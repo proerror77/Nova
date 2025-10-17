@@ -1,6 +1,9 @@
 use sqlx::postgres::{PgPool, PgPoolOptions};
 use std::time::Duration;
 
+pub mod post_repo;
+pub mod user_repo;
+
 pub async fn create_pool(database_url: &str, max_connections: u32) -> Result<PgPool, sqlx::Error> {
     PgPoolOptions::new()
         .max_connections(max_connections)
@@ -12,7 +15,5 @@ pub async fn create_pool(database_url: &str, max_connections: u32) -> Result<PgP
 }
 
 pub async fn run_migrations(pool: &PgPool) -> Result<(), sqlx::migrate::MigrateError> {
-    sqlx::migrate!("../migrations")
-        .run(pool)
-        .await
+    sqlx::migrate!("../migrations").run(pool).await
 }

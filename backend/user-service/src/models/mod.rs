@@ -78,3 +78,82 @@ pub struct AuthLog {
     pub metadata: Option<serde_json::Value>,
     pub created_at: DateTime<Utc>,
 }
+
+// ============================================
+// Post Models
+// ============================================
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct Post {
+    pub id: Uuid,
+    pub user_id: Uuid,
+    pub caption: Option<String>,
+    pub image_key: String,
+    pub image_sizes: Option<serde_json::Value>,
+    pub status: String,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub soft_delete: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct PostImage {
+    pub id: Uuid,
+    pub post_id: Uuid,
+    pub s3_key: String,
+    pub status: String,
+    pub size_variant: String,
+    pub file_size: Option<i32>,
+    pub width: Option<i32>,
+    pub height: Option<i32>,
+    pub url: Option<String>,
+    pub error_message: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct PostMetadata {
+    pub post_id: Uuid,
+    pub like_count: i32,
+    pub comment_count: i32,
+    pub view_count: i32,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct UploadSession {
+    pub id: Uuid,
+    pub post_id: Uuid,
+    pub upload_token: String,
+    pub file_hash: Option<String>,
+    pub expires_at: DateTime<Utc>,
+    pub is_completed: bool,
+    pub created_at: DateTime<Utc>,
+}
+
+// ============================================
+// Post Response Models
+// ============================================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PostResponse {
+    pub id: String,
+    pub user_id: String,
+    pub caption: Option<String>,
+    pub thumbnail_url: Option<String>,
+    pub medium_url: Option<String>,
+    pub original_url: Option<String>,
+    pub like_count: i32,
+    pub comment_count: i32,
+    pub view_count: i32,
+    pub status: String,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ImageSizes {
+    pub thumbnail_url: Option<String>,
+    pub medium_url: Option<String>,
+    pub original_url: Option<String>,
+}
