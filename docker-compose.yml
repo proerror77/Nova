@@ -1,0 +1,136 @@
+version: '3.9'
+
+services:
+  # ============================================
+  # PostgreSQL Database
+  # ============================================
+  postgres:
+    image: postgres:14-alpine
+    container_name: nova-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-nova_auth}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/migrations:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - nova-network
+
+  # ============================================
+  # Redis Cache
+  # ============================================
+  redis:
+    image: redis:7-alpine
+    container_name: nova-redis
+    restart: unless-stopped
+    command: >
+      redis-server
+      --appendonly yes
+      --requirepass ${REDIS_PASSWORD:-redis123}
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - nova-network
+
+  # ============================================
+  # User Service (Rust Actix-web)
+  # ============================================
+  user-service:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: runtime
+    container_name: nova-user-service
+    restart: unless-stopped
+    environment:
+      # Application
+      APP_ENV: development
+      APP_HOST: 0.0.0.0
+      APP_PORT: 8080
+      RUST_LOG: debug
+
+      # Database
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-nova_auth}
+      DATABASE_MAX_CONNECTIONS: 20
+
+      # Redis
+      REDIS_URL: redis://:${REDIS_PASSWORD:-redis123}@redis:6379/0
+      REDIS_POOL_SIZE: 10
+
+      # JWT
+      JWT_SECRET: ${JWT_SECRET:-dev_secret_change_in_production_32chars}
+      JWT_ACCESS_TOKEN_TTL: 900
+      JWT_REFRESH_TOKEN_TTL: 604800
+
+      # Email (mock for development)
+      SMTP_HOST: ${SMTP_HOST:-mailhog}
+      SMTP_PORT: ${SMTP_PORT:-1025}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-noreply@nova.dev}
+
+      # Rate limiting
+      RATE_LIMIT_MAX_REQUESTS: 100
+      RATE_LIMIT_WINDOW_SECS: 60
+    ports:
+      - "${USER_SERVICE_PORT:-8080}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - nova-network
+    healthcheck:
+      test: ["CMD", "/app/user-service", "healthcheck"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # ============================================
+  # MailHog (Email testing - development only)
+  # ============================================
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: nova-mailhog
+    restart: unless-stopped
+    ports:
+      - "1025:1025"  # SMTP
+      - "8025:8025"  # Web UI
+    networks:
+      - nova-network
+
+# ============================================
+# Volumes
+# ============================================
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+# ============================================
+# Networks
+# ============================================
+networks:
+  nova-network:
+    driver: bridge

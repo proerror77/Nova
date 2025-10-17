@@ -1,0 +1,67 @@
+# Rust
+/target/
+debug/
+release/
+*.rs.bk
+*.rlib
+*.prof*
+Cargo.lock
+.cargo/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+*.user
+*.iml
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local
+.env.*.local
+.env.production.local
+
+# Logs
+*.log
+logs/
+
+# Dependencies
+node_modules/
+vendor/
+.bundle/
+
+# Build
+build/
+dist/
+out/
+bin/
+
+# Test coverage
+coverage/
+*.profraw
+*.profdata
+
+# OS
+.DS_Store
+Thumbs.db
+*.tmp
+
+# Docker
+docker-compose.override.yml
+.dockerignore
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+data/
+
+# Temporary
+tmp/
+temp/
+*.swp
+.#*

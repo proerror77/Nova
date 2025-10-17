@@ -40,12 +40,23 @@ validator.workspace = true
 lettre.workspace = true
 governor.workspace = true
 prometheus.workspace = true
+aws-config.workspace = true
+aws-sdk-s3.workspace = true
+sha2.workspace = true
+hex.workspace = true
+mime.workspace = true
 
 # Service-specific dependencies
 futures = "0.3"
 lazy_static = "1.4"
+image = "0.24"
 
 [dev-dependencies]
 tokio-test = "0.4"
-mocktail = "0.1"
-sqlx-rt = "0.1"
+mockall = "0.12"
+actix-http = "3.9"
+tempfile = "3.8"
+
+[[test]]
+name = "posts_test"
+path = "tests/posts_test.rs"
