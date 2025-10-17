@@ -56,4 +56,4 @@ jobs:
         cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache,mode=max
 
     - name: Image digest
-      run: echo 'Built image digest: ${{ steps.docker_build.outputs.digest }}'
+      run: echo 'Image pushed successfully'
