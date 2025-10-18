@@ -46,6 +46,7 @@ jobs:
           type=raw,value=latest,enable={{is_default_branch}}
 
     - name: Build and push Docker image
+      id: docker_build
       uses: docker/build-push-action@v5
       with:
         context: ./backend
@@ -55,5 +56,15 @@ jobs:
         cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache
         cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache,mode=max
 
-    - name: Image digest
-      run: echo 'Image pushed successfully'
+    - name: Verify Docker image push
+      if: github.event_name != 'pull_request'
+      run: |
+        IMAGE_DIGEST="${{ steps.docker_build.outputs.digest }}"
+
+        if [ -z "$IMAGE_DIGEST" ]; then
+          echo "❌ Docker build failed: No image digest generated"
+          exit 1
+        fi
+
+        echo "✅ Docker image pushed successfully"
+        echo "Image digest: $IMAGE_DIGEST"

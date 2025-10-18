@@ -74,15 +74,18 @@ jobs:
       env:
         DATABASE_URL: postgresql://postgres:postgres@localhost:5432/nova_auth_test
         REDIS_URL: redis://localhost:6379
-      run: cargo tarpaulin --out Xml --timeout 300 --verbose
-      continue-on-error: true
+      run: |
+        cargo tarpaulin --out Xml --timeout 300 --verbose || {
+          echo "❌ Coverage generation failed"
+          exit 1
+        }
 
     - name: Upload coverage to Codecov
+      if: always()
       uses: codecov/codecov-action@v3
       with:
         files: ./cobertura.xml
         fail_ci_if_error: false
-      continue-on-error: true
 
   lint:
     name: Lint & Format
