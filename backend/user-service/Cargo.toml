@@ -67,7 +67,6 @@ image = "0.24"
 # Phase 4: Video Processing
 tonic = "0.10"
 prost = "0.12"
-tokio-process = "0.4"
 ndarray = "0.15"
 http = "0.2"
 
