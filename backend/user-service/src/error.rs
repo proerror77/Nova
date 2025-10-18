@@ -41,6 +41,12 @@ pub enum AppError {
 
     #[error("Email error: {0}")]
     Email(String),
+
+    #[error("Kafka error: {0}")]
+    Kafka(#[from] rdkafka::error::KafkaError),
+
+    #[error("IO error: {0}")]
+    Io(#[from] std::io::Error),
 }
 
 #[derive(Serialize)]
@@ -66,6 +72,8 @@ impl ResponseError for AppError {
             AppError::BadRequest(_) => StatusCode::BAD_REQUEST,
             AppError::Token(_) => StatusCode::UNAUTHORIZED,
             AppError::Email(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            AppError::Kafka(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            AppError::Io(_) => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 
@@ -84,6 +92,8 @@ impl ResponseError for AppError {
             AppError::BadRequest(_) => "BAD_REQUEST",
             AppError::Token(_) => "TOKEN_ERROR",
             AppError::Email(_) => "EMAIL_ERROR",
+            AppError::Kafka(_) => "KAFKA_ERROR",
+            AppError::Io(_) => "IO_ERROR",
         };
 
         let message = self.to_string();
@@ -91,6 +101,8 @@ impl ResponseError for AppError {
             AppError::Database(e) => Some(e.to_string()),
             AppError::Redis(e) => Some(e.to_string()),
             AppError::Token(e) => Some(e.to_string()),
+            AppError::Kafka(e) => Some(e.to_string()),
+            AppError::Io(e) => Some(e.to_string()),
             _ => None,
         };
 
@@ -121,5 +133,12 @@ impl From<lettre::error::Error> for AppError {
 impl From<lettre::transport::smtp::Error> for AppError {
     fn from(error: lettre::transport::smtp::Error) -> Self {
         AppError::Email(error.to_string())
+    }
+}
+
+// Convert serde_json errors to AppError
+impl From<serde_json::Error> for AppError {
+    fn from(error: serde_json::Error) -> Self {
+        AppError::Internal(format!("JSON serialization error: {}", error))
     }
 }

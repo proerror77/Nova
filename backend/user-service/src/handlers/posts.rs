@@ -230,6 +230,26 @@ pub async fn upload_complete_request(
         }
     }
 
+    // Record validated file hash for auditing (ensures future integrity checks)
+    if let Err(e) = post_repo::update_session_file_hash(
+        pool.get_ref(),
+        upload_session.id,
+        &req.file_hash,
+        req.file_size,
+    )
+    .await
+    {
+        tracing::error!(
+            "Failed to persist file hash for upload_session {}: {:?}",
+            upload_session.id,
+            e
+        );
+        return HttpResponse::InternalServerError().json(ErrorResponse {
+            error: "Database error".to_string(),
+            details: None,
+        });
+    }
+
     // h. Create 3 post_images records (thumbnail, medium, original) with status="pending"
     let image_variants = vec![
         ("thumbnail", format!("posts/{}/thumbnail", post_id)),
@@ -307,8 +327,8 @@ pub async fn upload_complete_request(
             );
             // Don't fail the request - mark post as failed and return success
             // The client uploaded successfully, but processing will be retried later
-            if let Err(db_err) = post_repo::update_post_status(pool.get_ref(), post_id, "failed")
-                .await
+            if let Err(db_err) =
+                post_repo::update_post_status(pool.get_ref(), post_id, "failed").await
             {
                 tracing::error!("Failed to update post status to 'failed': {:?}", db_err);
             }
@@ -497,7 +517,9 @@ pub async fn upload_init_request(
         None => {
             return HttpResponse::Unauthorized().json(ErrorResponse {
                 error: "Unauthorized".to_string(),
-                details: Some("User ID not found in request. JWT middleware may not be active.".to_string()),
+                details: Some(
+                    "User ID not found in request. JWT middleware may not be active.".to_string(),
+                ),
             });
         }
     };

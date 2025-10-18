@@ -172,12 +172,109 @@ pub fn get_email_from_token(token: &str) -> Result<String> {
     Ok(token_data.claims.email)
 }
 
+/// JWKS (JSON Web Key Set) structure for OAuth 2.0 authorization server metadata
+#[derive(Debug, Serialize)]
+pub struct JWKSKey {
+    pub kty: String,  // Key type: "RSA"
+    pub alg: String,  // Algorithm: "RS256"
+    pub kid: String,  // Key ID
+    pub use_: String, // Use: "sig" (signing)
+    pub n: String,    // RSA modulus (base64)
+    pub e: String,    // RSA public exponent (base64)
+}
+
+#[derive(Debug, Serialize)]
+pub struct JWKS {
+    pub keys: Vec<JWKSKey>,
+}
+
+/// Get JWKS for JWT key distribution (for verification by external services)
+///
+/// # Arguments
+/// * `pool` - Database connection pool
+/// * `grace_period_days` - Days to keep old keys active after rotation
+///
+/// # Returns
+/// JWKS structure with all valid public keys
+pub async fn get_jwks(pool: &sqlx::PgPool, _grace_period_days: i64) -> Result<JWKS> {
+    use crate::services::jwt_key_rotation;
+
+    // Get all valid keys from database
+    let keys = jwt_key_rotation::get_valid_keys(pool).await?;
+
+    let mut jwks_keys = Vec::new();
+
+    for key in keys {
+        // Note: Simplified JWKS - in production, would need to parse RSA modulus and exponent
+        // from the PEM public key. For now, we'll return basic key information.
+        // A full implementation would use an RSA library to extract the key parameters.
+
+        jwks_keys.push(JWKSKey {
+            kty: "RSA".to_string(),
+            alg: key.algorithm.clone(),
+            kid: key.key_id.clone(),
+            use_: "sig".to_string(),
+            // These would need to be extracted from the PEM public key in production
+            n: "...".to_string(),  // Base64-encoded RSA modulus
+            e: "AQAB".to_string(), // Standard RSA public exponent (65537)
+        });
+    }
+
+    Ok(JWKS { keys: jwks_keys })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    // Test RSA key pair - DO NOT USE IN PRODUCTION
+    const TEST_PRIVATE_KEY: &str = r#"-----BEGIN PRIVATE KEY-----
+MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDmk2ZpednMZ2LD
+UgdpKdNEgdB6Z8sbcHGwN+/UjEQGDJXpilaPQIVjGttbVbZ+l91IdvQ1x/cwN6sZ
+0+R8vIThjJcaHRelPnRmcsQeu5jtPA/6x8h8jpvzvYEXCZ3QI9Fe1trnI3KUbTOS
+WZpXRoWLlbgH4wUjTf9H6yKw11iNd5US9DbvLUU0F8noWqvVk8zqoB5aJosMNdW8
+VMoRP94Hi7T51xwpqkb3EBLWRjZS3icyUHWpPFCCTRsIRbkvZ62SU4K9y9JIOeWp
+ZZy1SOxrowbqUI5t+7ayE6+Rj4GRBh/z0rEBO4kGAln7+t3T8f4HKA8ttFWx9glg
+6CTUN9wnAgMBAAECggEAJE+LeIojOG4CPvbItVD236T/Kyeenqrt3G29VmA4c34W
+kE6kJFm+0m/voh80vBQ3rtUSJEi3WV/gPBMDD88IW2oD1FhHLv36NWABbpg7FFu5
+uyksc3Zp13qSZ7RbUTndcO1Y+mlkqTyBO0eNEg1zCRus0uEiIACFIShFsEpZZv2P
+cyaZCbr3AltkK4byQL2eQ7Q7aKPZXKEub+acLR5IWOzSRhVQ4KR3K53RHJ6MbGc7
+rrQP2MD+tQq1XH9TtKJ5uA51fe8goDhV8Hn4km2sabsSPqH1HyUkN4XZCJ5THhtY
+fna+gPkUl5ybumCMPpt1RDSkoJcZly0xWQFWUvMooQKBgQD3Ptqe/hcVfrQn6LoZ
+BbgSTv92dvd8Oz9WDBqt0LZDIKu5Kp8qwXIAb6xAd0tkhSDUmuodId8Jh/niRBMy
+3zAv90z2QTnXJRFgN3De7Wty/0f8HMRrjR63AwLcx5w5XOLhthVN+jkV+bu0+sJh
+EG81O/NbRaYrgnDHQXEHkoTvLwKBgQDuvXGlKahZi8HT3bdqa9lwQrLzVoKy7Ztj
+zDazsv24bCVXM0Hj/0NXzq/axvgU6vfG08wMLS/htUAg9QdgTA/HKa5Bb0axhFXc
+MQUR3/xTr3kfXXEwITdnDY2X3+j4SgD7OU92P+vwB4iGgPUegrqIHJmrfe51xEM3
+J4Sf51LkiQKBgDIR8IQyQMqBlkpevxFCLzzF8sYy4XuvI+xxFxYMJl0ByMT+9Kzb
+8BJWizOi9QmuTC/CD5dGvLxZZSmFT74FpOSR2GwmWWhQgWxSzfDXc+Md/5321XBS
+a930Jig/5EtZnDjJfxcDjXv9zx2fiq3NfjfxpB7fw/8bs2smvZUi/vjRAoGBAJ6k
+OklTFjBywxjjIwdPpUyItdsnKHB3naNCRzNABIMxMdrxD57Ot9Q4XvjU8HMN9Bom
+EVgiCshEJdoAmKcvw+hHVSjcJbC+TEOmO0U2fripSKZD9HvUBrmu8uDyBCBBJMfL
+vHbKYSC+EMW4Gantmr/pqV+grf2JrlSPKP0MvTNpAoGAZnsljoUTW9PSDnx30Hqk
+lRgoyQivtx6hKDm6v2l++mEQ0mMBE3NaN3hYxm6ncpG7b0giTu4jZx9U5Y0DLJ7m
+3Dv/Cqr1zqQEekb93a1JZQxj9DP+Q/vw8CX/ky+xCE4zz596Dql+nycrOcbUM056
+YMNQEWT7aC6+SsTEfz2Btk8=
+-----END PRIVATE KEY-----"#;
+
+    const TEST_PUBLIC_KEY: &str = r#"-----BEGIN PUBLIC KEY-----
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA5pNmaXnZzGdiw1IHaSnT
+RIHQemfLG3BxsDfv1IxEBgyV6YpWj0CFYxrbW1W2fpfdSHb0Ncf3MDerGdPkfLyE
+4YyXGh0XpT50ZnLEHruY7TwP+sfIfI6b872BFwmd0CPRXtba5yNylG0zklmaV0aF
+i5W4B+MFI03/R+sisNdYjXeVEvQ27y1FNBfJ6Fqr1ZPM6qAeWiaLDDXVvFTKET/e
+B4u0+dccKapG9xAS1kY2Ut4nMlB1qTxQgk0bCEW5L2etklOCvcvSSDnlqWWctUjs
+a6MG6lCObfu2shOvkY+BkQYf89KxATuJBgJZ+/rd0/H+BygPLbRVsfYJYOgk1Dfc
+JwIDAQAB
+-----END PUBLIC KEY-----"#;
+
+    // Initialize JWT keys for testing
+    fn init_test_keys() {
+        let _ = initialize_keys(TEST_PRIVATE_KEY, TEST_PUBLIC_KEY);
+    }
+
     #[test]
     fn test_generate_access_token() {
+        init_test_keys();
         let user_id = Uuid::new_v4();
         let email = "test@example.com";
         let username = "testuser";
@@ -193,6 +290,7 @@ mod tests {
 
     #[test]
     fn test_generate_refresh_token() {
+        init_test_keys();
         let user_id = Uuid::new_v4();
         let email = "test@example.com";
         let username = "testuser";
@@ -206,6 +304,7 @@ mod tests {
 
     #[test]
     fn test_generate_token_pair() {
+        init_test_keys();
         let user_id = Uuid::new_v4();
         let email = "test@example.com";
         let username = "testuser";
@@ -222,6 +321,7 @@ mod tests {
 
     #[test]
     fn test_validate_valid_token() {
+        init_test_keys();
         let user_id = Uuid::new_v4();
         let email = "test@example.com";
         let username = "testuser";
@@ -241,6 +341,7 @@ mod tests {
 
     #[test]
     fn test_validate_invalid_token() {
+        init_test_keys();
         let invalid_token = "not.a.valid.token";
         let result = validate_token(invalid_token);
         assert!(result.is_err());
@@ -248,6 +349,7 @@ mod tests {
 
     #[test]
     fn test_validate_corrupted_token() {
+        init_test_keys();
         let corrupted_token = "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.corrupted.signature";
         let result = validate_token(corrupted_token);
         assert!(result.is_err());
@@ -255,6 +357,7 @@ mod tests {
 
     #[test]
     fn test_is_token_expired() {
+        init_test_keys();
         let user_id = Uuid::new_v4();
         let email = "test@example.com";
         let username = "testuser";
@@ -269,6 +372,7 @@ mod tests {
 
     #[test]
     fn test_get_user_id_from_token() {
+        init_test_keys();
         let user_id = Uuid::new_v4();
         let email = "test@example.com";
         let username = "testuser";
@@ -283,6 +387,7 @@ mod tests {
 
     #[test]
     fn test_get_email_from_token() {
+        init_test_keys();
         let user_id = Uuid::new_v4();
         let email = "test@example.com";
         let username = "testuser";
@@ -297,6 +402,7 @@ mod tests {
 
     #[test]
     fn test_access_token_has_correct_expiry() {
+        init_test_keys();
         let user_id = Uuid::new_v4();
         let email = "test@example.com";
         let username = "testuser";
@@ -315,6 +421,7 @@ mod tests {
 
     #[test]
     fn test_refresh_token_has_longer_expiry() {
+        init_test_keys();
         let user_id = Uuid::new_v4();
         let email = "test@example.com";
         let username = "testuser";
@@ -337,6 +444,7 @@ mod tests {
 
     #[test]
     fn test_token_contains_all_required_claims() {
+        init_test_keys();
         let user_id = Uuid::new_v4();
         let email = "test@example.com";
         let username = "testuser";

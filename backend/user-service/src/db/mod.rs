@@ -1,6 +1,9 @@
 use sqlx::postgres::{PgPool, PgPoolOptions};
 use std::time::Duration;
 
+pub mod ch_client;
+pub mod oauth_repo;
+pub mod password_reset_repo;
 pub mod post_repo;
 pub mod user_repo;
 

@@ -11,6 +11,9 @@ pub struct User {
     pub password_hash: String,
     pub email_verified: bool,
     pub is_active: bool,
+    pub totp_secret: Option<String>,
+    pub totp_enabled: bool,
+    pub two_fa_enabled_at: Option<DateTime<Utc>>,
     pub failed_login_attempts: i32,
     pub locked_until: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
@@ -77,6 +80,21 @@ pub struct AuthLog {
     pub user_agent: Option<String>,
     pub metadata: Option<serde_json::Value>,
     pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct OAuthConnection {
+    pub id: Uuid,
+    pub user_id: Uuid,
+    pub provider: String, // "apple", "google", "facebook"
+    pub provider_user_id: String,
+    pub provider_email: Option<String>,
+    pub display_name: Option<String>,
+    pub access_token_hash: String,
+    pub refresh_token_hash: Option<String>,
+    pub token_expires_at: Option<DateTime<Utc>>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
 }
 
 // ============================================
@@ -156,4 +174,62 @@ pub struct ImageSizes {
     pub thumbnail_url: Option<String>,
     pub medium_url: Option<String>,
     pub original_url: Option<String>,
+}
+
+// ============================================
+// Feed Models (for ClickHouse integration)
+// ============================================
+
+/// Feed ranking request parameters
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FeedRankingRequest {
+    pub user_id: Uuid,
+    pub limit: u32,
+    pub offset: u32,
+    pub algo: String, // "ch" (ClickHouse), "time" (timeline)
+    pub cursor: Option<String>,
+}
+
+/// Post candidate from ClickHouse with raw metrics
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PostCandidate {
+    pub post_id: Uuid,
+    pub author_id: Uuid,
+    pub created_at: DateTime<Utc>,
+    pub likes: u32,
+    pub comments: u32,
+    pub shares: u32,
+    pub impressions: u32,
+}
+
+/// Ranked post with computed scores
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RankedPost {
+    pub post_id: Uuid,
+    pub author_id: Uuid,
+    pub created_at: DateTime<Utc>,
+    pub freshness_score: f32,
+    pub engagement_score: f32,
+    pub affinity_score: f32,
+    pub combined_score: f32,
+    pub reason: String, // "follow", "trending", "affinity"
+}
+
+/// Feed response with pagination
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FeedResponse {
+    pub posts: Vec<Uuid>,
+    pub cursor: Option<String>,
+    pub has_more: bool,
+    pub total_count: usize,
+}
+
+/// Feed metrics for observability
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FeedMetrics {
+    pub cache_hit: bool,
+    pub source: String, // "redis", "clickhouse", "fallback"
+    pub query_time_ms: u64,
+    pub candidate_count: usize,
+    pub final_count: usize,
 }

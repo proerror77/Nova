@@ -409,20 +409,22 @@ pub async fn mark_upload_completed(pool: &PgPool, session_id: Uuid) -> Result<()
     Ok(())
 }
 
-/// Update upload session with file hash
+/// Update upload session with file hash and size for audit trail
 pub async fn update_session_file_hash(
     pool: &PgPool,
     session_id: Uuid,
     file_hash: &str,
+    file_size: i64,
 ) -> Result<(), sqlx::Error> {
     sqlx::query(
         r#"
         UPDATE upload_sessions
-        SET file_hash = $1
-        WHERE id = $2
+        SET file_hash = $1, file_size = $2
+        WHERE id = $3
         "#,
     )
     .bind(file_hash)
+    .bind(file_size)
     .bind(session_id)
     .execute(pool)
     .await?;
