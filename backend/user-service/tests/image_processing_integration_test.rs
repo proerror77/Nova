@@ -196,11 +196,8 @@ async fn test_queue_full_error_handling() {
     };
 
     // This send will block until timeout (simulating queue full scenario)
-    let send_result = tokio::time::timeout(
-        std::time::Duration::from_millis(100),
-        sender.send(job3),
-    )
-    .await;
+    let send_result =
+        tokio::time::timeout(std::time::Duration::from_millis(100), sender.send(job3)).await;
 
     // Should timeout because queue is full and no one is receiving
     assert!(
