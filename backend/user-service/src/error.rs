@@ -47,6 +47,9 @@ pub enum AppError {
 
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
+
+    #[error("Configuration error: {0}")]
+    Configuration(String),
 }
 
 #[derive(Serialize)]
@@ -74,6 +77,7 @@ impl ResponseError for AppError {
             AppError::Email(_) => StatusCode::INTERNAL_SERVER_ERROR,
             AppError::Kafka(_) => StatusCode::INTERNAL_SERVER_ERROR,
             AppError::Io(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            AppError::Configuration(_) => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 
@@ -94,6 +98,7 @@ impl ResponseError for AppError {
             AppError::Email(_) => "EMAIL_ERROR",
             AppError::Kafka(_) => "KAFKA_ERROR",
             AppError::Io(_) => "IO_ERROR",
+            AppError::Configuration(_) => "CONFIGURATION_ERROR",
         };
 
         let message = self.to_string();
