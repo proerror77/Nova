@@ -18,7 +18,7 @@ pub async fn create_user(
         r#"
         INSERT INTO users (id, email, username, password_hash, email_verified, is_active, failed_login_attempts, created_at, updated_at)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-        RETURNING id, email, username, password_hash, email_verified, is_active, failed_login_attempts, locked_until, created_at, updated_at, last_login_at
+        RETURNING id, email, username, password_hash, email_verified, is_active, totp_secret, totp_enabled, two_fa_enabled_at, failed_login_attempts, locked_until, created_at, updated_at, last_login_at
         "#
     )
     .bind(id)
@@ -38,7 +38,7 @@ pub async fn create_user(
 pub async fn find_by_email(pool: &PgPool, email: &str) -> Result<Option<User>, sqlx::Error> {
     sqlx::query_as::<_, User>(
         r#"
-        SELECT id, email, username, password_hash, email_verified, is_active, failed_login_attempts, locked_until, created_at, updated_at, last_login_at
+        SELECT id, email, username, password_hash, email_verified, is_active, totp_secret, totp_enabled, two_fa_enabled_at, failed_login_attempts, locked_until, created_at, updated_at, last_login_at
         FROM users
         WHERE email = $1 AND deleted_at IS NULL
         "#
@@ -52,7 +52,7 @@ pub async fn find_by_email(pool: &PgPool, email: &str) -> Result<Option<User>, s
 pub async fn find_by_username(pool: &PgPool, username: &str) -> Result<Option<User>, sqlx::Error> {
     sqlx::query_as::<_, User>(
         r#"
-        SELECT id, email, username, password_hash, email_verified, is_active, failed_login_attempts, locked_until, created_at, updated_at, last_login_at
+        SELECT id, email, username, password_hash, email_verified, is_active, totp_secret, totp_enabled, two_fa_enabled_at, failed_login_attempts, locked_until, created_at, updated_at, last_login_at
         FROM users
         WHERE username = $1 AND deleted_at IS NULL
         "#
@@ -66,7 +66,7 @@ pub async fn find_by_username(pool: &PgPool, username: &str) -> Result<Option<Us
 pub async fn find_by_id(pool: &PgPool, id: Uuid) -> Result<Option<User>, sqlx::Error> {
     sqlx::query_as::<_, User>(
         r#"
-        SELECT id, email, username, password_hash, email_verified, is_active, failed_login_attempts, locked_until, created_at, updated_at, last_login_at
+        SELECT id, email, username, password_hash, email_verified, is_active, totp_secret, totp_enabled, two_fa_enabled_at, failed_login_attempts, locked_until, created_at, updated_at, last_login_at
         FROM users
         WHERE id = $1 AND deleted_at IS NULL
         "#
@@ -85,7 +85,7 @@ pub async fn verify_email(pool: &PgPool, user_id: Uuid) -> Result<User, sqlx::Er
         UPDATE users
         SET email_verified = true, updated_at = $1
         WHERE id = $2
-        RETURNING id, email, username, password_hash, email_verified, is_active, failed_login_attempts, locked_until, created_at, updated_at, last_login_at
+        RETURNING id, email, username, password_hash, email_verified, is_active, totp_secret, totp_enabled, two_fa_enabled_at, failed_login_attempts, locked_until, created_at, updated_at, last_login_at
         "#
     )
     .bind(now)
@@ -107,7 +107,7 @@ pub async fn update_password(
         UPDATE users
         SET password_hash = $1, updated_at = $2, failed_login_attempts = 0
         WHERE id = $3
-        RETURNING id, email, username, password_hash, email_verified, is_active, failed_login_attempts, locked_until, created_at, updated_at, last_login_at
+        RETURNING id, email, username, password_hash, email_verified, is_active, totp_secret, totp_enabled, two_fa_enabled_at, failed_login_attempts, locked_until, created_at, updated_at, last_login_at
         "#
     )
     .bind(new_password_hash)
@@ -126,7 +126,7 @@ pub async fn record_successful_login(pool: &PgPool, user_id: Uuid) -> Result<Use
         UPDATE users
         SET last_login_at = $1, failed_login_attempts = 0, locked_until = NULL, updated_at = $1
         WHERE id = $2
-        RETURNING id, email, username, password_hash, email_verified, is_active, failed_login_attempts, locked_until, created_at, updated_at, last_login_at
+        RETURNING id, email, username, password_hash, email_verified, is_active, totp_secret, totp_enabled, two_fa_enabled_at, failed_login_attempts, locked_until, created_at, updated_at, last_login_at
         "#
     )
     .bind(now)
@@ -135,15 +135,34 @@ pub async fn record_successful_login(pool: &PgPool, user_id: Uuid) -> Result<Use
     .await
 }
 
-/// Record a failed login attempt
+/// Record a failed login attempt and lock account if threshold reached
+///
+/// # Arguments
+/// * `max_allowed_attempts` - Maximum failed attempts before locking
+/// * `lock_duration_secs` - Lock duration in seconds
 pub async fn record_failed_login(
     pool: &PgPool,
     user_id: Uuid,
-    max_attempts: i32,
+    max_allowed_attempts: i32,
     lock_duration_secs: i64,
 ) -> Result<User, sqlx::Error> {
     let now = Utc::now();
-    let lock_until = if max_attempts <= 1 {
+
+    // Get current attempt count
+    let current_attempts: i32 = sqlx::query_scalar(
+        r#"
+        SELECT failed_login_attempts FROM users WHERE id = $1
+        "#,
+    )
+    .bind(user_id)
+    .fetch_one(pool)
+    .await?;
+
+    // Calculate new attempt count
+    let new_attempts = current_attempts + 1;
+
+    // Lock account if new_attempts >= max_attempts
+    let lock_until = if max_allowed_attempts > 0 && new_attempts >= max_allowed_attempts {
         Some(now + chrono::Duration::seconds(lock_duration_secs))
     } else {
         None
@@ -152,11 +171,12 @@ pub async fn record_failed_login(
     sqlx::query_as::<_, User>(
         r#"
         UPDATE users
-        SET failed_login_attempts = failed_login_attempts + 1, locked_until = $1, updated_at = $2
-        WHERE id = $3
-        RETURNING id, email, username, password_hash, email_verified, is_active, failed_login_attempts, locked_until, created_at, updated_at, last_login_at
+        SET failed_login_attempts = $1, locked_until = $2, updated_at = $3
+        WHERE id = $4
+        RETURNING id, email, username, password_hash, email_verified, is_active, totp_secret, totp_enabled, two_fa_enabled_at, failed_login_attempts, locked_until, created_at, updated_at, last_login_at
         "#
     )
+    .bind(new_attempts)
     .bind(lock_until)
     .bind(now)
     .bind(user_id)
@@ -165,13 +185,15 @@ pub async fn record_failed_login(
 }
 
 /// Soft delete a user (GDPR compliance)
+/// Sets deleted_at timestamp and deactivates account
+/// Note: email and username are NOT nullified to maintain referential integrity
 pub async fn soft_delete(pool: &PgPool, user_id: Uuid) -> Result<(), sqlx::Error> {
     let now = Utc::now();
 
     sqlx::query(
         r#"
         UPDATE users
-        SET deleted_at = $1, email = NULL, username = NULL, updated_at = $1
+        SET deleted_at = $1, is_active = FALSE, updated_at = $1
         WHERE id = $2
         "#,
     )
@@ -209,6 +231,47 @@ pub async fn username_exists(pool: &PgPool, username: &str) -> Result<bool, sqlx
     .await?;
 
     Ok(result)
+}
+
+/// Enable TOTP-based 2FA for a user
+pub async fn enable_totp(
+    pool: &PgPool,
+    user_id: Uuid,
+    totp_secret: &str,
+) -> Result<User, sqlx::Error> {
+    let now = Utc::now();
+
+    sqlx::query_as::<_, User>(
+        r#"
+        UPDATE users
+        SET totp_secret = $1, totp_enabled = true, two_fa_enabled_at = $2, updated_at = $2
+        WHERE id = $3
+        RETURNING id, email, username, password_hash, email_verified, is_active, totp_secret, totp_enabled, two_fa_enabled_at, failed_login_attempts, locked_until, created_at, updated_at, last_login_at
+        "#,
+    )
+    .bind(totp_secret)
+    .bind(now)
+    .bind(user_id)
+    .fetch_one(pool)
+    .await
+}
+
+/// Disable TOTP-based 2FA for a user
+pub async fn disable_totp(pool: &PgPool, user_id: Uuid) -> Result<User, sqlx::Error> {
+    let now = Utc::now();
+
+    sqlx::query_as::<_, User>(
+        r#"
+        UPDATE users
+        SET totp_secret = NULL, totp_enabled = false, updated_at = $1
+        WHERE id = $2
+        RETURNING id, email, username, password_hash, email_verified, is_active, totp_secret, totp_enabled, two_fa_enabled_at, failed_login_attempts, locked_until, created_at, updated_at, last_login_at
+        "#,
+    )
+    .bind(now)
+    .bind(user_id)
+    .fetch_one(pool)
+    .await
 }
 
 #[cfg(test)]

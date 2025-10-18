@@ -5,10 +5,12 @@ use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 
 use crate::db::user_repo;
+use crate::middleware::UserId;
 use crate::security::jwt;
 use crate::security::{hash_password, verify_password};
 use crate::services::email_verification;
 use crate::validators;
+use crate::Config;
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct RegisterRequest {
@@ -73,6 +75,52 @@ pub struct RefreshTokenRequest {
 
 #[derive(Debug, Serialize)]
 pub struct RefreshTokenResponse {
+    pub access_token: String,
+    pub refresh_token: String,
+    pub token_type: String,
+    pub expires_in: i64,
+}
+
+/// Request to enable 2FA (requires password verification)
+#[derive(Debug, Deserialize)]
+pub struct Enable2FARequest {
+    pub password: String,
+}
+
+/// Response with TOTP setup information
+#[derive(Debug, Serialize)]
+pub struct Enable2FAResponse {
+    pub temp_session_id: String,
+    pub qr_code: String, // SVG format QR code
+    pub secret: String,  // Base32 encoded secret for manual entry
+    pub backup_codes: Vec<String>,
+    pub expires_in: i64, // Session TTL in seconds
+}
+
+/// Request to confirm 2FA setup
+#[derive(Debug, Deserialize)]
+pub struct Confirm2FARequest {
+    pub temp_session_id: String,
+    pub code: String, // 6-digit TOTP code
+}
+
+/// Response confirming 2FA is now enabled
+#[derive(Debug, Serialize)]
+pub struct Confirm2FAResponse {
+    pub message: String,
+    pub two_fa_enabled: bool,
+}
+
+/// Request to verify 2FA code during login
+#[derive(Debug, Deserialize)]
+pub struct Verify2FARequest {
+    pub session_id: String,
+    pub code: String, // 6-digit TOTP code or 8-char backup code
+}
+
+/// Response with JWT tokens after successful 2FA verification
+#[derive(Debug, Serialize)]
+pub struct Verify2FAResponse {
     pub access_token: String,
     pub refresh_token: String,
     pub token_type: String,
@@ -197,7 +245,12 @@ pub async fn register(
 
 /// Handle user login
 /// POST /auth/login
-pub async fn login(pool: web::Data<PgPool>, req: web::Json<LoginRequest>) -> impl Responder {
+pub async fn login(
+    pool: web::Data<PgPool>,
+    redis: web::Data<ConnectionManager>,
+    config: web::Data<Config>,
+    req: web::Json<LoginRequest>,
+) -> impl Responder {
     // Validate email format
     if !validators::validate_email(&req.email) {
         return HttpResponse::BadRequest().json(ErrorResponse {
@@ -243,12 +296,18 @@ pub async fn login(pool: web::Data<PgPool>, req: web::Json<LoginRequest>) -> imp
 
     // Verify password
     if verify_password(&req.password, &user.password_hash).is_err() {
+        let max_attempts = std::cmp::max(config.rate_limit.max_requests as i32, 1);
+        let lock_duration_secs = match i64::try_from(config.rate_limit.window_secs) {
+            Ok(value) if value > 0 => value,
+            _ => 900, // Fallback to 15 minutes
+        };
+
         // Record failed login attempt
         let _ = user_repo::record_failed_login(
             pool.get_ref(),
             user.id,
-            user.failed_login_attempts,
-            900, // 15 minute lockout
+            max_attempts,
+            lock_duration_secs,
         )
         .await;
 
@@ -258,7 +317,32 @@ pub async fn login(pool: web::Data<PgPool>, req: web::Json<LoginRequest>) -> imp
         });
     }
 
-    // Generate JWT token pair
+    // Check if 2FA is enabled
+    if user.totp_enabled {
+        // Create temporary 2FA session in Redis
+        use crate::services::two_fa;
+
+        let session_id = uuid::Uuid::new_v4().to_string();
+        match two_fa::store_temp_session(redis.get_ref(), &session_id, user.id, "2fa_pending", 300)
+            .await
+        {
+            Ok(_) => {
+                return HttpResponse::Accepted().json(serde_json::json!({
+                    "session_id": session_id,
+                    "message": "2FA verification required",
+                    "expires_in": 300
+                }));
+            }
+            Err(_) => {
+                return HttpResponse::InternalServerError().json(ErrorResponse {
+                    error: "Failed to create 2FA session".to_string(),
+                    details: None,
+                });
+            }
+        }
+    }
+
+    // Generate JWT token pair (only if 2FA is not enabled)
     let tokens = match jwt::generate_token_pair(user.id, &user.email, &user.username) {
         Ok(tokens) => tokens,
         Err(_) => {
@@ -486,6 +570,317 @@ pub async fn refresh_token(
     };
 
     HttpResponse::Ok().json(RefreshTokenResponse {
+        access_token: tokens.access_token,
+        refresh_token: tokens.refresh_token,
+        token_type: tokens.token_type,
+        expires_in: tokens.expires_in,
+    })
+}
+
+/// Handle enabling 2FA setup
+/// POST /auth/2fa/enable
+pub async fn enable_2fa(
+    pool: web::Data<PgPool>,
+    redis: web::Data<ConnectionManager>,
+    auth_user: UserId,
+    req: web::Json<Enable2FARequest>,
+) -> impl Responder {
+    let user_id = auth_user.0;
+
+    // Get user from database
+    let user = match user_repo::find_by_id(pool.get_ref(), user_id).await {
+        Ok(Some(user)) => user,
+        Ok(None) => {
+            return HttpResponse::NotFound().json(ErrorResponse {
+                error: "User not found".to_string(),
+                details: None,
+            });
+        }
+        Err(_) => {
+            return HttpResponse::InternalServerError().json(ErrorResponse {
+                error: "Database error".to_string(),
+                details: None,
+            });
+        }
+    };
+
+    // Verify password
+    if verify_password(&req.password, &user.password_hash).is_err() {
+        return HttpResponse::Unauthorized().json(ErrorResponse {
+            error: "Invalid password".to_string(),
+            details: None,
+        });
+    }
+
+    // If 2FA already enabled, reject
+    if user.totp_enabled {
+        return HttpResponse::BadRequest().json(ErrorResponse {
+            error: "2FA already enabled".to_string(),
+            details: Some("Disable 2FA before enabling again".to_string()),
+        });
+    }
+
+    // Generate 2FA setup information
+    use crate::services::two_fa;
+    let (secret, uri, backup_codes) = match two_fa::generate_2fa_setup(&user.email).await {
+        Ok(setup) => setup,
+        Err(_) => {
+            return HttpResponse::InternalServerError().json(ErrorResponse {
+                error: "Failed to generate 2FA setup".to_string(),
+                details: None,
+            });
+        }
+    };
+
+    // Generate QR code from provisioning URI
+    use crate::security::TOTPGenerator;
+    let qr_code_bytes = match TOTPGenerator::generate_qr_code(&uri) {
+        Ok(bytes) => bytes,
+        Err(_) => {
+            return HttpResponse::InternalServerError().json(ErrorResponse {
+                error: "Failed to generate QR code".to_string(),
+                details: None,
+            });
+        }
+    };
+
+    // Convert QR code bytes to base64 string for JSON response
+    let qr_code = base64::encode(&qr_code_bytes);
+
+    // Create temporary session to hold the setup information
+    let temp_session_id = uuid::Uuid::new_v4().to_string();
+    let session_key = format!("2fa_setup:{}", temp_session_id);
+
+    // Store setup info in Redis with 10-minute TTL
+    use redis::AsyncCommands;
+    let setup_data = serde_json::json!({
+        "secret": secret.clone(),
+        "backup_codes": backup_codes.clone(),
+        "user_id": user_id.to_string(),
+    })
+    .to_string();
+
+    let mut redis_conn = redis.get_ref().clone();
+    if let Err(_) = redis_conn
+        .set_ex::<_, _, ()>(&session_key, setup_data, 600_u64)
+        .await
+    {
+        return HttpResponse::InternalServerError().json(ErrorResponse {
+            error: "Failed to store temporary session".to_string(),
+            details: None,
+        });
+    }
+
+    HttpResponse::Ok().json(Enable2FAResponse {
+        temp_session_id,
+        qr_code,
+        secret,
+        backup_codes,
+        expires_in: 600,
+    })
+}
+
+/// Handle confirming 2FA setup
+/// POST /auth/2fa/confirm
+pub async fn confirm_2fa(
+    pool: web::Data<PgPool>,
+    redis: web::Data<ConnectionManager>,
+    auth_user: UserId,
+    req: web::Json<Confirm2FARequest>,
+) -> impl Responder {
+    let user_id = auth_user.0;
+
+    // Retrieve setup info from Redis
+    use redis::AsyncCommands;
+
+    let session_key = format!("2fa_setup:{}", req.temp_session_id);
+    let mut redis_conn = redis.get_ref().clone();
+    let setup_data: Option<String> = match redis_conn.get(&session_key).await {
+        Ok(data) => data,
+        Err(_) => {
+            return HttpResponse::InternalServerError().json(ErrorResponse {
+                error: "Failed to retrieve session".to_string(),
+                details: None,
+            });
+        }
+    };
+
+    let setup_json = match setup_data {
+        Some(data) => match serde_json::from_str::<serde_json::Value>(&data) {
+            Ok(json) => json,
+            Err(_) => {
+                return HttpResponse::BadRequest().json(ErrorResponse {
+                    error: "Invalid session data".to_string(),
+                    details: None,
+                });
+            }
+        },
+        None => {
+            return HttpResponse::BadRequest().json(ErrorResponse {
+                error: "Session expired or invalid".to_string(),
+                details: None,
+            });
+        }
+    };
+
+    // Extract secret and verify TOTP code
+    let secret = match setup_json.get("secret").and_then(|v| v.as_str()) {
+        Some(s) => s,
+        None => {
+            return HttpResponse::BadRequest().json(ErrorResponse {
+                error: "Invalid session data".to_string(),
+                details: None,
+            });
+        }
+    };
+
+    use crate::security::TOTPGenerator;
+    let is_valid = match TOTPGenerator::verify_totp(secret, &req.code) {
+        Ok(valid) => valid,
+        Err(_) => {
+            return HttpResponse::BadRequest().json(ErrorResponse {
+                error: "Invalid TOTP code".to_string(),
+                details: None,
+            });
+        }
+    };
+
+    if !is_valid {
+        return HttpResponse::BadRequest().json(ErrorResponse {
+            error: "Invalid TOTP code".to_string(),
+            details: Some("The code does not match. Please try again.".to_string()),
+        });
+    }
+
+    // Enable TOTP in database
+    match user_repo::enable_totp(pool.get_ref(), user_id, secret).await {
+        Ok(_) => {}
+        Err(_) => {
+            return HttpResponse::InternalServerError().json(ErrorResponse {
+                error: "Failed to enable 2FA".to_string(),
+                details: None,
+            });
+        }
+    };
+
+    // Store backup codes
+    use crate::services::backup_codes;
+    let backup_codes_list: Vec<String> =
+        match setup_json.get("backup_codes").and_then(|v| v.as_array()) {
+            Some(codes) => codes
+                .iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect(),
+            None => {
+                return HttpResponse::BadRequest().json(ErrorResponse {
+                    error: "Invalid session data".to_string(),
+                    details: None,
+                });
+            }
+        };
+
+    if let Err(_) =
+        backup_codes::store_backup_codes(pool.get_ref(), user_id, &backup_codes_list).await
+    {
+        return HttpResponse::InternalServerError().json(ErrorResponse {
+            error: "Failed to store backup codes".to_string(),
+            details: None,
+        });
+    }
+
+    // Delete temporary session
+    let _ = redis_conn.del::<_, usize>(&session_key).await;
+
+    HttpResponse::Ok().json(Confirm2FAResponse {
+        message: "2FA has been successfully enabled".to_string(),
+        two_fa_enabled: true,
+    })
+}
+
+/// Handle verifying 2FA code during login
+/// POST /auth/2fa/verify
+pub async fn verify_2fa(
+    pool: web::Data<PgPool>,
+    redis: web::Data<ConnectionManager>,
+    req: web::Json<Verify2FARequest>,
+) -> impl Responder {
+    // Verify temporary 2FA session
+    use crate::services::two_fa;
+    let user_id =
+        match two_fa::verify_temp_session(redis.get_ref(), &req.session_id, "2fa_pending").await {
+            Ok(id) => id,
+            Err(_) => {
+                return HttpResponse::BadRequest().json(ErrorResponse {
+                    error: "Invalid or expired session".to_string(),
+                    details: None,
+                });
+            }
+        };
+
+    // Verify the 2FA code (TOTP or backup code)
+    let is_valid = match two_fa::verify_user_code(pool.get_ref(), user_id, &req.code).await {
+        Ok(valid) => valid,
+        Err(_) => {
+            return HttpResponse::InternalServerError().json(ErrorResponse {
+                error: "Failed to verify code".to_string(),
+                details: None,
+            });
+        }
+    };
+
+    if !is_valid {
+        // Record 2FA verification failure
+        use crate::metrics::helpers as metrics;
+        metrics::record_2fa_failure();
+
+        return HttpResponse::BadRequest().json(ErrorResponse {
+            error: "Invalid 2FA code".to_string(),
+            details: Some("The code does not match. Please try again.".to_string()),
+        });
+    }
+
+    // Record 2FA verification success
+    use crate::metrics::helpers as metrics;
+    metrics::record_2fa_success();
+
+    // Get user for token generation
+    let user = match user_repo::find_by_id(pool.get_ref(), user_id).await {
+        Ok(Some(user)) => user,
+        _ => {
+            return HttpResponse::InternalServerError().json(ErrorResponse {
+                error: "Failed to retrieve user".to_string(),
+                details: None,
+            });
+        }
+    };
+
+    // Generate JWT token pair
+    let tokens = match jwt::generate_token_pair(user_id, &user.email, &user.username) {
+        Ok(tokens) => tokens,
+        Err(_) => {
+            return HttpResponse::InternalServerError().json(ErrorResponse {
+                error: "Failed to generate tokens".to_string(),
+                details: None,
+            });
+        }
+    };
+
+    // Record successful login
+    if let Err(_) = user_repo::record_successful_login(pool.get_ref(), user_id).await {
+        return HttpResponse::InternalServerError().json(ErrorResponse {
+            error: "Failed to record login".to_string(),
+            details: None,
+        });
+    }
+
+    // Delete temporary session
+    use redis::AsyncCommands;
+    let mut redis_conn = redis.get_ref().clone();
+    let _ = redis_conn
+        .del::<_, usize>(format!("2fa_pending:{}", req.session_id))
+        .await;
+
+    HttpResponse::Ok().json(Verify2FAResponse {
         access_token: tokens.access_token,
         refresh_token: tokens.refresh_token,
         token_type: tokens.token_type,
