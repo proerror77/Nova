@@ -1,3 +1,5 @@
+pub mod job_config;
+
 use serde::Deserialize;
 use std::env;
 
@@ -11,6 +13,8 @@ pub struct Config {
     pub rate_limit: RateLimitConfig,
     pub s3: S3Config,
     pub cors: CorsConfig,
+    pub clickhouse: ClickHouseConfig,
+    pub kafka: KafkaConfig,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -105,6 +109,26 @@ pub struct CorsConfig {
     pub max_age: u64,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+pub struct ClickHouseConfig {
+    pub url: String,
+    #[serde(default = "default_clickhouse_database")]
+    pub database: String,
+    #[serde(default = "default_clickhouse_user")]
+    pub username: String,
+    #[serde(default = "default_clickhouse_password")]
+    pub password: String,
+    #[serde(default = "default_clickhouse_timeout_ms")]
+    pub timeout_ms: u64,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct KafkaConfig {
+    pub brokers: String,
+    #[serde(default = "default_events_topic")]
+    pub events_topic: String,
+}
+
 // Default value functions
 fn default_app_env() -> String {
     "development".to_string()
@@ -152,6 +176,26 @@ fn default_s3_presigned_url_expiry_secs() -> u64 {
 
 fn default_cors_max_age() -> u64 {
     3600 // 1 hour
+}
+
+fn default_clickhouse_database() -> String {
+    "nova_feed".to_string()
+}
+
+fn default_clickhouse_user() -> String {
+    "default".to_string()
+}
+
+fn default_clickhouse_password() -> String {
+    "clickhouse".to_string()
+}
+
+fn default_clickhouse_timeout_ms() -> u64 {
+    5000
+}
+
+fn default_events_topic() -> String {
+    "events".to_string()
 }
 
 impl Config {
@@ -244,6 +288,23 @@ impl Config {
                 .unwrap_or(default_cors_max_age()),
         };
 
+        let clickhouse = ClickHouseConfig {
+            url: env::var("CLICKHOUSE_URL").expect("CLICKHOUSE_URL must be set"),
+            database: env::var("CLICKHOUSE_DB").unwrap_or_else(|_| default_clickhouse_database()),
+            username: env::var("CLICKHOUSE_USER").unwrap_or_else(|_| default_clickhouse_user()),
+            password: env::var("CLICKHOUSE_PASSWORD")
+                .unwrap_or_else(|_| default_clickhouse_password()),
+            timeout_ms: env::var("CLICKHOUSE_TIMEOUT_MS")
+                .unwrap_or_else(|_| default_clickhouse_timeout_ms().to_string())
+                .parse()
+                .unwrap_or(default_clickhouse_timeout_ms()),
+        };
+
+        let kafka = KafkaConfig {
+            brokers: env::var("KAFKA_BROKERS").expect("KAFKA_BROKERS must be set"),
+            events_topic: env::var("KAFKA_EVENTS_TOPIC").unwrap_or_else(|_| default_events_topic()),
+        };
+
         Ok(Config {
             app,
             database,
@@ -253,6 +314,8 @@ impl Config {
             rate_limit,
             s3,
             cors,
+            clickhouse,
+            kafka,
         })
     }
 

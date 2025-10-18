@@ -1,15 +1,36 @@
-/// Service layer for authentication, email operations, and S3 storage
+/// Service layer for authentication, email operations, S3 storage, and social features
+pub mod backup_codes;
+pub mod cdc;
 pub mod email_verification;
+pub mod events;
+pub mod feed_ranking;
+pub mod feed_service;
 pub mod image_processing;
 pub mod job_queue;
+pub mod jwt_key_rotation;
+pub mod kafka_producer;
+pub mod oauth;
+pub mod password_reset_service;
+pub mod query_profiler;
+pub mod redis_job;
 pub mod s3_service;
 pub mod token_revocation;
+pub mod two_fa;
 
 // Service modules:
+// - backup_codes: Two-factor authentication backup codes management
+// - cdc: Change Data Capture consumer (PostgreSQL → Kafka → ClickHouse sync)
 // - email_verification: Email verification token management with Redis
+// - events: Application events consumer (Kafka → ClickHouse for analytics)
+// - feed_service: Personalized feed ranking with ClickHouse (Follow + Trending + Affinity)
 // - image_processing: Image resizing and variant generation (thumbnail, medium, original)
 // - job_queue: Background job queue for async image processing (MPSC channel-based)
-// - token_revocation: JWT token blacklist management for logout
+// - jwt_key_rotation: JWT signing key rotation for enhanced security
+// - kafka_producer: Kafka message producer for events and CDC
+// - oauth: OAuth2 authentication (Google, GitHub providers)
+// - password_reset_service: Password reset token management
+// - query_profiler: PostgreSQL query performance profiling
+// - redis_job: Background jobs for hot posts, suggestions, and feed cache warming
 // - s3_service: AWS S3 integration for image upload and storage
-// - Placeholder: Authentication service (register, login, refresh token)
-// - Placeholder: Email service (send verification, password reset emails)
+// - token_revocation: JWT token blacklist management for logout
+// - two_fa: Two-factor authentication (TOTP) management

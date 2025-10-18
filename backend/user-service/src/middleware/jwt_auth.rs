@@ -1,11 +1,11 @@
 /// JWT authentication middleware for Bearer token validation
 /// Extracts user_id from JWT claims and adds it to request extensions
 use actix_web::{
-    dev::{forward_ready, Service, ServiceRequest, ServiceResponse, Transform},
+    dev::{forward_ready, Payload, Service, ServiceRequest, ServiceResponse, Transform},
     error::ErrorUnauthorized,
-    Error, HttpMessage,
+    Error, FromRequest, HttpMessage, HttpRequest,
 };
-use futures::future::LocalBoxFuture;
+use futures::future::{ready, LocalBoxFuture, Ready};
 use std::rc::Rc;
 use uuid::Uuid;
 
@@ -102,6 +102,20 @@ where
             let res = service.call(req).await?;
             Ok(res)
         })
+    }
+}
+
+impl FromRequest for UserId {
+    type Error = Error;
+    type Future = Ready<Result<Self, Self::Error>>;
+
+    fn from_request(req: &HttpRequest, _: &mut Payload) -> Self::Future {
+        match req.extensions().get::<UserId>().cloned() {
+            Some(user_id) => ready(Ok(user_id)),
+            None => ready(Err(ErrorUnauthorized(
+                "User ID missing in request extensions",
+            ))),
+        }
     }
 }
 
