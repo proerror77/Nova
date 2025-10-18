@@ -47,6 +47,10 @@ anyhow = "1.0"
 argon2 = "0.5"
 jsonwebtoken = "9.2"
 rand = "0.8"
+rsa = { version = "0.9", features = ["sha2"] }
+aes-gcm = "0.10"
+hmac = "0.12"
+qrcode = "0.12"
 
 # Validation
 validator = { version = "0.18", features = ["derive"] }
@@ -65,11 +69,26 @@ aws-config = "1.1"
 aws-sdk-s3 = "1.13"
 
 # Hashing and encoding
+sha1 = "0.10"
 sha2 = "0.10"
 hex = "0.4"
 
 # MIME type detection
 mime = "0.3"
+
+# Encoding
+base64 = "0.21"
+
+# Async traits
+async-trait = "0.1"
+
+# HTTP client for OAuth
+reqwest = { version = "0.12", features = ["json"] }
+urlencoding = "2.1"
+
+# ClickHouse client
+clickhouse = { version = "0.12" }
+rdkafka = { version = "0.36", features = ["tokio", "cmake-build"] }
 
 [profile.release]
 opt-level = 3
