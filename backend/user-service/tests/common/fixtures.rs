@@ -2,7 +2,7 @@
 /// Provides database setup, test data creation, and cleanup
 use chrono::Utc;
 use sqlx::PgPool;
-use user_service::models::{Post, PostImage, User};
+use user_service::models::{OAuthConnection, Post, PostImage, User};
 use uuid::Uuid;
 
 // ============================================
@@ -46,6 +46,11 @@ pub async fn cleanup_test_data(pool: &PgPool) {
         .ok();
 
     sqlx::query("DELETE FROM posts").execute(pool).await.ok();
+
+    sqlx::query("DELETE FROM oauth_connections")
+        .execute(pool)
+        .await
+        .ok();
 
     sqlx::query("DELETE FROM sessions").execute(pool).await.ok();
 
@@ -266,4 +271,276 @@ pub async fn create_test_posts_batch(pool: &PgPool, user_id: Uuid, count: usize)
     }
 
     posts
+}
+
+// ============================================
+// OAuth Test Helpers
+// ============================================
+
+/// Create a test OAuth connection for a user
+pub async fn create_test_oauth_connection(
+    pool: &PgPool,
+    user_id: Uuid,
+    provider: &str,
+    provider_user_id: &str,
+) -> OAuthConnection {
+    use sha2::{Digest, Sha256};
+
+    let id = Uuid::new_v4();
+    let now = Utc::now();
+
+    // Hash tokens for storage
+    let mut hasher = Sha256::new();
+    hasher.update(b"test_access_token");
+    let access_token_hash = hex::encode(hasher.finalize());
+
+    let mut hasher = Sha256::new();
+    hasher.update(b"test_refresh_token");
+    let refresh_token_hash = hex::encode(hasher.finalize());
+
+    let expires_at = now + chrono::Duration::hours(1);
+
+    sqlx::query_as::<_, OAuthConnection>(
+        r#"
+        INSERT INTO oauth_connections
+        (id, user_id, provider, provider_user_id, provider_email, display_name,
+         access_token_hash, refresh_token_hash, token_expires_at, created_at, updated_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        RETURNING id, user_id, provider, provider_user_id, provider_email, display_name,
+                  access_token_hash, refresh_token_hash, token_expires_at, created_at, updated_at
+        "#,
+    )
+    .bind(id)
+    .bind(user_id)
+    .bind(provider)
+    .bind(provider_user_id)
+    .bind(format!("{}@{}.com", provider_user_id, provider))
+    .bind(Some(format!("Test {} User", provider)))
+    .bind(access_token_hash)
+    .bind(Some(refresh_token_hash))
+    .bind(Some(expires_at))
+    .bind(now)
+    .bind(now)
+    .fetch_one(pool)
+    .await
+    .expect("Failed to create test OAuth connection")
+}
+
+/// Find OAuth connection by provider and provider user ID
+pub async fn find_oauth_connection(
+    pool: &PgPool,
+    provider: &str,
+    provider_user_id: &str,
+) -> Option<OAuthConnection> {
+    sqlx::query_as::<_, OAuthConnection>(
+        r#"
+        SELECT id, user_id, provider, provider_user_id, provider_email, display_name,
+               access_token_hash, refresh_token_hash, token_expires_at, created_at, updated_at
+        FROM oauth_connections
+        WHERE provider = $1 AND provider_user_id = $2
+        "#,
+    )
+    .bind(provider)
+    .bind(provider_user_id)
+    .fetch_optional(pool)
+    .await
+    .ok()
+    .flatten()
+}
+
+/// Count OAuth connections for a user
+pub async fn count_user_oauth_connections(pool: &PgPool, user_id: Uuid) -> i64 {
+    sqlx::query_scalar::<_, i64>(
+        r#"
+        SELECT COUNT(*) FROM oauth_connections WHERE user_id = $1
+        "#,
+    )
+    .bind(user_id)
+    .fetch_one(pool)
+    .await
+    .unwrap_or(0)
+}
+
+// ============================================
+// Security Testing Helpers
+// ============================================
+
+/// Create a test user with unverified email
+pub async fn create_unverified_user(pool: &PgPool, email: &str, password_hash: &str) -> User {
+    let username = format!(
+        "user_{}",
+        Uuid::new_v4()
+            .to_string()
+            .chars()
+            .take(8)
+            .collect::<String>()
+    );
+
+    sqlx::query_as::<_, User>(
+        r#"
+        INSERT INTO users (email, username, password_hash, email_verified, is_active)
+        VALUES ($1, $2, $3, false, true)
+        RETURNING id, email, username, password_hash, email_verified, is_active,
+                  failed_login_attempts, locked_until, created_at, updated_at, last_login_at
+        "#,
+    )
+    .bind(email)
+    .bind(&username)
+    .bind(password_hash)
+    .fetch_one(pool)
+    .await
+    .expect("Failed to create unverified user")
+}
+
+/// Lock a user account until specified time
+pub async fn lock_user_account(pool: &PgPool, user_id: Uuid, locked_until: chrono::DateTime<Utc>) {
+    sqlx::query(
+        r#"
+        UPDATE users
+        SET failed_login_attempts = 5, locked_until = $1
+        WHERE id = $2
+        "#,
+    )
+    .bind(locked_until)
+    .bind(user_id)
+    .execute(pool)
+    .await
+    .expect("Failed to lock user account");
+}
+
+/// Get user's failed login attempts count
+pub async fn get_failed_login_attempts(pool: &PgPool, user_id: Uuid) -> i32 {
+    sqlx::query_scalar::<_, i32>(
+        r#"
+        SELECT failed_login_attempts FROM users WHERE id = $1
+        "#,
+    )
+    .bind(user_id)
+    .fetch_one(pool)
+    .await
+    .unwrap_or(0)
+}
+
+/// Get user's lock status
+pub async fn get_user_lock_status(pool: &PgPool, user_id: Uuid) -> Option<chrono::DateTime<Utc>> {
+    sqlx::query_scalar::<_, Option<chrono::DateTime<Utc>>>(
+        r#"
+        SELECT locked_until FROM users WHERE id = $1
+        "#,
+    )
+    .bind(user_id)
+    .fetch_one(pool)
+    .await
+    .ok()
+    .flatten()
+}
+
+// ============================================
+// Redis Test Helpers
+// ============================================
+
+/// Create a test Redis connection manager
+pub async fn create_test_redis() -> redis::aio::ConnectionManager {
+    let redis_url =
+        std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://localhost:6379".to_string());
+
+    let client = redis::Client::open(redis_url).expect("Failed to create Redis client");
+
+    redis::aio::ConnectionManager::new(client)
+        .await
+        .expect("Failed to connect to Redis")
+}
+
+/// Clear all Redis keys (for test isolation)
+pub async fn clear_redis(redis: &mut redis::aio::ConnectionManager) {
+    use redis::AsyncCommands;
+    let _: Result<(), redis::RedisError> = redis.del("*").await;
+}
+
+// ============================================
+// Performance Testing Helpers
+// ============================================
+
+/// Calculate percentile from sorted durations
+pub fn calculate_percentile(
+    mut durations: Vec<std::time::Duration>,
+    percentile: f64,
+) -> std::time::Duration {
+    if durations.is_empty() {
+        return std::time::Duration::from_secs(0);
+    }
+
+    durations.sort();
+    let index = ((percentile / 100.0) * durations.len() as f64).ceil() as usize - 1;
+    durations[index.min(durations.len() - 1)]
+}
+
+/// Statistics for performance testing
+#[derive(Debug)]
+pub struct PerformanceStats {
+    pub total_requests: usize,
+    pub successful: usize,
+    pub failed: usize,
+    pub p50: std::time::Duration,
+    pub p95: std::time::Duration,
+    pub p99: std::time::Duration,
+    pub min: std::time::Duration,
+    pub max: std::time::Duration,
+    pub avg: std::time::Duration,
+}
+
+impl PerformanceStats {
+    pub fn from_durations(durations: Vec<std::time::Duration>, failed_count: usize) -> Self {
+        if durations.is_empty() {
+            return Self {
+                total_requests: failed_count,
+                successful: 0,
+                failed: failed_count,
+                p50: std::time::Duration::from_secs(0),
+                p95: std::time::Duration::from_secs(0),
+                p99: std::time::Duration::from_secs(0),
+                min: std::time::Duration::from_secs(0),
+                max: std::time::Duration::from_secs(0),
+                avg: std::time::Duration::from_secs(0),
+            };
+        }
+
+        let mut sorted = durations.clone();
+        sorted.sort();
+
+        let total = durations.len();
+        let sum: std::time::Duration = durations.iter().sum();
+        let avg = sum / total as u32;
+
+        Self {
+            total_requests: total + failed_count,
+            successful: total,
+            failed: failed_count,
+            p50: calculate_percentile(sorted.clone(), 50.0),
+            p95: calculate_percentile(sorted.clone(), 95.0),
+            p99: calculate_percentile(sorted.clone(), 99.0),
+            min: sorted.first().copied().unwrap(),
+            max: sorted.last().copied().unwrap(),
+            avg,
+        }
+    }
+
+    pub fn print_report(&self) {
+        println!("\n=== Performance Test Results ===");
+        println!("Total Requests:    {}", self.total_requests);
+        println!("Successful:        {}", self.successful);
+        println!("Failed:            {}", self.failed);
+        println!(
+            "Success Rate:      {:.2}%",
+            (self.successful as f64 / self.total_requests as f64) * 100.0
+        );
+        println!("\nLatency Statistics:");
+        println!("  Min:     {:?}", self.min);
+        println!("  Average: {:?}", self.avg);
+        println!("  P50:     {:?}", self.p50);
+        println!("  P95:     {:?}", self.p95);
+        println!("  P99:     {:?}", self.p99);
+        println!("  Max:     {:?}", self.max);
+        println!("================================\n");
+    }
 }

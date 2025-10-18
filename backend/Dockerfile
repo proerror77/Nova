@@ -1,13 +1,15 @@
 # ============================================
 # Builder Stage - Compile Rust application
 # ============================================
-FROM rust:1.76-slim-bookworm AS builder
+FROM rustlang/rust:nightly-slim as builder
 
 # Install build dependencies
 RUN apt-get update && apt-get install -y \
     pkg-config \
     libssl-dev \
     ca-certificates \
+    cmake \
+    build-essential \
     && rm -rf /var/lib/apt/lists/*
 
 # Create app user for non-root execution
@@ -19,25 +21,10 @@ WORKDIR /app
 # Copy workspace configuration
 COPY Cargo.toml Cargo.lock ./
 
-# Copy service configuration
-COPY user-service/Cargo.toml ./user-service/
+# Copy service configuration and source
+COPY user-service ./user-service
 
-# Create dummy source files to cache dependencies
-RUN mkdir -p user-service/src && \
-    echo "fn main() {}" > user-service/src/main.rs && \
-    echo "" > user-service/src/lib.rs
-
-# Build dependencies only (layer caching optimization)
-RUN cargo build --release --manifest-path user-service/Cargo.toml && \
-    rm -rf user-service/src
-
-# Copy actual source code
-COPY user-service/src ./user-service/src
-
-# Touch main.rs to trigger rebuild (invalidate cache)
-RUN touch user-service/src/main.rs
-
-# Build actual application
+# Build application
 RUN cargo build --release --manifest-path user-service/Cargo.toml
 
 # ============================================

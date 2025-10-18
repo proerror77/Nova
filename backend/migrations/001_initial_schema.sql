@@ -24,11 +24,13 @@ CREATE TABLE users (
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
     last_login_at TIMESTAMP WITH TIME ZONE,
+    deleted_at TIMESTAMP WITH TIME ZONE,
 
     -- Constraints
     CONSTRAINT email_format CHECK (email ~* '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}$'),
     CONSTRAINT username_format CHECK (username ~* '^[a-zA-Z0-9_]{3,50}$'),
-    CONSTRAINT password_hash_not_empty CHECK (LENGTH(password_hash) > 0)
+    CONSTRAINT password_hash_not_empty CHECK (LENGTH(password_hash) > 0),
+    CONSTRAINT not_both_deleted_and_active CHECK (NOT (deleted_at IS NOT NULL AND is_active = TRUE))
 );
 
 -- Indexes for users table
