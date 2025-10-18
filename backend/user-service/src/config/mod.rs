@@ -1,4 +1,5 @@
 pub mod job_config;
+pub mod video_config;
 
 use serde::Deserialize;
 use std::env;
@@ -15,6 +16,7 @@ pub struct Config {
     pub cors: CorsConfig,
     pub clickhouse: ClickHouseConfig,
     pub kafka: KafkaConfig,
+    pub video: video_config::VideoConfig,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -305,6 +307,8 @@ impl Config {
             events_topic: env::var("KAFKA_EVENTS_TOPIC").unwrap_or_else(|_| default_events_topic()),
         };
 
+        let video = video_config::VideoConfig::from_env();
+
         Ok(Config {
             app,
             database,
@@ -316,6 +320,7 @@ impl Config {
             cors,
             clickhouse,
             kafka,
+            video,
         })
     }
 
