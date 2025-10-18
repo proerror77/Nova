@@ -16,6 +16,10 @@ pub mod redis_job;
 pub mod s3_service;
 pub mod token_revocation;
 pub mod two_fa;
+pub mod video_service;
+pub mod video_transcoding;
+pub mod video_processing_pipeline;
+pub mod deep_learning_inference;
 
 // Service modules:
 // - backup_codes: Two-factor authentication backup codes management
@@ -34,3 +38,7 @@ pub mod two_fa;
 // - s3_service: AWS S3 integration for image upload and storage
 // - token_revocation: JWT token blacklist management for logout
 // - two_fa: Two-factor authentication (TOTP) management
+// - video_service: Video upload, processing, and streaming (Phase 4)
+// - video_transcoding: FFmpeg-based transcoding, thumbnail extraction, metadata parsing (Phase 4)
+// - video_processing_pipeline: Orchestrates entire video processing workflow (Phase 4)
+// - deep_learning_inference: TensorFlow Serving + Milvus integration for embeddings (Phase 4)
