@@ -103,3 +103,27 @@ path = "tests/performance/load_test.rs"
 [[test]]
 name = "2fa_test"
 path = "tests/2fa_test.rs"
+
+[[test]]
+name = "events_integration_test"
+path = "tests/integration/events_integration_test.rs"
+
+[[test]]
+name = "feed_api_integration_test"
+path = "tests/integration/feed_api_integration_test.rs"
+
+[[test]]
+name = "feed_ranking_integration_test"
+path = "tests/integration/feed_ranking_integration_test.rs"
+
+[[test]]
+name = "feed_ranking_performance_test"
+path = "tests/performance/feed_ranking_performance_test.rs"
+
+[[test]]
+name = "events_dedup_test"
+path = "tests/integration/events_dedup_test.rs"
+
+[[test]]
+name = "events_load_test"
+path = "tests/performance/events_load_test.rs"
