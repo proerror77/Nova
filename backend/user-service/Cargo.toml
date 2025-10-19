@@ -94,11 +94,11 @@ path = "tests/job_test.rs"
 
 [[test]]
 name = "security_test"
-path = "tests/security/security_test.rs"
+path = "tests/integration/security_test.rs"
 
 [[test]]
 name = "load_test"
-path = "tests/performance/load_test.rs"
+path = "tests/integration/load_test.rs"
 
 [[test]]
 name = "2fa_test"

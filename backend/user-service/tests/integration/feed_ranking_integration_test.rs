@@ -170,8 +170,23 @@ fn test_saturation_control_large_feed() {
         }
     }
 
-    let ranked = service.rank_with_clickhouse(candidates).ok().unwrap_or_default();
-    let final_posts = service.dedup_and_saturation_with_authors(ranked).ok().unwrap_or_default();
+    let deduped = service.dedup_and_saturation_with_authors(candidates).ok().unwrap_or_default();
+    let ranked = service.rank_with_clickhouse(
+        deduped.into_iter().map(|rp| FeedCandidate {
+            post_id: rp.post_id.to_string(),
+            author_id: "test".to_string(),
+            likes: 0,
+            comments: 0,
+            shares: 0,
+            impressions: 0,
+            freshness_score: 0.0,
+            engagement_score: 0.0,
+            affinity_score: 0.0,
+            combined_score: rp.combined_score,
+            created_at: Utc::now(),
+        }).collect()
+    ).ok().unwrap_or_default();
+    let final_posts = ranked;
 
     // Should have at most 100 posts
     assert!(final_posts.len() <= 100);

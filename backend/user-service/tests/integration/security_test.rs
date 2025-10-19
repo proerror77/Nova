@@ -5,8 +5,10 @@ use chrono::{Duration, Utc};
 use serde_json::json;
 use uuid::Uuid;
 
-// Import common test fixtures from parent
-use common::fixtures::*;
+// Import common test fixtures
+#[path = "../common/fixtures.rs"]
+mod fixtures;
+use fixtures::*;
 
 // Import application modules
 use user_service::handlers::auth::{login, register, verify_email};

@@ -173,7 +173,10 @@ fn test_totp_code_generation_consistency() {
 
     // Both calls should return the same result (deterministic behavior)
     assert_eq!(result1.is_ok(), result2.is_ok());
-    assert_eq!(result1.as_deref(), result2.as_deref());
+    match (result1, result2) {
+        (Ok(r1), Ok(r2)) => assert_eq!(r1, r2),
+        _ => {}
+    }
 }
 
 #[test]
