@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Spacing Scale -->
+    <dimen name="space_xs">4dp</dimen>
+    <dimen name="space_sm">8dp</dimen>
+    <dimen name="space_md">12dp</dimen>
+    <dimen name="space_lg">16dp</dimen>
+    <dimen name="space_xl">24dp</dimen>
+    <dimen name="space_xxl">32dp</dimen>
+
+    <!-- Border Radius -->
+    <dimen name="radius_sm">8dp</dimen>
+    <dimen name="radius_md">12dp</dimen>
+    <dimen name="radius_lg">16dp</dimen>
+
+    <!-- Avatar Sizes -->
+    <dimen name="avatar_xs">24dp</dimen>
+    <dimen name="avatar_sm">32dp</dimen>
+    <dimen name="avatar_md">40dp</dimen>
+    <dimen name="avatar_lg">56dp</dimen>
+
+    <!-- Icon Sizes -->
+    <dimen name="icon_md">20dp</dimen>
+    <dimen name="icon_lg">24dp</dimen>
+
+    <!-- Post Card -->
+    <dimen name="post_card_padding_x">12dp</dimen>
+    <dimen name="post_card_padding_y">8dp</dimen>
+    <dimen name="post_card_corner">12dp</dimen>
+
+    <!-- Story -->
+    <dimen name="story_diameter">68dp</dimen>
+    <dimen name="story_ring">2dp</dimen>
+
+    <!-- Grid -->
+    <integer name="grid_columns">3</integer>
+    <dimen name="grid_gap">2dp</dimen>
+    <dimen name="grid_thumb_corner">4dp</dimen>
+
+    <!-- Hit Area -->
+    <dimen name="hit_area_min">44dp</dimen>
+
+    <!-- Typography Line Heights -->
+    <dimen name="line_height_tight">20dp</dimen>
+    <dimen name="line_height_normal">24dp</dimen>
+    <dimen name="line_height_relaxed">28dp</dimen>
+</resources>

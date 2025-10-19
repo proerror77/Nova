@@ -1,0 +1,200 @@
+{
+  "dashboard": {
+    "title": "Feed System Overview",
+    "tags": ["feed", "performance", "overview"],
+    "timezone": "utc",
+    "editable": true,
+    "graphTooltip": 1,
+    "panels": [
+      {
+        "id": 1,
+        "type": "stat",
+        "title": "Event-to-Visible Latency P95 (Target ≤5s)",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(events_processing_latency_ms_bucket{stage=\"total_e2e\"}[5m])) / 1000",
+            "refId": "A",
+            "legendFormat": "E2E Latency P95"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "green"},
+                {"value": 3, "color": "yellow"},
+                {"value": 5, "color": "red"}
+              ]
+            },
+            "unit": "s"
+          }
+        },
+        "gridPos": {"h": 6, "w": 6, "x": 0, "y": 0}
+      },
+      {
+        "id": 2,
+        "type": "stat",
+        "title": "Feed API P95 Latency (Cache Target ≤150ms)",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(feed_api_latency_ms_bucket{source=\"cache_hit\"}[5m]))",
+            "refId": "A",
+            "legendFormat": "Cache Hit P95"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "green"},
+                {"value": 150, "color": "yellow"},
+                {"value": 300, "color": "red"}
+              ]
+            },
+            "unit": "ms"
+          }
+        },
+        "gridPos": {"h": 6, "w": 6, "x": 6, "y": 0}
+      },
+      {
+        "id": 3,
+        "type": "stat",
+        "title": "Cache Hit Rate (Target ≥90%)",
+        "targets": [
+          {
+            "expr": "avg(feed_cache_hit_rate_percent{cache_layer=\"redis\"})",
+            "refId": "A",
+            "legendFormat": "Redis Cache"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "red"},
+                {"value": 80, "color": "yellow"},
+                {"value": 90, "color": "green"}
+              ]
+            },
+            "unit": "percent",
+            "max": 100,
+            "min": 0
+          }
+        },
+        "gridPos": {"h": 6, "w": 6, "x": 12, "y": 0}
+      },
+      {
+        "id": 4,
+        "type": "stat",
+        "title": "System Availability (Target ≥99.5%)",
+        "targets": [
+          {
+            "expr": "(1 - (rate(feed_api_requests_total{status=\"error\"}[5m]) / rate(feed_api_requests_total[5m]))) * 100",
+            "refId": "A",
+            "legendFormat": "Availability %"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "red"},
+                {"value": 99.0, "color": "yellow"},
+                {"value": 99.5, "color": "green"}
+              ]
+            },
+            "unit": "percent",
+            "max": 100,
+            "min": 95
+          }
+        },
+        "gridPos": {"h": 6, "w": 6, "x": 18, "y": 0}
+      },
+      {
+        "id": 5,
+        "type": "graph",
+        "title": "Feed API Request Rate (req/s)",
+        "targets": [
+          {
+            "expr": "sum(rate(feed_api_requests_total[1m])) by (source)",
+            "refId": "A",
+            "legendFormat": "{{source}}"
+          }
+        ],
+        "yaxes": [
+          {"format": "reqps", "label": "Requests/sec"},
+          {"show": false}
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 6}
+      },
+      {
+        "id": 6,
+        "type": "graph",
+        "title": "Feed API Latency Percentiles",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.50, rate(feed_api_latency_ms_bucket[5m]))",
+            "refId": "A",
+            "legendFormat": "P50"
+          },
+          {
+            "expr": "histogram_quantile(0.95, rate(feed_api_latency_ms_bucket[5m]))",
+            "refId": "B",
+            "legendFormat": "P95"
+          },
+          {
+            "expr": "histogram_quantile(0.99, rate(feed_api_latency_ms_bucket[5m]))",
+            "refId": "C",
+            "legendFormat": "P99"
+          }
+        ],
+        "yaxes": [
+          {"format": "ms", "label": "Latency"},
+          {"show": false}
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 6}
+      },
+      {
+        "id": 7,
+        "type": "graph",
+        "title": "Error Rate (Target <0.1%)",
+        "targets": [
+          {
+            "expr": "(rate(feed_api_requests_total{status=\"error\"}[5m]) / rate(feed_api_requests_total[5m])) * 100",
+            "refId": "A",
+            "legendFormat": "Error Rate %"
+          }
+        ],
+        "yaxes": [
+          {"format": "percent", "label": "Error %", "max": 1},
+          {"show": false}
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 14}
+      },
+      {
+        "id": 8,
+        "type": "graph",
+        "title": "ClickHouse Query Latency P95",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(feed_clickhouse_query_ms_bucket[5m]))",
+            "refId": "A",
+            "legendFormat": "{{query_type}}"
+          }
+        ],
+        "yaxes": [
+          {"format": "ms", "label": "Latency"},
+          {"show": false}
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 14}
+      }
+    ],
+    "refresh": "10s",
+    "schemaVersion": 36,
+    "version": 1
+  }
+}

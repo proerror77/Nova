@@ -1,0 +1,28 @@
+name: NovaDesignDemo
+options:
+  bundleIdPrefix: com.nova
+  deploymentTarget:
+    iOS: 15.0
+  developmentLanguage: en
+
+targets:
+  NovaDesignDemo:
+    type: application
+    platform: iOS
+    deploymentTarget: 15.0
+    sources:
+      - NovaDesignDemo
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.nova.NovaDesignDemo
+        INFOPLIST_FILE: NovaDesignDemo/Info.plist
+        SWIFT_VERSION: 5.9
+        DEVELOPMENT_TEAM: ""
+        CODE_SIGN_STYLE: Automatic
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        TARGETED_DEVICE_FAMILY: 1,2
+      debug:
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG
+      release:
+        SWIFT_OPTIMIZATION_LEVEL: -O

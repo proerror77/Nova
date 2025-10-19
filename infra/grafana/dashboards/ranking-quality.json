@@ -1,0 +1,346 @@
+{
+  "dashboard": {
+    "title": "Feed Ranking Quality Metrics",
+    "description": "Feed Ranking Algorithm Performance and Data Quality",
+    "uid": "ranking-quality",
+    "tags": [
+      "nova",
+      "phase3",
+      "ranking",
+      "quality"
+    ],
+    "timezone": "browser",
+    "schemaVersion": 39,
+    "version": 1,
+    "refresh": "30s",
+    "time": {
+      "from": "now-24h",
+      "to": "now"
+    },
+    "panels": [
+      {
+        "title": "Freshness Component (exponential decay)",
+        "type": "graph",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 0
+        },
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.50, rate(ranking_freshness_score_bucket[5m]))",
+            "refId": "A",
+            "legendFormat": "P50"
+          },
+          {
+            "expr": "histogram_quantile(0.95, rate(ranking_freshness_score_bucket[5m]))",
+            "refId": "B",
+            "legendFormat": "P95"
+          }
+        ]
+      },
+      {
+        "title": "Engagement Component (log-normalized)",
+        "type": "graph",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 0
+        },
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.50, rate(ranking_engagement_score_bucket[5m]))",
+            "refId": "A",
+            "legendFormat": "P50"
+          },
+          {
+            "expr": "histogram_quantile(0.95, rate(ranking_engagement_score_bucket[5m]))",
+            "refId": "B",
+            "legendFormat": "P95"
+          }
+        ]
+      },
+      {
+        "title": "Affinity Component (user-author 90d)",
+        "type": "graph",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 8
+        },
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.50, rate(ranking_affinity_score_bucket[5m]))",
+            "refId": "A",
+            "legendFormat": "P50"
+          },
+          {
+            "expr": "histogram_quantile(0.95, rate(ranking_affinity_score_bucket[5m]))",
+            "refId": "B",
+            "legendFormat": "P95"
+          }
+        ]
+      },
+      {
+        "title": "Final Ranking Score Distribution",
+        "type": "graph",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 8
+        },
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.25, rate(ranking_final_score_bucket[5m]))",
+            "refId": "A",
+            "legendFormat": "P25"
+          },
+          {
+            "expr": "histogram_quantile(0.50, rate(ranking_final_score_bucket[5m]))",
+            "refId": "B",
+            "legendFormat": "P50"
+          },
+          {
+            "expr": "histogram_quantile(0.95, rate(ranking_final_score_bucket[5m]))",
+            "refId": "C",
+            "legendFormat": "P95"
+          }
+        ]
+      },
+      {
+        "title": "Posts Deduplicated %",
+        "type": "gauge",
+        "gridPos": {
+          "h": 8,
+          "w": 6,
+          "x": 0,
+          "y": 16
+        },
+        "targets": [
+          {
+            "expr": "(sum(rate(ranking_posts_deduplicated_total[5m])) / sum(rate(ranking_posts_fetched_total[5m]))) * 100",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "max": 100,
+            "min": 0,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "yellow",
+                  "value": 0
+                },
+                {
+                  "color": "green",
+                  "value": 95
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "title": "Posts Removed by Saturation %",
+        "type": "gauge",
+        "gridPos": {
+          "h": 8,
+          "w": 6,
+          "x": 6,
+          "y": 16
+        },
+        "targets": [
+          {
+            "expr": "(sum(rate(ranking_posts_saturation_removed_total[5m])) / sum(rate(ranking_posts_fetched_total[5m]))) * 100",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "max": 100,
+            "min": 0,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": 0
+                },
+                {
+                  "color": "yellow",
+                  "value": 20
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "title": "Candidate Set Sizes (avg posts fetched)",
+        "type": "graph",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 16
+        },
+        "targets": [
+          {
+            "expr": "rate(ranking_followees_candidates_total[1m])",
+            "refId": "A",
+            "legendFormat": "Followees (F1)"
+          },
+          {
+            "expr": "rate(ranking_trending_candidates_total[1m])",
+            "refId": "B",
+            "legendFormat": "Trending (F2)"
+          },
+          {
+            "expr": "rate(ranking_affinity_candidates_total[1m])",
+            "refId": "C",
+            "legendFormat": "Affinity (F3)"
+          }
+        ]
+      },
+      {
+        "title": "Top 1000 Users Feed Cache Warmed",
+        "type": "gauge",
+        "gridPos": {
+          "h": 8,
+          "w": 6,
+          "x": 0,
+          "y": 24
+        },
+        "targets": [
+          {
+            "expr": "top_1000_users_warmed_total",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "max": 1000,
+            "min": 0,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "red",
+                  "value": 0
+                },
+                {
+                  "color": "yellow",
+                  "value": 800
+                },
+                {
+                  "color": "green",
+                  "value": 950
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "title": "Cache Warm Cycle Success %",
+        "type": "gauge",
+        "gridPos": {
+          "h": 8,
+          "w": 6,
+          "x": 6,
+          "y": 24
+        },
+        "targets": [
+          {
+            "expr": "(rate(cache_warmer_successes_total[1h]) / (rate(cache_warmer_successes_total[1h]) + rate(cache_warmer_failures_total[1h]))) * 100",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "max": 100,
+            "min": 0,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "red",
+                  "value": 0
+                },
+                {
+                  "color": "yellow",
+                  "value": 95
+                },
+                {
+                  "color": "green",
+                  "value": 99
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "title": "Ranking Query Fallback Ratio %",
+        "type": "gauge",
+        "gridPos": {
+          "h": 8,
+          "w": 6,
+          "x": 12,
+          "y": 24
+        },
+        "targets": [
+          {
+            "expr": "(sum(rate(circuit_breaker_fallback_queries_total[5m])) / sum(rate(feed_api_requests_total[5m]))) * 100",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "max": 100,
+            "min": 0,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": 0
+                },
+                {
+                  "color": "yellow",
+                  "value": 10
+                },
+                {
+                  "color": "red",
+                  "value": 25
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "title": "Posts per User Feed (avg)",
+        "type": "stat",
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 18,
+          "y": 24
+        },
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.50, rate(ranking_posts_returned_bucket[5m]))",
+            "refId": "A"
+          }
+        ]
+      }
+    ]
+  }
+}

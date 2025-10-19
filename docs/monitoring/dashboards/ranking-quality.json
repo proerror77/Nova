@@ -1,0 +1,219 @@
+{
+  "dashboard": {
+    "title": "Feed Ranking Quality Metrics",
+    "tags": ["ranking", "quality", "personalization"],
+    "timezone": "utc",
+    "editable": true,
+    "graphTooltip": 1,
+    "panels": [
+      {
+        "id": 1,
+        "type": "heatmap",
+        "title": "Freshness Score Distribution",
+        "targets": [
+          {
+            "expr": "feed_ranking_duration_ms_bucket{strategy=\"freshness_boost\"}",
+            "refId": "A",
+            "format": "heatmap",
+            "legendFormat": "{{le}}"
+          }
+        ],
+        "dataFormat": "tsbuckets",
+        "yAxis": {
+          "format": "short",
+          "logBase": 1
+        },
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0}
+      },
+      {
+        "id": 2,
+        "type": "heatmap",
+        "title": "Engagement Score Distribution",
+        "targets": [
+          {
+            "expr": "feed_ranking_duration_ms_bucket{strategy=\"engagement_score\"}",
+            "refId": "A",
+            "format": "heatmap",
+            "legendFormat": "{{le}}"
+          }
+        ],
+        "dataFormat": "tsbuckets",
+        "yAxis": {
+          "format": "short",
+          "logBase": 1
+        },
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0}
+      },
+      {
+        "id": 3,
+        "type": "graph",
+        "title": "Deduplication Enforcement Rate (Target: 100%)",
+        "targets": [
+          {
+            "expr": "(sum(rate(feed_dedup_posts_removed_total[5m])) / sum(rate(feed_api_requests_total{source=\"clickhouse_query\"}[5m]))) * 100",
+            "refId": "A",
+            "legendFormat": "Dedup Rate %"
+          }
+        ],
+        "yaxes": [
+          {"format": "percent", "label": "Dedup %", "min": 0, "max": 100},
+          {"show": false}
+        ],
+        "alert": {
+          "conditions": [
+            {
+              "evaluator": {"params": [99], "type": "lt"},
+              "operator": {"type": "and"},
+              "query": {"params": ["A", "5m", "now"]},
+              "type": "query"
+            }
+          ],
+          "executionErrorState": "alerting",
+          "frequency": "1m",
+          "handler": 1,
+          "name": "Dedup Rate Low",
+          "noDataState": "no_data"
+        },
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8}
+      },
+      {
+        "id": 4,
+        "type": "graph",
+        "title": "Saturation Rule Enforcement Rate",
+        "targets": [
+          {
+            "expr": "sum(rate(feed_saturation_posts_removed_total[5m])) by (rule)",
+            "refId": "A",
+            "legendFormat": "{{rule}}"
+          }
+        ],
+        "yaxes": [
+          {"format": "ops", "label": "Posts removed/sec"},
+          {"show": false}
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8}
+      },
+      {
+        "id": 5,
+        "type": "stat",
+        "title": "Circuit Breaker State",
+        "targets": [
+          {
+            "expr": "feed_circuit_breaker_state{service=\"clickhouse\"}",
+            "refId": "A",
+            "legendFormat": "ClickHouse"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "mappings": [
+              {"value": 0, "text": "Closed (Healthy)"},
+              {"value": 1, "text": "Half-Open (Testing)"},
+              {"value": 2, "text": "Open (Failed)"}
+            ],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "green"},
+                {"value": 1, "color": "yellow"},
+                {"value": 2, "color": "red"}
+              ]
+            }
+          }
+        },
+        "gridPos": {"h": 6, "w": 6, "x": 0, "y": 16}
+      },
+      {
+        "id": 6,
+        "type": "stat",
+        "title": "Top 1000 Users Cache Coverage",
+        "targets": [
+          {
+            "expr": "feed_top_1000_users_warmed{status=\"warmed\"}",
+            "refId": "A",
+            "legendFormat": "Warmed"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "red"},
+                {"value": 800, "color": "yellow"},
+                {"value": 950, "color": "green"}
+              ]
+            },
+            "unit": "short",
+            "max": 1000,
+            "min": 0
+          }
+        },
+        "gridPos": {"h": 6, "w": 6, "x": 6, "y": 16}
+      },
+      {
+        "id": 7,
+        "type": "graph",
+        "title": "Cache Invalidation Events",
+        "targets": [
+          {
+            "expr": "sum(rate(feed_cache_invalidations_total[5m])) by (event_type)",
+            "refId": "A",
+            "legendFormat": "{{event_type}}"
+          }
+        ],
+        "yaxes": [
+          {"format": "ops", "label": "Invalidations/sec"},
+          {"show": false}
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16}
+      },
+      {
+        "id": 8,
+        "type": "graph",
+        "title": "Feed Ranking Computation Duration P95",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(feed_ranking_duration_ms_bucket[5m]))",
+            "refId": "A",
+            "legendFormat": "{{strategy}}"
+          }
+        ],
+        "yaxes": [
+          {"format": "ms", "label": "Duration"},
+          {"show": false}
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 24}
+      },
+      {
+        "id": 9,
+        "type": "table",
+        "title": "Affinity Personalization Effectiveness",
+        "targets": [
+          {
+            "expr": "sum(rate(feed_ranking_duration_ms_count{strategy=\"affinity_personalization\"}[5m]))",
+            "refId": "A",
+            "instant": true,
+            "format": "table"
+          }
+        ],
+        "transformations": [
+          {
+            "id": "organize",
+            "options": {
+              "excludeByName": {},
+              "indexByName": {},
+              "renameByName": {
+                "Value": "Requests/sec"
+              }
+            }
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 24}
+      }
+    ],
+    "refresh": "30s",
+    "schemaVersion": 36,
+    "version": 1
+  }
+}

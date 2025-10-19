@@ -1,0 +1,347 @@
+---
+# Kubernetes Deployment for Video Ranking Service
+# Phase 4 Phase 3 - Video Ranking & Feed APIs
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: video-ranking-service
+  namespace: nova
+  labels:
+    app: video-ranking-service
+    version: v1
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: video-ranking-service
+  template:
+    metadata:
+      labels:
+        app: video-ranking-service
+        version: v1
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: video-ranking-service
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+
+      initContainers:
+      - name: migrate-database
+        image: video-ranking-service:latest
+        imagePullPolicy: IfNotPresent
+        command: ["cargo", "run", "--bin", "migrate"]
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: database-credentials
+              key: url
+        - name: ENVIRONMENT
+          value: "production"
+
+      containers:
+      - name: video-ranking-service
+        image: video-ranking-service:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: http
+          containerPort: 8000
+          protocol: TCP
+        - name: metrics
+          containerPort: 9090
+          protocol: TCP
+
+        env:
+        # Service Configuration
+        - name: APP_ENV
+          value: "production"
+        - name: APP_HOST
+          value: "0.0.0.0"
+        - name: APP_PORT
+          value: "8000"
+
+        # Database Configuration
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: database-credentials
+              key: url
+        - name: DATABASE_MAX_CONNECTIONS
+          value: "20"
+
+        # Redis Configuration
+        - name: REDIS_URL
+          valueFrom:
+            secretKeyRef:
+              name: redis-credentials
+              key: url
+
+        # ClickHouse Configuration
+        - name: CLICKHOUSE_URL
+          valueFrom:
+            configMapKeyRef:
+              name: clickhouse-config
+              key: url
+        - name: CLICKHOUSE_DATABASE
+          valueFrom:
+            configMapKeyRef:
+              name: clickhouse-config
+              key: database
+        - name: CLICKHOUSE_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: clickhouse-credentials
+              key: username
+        - name: CLICKHOUSE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: clickhouse-credentials
+              key: password
+
+        # Kafka Configuration
+        - name: KAFKA_BROKERS
+          valueFrom:
+            configMapKeyRef:
+              name: kafka-config
+              key: brokers
+        - name: KAFKA_EVENTS_TOPIC
+          valueFrom:
+            configMapKeyRef:
+              name: kafka-config
+              key: events-topic
+
+        # JWT Configuration
+        - name: JWT_PRIVATE_KEY_PEM
+          valueFrom:
+            secretKeyRef:
+              name: jwt-keys
+              key: private-key
+        - name: JWT_PUBLIC_KEY_PEM
+          valueFrom:
+            secretKeyRef:
+              name: jwt-keys
+              key: public-key
+
+        # S3 Configuration
+        - name: S3_ENDPOINT
+          valueFrom:
+            configMapKeyRef:
+              name: s3-config
+              key: endpoint
+        - name: S3_REGION
+          valueFrom:
+            configMapKeyRef:
+              name: s3-config
+              key: region
+        - name: S3_BUCKET
+          valueFrom:
+            configMapKeyRef:
+              name: s3-config
+              key: bucket
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: aws-credentials
+              key: access-key-id
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: aws-credentials
+              key: secret-access-key
+
+        # Logging
+        - name: RUST_LOG
+          value: "info,actix_web=debug,sqlx=debug"
+
+        # CORS Configuration
+        - name: CORS_ALLOWED_ORIGINS
+          value: "https://example.com,https://app.example.com"
+
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "512Mi"
+          limits:
+            cpu: "2000m"
+            memory: "2Gi"
+
+        livenessProbe:
+          httpGet:
+            path: /api/v1/health/live
+            port: http
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+
+        readinessProbe:
+          httpGet:
+            path: /api/v1/health/ready
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 2
+
+        startupProbe:
+          httpGet:
+            path: /api/v1/health/live
+            port: http
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          failureThreshold: 30
+
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        - name: var-run
+          mountPath: /var/run
+
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - video-ranking-service
+              topologyKey: kubernetes.io/hostname
+
+      volumes:
+      - name: tmp
+        emptyDir: {}
+      - name: var-run
+        emptyDir: {}
+
+---
+# Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: video-ranking-service
+  namespace: nova
+  labels:
+    app: video-ranking-service
+spec:
+  type: ClusterIP
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8000
+    protocol: TCP
+  - name: metrics
+    port: 9090
+    targetPort: 9090
+    protocol: TCP
+  selector:
+    app: video-ranking-service
+
+---
+# Horizontal Pod Autoscaler
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: video-ranking-service-hpa
+  namespace: nova
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: video-ranking-service
+  minReplicas: 3
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 15
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 50
+        periodSeconds: 60
+
+---
+# ServiceAccount
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: video-ranking-service
+  namespace: nova
+
+---
+# Role for accessing ConfigMaps and Secrets
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: video-ranking-service
+  namespace: nova
+rules:
+- apiGroups: [""]
+  resources: ["configmaps", "secrets"]
+  verbs: ["get", "list", "watch"]
+
+---
+# RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: video-ranking-service
+  namespace: nova
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: video-ranking-service
+subjects:
+- kind: ServiceAccount
+  name: video-ranking-service
+  namespace: nova
+
+---
+# PodDisruptionBudget
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: video-ranking-service-pdb
+  namespace: nova
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: video-ranking-service

@@ -1,0 +1,125 @@
+<?xml version="1.0"?>
+<!-- ============================================
+     ClickHouse Custom Configuration
+     Version: 1.0.0
+     Date: 2025-10-18
+     Purpose: Development-optimized settings
+     ============================================ -->
+<clickhouse>
+    <!-- ============================================
+         Logging Configuration
+         ============================================ -->
+    <logger>
+        <level>information</level>
+        <log>/var/log/clickhouse-server/clickhouse-server.log</log>
+        <errorlog>/var/log/clickhouse-server/clickhouse-server.err.log</errorlog>
+        <size>1000M</size>
+        <count>10</count>
+    </logger>
+
+    <!-- ============================================
+         Query Log (for performance monitoring)
+         ============================================ -->
+    <query_log>
+        <database>system</database>
+        <table>query_log</table>
+        <partition_by>toYYYYMM(event_date)</partition_by>
+        <flush_interval_milliseconds>7500</flush_interval_milliseconds>
+    </query_log>
+
+    <!-- ============================================
+         Kafka Engine Settings
+         ============================================ -->
+    <kafka>
+        <!-- Poll timeout for Kafka consumers -->
+        <kafka_poll_timeout_ms>1000</kafka_poll_timeout_ms>
+
+        <!-- Max poll interval (5 minutes) -->
+        <kafka_max_poll_interval_ms>300000</kafka_max_poll_interval_ms>
+
+        <!-- Session timeout (30 seconds) -->
+        <kafka_session_timeout_ms>30000</kafka_session_timeout_ms>
+    </kafka>
+
+    <!-- ============================================
+         Memory Limits (Development)
+         ============================================ -->
+    <max_server_memory_usage>4294967296</max_server_memory_usage> <!-- 4GB -->
+    <max_memory_usage>2147483648</max_memory_usage> <!-- 2GB per query -->
+
+    <!-- ============================================
+         Compression (Default: LZ4)
+         ============================================ -->
+    <compression>
+        <case>
+            <method>lz4</method>
+        </case>
+    </compression>
+
+    <!-- ============================================
+         MergeTree Settings
+         ============================================ -->
+    <merge_tree>
+        <!-- Max number of parts per partition before auto-merge -->
+        <parts_to_throw_insert>300</parts_to_throw_insert>
+
+        <!-- Background merge threads -->
+        <max_bytes_to_merge_at_max_space_in_pool>161061273600</max_bytes_to_merge_at_max_space_in_pool>
+
+        <!-- TTL merge frequency (hourly) -->
+        <merge_with_ttl_timeout>3600</merge_with_ttl_timeout>
+    </merge_tree>
+
+    <!-- ============================================
+         Network Settings
+         ============================================ -->
+    <listen_host>0.0.0.0</listen_host>
+    <http_port>8123</http_port>
+    <tcp_port>9000</tcp_port>
+    <interserver_http_port>9009</interserver_http_port>
+
+    <!-- ============================================
+         Performance Settings (Development)
+         ============================================ -->
+    <max_concurrent_queries>100</max_concurrent_queries>
+    <max_connections>1024</max_connections>
+
+    <!-- Background processing threads -->
+    <background_pool_size>16</background_pool_size>
+    <background_schedule_pool_size>16</background_schedule_pool_size>
+
+    <!-- ============================================
+         Query Settings
+         ============================================ -->
+    <profiles>
+        <default>
+            <!-- Max query execution time (5 minutes) -->
+            <max_execution_time>300</max_execution_time>
+
+            <!-- Enable parallel query execution -->
+            <max_threads>8</max_threads>
+
+            <!-- Allow experimental features (for window functions) -->
+            <allow_experimental_window_functions>1</allow_experimental_window_functions>
+
+            <!-- Enable query cache (ClickHouse 22.8+) -->
+            <use_query_cache>1</use_query_cache>
+        </default>
+    </profiles>
+
+    <!-- ============================================
+         Data Paths
+         ============================================ -->
+    <path>/var/lib/clickhouse/</path>
+    <tmp_path>/var/lib/clickhouse/tmp/</tmp_path>
+    <user_files_path>/var/lib/clickhouse/user_files/</user_files_path>
+    <format_schema_path>/var/lib/clickhouse/format_schemas/</format_schema_path>
+
+    <!-- ============================================
+         Security (Development - permissive)
+         ============================================ -->
+    <users_config>users.xml</users_config>
+
+    <!-- Allow connections from any IP (dev only) -->
+    <access_control_path>/var/lib/clickhouse/access/</access_control_path>
+</clickhouse>

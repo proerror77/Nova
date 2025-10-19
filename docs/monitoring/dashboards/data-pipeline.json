@@ -1,0 +1,223 @@
+{
+  "dashboard": {
+    "title": "Data Pipeline Monitoring",
+    "tags": ["pipeline", "cdc", "events", "clickhouse"],
+    "timezone": "utc",
+    "editable": true,
+    "graphTooltip": 1,
+    "panels": [
+      {
+        "id": 1,
+        "type": "graph",
+        "title": "CDC Consumer Lag (Messages Behind)",
+        "targets": [
+          {
+            "expr": "cdc_consumer_lag_messages",
+            "refId": "A",
+            "legendFormat": "{{table}} partition {{partition}}"
+          }
+        ],
+        "yaxes": [
+          {"format": "short", "label": "Messages", "logBase": 1},
+          {"show": false}
+        ],
+        "alert": {
+          "conditions": [
+            {
+              "evaluator": {"params": [1000], "type": "gt"},
+              "operator": {"type": "and"},
+              "query": {"params": ["A", "5m", "now"]},
+              "type": "query"
+            }
+          ],
+          "executionErrorState": "alerting",
+          "frequency": "1m",
+          "handler": 1,
+          "name": "CDC Consumer Lag High",
+          "noDataState": "no_data"
+        },
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0}
+      },
+      {
+        "id": 2,
+        "type": "graph",
+        "title": "CDC Lag Age (Time Behind)",
+        "targets": [
+          {
+            "expr": "cdc_lag_age_seconds",
+            "refId": "A",
+            "legendFormat": "{{table}}"
+          }
+        ],
+        "yaxes": [
+          {"format": "s", "label": "Seconds"},
+          {"show": false}
+        ],
+        "alert": {
+          "conditions": [
+            {
+              "evaluator": {"params": [30], "type": "gt"},
+              "operator": {"type": "and"},
+              "query": {"params": ["A", "5m", "now"]},
+              "type": "query"
+            }
+          ],
+          "executionErrorState": "alerting",
+          "frequency": "1m",
+          "handler": 1,
+          "name": "CDC Lag Age High",
+          "noDataState": "no_data"
+        },
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0}
+      },
+      {
+        "id": 3,
+        "type": "graph",
+        "title": "Events Consumer Lag (Seconds)",
+        "targets": [
+          {
+            "expr": "events_consumer_lag_seconds",
+            "refId": "A",
+            "legendFormat": "Partition {{partition}}"
+          }
+        ],
+        "yaxes": [
+          {"format": "s", "label": "Lag (seconds)"},
+          {"show": false}
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8}
+      },
+      {
+        "id": 4,
+        "type": "graph",
+        "title": "Events Processing Rate",
+        "targets": [
+          {
+            "expr": "sum(rate(events_consumed_total{status=\"success\"}[1m]))",
+            "refId": "A",
+            "legendFormat": "Success"
+          },
+          {
+            "expr": "sum(rate(events_consumed_total{status=\"duplicate\"}[1m]))",
+            "refId": "B",
+            "legendFormat": "Duplicate"
+          },
+          {
+            "expr": "sum(rate(events_consumed_total{status=\"error\"}[1m]))",
+            "refId": "C",
+            "legendFormat": "Error"
+          }
+        ],
+        "yaxes": [
+          {"format": "ops", "label": "Events/sec"},
+          {"show": false}
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8}
+      },
+      {
+        "id": 5,
+        "type": "graph",
+        "title": "ClickHouse Query Latency P95",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(clickhouse_query_duration_ms_bucket[5m]))",
+            "refId": "A",
+            "legendFormat": "{{query_type}}"
+          }
+        ],
+        "yaxes": [
+          {"format": "ms", "label": "Latency"},
+          {"show": false}
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16}
+      },
+      {
+        "id": 6,
+        "type": "graph",
+        "title": "ClickHouse Slow Queries (>500ms)",
+        "targets": [
+          {
+            "expr": "sum(rate(clickhouse_slow_queries_total[5m])) by (query_type)",
+            "refId": "A",
+            "legendFormat": "{{query_type}}"
+          }
+        ],
+        "yaxes": [
+          {"format": "ops", "label": "Slow queries/sec"},
+          {"show": false}
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16}
+      },
+      {
+        "id": 7,
+        "type": "graph",
+        "title": "CDC Message Processing Duration P95",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(cdc_message_processing_duration_ms_bucket[5m]))",
+            "refId": "A",
+            "legendFormat": "{{table}}"
+          }
+        ],
+        "yaxes": [
+          {"format": "ms", "label": "Duration"},
+          {"show": false}
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 24}
+      },
+      {
+        "id": 8,
+        "type": "graph",
+        "title": "CDC Insert Success vs Failure Rate",
+        "targets": [
+          {
+            "expr": "sum(rate(cdc_inserts_success_total[1m])) by (table)",
+            "refId": "A",
+            "legendFormat": "{{table}} success"
+          },
+          {
+            "expr": "sum(rate(cdc_inserts_failed_total[1m])) by (table)",
+            "refId": "B",
+            "legendFormat": "{{table}} failed"
+          }
+        ],
+        "yaxes": [
+          {"format": "ops", "label": "Inserts/sec"},
+          {"show": false}
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 24}
+      },
+      {
+        "id": 9,
+        "type": "table",
+        "title": "Kafka Topic Retention Summary",
+        "targets": [
+          {
+            "expr": "cdc_consumer_lag_messages",
+            "refId": "A",
+            "instant": true,
+            "format": "table"
+          }
+        ],
+        "transformations": [
+          {
+            "id": "organize",
+            "options": {
+              "excludeByName": {},
+              "indexByName": {},
+              "renameByName": {
+                "table": "Topic",
+                "partition": "Partition",
+                "Value": "Lag (messages)"
+              }
+            }
+          }
+        ],
+        "gridPos": {"h": 8, "w": 24, "x": 0, "y": 32}
+      }
+    ],
+    "refresh": "10s",
+    "schemaVersion": 36,
+    "version": 1
+  }
+}

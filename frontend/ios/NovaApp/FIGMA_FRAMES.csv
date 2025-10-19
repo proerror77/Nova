@@ -1,0 +1,22 @@
+Frame ID,Frame Name,Screen Name,SwiftUI View,Route Path,Description,Status
+O00,Onboarding,Onboarding Splash,OnboardingView,/onboarding,First-time user introduction flow,Design
+A01,Sign In,Sign In Screen,SignInView,/auth/signin,Email + Password login,Design
+A02,Sign Up,Sign Up Screen,SignUpView,/auth/signup,New user registration,Design
+A03,Apple Sign In Gate,Apple Sign In,AppleSignInGateView,/auth/apple,Sign in with Apple flow,Design
+F01,Feed,Home Feed,FeedView,/,Infinite scroll feed with skeleton loader,Dev
+P01,Post Detail,Post Detail,PostDetailView,/post/:id,Full-screen post with comments access,Dev
+C01,Comments,Comments Sheet,CommentsSheet,/post/:id/comments,Bottom sheet comment thread,Dev
+U00,Create Entry,Create Menu,CreateEntryView,/create,Photo/video selection entry,Planning
+U01,Photo Picker,Photo Library,PhotoPickerView,/create/picker,Native photo picker integration,Planning
+U02,Image Edit,Image Editor,ImageEditView,/create/edit,Crop/filter/adjust before upload,Planning
+U03,Publish Form,Post Publish,PublishFormView,/create/publish,Caption + Tags + Location,Planning
+U04,Upload Queue,Upload Manager,UploadQueueView,/create/queue,Offline upload queue with retry,Planning
+S01,Search,Search Home,SearchView,/search,Search bar with recent queries,Planning
+S02,User Results,User List,UserResultListView,/search/users,Filtered user search results,Planning
+PR01,My Profile,Own Profile,MyProfileView,/profile,Current user's profile page,Planning
+PR02,User Profile,Other Profile,UserProfileView,/profile/:userId,Other user's profile page,Planning
+PR03,Edit Profile,Edit Profile,EditProfileView,/profile/edit,Update bio/avatar/display name,Planning
+N01,Notifications,Notifications,NotificationsView,/notifications,Activity feed (likes/comments/follows),Planning
+ST01,Settings,Settings Menu,SettingsView,/settings,App settings and preferences,Planning
+ST02,Delete Account,Account Deletion,DeleteAccountFlow,/settings/delete,Account deletion confirmation flow,Planning
+ST03,Policy,Privacy Policy,PolicyWebView,/settings/policy,WebView for legal documents,Planning

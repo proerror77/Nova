@@ -1,0 +1,752 @@
+openapi: 3.0.3
+info:
+  title: Nova Authentication API
+  version: 1.0.0
+  description: |
+    Production-grade authentication microservice for Nova platform.
+
+    Features:
+    - Email/password authentication with Argon2 hashing
+    - OAuth 2.0 integration (Google, GitHub, Apple)
+    - JWT-based access and refresh tokens (RS256)
+    - Email verification workflow
+    - Password reset with secure tokens
+    - Rate limiting and brute force protection
+    - Account lockout mechanism
+
+    Security:
+    - All passwords hashed with Argon2id
+    - JWT tokens signed with RSA-2048
+    - HTTPS required in production
+    - CSRF protection via OAuth state parameter
+    - SQL injection prevention via parameterized queries
+
+  contact:
+    name: Nova API Support
+    email: api@nova.dev
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: https://api.nova.dev/auth
+    description: Production server
+  - url: https://staging.api.nova.dev/auth
+    description: Staging server
+  - url: http://localhost:8080/auth
+    description: Local development server
+
+tags:
+  - name: Authentication
+    description: User authentication endpoints
+  - name: OAuth
+    description: OAuth 2.0 social login
+  - name: Password Management
+    description: Password reset and recovery
+  - name: Health
+    description: Service health checks
+
+paths:
+  # ==========================================
+  # Authentication Endpoints
+  # ==========================================
+
+  /auth/register:
+    post:
+      tags:
+        - Authentication
+      summary: Register new user
+      description: |
+        Create a new user account with email and password.
+        Sends verification email after successful registration.
+
+        Password requirements:
+        - Minimum 8 characters
+        - At least one uppercase letter
+        - At least one lowercase letter
+        - At least one number
+        - At least one special character
+
+      operationId: register
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+            examples:
+              validUser:
+                summary: Valid registration
+                value:
+                  email: user@example.com
+                  username: johndoe
+                  password: SecureP@ssw0rd123
+      responses:
+        '201':
+          description: User registered successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegisterResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalidEmail:
+                  summary: Invalid email format
+                  value:
+                    error: Invalid email format
+                    details: Email must be a valid RFC 5322 format
+                weakPassword:
+                  summary: Weak password
+                  value:
+                    error: Password too weak
+                    details: Password must be 8+ chars with uppercase, lowercase, number, and special char
+        '409':
+          description: User already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                emailTaken:
+                  value:
+                    error: Email already registered
+                    details: This email is already in use
+
+  /auth/login:
+    post:
+      tags:
+        - Authentication
+      summary: User login
+      description: |
+        Authenticate user with email and password.
+        Returns JWT access and refresh tokens.
+
+        Account lockout after 5 failed attempts for 15 minutes.
+
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Invalid credentials or account locked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalidCredentials:
+                  value:
+                    error: Invalid credentials
+                accountLocked:
+                  value:
+                    error: Account temporarily locked
+                    details: Too many failed login attempts
+        '403':
+          description: Email not verified
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                emailNotVerified:
+                  value:
+                    error: Email not verified
+                    details: Please verify your email before logging in
+
+  /auth/logout:
+    post:
+      tags:
+        - Authentication
+      summary: User logout
+      description: Revoke access token by adding to blacklist
+      operationId: logout
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - access_token
+              properties:
+                access_token:
+                  type: string
+                  description: JWT access token to revoke
+      responses:
+        '200':
+          description: Logout successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Logged out successfully
+        '401':
+          description: Invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /auth/refresh-token:
+    post:
+      tags:
+        - Authentication
+      summary: Refresh access token
+      description: |
+        Generate new access and refresh tokens using valid refresh token.
+        Old refresh token is NOT invalidated (stateless refresh).
+
+      operationId: refreshToken
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - refresh_token
+              properties:
+                refresh_token:
+                  type: string
+                  description: Valid JWT refresh token
+      responses:
+        '200':
+          description: Tokens refreshed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          description: Invalid or expired refresh token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /auth/verify-email:
+    post:
+      tags:
+        - Authentication
+      summary: Verify email address
+      description: |
+        Verify user's email address using token sent via email.
+        Token is single-use and expires after 24 hours.
+
+      operationId: verifyEmail
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - token
+              properties:
+                token:
+                  type: string
+                  description: Verification token from email
+                  example: a1b2c3d4e5f6...
+      responses:
+        '200':
+          description: Email verified successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Email verified successfully
+                  email_verified:
+                    type: boolean
+                    example: true
+        '400':
+          description: Invalid or expired token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ==========================================
+  # OAuth Endpoints
+  # ==========================================
+
+  /oauth/authorize:
+    post:
+      tags:
+        - OAuth
+      summary: Initiate OAuth flow
+      description: |
+        Generate authorization URL for OAuth provider.
+        Returns state token for CSRF protection.
+
+      operationId: oauthAuthorize
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - provider
+              properties:
+                provider:
+                  type: string
+                  enum: [google, github, apple]
+                  description: OAuth provider
+                redirect_uri:
+                  type: string
+                  format: uri
+                  description: Optional redirect URI override
+      responses:
+        '200':
+          description: Authorization URL generated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  authorization_url:
+                    type: string
+                    format: uri
+                    example: https://accounts.google.com/o/oauth2/v2/auth?...
+                  state:
+                    type: string
+                    description: CSRF state token (also embedded in URL)
+        '400':
+          description: Invalid provider
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /oauth/callback:
+    get:
+      tags:
+        - OAuth
+      summary: OAuth callback handler
+      description: |
+        Handle OAuth provider callback after user authorization.
+        Validates state token, exchanges code for tokens, creates/links user account.
+
+      operationId: oauthCallback
+      parameters:
+        - name: provider
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [google, github, apple]
+        - name: code
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Authorization code from provider
+        - name: state
+          in: query
+          required: true
+          schema:
+            type: string
+          description: CSRF state token
+      responses:
+        '200':
+          description: OAuth login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          description: Invalid state or code
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: OAuth provider error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /oauth/link:
+    post:
+      tags:
+        - OAuth
+      summary: Link OAuth account
+      description: Link OAuth provider to existing authenticated user account
+      operationId: oauthLink
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - provider
+                - code
+                - state
+              properties:
+                provider:
+                  type: string
+                  enum: [google, github, apple]
+                code:
+                  type: string
+                  description: OAuth authorization code
+                state:
+                  type: string
+                  description: CSRF state token
+      responses:
+        '200':
+          description: OAuth account linked successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: OAuth account linked successfully
+                  provider:
+                    type: string
+                    example: google
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: OAuth account already linked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ==========================================
+  # Password Management
+  # ==========================================
+
+  /password/reset-request:
+    post:
+      tags:
+        - Password Management
+      summary: Request password reset
+      description: |
+        Send password reset email with token.
+        Rate limited to prevent abuse (max 3 requests per hour per email).
+
+      operationId: requestPasswordReset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+              properties:
+                email:
+                  type: string
+                  format: email
+      responses:
+        '200':
+          description: Reset email sent (always returns success to prevent email enumeration)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: If the email exists, a reset link has been sent
+        '429':
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /password/reset:
+    post:
+      tags:
+        - Password Management
+      summary: Reset password
+      description: |
+        Reset password using token from email.
+        Token is single-use and expires after 1 hour.
+
+      operationId: resetPassword
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - token
+                - new_password
+              properties:
+                token:
+                  type: string
+                  description: Reset token from email
+                new_password:
+                  type: string
+                  format: password
+                  description: New password (must meet strength requirements)
+      responses:
+        '200':
+          description: Password reset successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Password reset successfully
+        '400':
+          description: Invalid token or weak password
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /password/change:
+    post:
+      tags:
+        - Password Management
+      summary: Change password
+      description: Change password for authenticated user
+      operationId: changePassword
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - current_password
+                - new_password
+              properties:
+                current_password:
+                  type: string
+                  format: password
+                new_password:
+                  type: string
+                  format: password
+      responses:
+        '200':
+          description: Password changed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Password changed successfully
+        '401':
+          description: Invalid current password
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ==========================================
+  # Health Check
+  # ==========================================
+
+  /health:
+    get:
+      tags:
+        - Health
+      summary: Health check
+      description: Check service health and dependency status
+      operationId: healthCheck
+      responses:
+        '200':
+          description: Service healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: healthy
+                  version:
+                    type: string
+                    example: 1.0.0
+                  database:
+                    type: string
+                    enum: [connected, disconnected]
+                  redis:
+                    type: string
+                    enum: [connected, disconnected]
+                  timestamp:
+                    type: string
+                    format: date-time
+
+# ==========================================
+# Component Schemas
+# ==========================================
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        JWT access token obtained from login or OAuth.
+        Include in Authorization header: `Bearer <token>`
+
+  schemas:
+    # Request schemas
+    RegisterRequest:
+      type: object
+      required:
+        - email
+        - username
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          example: user@example.com
+        username:
+          type: string
+          minLength: 3
+          maxLength: 32
+          pattern: '^[a-zA-Z0-9_-]+$'
+          example: johndoe
+        password:
+          type: string
+          format: password
+          minLength: 8
+          example: SecureP@ssw0rd123
+
+    LoginRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          example: user@example.com
+        password:
+          type: string
+          format: password
+          example: SecureP@ssw0rd123
+
+    # Response schemas
+    RegisterResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: 550e8400-e29b-41d4-a716-446655440000
+        email:
+          type: string
+          format: email
+          example: user@example.com
+        username:
+          type: string
+          example: johndoe
+        message:
+          type: string
+          example: Registration successful. Check your email for verification link.
+
+    AuthResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+          description: JWT access token (1 hour expiry)
+          example: eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...
+        refresh_token:
+          type: string
+          description: JWT refresh token (30 days expiry)
+          example: eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...
+        token_type:
+          type: string
+          example: Bearer
+        expires_in:
+          type: integer
+          description: Access token expiry in seconds
+          example: 3600
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          description: Human-readable error message
+          example: Invalid credentials
+        details:
+          type: string
+          description: Additional error details (optional)
+          example: Password must be at least 8 characters
+
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        username:
+          type: string
+        email_verified:
+          type: boolean
+        is_active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+# ==========================================
+# Security Definitions
+# ==========================================
+
+security:
+  - BearerAuth: []

@@ -1,0 +1,12 @@
+apiVersion: 1
+
+providers:
+  - name: 'Nova Phase 3 Dashboards'
+    orgId: 1
+    folder: 'Phase 3 Feed System'
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 10
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards

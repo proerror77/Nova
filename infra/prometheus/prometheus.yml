@@ -1,0 +1,129 @@
+global:
+  scrape_interval: 30s         # Default scrape interval
+  evaluation_interval: 30s     # Evaluate alert rules every 30s
+  external_labels:
+    cluster: 'nova-prod'
+    env: 'production'
+    region: 'us-east-1'
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - alertmanager:9093
+
+# Rule files
+rule_files:
+  - /etc/prometheus/rules.yml
+
+# Scrape configurations
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+
+  # Nova Feed Service - Main metrics endpoint
+  - job_name: 'feed-service'
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+    scrape_timeout: 10s
+    static_configs:
+      - targets: ['feed-service:8000']
+        labels:
+          service: 'feed-service'
+          component: 'api'
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+      - source_labels: [__scheme__]
+        target_label: scheme
+
+  # ClickHouse Metrics (if using native metrics port)
+  - job_name: 'clickhouse'
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+    static_configs:
+      - targets: ['clickhouse:8001']
+        labels:
+          service: 'clickhouse'
+          component: 'olap'
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+
+  # Redis Metrics (requires redis_exporter)
+  - job_name: 'redis'
+    scrape_interval: 30s
+    static_configs:
+      - targets: ['redis-exporter:9121']
+        labels:
+          service: 'redis'
+          component: 'cache'
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+
+  # Kafka Metrics (requires JMX exporter)
+  - job_name: 'kafka'
+    scrape_interval: 30s
+    static_configs:
+      - targets:
+          - 'kafka-broker-1:9999'
+          - 'kafka-broker-2:9999'
+          - 'kafka-broker-3:9999'
+        labels:
+          service: 'kafka'
+          component: 'message-broker'
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+
+  # Zookeeper Metrics (requires exporter)
+  - job_name: 'zookeeper'
+    scrape_interval: 60s
+    static_configs:
+      - targets: ['zookeeper:9141']
+        labels:
+          service: 'zookeeper'
+          component: 'coordination'
+
+  # Node Exporter - System metrics
+  - job_name: 'node'
+    scrape_interval: 30s
+    static_configs:
+      - targets: ['node-exporter:9100']
+        labels:
+          service: 'system'
+          component: 'host'
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+
+  # PostgreSQL Metrics (requires postgres_exporter)
+  - job_name: 'postgresql'
+    scrape_interval: 30s
+    static_configs:
+      - targets: ['postgres-exporter:9187']
+        labels:
+          service: 'postgresql'
+          component: 'database'
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+
+  # Docker Metrics (requires cAdvisor)
+  - job_name: 'cadvisor'
+    scrape_interval: 30s
+    static_configs:
+      - targets: ['cadvisor:8080']
+        labels:
+          service: 'docker'
+          component: 'container'
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance

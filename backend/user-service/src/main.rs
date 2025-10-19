@@ -275,6 +275,25 @@ async fn main() -> io::Result<()> {
                             .service(handlers::invalidate_feed_cache),
                     )
                     .service(
+                        web::scope("/reels")
+                            .wrap(JwtAuthMiddleware)
+                            .service(handlers::reels_get_feed)
+                            .service(handlers::get_video_stream)
+                            .service(handlers::get_processing_status)
+                            .service(handlers::like_video)
+                            .service(handlers::watch_video)
+                            .service(handlers::share_video)
+                            .service(handlers::get_trending_sounds)
+                            .service(handlers::get_trending_hashtags)
+                            .service(handlers::search_videos)
+                            .service(handlers::get_similar_videos)
+                    )
+                    .service(
+                        web::scope("/discover")
+                            .wrap(JwtAuthMiddleware)
+                            .service(handlers::get_recommended_creators),
+                    )
+                    .service(
                         web::scope("/events")
                             .app_data(events_state.clone())
                             .service(handlers::ingest_events),
