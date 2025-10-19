@@ -125,5 +125,9 @@ name = "events_dedup_test"
 path = "tests/integration/events_dedup_test.rs"
 
 [[test]]
+name = "events_advanced_test"
+path = "tests/integration/events_advanced_test.rs"
+
+[[test]]
 name = "events_load_test"
 path = "tests/performance/events_load_test.rs"
