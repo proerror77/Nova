@@ -103,3 +103,12 @@ path = "tests/performance/load_test.rs"
 [[test]]
 name = "2fa_test"
 path = "tests/2fa_test.rs"
+
+# Phase 6: Video System Load Tests (T142-T143)
+[[test]]
+name = "video_feed_api_load_test"
+path = "tests/load/video/video_feed_api_load_test.rs"
+
+[[test]]
+name = "video_event_ingestion_load_test"
+path = "tests/load/video/video_event_ingestion_load_test.rs"
