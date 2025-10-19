@@ -144,3 +144,16 @@ path = "tests/unit/video/video_ranking_tests.rs"
 [[test]]
 name = "embedding_tests"
 path = "tests/unit/video/embedding_tests.rs"
+
+# Phase 6: Video System Integration Tests (T134-T137)
+[[test]]
+name = "video_e2e_tests"
+path = "tests/integration/video/video_e2e_tests.rs"
+
+[[test]]
+name = "video_ranking_integration_tests"
+path = "tests/integration/video/video_ranking_integration_tests.rs"
+
+[[test]]
+name = "video_streaming_engagement_tests"
+path = "tests/integration/video/video_streaming_engagement_tests.rs"
