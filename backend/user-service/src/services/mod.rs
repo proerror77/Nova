@@ -17,9 +17,9 @@ pub mod s3_service;
 pub mod token_revocation;
 pub mod two_fa;
 pub mod video_service;
-pub mod video_transcoding;
-pub mod video_processing_pipeline;
-pub mod deep_learning_inference;
+// pub mod video_transcoding;
+// pub mod video_processing_pipeline;
+// pub mod deep_learning_inference;
 
 // Service modules:
 // - backup_codes: Two-factor authentication backup codes management
