@@ -245,11 +245,11 @@ fn bench_dedup_and_saturation() {
             .collect();
 
         let start = Instant::now();
-        let ranked = service
-            .rank_with_clickhouse(candidates)
+        let deduped = service
+            .dedup_and_saturation_with_authors(candidates)
             .ok()
             .unwrap_or_default();
-        let _ = service.dedup_and_saturation_with_authors(ranked);
+        let _ = deduped; // Dedup operation is the benchmark target
         durations.push(start.elapsed());
     }
 
