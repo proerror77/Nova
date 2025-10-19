@@ -131,3 +131,16 @@ path = "tests/integration/events_advanced_test.rs"
 [[test]]
 name = "events_load_test"
 path = "tests/performance/events_load_test.rs"
+
+# Phase 6: Video System Unit Tests (T131-T133)
+[[test]]
+name = "video_metadata_tests"
+path = "tests/unit/video/video_metadata_tests.rs"
+
+[[test]]
+name = "video_ranking_tests"
+path = "tests/unit/video/video_ranking_tests.rs"
+
+[[test]]
+name = "embedding_tests"
+path = "tests/unit/video/embedding_tests.rs"
