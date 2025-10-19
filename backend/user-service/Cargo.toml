@@ -157,3 +157,20 @@ path = "tests/integration/video/video_ranking_integration_tests.rs"
 [[test]]
 name = "video_streaming_engagement_tests"
 path = "tests/integration/video/video_streaming_engagement_tests.rs"
+
+# Phase 6: Video System Performance Tests (T138-T141)
+[[test]]
+name = "video_ranking_latency_test"
+path = "tests/performance/video/video_ranking_latency_test.rs"
+
+[[test]]
+name = "video_transcoding_throughput_test"
+path = "tests/performance/video/video_transcoding_throughput_test.rs"
+
+[[test]]
+name = "video_model_inference_test"
+path = "tests/performance/video/video_model_inference_test.rs"
+
+[[test]]
+name = "video_bitrate_switching_test"
+path = "tests/performance/video/video_bitrate_switching_test.rs"
