@@ -1,9 +1,19 @@
+<<<<<<< HEAD
 use user_service::services::feed_ranking_service::{
     CacheStats, EngagementType, FeedRankingConfig, FeedRankingService, FeedResponse, FeedVideo,
 };
 /// Comprehensive integration tests for FeedRankingService
 /// Tests the full feed generation pipeline with caching, ranking, and engagement tracking
 use uuid::Uuid;
+=======
+/// Comprehensive integration tests for FeedRankingService
+/// Tests the full feed generation pipeline with caching, ranking, and engagement tracking
+
+use uuid::Uuid;
+use user_service::services::feed_ranking_service::{
+    CacheStats, EngagementType, FeedRankingConfig, FeedRankingService, FeedResponse, FeedVideo,
+};
+>>>>>>> origin/007-personalized-feed-ranking
 
 /// Test basic cache statistics tracking
 #[test]
@@ -335,6 +345,7 @@ fn test_engagement_type_hashable() {
 #[test]
 fn test_feed_response_json_compatible() {
     let response = FeedResponse {
+<<<<<<< HEAD
         videos: vec![FeedVideo {
             id: "v1".to_string(),
             creator_id: "c1".to_string(),
@@ -351,6 +362,26 @@ fn test_feed_response_json_compatible() {
             url_360p: None,
             ranking_score: 0.85,
         }],
+=======
+        videos: vec![
+            FeedVideo {
+                id: "v1".to_string(),
+                creator_id: "c1".to_string(),
+                title: "Test".to_string(),
+                duration_seconds: 60,
+                thumbnail_url: None,
+                view_count: 100,
+                like_count: 10,
+                comment_count: 5,
+                share_count: 2,
+                completion_rate: 0.8,
+                url_720p: None,
+                url_480p: None,
+                url_360p: None,
+                ranking_score: 0.85,
+            },
+        ],
+>>>>>>> origin/007-personalized-feed-ranking
         next_cursor: Some("next".to_string()),
     };
 

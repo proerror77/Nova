@@ -2,17 +2,29 @@
 ///
 /// Implements multi-signal personalized video ranking with weighted scoring.
 /// Combines 5 ranking signals: freshness, completion rate, engagement, affinity, and deep learning.
+<<<<<<< HEAD
+=======
+
+>>>>>>> origin/007-personalized-feed-ranking
 use tracing::{debug, info};
 use uuid::Uuid;
 
 /// Ranking configuration with signal weights
 #[derive(Debug, Clone)]
 pub struct RankingConfig {
+<<<<<<< HEAD
     pub freshness_weight: f32,  // 0.15
     pub completion_weight: f32, // 0.40
     pub engagement_weight: f32, // 0.25
     pub affinity_weight: f32,   // 0.15
     pub deep_model_weight: f32, // 0.05
+=======
+    pub freshness_weight: f32,      // 0.15
+    pub completion_weight: f32,     // 0.40
+    pub engagement_weight: f32,     // 0.25
+    pub affinity_weight: f32,       // 0.15
+    pub deep_model_weight: f32,     // 0.05
+>>>>>>> origin/007-personalized-feed-ranking
 }
 
 impl Default for RankingConfig {
@@ -41,6 +53,7 @@ impl RankingConfig {
 }
 
 /// Individual ranking signals for a video
+<<<<<<< HEAD
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct RankingSignals {
     pub video_id: Uuid,
@@ -49,11 +62,22 @@ pub struct RankingSignals {
     pub engagement_score: f32, // [0, 1] - normalized engagement
     pub affinity_score: f32,   // [0, 1] - user-creator affinity
     pub deep_model_score: f32, // [0, 1] - embedding similarity
+=======
+#[derive(Debug, Clone)]
+pub struct RankingSignals {
+    pub video_id: Uuid,
+    pub freshness_score: f32,       // [0, 1] - newer = higher
+    pub completion_rate: f32,       // [0, 1] - avg watch completion %
+    pub engagement_score: f32,      // [0, 1] - normalized engagement
+    pub affinity_score: f32,        // [0, 1] - user-creator affinity
+    pub deep_model_score: f32,      // [0, 1] - embedding similarity
+>>>>>>> origin/007-personalized-feed-ranking
 }
 
 impl RankingSignals {
     /// Validate that all scores are in [0, 1] range
     pub fn is_valid(&self) -> bool {
+<<<<<<< HEAD
         self.freshness_score >= 0.0
             && self.freshness_score <= 1.0
             && self.completion_rate >= 0.0
@@ -64,6 +88,13 @@ impl RankingSignals {
             && self.affinity_score <= 1.0
             && self.deep_model_score >= 0.0
             && self.deep_model_score <= 1.0
+=======
+        self.freshness_score >= 0.0 && self.freshness_score <= 1.0
+            && self.completion_rate >= 0.0 && self.completion_rate <= 1.0
+            && self.engagement_score >= 0.0 && self.engagement_score <= 1.0
+            && self.affinity_score >= 0.0 && self.affinity_score <= 1.0
+            && self.deep_model_score >= 0.0 && self.deep_model_score <= 1.0
+>>>>>>> origin/007-personalized-feed-ranking
     }
 }
 
@@ -99,16 +130,27 @@ impl RankingEngine {
             .collect();
 
         // Sort by score descending
+<<<<<<< HEAD
         scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+=======
+        scored.sort_by(|a, b| {
+            b.1.partial_cmp(&a.1)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+>>>>>>> origin/007-personalized-feed-ranking
 
         info!(
             "Ranked {} videos (top score: {:.4})",
             scored.len(),
+<<<<<<< HEAD
             scored
                 .first()
                 .map(|(_, score)| score)
                 .copied()
                 .unwrap_or(0.0)
+=======
+            scored.first().map(|(_, score)| score).copied().unwrap_or(0.0)
+>>>>>>> origin/007-personalized-feed-ranking
         );
 
         scored

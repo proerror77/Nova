@@ -1,0 +1,264 @@
+version: '3.9'
+
+services:
+  # ============================================
+  # PostgreSQL Database (OLTP)
+  # ============================================
+  postgres:
+    image: debezium/postgres:15-alpine
+    container_name: nova-postgres-staging
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: nova_feed
+      POSTGRES_USER: nova
+      POSTGRES_PASSWORD: nova_staging
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data_staging:/var/lib/postgresql/data
+      - ./backend/migrations:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nova"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - nova-staging
+
+  # ============================================
+  # Redis Cache
+  # ============================================
+  redis:
+    image: redis:7-alpine
+    container_name: nova-redis-staging
+    restart: unless-stopped
+    command: >
+      redis-server
+      --appendonly yes
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_data_staging:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - nova-staging
+
+  # ============================================
+  # Zookeeper (for Kafka)
+  # ============================================
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.6.1
+    container_name: nova-zookeeper-staging
+    restart: unless-stopped
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2182:2181"
+    volumes:
+      - zookeeper_data_staging:/var/lib/zookeeper/data
+    networks:
+      - nova-staging
+
+  # ============================================
+  # Kafka Broker
+  # ============================================
+  kafka:
+    image: confluentinc/cp-kafka:7.6.1
+    container_name: nova-kafka-staging
+    restart: unless-stopped
+    depends_on:
+      - zookeeper
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,PLAINTEXT_HOST://0.0.0.0:29092
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+    ports:
+      - "29093:29092"
+      - "9093:9092"
+    volumes:
+      - kafka_data_staging:/var/lib/kafka/data
+    networks:
+      - nova-staging
+
+  # ============================================
+  # ClickHouse (OLAP)
+  # ============================================
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.3-alpine
+    container_name: nova-clickhouse-staging
+    restart: unless-stopped
+    environment:
+      CLICKHOUSE_DB: nova
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: clickhouse123
+    ports:
+      - "8124:8123"
+      - "9001:9000"
+      - "9364:9363"
+    volumes:
+      - clickhouse_data_staging:/var/lib/clickhouse
+      - ./infra/clickhouse/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8123/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - nova-staging
+
+  # ============================================
+  # Feed Service (Main Application)
+  # ============================================
+  feed-service:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      args:
+        - RUST_VERSION=1.75
+    container_name: nova-feed-service-staging
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+      clickhouse:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: "postgres://nova:nova_staging@postgres:5432/nova_feed"
+      REDIS_URL: "redis://redis:6379"
+      CLICKHOUSE_URL: "http://clickhouse:8123"
+      CLICKHOUSE_USER: "default"
+      CLICKHOUSE_PASSWORD: "clickhouse123"
+      KAFKA_BROKERS: "kafka:9092"
+      LOG_LEVEL: "info"
+      HTTP_PORT: "8000"
+      RUST_LOG: "user_service=info,actix_web=info"
+    ports:
+      - "8001:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - nova-staging
+
+  # ============================================
+  # Prometheus (Metrics Collection)
+  # ============================================
+  prometheus:
+    image: prom/prometheus:v2.47.0
+    container_name: nova-prometheus-staging
+    restart: unless-stopped
+    volumes:
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./infra/prometheus/rules.yml:/etc/prometheus/rules.yml:ro
+      - prometheus_data_staging:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.enable-lifecycle'
+    ports:
+      - "9091:9090"
+    networks:
+      - nova-staging
+
+  # ============================================
+  # Grafana (Dashboarding)
+  # ============================================
+  grafana:
+    image: grafana/grafana:10.1.1
+    container_name: nova-grafana-staging
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_INSTALL_PLUGINS: "grafana-worldmap-panel"
+    volumes:
+      - ./infra/grafana/provisioning/datasources.yml:/etc/grafana/provisioning/datasources/prometheus.yml:ro
+      - ./infra/grafana/provisioning/dashboards.yml:/etc/grafana/provisioning/dashboards/dashboards.yml:ro
+      - ./infra/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data_staging:/var/lib/grafana
+    ports:
+      - "3001:3000"
+    networks:
+      - nova-staging
+
+  # ============================================
+  # Alertmanager (Alert Routing)
+  # ============================================
+  alertmanager:
+    image: prom/alertmanager:v0.26.0
+    container_name: nova-alertmanager-staging
+    restart: unless-stopped
+    volumes:
+      - ./infra/prometheus/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager_data_staging:/alertmanager
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+      - '--storage.path=/alertmanager'
+    ports:
+      - "9094:9093"
+    networks:
+      - nova-staging
+
+  # ============================================
+  # Node Exporter (System Metrics)
+  # ============================================
+  node-exporter:
+    image: prom/node-exporter:v1.6.1
+    container_name: nova-node-exporter-staging
+    restart: unless-stopped
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    ports:
+      - "9101:9100"
+    networks:
+      - nova-staging
+
+volumes:
+  postgres_data_staging:
+    driver: local
+  redis_data_staging:
+    driver: local
+  zookeeper_data_staging:
+    driver: local
+  kafka_data_staging:
+    driver: local
+  clickhouse_data_staging:
+    driver: local
+  prometheus_data_staging:
+    driver: local
+  grafana_data_staging:
+    driver: local
+  alertmanager_data_staging:
+    driver: local
+
+networks:
+  nova-staging:
+    driver: bridge

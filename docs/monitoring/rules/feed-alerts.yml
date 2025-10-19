@@ -1,0 +1,262 @@
+groups:
+  - name: feed_system_alerts
+    interval: 30s
+    rules:
+      # ========================================
+      # Critical: End-to-End Latency
+      # ========================================
+      - alert: EventToVisibleLatencyHigh
+        expr: |
+          histogram_quantile(0.95,
+            rate(events_processing_latency_ms_bucket{stage="total_e2e"}[5m])
+          ) > 5000
+        for: 10m
+        labels:
+          severity: critical
+          component: feed_pipeline
+        annotations:
+          summary: "Event-to-visible latency P95 exceeds 5 seconds"
+          description: |
+            The P95 latency from event generation to feed visibility is {{ $value | humanizeDuration }}.
+            This impacts user experience as new posts appear delayed in feeds.
+            Target: ≤5 seconds, Current: {{ $value | humanizeDuration }}
+
+            Recommended actions:
+            1. Check ClickHouse query performance (slow queries)
+            2. Verify Kafka consumer lag (should be <1000 messages)
+            3. Inspect materialized view refresh intervals
+            4. Review CDC consumer processing time
+
+      # ========================================
+      # Critical: Feed API Latency
+      # ========================================
+      - alert: FeedAPILatencyHigh
+        expr: |
+          histogram_quantile(0.95,
+            rate(feed_api_latency_ms_bucket[5m])
+          ) > 500
+        for: 5m
+        labels:
+          severity: warning
+          component: feed_api
+        annotations:
+          summary: "Feed API P95 latency exceeds 500ms"
+          description: |
+            Feed API latency P95 is {{ $value }}ms (target: cache ≤150ms, ClickHouse ≤800ms).
+
+            Source breakdown:
+            - Cache hit target: ≤150ms
+            - ClickHouse query target: ≤800ms
+            - Current P95: {{ $value }}ms
+
+            Recommended actions:
+            1. Check cache hit rate (should be ≥90%)
+            2. Review ClickHouse query performance
+            3. Inspect network latency to Redis/ClickHouse
+            4. Consider enabling circuit breaker for ClickHouse
+
+      # ========================================
+      # Critical: Cache Hit Rate
+      # ========================================
+      - alert: CacheHitRateLow
+        expr: |
+          avg(feed_cache_hit_rate_percent{cache_layer="redis"}) < 80
+        for: 5m
+        labels:
+          severity: warning
+          component: cache
+        annotations:
+          summary: "Feed cache hit rate below 80%"
+          description: |
+            Current cache hit rate: {{ $value | humanizePercentage }}
+            Target: ≥90%, Critical threshold: <80%
+
+            Impact: More requests fall back to ClickHouse, increasing latency.
+
+            Recommended actions:
+            1. Check Redis memory usage and eviction policy
+            2. Verify cache TTL configuration (should be 5 minutes)
+            3. Review top 1000 users cache warming job
+            4. Inspect cache invalidation frequency
+
+      # ========================================
+      # Critical: ClickHouse Lag
+      # ========================================
+      - alert: ClickHouseLagHigh
+        expr: |
+          max(cdc_lag_age_seconds) > 30
+        for: 2m
+        labels:
+          severity: critical
+          component: clickhouse_cdc
+        annotations:
+          summary: "ClickHouse CDC lag exceeds 30 seconds"
+          description: |
+            ClickHouse data is {{ $value }}s behind PostgreSQL.
+            Table: {{ $labels.table }}
+
+            Impact: Feed recommendations based on stale data.
+
+            Recommended actions:
+            1. Check CDC consumer health (Debezium connector)
+            2. Verify Kafka topic health and partition lag
+            3. Inspect ClickHouse insert performance
+            4. Review network connectivity between services
+
+      # ========================================
+      # Critical: Events Deduplication
+      # ========================================
+      - alert: EventsDedupFailed
+        expr: |
+          (
+            sum(rate(events_dedup_hits_total[5m])) /
+            (sum(rate(events_dedup_hits_total[5m])) + sum(rate(events_dedup_misses_total[5m])))
+          ) < 0.99
+        for: 5m
+        labels:
+          severity: warning
+          component: events_consumer
+        annotations:
+          summary: "Events deduplication rate below 99%"
+          description: |
+            Current dedup rate: {{ $value | humanizePercentage }}
+            Target: 100% (no duplicate event IDs)
+
+            Impact: Duplicate events may skew metrics and feed ranking.
+
+            Recommended actions:
+            1. Check Redis dedup cache availability
+            2. Verify dedup cache TTL (should be 24 hours)
+            3. Inspect event ID generation uniqueness
+            4. Review consumer offset commit strategy
+
+      # ========================================
+      # Critical: Circuit Breaker Open
+      # ========================================
+      - alert: CircuitBreakerOpen
+        expr: |
+          feed_circuit_breaker_state{service="clickhouse"} >= 2
+        for: 1m
+        labels:
+          severity: critical
+          component: circuit_breaker
+        annotations:
+          summary: "ClickHouse circuit breaker is OPEN"
+          description: |
+            Circuit breaker state: {{ $value }} (0=Closed, 1=HalfOpen, 2=Open)
+            Service: {{ $labels.service }}
+
+            Impact: All feed requests falling back to PostgreSQL or cached data only.
+
+            Recommended actions:
+            1. Check ClickHouse availability and health
+            2. Review recent query errors and timeouts
+            3. Verify network connectivity
+            4. Inspect ClickHouse resource usage (CPU/Memory/Disk)
+
+      # ========================================
+      # Warning: System Availability
+      # ========================================
+      - alert: AvailabilityDegraded
+        expr: |
+          (
+            1 - (
+              rate(feed_api_requests_total{status="error"}[5m]) /
+              rate(feed_api_requests_total[5m])
+            )
+          ) * 100 < 99.5
+        for: 15m
+        labels:
+          severity: warning
+          component: availability
+        annotations:
+          summary: "System availability below 99.5%"
+          description: |
+            Current availability: {{ $value | humanizePercentage }}
+            Target: ≥99.5%
+
+            Error rate: {{ (100 - $value) | humanizePercentage }}
+
+            Recommended actions:
+            1. Review error logs for common failure patterns
+            2. Check dependency health (PostgreSQL/Redis/ClickHouse/Kafka)
+            3. Inspect rate limiting and throttling
+            4. Review recent deployments or configuration changes
+
+      # ========================================
+      # Warning: Kafka Consumer Lag
+      # ========================================
+      - alert: KafkaConsumerLagHigh
+        expr: |
+          max(cdc_consumer_lag_messages) > 1000
+        for: 5m
+        labels:
+          severity: warning
+          component: kafka_consumer
+        annotations:
+          summary: "Kafka consumer lag exceeds 1000 messages"
+          description: |
+            Consumer lag: {{ $value }} messages
+            Topic: {{ $labels.table }}
+            Partition: {{ $labels.partition }}
+
+            Impact: Delayed data synchronization to ClickHouse.
+
+            Recommended actions:
+            1. Check consumer throughput (messages/sec)
+            2. Verify consumer group health
+            3. Inspect Kafka broker performance
+            4. Consider increasing consumer parallelism
+
+      # ========================================
+      # Warning: Slow ClickHouse Queries
+      # ========================================
+      - alert: ClickHouseSlowQueriesHigh
+        expr: |
+          sum(rate(clickhouse_slow_queries_total[5m])) > 1
+        for: 10m
+        labels:
+          severity: warning
+          component: clickhouse_performance
+        annotations:
+          summary: "High rate of slow ClickHouse queries (>500ms)"
+          description: |
+            Slow queries/sec: {{ $value }}
+            Query type: {{ $labels.query_type }}
+
+            Impact: Increased feed API latency and resource usage.
+
+            Recommended actions:
+            1. Review query execution plans
+            2. Check if indexes are being used
+            3. Verify ClickHouse resource usage (CPU/Memory)
+            4. Consider query optimization or caching
+            5. Review materialized view definitions
+
+  # ========================================
+  # Recording Rules (Pre-computed metrics)
+  # ========================================
+  - name: feed_system_recordings
+    interval: 30s
+    rules:
+      # Availability percentage (5m window)
+      - record: feed:availability:5m
+        expr: |
+          (
+            1 - (
+              rate(feed_api_requests_total{status="error"}[5m]) /
+              rate(feed_api_requests_total[5m])
+            )
+          ) * 100
+
+      # Cache hit rate percentage (5m window)
+      - record: feed:cache_hit_rate:5m
+        expr: |
+          avg(feed_cache_hit_rate_percent{cache_layer="redis"})
+
+      # P95 latency by source (5m window)
+      - record: feed:latency:p95:5m
+        expr: |
+          histogram_quantile(0.95,
+            rate(feed_api_latency_ms_bucket[5m])
+          )

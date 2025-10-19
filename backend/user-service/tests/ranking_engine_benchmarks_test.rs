@@ -1,8 +1,15 @@
 /// Performance benchmarks for ranking engine
 /// Measures throughput, latency, and memory usage of ranking operations
+<<<<<<< HEAD
 use std::time::Instant;
 use user_service::services::ranking_engine::{RankingConfig, RankingEngine, RankingSignals};
 use uuid::Uuid;
+=======
+
+use std::time::Instant;
+use uuid::Uuid;
+use user_service::services::ranking_engine::{RankingConfig, RankingEngine, RankingSignals};
+>>>>>>> origin/007-personalized-feed-ranking
 
 /// Benchmark freshness score calculation
 #[test]
@@ -24,11 +31,15 @@ fn bench_freshness_score_calculation() {
     );
 
     // Assert reasonable performance: < 1 microsecond per operation
+<<<<<<< HEAD
     assert!(
         per_ops < 1.0,
         "Freshness calculation too slow: {:.3} μs",
         per_ops
     );
+=======
+    assert!(per_ops < 1.0, "Freshness calculation too slow: {:.3} μs", per_ops);
+>>>>>>> origin/007-personalized-feed-ranking
 }
 
 /// Benchmark engagement score calculation
@@ -54,11 +65,15 @@ fn bench_engagement_score_calculation() {
     );
 
     // Assert reasonable performance: < 1 microsecond per operation
+<<<<<<< HEAD
     assert!(
         per_ops < 1.0,
         "Engagement calculation too slow: {:.3} μs",
         per_ops
     );
+=======
+    assert!(per_ops < 1.0, "Engagement calculation too slow: {:.3} μs", per_ops);
+>>>>>>> origin/007-personalized-feed-ranking
 }
 
 /// Benchmark affinity score calculation
@@ -85,11 +100,15 @@ fn bench_affinity_score_calculation() {
     );
 
     // Assert reasonable performance: < 0.5 microseconds per operation
+<<<<<<< HEAD
     assert!(
         per_ops < 0.5,
         "Affinity calculation too slow: {:.3} μs",
         per_ops
     );
+=======
+    assert!(per_ops < 0.5, "Affinity calculation too slow: {:.3} μs", per_ops);
+>>>>>>> origin/007-personalized-feed-ranking
 }
 
 /// Benchmark video ranking with 100 videos
@@ -124,11 +143,15 @@ async fn bench_rank_videos_100() {
     );
 
     // Assert reasonable performance: < 1000 microseconds per ranking
+<<<<<<< HEAD
     assert!(
         per_ops < 1000.0,
         "Ranking 100 videos too slow: {:.3} μs",
         per_ops
     );
+=======
+    assert!(per_ops < 1000.0, "Ranking 100 videos too slow: {:.3} μs", per_ops);
+>>>>>>> origin/007-personalized-feed-ranking
 }
 
 /// Benchmark video ranking with 1000 videos
@@ -163,11 +186,15 @@ async fn bench_rank_videos_1000() {
     );
 
     // Assert reasonable performance: < 10ms per ranking
+<<<<<<< HEAD
     assert!(
         per_ops < 10_000.0,
         "Ranking 1000 videos too slow: {:.3} μs",
         per_ops
     );
+=======
+    assert!(per_ops < 10_000.0, "Ranking 1000 videos too slow: {:.3} μs", per_ops);
+>>>>>>> origin/007-personalized-feed-ranking
 }
 
 /// Benchmark weighted score calculation (manual implementation for testing)
@@ -202,11 +229,15 @@ fn bench_weighted_score_all_signals() {
     );
 
     // Assert reasonable performance: < 0.5 microseconds per operation
+<<<<<<< HEAD
     assert!(
         per_ops < 0.5,
         "Score calculation too slow: {:.3} μs",
         per_ops
     );
+=======
+    assert!(per_ops < 0.5, "Score calculation too slow: {:.3} μs", per_ops);
+>>>>>>> origin/007-personalized-feed-ranking
 }
 
 /// Benchmark ranking config validation
@@ -229,11 +260,15 @@ fn bench_config_validation() {
     );
 
     // Assert very fast: < 0.1 microseconds per operation
+<<<<<<< HEAD
     assert!(
         per_ops < 0.1,
         "Config validation too slow: {:.3} μs",
         per_ops
     );
+=======
+    assert!(per_ops < 0.1, "Config validation too slow: {:.3} μs", per_ops);
+>>>>>>> origin/007-personalized-feed-ranking
 }
 
 /// Benchmark ranking signals validation
@@ -264,11 +299,15 @@ fn bench_signals_validation() {
     );
 
     // Assert very fast: < 0.1 microseconds per operation
+<<<<<<< HEAD
     assert!(
         per_ops < 0.1,
         "Signals validation too slow: {:.3} μs",
         per_ops
     );
+=======
+    assert!(per_ops < 0.1, "Signals validation too slow: {:.3} μs", per_ops);
+>>>>>>> origin/007-personalized-feed-ranking
 }
 
 /// Benchmark entire ranking pipeline with 500 videos
@@ -303,11 +342,15 @@ async fn bench_full_ranking_pipeline() {
     );
 
     // P95 latency should be under 5ms
+<<<<<<< HEAD
     assert!(
         per_ops < 5_000.0,
         "Full pipeline too slow: {:.3} μs",
         per_ops
     );
+=======
+    assert!(per_ops < 5_000.0, "Full pipeline too slow: {:.3} μs", per_ops);
+>>>>>>> origin/007-personalized-feed-ranking
 }
 
 /// Memory footprint test - ensure no memory bloat

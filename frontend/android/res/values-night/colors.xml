@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- BrandA Dark Mode -->
+
+    <!-- Backgrounds -->
+    <color name="bg_surface">#101828</color>
+    <color name="bg_elevated">#1D2939</color>
+
+    <!-- Foreground Text -->
+    <color name="fg_primary">#FFFFFF</color>
+    <color name="fg_secondary">#98A2B3</color>
+
+    <!-- Brand -->
+    <color name="brand_primary">#0BA5EC</color>
+    <color name="brand_on">#001119</color>
+
+    <!-- Borders -->
+    <color name="border_subtle">#1D2939</color>
+    <color name="border_strong">#344054</color>
+
+    <!-- State Colors -->
+    <color name="state_success">#12B76A</color>
+    <color name="state_warning">#F79009</color>
+    <color name="state_danger">#F97066</color>
+
+    <!-- Gray Palette (Same as light) -->
+    <color name="gray_0">#FFFFFF</color>
+    <color name="gray_50">#F9FAFB</color>
+    <color name="gray_100">#F2F4F7</color>
+    <color name="gray_200">#E4E7EC</color>
+    <color name="gray_300">#D0D5DD</color>
+    <color name="gray_400">#98A2B3</color>
+    <color name="gray_500">#667085</color>
+    <color name="gray_600">#475467</color>
+    <color name="gray_700">#344054</color>
+    <color name="gray_800">#1D2939</color>
+    <color name="gray_900">#101828</color>
+
+    <!-- Blue Palette (Same as light) -->
+    <color name="blue_50">#E0F2FE</color>
+    <color name="blue_100">#B9E6FE</color>
+    <color name="blue_200">#7CD4FD</color>
+    <color name="blue_300">#36BFFA</color>
+    <color name="blue_400">#0BA5EC</color>
+    <color name="blue_500">#0086C9</color>
+    <color name="blue_600">#026AA2</color>
+    <color name="blue_700">#065986</color>
+    <color name="blue_800">#0B4A6F</color>
+    <color name="blue_900">#053D5A</color>
+
+    <!-- Red Palette (Same as light) -->
+    <color name="red_50">#FEF3F2</color>
+    <color name="red_100">#FEE4E2</color>
+    <color name="red_200">#FECDCA</color>
+    <color name="red_300">#FDA29B</color>
+    <color name="red_400">#F97066</color>
+    <color name="red_500">#F04438</color>
+    <color name="red_600">#D92D20</color>
+    <color name="red_700">#B42318</color>
+    <color name="red_800">#912018</color>
+    <color name="red_900">#7A271A</color>
+
+    <!-- Green Palette (Same as light) -->
+    <color name="green_50">#ECFDF3</color>
+    <color name="green_100">#D1FADF</color>
+    <color name="green_200">#A6F4C5</color>
+    <color name="green_300">#6CE9A6</color>
+    <color name="green_400">#32D583</color>
+    <color name="green_500">#12B76A</color>
+    <color name="green_600">#039855</color>
+    <color name="green_700">#027A48</color>
+    <color name="green_800">#05603A</color>
+    <color name="green_900">#054F31</color>
+
+    <!-- Orange Palette (Same as light) -->
+    <color name="orange_50">#FEF6EE</color>
+    <color name="orange_100">#FDEAD7</color>
+    <color name="orange_200">#F9DBAF</color>
+    <color name="orange_300">#F7B27A</color>
+    <color name="orange_400">#F38744</color>
+    <color name="orange_500">#F79009</color>
+    <color name="orange_600">#DC6803</color>
+    <color name="orange_700">#B54708</color>
+    <color name="orange_800">#93370D</color>
+    <color name="orange_900">#792E0D</color>
+
+    <!-- BrandB Dark Mode Overrides -->
+    <color name="brand_b_primary">#F97066</color>
+    <color name="brand_b_on">#2A0A08</color>
+    <color name="brand_b_danger">#F04438</color>
+</resources>

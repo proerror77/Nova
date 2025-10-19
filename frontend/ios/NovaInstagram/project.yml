@@ -1,0 +1,25 @@
+name: NovaInstagram
+options:
+  bundleIdPrefix: com.nova
+settings:
+  SWIFT_VERSION: 5
+
+targets:
+  NovaInstagram:
+    type: application
+    platform: iOS
+    deploymentTarget: 16.0
+    sources:
+      - path: .
+        includes:
+          - "*.swift"
+    info:
+      path: Info.plist
+      useBaseLocalizationAsDefault: true
+    settings:
+      PRODUCT_BUNDLE_IDENTIFIER: com.nova.NovaInstagram
+      PRODUCT_NAME: NovaInstagram
+      DEVELOPMENT_TEAM: ""
+      CODE_SIGN_STYLE: Automatic
+      GENERATE_INFOPLIST_FILE: "YES"
+      INFOPLIST_FILE: Info.plist

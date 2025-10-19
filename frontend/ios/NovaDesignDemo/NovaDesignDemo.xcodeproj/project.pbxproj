@@ -1,0 +1,339 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		003C22D91CDCB8E6152945F4 /* ThemeShowcaseView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 17F59AEEB5B54D86190AAF91 /* ThemeShowcaseView.swift */; };
+		36359B255967A4244DF06266 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E7490B0F2529A0CE2FDB045 /* Theme.swift */; };
+		4DB000EBB799250590898D6C /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A7AD5A4291C5DD80F12D756C /* Assets.xcassets */; };
+		79890DB10BA87AC12FF317CB /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = D2616E2F6C2E0ECBE2AA7C34 /* Preview Assets.xcassets */; };
+		8A1FB0298B62F6257695EC58 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6234D506231CEC271508645D /* ContentView.swift */; };
+		CB7A7794BEA1F3A9DC52F0CC /* NovaDesignDemoApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48E7BC0543D81A10F2E99D2F /* NovaDesignDemoApp.swift */; };
+		DDB43B4A329BFDF02A1B0A66 /* PostCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40804D45CF62BAE84B7E589F /* PostCard.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		17F59AEEB5B54D86190AAF91 /* ThemeShowcaseView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThemeShowcaseView.swift; sourceTree = "<group>"; };
+		40804D45CF62BAE84B7E589F /* PostCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostCard.swift; sourceTree = "<group>"; };
+		48E7BC0543D81A10F2E99D2F /* NovaDesignDemoApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NovaDesignDemoApp.swift; sourceTree = "<group>"; };
+		4E7490B0F2529A0CE2FDB045 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
+		6234D506231CEC271508645D /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		A7AD5A4291C5DD80F12D756C /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		B97C58037FB962497F541C8A /* NovaDesignDemo.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = NovaDesignDemo.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		CD96ECF227A40647FF60D6E7 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		D2616E2F6C2E0ECBE2AA7C34 /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		2B0C3AA7D0DF4D885E0A377E /* Preview Content */ = {
+			isa = PBXGroup;
+			children = (
+				D2616E2F6C2E0ECBE2AA7C34 /* Preview Assets.xcassets */,
+			);
+			path = "Preview Content";
+			sourceTree = "<group>";
+		};
+		451F18A407B5732C46626E8E = {
+			isa = PBXGroup;
+			children = (
+				9425C78F7B8D7CAD2D2832B7 /* NovaDesignDemo */,
+				D2D4310B1A37B6947AB632FE /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		9425C78F7B8D7CAD2D2832B7 /* NovaDesignDemo */ = {
+			isa = PBXGroup;
+			children = (
+				A7AD5A4291C5DD80F12D756C /* Assets.xcassets */,
+				6234D506231CEC271508645D /* ContentView.swift */,
+				CD96ECF227A40647FF60D6E7 /* Info.plist */,
+				48E7BC0543D81A10F2E99D2F /* NovaDesignDemoApp.swift */,
+				40804D45CF62BAE84B7E589F /* PostCard.swift */,
+				4E7490B0F2529A0CE2FDB045 /* Theme.swift */,
+				17F59AEEB5B54D86190AAF91 /* ThemeShowcaseView.swift */,
+				2B0C3AA7D0DF4D885E0A377E /* Preview Content */,
+			);
+			path = NovaDesignDemo;
+			sourceTree = "<group>";
+		};
+		D2D4310B1A37B6947AB632FE /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				B97C58037FB962497F541C8A /* NovaDesignDemo.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		175336161D243E2DE99C38BB /* NovaDesignDemo */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = F774C4361C7CDDDEA1F3BE5E /* Build configuration list for PBXNativeTarget "NovaDesignDemo" */;
+			buildPhases = (
+				B5DD8EB41D20797EED068812 /* Sources */,
+				8DC70A94030D106111A295CF /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = NovaDesignDemo;
+			packageProductDependencies = (
+			);
+			productName = NovaDesignDemo;
+			productReference = B97C58037FB962497F541C8A /* NovaDesignDemo.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		9D9F7F3AE5BF0326E3FE4AB1 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					175336161D243E2DE99C38BB = {
+						DevelopmentTeam = "";
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = 803249DBD1134645C3FC83D7 /* Build configuration list for PBXProject "NovaDesignDemo" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 451F18A407B5732C46626E8E;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				175336161D243E2DE99C38BB /* NovaDesignDemo */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		8DC70A94030D106111A295CF /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4DB000EBB799250590898D6C /* Assets.xcassets in Resources */,
+				79890DB10BA87AC12FF317CB /* Preview Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		B5DD8EB41D20797EED068812 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				8A1FB0298B62F6257695EC58 /* ContentView.swift in Sources */,
+				CB7A7794BEA1F3A9DC52F0CC /* NovaDesignDemoApp.swift in Sources */,
+				DDB43B4A329BFDF02A1B0A66 /* PostCard.swift in Sources */,
+				36359B255967A4244DF06266 /* Theme.swift in Sources */,
+				003C22D91CDCB8E6152945F4 /* ThemeShowcaseView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		45CCD658B0B671DEB33CD3C9 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		75D4AD0AF7535411C3489EA1 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		A9F04C8680C4EF319ED73BAF /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = "";
+				INFOPLIST_FILE = NovaDesignDemo/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.nova.NovaDesignDemo;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.9;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		E6AA59E4D1CC3E44122D6FB2 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = "";
+				INFOPLIST_FILE = NovaDesignDemo/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.nova.NovaDesignDemo;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.9;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		803249DBD1134645C3FC83D7 /* Build configuration list for PBXProject "NovaDesignDemo" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				75D4AD0AF7535411C3489EA1 /* Debug */,
+				45CCD658B0B671DEB33CD3C9 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		F774C4361C7CDDDEA1F3BE5E /* Build configuration list for PBXNativeTarget "NovaDesignDemo" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E6AA59E4D1CC3E44122D6FB2 /* Debug */,
+				A9F04C8680C4EF319ED73BAF /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 9D9F7F3AE5BF0326E3FE4AB1 /* Project object */;
+}

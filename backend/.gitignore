@@ -1,0 +1,31 @@
+# Rust build artifacts
+target/
+**/*.rs.bk
+*.pdb
+Cargo.lock
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs
+*.log
+logs/
+
+# Testing
+coverage/
+*.profraw
+
+# Database
+*.db
+*.db-shm
+*.db-wal

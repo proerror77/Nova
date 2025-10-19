@@ -150,7 +150,11 @@ impl CacheWarmerJob {
             .arg(&data)
             .arg("EX")
             .arg(ttl)
+<<<<<<< HEAD
             .query_async::<_, ()>(&mut conn)
+=======
+            .query_async(&mut conn)
+>>>>>>> origin/007-personalized-feed-ranking
             .await
             .context("Failed to write warmup cache to Redis")?;
 

@@ -200,7 +200,11 @@ impl SuggestedUsersJob {
         }
 
         let mut conn = ctx.redis_pool.clone();
+<<<<<<< HEAD
         pipe.query_async::<_, ()>(&mut conn)
+=======
+        pipe.query_async(&mut conn)
+>>>>>>> origin/007-personalized-feed-ranking
             .await
             .context("Failed to execute Redis pipeline")?;
 

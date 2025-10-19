@@ -348,9 +348,13 @@ fn test_author_saturation_in_top_5() {
         },
     ];
 
+<<<<<<< HEAD
     let final_posts = service
         .dedup_and_saturation_with_authors(candidates)
         .unwrap();
+=======
+    let final_posts = service.dedup_and_saturation_with_authors(candidates).unwrap();
+>>>>>>> origin/007-personalized-feed-ranking
 
     // Should have 2 posts (author A's second post rejected)
     assert!(final_posts.len() <= 2);
@@ -398,9 +402,13 @@ fn test_min_distance_between_same_author() {
         });
     }
 
+<<<<<<< HEAD
     let final_posts = service
         .dedup_and_saturation_with_authors(candidates)
         .unwrap();
+=======
+    let final_posts = service.dedup_and_saturation_with_authors(candidates).unwrap();
+>>>>>>> origin/007-personalized-feed-ranking
 
     // Verify same-author posts are at least 3 positions apart
     let author_positions: std::collections::HashMap<String, Vec<usize>> = {
@@ -497,7 +505,11 @@ fn test_reason_assignment_edge_cases() {
             freshness_score: 0.1,
             engagement_score: 0.1,
             affinity_score: 0.95, // Very high affinity
+<<<<<<< HEAD
             combined_score: 0.7,  // Higher score to be first in ranking
+=======
+            combined_score: 0.7, // Higher score to be first in ranking
+>>>>>>> origin/007-personalized-feed-ranking
             created_at: Utc::now(),
         },
     ];

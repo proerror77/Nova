@@ -1,0 +1,196 @@
+/*
+ * Localizable.strings (Traditional Chinese)
+ * NovaSocial
+ */
+
+// MARK: - Common
+"common.ok" = "確定";
+"common.cancel" = "取消";
+"common.save" = "儲存";
+"common.delete" = "刪除";
+"common.edit" = "編輯";
+"common.done" = "完成";
+"common.retry" = "重試";
+"common.loading" = "載入中...";
+"common.error" = "錯誤";
+"common.success" = "成功";
+"common.confirm" = "確認";
+"common.back" = "返回";
+"common.next" = "下一步";
+"common.skip" = "跳過";
+"common.close" = "關閉";
+"common.yes" = "是";
+"common.no" = "否";
+"common.send" = "傳送";
+"common.share" = "分享";
+"common.search" = "搜尋";
+
+// MARK: - Authentication
+"auth.login" = "登入";
+"auth.logout" = "登出";
+"auth.signup" = "註冊";
+"auth.email" = "電子郵件";
+"auth.password" = "密碼";
+"auth.confirmPassword" = "確認密碼";
+"auth.forgotPassword" = "忘記密碼？";
+"auth.resetPassword" = "重設密碼";
+"auth.enterEmail" = "請輸入電子郵件";
+"auth.enterPassword" = "請輸入密碼";
+"auth.enterConfirmPassword" = "請再次輸入密碼";
+"auth.username" = "使用者名稱";
+"auth.enterUsername" = "請輸入使用者名稱";
+"auth.dontHaveAccount" = "還沒有帳號？";
+"auth.alreadyHaveAccount" = "已有帳號？";
+"auth.signupNow" = "立即註冊";
+"auth.loginNow" = "立即登入";
+
+// MARK: - Validation Errors
+"error.invalidEmail" = "電子郵件格式不正確";
+"error.passwordTooShort" = "密碼至少需要8個字元";
+"error.passwordsDoNotMatch" = "兩次輸入的密碼不一致";
+"error.usernameRequired" = "請輸入使用者名稱";
+"error.emailRequired" = "請輸入電子郵件";
+"error.passwordRequired" = "請輸入密碼";
+"error.networkError" = "網路錯誤，請重試";
+"error.unknownError" = "發生未知錯誤";
+"error.unauthorized" = "未授權，請重新登入";
+
+// MARK: - Feed
+"feed.title" = "動態";
+"feed.loading" = "載入中...";
+"feed.noPostsYet" = "暫無動態";
+"feed.startFollowing" = "追蹤其他使用者來查看他們的動態";
+"feed.pullToRefresh" = "下拉重新整理";
+"feed.loadingMore" = "載入更多...";
+
+// MARK: - Post
+"post.create" = "發佈動態";
+"post.edit" = "編輯動態";
+"post.delete" = "刪除動態";
+"post.deleteConfirm" = "確定要刪除這則動態嗎？";
+"post.caption" = "說點什麼";
+"post.enterCaption" = "寫點什麼...";
+"post.share" = "分享";
+"post.like" = "按讚";
+"post.unlike" = "取消讚";
+"post.comment" = "留言";
+"post.comments" = "留言";
+"post.viewComments" = "查看全部 %d 則留言";
+"post.viewComment" = "查看 1 則留言";
+"post.addComment" = "新增留言...";
+"post.likedBy" = "%@ 和其他 %d 人都說讚";
+"post.likedByOne" = "%@ 說讚";
+"post.likedByTwo" = "%@ 和 %@ 說讚";
+
+// MARK: - Profile
+"profile.title" = "個人檔案";
+"profile.editProfile" = "編輯個人檔案";
+"profile.followers" = "追蹤者";
+"profile.following" = "追蹤中";
+"profile.posts" = "動態";
+"profile.follow" = "追蹤";
+"profile.unfollow" = "取消追蹤";
+"profile.message" = "私訊";
+"profile.bio" = "簡介";
+"profile.website" = "網站";
+"profile.noPostsYet" = "暫無動態";
+
+// MARK: - Notifications
+"notification.title" = "通知";
+"notification.likedYourPost" = "%@ 說你的動態讚";
+"notification.commentedOnYourPost" = "%@ 留言了你的動態";
+"notification.startedFollowingYou" = "%@ 追蹤了你";
+"notification.mentionedYou" = "%@ 在留言中提到了你";
+"notification.noNotifications" = "暫無通知";
+"notification.markAllAsRead" = "全部標示為已讀";
+
+// MARK: - Explore
+"explore.title" = "探索";
+"explore.searchPlaceholder" = "搜尋使用者、標籤或動態";
+"explore.trending" = "熱門";
+"explore.suggested" = "推薦";
+"explore.noResults" = "沒有找到結果";
+
+// MARK: - Settings
+"settings.title" = "設定";
+"settings.account" = "帳號";
+"settings.privacy" = "隱私";
+"settings.notifications" = "通知";
+"settings.language" = "語言";
+"settings.theme" = "主題";
+"settings.about" = "關於";
+"settings.termsOfService" = "服務條款";
+"settings.privacyPolicy" = "隱私權政策";
+"settings.help" = "幫助";
+"settings.logout" = "登出";
+"settings.logoutConfirm" = "確定要登出嗎？";
+"settings.deleteAccount" = "刪除帳號";
+"settings.deleteAccountConfirm" = "確定要刪除帳號嗎？此動作無法復原。";
+
+// MARK: - Language Selection
+"language.select" = "選擇語言";
+"language.current" = "目前語言";
+"language.english" = "English";
+"language.chineseSimplified" = "简体中文";
+"language.chineseTraditional" = "繁體中文";
+"language.japanese" = "日本語";
+"language.systemDefault" = "跟隨系統";
+
+// MARK: - Time Formats
+"time.justNow" = "剛剛";
+"time.minuteAgo" = "%d 分鐘前";
+"time.minutesAgo" = "%d 分鐘前";
+"time.hourAgo" = "%d 小時前";
+"time.hoursAgo" = "%d 小時前";
+"time.dayAgo" = "%d 天前";
+"time.daysAgo" = "%d 天前";
+"time.weekAgo" = "%d 週前";
+"time.weeksAgo" = "%d 週前";
+
+// MARK: - Plurals
+"plurals.follower" = "%d 位追蹤者";
+"plurals.followers" = "%d 位追蹤者";
+"plurals.post" = "%d 則動態";
+"plurals.posts" = "%d 則動態";
+"plurals.like" = "%d 個讚";
+"plurals.likes" = "%d 個讚";
+"plurals.comment" = "%d 則留言";
+"plurals.comments" = "%d 則留言";
+
+// MARK: - Actions
+"action.tapToView" = "點擊查看";
+"action.tapToEdit" = "點擊編輯";
+"action.swipeToDelete" = "滑動刪除";
+"action.holdToRecord" = "按住錄製";
+
+// MARK: - Empty States
+"empty.noPosts" = "暫無動態";
+"empty.noComments" = "暫無留言";
+"empty.noFollowers" = "暫無追蹤者";
+"empty.noFollowing" = "暫未追蹤任何人";
+"empty.noNotifications" = "暫無通知";
+"empty.noSearchResults" = "未找到 \"%@\" 的相關結果";
+
+// MARK: - Camera & Media
+"media.camera" = "相機";
+"media.photoLibrary" = "照片圖庫";
+"media.takePhoto" = "拍照";
+"media.choosePhoto" = "選擇照片";
+"media.removePhoto" = "移除照片";
+"media.cameraPermissionDenied" = "相機權限已被拒絕，請在設定中開啟";
+"media.photoPermissionDenied" = "照片圖庫權限已被拒絕，請在設定中開啟";
+
+// MARK: - Network Status
+"network.offline" = "網路未連線";
+"network.reconnecting" = "重新連線中...";
+"network.connected" = "已連線";
+
+// MARK: - Accessibility
+"accessibility.profileImage" = "個人檔案圖片";
+"accessibility.postImage" = "動態圖片";
+"accessibility.likeButton" = "按讚按鈕";
+"accessibility.commentButton" = "留言按鈕";
+"accessibility.shareButton" = "分享按鈕";
+"accessibility.backButton" = "返回按鈕";
+"accessibility.closeButton" = "關閉按鈕";
+"accessibility.menuButton" = "選單按鈕";

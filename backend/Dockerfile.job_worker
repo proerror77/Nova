@@ -1,0 +1,68 @@
+# ==============================================================================
+# Stage 1: 构建阶段
+# ==============================================================================
+FROM rust:1.75-slim-bookworm AS builder
+
+# 安装必要的构建依赖
+RUN apt-get update && apt-get install -y \
+    pkg-config \
+    libssl-dev \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# 设置工作目录
+WORKDIR /build
+
+# 复制 Cargo 配置文件 (利用 Docker 缓存层)
+COPY Cargo.toml Cargo.lock ./
+COPY user-service/Cargo.toml ./user-service/
+
+# 创建 dummy 源文件以预编译依赖
+RUN mkdir -p user-service/src/bin && \
+    echo "fn main() {}" > user-service/src/bin/job_worker.rs && \
+    echo "fn main() {}" > user-service/src/main.rs && \
+    mkdir -p user-service/src && echo "" > user-service/src/lib.rs
+
+# 预编译依赖 (这一层会被缓存)
+RUN cargo build --release --bin job_worker && \
+    rm -rf user-service/src
+
+# 复制实际源代码
+COPY user-service/src ./user-service/src
+COPY user-service/tests ./user-service/tests
+
+# 编译最终二进制文件
+RUN cargo build --release --bin job_worker
+
+# ==============================================================================
+# Stage 2: 运行阶段 (最小化镜像)
+# ==============================================================================
+FROM debian:bookworm-slim
+
+# 安装运行时依赖
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    libssl3 \
+    && rm -rf /var/lib/apt/lists/*
+
+# 创建非 root 用户
+RUN groupadd -r jobworker && useradd -r -g jobworker jobworker
+
+# 设置工作目录
+WORKDIR /app
+
+# 从 builder 复制二进制文件
+COPY --from=builder /build/target/release/job_worker /app/job_worker
+
+# 设置权限
+RUN chown -R jobworker:jobworker /app
+
+# 切换到非 root 用户
+USER jobworker
+
+# 健康检查 (检查进程是否存在)
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD pgrep -f job_worker || exit 1
+
+# 启动 job worker
+ENTRYPOINT ["/app/job_worker"]
