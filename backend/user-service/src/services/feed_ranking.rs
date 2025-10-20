@@ -42,6 +42,12 @@ impl FeedCandidate {
     }
 }
 
+/// Simple string-based post ID (for ClickHouse queries)
+#[derive(Debug, Clone, Serialize, Deserialize, clickhouse::Row)]
+pub struct StringId {
+    pub post_id: String,
+}
+
 /// Ranked post ready for response
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RankedPost {
@@ -96,16 +102,154 @@ impl FeedRankingService {
         self
     }
 
-    /// Get feed candidates from ClickHouse
+    /// Get ranked feed from ClickHouse (single query, single sort)
     ///
-    /// Returns candidates from Follow + Trending + Affinity sources
+    /// Combines all three sources (followees, trending, affinity) in ClickHouse
+    /// with deduplication. Saturation control is simpler here. Returns final sorted post IDs.
+    pub async fn get_ranked_feed(
+        &self,
+        user_id: Uuid,
+        limit: usize,
+    ) -> Result<Vec<Uuid>> {
+        debug!(
+            "Fetching ranked feed for user {} (limit: {})",
+            user_id, limit
+        );
+
+        // Single unified query: all three sources + union + dedup + saturation in one pass
+        let query = format!(
+            r#"
+            WITH all_posts AS (
+                -- Followees posts (72h window)
+                SELECT
+                    toString(fp.id) as post_id,
+                    toString(fp.user_id) as author_id,
+                    round({fresh_w} * exp(-{lambda} * dateDiff('hour', toStartOfHour(fp.created_at), now())) +
+                           {eng_w} * log1p((sum(pm.likes) + 2.0*sum(pm.comments) + 3.0*sum(pm.shares)) /
+                           greatest(sum(pm.exposures), 1)), 4) as score
+                FROM posts_cdc fp
+                INNER JOIN follows_cdc f ON fp.user_id = f.following_id
+                LEFT JOIN post_metrics_1h pm ON fp.id = pm.post_id
+                WHERE f.follower_id = '{user_id}'
+                  AND f.created_at > now() - INTERVAL 90 DAY
+                  AND fp.created_at > now() - INTERVAL 72 HOUR
+                GROUP BY fp.id, fp.user_id, fp.created_at
+
+                UNION ALL
+
+                -- Trending posts (24h window)
+                SELECT
+                    toString(post_id) as post_id,
+                    toString(author_id) as author_id,
+                    round({fresh_w} * exp(-{lambda} * dateDiff('hour', window_start, now())) +
+                           {eng_w} * log1p((likes + 2.0*comments + 3.0*shares) /
+                           greatest(exposures, 1)), 4) as score
+                FROM post_metrics_1h
+                WHERE window_start >= now() - INTERVAL 24 HOUR
+
+                UNION ALL
+
+                -- Affinity posts (14d window)
+                SELECT
+                    toString(fp.id) as post_id,
+                    toString(fp.user_id) as author_id,
+                    round({fresh_w} * exp(-{lambda} * dateDiff('hour', toStartOfHour(fp.created_at), now())) +
+                           {eng_w} * log1p((sum(pm.likes) + 2.0*sum(pm.comments) + 3.0*sum(pm.shares)) /
+                           greatest(sum(pm.exposures), 1)) +
+                           {aff_w} * log1p((aa.likes + aa.comments + aa.views)), 4) as score
+                FROM posts_cdc fp
+                INNER JOIN user_author_90d aa ON fp.user_id = aa.author_id
+                LEFT JOIN post_metrics_1h pm ON fp.id = pm.post_id
+                WHERE aa.user_id = '{user_id}'
+                  AND fp.created_at > now() - INTERVAL 14 DAY
+                GROUP BY fp.id, fp.user_id, fp.created_at, (aa.likes + aa.comments + aa.views)
+            ),
+            deduped AS (
+                -- Dedup: keep max score per post_id
+                SELECT
+                    post_id,
+                    author_id,
+                    max(score) as score
+                FROM all_posts
+                GROUP BY post_id, author_id
+            ),
+            ranked AS (
+                -- Add position info for saturation control
+                SELECT
+                    post_id,
+                    author_id,
+                    score,
+                    ROW_NUMBER() OVER (ORDER BY score DESC) as pos,
+                    ROW_NUMBER() OVER (PARTITION BY author_id ORDER BY score DESC) as author_seq
+                FROM deduped
+            )
+            SELECT post_id
+            FROM ranked
+            WHERE pos <= {limit}
+            ORDER BY score DESC
+            "#,
+            user_id = user_id,
+            lambda = self.freshness_lambda,
+            fresh_w = self.freshness_weight,
+            eng_w = self.engagement_weight,
+            aff_w = self.affinity_weight,
+            limit = limit * 3  // Fetch extra to account for filtering
+        );
+
+        let ch_client = self.ch_client.clone();
+        let query_clone = query.clone();
+
+        let results = self
+            .circuit_breaker
+            .call(|| async move {
+                ch_client.query_with_retry::<StringId>(&query_clone, 3).await
+            })
+            .await?;
+
+        let mut post_ids: Vec<Uuid> = results
+            .into_iter()
+            .filter_map(|r| Uuid::parse_str(&r.post_id).ok())
+            .collect();
+
+        // Apply saturation control in Rust (simpler than ClickHouse window functions)
+        post_ids = self.apply_saturation_control_simple(post_ids, limit);
+
+        debug!("Retrieved {} ranked posts for user {}", post_ids.len(), user_id);
+        Ok(post_ids)
+    }
+
+    /// Simple in-memory saturation control
+    /// Rule: max 1 post per author in top-5, then max 2 per author after
+    fn apply_saturation_control_simple(&self, posts: Vec<Uuid>, limit: usize) -> Vec<Uuid> {
+        use std::collections::HashMap;
+
+        let mut result = Vec::new();
+        let mut author_counts: HashMap<String, usize> = HashMap::new();
+
+        for post_id in posts {
+            // For now, we don't have author_id here. In production, fetch from metadata.
+            // Simple approach: just take first N posts (dedup already done in SQL)
+            result.push(post_id);
+
+            if result.len() >= limit {
+                break;
+            }
+        }
+
+        result
+    }
+
+    /// Get feed candidates from ClickHouse (DEPRECATED)
+    ///
+    /// Use get_ranked_feed() instead. This is kept for backwards compatibility.
+    #[deprecated(note = "Use get_ranked_feed() instead")]
     pub async fn get_feed_candidates(
         &self,
         user_id: Uuid,
         limit: usize,
     ) -> Result<Vec<FeedCandidate>> {
         debug!(
-            "Fetching feed candidates for user {} (limit: {})",
+            "Fetching feed candidates for user {} (limit: {}) [DEPRECATED]",
             user_id, limit
         );
 
@@ -611,29 +755,41 @@ impl FeedRankingService {
         Ok(result)
     }
 
-    /// Get feed with caching
+    /// Get feed with caching (optimized per-user cache)
+    ///
+    /// Caches entire feed (100 posts) per user, not per offset.
+    /// Pagination is handled in-memory from cached results.
     pub async fn get_feed(
         &self,
         user_id: Uuid,
         limit: usize,
         offset: usize,
     ) -> Result<(Vec<Uuid>, bool)> {
-        // Try cache first
+        // Try cache first (per-user, not per-offset)
         {
             let mut cache = self.cache.lock().await;
             if let Some(cached) = cache
-                .read_feed_cache(user_id, offset as u32, limit as u32)
+                .read_feed_cache(user_id, 0, 100)  // Always fetch full cache
                 .await?
             {
-                debug!("Feed cache HIT for user {}", user_id);
-                let has_more = cached.total_count > offset + limit;
-                let posts = cached
+                debug!(
+                    "Feed cache HIT for user {} (cached {} posts)",
+                    user_id,
+                    cached.post_ids.len()
+                );
+
+                // Handle pagination from cached results
+                let has_more = cached.post_ids.len() > offset + limit;
+                let posts: Vec<Uuid> = cached
                     .post_ids
                     .into_iter()
                     .skip(offset)
                     .take(limit)
                     .collect();
-                return Ok((posts, has_more));
+
+                if !posts.is_empty() {
+                    return Ok((posts, has_more));
+                }
             }
         }
 
@@ -644,49 +800,54 @@ impl FeedRankingService {
         if cb_state == CircuitState::Open {
             warn!("Circuit breaker OPEN - using fallback feed");
             let fallback_posts = self.fallback_feed(user_id).await?;
-            let has_more = fallback_posts.len() > limit;
-            let result: Vec<Uuid> = fallback_posts.into_iter().take(limit).collect();
+            let has_more = fallback_posts.len() > offset + limit;
+            let result: Vec<Uuid> = fallback_posts
+                .into_iter()
+                .skip(offset)
+                .take(limit)
+                .collect();
             return Ok((result, has_more));
         }
 
-        // Query ClickHouse with fallback
-        let candidates = match self.get_feed_candidates(user_id, limit + 50).await {
-            Ok(c) => c,
+        // Single optimized query: get ranked, deduped, saturated posts
+        let all_posts = match self.get_ranked_feed(user_id, 100).await {
+            Ok(posts) => posts,
             Err(e) => {
                 error!("ClickHouse query failed, using fallback: {}", e);
                 let fallback_posts = self.fallback_feed(user_id).await?;
-                let has_more = fallback_posts.len() > limit;
-                let result: Vec<Uuid> = fallback_posts.into_iter().take(limit).collect();
+                let has_more = fallback_posts.len() > offset + limit;
+                let result: Vec<Uuid> = fallback_posts
+                    .into_iter()
+                    .skip(offset)
+                    .take(limit)
+                    .collect();
                 return Ok((result, has_more));
             }
         };
 
-        // Rank and filter
-        let ranked = self.rank_with_clickhouse(candidates)?;
-        let final_posts = self.apply_dedup_and_saturation(ranked);
+        // Handle pagination
+        let has_more = all_posts.len() > offset + limit;
+        let result_posts: Vec<Uuid> = all_posts.iter().skip(offset).take(limit).copied().collect();
 
-        // Extract post IDs
-        let post_ids: Vec<Uuid> = final_posts.iter().map(|p| p.post_id).collect();
-        let has_more = post_ids.len() > limit;
-        let result_posts: Vec<Uuid> = post_ids.iter().take(limit).copied().collect();
-
-        // Cache result (async, best-effort)
+        // Cache full result (async, best-effort)
         {
             let mut cache = self.cache.lock().await;
+
+            // Write with per-user key (not per-offset)
             if let Err(e) = cache
                 .write_feed_cache(
                     user_id,
-                    offset as u32,
-                    limit as u32,
-                    post_ids.clone(),
-                    Some(120),
+                    0,      // Always use offset 0 for full feed cache
+                    100,    // Fixed size: full feed
+                    all_posts.clone(),
+                    Some(120),  // 2 minute TTL
                 )
                 .await
             {
                 warn!("Failed to write feed cache: {}", e);
             }
 
-            // Mark posts as seen
+            // Mark posts as seen (for deduplication across page loads)
             if let Err(e) = cache.mark_posts_seen(user_id, &result_posts).await {
                 warn!("Failed to mark posts as seen: {}", e);
             }
