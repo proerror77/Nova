@@ -129,27 +129,6 @@ services:
       - nova-network
 
   # ============================================
-  # Kafka UI (observability)
-  # ============================================
-  kafka-ui:
-    image: provectuslabs/kafka-ui:latest
-    container_name: nova-kafka-ui
-    restart: unless-stopped
-    depends_on:
-      kafka:
-        condition: service_started
-    environment:
-      KAFKA_CLUSTERS_0_NAME: nova-cluster
-      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
-      KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
-      KAFKA_CLUSTERS_0_KAFKACONNECT_0_NAME: debezium
-      KAFKA_CLUSTERS_0_KAFKACONNECT_0_ADDRESS: http://debezium:8083
-    ports:
-      - "8080:8080"
-    networks:
-      - nova-network
-
-  # ============================================
   # ClickHouse (OLAP)
   # ============================================
   # NOTE: Feed ranking uses unified query combining followees, trending, affinity
@@ -261,121 +240,6 @@ services:
       timeout: 5s
       retries: 3
 
-  # ============================================
-  # Streaming Services
-  # ============================================
-  streaming-ingest:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-      target: runtime
-    container_name: nova-streaming-ingest
-    restart: unless-stopped
-    environment:
-      RUST_LOG: info
-      APP_ENV: development
-      RTMP_BIND_ADDR: "0.0.0.0:1935"
-      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-nova_auth}
-      KAFKA_BROKERS: kafka:9092
-      REDIS_URL: redis://:${REDIS_PASSWORD:-redis123}@redis:6379/0
-    ports:
-      - "1935:1935"  # RTMP
-    depends_on:
-      postgres:
-        condition: service_healthy
-      kafka:
-        condition: service_started
-      redis:
-        condition: service_healthy
-    networks:
-      - nova-network
-
-  streaming-transcode:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-      target: runtime
-    container_name: nova-streaming-transcode
-    restart: unless-stopped
-    environment:
-      RUST_LOG: info
-      APP_ENV: development
-      KAFKA_BROKERS: kafka:9092
-      KAFKA_CONSUMER_TOPIC: stream-frames
-      SEGMENT_OUTPUT_DIR: /var/segments
-      REDIS_URL: redis://:${REDIS_PASSWORD:-redis123}@redis:6379/1
-      MOCK_FFMPEG: "true"
-    depends_on:
-      kafka:
-        condition: service_started
-      redis:
-        condition: service_healthy
-    volumes:
-      - streaming_segments:/var/segments
-    networks:
-      - nova-network
-
-  streaming-delivery:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-      target: runtime
-    container_name: nova-streaming-delivery
-    restart: unless-stopped
-    environment:
-      RUST_LOG: info
-      APP_ENV: development
-      APP_HOST: 0.0.0.0
-      APP_PORT: 8080
-      REDIS_URL: redis://:${REDIS_PASSWORD:-redis123}@redis:6379/2
-    ports:
-      - "8082:8080"  # HLS/DASH delivery
-    depends_on:
-      redis:
-        condition: service_healthy
-    networks:
-      - nova-network
-
-  streaming-api:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-      target: runtime
-    container_name: nova-streaming-api
-    restart: unless-stopped
-    environment:
-      RUST_LOG: info
-      APP_ENV: development
-      APP_HOST: 0.0.0.0
-      APP_PORT: 8081
-      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-nova_auth}
-      KAFKA_BROKERS: kafka:9092
-      REDIS_URL: redis://:${REDIS_PASSWORD:-redis123}@redis:6379/3
-    ports:
-      - "8081:8081"  # Management API
-    depends_on:
-      postgres:
-        condition: service_healthy
-      kafka:
-        condition: service_started
-      redis:
-        condition: service_healthy
-    networks:
-      - nova-network
-
-  # ============================================
-  # MailHog (Email testing - development only)
-  # ============================================
-  mailhog:
-    image: mailhog/mailhog:latest
-    container_name: nova-mailhog
-    restart: unless-stopped
-    ports:
-      - "1025:1025"  # SMTP
-      - "8025:8025"  # Web UI
-    networks:
-      - nova-network
-
 # ============================================
 # Volumes
 # ============================================
@@ -391,8 +255,6 @@ volumes:
   clickhouse_data:
     driver: local
   clickhouse_logs:
-    driver: local
-  streaming_segments:
     driver: local
 
 # ============================================
