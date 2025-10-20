@@ -23,34 +23,32 @@ enum APIEndpoint: Sendable {
     /// Builds the complete URL for this endpoint
     var url: URL {
         let baseURL = APIConfig.baseURL
+        func build(_ path: String, queryItems: [URLQueryItem]? = nil) -> URL {
+            var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: true)!
+            let normalized = path.hasPrefix("/") ? path : "/" + path
+            components.path = (baseURL.path.isEmpty ? "" : baseURL.path) + normalized
+            components.queryItems = queryItems
+            return components.url!
+        }
         switch self {
         case .feed(let page, let limit):
-            var components = URLComponents(url: baseURL.appendingPathComponent("/api/v1/feed"), resolvingAgainstBaseURL: true)!
-            components.queryItems = [
+            return build("/api/v1/feed", queryItems: [
                 URLQueryItem(name: "page", value: "\(page)"),
                 URLQueryItem(name: "limit", value: "\(limit)")
-            ]
-            return components.url!
-
+            ])
         case .users(let id):
-            return baseURL.appendingPathComponent("/api/v1/users/\(id)")
-
+            return build("/api/v1/users/\(id)")
         case .searchUsers(let query, let page, let limit):
-            var components = URLComponents(url: baseURL.appendingPathComponent("/api/v1/search/users"), resolvingAgainstBaseURL: true)!
-            components.queryItems = [
+            return build("/api/v1/search/users", queryItems: [
                 URLQueryItem(name: "q", value: query),
                 URLQueryItem(name: "page", value: "\(page)"),
                 URLQueryItem(name: "limit", value: "\(limit)")
-            ]
-            return components.url!
-
+            ])
         case .notifications(let page, let limit):
-            var components = URLComponents(url: baseURL.appendingPathComponent("/api/v1/notifications"), resolvingAgainstBaseURL: true)!
-            components.queryItems = [
+            return build("/api/v1/notifications", queryItems: [
                 URLQueryItem(name: "page", value: "\(page)"),
                 URLQueryItem(name: "limit", value: "\(limit)")
-            ]
-            return components.url!
+            ])
         }
     }
 

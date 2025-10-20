@@ -21,7 +21,7 @@ final class PostRepository {
 
     // MARK: - Post CRUD
 
-    /// 创建帖子（完整流程：获取上传 URL → 上传图片 → 创建帖子记录）
+    /// 创建帖子（完整流程：upload/init → PUT 上传 → upload/complete → 获取帖子详情）
     func createPost(image: UIImage, caption: String?) async throws -> Post {
         // 验证输入
         if let caption = caption {
@@ -39,25 +39,45 @@ final class PostRepository {
             throw APIError.fileTooLarge
         }
 
-        // 2. 获取预签名 URL
-        let uploadInfo = try await requestUploadURL(contentType: "image/jpeg")
-
-        // 3. 上传图片到 S3
-        try await uploadImageToS3(data: imageData, url: uploadInfo.uploadUrl)
-
-        // 4. 创建帖子记录
-        let request = CreatePostRequest(
-            fileKey: uploadInfo.fileKey,
+        // 2. 初始化上傳（取得預簽 URL、post_id、upload_token）
+        let filename = "post_\(UUID().uuidString).jpg"
+        let initReq = PostUploadInitRequest(
+            filename: filename,
+            contentType: "image/jpeg",
+            fileSize: imageData.count,
             caption: caption
         )
-
-        let endpoint = APIEndpoint(
-            path: "/api/v1/posts",
+        let initEndpoint = APIEndpoint(
+            path: "/api/v1/posts/upload/init",
             method: .post,
-            body: request
+            body: initReq
         )
+        let initResp: PostUploadInitResponse = try await interceptor.executeWithRetry(initEndpoint)
 
-        let response: PostResponse = try await interceptor.executeWithRetry(endpoint)
+        // 3. 上传图片到 S3 (PUT)
+        try await uploadImageToS3(data: imageData, url: initResp.presignedUrl)
+
+        // 4. 完成上傳（提交雜湊與檔案大小）
+        let fileHash = imageData.sha256Hex
+        let completeReq = PostUploadCompleteRequest(
+            postId: initResp.postId,
+            uploadToken: initResp.uploadToken,
+            fileHash: fileHash,
+            fileSize: imageData.count
+        )
+        let completeEndpoint = APIEndpoint(
+            path: "/api/v1/posts/upload/complete",
+            method: .post,
+            body: completeReq
+        )
+        _ = try await interceptor.executeWithRetry(completeEndpoint) as PostUploadCompleteResponse
+
+        // 5. 拉取帖子詳情
+        let getEndpoint = APIEndpoint(
+            path: "/api/v1/posts/\(initResp.postId)",
+            method: .get
+        )
+        let response: PostResponse = try await interceptor.executeWithRetry(getEndpoint)
         return response.post
     }
 
@@ -171,16 +191,9 @@ final class PostRepository {
 
     // MARK: - Private Helpers
 
+    // 兼容舊代碼保留占位，實際不再使用
     private func requestUploadURL(contentType: String) async throws -> UploadURLResponse {
-        let request = UploadURLRequest(contentType: contentType)
-
-        let endpoint = APIEndpoint(
-            path: "/api/v1/posts/upload-url",
-            method: .post,
-            body: request
-        )
-
-        return try await interceptor.executeWithRetry(endpoint)
+        throw APIError.badRequest("/api/v1/posts/upload-url is deprecated; use upload/init + upload/complete")
     }
 
     private func uploadImageToS3(data: Data, url: String) async throws {

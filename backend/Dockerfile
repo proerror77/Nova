@@ -18,8 +18,8 @@ RUN useradd -m -u 1001 -s /bin/bash appuser
 # Set working directory
 WORKDIR /app
 
-# Copy workspace configuration
-COPY Cargo.toml Cargo.lock ./
+# Copy workspace configuration (lockfile optional in dev builds)
+COPY Cargo.toml ./
 
 # Copy service configuration and source
 COPY user-service ./user-service

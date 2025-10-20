@@ -189,21 +189,21 @@ impl FeedRankingService {
             SELECT
                 toString(fp.id) as post_id,
                 toString(fp.user_id) as author_id,
-                sum(pm.likes_count) as likes,
-                sum(pm.comments_count) as comments,
-                sum(pm.shares_count) as shares,
-                sum(pm.impressions_count) as impressions,
+                sum(pm.likes) as likes,
+                sum(pm.comments) as comments,
+                sum(pm.shares) as shares,
+                sum(pm.exposures) as impressions,
                 round(exp(-{lambda} * dateDiff('hour', toStartOfHour(fp.created_at), now())), 4) as freshness_score,
-                round(log1p((sum(pm.likes_count) + 2.0*sum(pm.comments_count) + 3.0*sum(pm.shares_count)) /
-                    greatest(sum(pm.impressions_count), 1)), 4) as engagement_score,
+                round(log1p((sum(pm.likes) + 2.0*sum(pm.comments) + 3.0*sum(pm.shares)) /
+                    greatest(sum(pm.exposures), 1)), 4) as engagement_score,
                 0.0 as affinity_score,
                 round({fresh_w} * exp(-{lambda} * dateDiff('hour', toStartOfHour(fp.created_at), now())) +
-                       {eng_w} * log1p((sum(pm.likes_count) + 2.0*sum(pm.comments_count) + 3.0*sum(pm.shares_count)) /
-                       greatest(sum(pm.impressions_count), 1)), 4) as combined_score,
+                       {eng_w} * log1p((sum(pm.likes) + 2.0*sum(pm.comments) + 3.0*sum(pm.shares)) /
+                       greatest(sum(pm.exposures), 1)), 4) as combined_score,
                 fp.created_at
             FROM posts_cdc fp
             INNER JOIN follows_cdc f ON fp.user_id = f.following_id
-            LEFT JOIN post_metrics_1h pm ON fp.id = pm.post_id AND pm.metric_hour >= toStartOfHour(now()) - INTERVAL 3 HOUR
+            LEFT JOIN post_metrics_1h pm ON fp.id = pm.post_id AND pm.window_start >= toStartOfHour(now()) - INTERVAL 3 HOUR
             WHERE f.follower_id = '{user_id}'
               AND f.created_at > now() - INTERVAL 90 DAY
               AND fp.created_at > now() - INTERVAL 72 HOUR
@@ -237,20 +237,20 @@ impl FeedRankingService {
             SELECT
                 toString(post_id) as post_id,
                 toString(author_id) as author_id,
-                likes_count as likes,
-                comments_count as comments,
-                shares_count as shares,
-                impressions_count as impressions,
-                round(exp(-{lambda} * dateDiff('hour', metric_hour, now())), 4) as freshness_score,
-                round(log1p((likes_count + 2.0*comments_count + 3.0*shares_count) /
-                    greatest(impressions_count, 1)), 4) as engagement_score,
+                likes as likes,
+                comments as comments,
+                shares as shares,
+                exposures as impressions,
+                round(exp(-{lambda} * dateDiff('hour', window_start, now())), 4) as freshness_score,
+                round(log1p((likes + 2.0*comments + 3.0*shares) /
+                    greatest(exposures, 1)), 4) as engagement_score,
                 0.0 as affinity_score,
-                round({fresh_w} * exp(-{lambda} * dateDiff('hour', metric_hour, now())) +
-                       {eng_w} * log1p((likes_count + 2.0*comments_count + 3.0*shares_count) /
-                       greatest(impressions_count, 1)), 4) as combined_score,
-                metric_hour as created_at
+                round({fresh_w} * exp(-{lambda} * dateDiff('hour', window_start, now())) +
+                       {eng_w} * log1p((likes + 2.0*comments + 3.0*shares) /
+                       greatest(exposures, 1)), 4) as combined_score,
+                window_start as created_at
             FROM post_metrics_1h
-            WHERE metric_hour >= now() - INTERVAL 24 HOUR
+            WHERE window_start >= now() - INTERVAL 24 HOUR
             ORDER BY combined_score DESC
             LIMIT {limit}
             "#,
@@ -283,25 +283,25 @@ impl FeedRankingService {
             SELECT
                 toString(fp.id) as post_id,
                 toString(fp.user_id) as author_id,
-                sum(pm.likes_count) as likes,
-                sum(pm.comments_count) as comments,
-                sum(pm.shares_count) as shares,
-                sum(pm.impressions_count) as impressions,
+                sum(pm.likes) as likes,
+                sum(pm.comments) as comments,
+                sum(pm.shares) as shares,
+                sum(pm.exposures) as impressions,
                 round(exp(-{lambda} * dateDiff('hour', toStartOfHour(fp.created_at), now())), 4) as freshness_score,
-                round(log1p((sum(pm.likes_count) + 2.0*sum(pm.comments_count) + 3.0*sum(pm.shares_count)) /
-                    greatest(sum(pm.impressions_count), 1)), 4) as engagement_score,
-                round(log1p(aa.interaction_count), 4) as affinity_score,
+                round(log1p((sum(pm.likes) + 2.0*sum(pm.comments) + 3.0*sum(pm.shares)) /
+                    greatest(sum(pm.exposures), 1)), 4) as engagement_score,
+                round(log1p((aa.likes + aa.comments + aa.views)), 4) as affinity_score,
                 round({fresh_w} * exp(-{lambda} * dateDiff('hour', toStartOfHour(fp.created_at), now())) +
-                       {eng_w} * log1p((sum(pm.likes_count) + 2.0*sum(pm.comments_count) + 3.0*sum(pm.shares_count)) /
-                       greatest(sum(pm.impressions_count), 1)) +
-                       {aff_w} * log1p(aa.interaction_count), 4) as combined_score,
+                       {eng_w} * log1p((sum(pm.likes) + 2.0*sum(pm.comments) + 3.0*sum(pm.shares)) /
+                       greatest(sum(pm.exposures), 1)) +
+                       {aff_w} * log1p((aa.likes + aa.comments + aa.views)), 4) as combined_score,
                 fp.created_at
             FROM posts_cdc fp
             INNER JOIN user_author_90d aa ON fp.user_id = aa.author_id
-            LEFT JOIN post_metrics_1h pm ON fp.id = pm.post_id AND pm.metric_hour >= toStartOfHour(now()) - INTERVAL 3 HOUR
+            LEFT JOIN post_metrics_1h pm ON fp.id = pm.post_id AND pm.window_start >= toStartOfHour(now()) - INTERVAL 3 HOUR
             WHERE aa.user_id = '{user_id}'
               AND fp.created_at > now() - INTERVAL 14 DAY
-            GROUP BY fp.id, fp.user_id, fp.created_at, aa.interaction_count
+            GROUP BY fp.id, fp.user_id, fp.created_at, (aa.likes + aa.comments + aa.views)
             ORDER BY combined_score DESC
             LIMIT {limit}
             "#,
@@ -341,21 +341,21 @@ impl FeedRankingService {
                 SELECT
                     toString(fp.id) as post_id,
                     toString(fp.user_id) as author_id,
-                    sum(pm.likes_count) as likes,
-                    sum(pm.comments_count) as comments,
-                    sum(pm.shares_count) as shares,
-                    sum(pm.impressions_count) as impressions,
+                    sum(pm.likes) as likes,
+                    sum(pm.comments) as comments,
+                    sum(pm.shares) as shares,
+                    sum(pm.exposures) as impressions,
                     round(exp(-{lambda} * dateDiff('hour', toStartOfHour(fp.created_at), now())), 4) as freshness_score,
-                    round(log1p((sum(pm.likes_count) + 2.0*sum(pm.comments_count) + 3.0*sum(pm.shares_count)) /
-                        greatest(sum(pm.impressions_count), 1)), 4) as engagement_score,
+                    round(log1p((sum(pm.likes) + 2.0*sum(pm.comments) + 3.0*sum(pm.shares)) /
+                        greatest(sum(pm.exposures), 1)), 4) as engagement_score,
                     0.0 as affinity_score,
                     round({fresh_w} * exp(-{lambda} * dateDiff('hour', toStartOfHour(fp.created_at), now())) +
-                           {eng_w} * log1p((sum(pm.likes_count) + 2.0*sum(pm.comments_count) + 3.0*sum(pm.shares_count)) /
-                           greatest(sum(pm.impressions_count), 1)), 4) as combined_score,
+                           {eng_w} * log1p((sum(pm.likes) + 2.0*sum(pm.comments) + 3.0*sum(pm.shares)) /
+                           greatest(sum(pm.exposures), 1)), 4) as combined_score,
                     fp.created_at
                 FROM posts_cdc fp
                 INNER JOIN follows_cdc f ON fp.user_id = f.following_id
-                LEFT JOIN post_metrics_1h pm ON fp.id = pm.post_id AND pm.metric_hour >= toStartOfHour(now()) - INTERVAL 3 HOUR
+                LEFT JOIN post_metrics_1h pm ON fp.id = pm.post_id AND pm.window_start >= toStartOfHour(now()) - INTERVAL 3 HOUR
                 WHERE f.follower_id = '{user_id}'
                   AND f.created_at > now() - INTERVAL 90 DAY
                   AND fp.created_at > now() - INTERVAL 72 HOUR
@@ -365,20 +365,20 @@ impl FeedRankingService {
                 SELECT
                     toString(post_id) as post_id,
                     toString(author_id) as author_id,
-                    likes_count as likes,
-                    comments_count as comments,
-                    shares_count as shares,
-                    impressions_count as impressions,
-                    round(exp(-{lambda} * dateDiff('hour', metric_hour, now())), 4) as freshness_score,
-                    round(log1p((likes_count + 2.0*comments_count + 3.0*shares_count) /
-                        greatest(impressions_count, 1)), 4) as engagement_score,
+                    likes as likes,
+                    comments as comments,
+                    shares as shares,
+                    exposures as impressions,
+                    round(exp(-{lambda} * dateDiff('hour', window_start, now())), 4) as freshness_score,
+                    round(log1p((likes + 2.0*comments + 3.0*shares) /
+                        greatest(exposures, 1)), 4) as engagement_score,
                     0.0 as affinity_score,
-                    round({fresh_w} * exp(-{lambda} * dateDiff('hour', metric_hour, now())) +
-                           {eng_w} * log1p((likes_count + 2.0*comments_count + 3.0*shares_count) /
-                           greatest(impressions_count, 1)), 4) as combined_score,
-                    metric_hour as created_at
+                    round({fresh_w} * exp(-{lambda} * dateDiff('hour', window_start, now())) +
+                           {eng_w} * log1p((likes + 2.0*comments + 3.0*shares) /
+                           greatest(exposures, 1)), 4) as combined_score,
+                    window_start as created_at
                 FROM post_metrics_1h
-                WHERE metric_hour >= now() - INTERVAL 24 HOUR
+                WHERE window_start >= now() - INTERVAL 24 HOUR
                 ORDER BY combined_score DESC
                 LIMIT 200
             ),
@@ -386,25 +386,25 @@ impl FeedRankingService {
                 SELECT
                     toString(fp.id) as post_id,
                     toString(fp.user_id) as author_id,
-                    sum(pm.likes_count) as likes,
-                    sum(pm.comments_count) as comments,
-                    sum(pm.shares_count) as shares,
-                    sum(pm.impressions_count) as impressions,
+                    sum(pm.likes) as likes,
+                    sum(pm.comments) as comments,
+                    sum(pm.shares) as shares,
+                    sum(pm.exposures) as impressions,
                     round(exp(-{lambda} * dateDiff('hour', toStartOfHour(fp.created_at), now())), 4) as freshness_score,
-                    round(log1p((sum(pm.likes_count) + 2.0*sum(pm.comments_count) + 3.0*sum(pm.shares_count)) /
-                        greatest(sum(pm.impressions_count), 1)), 4) as engagement_score,
-                    round(log1p(aa.interaction_count), 4) as affinity_score,
+                    round(log1p((sum(pm.likes) + 2.0*sum(pm.comments) + 3.0*sum(pm.shares)) /
+                        greatest(sum(pm.exposures), 1)), 4) as engagement_score,
+                    round(log1p((aa.likes + aa.comments + aa.views)), 4) as affinity_score,
                     round({fresh_w} * exp(-{lambda} * dateDiff('hour', toStartOfHour(fp.created_at), now())) +
-                           {eng_w} * log1p((sum(pm.likes_count) + 2.0*sum(pm.comments_count) + 3.0*sum(pm.shares_count)) /
-                           greatest(sum(pm.impressions_count), 1)) +
-                           {aff_w} * log1p(aa.interaction_count), 4) as combined_score,
+                           {eng_w} * log1p((sum(pm.likes) + 2.0*sum(pm.comments) + 3.0*sum(pm.shares)) /
+                           greatest(sum(pm.exposures), 1)) +
+                           {aff_w} * log1p((aa.likes + aa.comments + aa.views)), 4) as combined_score,
                     fp.created_at
                 FROM posts_cdc fp
                 INNER JOIN user_author_90d aa ON fp.user_id = aa.author_id
-                LEFT JOIN post_metrics_1h pm ON fp.id = pm.post_id AND pm.metric_hour >= toStartOfHour(now()) - INTERVAL 3 HOUR
+                LEFT JOIN post_metrics_1h pm ON fp.id = pm.post_id AND pm.window_start >= toStartOfHour(now()) - INTERVAL 3 HOUR
                 WHERE aa.user_id = '{user_id}'
                   AND fp.created_at > now() - INTERVAL 14 DAY
-                GROUP BY fp.id, fp.user_id, fp.created_at, aa.interaction_count
+                GROUP BY fp.id, fp.user_id, fp.created_at, (aa.likes + aa.comments + aa.views)
                 ORDER BY combined_score DESC
                 LIMIT 200
             )
