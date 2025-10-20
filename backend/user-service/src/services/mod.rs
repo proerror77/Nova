@@ -11,9 +11,12 @@ pub mod cdc;
 pub mod cdn_failover;
 pub mod cdn_handler_integration;
 pub mod cdn_service;
+pub mod clickhouse_feature_extractor;
+pub mod deep_learning_inference;
 pub mod email_verification;
 pub mod events;
 pub mod feed_ranking;
+pub mod feed_ranking_service;
 pub mod feed_service;
 pub mod ffmpeg_optimizer;
 pub mod image_processing;
@@ -24,6 +27,7 @@ pub mod oauth;
 pub mod origin_shield;
 pub mod password_reset_service;
 pub mod query_profiler;
+pub mod ranking_engine;
 pub mod redis_job;
 pub mod s3_service;
 pub mod streaming;
@@ -32,6 +36,7 @@ pub mod token_revocation;
 pub mod transcoding_optimizer;
 pub mod transcoding_progress;
 pub mod two_fa;
+pub mod video_processing_pipeline;
 pub mod video_service;
 pub mod video_transcoding;
 
@@ -53,6 +58,12 @@ pub mod video_transcoding;
 // - ffmpeg_optimizer: FFmpeg configuration and optimization strategies
 // - transcoding_optimizer: Transcoding workflow optimization
 // - transcoding_progress: Progress tracking and status reporting for transcoding jobs
+// - video_processing_pipeline: Orchestrates entire video processing workflow (Phase 7)
+//
+// MACHINE LEARNING & RANKING:
+// - clickhouse_feature_extractor: Feature extraction for ML model training
+// - deep_learning_inference: TensorFlow Serving + Milvus integration for embeddings
+// - feed_ranking_service: Advanced ML-based feed ranking orchestration (Phase 7)
 //
 // COMMON SERVICES:
 // - backup_codes: Two-factor authentication backup codes management
