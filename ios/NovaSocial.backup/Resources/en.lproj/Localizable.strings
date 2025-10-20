@@ -1,0 +1,131 @@
+/* App Name */
+"app.name" = "Nova";
+
+/* Common */
+"common.cancel" = "Cancel";
+"common.confirm" = "Confirm";
+"common.delete" = "Delete";
+"common.edit" = "Edit";
+"common.save" = "Save";
+"common.send" = "Send";
+"common.done" = "Done";
+"common.back" = "Back";
+"common.next" = "Next";
+"common.skip" = "Skip";
+"common.retry" = "Retry";
+"common.close" = "Close";
+"common.ok" = "OK";
+"common.yes" = "Yes";
+"common.no" = "No";
+"common.loading" = "Loading...";
+"common.error" = "Error";
+"common.success" = "Success";
+"common.warning" = "Warning";
+
+/* Authentication */
+"auth.login" = "Login";
+"auth.register" = "Sign Up";
+"auth.logout" = "Logout";
+"auth.email" = "Email";
+"auth.password" = "Password";
+"auth.username" = "Username";
+"auth.forgot_password" = "Forgot Password?";
+"auth.create_account" = "Create Account";
+"auth.already_have_account" = "Already have an account?";
+"auth.dont_have_account" = "Don't have an account?";
+"auth.error.invalid_credentials" = "Invalid username or password";
+"auth.error.password_too_short" = "Password must be at least 8 characters";
+"auth.error.email_invalid" = "Invalid email format";
+
+/* Feed */
+"feed.title" = "Feed";
+"feed.new_post" = "New Post";
+"feed.refresh" = "Refresh";
+"feed.no_more_posts" = "No more posts";
+"feed.loading_more" = "Loading more...";
+"feed.posts_count" = "%d posts";
+
+/* Post */
+"post.like" = "Like";
+"post.unlike" = "Unlike";
+"post.comment" = "Comment";
+"post.share" = "Share";
+"post.delete" = "Delete";
+"post.edit" = "Edit";
+"post.report" = "Report";
+"post.save" = "Save";
+"post.unsave" = "Unsave";
+"post.likes_count" = "%d likes";
+"post.comments_count" = "%d comments";
+"post.shares_count" = "%d shares";
+"post.time_ago.minutes" = "%d minutes ago";
+"post.time_ago.hours" = "%d hours ago";
+"post.time_ago.days" = "%d days ago";
+
+/* Profile */
+"profile.followers" = "Followers";
+"profile.following" = "Following";
+"profile.posts" = "Posts";
+"profile.follow" = "Follow";
+"profile.unfollow" = "Unfollow";
+"profile.edit_profile" = "Edit Profile";
+"profile.settings" = "Settings";
+"profile.bio" = "Bio";
+"profile.followers_count" = "%d followers";
+"profile.following_count" = "%d following";
+"profile.posts_count" = "%d posts";
+
+/* Notification */
+"notification.title" = "Notifications";
+"notification.mark_all_read" = "Mark All as Read";
+"notification.no_notifications" = "No notifications";
+"notification.liked_your_post" = "%@ liked your post";
+"notification.commented_on_your_post" = "%@ commented on your post";
+"notification.followed_you" = "%@ followed you";
+
+/* Search */
+"search.title" = "Search";
+"search.placeholder" = "Search users, tags...";
+"search.no_results" = "No results found";
+"search.recent" = "Recent";
+"search.trending" = "Trending";
+
+/* Settings */
+"settings.title" = "Settings";
+"settings.account" = "Account";
+"settings.privacy" = "Privacy";
+"settings.notifications" = "Notifications";
+"settings.language" = "Language";
+"settings.theme" = "Theme";
+"settings.about" = "About";
+"settings.version" = "Version";
+"settings.logout" = "Logout";
+
+/* Error Messages */
+"error.network_error" = "Network connection failed. Please check your network settings.";
+"error.unknown_error" = "Unknown error occurred. Please try again later.";
+"error.server_error" = "Server error. Please try again later.";
+"error.invalid_input" = "Invalid input";
+"error.unauthorized" = "Unauthorized. Please login again.";
+
+/* Create Post */
+"create_post.title" = "Create Post";
+"create_post.caption" = "Write a caption...";
+"create_post.caption_placeholder" = "Share your thoughts...";
+"create_post.select_media" = "Select Photo or Video";
+"create_post.publish" = "Publish";
+"create_post.uploading" = "Uploading...";
+
+/* Language Selection */
+"language_selection.title" = "Language";
+"language_selection.current_language" = "Current Language";
+"language_selection.system_language" = "System Default";
+"language_selection.footer" = "Changing the language will update the app interface. Some changes may require restarting the app to fully apply.";
+"language_selection.changed_title" = "Language Changed";
+"language_selection.changed_message" = "The app language has been changed. Some features may require restarting the app to fully apply.";
+
+/* Settings Additions */
+"settings.terms_of_service" = "Terms of Service";
+"settings.privacy_policy" = "Privacy Policy";
+"settings.help" = "Help & Support";
+"settings.logout_confirm" = "Are you sure you want to logout?";
