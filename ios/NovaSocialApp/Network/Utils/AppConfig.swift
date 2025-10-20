@@ -16,9 +16,17 @@ enum Environment {
     }
 
     var baseURL: URL {
+        // 优先使用 Info.plist 中的覆盖值（键：API_BASE_URL），便于真机调试改为局域网 IP
+        if let override = Bundle.main.infoDictionary?["API_BASE_URL"] as? String,
+           let url = URL(string: override), !override.isEmpty {
+            return url
+        }
+
         switch self {
         case .development:
-            return URL(string: "http://192.168.31.154:8001")!
+            // iOS 模拟器 → 访问宿主机服务请使用 localhost
+            // 后端本地端口（.env 中 USER_SERVICE_PORT=8085）
+            return URL(string: "http://localhost:8085")!
         case .staging:
             return URL(string: "https://api-staging.nova.social")!
         case .production:

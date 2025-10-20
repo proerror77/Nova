@@ -130,15 +130,17 @@ final class APIClient {
         _ endpoint: APIEndpoint,
         authenticated: Bool
     ) throws -> URLRequest {
-        // 构建 URL
-        var urlComponents = URLComponents(url: baseURL.appendingPathComponent(endpoint.path), resolvingAgainstBaseURL: false)
+        // 构建 URL，避免将带有斜杠的 path 当作单个 component 被转义
+        var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false)
+        let path = endpoint.path.hasPrefix("/") ? endpoint.path : "/" + endpoint.path
+        components?.path = (baseURL.path.isEmpty ? "" : baseURL.path) + path
 
         // 添加 Query Parameters
         if let queryItems = endpoint.queryItems, !queryItems.isEmpty {
-            urlComponents?.queryItems = queryItems
+            components?.queryItems = queryItems
         }
 
-        guard let url = urlComponents?.url else {
+        guard let url = components?.url else {
             throw APIError.invalidResponse
         }
 

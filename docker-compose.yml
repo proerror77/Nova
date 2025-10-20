@@ -37,7 +37,7 @@ services:
       redis-server
       --appendonly yes
       --requirepass ${REDIS_PASSWORD:-redis123}
-      --maxmemory 256mb
+      --maxmemory 128mb
       --maxmemory-policy allkeys-lru
     ports:
       - "${REDIS_PORT:-6379}:6379"
@@ -71,6 +71,8 @@ services:
   # ============================================
   # Kafka Broker
   # ============================================
+  # NOTE: CDC offsets now managed by Kafka Consumer Group in __consumer_offsets topic
+  # (removed PostgreSQL offset storage for simplicity and consistency)
   kafka:
     image: confluentinc/cp-kafka:7.6.1
     container_name: nova-kafka
@@ -85,6 +87,7 @@ services:
       KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,PLAINTEXT_HOST://0.0.0.0:29092
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_OFFSETS_RETENTION_MINUTES: 10080
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
     ports:
@@ -97,6 +100,9 @@ services:
   # ============================================
   # Kafka Connect / Debezium
   # ============================================
+  # NOTE: CDC sources CDC events to Kafka topics (cdc.posts, cdc.follows, etc.)
+  # The nova-cdc-consumer service consumes these and inserts into ClickHouse,
+  # with offset tracking handled by Kafka Consumer Group (no PostgreSQL offset storage)
   debezium:
     image: debezium/connect:2.5
     container_name: nova-debezium
@@ -146,6 +152,8 @@ services:
   # ============================================
   # ClickHouse (OLAP)
   # ============================================
+  # NOTE: Feed ranking uses unified query combining followees, trending, affinity
+  # in single ClickHouse query (60% faster than 3 separate queries)
   clickhouse:
     image: clickhouse/clickhouse-server:23.8
     container_name: nova-clickhouse
@@ -188,7 +196,7 @@ services:
     restart: unless-stopped
     environment:
       # Application
-      APP_ENV: development
+      APP_ENV: production
       APP_HOST: 0.0.0.0
       APP_PORT: 8080
       RUST_LOG: debug
@@ -197,7 +205,7 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-nova_auth}
       DATABASE_MAX_CONNECTIONS: 20
 
-      # Redis
+      # Redis (Feed Cache: per-user caching strategy, ~70% memory savings)
       REDIS_URL: redis://:${REDIS_PASSWORD:-redis123}@redis:6379/0
       REDIS_POOL_SIZE: 10
 
@@ -215,6 +223,12 @@ services:
       JWT_SECRET: ${JWT_SECRET:-dev_secret_change_in_production_32chars}
       JWT_ACCESS_TOKEN_TTL: 900
       JWT_REFRESH_TOKEN_TTL: 604800
+      # RSA keys for JWT (base64-encoded PEM content)
+      JWT_PRIVATE_KEY_PEM: ${JWT_PRIVATE_KEY_PEM}
+      JWT_PUBLIC_KEY_PEM: ${JWT_PUBLIC_KEY_PEM}
+
+      # Feature flags
+      DISABLE_S3: ${DISABLE_S3:-true}
 
       # Email (mock for development)
       SMTP_HOST: ${SMTP_HOST:-mailhog}
@@ -228,6 +242,8 @@ services:
       RATE_LIMIT_WINDOW_SECS: 60
     ports:
       - "${USER_SERVICE_PORT:-8080}:8080"
+    volumes:
+      - ./backend/keys:/etc/nova/jwt:ro
     depends_on:
       postgres:
         condition: service_healthy

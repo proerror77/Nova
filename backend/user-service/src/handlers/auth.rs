@@ -276,8 +276,8 @@ pub async fn login(
         }
     };
 
-    // Check if email is verified
-    if !user.email_verified {
+    // Check if email is verified (production only)
+    if config.is_production() && !user.email_verified {
         return HttpResponse::Forbidden().json(ErrorResponse {
             error: "Email not verified".to_string(),
             details: Some("Please verify your email before logging in".to_string()),

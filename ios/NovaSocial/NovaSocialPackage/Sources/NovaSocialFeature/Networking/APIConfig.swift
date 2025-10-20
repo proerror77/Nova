@@ -11,9 +11,9 @@ enum APIEnvironment: Sendable {
     var baseURL: String {
         switch self {
         case .development:
-            return "http://localhost:8001"
+            return "http://localhost:8080"
         case .stagingLocal:
-            return "http://localhost:8001"
+            return "http://localhost:8080"
         case .stagingGitHub:
             return "https://staging-api.nova.app"
         case .stagingProxy:

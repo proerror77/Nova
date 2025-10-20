@@ -59,6 +59,7 @@ urlencoding.workspace = true
 clickhouse.workspace = true
 hmac.workspace = true
 qrcode.workspace = true
+rsa.workspace = true
 
 # Service-specific dependencies
 futures = "0.3"

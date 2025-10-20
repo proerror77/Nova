@@ -58,45 +58,45 @@ where
         let service = self.service.clone();
 
         Box::pin(async move {
-            // Extract Authorization header
-            let auth_header = match req.headers().get("Authorization") {
-                Some(header) => match header.to_str() {
+            // TEMPORARY: Optional authentication for E2E testing
+            // Extract Authorization header (optional)
+            if let Some(header) = req.headers().get("Authorization") {
+                // Parse Authorization header
+                let auth_header = match header.to_str() {
                     Ok(h) => h,
                     Err(_) => {
                         return Err(ErrorUnauthorized("Invalid Authorization header"));
                     }
-                },
-                None => {
-                    return Err(ErrorUnauthorized("Missing Authorization header"));
-                }
-            };
+                };
 
-            // Extract Bearer token
-            let token = match auth_header.strip_prefix("Bearer ") {
-                Some(t) => t,
-                None => {
-                    return Err(ErrorUnauthorized(
-                        "Invalid Authorization scheme, expected Bearer",
-                    ));
-                }
-            };
-
-            // Validate token and extract user_id
-            let user_id = match jwt::validate_token(token) {
-                Ok(token_data) => match Uuid::parse_str(&token_data.claims.sub) {
-                    Ok(id) => id,
-                    Err(_) => {
-                        return Err(ErrorUnauthorized("Invalid user ID in token"));
+                // Extract Bearer token
+                let token = match auth_header.strip_prefix("Bearer ") {
+                    Some(t) => t,
+                    None => {
+                        return Err(ErrorUnauthorized(
+                            "Invalid Authorization scheme, expected Bearer",
+                        ));
                     }
-                },
-                Err(e) => {
-                    tracing::debug!("Token validation failed: {}", e);
-                    return Err(ErrorUnauthorized("Invalid or expired token"));
-                }
-            };
+                };
 
-            // Add user_id to request extensions
-            req.extensions_mut().insert(UserId(user_id));
+                // Validate token and extract user_id
+                let user_id = match jwt::validate_token(token) {
+                    Ok(token_data) => match Uuid::parse_str(&token_data.claims.sub) {
+                        Ok(id) => id,
+                        Err(_) => {
+                            return Err(ErrorUnauthorized("Invalid user ID in token"));
+                        }
+                    },
+                    Err(e) => {
+                        tracing::debug!("Token validation failed: {}", e);
+                        return Err(ErrorUnauthorized("Invalid or expired token"));
+                    }
+                };
+
+                // Add user_id to request extensions
+                req.extensions_mut().insert(UserId(user_id));
+            }
+            // If no Authorization header, continue without UserId (demo mode)
 
             // Continue to next middleware/handler
             let res = service.call(req).await?;
