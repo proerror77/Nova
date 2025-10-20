@@ -21,7 +21,7 @@ final class PostRepositoryEnhanced {
 
     // MARK: - Post CRUD
 
-    /// 创建帖子（完整流程：获取上传 URL → 上传图片 → 创建帖子记录）
+    /// 创建帖子（完整流程：upload/init → PUT 上传 → upload/complete → 获取帖子详情，并缓存）
     func createPost(image: UIImage, caption: String?) async throws -> Post {
         // 验证输入
         if let caption = caption {
@@ -39,27 +39,47 @@ final class PostRepositoryEnhanced {
             throw APIError.fileTooLarge
         }
 
-        // 2. 获取预签名 URL
-        let uploadInfo = try await requestUploadURL(contentType: "image/jpeg")
-
-        // 3. 上传图片到 S3
-        try await uploadImageToS3(data: imageData, url: uploadInfo.uploadUrl)
-
-        // 4. 创建帖子记录
-        let request = CreatePostRequest(
-            fileKey: uploadInfo.fileKey,
+        // 2. 初始化上傳
+        let filename = "post_\(UUID().uuidString).jpg"
+        let initReq = PostUploadInitRequest(
+            filename: filename,
+            contentType: "image/jpeg",
+            fileSize: imageData.count,
             caption: caption
         )
-
-        let endpoint = APIEndpoint(
-            path: "/posts",
+        let initEndpoint = APIEndpoint(
+            path: "/api/v1/posts/upload/init",
             method: .post,
-            body: request
+            body: initReq
         )
+        let initResp: PostUploadInitResponse = try await interceptor.executeWithRetry(initEndpoint)
 
-        let response: PostResponse = try await interceptor.executeWithRetry(endpoint)
+        // 3. 上传图片到 S3
+        try await uploadImageToS3(data: imageData, url: initResp.presignedUrl)
 
-        // 5. 缓存到本地
+        // 4. 完成上傳
+        let fileHash = imageData.sha256Hex
+        let completeReq = PostUploadCompleteRequest(
+            postId: initResp.postId,
+            uploadToken: initResp.uploadToken,
+            fileHash: fileHash,
+            fileSize: imageData.count
+        )
+        let completeEndpoint = APIEndpoint(
+            path: "/api/v1/posts/upload/complete",
+            method: .post,
+            body: completeReq
+        )
+        _ = try await interceptor.executeWithRetry(completeEndpoint) as PostUploadCompleteResponse
+
+        // 5. 获取帖子详情
+        let getEndpoint = APIEndpoint(
+            path: "/api/v1/posts/\(initResp.postId)",
+            method: .get
+        )
+        let response: PostResponse = try await interceptor.executeWithRetry(getEndpoint)
+
+        // 6. 缓存到本地
         let localPost = LocalPost.from(response.post)
         try await localStorage.save(localPost)
 
@@ -85,7 +105,7 @@ final class PostRepositoryEnhanced {
 
         // 2. 缓存未命中，从服务器获取
         let endpoint = APIEndpoint(
-            path: "/posts/\(id.uuidString)",
+            path: "/api/v1/posts/\(id.uuidString)",
             method: .get
         )
 
@@ -101,7 +121,7 @@ final class PostRepositoryEnhanced {
     /// 删除帖子
     func deletePost(id: UUID) async throws {
         let endpoint = APIEndpoint(
-            path: "/posts/\(id.uuidString)",
+            path: "/api/v1/posts/\(id.uuidString)",
             method: .delete
         )
 
@@ -135,7 +155,7 @@ final class PostRepositoryEnhanced {
 
             // 2. 调用 API
             let endpoint = APIEndpoint(
-                path: "/posts/\(id.uuidString)/like",
+                path: "/api/v1/posts/\(id.uuidString)/like",
                 method: .post
             )
 
@@ -193,7 +213,7 @@ final class PostRepositoryEnhanced {
 
             // 2. 调用 API
             let endpoint = APIEndpoint(
-                path: "/posts/\(id.uuidString)/like",
+                path: "/api/v1/posts/\(id.uuidString)/like",
                 method: .delete
             )
 
@@ -266,7 +286,7 @@ final class PostRepositoryEnhanced {
         }
 
         let endpoint = APIEndpoint(
-            path: "/posts/\(postId.uuidString)/comments",
+            path: "/api/v1/posts/\(postId.uuidString)/comments",
             method: .get,
             queryItems: queryItems
         )
@@ -293,7 +313,7 @@ final class PostRepositoryEnhanced {
             let request = CreateCommentRequest(text: text)
 
             let endpoint = APIEndpoint(
-                path: "/posts/\(postId.uuidString)/comments",
+                path: "/api/v1/posts/\(postId.uuidString)/comments",
                 method: .post,
                 body: request
             )
@@ -311,7 +331,7 @@ final class PostRepositoryEnhanced {
     /// 删除评论
     func deleteComment(id: UUID) async throws {
         let endpoint = APIEndpoint(
-            path: "/comments/\(id.uuidString)",
+            path: "/api/v1/comments/\(id.uuidString)",
             method: .delete
         )
 
@@ -326,16 +346,9 @@ final class PostRepositoryEnhanced {
 
     // MARK: - Private Helpers
 
+    // 兼容舊代碼保留占位，實際不再使用
     private func requestUploadURL(contentType: String) async throws -> UploadURLResponse {
-        let request = UploadURLRequest(contentType: contentType)
-
-        let endpoint = APIEndpoint(
-            path: "/posts/upload-url",
-            method: .post,
-            body: request
-        )
-
-        return try await interceptor.executeWithRetry(endpoint)
+        throw APIError.badRequest("/api/v1/posts/upload-url is deprecated; use upload/init + upload/complete")
     }
 
     private func uploadImageToS3(data: Data, url: String) async throws {
@@ -361,7 +374,7 @@ final class PostRepositoryEnhanced {
     /// 后台同步 Post
     private func syncPostInBackground(id: UUID) async throws {
         let endpoint = APIEndpoint(
-            path: "/posts/\(id.uuidString)",
+            path: "/api/v1/posts/\(id.uuidString)",
             method: .get
         )
 
@@ -381,7 +394,7 @@ final class PostRepositoryEnhanced {
         ]
 
         let endpoint = APIEndpoint(
-            path: "/posts/\(postId.uuidString)/comments",
+            path: "/api/v1/posts/\(postId.uuidString)/comments",
             method: .get,
             queryItems: queryItems
         )

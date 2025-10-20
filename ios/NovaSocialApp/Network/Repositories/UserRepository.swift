@@ -27,7 +27,7 @@ final class UserRepository {
         }
 
         let endpoint = APIEndpoint(
-            path: "/users/\(username)",
+            path: "/api/v1/users/\(username)",
             method: .get
         )
 
@@ -45,7 +45,7 @@ final class UserRepository {
         }
 
         let endpoint = APIEndpoint(
-            path: "/users/\(userId.uuidString)/posts",
+            path: "/api/v1/users/\(userId.uuidString)/posts",
             method: .get,
             queryItems: queryItems
         )
@@ -84,7 +84,7 @@ final class UserRepository {
         )
 
         let endpoint = APIEndpoint(
-            path: "/users/me",
+            path: "/api/v1/users/me",
             method: .put,
             body: request
         )
@@ -106,7 +106,7 @@ final class UserRepository {
         ]
 
         let endpoint = APIEndpoint(
-            path: "/users/search",
+            path: "/api/v1/users/search",
             method: .get,
             queryItems: queryItems
         )
@@ -124,7 +124,7 @@ final class UserRepository {
 
         return try await deduplicator.execute(key: key) {
             let endpoint = APIEndpoint(
-                path: "/users/\(id.uuidString)/follow",
+                path: "/api/v1/users/\(id.uuidString)/follow",
                 method: .post
             )
 
@@ -139,7 +139,7 @@ final class UserRepository {
 
         return try await deduplicator.execute(key: key) {
             let endpoint = APIEndpoint(
-                path: "/users/\(id.uuidString)/follow",
+                path: "/api/v1/users/\(id.uuidString)/follow",
                 method: .delete
             )
 
@@ -159,7 +159,7 @@ final class UserRepository {
         }
 
         let endpoint = APIEndpoint(
-            path: "/users/\(userId.uuidString)/followers",
+            path: "/api/v1/users/\(userId.uuidString)/followers",
             method: .get,
             queryItems: queryItems
         )
@@ -179,7 +179,7 @@ final class UserRepository {
         }
 
         let endpoint = APIEndpoint(
-            path: "/users/\(userId.uuidString)/following",
+            path: "/api/v1/users/\(userId.uuidString)/following",
             method: .get,
             queryItems: queryItems
         )
