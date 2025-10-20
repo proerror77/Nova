@@ -1,6 +1,8 @@
 # ============================================
 # Builder Stage - Compile Rust application
 # ============================================
+# NOTE: Compiles optimized feed ranking engine with unified ClickHouse queries
+# and simplified CDC offset management (Kafka auto-commit)
 FROM rustlang/rust:nightly-slim as builder
 
 # Install build dependencies
@@ -24,12 +26,14 @@ COPY Cargo.toml ./
 # Copy service configuration and source
 COPY user-service ./user-service
 
-# Build application
+# Build application with release optimizations
 RUN cargo build --release --manifest-path user-service/Cargo.toml
 
 # ============================================
 # Runtime Stage - Minimal production image
 # ============================================
+# Optimized: Only includes runtime dependencies (no build tools)
+# Reduces image size and attack surface
 FROM debian:bookworm-slim AS runtime
 
 # Install runtime dependencies only
@@ -67,5 +71,5 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
 ENV RUST_LOG=info
 ENV APP_ENV=production
 
-# Run application
+# Run application (includes CDC consumer for ClickHouse ingestion)
 CMD ["/app/user-service"]
