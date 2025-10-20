@@ -11,12 +11,12 @@ pub mod cdc;
 pub mod cdn_failover;
 pub mod cdn_handler_integration;
 pub mod cdn_service;
-pub mod clickhouse_feature_extractor;
-pub mod deep_learning_inference;
+// pub mod clickhouse_feature_extractor;  // TODO: Phase 2 - needs RankingSignals with Serialize/Deserialize
+// pub mod deep_learning_inference;       // TODO: Phase 2 - pending implementation
 pub mod email_verification;
 pub mod events;
 pub mod feed_ranking;
-pub mod feed_ranking_service;
+// pub mod feed_ranking_service;          // TODO: Phase 2 - depends on incomplete VideoService
 pub mod feed_service;
 pub mod ffmpeg_optimizer;
 pub mod image_processing;
@@ -28,6 +28,7 @@ pub mod origin_shield;
 pub mod password_reset_service;
 pub mod query_profiler;
 pub mod ranking_engine;
+pub mod recommendation_v2;
 pub mod redis_job;
 pub mod s3_service;
 pub mod streaming;
@@ -36,7 +37,7 @@ pub mod token_revocation;
 pub mod transcoding_optimizer;
 pub mod transcoding_progress;
 pub mod two_fa;
-pub mod video_processing_pipeline;
+// pub mod video_processing_pipeline;     // TODO: Phase 2 - depends on VideoTranscodingService methods
 pub mod video_service;
 pub mod video_transcoding;
 
@@ -64,6 +65,7 @@ pub mod video_transcoding;
 // - clickhouse_feature_extractor: Feature extraction for ML model training
 // - deep_learning_inference: TensorFlow Serving + Milvus integration for embeddings
 // - feed_ranking_service: Advanced ML-based feed ranking orchestration (Phase 7)
+// - recommendation_v2: Hybrid recommendation engine v2 (collaborative filtering + content-based + AB testing)
 //
 // COMMON SERVICES:
 // - backup_codes: Two-factor authentication backup codes management
