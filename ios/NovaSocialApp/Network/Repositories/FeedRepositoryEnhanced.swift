@@ -93,7 +93,7 @@ final class FeedRepositoryEnhanced {
 
         // 从网络加载（带去重）
         return try await deduplicator.deduplicate(key: cacheKey) {
-            let timer = PerformanceTimer(path: "/feed/explore", method: .get)
+            let timer = PerformanceTimer(path: "/api/v1/feed/explore", method: .get)
 
             let queryItems = [
                 URLQueryItem(name: "page", value: "\(page)"),
@@ -101,7 +101,7 @@ final class FeedRepositoryEnhanced {
             ]
 
             let endpoint = APIEndpoint(
-                path: "/feed/explore",
+                path: "/api/v1/feed/explore",
                 method: .get,
                 queryItems: queryItems
             )
@@ -131,7 +131,7 @@ final class FeedRepositoryEnhanced {
 
     /// 从服务器获取 Feed 并缓存
     private func fetchAndCacheFeed(cursor: String?, limit: Int) async throws -> [Post] {
-        let timer = PerformanceTimer(path: "/feed", method: .get)
+        let timer = PerformanceTimer(path: "/api/v1/feed", method: .get)
 
         var queryItems = [
             URLQueryItem(name: "limit", value: "\(limit)")
@@ -142,7 +142,7 @@ final class FeedRepositoryEnhanced {
         }
 
         let endpoint = APIEndpoint(
-            path: "/feed",
+            path: "/api/v1/feed",
             method: .get,
             queryItems: queryItems
         )
@@ -173,7 +173,7 @@ final class FeedRepositoryEnhanced {
 
     /// 后台同步 Feed（不阻塞 UI）
     private func syncFeedInBackground(limit: Int) async throws {
-        let timer = PerformanceTimer(path: "/feed", method: .get)
+        let timer = PerformanceTimer(path: "/api/v1/feed", method: .get)
 
         let queryItems = [
             URLQueryItem(name: "limit", value: "\(limit)")

@@ -22,7 +22,7 @@ final class AuthRepository {
         )
 
         let endpoint = APIEndpoint(
-            path: "/auth/register",
+            path: "/api/v1/auth/register",
             method: .post,
             body: request
         )
@@ -46,7 +46,7 @@ final class AuthRepository {
         )
 
         let endpoint = APIEndpoint(
-            path: "/auth/login",
+            path: "/api/v1/auth/login",
             method: .post,
             body: request
         )
@@ -65,7 +65,7 @@ final class AuthRepository {
     /// 用户登出
     func logout() async throws {
         let endpoint = APIEndpoint(
-            path: "/auth/logout",
+            path: "/api/v1/auth/logout",
             method: .post
         )
 
@@ -82,7 +82,7 @@ final class AuthRepository {
         }
 
         let endpoint = APIEndpoint(
-            path: "/auth/verify-email",
+            path: "/api/v1/auth/verify-email",
             method: .post,
             body: VerifyRequest(code: code)
         )
