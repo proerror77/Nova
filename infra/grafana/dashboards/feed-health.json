@@ -1,0 +1,217 @@
+{
+  "dashboard": {
+    "title": "Feed API Health Dashboard",
+    "description": "Real-time Feed API and Ranking Service Health Monitoring",
+    "uid": "feed-health-dashboard",
+    "tags": [
+      "nova",
+      "phase3",
+      "feed",
+      "health",
+      "api"
+    ],
+    "timezone": "browser",
+    "schemaVersion": 39,
+    "version": 1,
+    "refresh": "10s",
+    "time": {
+      "from": "now-6h",
+      "to": "now"
+    },
+    "panels": [
+      {
+        "title": "Feed API Availability",
+        "type": "stat",
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 0,
+          "y": 0
+        },
+        "targets": [
+          {
+            "expr": "(1 - (rate(feed_api_errors_total[5m]) / rate(feed_api_requests_total[5m]))) * 100",
+            "refId": "A",
+            "legendFormat": "Availability %"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "red",
+                  "value": null
+                },
+                {
+                  "color": "yellow",
+                  "value": 95
+                },
+                {
+                  "color": "green",
+                  "value": 99.5
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "title": "Feed Cache Hit Rate",
+        "type": "stat",
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 6,
+          "y": 0
+        },
+        "targets": [
+          {
+            "expr": "(rate(feed_cache_hits_total[5m]) / (rate(feed_cache_hits_total[5m]) + rate(feed_cache_misses_total[5m]))) * 100",
+            "refId": "A",
+            "legendFormat": "Hit Rate %"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "red",
+                  "value": null
+                },
+                {
+                  "color": "yellow",
+                  "value": 80
+                },
+                {
+                  "color": "green",
+                  "value": 90
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "title": "Ranking Latency (P95, P99)",
+        "type": "graph",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 4
+        },
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(ranking_service_duration_seconds_bucket[1m]))",
+            "refId": "A",
+            "legendFormat": "P95"
+          },
+          {
+            "expr": "histogram_quantile(0.99, rate(ranking_service_duration_seconds_bucket[1m]))",
+            "refId": "B",
+            "legendFormat": "P99"
+          }
+        ]
+      },
+      {
+        "title": "ClickHouse Query Performance",
+        "type": "graph",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 4
+        },
+        "targets": [
+          {
+            "expr": "rate(clickhouse_query_duration_seconds_sum[1m]) / rate(clickhouse_query_duration_seconds_count[1m])",
+            "refId": "A",
+            "legendFormat": "Avg Query Time"
+          },
+          {
+            "expr": "histogram_quantile(0.99, rate(clickhouse_query_duration_seconds_bucket[1m]))",
+            "refId": "B",
+            "legendFormat": "P99 Query Time"
+          }
+        ]
+      },
+      {
+        "title": "Feed API Error Rate",
+        "type": "graph",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 12
+        },
+        "targets": [
+          {
+            "expr": "rate(feed_api_errors_total[1m])",
+            "refId": "A",
+            "legendFormat": "Errors/sec"
+          }
+        ]
+      },
+      {
+        "title": "Redis Dedup Bloom Filter Stats",
+        "type": "stat",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 12
+        },
+        "targets": [
+          {
+            "expr": "rate(bloom_filter_lookups_total[5m])",
+            "refId": "A",
+            "legendFormat": "Lookups/sec"
+          },
+          {
+            "expr": "rate(bloom_filter_collisions_total[5m])",
+            "refId": "B",
+            "legendFormat": "Collisions/sec"
+          }
+        ]
+      },
+      {
+        "title": "Active Feed Requests",
+        "type": "stat",
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 0,
+          "y": 20
+        },
+        "targets": [
+          {
+            "expr": "increase(feed_api_requests_total[5m])",
+            "refId": "A",
+            "legendFormat": "Requests in last 5m"
+          }
+        ]
+      },
+      {
+        "title": "Mean Feed Ranking Score",
+        "type": "stat",
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 6,
+          "y": 20
+        },
+        "targets": [
+          {
+            "expr": "avg(ranking_score)",
+            "refId": "A",
+            "legendFormat": "Avg Score"
+          }
+        ]
+      }
+    ]
+  }
+}

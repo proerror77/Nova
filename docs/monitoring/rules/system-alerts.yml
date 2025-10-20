@@ -1,0 +1,192 @@
+groups:
+  - name: system_health_alerts
+    interval: 30s
+    rules:
+      # ========================================
+      # Critical: System Availability
+      # ========================================
+      - alert: ServiceDown
+        expr: up{job=~".*feed.*|.*ranking.*"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: infrastructure
+        annotations:
+          summary: "Service {{ $labels.job }} is down"
+          description: |
+            Service {{ $labels.job }} on {{ $labels.instance }} has been unavailable for 2 minutes.
+            This is a critical issue affecting users.
+
+            Recommended actions:
+            1. SSH into {{ $labels.instance }} and check service status
+            2. Review service logs: journalctl -u nova-feed -n 100
+            3. Check if instance needs reboot
+            4. Verify database connections are alive
+
+      # ========================================
+      # Critical: Database Connection Pool
+      # ========================================
+      - alert: DBConnectionPoolExhausted
+        expr: |
+          (pg_stat_activity_count / pg_stat_activity_max) * 100 > 90
+        for: 5m
+        labels:
+          severity: critical
+          component: database
+        annotations:
+          summary: "Database connection pool {{ $value | humanize }}% exhausted"
+          description: |
+            PostgreSQL connection pool utilization is at {{ $value | humanize }}% (threshold: 90%).
+            New connections will be rejected, causing request failures.
+
+            Current connections: {{ $value }}
+            Max connections: {{ $labels.pg_stat_activity_max }}
+
+            Recommended actions:
+            1. Kill long-running queries: SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE state = 'idle';
+            2. Increase max_connections in postgresql.conf
+            3. Review connection pooler settings
+            4. Check for connection leaks in application
+
+      # ========================================
+      # Critical: Redis Memory
+      # ========================================
+      - alert: RedisMemoryHigh
+        expr: |
+          (redis_memory_used_bytes / redis_memory_max_bytes) * 100 > 95
+        for: 5m
+        labels:
+          severity: critical
+          component: cache
+        annotations:
+          summary: "Redis memory usage at {{ $value | humanize }}%"
+          description: |
+            Redis memory usage is critically high at {{ $value | humanize }}% of max.
+            Evictions will occur soon, impacting cache hit rate.
+
+            Used: {{ $value | humanize1024 }}B
+            Max: {{ $labels.redis_memory_max_bytes | humanize1024 }}B
+
+            Recommended actions:
+            1. Increase maxmemory in redis.conf
+            2. Review eviction policy (current: {{ $labels.policy }})
+            3. Check for memory leaks (MEMORY STATS)
+            4. Consider scaling to Redis cluster
+
+      # ========================================
+      # Critical: CDC Lag
+      # ========================================
+      - alert: CDCLagHigh
+        expr: cdc_lag_seconds > 30
+        for: 10m
+        labels:
+          severity: critical
+          component: data_pipeline
+        annotations:
+          summary: "CDC lag is {{ $value | humanizeDuration }}"
+          description: |
+            Change Data Capture lag has exceeded 30 seconds for 10 minutes.
+            This means database changes are delayed in reaching the analytics layer.
+
+            Current lag: {{ $value | humanizeDuration }}
+            Table: {{ $labels.table }}
+
+            Recommended actions:
+            1. Check Kafka broker health: kafka-broker-api-versions.sh
+            2. Review Debezium connector status
+            3. Check PostgreSQL WAL generation rate
+            4. Inspect Kafka consumer lag: kafka-consumer-groups.sh
+
+      # ========================================
+      # Warning: Error Rate
+      # ========================================
+      - alert: ErrorRateHigh
+        expr: |
+          (rate(errors_total[5m]) / rate(requests_total[5m])) * 100 > 5
+        for: 5m
+        labels:
+          severity: warning
+          component: application
+        annotations:
+          summary: "Error rate is {{ $value | humanize }}%"
+          description: |
+            Application error rate has exceeded 5% (current: {{ $value | humanize }}%).
+            This may indicate issues with dependencies or invalid input.
+
+            Component: {{ $labels.component }}
+            Error type: {{ $labels.error_type }}
+
+            Recommended actions:
+            1. Check recent deployments
+            2. Review application logs for error patterns
+            3. Check dependency health (databases, external APIs)
+            4. Verify input validation rules
+
+      # ========================================
+      # Warning: ClickHouse Slow Queries
+      # ========================================
+      - alert: ClickHouseSlowQueries
+        expr: |
+          rate(clickhouse_slow_queries_total[5m]) > 5
+        for: 10m
+        labels:
+          severity: warning
+          component: analytics
+        annotations:
+          summary: "{{ $value | humanize }} slow queries per second"
+          description: |
+            ClickHouse is processing {{ $value | humanize }} slow queries per second (threshold: 5).
+            This indicates query optimization opportunities.
+
+            Recommended actions:
+            1. Run SYSTEM FLUSH LOGS to see slow_log table
+            2. Use EXPLAIN to analyze slow queries
+            3. Check materialized view refresh intervals
+            4. Consider adding indexes or optimizing joins
+
+      # ========================================
+      # Warning: Kafka Consumer Lag
+      # ========================================
+      - alert: KafkaConsumerLagHigh
+        expr: |
+          kafka_consumer_lag{group=~"nova-.*"} > 1000
+        for: 5m
+        labels:
+          severity: warning
+          component: data_pipeline
+        annotations:
+          summary: "Kafka consumer lag for {{ $labels.group }} is {{ $value | humanize }} messages"
+          description: |
+            Consumer {{ $labels.group }} is falling behind on topic {{ $labels.topic }} partition {{ $labels.partition }}.
+            Lag: {{ $value | humanize }} messages
+
+            Recommended actions:
+            1. Check consumer application logs
+            2. Increase consumer parallelism if possible
+            3. Verify Kafka broker performance
+            4. Monitor ClickHouse insert rate to see if it's the bottleneck
+
+      # ========================================
+      # Info: High Memory Usage Warning
+      # ========================================
+      - alert: ApplicationMemoryHigh
+        expr: |
+          (process_resident_memory_bytes / process_virtual_memory_max_bytes) * 100 > 80
+        for: 10m
+        labels:
+          severity: warning
+          component: application
+        annotations:
+          summary: "Process memory usage at {{ $value | humanize }}%"
+          description: |
+            Process {{ $labels.job }} on {{ $labels.instance }} is using {{ $value | humanize }}% of available memory.
+            Consider this for capacity planning.
+
+            Current: {{ $labels.process_resident_memory_bytes | humanize1024 }}B
+            Max: {{ $labels.process_virtual_memory_max_bytes | humanize1024 }}B
+
+            Recommended actions:
+            1. Monitor for memory leaks
+            2. Review GC logs
+            3. Consider increasing container memory limits
+            4. Profile application with pprof or valgrind

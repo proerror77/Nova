@@ -1,0 +1,276 @@
+{
+  "dashboard": {
+    "title": "System Health Dashboard",
+    "description": "Infrastructure and System-Wide Health Metrics",
+    "uid": "system-health-dashboard",
+    "tags": [
+      "nova",
+      "system",
+      "health",
+      "infrastructure"
+    ],
+    "timezone": "browser",
+    "schemaVersion": 39,
+    "version": 1,
+    "refresh": "30s",
+    "time": {
+      "from": "now-24h",
+      "to": "now"
+    },
+    "panels": [
+      {
+        "title": "System Availability",
+        "type": "stat",
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 0,
+          "y": 0
+        },
+        "targets": [
+          {
+            "expr": "up{job=~'.*feed.*|.*ranking.*'}",
+            "refId": "A",
+            "legendFormat": "{{ instance }}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "hideFrom": {
+                "tooltip": false,
+                "viz": false,
+                "legend": false
+              }
+            }
+          }
+        }
+      },
+      {
+        "title": "Redis Connection Pool Status",
+        "type": "stat",
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 6,
+          "y": 0
+        },
+        "targets": [
+          {
+            "expr": "redis_connected_clients",
+            "refId": "A",
+            "legendFormat": "Connected Clients"
+          }
+        ]
+      },
+      {
+        "title": "Database Connection Uptime",
+        "type": "stat",
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 12,
+          "y": 0
+        },
+        "targets": [
+          {
+            "expr": "time() - process_start_time_seconds",
+            "refId": "A",
+            "legendFormat": "Uptime (seconds)"
+          }
+        ]
+      },
+      {
+        "title": "CPU Usage by Service",
+        "type": "graph",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 4
+        },
+        "targets": [
+          {
+            "expr": "rate(process_cpu_seconds_total[1m]) * 100",
+            "refId": "A",
+            "legendFormat": "{{ instance }}"
+          }
+        ]
+      },
+      {
+        "title": "Memory Usage by Service",
+        "type": "graph",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 4
+        },
+        "targets": [
+          {
+            "expr": "process_resident_memory_bytes / 1024 / 1024",
+            "refId": "A",
+            "legendFormat": "{{ instance }} (MB)"
+          }
+        ]
+      },
+      {
+        "title": "ClickHouse Cluster Health",
+        "type": "stat",
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 0,
+          "y": 12
+        },
+        "targets": [
+          {
+            "expr": "clickhouse_up",
+            "refId": "A",
+            "legendFormat": "{{ instance }}"
+          }
+        ]
+      },
+      {
+        "title": "Kafka Broker Status",
+        "type": "stat",
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 6,
+          "y": 12
+        },
+        "targets": [
+          {
+            "expr": "kafka_broker_info",
+            "refId": "A",
+            "legendFormat": "Broker {{ broker_id }}"
+          }
+        ]
+      },
+      {
+        "title": "CDC Lag (seconds)",
+        "type": "stat",
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 12,
+          "y": 12
+        },
+        "targets": [
+          {
+            "expr": "cdc_lag_seconds",
+            "refId": "A",
+            "legendFormat": "Current Lag"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "yellow",
+                  "value": 5
+                },
+                {
+                  "color": "red",
+                  "value": 30
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "title": "Error Rate by Component",
+        "type": "graph",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 16
+        },
+        "targets": [
+          {
+            "expr": "rate(errors_total[5m])",
+            "refId": "A",
+            "legendFormat": "{{ component }}"
+          }
+        ]
+      },
+      {
+        "title": "Request Latency Distribution",
+        "type": "heatmap",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 16
+        },
+        "targets": [
+          {
+            "expr": "rate(http_request_duration_seconds_bucket[5m])",
+            "refId": "A",
+            "legendFormat": "{{ le }}"
+          }
+        ]
+      },
+      {
+        "title": "Database Connection Pool Utilization",
+        "type": "gauge",
+        "gridPos": {
+          "h": 6,
+          "w": 6,
+          "x": 0,
+          "y": 24
+        },
+        "targets": [
+          {
+            "expr": "(sum(pg_stat_activity_count) / 100) * 100",
+            "refId": "A",
+            "legendFormat": "Utilization %"
+          }
+        ]
+      },
+      {
+        "title": "Cache Memory Usage",
+        "type": "gauge",
+        "gridPos": {
+          "h": 6,
+          "w": 6,
+          "x": 6,
+          "y": 24
+        },
+        "targets": [
+          {
+            "expr": "(redis_memory_used_bytes / redis_memory_max_bytes) * 100",
+            "refId": "A",
+            "legendFormat": "Redis Memory %"
+          }
+        ]
+      },
+      {
+        "title": "Query Performance - Top Slow Queries",
+        "type": "table",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 30
+        },
+        "targets": [
+          {
+            "expr": "topk(5, rate(slow_queries_total[5m]))",
+            "refId": "A",
+            "legendFormat": "{{ query }}"
+          }
+        ]
+      }
+    ]
+  }
+}
