@@ -1,0 +1,23 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appID": "TEAM_ID.com.nova.social",
+        "paths": [
+          "/user/*",
+          "/post/*",
+          "/search",
+          "/notifications",
+          "/explore",
+          "/auth/verify"
+        ]
+      }
+    ]
+  },
+  "webcredentials": {
+    "apps": [
+      "TEAM_ID.com.nova.social"
+    ]
+  }
+}

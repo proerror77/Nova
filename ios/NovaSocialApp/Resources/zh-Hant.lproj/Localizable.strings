@@ -1,0 +1,131 @@
+/* 應用名稱 */
+"app.name" = "Nova";
+
+/* 通用 */
+"common.cancel" = "取消";
+"common.confirm" = "確認";
+"common.delete" = "刪除";
+"common.edit" = "編輯";
+"common.save" = "儲存";
+"common.send" = "傳送";
+"common.done" = "完成";
+"common.back" = "返回";
+"common.next" = "下一步";
+"common.skip" = "略過";
+"common.retry" = "重試";
+"common.close" = "關閉";
+"common.ok" = "好的";
+"common.yes" = "是";
+"common.no" = "否";
+"common.loading" = "載入中...";
+"common.error" = "錯誤";
+"common.success" = "成功";
+"common.warning" = "警告";
+
+/* 認證 */
+"auth.login" = "登入";
+"auth.register" = "註冊";
+"auth.logout" = "登出";
+"auth.email" = "電子郵件";
+"auth.password" = "密碼";
+"auth.username" = "使用者名稱";
+"auth.forgot_password" = "忘記密碼？";
+"auth.create_account" = "建立帳號";
+"auth.already_have_account" = "已有帳號？";
+"auth.dont_have_account" = "還沒有帳號？";
+"auth.error.invalid_credentials" = "使用者名稱或密碼錯誤";
+"auth.error.password_too_short" = "密碼長度至少為 8 位";
+"auth.error.email_invalid" = "電子郵件格式不正確";
+
+/* 動態流 */
+"feed.title" = "動態";
+"feed.new_post" = "新動態";
+"feed.refresh" = "重新整理";
+"feed.no_more_posts" = "沒有更多內容了";
+"feed.loading_more" = "載入更多...";
+"feed.posts_count" = "%d 則動態";
+
+/* 貼文 */
+"post.like" = "按讚";
+"post.unlike" = "取消按讚";
+"post.comment" = "留言";
+"post.share" = "分享";
+"post.delete" = "刪除";
+"post.edit" = "編輯";
+"post.report" = "檢舉";
+"post.save" = "收藏";
+"post.unsave" = "取消收藏";
+"post.likes_count" = "%d 個讚";
+"post.comments_count" = "%d 則留言";
+"post.shares_count" = "%d 次分享";
+"post.time_ago.minutes" = "%d 分鐘前";
+"post.time_ago.hours" = "%d 小時前";
+"post.time_ago.days" = "%d 天前";
+
+/* 個人資料 */
+"profile.followers" = "粉絲";
+"profile.following" = "追蹤中";
+"profile.posts" = "貼文";
+"profile.follow" = "追蹤";
+"profile.unfollow" = "取消追蹤";
+"profile.edit_profile" = "編輯資料";
+"profile.settings" = "設定";
+"profile.bio" = "個人簡介";
+"profile.followers_count" = "%d 位粉絲";
+"profile.following_count" = "追蹤 %d 人";
+"profile.posts_count" = "%d 則貼文";
+
+/* 通知 */
+"notification.title" = "通知";
+"notification.mark_all_read" = "全部標示為已讀";
+"notification.no_notifications" = "暫無通知";
+"notification.liked_your_post" = "%@ 對你的貼文按讚";
+"notification.commented_on_your_post" = "%@ 留言了你的貼文";
+"notification.followed_you" = "%@ 追蹤了你";
+
+/* 搜尋 */
+"search.title" = "搜尋";
+"search.placeholder" = "搜尋使用者、標籤...";
+"search.no_results" = "未找到相關結果";
+"search.recent" = "最近搜尋";
+"search.trending" = "熱門";
+
+/* 設定 */
+"settings.title" = "設定";
+"settings.account" = "帳號設定";
+"settings.privacy" = "隱私設定";
+"settings.notifications" = "通知設定";
+"settings.language" = "語言";
+"settings.theme" = "主題";
+"settings.about" = "關於";
+"settings.version" = "版本";
+"settings.logout" = "登出";
+
+/* 錯誤訊息 */
+"error.network_error" = "網路連線失敗，請檢查網路設定";
+"error.unknown_error" = "未知錯誤，請稍後重試";
+"error.server_error" = "伺服器錯誤，請稍後重試";
+"error.invalid_input" = "輸入內容無效";
+"error.unauthorized" = "未授權，請重新登入";
+
+/* 建立貼文 */
+"create_post.title" = "發佈動態";
+"create_post.caption" = "說點什麼...";
+"create_post.caption_placeholder" = "分享你的想法...";
+"create_post.select_media" = "選擇圖片或影片";
+"create_post.publish" = "發佈";
+"create_post.uploading" = "上傳中...";
+
+/* 語言選擇 */
+"language_selection.title" = "選擇語言";
+"language_selection.current_language" = "目前語言";
+"language_selection.system_language" = "跟隨系統";
+"language_selection.footer" = "更改語言將更新應用程式介面。某些變更可能需要重新啟動應用程式才能完全生效。";
+"language_selection.changed_title" = "語言已變更";
+"language_selection.changed_message" = "應用程式語言已變更。某些功能可能需要重新啟動應用程式才能完全生效。";
+
+/* 設定補充 */
+"settings.terms_of_service" = "服務條款";
+"settings.privacy_policy" = "隱私權政策";
+"settings.help" = "說明與支援";
+"settings.logout_confirm" = "確定要登出嗎？";
