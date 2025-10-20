@@ -156,7 +156,7 @@ async fn main() -> io::Result<()> {
         max_concurrent_inserts: 10,
     };
 
-    let cdc_consumer = CdcConsumer::new(cdc_config, ch_writable.as_ref().clone(), db_pool.clone())
+    let cdc_consumer = CdcConsumer::new(cdc_config, ch_writable.as_ref().clone())
         .await
         .expect("Failed to create CDC consumer");
 
