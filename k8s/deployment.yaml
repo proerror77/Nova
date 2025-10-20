@@ -1,0 +1,182 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: nova-api
+  namespace: nova
+  labels:
+    app: nova-api
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: 8080
+      name: http
+  selector:
+    app: nova-api
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nova-api
+  namespace: nova
+  labels:
+    app: nova-api
+  annotations:
+    description: "Nova User Service - Authentication & Content Publishing"
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: nova-api
+  template:
+    metadata:
+      labels:
+        app: nova-api
+        version: v1
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: nova-api
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        fsGroup: 1001
+
+      initContainers:
+      # Wait for database to be ready
+      - name: wait-for-db
+        image: busybox:1.35
+        command:
+        - sh
+        - -c
+        - |
+          echo "Waiting for PostgreSQL..."
+          until nc -z nova-postgres 5432; do
+            echo "PostgreSQL is unavailable - sleeping"
+            sleep 2
+          done
+          echo "PostgreSQL is up"
+
+      # Wait for Redis to be ready
+      - name: wait-for-redis
+        image: busybox:1.35
+        command:
+        - sh
+        - -c
+        - |
+          echo "Waiting for Redis..."
+          until nc -z nova-redis 6379; do
+            echo "Redis is unavailable - sleeping"
+            sleep 2
+          done
+          echo "Redis is up"
+
+      containers:
+      - name: nova-api
+        image: nova-api:latest
+        imagePullPolicy: IfNotPresent
+
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+
+        # Load configuration from ConfigMap and Secret
+        envFrom:
+        - configMapRef:
+            name: nova-config
+        - secretRef:
+            name: nova-secrets
+
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
+
+        livenessProbe:
+          httpGet:
+            path: /api/v1/health/live
+            port: 8080
+            scheme: HTTP
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+
+        readinessProbe:
+          httpGet:
+            path: /api/v1/health/ready
+            port: 8080
+            scheme: HTTP
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 2
+
+        # Security context
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+
+        # Volume mounts for temporary files
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        - name: cache
+          mountPath: /app/cache
+
+      volumes:
+      - name: tmp
+        emptyDir: {}
+      - name: cache
+        emptyDir: {}
+
+      # Pod disruption budget for high availability
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - nova-api
+              topologyKey: kubernetes.io/hostname
+
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: nova-api-pdb
+  namespace: nova
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: nova-api
