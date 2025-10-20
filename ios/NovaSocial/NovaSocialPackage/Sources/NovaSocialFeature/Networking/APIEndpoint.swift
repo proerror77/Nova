@@ -10,13 +10,13 @@ enum APIEndpoint: Sendable {
     var description: String {
         switch self {
         case .feed:
-            return "/feed"
+            return "/api/v1/feed"
         case .users(let id):
-            return "/users/\(id)"
+            return "/api/v1/users/\(id)"
         case .searchUsers:
-            return "/search/users"
+            return "/api/v1/search/users"
         case .notifications:
-            return "/notifications"
+            return "/api/v1/notifications"
         }
     }
 
@@ -25,7 +25,7 @@ enum APIEndpoint: Sendable {
         let baseURL = APIConfig.baseURL
         switch self {
         case .feed(let page, let limit):
-            var components = URLComponents(url: baseURL.appendingPathComponent("/feed"), resolvingAgainstBaseURL: true)!
+            var components = URLComponents(url: baseURL.appendingPathComponent("/api/v1/feed"), resolvingAgainstBaseURL: true)!
             components.queryItems = [
                 URLQueryItem(name: "page", value: "\(page)"),
                 URLQueryItem(name: "limit", value: "\(limit)")
@@ -33,10 +33,10 @@ enum APIEndpoint: Sendable {
             return components.url!
 
         case .users(let id):
-            return baseURL.appendingPathComponent("/users/\(id)")
+            return baseURL.appendingPathComponent("/api/v1/users/\(id)")
 
         case .searchUsers(let query, let page, let limit):
-            var components = URLComponents(url: baseURL.appendingPathComponent("/search/users"), resolvingAgainstBaseURL: true)!
+            var components = URLComponents(url: baseURL.appendingPathComponent("/api/v1/search/users"), resolvingAgainstBaseURL: true)!
             components.queryItems = [
                 URLQueryItem(name: "q", value: query),
                 URLQueryItem(name: "page", value: "\(page)"),
@@ -45,7 +45,7 @@ enum APIEndpoint: Sendable {
             return components.url!
 
         case .notifications(let page, let limit):
-            var components = URLComponents(url: baseURL.appendingPathComponent("/notifications"), resolvingAgainstBaseURL: true)!
+            var components = URLComponents(url: baseURL.appendingPathComponent("/api/v1/notifications"), resolvingAgainstBaseURL: true)!
             components.queryItems = [
                 URLQueryItem(name: "page", value: "\(page)"),
                 URLQueryItem(name: "limit", value: "\(limit)")

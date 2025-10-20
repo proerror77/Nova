@@ -52,7 +52,7 @@ final class PostRepository {
         )
 
         let endpoint = APIEndpoint(
-            path: "/posts",
+            path: "/api/v1/posts",
             method: .post,
             body: request
         )
@@ -64,7 +64,7 @@ final class PostRepository {
     /// 获取帖子详情
     func getPost(id: UUID) async throws -> Post {
         let endpoint = APIEndpoint(
-            path: "/posts/\(id.uuidString)",
+            path: "/api/v1/posts/\(id.uuidString)",
             method: .get
         )
 
@@ -75,7 +75,7 @@ final class PostRepository {
     /// 删除帖子
     func deletePost(id: UUID) async throws {
         let endpoint = APIEndpoint(
-            path: "/posts/\(id.uuidString)",
+            path: "/api/v1/posts/\(id.uuidString)",
             method: .delete
         )
 
@@ -91,7 +91,7 @@ final class PostRepository {
 
         return try await deduplicator.execute(key: key) {
             let endpoint = APIEndpoint(
-                path: "/posts/\(id.uuidString)/like",
+                path: "/api/v1/posts/\(id.uuidString)/like",
                 method: .post
             )
 
@@ -106,7 +106,7 @@ final class PostRepository {
 
         return try await deduplicator.execute(key: key) {
             let endpoint = APIEndpoint(
-                path: "/posts/\(id.uuidString)/like",
+                path: "/api/v1/posts/\(id.uuidString)/like",
                 method: .delete
             )
 
@@ -128,7 +128,7 @@ final class PostRepository {
         }
 
         let endpoint = APIEndpoint(
-            path: "/posts/\(postId.uuidString)/comments",
+            path: "/api/v1/posts/\(postId.uuidString)/comments",
             method: .get,
             queryItems: queryItems
         )
@@ -149,7 +149,7 @@ final class PostRepository {
             let request = CreateCommentRequest(text: text)
 
             let endpoint = APIEndpoint(
-                path: "/posts/\(postId.uuidString)/comments",
+                path: "/api/v1/posts/\(postId.uuidString)/comments",
                 method: .post,
                 body: request
             )
@@ -162,7 +162,7 @@ final class PostRepository {
     /// 删除评论
     func deleteComment(id: UUID) async throws {
         let endpoint = APIEndpoint(
-            path: "/comments/\(id.uuidString)",
+            path: "/api/v1/comments/\(id.uuidString)",
             method: .delete
         )
 
@@ -175,7 +175,7 @@ final class PostRepository {
         let request = UploadURLRequest(contentType: contentType)
 
         let endpoint = APIEndpoint(
-            path: "/posts/upload-url",
+            path: "/api/v1/posts/upload-url",
             method: .post,
             body: request
         )
