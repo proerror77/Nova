@@ -1,0 +1,141 @@
+global:
+  resolve_timeout: 5m
+  slack_api_url: "${SLACK_WEBHOOK_URL}"
+  pagerduty_url: "https://events.pagerduty.com/v2/enqueue"
+
+templates:
+  - '/etc/alertmanager/templates/*.tmpl'
+
+route:
+  receiver: default-receiver
+  group_by: ['alertname', 'cluster', 'service']
+  group_wait: 10s
+  group_interval: 10s
+  repeat_interval: 4h
+
+  routes:
+    # Critical alerts - immediate escalation to PagerDuty
+    - match:
+        severity: critical
+      receiver: pagerduty-critical
+      group_wait: 0s
+      group_interval: 5m
+      repeat_interval: 1h
+      continue: true
+
+    # Warning alerts - send to Slack
+    - match:
+        severity: warning
+      receiver: slack-warnings
+      group_wait: 10s
+      repeat_interval: 12h
+      continue: true
+
+    # Feed service alerts - send to team channel
+    - match:
+        component: feed_api
+      receiver: slack-feed-team
+      continue: true
+
+    # Infrastructure alerts
+    - match:
+        component: infrastructure
+      receiver: slack-infra-team
+      continue: true
+
+receivers:
+  # Default receiver (email)
+  - name: default-receiver
+    email_configs:
+      - to: 'alerts@example.com'
+        from: 'prometheus@example.com'
+        smarthost: 'smtp.example.com:587'
+        auth_username: 'alerts@example.com'
+        auth_password: '${EMAIL_PASSWORD}'
+        headers:
+          Subject: '[{{ .GroupLabels.alertname }}] {{ .Status }}'
+
+  # PagerDuty for critical alerts
+  - name: pagerduty-critical
+    pagerduty_configs:
+      - service_key: '${PAGERDUTY_SERVICE_KEY}'
+        description: |
+          Alert: {{ .GroupLabels.alertname }}
+          Status: {{ .Status }}
+          Component: {{ .GroupLabels.component }}
+
+          {{ range .Alerts -}}
+          {{ .Annotations.summary }}
+          {{ .Annotations.description }}
+          {{ end }}
+        details:
+          firing: '{{ template "pagerduty.default.instances" .Alerts.Firing }}'
+          resolved: '{{ template "pagerduty.default.instances" .Alerts.Resolved }}'
+
+  # Slack - Warnings channel
+  - name: slack-warnings
+    slack_configs:
+      - channel: '#nova-warnings'
+        title: '[{{ .GroupLabels.severity | toUpper }}] {{ .GroupLabels.alertname }}'
+        text: |
+          *Component:* {{ .GroupLabels.component }}
+          *Status:* {{ .Status }}
+          {{ range .Alerts -}}
+          {{ .Annotations.summary }}
+          {{ .Annotations.description }}
+          {{ end }}
+        color: '{{ if eq .Status "firing" }}warning{{ else }}good{{ end }}'
+        send_resolved: true
+        actions:
+          - type: button
+            text: 'View in Grafana'
+            url: 'https://grafana.example.com'
+
+  # Slack - Feed team channel
+  - name: slack-feed-team
+    slack_configs:
+      - channel: '#nova-feed-team'
+        title: '[Feed] {{ .GroupLabels.alertname }}'
+        text: |
+          *Severity:* {{ .GroupLabels.severity }}
+          *Cluster:* {{ .GroupLabels.cluster }}
+          {{ range .Alerts -}}
+          • {{ .Annotations.summary }}
+          {{ .Annotations.description }}
+          *Runbook:* {{ .Annotations.runbook }}
+          {{ end }}
+        color: '{{ if eq .Status "firing" }}{{ if eq .GroupLabels.severity "critical" }}danger{{ else }}warning{{ end }}{{ else }}good{{ end }}'
+        send_resolved: true
+        footer: 'Nova Feed Alerting | {{ .ExternalURL }}'
+        footer_logo: 'https://example.com/logo.png'
+        link_names: true
+
+  # Slack - Infrastructure team channel
+  - name: slack-infra-team
+    slack_configs:
+      - channel: '#nova-infra'
+        title: '[Infra] {{ .GroupLabels.alertname }}'
+        text: |
+          *Severity:* {{ .GroupLabels.severity }}
+          *Status:* {{ .Status }}
+          {{ range .Alerts -}}
+          • {{ .Annotations.summary }}
+          Instance: {{ .Labels.instance }}
+          {{ end }}
+        color: '{{ if eq .Status "firing" }}{{ if eq .GroupLabels.severity "critical" }}danger{{ else }}warning{{ end }}{{ else }}good{{ end }}'
+        send_resolved: true
+
+inhibit_rules:
+  # Don't send warning alerts if corresponding critical alert is firing
+  - source_match:
+      severity: 'critical'
+    target_match:
+      severity: 'warning'
+    equal: ['alertname', 'cluster', 'component']
+
+  # Don't send resolved messages if firing alerts still exist
+  - source_match:
+      severity: 'critical'
+    target_match_re:
+      severity: 'warning|info'
+    equal: ['alertname', 'instance']

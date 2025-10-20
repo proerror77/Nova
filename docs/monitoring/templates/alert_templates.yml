@@ -1,0 +1,243 @@
+# Prometheus Alertmanager notification templates
+# These templates format alerts for Slack, email, and PagerDuty
+
+templates:
+  - /etc/alertmanager/templates/*.tmpl
+
+route:
+  receiver: 'default-receiver'
+  group_by: ['alertname', 'component', 'severity']
+  group_wait: 10s
+  group_interval: 5m
+  repeat_interval: 4h
+
+  routes:
+    # Critical alerts → PagerDuty + Slack #incidents
+    - match:
+        severity: critical
+      receiver: 'pagerduty-critical'
+      continue: true
+
+    - match:
+        severity: critical
+      receiver: 'slack-incidents'
+
+    # Warning alerts → Slack #alerts
+    - match:
+        severity: warning
+      receiver: 'slack-alerts'
+
+receivers:
+  # Default receiver (catchall)
+  - name: 'default-receiver'
+    email_configs:
+      - to: 'ops-team@example.com'
+        from: 'alertmanager@example.com'
+        smarthost: 'smtp.example.com:587'
+        auth_username: 'alertmanager'
+        auth_password: '$SMTP_PASSWORD'
+        headers:
+          Subject: '[{{ .Status | toUpper }}{{ if eq .Status "firing" }}:{{ .Alerts.Firing | len }}{{ end }}] {{ .GroupLabels.alertname }}'
+        html: '{{ template "email.default.html" . }}'
+
+  # PagerDuty for critical alerts
+  - name: 'pagerduty-critical'
+    pagerduty_configs:
+      - service_key: '$PAGERDUTY_SERVICE_KEY'
+        description: '{{ .GroupLabels.alertname }}: {{ .GroupLabels.component }}'
+        details:
+          firing: '{{ template "pagerduty.default.description" . }}'
+        client: 'Prometheus Alertmanager'
+        client_url: 'https://prometheus.example.com'
+
+  # Slack for critical incidents
+  - name: 'slack-incidents'
+    slack_configs:
+      - api_url: '$SLACK_WEBHOOK_URL_INCIDENTS'
+        channel: '#incidents'
+        username: 'Alertmanager'
+        icon_emoji: ':rotating_light:'
+        title: '[CRITICAL] {{ .GroupLabels.alertname }}'
+        text: '{{ template "slack.critical.text" . }}'
+        color: 'danger'
+        send_resolved: true
+
+  # Slack for warning alerts
+  - name: 'slack-alerts'
+    slack_configs:
+      - api_url: '$SLACK_WEBHOOK_URL_ALERTS'
+        channel: '#alerts'
+        username: 'Alertmanager'
+        icon_emoji: ':warning:'
+        title: '[WARNING] {{ .GroupLabels.alertname }}'
+        text: '{{ template "slack.warning.text" . }}'
+        color: 'warning'
+        send_resolved: true
+
+# ============================================
+# Custom Templates (save as .tmpl files)
+# ============================================
+
+# --- Slack Critical Template (slack.critical.text) ---
+# {{ define "slack.critical.text" }}
+# *Summary:* {{ .GroupLabels.alertname }}
+# *Component:* {{ .GroupLabels.component }}
+# *Severity:* CRITICAL
+#
+# {{ range .Alerts }}
+# *Description:* {{ .Annotations.description }}
+#
+# *Current Value:* {{ .Value }}
+# *Firing Since:* {{ .StartsAt.Format "2006-01-02 15:04:05 MST" }}
+#
+# *Recommended Actions:*
+# {{ .Annotations.summary }}
+#
+# *View in Grafana:* <https://grafana.example.com/d/feed-overview|Feed System Dashboard>
+# *View in Prometheus:* <https://prometheus.example.com/alerts|Prometheus Alerts>
+# {{ end }}
+# {{ end }}
+
+# --- Slack Warning Template (slack.warning.text) ---
+# {{ define "slack.warning.text" }}
+# *Summary:* {{ .GroupLabels.alertname }}
+# *Component:* {{ .GroupLabels.component }}
+# *Severity:* WARNING
+#
+# {{ range .Alerts }}
+# *Description:* {{ .Annotations.description }}
+#
+# *Current Value:* {{ .Value }}
+# *Firing Since:* {{ .StartsAt.Format "2006-01-02 15:04:05 MST" }}
+#
+# *Recommended Actions:*
+# {{ .Annotations.summary }}
+# {{ end }}
+# {{ end }}
+
+# --- Email Template (email.default.html) ---
+# {{ define "email.default.html" }}
+# <!DOCTYPE html>
+# <html>
+# <head>
+#   <style>
+#     body { font-family: Arial, sans-serif; }
+#     .header { background-color: #f44336; color: white; padding: 10px; }
+#     .warning { background-color: #ff9800; color: white; padding: 10px; }
+#     .resolved { background-color: #4caf50; color: white; padding: 10px; }
+#     .alert { margin: 20px 0; padding: 15px; border-left: 4px solid #f44336; }
+#     .metric { font-weight: bold; }
+#   </style>
+# </head>
+# <body>
+#   <div class="{{ if eq .Status "firing" }}header{{ else }}resolved{{ end }}">
+#     <h2>[{{ .Status | toUpper }}] {{ .GroupLabels.alertname }}</h2>
+#   </div>
+#
+#   {{ range .Alerts }}
+#   <div class="alert">
+#     <h3>{{ .Annotations.summary }}</h3>
+#     <p><strong>Component:</strong> {{ .Labels.component }}</p>
+#     <p><strong>Severity:</strong> {{ .Labels.severity }}</p>
+#     <p><strong>Current Value:</strong> <span class="metric">{{ .Value }}</span></p>
+#     <p><strong>Started:</strong> {{ .StartsAt.Format "2006-01-02 15:04:05 MST" }}</p>
+#     <p><strong>Description:</strong> {{ .Annotations.description }}</p>
+#   </div>
+#   {{ end }}
+#
+#   <hr>
+#   <p>
+#     <a href="https://grafana.example.com/d/feed-overview">View Dashboard</a> |
+#     <a href="https://prometheus.example.com/alerts">View Prometheus</a>
+#   </p>
+# </body>
+# </html>
+# {{ end }}
+
+# --- PagerDuty Template (pagerduty.default.description) ---
+# {{ define "pagerduty.default.description" }}
+# {{ range .Alerts }}
+# Alert: {{ .Annotations.summary }}
+# Component: {{ .Labels.component }}
+# Value: {{ .Value }}
+# Started: {{ .StartsAt.Format "2006-01-02 15:04:05 MST" }}
+#
+# Description:
+# {{ .Annotations.description }}
+# {{ end }}
+# {{ end }}
+
+# ============================================
+# Alert Routing Examples
+# ============================================
+
+# Example: Route specific components to dedicated channels
+#
+# routes:
+#   - match:
+#       component: clickhouse_cdc
+#     receiver: 'slack-data-pipeline'
+#
+#   - match:
+#       component: feed_api
+#     receiver: 'slack-backend-team'
+#
+#   - match:
+#       component: cache
+#     receiver: 'slack-infrastructure'
+
+# Example: Route by time of day (business hours vs off-hours)
+#
+# routes:
+#   - match:
+#       severity: critical
+#     receiver: 'pagerduty-oncall'
+#     active_time_intervals:
+#       - business_hours
+#
+#   - match:
+#       severity: critical
+#     receiver: 'pagerduty-escalation'
+#     active_time_intervals:
+#       - after_hours
+#
+# time_intervals:
+#   - name: business_hours
+#     time_intervals:
+#       - times:
+#         - start_time: '09:00'
+#           end_time: '18:00'
+#         weekdays: ['monday:friday']
+#
+#   - name: after_hours
+#     time_intervals:
+#       - times:
+#         - start_time: '18:00'
+#           end_time: '09:00'
+#       - weekdays: ['saturday', 'sunday']
+
+# ============================================
+# Inhibition Rules (suppress dependent alerts)
+# ============================================
+
+inhibit_rules:
+  # Suppress cache hit rate alerts if circuit breaker is open
+  - source_match:
+      alertname: 'CircuitBreakerOpen'
+    target_match:
+      alertname: 'CacheHitRateLow'
+    equal: ['component']
+
+  # Suppress latency alerts if availability is degraded
+  - source_match:
+      alertname: 'AvailabilityDegraded'
+    target_match_re:
+      alertname: '.*Latency.*'
+    equal: ['component']
+
+  # Suppress slow query alerts if ClickHouse lag is high
+  - source_match:
+      alertname: 'ClickHouseLagHigh'
+    target_match:
+      alertname: 'ClickHouseSlowQueriesHigh'
+    equal: ['component']

@@ -1,0 +1,114 @@
+[package]
+name = "user-service"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "user-service"
+path = "src/main.rs"
+
+[[bin]]
+name = "job_worker"
+path = "src/bin/job_worker.rs"
+
+[lib]
+name = "user_service"
+path = "src/lib.rs"
+
+[dependencies]
+# Workspace dependencies
+actix-web.workspace = true
+actix-rt.workspace = true
+actix-cors.workspace = true
+tokio.workspace = true
+sqlx.workspace = true
+redis.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+uuid.workspace = true
+chrono.workspace = true
+dotenv.workspace = true
+envy.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+tracing-actix-web.workspace = true
+thiserror.workspace = true
+anyhow.workspace = true
+argon2.workspace = true
+jsonwebtoken.workspace = true
+rand.workspace = true
+validator.workspace = true
+lettre.workspace = true
+governor.workspace = true
+prometheus.workspace = true
+aws-config.workspace = true
+aws-sdk-s3.workspace = true
+sha1.workspace = true
+sha2.workspace = true
+hex.workspace = true
+mime.workspace = true
+base64.workspace = true
+rdkafka.workspace = true
+async-trait.workspace = true
+reqwest.workspace = true
+urlencoding.workspace = true
+clickhouse.workspace = true
+hmac.workspace = true
+qrcode.workspace = true
+
+# Service-specific dependencies
+futures = "0.3"
+lazy_static = "1.4"
+image = "0.24"
+
+# Phase 4: Video Processing
+tonic = "0.10"
+prost = "0.12"
+ndarray = "0.15"
+http = "0.2"
+
+[dev-dependencies]
+tokio-test = "0.4"
+mockall = "0.12"
+actix-http = "3.9"
+tempfile = "3.8"
+
+[[test]]
+name = "posts_test"
+path = "tests/posts_test.rs"
+
+[[test]]
+name = "oauth_test"
+path = "tests/oauth_test.rs"
+
+[[test]]
+name = "feed_ranking_test"
+path = "tests/feed_ranking_test.rs"
+
+[[test]]
+name = "job_test"
+path = "tests/job_test.rs"
+
+[[test]]
+name = "security_test"
+path = "tests/security/security_test.rs"
+
+[[test]]
+name = "load_test"
+path = "tests/performance/load_test.rs"
+
+[[test]]
+name = "2fa_test"
+path = "tests/2fa_test.rs"
+
+# Phase 6: Video System Load Tests (T142-T143)
+[[test]]
+name = "video_feed_api_load_test"
+path = "tests/load/video/video_feed_api_load_test.rs"
+
+[[test]]
+name = "video_event_ingestion_load_test"
+path = "tests/load/video/video_event_ingestion_load_test.rs"

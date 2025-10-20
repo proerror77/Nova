@@ -1,0 +1,116 @@
+<?xml version="1.0"?>
+<!-- ============================================
+     ClickHouse Users Configuration
+     Version: 1.0.0
+     Date: 2025-10-18
+     Purpose: Development user accounts
+     ============================================ -->
+<clickhouse>
+    <users>
+        <!-- ============================================
+             Default User (Development)
+             ============================================ -->
+        <default>
+            <!-- Password (leave empty for no password in dev) -->
+            <password></password>
+
+            <!-- Networks allowed to connect -->
+            <networks>
+                <ip>::/0</ip>  <!-- Allow all IPv6 -->
+                <ip>0.0.0.0/0</ip>  <!-- Allow all IPv4 -->
+            </networks>
+
+            <!-- User profile -->
+            <profile>default</profile>
+
+            <!-- Quota (unlimited for dev) -->
+            <quota>default</quota>
+
+            <!-- Databases accessible -->
+            <access_management>1</access_management>
+            <allow_databases>
+                <database>nova_analytics</database>
+                <database>system</database>
+            </allow_databases>
+        </default>
+
+        <!-- ============================================
+             Admin User (Optional - for production)
+             ============================================ -->
+        <!-- Uncomment for production deployment
+        <admin>
+            <password_sha256_hex><!-- SHA256 of your password --></password_sha256_hex>
+            <networks>
+                <ip>10.0.0.0/8</ip>
+            </networks>
+            <profile>default</profile>
+            <quota>default</quota>
+            <access_management>1</access_management>
+        </admin>
+        -->
+    </users>
+
+    <!-- ============================================
+         Quotas (Resource Limits)
+         ============================================ -->
+    <quotas>
+        <default>
+            <!-- No limits for development -->
+            <interval>
+                <duration>3600</duration>  <!-- 1 hour -->
+                <queries>0</queries>  <!-- Unlimited queries -->
+                <errors>0</errors>  <!-- Unlimited errors -->
+                <result_rows>0</result_rows>  <!-- Unlimited rows -->
+                <read_rows>0</read_rows>  <!-- Unlimited read rows -->
+                <execution_time>0</execution_time>  <!-- Unlimited execution time -->
+            </interval>
+        </default>
+
+        <!-- Production quota example (commented) -->
+        <!--
+        <production>
+            <interval>
+                <duration>3600</duration>
+                <queries>10000</queries>
+                <errors>1000</errors>
+                <result_rows>100000000</result_rows>
+                <read_rows>100000000000</read_rows>
+                <execution_time>36000</execution_time>
+            </interval>
+        </production>
+        -->
+    </quotas>
+
+    <!-- ============================================
+         Profiles (Query Settings)
+         ============================================ -->
+    <profiles>
+        <default>
+            <!-- Max memory per query (2GB) -->
+            <max_memory_usage>2147483648</max_memory_usage>
+
+            <!-- Max query execution time (5 minutes) -->
+            <max_execution_time>300</max_execution_time>
+
+            <!-- Max threads per query -->
+            <max_threads>8</max_threads>
+
+            <!-- Allow DDL queries -->
+            <allow_ddl>1</allow_ddl>
+
+            <!-- Enable query cache -->
+            <use_query_cache>1</use_query_cache>
+
+            <!-- Allow experimental features -->
+            <allow_experimental_window_functions>1</allow_experimental_window_functions>
+        </default>
+
+        <!-- Read-only profile (for application queries) -->
+        <readonly>
+            <readonly>1</readonly>
+            <max_memory_usage>1073741824</max_memory_usage>  <!-- 1GB -->
+            <max_execution_time>60</max_execution_time>  <!-- 1 minute -->
+            <max_threads>4</max_threads>
+        </readonly>
+    </profiles>
+</clickhouse>

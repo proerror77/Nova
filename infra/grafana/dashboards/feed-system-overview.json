@@ -1,0 +1,235 @@
+{
+  "dashboard": {
+    "title": "Phase 3 Feed System Overview",
+    "description": "Real-time Personalized Feed Ranking System Monitoring",
+    "uid": "feed-system-overview",
+    "tags": [
+      "nova",
+      "phase3",
+      "feed",
+      "overview"
+    ],
+    "timezone": "browser",
+    "schemaVersion": 39,
+    "version": 1,
+    "refresh": "30s",
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "panels": [
+      {
+        "title": "Feed API Request Rate",
+        "type": "graph",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 0
+        },
+        "targets": [
+          {
+            "expr": "rate(feed_api_requests_total[1m])",
+            "refId": "A",
+            "legendFormat": "Requests/sec"
+          }
+        ]
+      },
+      {
+        "title": "Feed API Latency (P50, P95, P99)",
+        "type": "graph",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 0
+        },
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.50, rate(feed_api_duration_seconds_bucket[5m]))",
+            "refId": "A",
+            "legendFormat": "P50"
+          },
+          {
+            "expr": "histogram_quantile(0.95, rate(feed_api_duration_seconds_bucket[5m]))",
+            "refId": "B",
+            "legendFormat": "P95"
+          },
+          {
+            "expr": "histogram_quantile(0.99, rate(feed_api_duration_seconds_bucket[5m]))",
+            "refId": "C",
+            "legendFormat": "P99"
+          }
+        ]
+      },
+      {
+        "title": "Cache Hit Rate %",
+        "type": "gauge",
+        "gridPos": {
+          "h": 8,
+          "w": 6,
+          "x": 0,
+          "y": 8
+        },
+        "targets": [
+          {
+            "expr": "(rate(feed_cache_hits_total[5m]) / (rate(feed_cache_hits_total[5m]) + rate(feed_cache_misses_total[5m]))) * 100",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "max": 100,
+            "min": 0,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "red",
+                  "value": 0
+                },
+                {
+                  "color": "yellow",
+                  "value": 85
+                },
+                {
+                  "color": "green",
+                  "value": 90
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "title": "Circuit Breaker Status",
+        "type": "stat",
+        "gridPos": {
+          "h": 8,
+          "w": 6,
+          "x": 6,
+          "y": 8
+        },
+        "targets": [
+          {
+            "expr": "circuit_breaker_state",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "mappings": [
+              {
+                "type": "value",
+                "options": {
+                  "0": {
+                    "text": "CLOSED (Normal)",
+                    "color": "green"
+                  },
+                  "1": {
+                    "text": "HALF_OPEN (Recovering)",
+                    "color": "yellow"
+                  },
+                  "2": {
+                    "text": "OPEN (Fallback)",
+                    "color": "red"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "title": "System Availability %",
+        "type": "gauge",
+        "gridPos": {
+          "h": 8,
+          "w": 6,
+          "x": 12,
+          "y": 8
+        },
+        "targets": [
+          {
+            "expr": "(1 - (rate(feed_api_errors_total[5m]) / rate(feed_api_requests_total[5m]))) * 100",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "max": 100,
+            "min": 99,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "red",
+                  "value": 99
+                },
+                {
+                  "color": "yellow",
+                  "value": 99.5
+                },
+                {
+                  "color": "green",
+                  "value": 99.95
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "title": "Error Rate (errors/sec)",
+        "type": "graph",
+        "gridPos": {
+          "h": 8,
+          "w": 6,
+          "x": 18,
+          "y": 8
+        },
+        "targets": [
+          {
+            "expr": "rate(feed_api_errors_total[1m])",
+            "refId": "A",
+            "legendFormat": "Errors/sec"
+          }
+        ]
+      },
+      {
+        "title": "Event-to-Visible Latency P95 (seconds)",
+        "type": "graph",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 16
+        },
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(event_to_visible_latency_seconds_bucket[5m]))",
+            "refId": "A",
+            "legendFormat": "P95 Latency"
+          }
+        ]
+      },
+      {
+        "title": "Events Processed (per minute)",
+        "type": "graph",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 16
+        },
+        "targets": [
+          {
+            "expr": "rate(events_received_total[1m])",
+            "refId": "A",
+            "legendFormat": "Events/min"
+          }
+        ]
+      }
+    ]
+  }
+}

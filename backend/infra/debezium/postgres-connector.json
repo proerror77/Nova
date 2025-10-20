@@ -1,0 +1,71 @@
+{
+  "name": "nova-postgres-cdc-connector",
+  "config": {
+    "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+    "tasks.max": "1",
+
+    "database.hostname": "${DB_HOST:localhost}",
+    "database.port": "${DB_PORT:5432}",
+    "database.user": "${DB_USER:postgres}",
+    "database.password": "${DB_PASSWORD:postgres}",
+    "database.dbname": "${DB_NAME:nova}",
+    "database.server.name": "nova-cdc",
+
+    "plugin.name": "pgoutput",
+    "slot.name": "debezium_nova_slot",
+    "slot.drop.on.stop": "false",
+    "publication.name": "debezium_publication",
+    "publication.autocreate.mode": "filtered",
+
+    "snapshot.mode": "initial",
+    "snapshot.locking.mode": "minimal",
+
+    "table.include.list": "public.users,public.posts,public.follows,public.comments,public.likes",
+
+    "topic.prefix": "cdc",
+    "topic.creation.default.replication.factor": "${REPLICATION_FACTOR:1}",
+    "topic.creation.default.partitions": "${DEFAULT_PARTITIONS:3}",
+    "topic.creation.default.cleanup.policy": "compact",
+    "topic.creation.default.retention.ms": "604800000",
+    "topic.creation.default.compression.type": "snappy",
+
+    "topic.creation.posts.partitions": "10",
+    "topic.creation.posts.cleanup.policy": "compact",
+    "topic.creation.posts.retention.ms": "2592000000",
+
+    "topic.creation.follows.partitions": "5",
+    "topic.creation.comments.partitions": "5",
+    "topic.creation.likes.partitions": "8",
+    "topic.creation.users.partitions": "3",
+
+    "transforms": "unwrap,addTopicSuffix",
+    "transforms.unwrap.type": "io.debezium.transforms.ExtractNewRecordState",
+    "transforms.unwrap.drop.tombstones": "false",
+    "transforms.unwrap.delete.handling.mode": "rewrite",
+    "transforms.unwrap.add.fields": "op,source.ts_ms,source.db,source.table",
+
+    "transforms.addTopicSuffix.type": "org.apache.kafka.connect.transforms.RegexRouter",
+    "transforms.addTopicSuffix.regex": "cdc\\.nova-cdc\\.public\\.(.*)",
+    "transforms.addTopicSuffix.replacement": "cdc.$1",
+
+    "key.converter": "org.apache.kafka.connect.json.JsonConverter",
+    "key.converter.schemas.enable": "false",
+    "value.converter": "org.apache.kafka.connect.json.JsonConverter",
+    "value.converter.schemas.enable": "false",
+
+    "heartbeat.interval.ms": "10000",
+    "heartbeat.action.query": "INSERT INTO public.debezium_heartbeat (id, ts) VALUES (1, NOW()) ON CONFLICT (id) DO UPDATE SET ts = EXCLUDED.ts",
+
+    "errors.tolerance": "none",
+    "errors.log.enable": "true",
+    "errors.log.include.messages": "true",
+
+    "decimal.handling.mode": "double",
+    "time.precision.mode": "adaptive_time_microseconds",
+    "tombstones.on.delete": "true",
+
+    "max.batch.size": "2048",
+    "max.queue.size": "8192",
+    "poll.interval.ms": "500"
+  }
+}

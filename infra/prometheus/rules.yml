@@ -1,0 +1,223 @@
+---
+# Prometheus Alerting Rules for Phase 3 Feed Ranking System
+# Alert: P95 Feed API Latency SLO Breach
+groups:
+  - name: feed_system_alerts
+    interval: 30s
+    rules:
+      # Feed API Performance
+      - alert: FeedAPILatencyP95High
+        expr: histogram_quantile(0.95, rate(feed_api_duration_seconds_bucket[5m])) > 0.8
+        for: 5m
+        labels:
+          severity: critical
+          component: feed_api
+        annotations:
+          summary: "Feed API P95 latency exceeds SLO (800ms)"
+          description: "P95 latency: {{ $value }}s for {{ $labels.instance }}"
+          runbook: "https://docs.example.com/runbook/feed_latency_high"
+
+      - alert: FeedAPICacheHitRateLow
+        expr: rate(feed_cache_hits_total[5m]) / (rate(feed_cache_hits_total[5m]) + rate(feed_cache_misses_total[5m])) < 0.85
+        for: 10m
+        labels:
+          severity: warning
+          component: feed_api
+        annotations:
+          summary: "Feed cache hit rate below 85% target"
+          description: "Current hit rate: {{ $value | humanizePercentage }} for {{ $labels.instance }}"
+
+      # Circuit Breaker Health
+      - alert: CircuitBreakerOpen
+        expr: circuit_breaker_state == 2
+        for: 2m
+        labels:
+          severity: critical
+          component: circuit_breaker
+        annotations:
+          summary: "Circuit Breaker is OPEN - ClickHouse may be unavailable"
+          description: "{{ $labels.datasource }} circuit breaker opened for {{ $labels.instance }}"
+          runbook: "https://docs.example.com/runbook/circuit_breaker_open"
+
+      - alert: CircuitBreakerHalfOpen
+        expr: circuit_breaker_state == 1
+        for: 1m
+        labels:
+          severity: warning
+          component: circuit_breaker
+        annotations:
+          summary: "Circuit Breaker in HALF_OPEN state - attempting recovery"
+          description: "{{ $labels.datasource }} for {{ $labels.instance }}"
+
+      # Event Pipeline Health
+      - alert: EventConsumerLagHigh
+        expr: kafka_consumer_lag{group="nova-events-consumer-v1",topic="events"} > 100000
+        for: 5m
+        labels:
+          severity: warning
+          component: events_pipeline
+        annotations:
+          summary: "Events consumer lag exceeds 100k messages"
+          description: "Current lag: {{ $value }} messages for partition {{ $labels.partition }}"
+
+      - alert: CDCConsumerLagHigh
+        expr: kafka_consumer_lag{group="nova-cdc-consumer-v1"} > 50000
+        for: 5m
+        labels:
+          severity: warning
+          component: cdc_pipeline
+        annotations:
+          summary: "CDC consumer lag exceeds 50k messages"
+          description: "Current lag: {{ $value }} messages - possible PostgreSQL replication delay"
+
+      # ClickHouse Health
+      - alert: ClickHouseQueryTimeout
+        expr: rate(clickhouse_query_timeout_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          component: clickhouse
+        annotations:
+          summary: "ClickHouse query timeouts detected (>0.1/sec)"
+          description: "Timeout rate: {{ $value }}/sec for {{ $labels.instance }}"
+
+      - alert: ClickHouseInsertErrors
+        expr: rate(clickhouse_insert_errors_total[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+          component: clickhouse
+        annotations:
+          summary: "ClickHouse INSERT errors detected (>0.05/sec)"
+          description: "Error rate: {{ $value }}/sec - data loss risk for {{ $labels.instance }}"
+
+      # Redis Cache Health
+      - alert: RedisCacheMemoryHigh
+        expr: redis_memory_used_bytes / redis_memory_max_bytes > 0.85
+        for: 10m
+        labels:
+          severity: warning
+          component: redis
+        annotations:
+          summary: "Redis memory usage exceeds 85%"
+          description: "Current usage: {{ $value | humanizePercentage }} for {{ $labels.instance }}"
+
+      - alert: RedisCacheEvictions
+        expr: rate(redis_evicted_keys_total[5m]) > 100
+        for: 5m
+        labels:
+          severity: warning
+          component: redis
+        annotations:
+          summary: "Redis evicting keys due to memory pressure (>100/sec)"
+          description: "Eviction rate: {{ $value }}/sec - cache hit rate will degrade"
+
+      # Deduplication Health
+      - alert: DeduplicationFailureRate
+        expr: rate(dedup_failures_total[5m]) / rate(events_received_total[5m]) > 0.01
+        for: 5m
+        labels:
+          severity: warning
+          component: dedup
+        annotations:
+          summary: "Event deduplication failure rate >1%"
+          description: "Failure rate: {{ $value | humanizePercentage }} - potential duplicate posts"
+
+      # System Health
+      - alert: EventToVisibleLatencyHigh
+        expr: histogram_quantile(0.95, rate(event_to_visible_latency_seconds_bucket[5m])) > 5
+        for: 5m
+        labels:
+          severity: warning
+          component: system
+        annotations:
+          summary: "Event-to-visible latency exceeds 5s SLO"
+          description: "P95 latency: {{ $value }}s for {{ $labels.instance }}"
+
+      - alert: FeedSystemAvailabilityLow
+        expr: (1 - (rate(feed_api_errors_total[5m]) / rate(feed_api_requests_total[5m]))) < 0.995
+        for: 10m
+        labels:
+          severity: critical
+          component: system
+        annotations:
+          summary: "Feed system availability below 99.5% SLO"
+          description: "Current availability: {{ $value | humanizePercentage }} for {{ $labels.instance }}"
+
+      # Recording Rules (for performance optimization)
+      - record: feed:latency:p50
+        expr: histogram_quantile(0.50, rate(feed_api_duration_seconds_bucket[1m]))
+
+      - record: feed:latency:p99
+        expr: histogram_quantile(0.99, rate(feed_api_duration_seconds_bucket[1m]))
+
+      - record: feed:cache:hitrate
+        expr: rate(feed_cache_hits_total[5m]) / (rate(feed_cache_hits_total[5m]) + rate(feed_cache_misses_total[5m]))
+
+      - record: kafka:consumer:lag:total
+        expr: sum by (group) (kafka_consumer_lag)
+
+      - record: clickhouse:insert:throughput
+        expr: rate(clickhouse_inserted_events_total[1m])
+
+---
+# Recording Rules for Dashboards (computed every 30s)
+- name: feed_system_metrics
+  interval: 30s
+  rules:
+    # API Metrics
+    - record: feed_api:requests:rate_1m
+      expr: rate(feed_api_requests_total[1m])
+
+    - record: feed_api:errors:rate_1m
+      expr: rate(feed_api_errors_total[1m])
+
+    - record: feed_api:error_ratio_1m
+      expr: rate(feed_api_errors_total[1m]) / rate(feed_api_requests_total[1m])
+
+    # Cache Metrics
+    - record: feed_cache:hit_ratio_5m
+      expr: |
+        (
+          sum(rate(feed_cache_hits_total[5m]))
+          /
+          (sum(rate(feed_cache_hits_total[5m])) + sum(rate(feed_cache_misses_total[5m])))
+        ) * 100
+
+    - record: feed_cache:memory_usage_mb
+      expr: feed_cache_memory_bytes / (1024 * 1024)
+
+    # Event Pipeline Metrics
+    - record: events:ingestion:rate_1m
+      expr: rate(events_received_total[1m])
+
+    - record: events:processing:latency_p95
+      expr: histogram_quantile(0.95, rate(events_processing_duration_seconds_bucket[5m]))
+
+    # CDC Metrics
+    - record: cdc:messages:processed_1m
+      expr: rate(cdc_messages_processed_total[1m])
+
+    - record: cdc:lag:max_partition
+      expr: max(kafka_consumer_lag{group="nova-cdc-consumer-v1"})
+
+    # ClickHouse Metrics
+    - record: clickhouse:events:stored_1m
+      expr: rate(clickhouse_inserted_events_total[1m])
+
+    - record: clickhouse:query:latency_p95
+      expr: histogram_quantile(0.95, rate(clickhouse_query_duration_seconds_bucket[5m]))
+
+    # Ranking Metrics
+    - record: ranking:dedup_ratio_5m
+      expr: (sum(rate(ranking_posts_deduplicated_total[5m])) / sum(rate(ranking_posts_fetched_total[5m]))) * 100
+
+    - record: ranking:saturation_ratio_5m
+      expr: (sum(rate(ranking_posts_saturation_removed_total[5m])) / sum(rate(ranking_posts_fetched_total[5m]))) * 100
+
+    # Circuit Breaker Metrics
+    - record: circuit_breaker:state_transitions_1m
+      expr: rate(circuit_breaker_state_changes_total[1m])
+
+    - record: circuit_breaker:query_fallback_ratio_5m
+      expr: (sum(rate(circuit_breaker_fallback_queries_total[5m])) / sum(rate(feed_api_requests_total[5m]))) * 100

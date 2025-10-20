@@ -1,0 +1,229 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: job-worker
+  namespace: nova
+  labels:
+    app: job-worker
+    component: background-jobs
+    tier: backend
+spec:
+  replicas: 2  # 建议至少 2 个副本保证高可用
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0  # 确保至少有 1 个副本在运行
+  selector:
+    matchLabels:
+      app: job-worker
+  template:
+    metadata:
+      labels:
+        app: job-worker
+        component: background-jobs
+        tier: backend
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: job-worker
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+
+      # 优雅关闭配置
+      terminationGracePeriodSeconds: 60  # 允许 jobs 最多 60 秒完成
+
+      containers:
+        - name: job-worker
+          image: nova/job-worker:latest
+          imagePullPolicy: IfNotPresent
+
+          # 资源限制 (根据实际负载调整)
+          resources:
+            requests:
+              cpu: 200m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+
+          # 环境变量
+          env:
+            # Redis 配置
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: job-worker-secrets
+                  key: redis-url
+
+            # ClickHouse 配置
+            - name: CLICKHOUSE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: job-worker-config
+                  key: clickhouse-url
+
+            # Job 配置
+            - name: JOB_TRENDING_INTERVAL_SEC
+              value: "60"
+            - name: JOB_TRENDING_WINDOW_HOURS
+              value: "1"
+            - name: JOB_TRENDING_TOPK
+              value: "50"
+
+            - name: JOB_SUGGESTION_INTERVAL_SEC
+              value: "600"
+            - name: JOB_SUGGESTION_BATCH_SIZE
+              value: "100"
+            - name: JOB_SUGGESTIONS_PER_USER
+              value: "20"
+
+            - name: JOB_CH_TIMEOUT_MS
+              value: "30000"
+            - name: JOB_REDIS_POOL_SIZE
+              value: "10"
+            - name: JOB_MAX_CONCURRENT
+              value: "4"
+
+            # 日志级别
+            - name: RUST_LOG
+              value: "job_worker=info,user_service=info,info"
+
+          # 健康检查 (基于日志输出或自定义端点)
+          livenessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - "pgrep -f job_worker"
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+
+          readinessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - "pgrep -f job_worker"
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 2
+
+          # 生命周期钩子: 确保优雅关闭
+          lifecycle:
+            preStop:
+              exec:
+                command:
+                  - /bin/sh
+                  - -c
+                  - "sleep 10"  # 等待 10 秒让 jobs 完成
+
+      # 节点选择器 (可选)
+      nodeSelector:
+        workload-type: background-jobs
+
+      # 容忍度 (可选)
+      tolerations:
+        - key: "background-jobs"
+          operator: "Equal"
+          value: "true"
+          effect: "NoSchedule"
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: job-worker
+  namespace: nova
+  labels:
+    app: job-worker
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: job-worker-config
+  namespace: nova
+  labels:
+    app: job-worker
+data:
+  clickhouse-url: "http://clickhouse:8123"
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: job-worker-secrets
+  namespace: nova
+  labels:
+    app: job-worker
+type: Opaque
+stringData:
+  redis-url: "redis://redis-master:6379"
+  # 生产环境应使用 external-secrets 或 sealed-secrets
+
+---
+# Horizontal Pod Autoscaler (可选)
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: job-worker-hpa
+  namespace: nova
+  labels:
+    app: job-worker
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: job-worker
+  minReplicas: 2
+  maxReplicas: 5
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300  # 5 分钟稳定期
+      policies:
+        - type: Percent
+          value: 50
+          periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+        - type: Percent
+          value: 100
+          periodSeconds: 30
+
+---
+# PodDisruptionBudget: 确保滚动更新时至少 1 个副本可用
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: job-worker-pdb
+  namespace: nova
+  labels:
+    app: job-worker
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: job-worker

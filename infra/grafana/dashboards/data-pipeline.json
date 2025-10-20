@@ -1,0 +1,212 @@
+{
+  "dashboard": {
+    "title": "Data Pipeline & Event Processing",
+    "description": "CDC and Events Consumer Pipeline Monitoring",
+    "uid": "data-pipeline",
+    "tags": [
+      "nova",
+      "phase3",
+      "pipeline",
+      "kafka",
+      "clickhouse"
+    ],
+    "timezone": "browser",
+    "schemaVersion": 39,
+    "version": 1,
+    "refresh": "30s",
+    "time": {
+      "from": "now-6h",
+      "to": "now"
+    },
+    "panels": [
+      {
+        "title": "CDC Consumer Lag (messages)",
+        "type": "graph",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 0
+        },
+        "targets": [
+          {
+            "expr": "kafka_consumer_lag{group=\"nova-cdc-consumer-v1\"}",
+            "refId": "A",
+            "legendFormat": "{{topic}}-{{partition}}"
+          }
+        ]
+      },
+      {
+        "title": "Events Consumer Lag (messages)",
+        "type": "graph",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 0
+        },
+        "targets": [
+          {
+            "expr": "kafka_consumer_lag{group=\"nova-events-consumer-v1\"}",
+            "refId": "A",
+            "legendFormat": "{{topic}}-{{partition}}"
+          }
+        ]
+      },
+      {
+        "title": "CDC Messages Processed (per sec)",
+        "type": "graph",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 8
+        },
+        "targets": [
+          {
+            "expr": "rate(cdc_messages_processed_total[1m])",
+            "refId": "A",
+            "legendFormat": "Messages/sec"
+          }
+        ]
+      },
+      {
+        "title": "Events Ingestion Rate (per sec)",
+        "type": "graph",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 8
+        },
+        "targets": [
+          {
+            "expr": "rate(events_received_total[1m])",
+            "refId": "A",
+            "legendFormat": "Events/sec"
+          }
+        ]
+      },
+      {
+        "title": "ClickHouse Insert Throughput",
+        "type": "graph",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 16
+        },
+        "targets": [
+          {
+            "expr": "rate(clickhouse_inserted_events_total[1m])",
+            "refId": "A",
+            "legendFormat": "Events/sec"
+          }
+        ]
+      },
+      {
+        "title": "ClickHouse Query Latency P95 (ms)",
+        "type": "graph",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 16
+        },
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(clickhouse_query_duration_seconds_bucket[5m])) * 1000",
+            "refId": "A",
+            "legendFormat": "P95 Latency"
+          }
+        ]
+      },
+      {
+        "title": "CDC Processing Latency P95 (ms)",
+        "type": "graph",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 24
+        },
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(cdc_processing_duration_seconds_bucket[5m])) * 1000",
+            "refId": "A",
+            "legendFormat": "P95 Latency"
+          }
+        ]
+      },
+      {
+        "title": "Event Processing Latency P95 (ms)",
+        "type": "graph",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 24
+        },
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(events_processing_duration_seconds_bucket[5m])) * 1000",
+            "refId": "A",
+            "legendFormat": "P95 Latency"
+          }
+        ]
+      },
+      {
+        "title": "Data Loss Events (errors)",
+        "type": "stat",
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 0,
+          "y": 32
+        },
+        "targets": [
+          {
+            "expr": "increase(cdc_messages_failed_total[1h])",
+            "refId": "A",
+            "legendFormat": "CDC Failures"
+          }
+        ]
+      },
+      {
+        "title": "Duplicate Events (detected)",
+        "type": "stat",
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 6,
+          "y": 32
+        },
+        "targets": [
+          {
+            "expr": "increase(dedup_detected_duplicates_total[1h])",
+            "refId": "A",
+            "legendFormat": "Duplicates"
+          }
+        ]
+      },
+      {
+        "title": "Kafka Consumer Group Offset Status",
+        "type": "table",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 32
+        },
+        "targets": [
+          {
+            "expr": "kafka_consumer_offset{group=~\"nova-.*-consumer-v1\"}",
+            "format": "table",
+            "instant": true,
+            "refId": "A"
+          }
+        ]
+      }
+    ]
+  }
+}

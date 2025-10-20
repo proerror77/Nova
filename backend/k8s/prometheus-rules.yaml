@@ -1,0 +1,259 @@
+---
+# Prometheus ServiceMonitor for Video Ranking Service
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: video-ranking-service
+  namespace: nova
+  labels:
+    app: video-ranking-service
+spec:
+  selector:
+    matchLabels:
+      app: video-ranking-service
+  endpoints:
+  - port: metrics
+    interval: 30s
+    path: /metrics
+
+---
+# PrometheusRule for Alerting
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: video-ranking-service-alerts
+  namespace: nova
+  labels:
+    app: video-ranking-service
+    prometheus: kube-prometheus
+spec:
+  groups:
+  - name: video-ranking-service
+    interval: 30s
+    rules:
+
+    # Cache Hit Rate Alert - Critical
+    - alert: VideoCacheHitRateLow
+      expr: |
+        rate(feed_cache_hits_total[5m]) /
+        (rate(feed_cache_hits_total[5m]) + rate(feed_cache_misses_total[5m])) < 0.85
+      for: 5m
+      labels:
+        severity: critical
+        service: video-ranking
+      annotations:
+        summary: "Video Ranking Cache Hit Rate Low"
+        description: "Cache hit rate is {{ $value | humanizePercentage }} (threshold: 85%)"
+        runbook_url: "https://wiki.example.com/video-ranking-runbook"
+
+    # Feed Generation Latency - Warning
+    - alert: FeedGenerationLatencyHigh
+      expr: |
+        histogram_quantile(0.95,
+          rate(feed_generation_duration_seconds_bucket[5m])
+        ) > 0.3
+      for: 5m
+      labels:
+        severity: warning
+        service: video-ranking
+      annotations:
+        summary: "Feed Generation P95 Latency High"
+        description: "P95 latency is {{ $value | humanizeDuration }} (threshold: 300ms)"
+
+    # Feed Generation Latency - Critical
+    - alert: FeedGenerationLatencyCritical
+      expr: |
+        histogram_quantile(0.95,
+          rate(feed_generation_duration_seconds_bucket[5m])
+        ) > 0.5
+      for: 2m
+      labels:
+        severity: critical
+        service: video-ranking
+      annotations:
+        summary: "Feed Generation P95 Latency Critical"
+        description: "P95 latency is {{ $value | humanizeDuration }} (threshold: 500ms)"
+
+    # Database Connection Pool Exhaustion
+    - alert: DatabaseConnectionPoolExhaustion
+      expr: |
+        database_pool_available / database_pool_size < 0.2
+      for: 2m
+      labels:
+        severity: warning
+        service: video-ranking
+      annotations:
+        summary: "Database Connection Pool Exhaustion Warning"
+        description: "Only {{ $value | humanizePercentage }} of connections available"
+
+    # Redis Connection Failures
+    - alert: RedisConnectionFailures
+      expr: |
+        rate(redis_connection_errors_total[5m]) > 0.1
+      for: 3m
+      labels:
+        severity: critical
+        service: video-ranking
+      annotations:
+        summary: "Redis Connection Failures Detected"
+        description: "Redis error rate is {{ $value | humanize }} errors/sec"
+
+    # ClickHouse Query Errors
+    - alert: ClickHouseQueryErrors
+      expr: |
+        rate(clickhouse_query_errors_total[5m]) > 0.05
+      for: 5m
+      labels:
+        severity: warning
+        service: video-ranking
+      annotations:
+        summary: "ClickHouse Query Error Rate High"
+        description: "Error rate is {{ $value | humanize }} errors/sec"
+
+    # Kafka Producer Errors
+    - alert: KafkaProducerErrors
+      expr: |
+        rate(kafka_producer_errors_total[5m]) > 0
+      for: 5m
+      labels:
+        severity: warning
+        service: video-ranking
+      annotations:
+        summary: "Kafka Producer Errors Detected"
+        description: "{{ $value | humanize }} errors/sec"
+
+    # Engagement Event Processing Lag
+    - alert: EngagementEventProcessingLag
+      expr: |
+        engagement_event_processing_lag_seconds > 60
+      for: 5m
+      labels:
+        severity: warning
+        service: video-ranking
+      annotations:
+        summary: "Engagement Event Processing Lag"
+        description: "Processing lag is {{ $value | humanizeDuration }}"
+
+    # Ranking Engine Error Rate
+    - alert: RankingEngineErrorRate
+      expr: |
+        rate(ranking_engine_errors_total[5m]) > 0.01
+      for: 5m
+      labels:
+        severity: warning
+        service: video-ranking
+      annotations:
+        summary: "Ranking Engine Error Rate High"
+        description: "Error rate is {{ $value | humanizePercentage }}"
+
+    # Service Pod Crash Loop
+    - alert: VideoPodCrashLoop
+      expr: |
+        increase(kube_pod_container_status_restarts_total{pod=~"video-ranking-service.*"}[15m]) > 5
+      for: 5m
+      labels:
+        severity: critical
+        service: video-ranking
+      annotations:
+        summary: "Video Ranking Service Pod Crash Loop"
+        description: "Pod {{ $labels.pod }} has restarted {{ $value }} times in 15 minutes"
+
+    # Service Pod Memory Usage
+    - alert: VideoPodMemoryUsageHigh
+      expr: |
+        container_memory_usage_bytes{pod=~"video-ranking-service.*"} /
+        container_spec_memory_limit_bytes{pod=~"video-ranking-service.*"} > 0.9
+      for: 5m
+      labels:
+        severity: warning
+        service: video-ranking
+      annotations:
+        summary: "Video Ranking Service Memory Usage High"
+        description: "Memory usage is {{ $value | humanizePercentage }} of limit"
+
+    # Service Pod CPU Usage
+    - alert: VideoPodCPUUsageHigh
+      expr: |
+        rate(container_cpu_usage_seconds_total{pod=~"video-ranking-service.*"}[5m]) > 1.8
+      for: 5m
+      labels:
+        severity: warning
+        service: video-ranking
+      annotations:
+        summary: "Video Ranking Service CPU Usage High"
+        description: "CPU usage is {{ $value }} cores"
+
+    # HTTP 5xx Error Rate
+    - alert: HighHTTPErrorRate
+      expr: |
+        rate(http_requests_total{status=~"5.."}[5m]) /
+        rate(http_requests_total[5m]) > 0.05
+      for: 5m
+      labels:
+        severity: warning
+        service: video-ranking
+      annotations:
+        summary: "High HTTP 5xx Error Rate"
+        description: "Error rate is {{ $value | humanizePercentage }}"
+
+    # Feed Success Rate Low
+    - alert: FeedSuccessRateLow
+      expr: |
+        rate(feed_generation_success_total[5m]) /
+        rate(feed_generation_total[5m]) < 0.95
+      for: 5m
+      labels:
+        severity: warning
+        service: video-ranking
+      annotations:
+        summary: "Feed Generation Success Rate Low"
+        description: "Success rate is {{ $value | humanizePercentage }} (threshold: 95%)"
+
+---
+# Recording Rules for Performance
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: video-ranking-recording-rules
+  namespace: nova
+  labels:
+    app: video-ranking-service
+spec:
+  groups:
+  - name: video-ranking-recording
+    interval: 15s
+    rules:
+
+    # Cache hit rate by pod
+    - record: job:feed_cache_hit_rate:ratio_5m
+      expr: |
+        sum(rate(feed_cache_hits_total[5m])) by (pod) /
+        (sum(rate(feed_cache_hits_total[5m])) by (pod) +
+         sum(rate(feed_cache_misses_total[5m])) by (pod))
+
+    # Feed generation latency percentiles
+    - record: job:feed_generation_latency:p50_5m
+      expr: |
+        histogram_quantile(0.5,
+          sum(rate(feed_generation_duration_seconds_bucket[5m])) by (le))
+
+    - record: job:feed_generation_latency:p95_5m
+      expr: |
+        histogram_quantile(0.95,
+          sum(rate(feed_generation_duration_seconds_bucket[5m])) by (le))
+
+    - record: job:feed_generation_latency:p99_5m
+      expr: |
+        histogram_quantile(0.99,
+          sum(rate(feed_generation_duration_seconds_bucket[5m])) by (le))
+
+    # Engagement event throughput
+    - record: job:engagement_events:rate_5m
+      expr: |
+        sum(rate(engagement_events_recorded_total[5m])) by (type)
+
+    # Ranking performance by signal type
+    - record: job:ranking_duration:p95_5m
+      expr: |
+        histogram_quantile(0.95,
+          sum(rate(ranking_duration_seconds_bucket[5m])) by (signal, le))
