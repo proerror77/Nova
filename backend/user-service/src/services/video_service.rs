@@ -1,9 +1,7 @@
 /// Video Upload & Management Service
 ///
 /// Handles video uploads, processing, and storage integration
-// use crate::config::video_config::VideoConfig;
 use crate::error::{AppError, Result};
-use crate::models::video::*;
 use chrono::Utc;
 use uuid::Uuid;
 
@@ -14,46 +12,43 @@ pub struct VideoService;
 
 impl VideoService {
     /// Create new video service instance
-    pub fn new(/* config: VideoConfig */) -> Self {
+    pub fn new() -> Self {
         Self
     }
 
     /// Generate presigned URL for video upload
+    ///
+    /// Returns URL that client can use to upload directly to S3
     pub async fn generate_upload_url(&self, _user_id: Uuid) -> Result<PresignedUploadResponse> {
         Err(AppError::Internal(
-            "Video service not fully implemented".to_string(),
+            "Video upload not yet implemented".to_string(),
         ))
     }
 
-    /// Queue video processing job
-    pub async fn queue_processing_job(&self, _video_id: Uuid) -> Result<String> {
+    /// Validate uploaded video metadata
+    pub async fn validate_video_metadata(
+        &self,
+        _title: &str,
+        _description: Option<&str>,
+        _duration_seconds: u32,
+    ) -> Result<()> {
         Err(AppError::Internal(
-            "Video service not fully implemented".to_string(),
+            "Video validation not yet implemented".to_string(),
         ))
     }
 
-    /// Get allowed video formats
-    pub fn get_allowed_formats(&self) -> Vec<String> {
-        vec![]
+    /// Start video processing job
+    pub async fn start_processing(&self, _video_id: &Uuid, _title: &str, _upload_url: &str) -> Result<()> {
+        Err(AppError::Internal(
+            "Video processing not yet implemented".to_string(),
+        ))
     }
+}
 
-    /// Get allowed video codecs
-    pub fn get_allowed_codecs(&self) -> Vec<String> {
-        vec![]
-    }
-
-    /// Get target bitrates for transcoding
-    pub fn get_target_bitrates(&self) -> Vec<u32> {
-        vec![]
-    }
-
-    /// Get max file size in bytes
-    pub fn get_max_file_size_bytes(&self) -> u64 {
-        0
-    }
-
-    /// Check if virus scanning is enabled
-    pub fn is_virus_scan_enabled(&self) -> bool {
-        false
-    }
+/// Presigned upload response
+#[derive(Debug, Clone)]
+pub struct PresignedUploadResponse {
+    pub video_id: String,
+    pub upload_url: String,
+    pub expiry_seconds: u32,
 }
