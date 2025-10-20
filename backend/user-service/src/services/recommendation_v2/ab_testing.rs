@@ -24,7 +24,7 @@ pub struct ABTestingFramework {
     /// Active experiments loaded from PostgreSQL
     pub experiments: HashMap<String, Experiment>,
 
-    /// Redis client for caching variant assignments (optional)
+    // Redis client for caching variant assignments (optional)
     // pub redis_client: Arc<Redis>,
 }
 

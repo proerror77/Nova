@@ -1,11 +1,6 @@
 [workspace]
 members = [
-    "user-service",
-    "crates/streaming-core",
-    "crates/streaming-ingest",
-    "crates/streaming-transcode",
-    "crates/streaming-delivery",
-    "crates/streaming-api"
+    "user-service"
 ]
 resolver = "2"
 
