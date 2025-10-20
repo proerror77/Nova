@@ -1,0 +1,147 @@
+use super::{OAuthError, OAuthProvider, OAuthUserInfo};
+use async_trait::async_trait;
+use reqwest::Client;
+use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+
+#[derive(Clone)]
+pub struct FacebookOAuthProvider {
+    client_id: String,
+    client_secret: String,
+    redirect_uri: String,
+    http_client: Arc<Client>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct FacebookTokenResponse {
+    access_token: String,
+    token_type: String,
+    #[serde(default)]
+    expires_in: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct FacebookUserInfo {
+    id: String,
+    email: String,
+    name: Option<String>,
+    picture: Option<FacebookPicture>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct FacebookPicture {
+    data: Option<FacebookPictureData>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct FacebookPictureData {
+    url: Option<String>,
+}
+
+impl FacebookOAuthProvider {
+    pub fn new() -> Result<Self, OAuthError> {
+        let client_id = std::env::var("FACEBOOK_CLIENT_ID")
+            .map_err(|_| OAuthError::ConfigError("FACEBOOK_CLIENT_ID not set".to_string()))?;
+        let client_secret = std::env::var("FACEBOOK_CLIENT_SECRET")
+            .map_err(|_| OAuthError::ConfigError("FACEBOOK_CLIENT_SECRET not set".to_string()))?;
+        let redirect_uri = std::env::var("FACEBOOK_REDIRECT_URI")
+            .map_err(|_| OAuthError::ConfigError("FACEBOOK_REDIRECT_URI not set".to_string()))?;
+
+        Ok(Self {
+            client_id,
+            client_secret,
+            redirect_uri,
+            http_client: Arc::new(Client::new()),
+        })
+    }
+}
+
+#[async_trait]
+impl OAuthProvider for FacebookOAuthProvider {
+    fn get_authorization_url(&self, state: &str) -> Result<String, OAuthError> {
+        let auth_url = format!(
+            "https://www.facebook.com/v18.0/dialog/oauth?client_id={}&redirect_uri={}&scope=email,public_profile&state={}",
+            urlencoding::encode(&self.client_id),
+            urlencoding::encode(&self.redirect_uri),
+            urlencoding::encode(state)
+        );
+        Ok(auth_url)
+    }
+
+    async fn exchange_code(
+        &self,
+        code: &str,
+        redirect_uri: &str,
+    ) -> Result<OAuthUserInfo, OAuthError> {
+        // Exchange authorization code for access token
+        let token_response = self
+            .http_client
+            .get("https://graph.facebook.com/v18.0/oauth/access_token")
+            .query(&[
+                ("client_id", self.client_id.as_str()),
+                ("client_secret", self.client_secret.as_str()),
+                ("redirect_uri", redirect_uri),
+                ("code", code),
+            ])
+            .send()
+            .await
+            .map_err(|e| OAuthError::TokenExchange(format!("HTTP error: {}", e)))?
+            .json::<FacebookTokenResponse>()
+            .await
+            .map_err(|e| OAuthError::TokenExchange(format!("JSON parse error: {}", e)))?;
+
+        // Fetch user info
+        let user_info = self
+            .http_client
+            .get("https://graph.facebook.com/me")
+            .query(&[
+                ("fields", "id,email,name,picture"),
+                ("access_token", &token_response.access_token),
+            ])
+            .send()
+            .await
+            .map_err(|e| OAuthError::UserInfoFetch(format!("HTTP error: {}", e)))?
+            .json::<FacebookUserInfo>()
+            .await
+            .map_err(|e| OAuthError::UserInfoFetch(format!("JSON parse error: {}", e)))?;
+
+        let token_expires_at = if token_response.expires_in > 0 {
+            Some(chrono::Utc::now().timestamp() + token_response.expires_in)
+        } else {
+            None
+        };
+
+        Ok(OAuthUserInfo {
+            provider: "facebook".to_string(),
+            provider_user_id: user_info.id,
+            email: user_info.email,
+            display_name: user_info.name,
+            access_token: token_response.access_token,
+            refresh_token: None,
+            token_expires_at,
+        })
+    }
+
+    fn verify_state(&self, state: &str) -> Result<(), OAuthError> {
+        if state.is_empty() {
+            return Err(OAuthError::InvalidState);
+        }
+        Ok(())
+    }
+
+    fn provider_name(&self) -> &str {
+        "facebook"
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_facebook_oauth_provider_name() {
+        if let Ok(provider) = FacebookOAuthProvider::new() {
+            assert_eq!(provider.provider_name(), "facebook");
+        }
+    }
+}

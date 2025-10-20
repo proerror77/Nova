@@ -1,0 +1,283 @@
+version: '3.9'
+
+services:
+  # ============================================
+  # PostgreSQL Database
+  # ============================================
+  postgres:
+    image: debezium/postgres:15-alpine
+    container_name: nova-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-nova_auth}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    ports:
+      - "${POSTGRES_PORT:-55432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/migrations:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - nova-network
+
+  # ============================================
+  # Redis Cache
+  # ============================================
+  redis:
+    image: redis:7-alpine
+    container_name: nova-redis
+    restart: unless-stopped
+    command: >
+      redis-server
+      --appendonly yes
+      --requirepass ${REDIS_PASSWORD:-redis123}
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - nova-network
+
+  # ============================================
+  # Zookeeper (for Kafka)
+  # ============================================
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.6.1
+    container_name: nova-zookeeper
+    restart: unless-stopped
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+    volumes:
+      - zookeeper_data:/var/lib/zookeeper/data
+    networks:
+      - nova-network
+
+  # ============================================
+  # Kafka Broker
+  # ============================================
+  kafka:
+    image: confluentinc/cp-kafka:7.6.1
+    container_name: nova-kafka
+    restart: unless-stopped
+    depends_on:
+      - zookeeper
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,PLAINTEXT_HOST://0.0.0.0:29092
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+    ports:
+      - "29092:29092"
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    networks:
+      - nova-network
+
+  # ============================================
+  # Kafka Connect / Debezium
+  # ============================================
+  debezium:
+    image: debezium/connect:2.5
+    container_name: nova-debezium
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+    environment:
+      BOOTSTRAP_SERVERS: kafka:9092
+      GROUP_ID: 1
+      CONFIG_STORAGE_TOPIC: debezium_config
+      OFFSET_STORAGE_TOPIC: debezium_offsets
+      STATUS_STORAGE_TOPIC: debezium_status
+      KEY_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      VALUE_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      KEY_CONVERTER_SCHEMAS_ENABLE: "false"
+      VALUE_CONVERTER_SCHEMAS_ENABLE: "false"
+      ENABLE_DEBEZIUM_SCRIPTING: "true"
+    ports:
+      - "8083:8083"
+    networks:
+      - nova-network
+
+  # ============================================
+  # Kafka UI (observability)
+  # ============================================
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: nova-kafka-ui
+    restart: unless-stopped
+    depends_on:
+      kafka:
+        condition: service_started
+    environment:
+      KAFKA_CLUSTERS_0_NAME: nova-cluster
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+      KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
+      KAFKA_CLUSTERS_0_KAFKACONNECT_0_NAME: debezium
+      KAFKA_CLUSTERS_0_KAFKACONNECT_0_ADDRESS: http://debezium:8083
+    ports:
+      - "8080:8080"
+    networks:
+      - nova-network
+
+  # ============================================
+  # ClickHouse (OLAP)
+  # ============================================
+  clickhouse:
+    image: clickhouse/clickhouse-server:23.8
+    container_name: nova-clickhouse
+    restart: unless-stopped
+    environment:
+      CLICKHOUSE_DB: nova_feed
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: clickhouse
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+    ports:
+      - "8123:8123"   # HTTP
+      - "9000:9000"   # Native TCP
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+      - clickhouse_logs:/var/log/clickhouse-server
+      - ./backend/clickhouse/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "bash",
+          "-c",
+          "clickhouse-client --user=default --password=clickhouse --query='SELECT 1'"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - nova-network
+
+  # ============================================
+  # User Service (Rust Actix-web)
+  # ============================================
+  user-service:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: runtime
+    container_name: nova-user-service
+    restart: unless-stopped
+    environment:
+      # Application
+      APP_ENV: development
+      APP_HOST: 0.0.0.0
+      APP_PORT: 8080
+      RUST_LOG: debug
+
+      # Database
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-nova_auth}
+      DATABASE_MAX_CONNECTIONS: 20
+
+      # Redis
+      REDIS_URL: redis://:${REDIS_PASSWORD:-redis123}@redis:6379/0
+      REDIS_POOL_SIZE: 10
+
+      # Kafka / Debezium
+      KAFKA_BROKERS: kafka:9092
+      DEBEZIUM_CONNECT_URL: http://debezium:8083
+
+      # ClickHouse
+      CLICKHOUSE_URL: http://clickhouse:8123
+      CLICKHOUSE_DB: nova_feed
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: clickhouse
+
+      # JWT
+      JWT_SECRET: ${JWT_SECRET:-dev_secret_change_in_production_32chars}
+      JWT_ACCESS_TOKEN_TTL: 900
+      JWT_REFRESH_TOKEN_TTL: 604800
+
+      # Email (mock for development)
+      SMTP_HOST: ${SMTP_HOST:-mailhog}
+      SMTP_PORT: ${SMTP_PORT:-1025}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-noreply@nova.dev}
+
+      # Rate limiting
+      RATE_LIMIT_MAX_REQUESTS: 100
+      RATE_LIMIT_WINDOW_SECS: 60
+    ports:
+      - "${USER_SERVICE_PORT:-8080}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+      clickhouse:
+        condition: service_healthy
+    networks:
+      - nova-network
+    healthcheck:
+      test: ["CMD", "/app/user-service", "healthcheck"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # ============================================
+  # MailHog (Email testing - development only)
+  # ============================================
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: nova-mailhog
+    restart: unless-stopped
+    ports:
+      - "1025:1025"  # SMTP
+      - "8025:8025"  # Web UI
+    networks:
+      - nova-network
+
+# ============================================
+# Volumes
+# ============================================
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  zookeeper_data:
+    driver: local
+  kafka_data:
+    driver: local
+  clickhouse_data:
+    driver: local
+  clickhouse_logs:
+    driver: local
+
+# ============================================
+# Networks
+# ============================================
+networks:
+  nova-network:
+    driver: bridge

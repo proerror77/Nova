@@ -1,0 +1,61 @@
+name: Deploy
+
+on:
+  push:
+    branches: [ main, master ]
+    tags: [ 'v*' ]
+  workflow_run:
+    workflows: ["Build & Push Docker"]
+    types: [completed]
+    branches: [main, master]
+
+jobs:
+  deploy:
+    if: github.event.workflow_run.conclusion == 'success' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Extract version
+      id: version
+      run: |
+        if [[ ${{ github.ref }} == refs/tags/* ]]; then
+          VERSION=${GITHUB_REF#refs/tags/}
+        else
+          VERSION=$(git rev-parse --short HEAD)
+        fi
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "image=ghcr.io/${{ github.repository }}/nova-user-service:$VERSION" >> $GITHUB_OUTPUT
+
+    - name: Deploy to production
+      env:
+        DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
+        DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+        DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+        IMAGE: ${{ steps.version.outputs.image }}
+        VERSION: ${{ steps.version.outputs.version }}
+      run: |
+        mkdir -p ~/.ssh
+        echo "$DEPLOY_KEY" > ~/.ssh/deploy_key
+        chmod 600 ~/.ssh/deploy_key
+        ssh-keyscan -H $DEPLOY_HOST >> ~/.ssh/known_hosts
+        
+        # Deploy logic - customize based on your deployment target
+        ssh -i ~/.ssh/deploy_key $DEPLOY_USER@$DEPLOY_HOST << EOF
+          cd /app/nova
+          docker pull $IMAGE
+          docker-compose -f docker-compose.yml up -d nova-user-service
+          echo "Deployed version: $VERSION"
+        EOF
+      continue-on-error: true
+
+    - name: Notify deployment status
+      if: always()
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const status = '${{ job.status }}';
+          const message = `Deployment ${status}: Version ${{ steps.version.outputs.version }}`;
+          console.log(message);
