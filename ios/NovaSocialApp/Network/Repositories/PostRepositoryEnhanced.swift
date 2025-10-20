@@ -52,7 +52,7 @@ final class PostRepositoryEnhanced {
         )
 
         let endpoint = APIEndpoint(
-            path: "/posts",
+            path: "/api/v1/posts",
             method: .post,
             body: request
         )
@@ -85,7 +85,7 @@ final class PostRepositoryEnhanced {
 
         // 2. 缓存未命中，从服务器获取
         let endpoint = APIEndpoint(
-            path: "/posts/\(id.uuidString)",
+            path: "/api/v1/posts/\(id.uuidString)",
             method: .get
         )
 
@@ -101,7 +101,7 @@ final class PostRepositoryEnhanced {
     /// 删除帖子
     func deletePost(id: UUID) async throws {
         let endpoint = APIEndpoint(
-            path: "/posts/\(id.uuidString)",
+            path: "/api/v1/posts/\(id.uuidString)",
             method: .delete
         )
 
@@ -135,7 +135,7 @@ final class PostRepositoryEnhanced {
 
             // 2. 调用 API
             let endpoint = APIEndpoint(
-                path: "/posts/\(id.uuidString)/like",
+                path: "/api/v1/posts/\(id.uuidString)/like",
                 method: .post
             )
 
@@ -193,7 +193,7 @@ final class PostRepositoryEnhanced {
 
             // 2. 调用 API
             let endpoint = APIEndpoint(
-                path: "/posts/\(id.uuidString)/like",
+                path: "/api/v1/posts/\(id.uuidString)/like",
                 method: .delete
             )
 
@@ -266,7 +266,7 @@ final class PostRepositoryEnhanced {
         }
 
         let endpoint = APIEndpoint(
-            path: "/posts/\(postId.uuidString)/comments",
+            path: "/api/v1/posts/\(postId.uuidString)/comments",
             method: .get,
             queryItems: queryItems
         )
@@ -293,7 +293,7 @@ final class PostRepositoryEnhanced {
             let request = CreateCommentRequest(text: text)
 
             let endpoint = APIEndpoint(
-                path: "/posts/\(postId.uuidString)/comments",
+                path: "/api/v1/posts/\(postId.uuidString)/comments",
                 method: .post,
                 body: request
             )
@@ -330,7 +330,7 @@ final class PostRepositoryEnhanced {
         let request = UploadURLRequest(contentType: contentType)
 
         let endpoint = APIEndpoint(
-            path: "/posts/upload-url",
+            path: "/api/v1/posts/upload-url",
             method: .post,
             body: request
         )
@@ -361,7 +361,7 @@ final class PostRepositoryEnhanced {
     /// 后台同步 Post
     private func syncPostInBackground(id: UUID) async throws {
         let endpoint = APIEndpoint(
-            path: "/posts/\(id.uuidString)",
+            path: "/api/v1/posts/\(id.uuidString)",
             method: .get
         )
 
@@ -381,7 +381,7 @@ final class PostRepositoryEnhanced {
         ]
 
         let endpoint = APIEndpoint(
-            path: "/posts/\(postId.uuidString)/comments",
+            path: "/api/v1/posts/\(postId.uuidString)/comments",
             method: .get,
             queryItems: queryItems
         )

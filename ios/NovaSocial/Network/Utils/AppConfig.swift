@@ -18,7 +18,7 @@ enum Environment {
     var baseURL: URL {
         switch self {
         case .development:
-            return URL(string: "http://localhost:8080")!
+            return URL(string: "http://localhost:3000")!
         case .staging:
             return URL(string: "https://api-staging.nova.social")!
         case .production:

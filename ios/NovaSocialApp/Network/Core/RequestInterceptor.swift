@@ -131,7 +131,7 @@ actor RequestInterceptor {
         Logger.log("🔄 Refreshing access token...", level: .info)
 
         let endpoint = APIEndpoint(
-            path: "/auth/refresh",
+            path: "/api/v1/auth/refresh",
             method: .post,
             body: ["refresh_token": refreshToken]
         )
