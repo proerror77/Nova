@@ -1,0 +1,235 @@
+# Phase 7B Feature 3: Video Live Streaming Infrastructure
+# This extends the main docker-compose.yml with streaming-specific services
+# Usage: docker-compose -f docker-compose.yml -f backend/docker-compose.streaming.yml up
+
+version: '3.9'
+
+services:
+  # ===========================================================================
+  # Nginx-RTMP Server (RTMP Ingestion + HLS Transcoding)
+  # ===========================================================================
+  nginx-rtmp:
+    image: tiangolo/nginx-rtmp:latest
+    container_name: nova-nginx-rtmp
+    restart: unless-stopped
+    profiles:
+      - streaming
+    ports:
+      - "1935:1935"  # RTMP ingestion port (OBS connects here)
+      - "8088:8080"  # HTTP stats page (http://localhost:8088/stat)
+    volumes:
+      # Configuration
+      - ./backend/nginx/rtmp.conf:/etc/nginx/nginx.conf:ro
+
+      # HLS output directory (shared with hls-origin)
+      - hls_data:/tmp/hls
+
+      # Optional: Recording storage (if auto-recording enabled)
+      - recordings:/mnt/recordings
+
+      # Optional: VOD storage (for playback of old streams)
+      - vod_data:/mnt/vod
+    environment:
+      # Webhook URLs (called by Nginx-RTMP on events)
+      - RTMP_AUTH_URL=http://user-service:8080/api/v1/streams/auth
+      - RTMP_DONE_URL=http://user-service:8080/api/v1/streams/done
+    networks:
+      - nova-network
+    depends_on:
+      - user-service
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/stat"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    labels:
+      - "com.nova.service=streaming"
+      - "com.nova.component=rtmp-ingestion"
+
+  # ===========================================================================
+  # HLS Origin Server (Serves HLS Segments via HTTP)
+  # ===========================================================================
+  hls-origin:
+    image: nginx:1.25-alpine
+    container_name: nova-hls-origin
+    restart: unless-stopped
+    profiles:
+      - streaming
+    ports:
+      - "8089:80"  # HLS origin (http://localhost:8089/hls/{stream_id}/playlist.m3u8)
+    volumes:
+      # HLS segments (shared with nginx-rtmp)
+      - hls_data:/usr/share/nginx/html/hls:ro
+
+      # Nginx configuration (CORS headers for cross-origin playback)
+      - ./backend/nginx/hls-origin.conf:/etc/nginx/conf.d/default.conf:ro
+    networks:
+      - nova-network
+    depends_on:
+      - nginx-rtmp
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    labels:
+      - "com.nova.service=streaming"
+      - "com.nova.component=hls-origin"
+
+  # ===========================================================================
+  # Stream Monitor (Health Checks for Active Streams)
+  # ===========================================================================
+  # Optional: Monitors stream health (bitrate, fps, connection status)
+  # Polls Nginx /stat endpoint every 10 seconds
+  # Updates PostgreSQL stream_metadata table
+  stream-monitor:
+    image: ${STREAM_MONITOR_IMAGE:-stream-monitor:latest}
+    container_name: nova-stream-monitor
+    restart: unless-stopped
+    profiles:
+      - streaming
+    deploy:
+      restart_policy:
+        condition: on-failure
+    environment:
+      # Database
+      - DATABASE_URL=${DATABASE_URL:-postgresql://postgres:postgres@postgres:5432/nova_auth}
+
+      # Redis
+      - REDIS_URL=${REDIS_URL:-redis://:redis123@redis:6379/0}
+
+      # Nginx-RTMP stats endpoint
+      - RTMP_STAT_URL=http://nginx-rtmp:8080/stat
+
+      # Polling interval
+      - MONITOR_INTERVAL_SECS=10
+
+      # Logging
+      - RUST_LOG=info
+    networks:
+      - nova-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      nginx-rtmp:
+        condition: service_started
+    labels:
+      - "com.nova.service=streaming"
+      - "com.nova.component=stream-monitor"
+    healthcheck:
+      # Verify it can reach the RTMP stats endpoint specified via env
+      test: ["CMD-SHELL", "wget -q -O- \"$RTMP_STAT_URL\" >/dev/null 2>&1 || curl -fsS \"$RTMP_STAT_URL\" >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # ===========================================================================
+  # VOD Processor (Converts Live Streams to VOD)
+  # ===========================================================================
+  # Background worker that consumes Kafka 'stream.ended' events
+  # Runs FFmpeg to concatenate HLS segments -> MP4
+  vod-processor:
+    image: ${VOD_PROCESSOR_IMAGE:-vod-processor:latest}
+    container_name: nova-vod-processor
+    restart: unless-stopped
+    profiles:
+      - streaming
+    volumes:
+      # HLS segments (input)
+      - hls_data:/tmp/hls:ro
+
+      # VOD output (temporary, before S3 upload)
+      - vod_data:/tmp/vod
+
+      # Recordings (if auto-record enabled)
+      - recordings:/mnt/recordings:ro
+    environment:
+      # Database
+      - DATABASE_URL=${DATABASE_URL:-postgresql://postgres:postgres@postgres:5432/nova_auth}
+
+      # Kafka
+      - KAFKA_BROKERS=${KAFKA_BROKERS:-kafka:9092}
+      - KAFKA_CONSUMER_GROUP=vod-processor
+
+      # S3 (for VOD upload)
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_REGION=${AWS_REGION:-us-east-1}
+      - S3_BUCKET_VOD=${S3_BUCKET_VOD:-nova-vod}
+
+      # Processing settings
+      - FFMPEG_THREADS=4
+      - MAX_CONCURRENT_JOBS=2
+
+      # Logging
+      - RUST_LOG=info
+    networks:
+      - nova-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+    labels:
+      - "com.nova.service=streaming"
+      - "com.nova.component=vod-processor"
+    # Resource limits (FFmpeg is CPU-intensive)
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 4G
+        reservations:
+          cpus: '2'
+          memory: 2G
+    healthcheck:
+      # Minimal external dependency check to ensure environment ready
+      test: ["CMD-SHELL", "wget -q --tries=1 --spider http://nginx-rtmp:8080/stat || curl -fsS http://nginx-rtmp:8080/stat >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+# =============================================================================
+# Volumes
+# =============================================================================
+volumes:
+  # HLS segments (shared between nginx-rtmp and hls-origin)
+  hls_data:
+    driver: local
+    driver_opts:
+      type: tmpfs  # In-memory filesystem for fast I/O
+      device: tmpfs
+      o: size=10G  # 10GB limit (auto-cleanup old segments)
+
+  # Stream recordings (persistent storage)
+  recordings:
+    driver: local
+
+  # VOD files (temporary, before S3 upload)
+  vod_data:
+    driver: local
+
+# =============================================================================
+# Networks
+# =============================================================================
+# Reuse network from main docker-compose.yml
+networks:
+  nova-network:
+    driver: bridge
+
+# =============================================================================
+# Configuration Files Required
+# =============================================================================
+# The following configuration files must be created:
+#
+# 1. backend/nginx/rtmp.conf
+#    - Nginx-RTMP module configuration
+#    - Defines RTMP application, HLS output, webhooks
+#
+# 2. backend/nginx/hls-origin.conf
+#    - Nginx HTTP server for serving HLS segments
+#    - Includes CORS headers for cross-origin playback
+# Stream monitor / VOD processor 需要預先建置映像檔，並透過
+# STREAM_MONITOR_IMAGE / VOD_PROCESSOR_IMAGE 環境變數指定。
