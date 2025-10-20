@@ -10,9 +10,10 @@ rust-version.workspace = true
 name = "user-service"
 path = "src/main.rs"
 
-[[bin]]
-name = "job_worker"
-path = "src/bin/job_worker.rs"
+# [[bin]]
+# name = "job_worker"
+# path = "src/bin/job_worker.rs"
+# TODO: Uncomment when job_worker.rs is implemented
 
 [lib]
 name = "user_service"
