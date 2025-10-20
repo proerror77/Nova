@@ -1,5 +1,5 @@
 pub mod job_config;
-// pub mod video_config;
+pub mod video_config;
 
 use serde::Deserialize;
 use std::env;
