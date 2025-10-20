@@ -3,6 +3,7 @@ pub mod video_config;
 
 use serde::Deserialize;
 use std::env;
+use base64::{Engine as _, engine::general_purpose};
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Config {
@@ -239,10 +240,22 @@ impl Config {
                 .unwrap_or_else(|_| default_jwt_refresh_ttl().to_string())
                 .parse()
                 .unwrap_or(default_jwt_refresh_ttl()),
-            private_key_pem: env::var("JWT_PRIVATE_KEY_PEM")
-                .expect("JWT_PRIVATE_KEY_PEM must be set (base64-encoded PEM content)"),
-            public_key_pem: env::var("JWT_PUBLIC_KEY_PEM")
-                .expect("JWT_PUBLIC_KEY_PEM must be set (base64-encoded PEM content)"),
+            private_key_pem: {
+                let base64_encoded = env::var("JWT_PRIVATE_KEY_PEM")
+                    .expect("JWT_PRIVATE_KEY_PEM must be set (base64-encoded PEM content)");
+                let decoded = general_purpose::STANDARD.decode(&base64_encoded)
+                    .expect("Failed to decode JWT_PRIVATE_KEY_PEM from base64");
+                String::from_utf8(decoded)
+                    .expect("JWT_PRIVATE_KEY_PEM is not valid UTF-8")
+            },
+            public_key_pem: {
+                let base64_encoded = env::var("JWT_PUBLIC_KEY_PEM")
+                    .expect("JWT_PUBLIC_KEY_PEM must be set (base64-encoded PEM content)");
+                let decoded = general_purpose::STANDARD.decode(&base64_encoded)
+                    .expect("Failed to decode JWT_PUBLIC_KEY_PEM from base64");
+                String::from_utf8(decoded)
+                    .expect("JWT_PUBLIC_KEY_PEM is not valid UTF-8")
+            },
         };
 
         let email = EmailConfig {
