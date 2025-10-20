@@ -171,6 +171,21 @@ struct FeedResponse: Codable {
     enum CodingKeys: String, CodingKey {
         case posts
         case nextCursor = "next_cursor"
+        case cursor // backend alternative key
+    }
+
+    init(posts: [Post], nextCursor: String?) {
+        self.posts = posts
+        self.nextCursor = nextCursor
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let posts = try container.decode([Post].self, forKey: .posts)
+        // Prefer next_cursor, fallback to cursor
+        let nextCursor = try container.decodeIfPresent(String.self, forKey: .nextCursor)
+            ?? container.decodeIfPresent(String.self, forKey: .cursor)
+        self.init(posts: posts, nextCursor: nextCursor)
     }
 }
 
