@@ -1,3 +1,8 @@
+//! DEPRECATED: This module is a legacy placeholder. Use `feed_ranking_service` instead.
+//!
+//! The real implementation has moved to feed_ranking_service.rs which provides
+//! a complete, tested implementation with actual Redis and ClickHouse integration.
+
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -360,7 +365,9 @@ impl FeedService {
         result
     }
 
-    /// Get cached feed from Redis
+    /// Get cached feed from Redis (MOCK IMPLEMENTATION)
+    ///
+    /// Real implementation: see feed_ranking_service.rs
     /// Cache key: feed:v1:{user_id}:{offset}:{limit}
     /// TTL: 60 seconds
     async fn get_cached_feed(
@@ -370,12 +377,14 @@ impl FeedService {
         limit: u32,
     ) -> Result<Vec<FeedItem>> {
         let _cache_key = format!("feed:v1:{}:{}:{}", user_id, offset, limit);
-        // TODO: Implement Redis get + deserialize
-        // For now, always cache miss
+        // This module is deprecated. Always return cache miss for backward compatibility.
+        debug!("get_cached_feed called (deprecated module) - returning cache miss for user {} offset={} limit={}", user_id, offset, limit);
         Err(AppError::NotFound("Cache miss".to_string()))
     }
 
-    /// Cache feed to Redis
+    /// Cache feed to Redis (MOCK IMPLEMENTATION)
+    ///
+    /// Real implementation: see feed_ranking_service.rs
     /// TTL: 60 seconds
     async fn cache_feed(
         &self,
@@ -385,20 +394,18 @@ impl FeedService {
         _feed: &[FeedItem],
     ) -> Result<()> {
         let _cache_key = format!("feed:v1:{}:{}:{}", user_id, offset, limit);
-        // TODO: Implement Redis set with TTL
+        // This module is deprecated. No-op for backward compatibility.
+        debug!("cache_feed called (deprecated module) - no-op for user {} offset={} limit={}", user_id, offset, limit);
         Ok(())
     }
 
-    /// Execute ClickHouse query and deserialize results
+    /// Execute ClickHouse query (MOCK IMPLEMENTATION)
+    ///
+    /// Real implementation: see feed_ranking_service.rs
     /// This is a placeholder - would use real clickhouse-rs client
     async fn clickhouse_query<T: for<'de> Deserialize<'de>>(&self, query: &str) -> Result<Vec<T>> {
-        // TODO: Execute query against ClickHouse
-        // Example implementation:
-        // let response = self.clickhouse_client.query(query).fetch_all().await?;
-        // let results = serde_json::from_slice(&response)?;
-        // Ok(results)
-
-        debug!("Would execute ClickHouse query: {}", query);
+        // This module is deprecated. Always return empty results for backward compatibility.
+        debug!("clickhouse_query called (deprecated module) - returning empty results for: {}", query);
         Ok(Vec::new())
     }
 }

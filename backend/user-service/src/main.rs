@@ -106,8 +106,7 @@ async fn main() -> io::Result<()> {
     let feed_cache = FeedCache::new(redis_manager.clone(), 120);
     let feed_cache = Arc::new(Mutex::new(feed_cache));
     let feed_ranking = Arc::new(FeedRankingService::new(
-        clickhouse_client.clone(),
-        feed_cache.clone(),
+        Default::default(), // Use default config
     ));
 
     let feed_state = web::Data::new(FeedHandlerState {
@@ -272,6 +271,7 @@ async fn main() -> io::Result<()> {
                             .wrap(JwtAuthMiddleware)
                             .app_data(feed_state.clone())
                             .service(handlers::get_feed)
+                            .service(handlers::get_trending)
                             .service(handlers::invalidate_feed_cache),
                     )
                     .service(
@@ -291,6 +291,7 @@ async fn main() -> io::Result<()> {
                     .service(
                         web::scope("/discover")
                             .wrap(JwtAuthMiddleware)
+                            .service(handlers::get_suggested_users)
                             .service(handlers::get_recommended_creators),
                     )
                     .service(

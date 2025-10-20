@@ -172,6 +172,100 @@ pub async fn invalidate_feed_cache(
     })))
 }
 
+/// Trending posts response
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TrendingResponse {
+    pub posts: Vec<String>, // Post IDs (UUIDs as strings)
+    pub window: String,     // Time window: "1h", "24h", "7d"
+    pub count: usize,
+}
+
+/// GET /api/v1/feed/trending
+///
+/// Get trending posts for the authenticated user
+///
+/// Query Parameters:
+/// - window: "1h" (hourly) | "24h" (daily) | "7d" (weekly) - default: "24h"
+///
+/// Response:
+/// ```json
+/// {
+///   "posts": ["uuid1", "uuid2", ...],
+///   "window": "24h",
+///   "count": 50
+/// }
+/// ```
+#[get("/trending")]
+pub async fn get_trending(
+    query: web::Query<std::collections::HashMap<String, String>>,
+    redis_manager: web::Data<redis::aio::ConnectionManager>,
+    http_req: HttpRequest,
+) -> Result<HttpResponse> {
+    // Verify user is authenticated
+    let _user_id = http_req
+        .extensions()
+        .get::<UserId>()
+        .map(|u| u.0)
+        .ok_or_else(|| AppError::Authentication("Missing user context".into()))?;
+
+    // Determine time window (default: 24h)
+    let window = query.get("window").map(|s| s.as_str()).unwrap_or("24h");
+
+    let valid_windows = ["1h", "24h", "7d"];
+    if !valid_windows.contains(&window) {
+        return Err(AppError::BadRequest(
+            "Invalid window parameter. Must be '1h', '24h', or '7d'".to_string(),
+        ));
+    }
+
+    debug!("Trending request: window={}", window);
+
+    // Build Redis key based on window
+    let redis_key = format!("nova:cache:trending:{}", window);
+
+    // Get trending posts from Redis
+    let mut conn = redis_manager.get_connection().await.map_err(|e| {
+        error!("Redis connection failed: {}", e);
+        AppError::InternalServerError("Failed to connect to cache".to_string())
+    })?;
+
+    // Try to get from cache
+    let cached: Option<String> = redis::cmd("GET")
+        .arg(&redis_key)
+        .query_async(&mut conn)
+        .await
+        .map_err(|e| {
+            error!("Failed to query Redis for trending: {}", e);
+            AppError::InternalServerError("Cache lookup failed".to_string())
+        })?;
+
+    let posts = if let Some(json_str) = cached {
+        // Parse cached JSON array
+        serde_json::from_str::<Vec<String>>(&json_str).unwrap_or_else(|_| {
+            debug!("Failed to parse cached trending data, returning empty list");
+            Vec::new()
+        })
+    } else {
+        debug!("No cached trending data found for window: {}", window);
+        Vec::new()
+    };
+
+    let count = posts.len();
+
+    debug!(
+        "Trending response: window={} count={}",
+        window, count
+    );
+
+    let response = TrendingResponse {
+        posts,
+        window: window.to_string(),
+        count,
+    };
+
+    Ok(HttpResponse::Ok().json(response))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

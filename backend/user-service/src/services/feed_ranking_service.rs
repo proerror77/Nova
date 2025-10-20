@@ -3,10 +3,7 @@
 /// Orchestrates personalized video feed generation with multi-level caching,
 /// ranking signal aggregation, and engagement tracking. Implements cache-first
 /// architecture with graceful degradation.
-<<<<<<< HEAD
-=======
 
->>>>>>> origin/007-personalized-feed-ranking
 use crate::error::{AppError, Result};
 use crate::models::video::*;
 use chrono::{DateTime, Utc};
@@ -175,26 +172,11 @@ impl FeedRankingService {
         info!("Cache miss for user feed: {}, generating feed", user_id);
 
         // Step 2: Query ranking signals from ClickHouse
-<<<<<<< HEAD
-        debug!(
-            "Querying ranking signals from ClickHouse for user: {}",
-            user_id
-        );
-        let ranking_signals = self.query_ranking_signals(user_id).await?;
-
-        // Step 3: Rank videos using multi-signal algorithm
-        debug!(
-            "Ranking {} videos for user: {}",
-            ranking_signals.len(),
-            user_id
-        );
-=======
         debug!("Querying ranking signals from ClickHouse for user: {}", user_id);
         let ranking_signals = self.query_ranking_signals(user_id).await?;
 
         // Step 3: Rank videos using multi-signal algorithm
         debug!("Ranking {} videos for user: {}", ranking_signals.len(), user_id);
->>>>>>> origin/007-personalized-feed-ranking
         let mut ranked_videos = ranking_signals;
         ranked_videos.sort_by(|a, b| {
             b.ranking_score
@@ -203,14 +185,7 @@ impl FeedRankingService {
         });
 
         // Step 4: Apply deduplication (last 30 days)
-<<<<<<< HEAD
-        debug!(
-            "Applying deduplication for user: {} (window: {} days)",
-            user_id, self.config.dedup_window_days
-        );
-=======
         debug!("Applying deduplication for user: {} (window: {} days)", user_id, self.config.dedup_window_days);
->>>>>>> origin/007-personalized-feed-ranking
         let deduped = self
             .dedup_videos(&ranked_videos, user_id, self.config.dedup_window_days)
             .await?;
@@ -229,14 +204,7 @@ impl FeedRankingService {
         };
 
         // Step 6: Cache the result
-<<<<<<< HEAD
-        debug!(
-            "Caching feed result for user: {}, TTL: {} hours",
-            user_id, self.config.cache_ttl_hours
-        );
-=======
         debug!("Caching feed result for user: {}, TTL: {} hours", user_id, self.config.cache_ttl_hours);
->>>>>>> origin/007-personalized-feed-ranking
         self.cache_feed(&cache_key, &response).await?;
 
         let hit_rate = self
@@ -280,12 +248,7 @@ impl FeedRankingService {
             "Queueing engagement event to Kafka: user={}, video={}",
             user_id, video_id
         );
-<<<<<<< HEAD
-        self.queue_engagement_event(user_id, video_id, event_type)
-            .await?;
-=======
         self.queue_engagement_event(user_id, video_id, event_type).await?;
->>>>>>> origin/007-personalized-feed-ranking
 
         // Step 3: Invalidate user's feed cache to force refresh
         let cache_key = format!("feed:u:{}", user_id);
@@ -473,13 +436,9 @@ mod tests {
         let service = FeedRankingService::new(config);
         let user_id = Uuid::new_v4();
 
-<<<<<<< HEAD
-        let result = service.get_personalized_feed(user_id, None, Some(40)).await;
-=======
         let result = service
             .get_personalized_feed(user_id, None, Some(40))
             .await;
->>>>>>> origin/007-personalized-feed-ranking
 
         assert!(result.is_ok());
         let feed = result.unwrap();
