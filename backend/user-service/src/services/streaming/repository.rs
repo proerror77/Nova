@@ -36,8 +36,7 @@ impl StreamRepository {
         stream_key: String,
         rtmp_url: String,
     ) -> Result<StreamRow> {
-        let row = sqlx::query_as!(
-            StreamRow,
+        let row = sqlx::query_as::<_, StreamRow>(
             r#"
             INSERT INTO live_streams (
                 creator_id, title, description, category, stream_key, rtmp_url, status
@@ -51,13 +50,13 @@ impl StreamRepository {
                 current_viewers, peak_viewers, total_unique_viewers, total_messages,
                 auto_archive, created_at, started_at, ended_at
             "#,
-            creator_id,
-            title,
-            description,
-            category as Option<StreamCategory>,
-            stream_key,
-            rtmp_url
         )
+        .bind(creator_id)
+        .bind(title)
+        .bind(description)
+        .bind(category)
+        .bind(stream_key)
+        .bind(rtmp_url)
         .fetch_one(&self.pool)
         .await
         .context("Failed to insert stream")?;
@@ -71,8 +70,7 @@ impl StreamRepository {
 
     /// Get stream by ID
     pub async fn get_stream_by_id(&self, stream_id: Uuid) -> Result<Option<StreamRow>> {
-        let row = sqlx::query_as!(
-            StreamRow,
+        let row = sqlx::query_as::<_, StreamRow>(
             r#"
             SELECT
                 id, creator_id, stream_key, title, description,
@@ -84,8 +82,8 @@ impl StreamRepository {
             FROM live_streams
             WHERE id = $1
             "#,
-            stream_id
         )
+        .bind(stream_id)
         .fetch_optional(&self.pool)
         .await
         .context("Failed to fetch stream by ID")?;
@@ -95,8 +93,7 @@ impl StreamRepository {
 
     /// Get stream by stream key (for RTMP auth)
     pub async fn get_stream_by_key(&self, stream_key: &str) -> Result<Option<StreamRow>> {
-        let row = sqlx::query_as!(
-            StreamRow,
+        let row = sqlx::query_as::<_, StreamRow>(
             r#"
             SELECT
                 id, creator_id, stream_key, title, description,
@@ -108,8 +105,8 @@ impl StreamRepository {
             FROM live_streams
             WHERE stream_key = $1
             "#,
-            stream_key
         )
+        .bind(stream_key)
         .fetch_optional(&self.pool)
         .await
         .context("Failed to fetch stream by key")?;
@@ -119,15 +116,14 @@ impl StreamRepository {
 
     /// Get creator information
     pub async fn get_creator_info(&self, user_id: Uuid) -> Result<Option<CreatorInfo>> {
-        let row = sqlx::query_as!(
-            CreatorInfo,
+        let row = sqlx::query_as::<_, CreatorInfo>(
             r#"
             SELECT id, username, avatar_url
             FROM users
             WHERE id = $1
             "#,
-            user_id
         )
+        .bind(user_id)
         .fetch_optional(&self.pool)
         .await
         .context("Failed to fetch creator info")?;
@@ -143,8 +139,7 @@ impl StreamRepository {
         offset: i64,
     ) -> Result<Vec<StreamRow>> {
         let rows = if let Some(cat) = category {
-            sqlx::query_as!(
-                StreamRow,
+            sqlx::query_as::<_, StreamRow>(
                 r#"
                 SELECT
                     id, creator_id, stream_key, title, description,
@@ -158,15 +153,14 @@ impl StreamRepository {
                 ORDER BY current_viewers DESC, started_at DESC
                 LIMIT $2 OFFSET $3
                 "#,
-                cat as StreamCategory,
-                limit,
-                offset
             )
+            .bind(cat)
+            .bind(limit)
+            .bind(offset)
             .fetch_all(&self.pool)
             .await?
         } else {
-            sqlx::query_as!(
-                StreamRow,
+            sqlx::query_as::<_, StreamRow>(
                 r#"
                 SELECT
                     id, creator_id, stream_key, title, description,
@@ -180,9 +174,9 @@ impl StreamRepository {
                 ORDER BY current_viewers DESC, started_at DESC
                 LIMIT $1 OFFSET $2
                 "#,
-                limit,
-                offset
             )
+            .bind(limit)
+            .bind(offset)
             .fetch_all(&self.pool)
             .await?
         };
@@ -193,23 +187,23 @@ impl StreamRepository {
     /// Count live streams
     pub async fn count_live_streams(&self, category: Option<StreamCategory>) -> Result<i64> {
         let count = if let Some(cat) = category {
-            sqlx::query_scalar!(
+            sqlx::query_scalar::<_, i64>(
                 r#"
-                SELECT COUNT(*) as "count!"
+                SELECT COUNT(*) as "count"
                 FROM live_streams
                 WHERE status = 'live' AND category = $1
                 "#,
-                cat as StreamCategory
             )
+            .bind(cat)
             .fetch_one(&self.pool)
             .await?
         } else {
-            sqlx::query_scalar!(
+            sqlx::query_scalar::<_, i64>(
                 r#"
-                SELECT COUNT(*) as "count!"
+                SELECT COUNT(*) as "count"
                 FROM live_streams
                 WHERE status = 'live'
-                "#
+                "#,
             )
             .fetch_one(&self.pool)
             .await?
@@ -224,15 +218,15 @@ impl StreamRepository {
 
     /// Update stream status to 'live' (when RTMP connects)
     pub async fn start_stream(&self, stream_id: Uuid, hls_url: String) -> Result<()> {
-        sqlx::query!(
+        sqlx::query(
             r#"
             UPDATE live_streams
             SET status = 'live', hls_url = $2, started_at = NOW()
             WHERE id = $1
             "#,
-            stream_id,
-            hls_url
         )
+        .bind(stream_id)
+        .bind(hls_url)
         .execute(&self.pool)
         .await
         .context("Failed to update stream status to live")?;
@@ -242,14 +236,14 @@ impl StreamRepository {
 
     /// Update stream status to 'ended' (when RTMP disconnects)
     pub async fn end_stream(&self, stream_id: Uuid) -> Result<()> {
-        sqlx::query!(
+        sqlx::query(
             r#"
             UPDATE live_streams
             SET status = 'ended', hls_url = NULL, ended_at = NOW()
             WHERE id = $1
             "#,
-            stream_id
         )
+        .bind(stream_id)
         .execute(&self.pool)
         .await
         .context("Failed to update stream status to ended")?;
@@ -264,16 +258,16 @@ impl StreamRepository {
         current_viewers: i32,
         peak_viewers: i32,
     ) -> Result<()> {
-        sqlx::query!(
+        sqlx::query(
             r#"
             UPDATE live_streams
             SET current_viewers = $2, peak_viewers = GREATEST(peak_viewers, $3)
             WHERE id = $1
             "#,
-            stream_id,
-            current_viewers,
-            peak_viewers
         )
+        .bind(stream_id)
+        .bind(current_viewers)
+        .bind(peak_viewers)
         .execute(&self.pool)
         .await
         .context("Failed to update viewer counts")?;
@@ -283,14 +277,14 @@ impl StreamRepository {
 
     /// Check if creator has an active stream
     pub async fn has_active_stream(&self, creator_id: Uuid) -> Result<bool> {
-        let count = sqlx::query_scalar!(
+        let count = sqlx::query_scalar::<_, i64>(
             r#"
-            SELECT COUNT(*) as "count!"
+            SELECT COUNT(*) as "count"
             FROM live_streams
             WHERE creator_id = $1 AND status IN ('preparing', 'live')
             "#,
-            creator_id
         )
+        .bind(creator_id)
         .fetch_one(&self.pool)
         .await?;
 
@@ -303,13 +297,13 @@ impl StreamRepository {
 
     /// Delete stream (creator only, requires authorization check in service layer)
     pub async fn delete_stream(&self, stream_id: Uuid) -> Result<()> {
-        sqlx::query!(
+        sqlx::query(
             r#"
             DELETE FROM live_streams
             WHERE id = $1
             "#,
-            stream_id
         )
+        .bind(stream_id)
         .execute(&self.pool)
         .await
         .context("Failed to delete stream")?;

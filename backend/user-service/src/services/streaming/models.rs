@@ -102,7 +102,7 @@ pub struct StreamDetails {
 }
 
 /// Creator information (embedded in stream details)
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, sqlx::FromRow)]
 pub struct CreatorInfo {
     pub id: Uuid,
     pub username: String,
