@@ -434,6 +434,9 @@ mod tests {
             max_parallel_jobs: 4,
             job_timeout_seconds: 7200,
             target_bitrates,
+            s3_processed_bucket: "nova-videos".to_string(),
+            s3_processed_prefix: "processed/".to_string(),
+            extract_thumbnails: true,
             thumbnail_dimensions: (320, 180),
         }
     }
