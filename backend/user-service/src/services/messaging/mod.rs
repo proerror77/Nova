@@ -29,7 +29,8 @@ pub mod websocket_handler;
 // Kafka event publishing for message lifecycle
 pub mod kafka_events_publisher;
 
-// TODO: Phase 3 (Future) - Implement these
+// Phase 4 (Future) - Group Messaging & Typing Indicators
+// See GitHub Issue #T217 for implementation roadmap
 // pub mod conversation_service; // Group messaging support
 // pub mod typing_indicators;    // Typing notification aggregation
 
