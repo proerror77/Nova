@@ -78,7 +78,7 @@ async fn test_feed_ranking_e2e() {
             assert!(posts.len() <= 20);
 
             // Verify all are valid UUIDs
-            for post_id in posts {
+            for post_id in &posts {
                 assert!(!post_id.to_string().is_empty());
             }
 
