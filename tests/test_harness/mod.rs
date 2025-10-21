@@ -58,7 +58,7 @@ impl TestEnvironment {
     pub async fn stop_clickhouse(&self) {
         eprintln!("Stopping ClickHouse container...");
         let _ = tokio::process::Command::new("docker")
-            .args(&["stop", "clickhouse"])
+            .args(["stop", "clickhouse"])
             .output()
             .await;
     }
@@ -66,7 +66,7 @@ impl TestEnvironment {
     pub async fn start_clickhouse(&self) {
         eprintln!("Starting ClickHouse container...");
         let _ = tokio::process::Command::new("docker")
-            .args(&["start", "clickhouse"])
+            .args(["start", "clickhouse"])
             .output()
             .await;
     }
@@ -98,14 +98,14 @@ impl KafkaProducer {
         use rdkafka::util::Timeout;
 
         let payload_str = serde_json::to_string(&payload)
-            .map_err(|e| format!("Failed to serialize payload: {}", e))?;
+            .map_err(|e| format!("Failed to serialize payload: {e}"))?;
 
         let record = FutureRecord::to(topic).payload(&payload_str).key("");
 
         self.producer
             .send(record, Timeout::After(Duration::from_secs(5)))
             .await
-            .map_err(|(err, _)| format!("Failed to send to Kafka: {}", err))?;
+            .map_err(|(err, _)| format!("Failed to send to Kafka: {err}"))?;
 
         Ok(())
     }
@@ -138,10 +138,10 @@ impl ClickHouseClient {
         let result: String = q
             .fetch_one()
             .await
-            .map_err(|e| format!("ClickHouse query failed: {}", e))?;
+            .map_err(|e| format!("ClickHouse query failed: {e}"))?;
 
         serde_json::from_str(&result)
-            .map_err(|e| format!("Failed to parse ClickHouse response: {}", e))
+            .map_err(|e| format!("Failed to parse ClickHouse response: {e}"))
     }
 
     pub async fn execute_batch(&self, queries: &[&str]) -> Result<(), String> {
@@ -150,7 +150,7 @@ impl ClickHouseClient {
                 .query(query)
                 .execute()
                 .await
-                .map_err(|e| format!("ClickHouse execute failed: {}", e))?;
+                .map_err(|e| format!("ClickHouse execute failed: {e}"))?;
         }
         Ok(())
     }
@@ -176,7 +176,7 @@ impl PostgresClient {
         sqlx::query(query)
             .execute(&self.pool)
             .await
-            .map_err(|e| format!("PostgreSQL execute failed: {}", e))?;
+            .map_err(|e| format!("PostgreSQL execute failed: {e}"))?;
 
         Ok(())
     }
@@ -199,7 +199,7 @@ impl RedisClient {
             .client
             .get_multiplexed_async_connection()
             .await
-            .map_err(|e| format!("Failed to get Redis connection: {}", e))?;
+            .map_err(|e| format!("Failed to get Redis connection: {e}"))?;
 
         redis::pipe()
             .cmd("SET")
@@ -210,7 +210,7 @@ impl RedisClient {
             .arg(ttl)
             .query_async(&mut conn)
             .await
-            .map_err(|e| format!("Failed to set Redis key: {}", e))
+            .map_err(|e| format!("Failed to set Redis key: {e}"))
     }
 
     pub async fn del(&self, key: &str) -> Result<(), String> {
@@ -218,13 +218,13 @@ impl RedisClient {
             .client
             .get_multiplexed_async_connection()
             .await
-            .map_err(|e| format!("Failed to get Redis connection: {}", e))?;
+            .map_err(|e| format!("Failed to get Redis connection: {e}"))?;
 
         redis::cmd("DEL")
             .arg(key)
             .query_async(&mut conn)
             .await
-            .map_err(|e| format!("Failed to delete Redis key: {}", e))
+            .map_err(|e| format!("Failed to delete Redis key: {e}"))
     }
 }
 
@@ -260,7 +260,7 @@ impl FeedApiClient {
             .query(&[("limit", limit)])
             .send()
             .await
-            .map_err(|e| format!("Feed API request failed: {}", e))?;
+            .map_err(|e| format!("Feed API request failed: {e}"))?;
 
         if !response.status().is_success() {
             return Err(format!("Feed API returned error: {}", response.status()));
@@ -269,6 +269,6 @@ impl FeedApiClient {
         response
             .json::<Vec<FeedPost>>()
             .await
-            .map_err(|e| format!("Failed to parse feed response: {}", e))
+            .map_err(|e| format!("Failed to parse feed response: {e}"))
     }
 }

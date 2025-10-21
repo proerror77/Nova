@@ -63,7 +63,7 @@ async fn test_feed_api_performance_baseline() {
         durations.push(start.elapsed());
 
         if i % 100 == 0 {
-            println!("  Progress: {}/1000", i);
+            println!("  Progress: {i}/1000");
         }
     }
 
@@ -73,7 +73,7 @@ async fn test_feed_api_performance_baseline() {
     let p95 = durations[950];
     let p99 = durations[990];
 
-    println!("Results: P50={:?}, P95={:?}, P99={:?}", p50, p95, p99);
+    println!("Results: P50={p50:?}, P95={p95:?}, P99={p99:?}");
 
     // Baseline and threshold
     let baseline_p95 = Duration::from_millis(300);
@@ -82,10 +82,7 @@ async fn test_feed_api_performance_baseline() {
     // Assert: P95 should not regress by > 50%
     assert!(
         p95 < threshold_p95,
-        "Performance regression detected: P95={:?} exceeds threshold {:?} (baseline={:?})",
-        p95,
-        threshold_p95,
-        baseline_p95
+        "Performance regression detected: P95={p95:?} exceeds threshold {threshold_p95:?} (baseline={baseline_p95:?})"
     );
 
     env.cleanup().await;
@@ -106,8 +103,7 @@ async fn test_events_throughput_sustained() {
     let target_rate = 1000; // events/sec
 
     println!(
-        "Sending events at {} events/sec for {:?}...",
-        target_rate, test_duration
+        "Sending events at {target_rate} events/sec for {test_duration:?}..."
     );
 
     // Send events in batches
@@ -116,7 +112,7 @@ async fn test_events_throughput_sustained() {
         let batch_start = Instant::now();
 
         for i in 0..100 {
-            let event_id = format!("evt-throughput-{:06}", sent_count);
+            let event_id = format!("evt-throughput-{sent_count:06}");
             let event = json!({
                 "event_id": event_id,
                 "event_type": "like",
@@ -167,7 +163,7 @@ async fn test_events_throughput_sustained() {
         .as_u64()
         .expect("Failed to extract count from ClickHouse response");
 
-    println!("Received: {} events in ClickHouse", received_count);
+    println!("Received: {received_count} events in ClickHouse");
 
     // Calculate loss rate
     let loss_rate = (sent_count - received_count as usize) as f64 / sent_count as f64 * 100.0;
@@ -175,10 +171,7 @@ async fn test_events_throughput_sustained() {
     // Assert: No events should be lost (allow 0.1% tolerance for Kafka/CH eventual consistency)
     assert!(
         loss_rate < 0.1,
-        "Event loss detected: sent={}, received={}, loss={:.2}%",
-        sent_count,
-        received_count,
-        loss_rate
+        "Event loss detected: sent={sent_count}, received={received_count}, loss={loss_rate:.2}%"
     );
 
     env.cleanup().await;
@@ -197,8 +190,7 @@ async fn test_feed_api_under_concurrent_load() {
     let requests_per_user = 50;
 
     println!(
-        "Starting concurrent load test: {} users × {} requests",
-        num_users, requests_per_user
+        "Starting concurrent load test: {num_users} users × {requests_per_user} requests"
     );
 
     let start = Instant::now();
@@ -211,7 +203,7 @@ async fn test_feed_api_under_concurrent_load() {
 
             for _ in 0..requests_per_user {
                 let req_start = Instant::now();
-                let _ = api_clone.get_feed(&format!("user-{}", user_id), 50).await;
+                let _ = api_clone.get_feed(&format!("user-{user_id}"), 50).await;
                 durations.push(req_start.elapsed());
             }
 
@@ -231,13 +223,12 @@ async fn test_feed_api_under_concurrent_load() {
     all_durations.sort();
     let p95 = all_durations[all_durations.len() * 95 / 100];
 
-    println!("Concurrent load test completed in {:?}", total_elapsed);
+    println!("Concurrent load test completed in {total_elapsed:?}");
     println!("Total requests: {}, P95={:?}", all_durations.len(), p95);
 
     assert!(
         p95 < Duration::from_millis(500),
-        "P95 under concurrent load should be < 500ms: got {:?}",
-        p95
+        "P95 under concurrent load should be < 500ms: got {p95:?}"
     );
 
     env.cleanup().await;

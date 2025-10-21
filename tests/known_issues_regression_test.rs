@@ -54,8 +54,7 @@ async fn test_dedup_prevents_duplicate_events() {
 
     assert_eq!(
         count, 1,
-        "Deduplication should prevent duplicates: got {} records for event_id={}",
-        count, event_id
+        "Deduplication should prevent duplicates: got {count} records for event_id={event_id}"
     );
 
     env.cleanup().await;
@@ -117,11 +116,11 @@ async fn test_author_saturation_rule() {
 
     // Setup: Create 3 high-score posts from author_a, 2 from author_b
     ch.execute_batch(&[
-        &format!("INSERT INTO feed_materialized (user_id, post_id, author_id, score, rank) VALUES ('{}', 'post-a1', '{}', 500.0, 1)", user_id, author_a),
-        &format!("INSERT INTO feed_materialized (user_id, post_id, author_id, score, rank) VALUES ('{}', 'post-a2', '{}', 480.0, 2)", user_id, author_a),
-        &format!("INSERT INTO feed_materialized (user_id, post_id, author_id, score, rank) VALUES ('{}', 'post-a3', '{}', 460.0, 3)", user_id, author_a),
-        &format!("INSERT INTO feed_materialized (user_id, post_id, author_id, score, rank) VALUES ('{}', 'post-b1', '{}', 450.0, 4)", user_id, author_b),
-        &format!("INSERT INTO feed_materialized (user_id, post_id, author_id, score, rank) VALUES ('{}', 'post-b2', '{}', 440.0, 5)", user_id, author_b),
+        &format!("INSERT INTO feed_materialized (user_id, post_id, author_id, score, rank) VALUES ('{user_id}', 'post-a1', '{author_a}', 500.0, 1)"),
+        &format!("INSERT INTO feed_materialized (user_id, post_id, author_id, score, rank) VALUES ('{user_id}', 'post-a2', '{author_a}', 480.0, 2)"),
+        &format!("INSERT INTO feed_materialized (user_id, post_id, author_id, score, rank) VALUES ('{user_id}', 'post-a3', '{author_a}', 460.0, 3)"),
+        &format!("INSERT INTO feed_materialized (user_id, post_id, author_id, score, rank) VALUES ('{user_id}', 'post-b1', '{author_b}', 450.0, 4)"),
+        &format!("INSERT INTO feed_materialized (user_id, post_id, author_id, score, rank) VALUES ('{user_id}', 'post-b2', '{author_b}', 440.0, 5)"),
     ]).await.expect("Failed to insert feed data");
 
     // Action: Get feed
@@ -133,9 +132,7 @@ async fn test_author_saturation_rule() {
 
     assert!(
         author_a_count <= 1,
-        "Top-5 should have at most 1 post from author '{}': got {} posts",
-        author_a,
-        author_a_count
+        "Top-5 should have at most 1 post from author '{author_a}': got {author_a_count} posts"
     );
 
     // Also verify we still have 5 posts (didn't just filter out all of them)
@@ -191,19 +188,16 @@ async fn test_event_to_visible_latency_p95() {
     // Assert: Post should be visible
     assert!(
         visible,
-        "Post should become visible in feed after {} attempts ({:?})",
-        attempts, elapsed
+        "Post should become visible in feed after {attempts} attempts ({elapsed:?})"
     );
 
     // Assert: Latency should be < 5s (P95 threshold)
     assert!(
         elapsed < Duration::from_secs(5),
-        "Event-to-visible latency should be < 5s: got {:?} ({} attempts)",
-        elapsed,
-        attempts
+        "Event-to-visible latency should be < 5s: got {elapsed:?} ({attempts} attempts)"
     );
 
-    println!("Latency test passed: {:?} ({} attempts)", elapsed, attempts);
+    println!("Latency test passed: {elapsed:?} ({attempts} attempts)");
 
     env.cleanup().await;
 }
@@ -248,8 +242,7 @@ async fn test_dedup_with_different_timestamps() {
 
     assert_eq!(
         count, 1,
-        "Should deduplicate even with different timestamps: got {} records",
-        count
+        "Should deduplicate even with different timestamps: got {count} records"
     );
 
     env.cleanup().await;

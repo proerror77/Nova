@@ -52,8 +52,7 @@ async fn test_cdc_consumption_from_kafka() {
 
     assert_eq!(
         count, 1,
-        "CDC should propagate post to ClickHouse: got count={}",
-        count
+        "CDC should propagate post to ClickHouse: got count={count}"
     );
 
     // Cleanup
@@ -96,8 +95,7 @@ async fn test_events_consumption_from_kafka() {
 
     assert_eq!(
         count, 1,
-        "Events consumer should process event: got count={}",
-        count
+        "Events consumer should process event: got count={count}"
     );
 
     env.cleanup().await;
@@ -207,8 +205,7 @@ async fn test_redis_cache_effectiveness() {
     // Assert: Response should be fast (< 50ms for cache hit)
     assert!(
         latency < Duration::from_millis(50),
-        "Cache hit should be fast: got {:?}",
-        latency
+        "Cache hit should be fast: got {latency:?}"
     );
 
     assert_eq!(feed[0].post_id, "cached-001", "Should return cached data");
@@ -222,8 +219,7 @@ async fn test_redis_cache_effectiveness() {
     // Assert: Without cache should be slower (> 50ms for ClickHouse query)
     assert!(
         latency_no_cache > Duration::from_millis(50),
-        "Without cache should be slower: got {:?}",
-        latency_no_cache
+        "Without cache should be slower: got {latency_no_cache:?}"
     );
 
     env.cleanup().await;
