@@ -2,8 +2,8 @@ use rdkafka::config::ClientConfig;
 use rdkafka::consumer::{Consumer, StreamConsumer};
 use rdkafka::message::Message;
 use serde::{Deserialize, Serialize};
-use sha1::{Digest, Sha1};
 use serde_json::Value;
+use sha1::{Digest, Sha1};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Semaphore;
@@ -282,7 +282,9 @@ impl EventsConsumer {
 
                 // Map AltEvent -> EventMessage
                 // user_id as i64 via hash to keep ClickHouse schema compatible
-                let user_id_string = alt.user_id.as_str()
+                let user_id_string = alt
+                    .user_id
+                    .as_str()
                     .map(|s| s.to_string())
                     .unwrap_or_else(|| alt.user_id.to_string());
                 let mut hasher = Sha1::new();
@@ -293,20 +295,34 @@ impl EventsConsumer {
                 let user_id_num = i64::from_be_bytes(bytes8);
 
                 // timestamp in millis
-                let ts_ms = if let Some(ts) = alt.ts { ts } else if let Some(et) = alt.event_time {
+                let ts_ms = if let Some(ts) = alt.ts {
+                    ts
+                } else if let Some(et) = alt.event_time {
                     match chrono::DateTime::parse_from_rfc3339(&et) {
                         Ok(dt) => dt.timestamp_millis(),
                         Err(_) => chrono::Utc::now().timestamp_millis(),
                     }
-                } else { chrono::Utc::now().timestamp_millis() };
+                } else {
+                    chrono::Utc::now().timestamp_millis()
+                };
 
                 // Properties bucket
                 let mut props = serde_json::Map::new();
-                if let Some(p) = alt.post_id { props.insert("post_id".into(), p); }
-                if let Some(a) = alt.author_id { props.insert("author_id".into(), a); }
-                if let Some(d) = alt.dwell_ms { props.insert("dwell_ms".into(), serde_json::json!(d)); }
-                if let Some(dev) = alt.device { props.insert("device".into(), serde_json::json!(dev)); }
-                if let Some(ver) = alt.app_ver { props.insert("app_ver".into(), serde_json::json!(ver)); }
+                if let Some(p) = alt.post_id {
+                    props.insert("post_id".into(), p);
+                }
+                if let Some(a) = alt.author_id {
+                    props.insert("author_id".into(), a);
+                }
+                if let Some(d) = alt.dwell_ms {
+                    props.insert("dwell_ms".into(), serde_json::json!(d));
+                }
+                if let Some(dev) = alt.device {
+                    props.insert("device".into(), serde_json::json!(dev));
+                }
+                if let Some(ver) = alt.app_ver {
+                    props.insert("app_ver".into(), serde_json::json!(ver));
+                }
 
                 EventMessage {
                     event_id: uuid::Uuid::new_v4().to_string(),

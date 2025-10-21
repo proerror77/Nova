@@ -6,12 +6,15 @@ use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
+use actix::Actor;
 use user_service::{
     cache::FeedCache,
     config::Config,
     db::{ch_client::ClickHouseClient, create_pool, run_migrations},
     handlers,
-    handlers::{events::EventHandlerState, feed::FeedHandlerState, streaming_websocket::StreamingHub},
+    handlers::{
+        events::EventHandlerState, feed::FeedHandlerState, streaming_websocket::StreamingHub,
+    },
     metrics,
     middleware::{JwtAuthMiddleware, MetricsMiddleware},
     services::{
@@ -23,7 +26,6 @@ use user_service::{
         s3_service,
     },
 };
-use actix::Actor;
 
 #[actix_web::main]
 async fn main() -> io::Result<()> {

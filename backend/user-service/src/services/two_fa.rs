@@ -6,9 +6,9 @@ use sqlx::PgPool;
 use std::convert::TryFrom;
 use uuid::Uuid;
 
+use crate::redis::{keys::TwoFactorKey, operations::*};
 use crate::security::TOTPGenerator;
 use crate::services::backup_codes;
-use crate::redis::{operations::*, keys::TwoFactorKey};
 
 /// 统一验证用户代码 (TOTP 或备用码)
 ///
@@ -77,7 +77,8 @@ pub async fn verify_temp_session(
     session_id: &str,
     session_type: &str,
 ) -> Result<Uuid> {
-    let user_id_str = redis_get(redis, &TwoFactorKey::temp_session(session_type, session_id)).await?;
+    let user_id_str =
+        redis_get(redis, &TwoFactorKey::temp_session(session_type, session_id)).await?;
 
     match user_id_str {
         Some(uid) => Ok(Uuid::parse_str(&uid)?),

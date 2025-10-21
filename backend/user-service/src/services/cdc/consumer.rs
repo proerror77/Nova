@@ -59,22 +59,19 @@ pub struct CdcConsumer {
 
 impl CdcConsumer {
     /// Create a new CDC consumer (simplified, no offset storage)
-    pub async fn new(
-        config: CdcConsumerConfig,
-        ch_client: ClickHouseClient,
-    ) -> Result<Self> {
+    pub async fn new(config: CdcConsumerConfig, ch_client: ClickHouseClient) -> Result<Self> {
         info!("Initializing CDC consumer with config: {:?}", config);
 
         // Create Kafka consumer with auto-commit enabled
         let consumer: StreamConsumer = ClientConfig::new()
             .set("group.id", &config.group_id)
             .set("bootstrap.servers", &config.brokers)
-            .set("enable.auto.commit", "true")  // Let Kafka manage offsets
-            .set("auto.commit.interval.ms", "5000")  // Commit every 5 seconds
-            .set("auto.offset.reset", "earliest")  // Start from beginning if no offset
+            .set("enable.auto.commit", "true") // Let Kafka manage offsets
+            .set("auto.commit.interval.ms", "5000") // Commit every 5 seconds
+            .set("auto.offset.reset", "earliest") // Start from beginning if no offset
             .set("session.timeout.ms", "30000")
             .set("heartbeat.interval.ms", "3000")
-            .set("max.poll.interval.ms", "300000")  // 5 minutes
+            .set("max.poll.interval.ms", "300000") // 5 minutes
             .set("enable.partition.eof", "false")
             .create()
             .map_err(|e| {
@@ -190,7 +187,6 @@ impl CdcConsumer {
 
         Ok(())
     }
-
 
     /// Insert posts CDC message into ClickHouse
     async fn insert_posts_cdc(&self, msg: &CdcMessage) -> Result<()> {

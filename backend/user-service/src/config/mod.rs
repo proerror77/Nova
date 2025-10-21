@@ -279,7 +279,8 @@ impl Config {
                 region: env::var("S3_REGION").unwrap_or_else(|_| "us-east-1".to_string()),
                 aws_access_key_id: env::var("AWS_ACCESS_KEY_ID").unwrap_or_default(),
                 aws_secret_access_key: env::var("AWS_SECRET_ACCESS_KEY").unwrap_or_default(),
-                cloudfront_url: env::var("CLOUDFRONT_URL").unwrap_or_else(|_| "http://localhost".to_string()),
+                cloudfront_url: env::var("CLOUDFRONT_URL")
+                    .unwrap_or_else(|_| "http://localhost".to_string()),
                 presigned_url_expiry_secs: env::var("S3_PRESIGNED_URL_EXPIRY_SECS")
                     .unwrap_or_else(|_| default_s3_presigned_url_expiry_secs().to_string())
                     .parse()

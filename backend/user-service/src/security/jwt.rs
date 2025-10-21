@@ -1,18 +1,18 @@
 use anyhow::{anyhow, Result};
+use base64::engine::general_purpose::{STANDARD as B64, URL_SAFE_NO_PAD as B64URL_NOPAD};
+use base64::Engine;
 /// JWT token generation and validation using RS256 (RSA with SHA-256)
 /// Access tokens: 1-hour expiry
 /// Refresh tokens: 30-day expiry
 use chrono::{Duration, Utc};
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, TokenData, Validation};
 use lazy_static::lazy_static;
+use rsa::pkcs1::DecodeRsaPublicKey as _;
+use rsa::pkcs8::DecodePublicKey as _;
+use rsa::traits::PublicKeyParts;
+use rsa::RsaPublicKey;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use base64::engine::general_purpose::{STANDARD as B64, URL_SAFE_NO_PAD as B64URL_NOPAD};
-use base64::Engine;
-use rsa::{RsaPublicKey};
-use rsa::pkcs8::DecodePublicKey as _;
-use rsa::pkcs1::DecodeRsaPublicKey as _;
-use rsa::traits::PublicKeyParts;
 
 const ACCESS_TOKEN_EXPIRY_HOURS: i64 = 1;
 const REFRESH_TOKEN_EXPIRY_DAYS: i64 = 30;
@@ -58,8 +58,7 @@ fn normalize_pem_bytes(input: &str, which: &str) -> Result<Vec<u8>> {
         Ok(trimmed.as_bytes().to_vec())
     } else {
         // Try base64 decode
-        B64
-            .decode(trimmed)
+        B64.decode(trimmed)
             .map_err(|e| anyhow!("Failed to decode {} (base64): {}", which, e))
     }
 }
@@ -234,14 +233,18 @@ fn parse_rsa_components_from_pem(pem: &str) -> Result<(String, String)> {
 
 fn read_env_public_key_pem() -> Option<String> {
     if let Ok(val) = std::env::var("JWT_PUBLIC_KEY_PEM") {
-        if val.trim().is_empty() { return None; }
+        if val.trim().is_empty() {
+            return None;
+        }
         let trimmed = val.trim().to_string();
         if trimmed.starts_with("-----BEGIN") {
             return Some(trimmed);
         }
         // Try base64 decode to PEM string
         if let Ok(bytes) = B64.decode(trimmed.as_bytes()) {
-            if let Ok(s) = String::from_utf8(bytes) { return Some(s); }
+            if let Ok(s) = String::from_utf8(bytes) {
+                return Some(s);
+            }
         }
     }
     None
@@ -254,7 +257,10 @@ pub async fn get_jwks(pool: &sqlx::PgPool, _grace_period_days: i64) -> Result<JW
     let keys = match jwt_key_rotation::get_valid_keys(pool).await {
         Ok(k) => k,
         Err(e) => {
-            tracing::warn!("JWKS DB query failed; using env key fallback if present: {}", e);
+            tracing::warn!(
+                "JWKS DB query failed; using env key fallback if present: {}",
+                e
+            );
             Vec::new()
         }
     };
@@ -272,7 +278,11 @@ pub async fn get_jwks(pool: &sqlx::PgPool, _grace_period_days: i64) -> Result<JW
                 e,
             }),
             Err(err) => {
-                tracing::warn!("Failed to parse DB public key (kid={}): {}", key.key_id, err);
+                tracing::warn!(
+                    "Failed to parse DB public key (kid={}): {}",
+                    key.key_id,
+                    err
+                );
             }
         }
     }
@@ -290,7 +300,9 @@ pub async fn get_jwks(pool: &sqlx::PgPool, _grace_period_days: i64) -> Result<JW
                     e,
                 });
             } else {
-                tracing::warn!("JWT_PUBLIC_KEY_PEM present but failed to parse; JWKS will be empty");
+                tracing::warn!(
+                    "JWT_PUBLIC_KEY_PEM present but failed to parse; JWKS will be empty"
+                );
             }
         }
     }

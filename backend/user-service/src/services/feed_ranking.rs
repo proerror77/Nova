@@ -106,11 +106,7 @@ impl FeedRankingService {
     ///
     /// Combines all three sources (followees, trending, affinity) in ClickHouse
     /// with deduplication. Saturation control is simpler here. Returns final sorted post IDs.
-    pub async fn get_ranked_feed(
-        &self,
-        user_id: Uuid,
-        limit: usize,
-    ) -> Result<Vec<Uuid>> {
+    pub async fn get_ranked_feed(&self, user_id: Uuid, limit: usize) -> Result<Vec<Uuid>> {
         debug!(
             "Fetching ranked feed for user {} (limit: {})",
             user_id, limit
@@ -193,7 +189,7 @@ impl FeedRankingService {
             fresh_w = self.freshness_weight,
             eng_w = self.engagement_weight,
             aff_w = self.affinity_weight,
-            limit = limit * 3  // Fetch extra to account for filtering
+            limit = limit * 3 // Fetch extra to account for filtering
         );
 
         let ch_client = self.ch_client.clone();
@@ -202,7 +198,9 @@ impl FeedRankingService {
         let results = self
             .circuit_breaker
             .call(|| async move {
-                ch_client.query_with_retry::<StringId>(&query_clone, 3).await
+                ch_client
+                    .query_with_retry::<StringId>(&query_clone, 3)
+                    .await
             })
             .await?;
 
@@ -214,7 +212,11 @@ impl FeedRankingService {
         // Apply saturation control in Rust (simpler than ClickHouse window functions)
         post_ids = self.apply_saturation_control_simple(post_ids, limit);
 
-        debug!("Retrieved {} ranked posts for user {}", post_ids.len(), user_id);
+        debug!(
+            "Retrieved {} ranked posts for user {}",
+            post_ids.len(),
+            user_id
+        );
         Ok(post_ids)
     }
 
@@ -769,7 +771,7 @@ impl FeedRankingService {
         {
             let mut cache = self.cache.lock().await;
             if let Some(cached) = cache
-                .read_feed_cache(user_id, 0, 100)  // Always fetch full cache
+                .read_feed_cache(user_id, 0, 100) // Always fetch full cache
                 .await?
             {
                 debug!(
@@ -837,10 +839,10 @@ impl FeedRankingService {
             if let Err(e) = cache
                 .write_feed_cache(
                     user_id,
-                    0,      // Always use offset 0 for full feed cache
-                    100,    // Fixed size: full feed
+                    0,   // Always use offset 0 for full feed cache
+                    100, // Fixed size: full feed
                     all_posts.clone(),
-                    Some(120),  // 2 minute TTL
+                    Some(120), // 2 minute TTL
                 )
                 .await
             {

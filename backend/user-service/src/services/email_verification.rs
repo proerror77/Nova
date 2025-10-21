@@ -1,10 +1,10 @@
+use crate::redis::{keys::EmailVerificationKey, operations::*};
+use crate::security::generate_token;
 use anyhow::Result;
 /// Email verification service
 /// Manages email verification tokens stored in Redis with 1-hour expiration
 use redis::aio::ConnectionManager;
 use uuid::Uuid;
-use crate::security::generate_token;
-use crate::redis::{operations::*, keys::EmailVerificationKey};
 
 const VERIFICATION_TOKEN_EXPIRY_SECS: u64 = 3600; // 1 hour
 
@@ -106,6 +106,7 @@ pub async fn revoke_token(redis: &ConnectionManager, user_id: Uuid, email: &str)
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::security::token::TOKEN_LENGTH;
 
     #[test]
     fn test_generate_token_creates_valid_length() {

@@ -278,19 +278,13 @@ pub async fn notify_viewer_count_changed(
     };
 
     // Broadcast to all clients watching this stream
-    hub.do_send(BroadcastMessage {
-        stream_id,
-        message,
-    });
+    hub.do_send(BroadcastMessage { stream_id, message });
 
     Ok(())
 }
 
 /// Notify stream started
-pub fn notify_stream_started(
-    hub: &Addr<StreamingHub>,
-    stream_id: Uuid,
-) {
+pub fn notify_stream_started(hub: &Addr<StreamingHub>, stream_id: Uuid) {
     // Record stream started to Prometheus
     // Note: Using default region "us-west-2" - should be configurable in production
     streaming_metrics::helpers::record_stream_started(&stream_id.to_string(), "us-west-2");
@@ -303,17 +297,11 @@ pub fn notify_stream_started(
         }),
     };
 
-    hub.do_send(BroadcastMessage {
-        stream_id,
-        message,
-    });
+    hub.do_send(BroadcastMessage { stream_id, message });
 }
 
 /// Notify stream ended
-pub fn notify_stream_ended(
-    hub: &Addr<StreamingHub>,
-    stream_id: Uuid,
-) {
+pub fn notify_stream_ended(hub: &Addr<StreamingHub>, stream_id: Uuid) {
     // Record stream ended to Prometheus
     // Note: Duration and final viewer count should be obtained from session tracking
     // Using defaults here - should be integrated with session store
@@ -327,10 +315,7 @@ pub fn notify_stream_ended(
         }),
     };
 
-    hub.do_send(BroadcastMessage {
-        stream_id,
-        message,
-    });
+    hub.do_send(BroadcastMessage { stream_id, message });
 }
 
 #[cfg(test)]

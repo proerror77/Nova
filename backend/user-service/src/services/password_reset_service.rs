@@ -5,6 +5,7 @@ use crate::security::{generate_token, hash_token, verify_token_hash};
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::security::token::TOKEN_LENGTH;
 
     #[test]
     fn test_generate_token_creates_valid_length() {

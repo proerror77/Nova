@@ -1,8 +1,8 @@
+use crate::redis::{keys::TokenRevocationKey, operations::*};
 use anyhow::Result;
 /// Token revocation/blacklist service
 /// Manages JWT token blacklist in Redis to prevent token reuse after logout
 use redis::aio::ConnectionManager;
-use crate::redis::{operations::*, keys::TokenRevocationKey};
 
 /// Add a token to the blacklist after logout
 /// Stores the token with expiration matching the token's exp claim

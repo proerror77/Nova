@@ -49,10 +49,7 @@ impl FeedCacheKey {
     /// Key for cached feed: user_id + offset + limit
     /// Pattern: nova:feed:user_id:offset:limit
     pub fn feed(user_id: Uuid, offset: i64, limit: i32) -> String {
-        format!(
-            "{}:feed:{}:{}:{}",
-            NOVA_NAMESPACE, user_id, offset, limit
-        )
+        format!("{}:feed:{}:{}:{}", NOVA_NAMESPACE, user_id, offset, limit)
     }
 
     /// Key for suggested users cache
@@ -199,8 +196,14 @@ mod tests {
         ];
 
         for key in keys {
-            assert!(key.starts_with("nova:"), "Key must start with 'nova:' namespace");
-            assert!(key.matches(':').count() >= 1, "Key must have at least one colon separator");
+            assert!(
+                key.starts_with("nova:"),
+                "Key must start with 'nova:' namespace"
+            );
+            assert!(
+                key.matches(':').count() >= 1,
+                "Key must have at least one colon separator"
+            );
         }
     }
 }

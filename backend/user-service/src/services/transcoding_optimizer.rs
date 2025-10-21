@@ -3,7 +3,6 @@
 /// Implements parallel transcoding with priority-based job scheduling,
 /// parallel quality tier generation, and real-time progress tracking.
 /// Targets 40% performance improvement over sequential transcoding.
-
 use crate::config::video_config::VideoProcessingConfig;
 use crate::error::{AppError, Result};
 use crate::models::video::TranscodingJob;
@@ -49,20 +48,20 @@ impl QualityTier {
     /// Get FFmpeg preset (faster → slower = speed → quality)
     pub fn ffmpeg_preset(&self) -> &'static str {
         match self {
-            QualityTier::Q4K => "medium",        // Quality focus
-            QualityTier::Q1080 => "medium",      // Balanced
-            QualityTier::Q720 => "medium",       // Balanced
-            QualityTier::Q480 => "faster",       // Speed focus
+            QualityTier::Q4K => "medium",   // Quality focus
+            QualityTier::Q1080 => "medium", // Balanced
+            QualityTier::Q720 => "medium",  // Balanced
+            QualityTier::Q480 => "faster",  // Speed focus
         }
     }
 
     /// Get CRF (Constant Rate Factor) value (0-51, lower = better quality)
     pub fn crf_value(&self) -> u8 {
         match self {
-            QualityTier::Q4K => 22,    // Better quality for 4K
-            QualityTier::Q1080 => 26,  // Balanced
-            QualityTier::Q720 => 28,   // Balanced
-            QualityTier::Q480 => 30,   // Lower quality acceptable
+            QualityTier::Q4K => 22,   // Better quality for 4K
+            QualityTier::Q1080 => 26, // Balanced
+            QualityTier::Q720 => 28,  // Balanced
+            QualityTier::Q480 => 30,  // Lower quality acceptable
         }
     }
 
@@ -261,7 +260,9 @@ impl TranscodingOptimizer {
 
                 info!(
                     "Starting transcoding job: {} (quality: {}, priority: {})",
-                    job.job_id, job.quality_tier.as_str(), job.priority
+                    job.job_id,
+                    job.quality_tier.as_str(),
+                    job.priority
                 );
 
                 return Ok(Some(job));
@@ -310,7 +311,10 @@ impl TranscodingOptimizer {
             info!("Transcoding job completed: {}", job_id);
             Ok(())
         } else {
-            Err(AppError::NotFound(format!("Active job not found: {}", job_id)))
+            Err(AppError::NotFound(format!(
+                "Active job not found: {}",
+                job_id
+            )))
         }
     }
 
@@ -328,7 +332,10 @@ impl TranscodingOptimizer {
             error!("Transcoding job failed: {} - {}", job_id, error_msg);
             Ok(())
         } else {
-            Err(AppError::NotFound(format!("Active job not found: {}", job_id)))
+            Err(AppError::NotFound(format!(
+                "Active job not found: {}",
+                job_id
+            )))
         }
     }
 
@@ -367,7 +374,10 @@ impl TranscodingOptimizer {
         let completed = self.completed_jobs.read().await;
 
         let completed_count = completed.len();
-        let failed_count = completed.iter().filter(|j| j.status == TranscodingStatus::Failed).count();
+        let failed_count = completed
+            .iter()
+            .filter(|j| j.status == TranscodingStatus::Failed)
+            .count();
 
         TranscodingStatistics {
             queue_depth,
@@ -424,6 +434,9 @@ mod tests {
             max_parallel_jobs: 4,
             job_timeout_seconds: 7200,
             target_bitrates,
+            s3_processed_bucket: "test-bucket".to_string(),
+            s3_processed_prefix: "processed/".to_string(),
+            extract_thumbnails: true,
             thumbnail_dimensions: (320, 180),
         }
     }

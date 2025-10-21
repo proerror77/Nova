@@ -26,7 +26,7 @@ pub use ab_testing::{ABTestingFramework, Experiment, ExperimentEvent, Variant};
 pub use collaborative_filtering::{CollaborativeFilteringModel, SimilarityMetric};
 pub use content_based::{ContentBasedModel, PostFeatures, UserProfile};
 pub use hybrid_ranker::{HybridRanker, HybridWeights, RankingStrategy};
-pub use onnx_serving::{ONNXModelServer, ModelMetadata};
+pub use onnx_serving::{ModelMetadata, ONNXModelServer};
 
 use crate::error::Result;
 use uuid::Uuid;
@@ -54,11 +54,7 @@ impl RecommendationServiceV2 {
     }
 
     /// Get personalized recommendations for user
-    pub async fn get_recommendations(
-        &self,
-        user_id: Uuid,
-        limit: usize,
-    ) -> Result<Vec<Uuid>> {
+    pub async fn get_recommendations(&self, user_id: Uuid, limit: usize) -> Result<Vec<Uuid>> {
         // TODO: Implement recommendation pipeline
         // 1. Determine experiment variant (A/B testing)
         // 2. Get candidate posts (from ClickHouse)

@@ -1,5 +1,5 @@
 /// Unified validation error messages and response builders
-use actix_web::{HttpResponse, http::StatusCode};
+use actix_web::{http::StatusCode, HttpResponse};
 use serde::Serialize;
 
 #[derive(Debug, Serialize)]
@@ -25,20 +25,12 @@ pub mod messages {
         "Password must be 8+ chars with uppercase, lowercase, number, and special char",
     );
 
-    pub const EMPTY_TOKEN: (&str, &str) = (
-        "Token required",
-        "",
-    );
+    pub const EMPTY_TOKEN: (&str, &str) = ("Token required", "");
 
-    pub const TOKEN_TOO_LONG: (&str, &str) = (
-        "Token too long",
-        "",
-    );
+    pub const TOKEN_TOO_LONG: (&str, &str) = ("Token too long", "");
 
-    pub const INVALID_TOKEN_FORMAT: (&str, &str) = (
-        "Invalid token format",
-        "Token must be hexadecimal",
-    );
+    pub const INVALID_TOKEN_FORMAT: (&str, &str) =
+        ("Invalid token format", "Token must be hexadecimal");
 }
 
 /// Builder for validation error responses
@@ -49,7 +41,11 @@ impl ValidationError {
     pub fn bad_request(error: &str, details: &str) -> HttpResponse {
         let response = ErrorResponse {
             error: error.to_string(),
-            details: if details.is_empty() { None } else { Some(details.to_string()) },
+            details: if details.is_empty() {
+                None
+            } else {
+                Some(details.to_string())
+            },
         };
         HttpResponse::BadRequest().json(response)
     }
@@ -76,7 +72,10 @@ impl ValidationError {
     }
 
     pub fn invalid_token_format() -> HttpResponse {
-        Self::bad_request(messages::INVALID_TOKEN_FORMAT.0, messages::INVALID_TOKEN_FORMAT.1)
+        Self::bad_request(
+            messages::INVALID_TOKEN_FORMAT.0,
+            messages::INVALID_TOKEN_FORMAT.1,
+        )
     }
 }
 

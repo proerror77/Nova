@@ -5,7 +5,7 @@ use sha2::{Digest, Sha256};
 use std::fmt::Write as FmtWrite;
 
 /// Length of generated random tokens (32 bytes = 64 hex characters when encoded)
-const TOKEN_LENGTH: usize = 32;
+pub const TOKEN_LENGTH: usize = 32;
 
 /// Generate a random token as a hexadecimal string
 ///

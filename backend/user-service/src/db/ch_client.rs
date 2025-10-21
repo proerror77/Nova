@@ -196,7 +196,8 @@ impl ClickHouseClient {
             result: u8,
         }
 
-        match self.client
+        match self
+            .client
             .query("SELECT 1 as result")
             .fetch_one::<HealthCheck>()
             .await
@@ -209,7 +210,10 @@ impl ClickHouseClient {
                 // tries to set readonly parameter but server is already in readonly mode.
                 // The connection is still alive and queryable.
                 if error_msg.contains("Cannot modify 'readonly' setting in readonly mode") {
-                    debug!("ClickHouse readonly mode note (expected in some configurations): {}", e);
+                    debug!(
+                        "ClickHouse readonly mode note (expected in some configurations): {}",
+                        e
+                    );
                     return Ok(());
                 }
 

@@ -12,8 +12,8 @@
 
 use lazy_static::lazy_static;
 use prometheus::{
-    register_counter_vec, register_gauge, register_gauge_vec, register_histogram_vec,
-    CounterVec, Encoder, Gauge, GaugeVec, HistogramVec, Registry, TextEncoder,
+    register_counter_vec, register_gauge, register_gauge_vec, register_histogram_vec, CounterVec,
+    Encoder, Gauge, GaugeVec, HistogramVec, Registry, TextEncoder,
 };
 
 lazy_static! {
@@ -134,11 +134,18 @@ pub mod helpers {
     /// Record start of new broadcast stream
     pub fn record_stream_started(stream_id: &str, region: &str) {
         STREAMING_ACTIVE_STREAMS.with_label_values(&[region]).inc();
-        STREAMING_PEAK_VIEWERS.with_label_values(&[stream_id]).set(0.0);
+        STREAMING_PEAK_VIEWERS
+            .with_label_values(&[stream_id])
+            .set(0.0);
     }
 
     /// Record end of broadcast stream
-    pub fn record_stream_ended(stream_id: &str, region: &str, duration_seconds: f64, viewer_count: i32) {
+    pub fn record_stream_ended(
+        stream_id: &str,
+        region: &str,
+        duration_seconds: f64,
+        viewer_count: i32,
+    ) {
         STREAMING_ACTIVE_STREAMS.with_label_values(&[region]).dec();
         STREAMING_DURATION_SECONDS
             .with_label_values(&["live"])

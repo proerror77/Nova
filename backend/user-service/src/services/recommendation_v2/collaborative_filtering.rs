@@ -40,11 +40,7 @@ impl CollaborativeFilteringModel {
     /// Load pre-computed similarity matrices from disk
     ///
     /// Expected file format: bincode serialized HashMap<Uuid, Vec<(Uuid, f64)>>
-    pub fn load(
-        user_sim_path: &str,
-        item_sim_path: &str,
-        k_neighbors: usize,
-    ) -> Result<Self> {
+    pub fn load(user_sim_path: &str, item_sim_path: &str, k_neighbors: usize) -> Result<Self> {
         // TODO: Implement loading from bincode files
         // let user_similarity = load_bincode(user_sim_path)?;
         // let item_similarity = load_bincode(item_sim_path)?;

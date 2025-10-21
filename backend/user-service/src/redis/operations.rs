@@ -43,10 +43,7 @@ pub async fn redis_set_ex(
 /// ```ignore
 /// let token = redis_get(&redis, "verify_email:user@example.com").await?;
 /// ```
-pub async fn redis_get(
-    redis: &ConnectionManager,
-    key: &str,
-) -> Result<Option<String>> {
+pub async fn redis_get(redis: &ConnectionManager, key: &str) -> Result<Option<String>> {
     let mut conn = redis.clone();
     let value: Option<String> = conn
         .get(key)
@@ -68,10 +65,7 @@ pub async fn redis_get(
 /// ```ignore
 /// redis_delete(&redis, "verify_email:user@example.com").await?;
 /// ```
-pub async fn redis_delete(
-    redis: &ConnectionManager,
-    key: &str,
-) -> Result<u32> {
+pub async fn redis_delete(redis: &ConnectionManager, key: &str) -> Result<u32> {
     let mut conn = redis.clone();
     let deleted: u32 = conn
         .del(key)
@@ -90,10 +84,7 @@ pub async fn redis_delete(
 /// ```ignore
 /// let exists = redis_exists(&redis, "verify_email:user@example.com").await?;
 /// ```
-pub async fn redis_exists(
-    redis: &ConnectionManager,
-    key: &str,
-) -> Result<bool> {
+pub async fn redis_exists(redis: &ConnectionManager, key: &str) -> Result<bool> {
     let mut conn = redis.clone();
     let exists: bool = conn
         .exists(key)
@@ -113,11 +104,7 @@ pub async fn redis_exists(
 /// ```ignore
 /// let new_count = redis_incr(&redis, "rate_limit:user123", 1).await?;
 /// ```
-pub async fn redis_incr(
-    redis: &ConnectionManager,
-    key: &str,
-    increment: i32,
-) -> Result<i32> {
+pub async fn redis_incr(redis: &ConnectionManager, key: &str, increment: i32) -> Result<i32> {
     let mut conn = redis.clone();
     let value: i32 = conn
         .incr(key, increment)
@@ -140,11 +127,7 @@ pub async fn redis_incr(
 /// ```ignore
 /// redis_expire(&redis, "verify_email:user@example.com", 7200).await?;
 /// ```
-pub async fn redis_expire(
-    redis: &ConnectionManager,
-    key: &str,
-    ttl_seconds: u64,
-) -> Result<bool> {
+pub async fn redis_expire(redis: &ConnectionManager, key: &str, ttl_seconds: u64) -> Result<bool> {
     let mut conn = redis.clone();
     let expired: bool = conn
         .expire(key, ttl_seconds as i64)
