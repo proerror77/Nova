@@ -1,0 +1,204 @@
+{
+  "generated_at": "2025-10-21T11:27:59Z",
+  "categories": {
+    "specs": [
+      "specs/001-rtmp-hls-streaming/spec.md",
+      "specs/001-rtmp-hls-streaming/data-model.md",
+      "specs/001-rtmp-hls-streaming/tasks.md",
+      "specs/001-rtmp-hls-streaming/plan.md",
+      "specs/001-rtmp-hls-streaming/quickstart.md",
+      "specs/001-rtmp-hls-streaming/research.md",
+      "specs/001-rtmp-hls-streaming/GLOSSARY.md",
+      "specs/007-phase-7a-notifications-social/requirements.md",
+      "specs/007-phase-7a-notifications-social/design.md",
+      "specs/007-phase-7a-notifications-social/tasks.md"
+    ],
+    "docs_misc": [
+      "docs/PRD.md",
+      "docs/ARCHITECTURE_REVIEW.md",
+      "docs/architecture/phase-0-structure.md",
+      "docs/api/messaging-api.md"
+    ],
+    "phases": {
+      "phase0": [
+        "PHASE_0_SUMMARY.md"
+      ],
+      "phase1": [
+        "PHASE_1_FINAL_COMPLETE.md"
+      ],
+      "phase2": [
+        "PHASE_2_KICKOFF.md",
+        "PHASE_2_PROGRESS.md",
+        "PHASE_2_UPLOAD_INIT_COMPLETE.md",
+        "PHASE_2_FINAL_COMPLETE.md"
+      ],
+      "phase7a": [
+        "PHASE_7A_KICKOFF_COMPLETE.md",
+        "PHASE_7A_WEEK2_3_EXECUTION.md",
+        "PHASE_7A_WEEK2_3_PROGRESS_TRACKER.md"
+      ]
+    },
+    "status": [
+      "PROJECT_STATUS_REPORT.md",
+      "CURRENT_PROGRESS.md",
+      "EXECUTION_SUMMARY.md"
+    ],
+    "guides": [
+      "DEPLOYMENT_QUICK_REFERENCE.md",
+      "QUICK_PR_GUIDE.md",
+      "QUICK_REFERENCE.md",
+      "docs/PROXY_SETUP_GUIDE.md",
+      "k8s/DEPLOYMENT_GUIDE.md",
+      "docs/phase-7b/ios-messaging-integration.md"
+    ],
+    "backend_docs": [
+      "backend/README.md",
+      "backend/TESTING_SETUP.md",
+      "backend/PHASE1_COMPLETE.md",
+      "backend/PHASE2_COMPLETE.md",
+      "backend/PHASE_1_PROGRESS.md",
+      "backend/AUTH_1013_COMPLETION.md",
+      "backend/AUTH_1020_REFACTOR_COVERAGE.md",
+      "backend/social-service/README.md",
+      "backend/user-service/T202_FCM_APNS_IMPLEMENTATION.md",
+      "backend/user-service/tests/COVERAGE_SUMMARY.md",
+      "backend/user-service/tests/oauth_test_README.md"
+    ],
+    "testing_docs": [
+      "tests/README.md",
+      "tests/IMPLEMENTATION_SUMMARY.md",
+      "tests/fixtures/README.md",
+      "tests/test_harness/README.md"
+    ],
+    "ios": {
+      "canonical": [
+        "ios/NovaSocialApp/README.md",
+        "ios/NovaSocialApp/QUICK_START.md",
+        "ios/NovaSocialApp/XCODE_SETUP.md",
+        "ios/NovaSocialApp/ACCESSIBILITY_DEEPLINKING_DELIVERY.md",
+        "ios/NovaSocialApp/ACCESSIBILITY_QUICKSTART.md",
+        "ios/NovaSocialApp/Accessibility/AccessibilityChecklist.md",
+        "ios/NovaSocialApp/CODE_REVIEW_REPORT.md",
+        "ios/NovaSocialApp/Config/UniversalLinksSetup.md",
+        "ios/NovaSocialApp/DELIVERY_REPORT.md",
+        "ios/NovaSocialApp/DesignSystem/README.md",
+        "ios/NovaSocialApp/DesignSystem/INTEGRATION_GUIDE.md",
+        "ios/NovaSocialApp/DesignSystem/QUICKSTART.md",
+        "ios/NovaSocialApp/DesignSystem/SUMMARY.md",
+        "ios/NovaSocialApp/Documentation/ACCESSIBILITY_CHECKLIST.md",
+        "ios/NovaSocialApp/Documentation/AccessibilityAuditReport.md",
+        "ios/NovaSocialApp/Documentation/DEEP_LINKING_GUIDE.md",
+        "ios/NovaSocialApp/Documentation/DeepLinkingGuide.md",
+        "ios/NovaSocialApp/Documentation/FeedOptimizationGuide.md",
+        "ios/NovaSocialApp/Documentation/FeedOptimization_QuickReference.md",
+        "ios/NovaSocialApp/Documentation/FeedOptimization_Summary.md",
+        "ios/NovaSocialApp/Documentation/LOCALIZATION_GUIDE.md",
+        "ios/NovaSocialApp/Documentation/MediaKitGuide.md",
+        "ios/NovaSocialApp/Documentation/MediaKitPerformanceReport.md",
+        "ios/NovaSocialApp/Documentation/MediaKitQuickStart.md",
+        "ios/NovaSocialApp/Documentation/PersistenceGuide.md",
+        "ios/NovaSocialApp/Documentation/PersistenceMigrationGuide.md",
+        "ios/NovaSocialApp/Documentation/PersistencePerformanceReport.md",
+        "ios/NovaSocialApp/Documentation/PersistenceQuickStart.md",
+        "ios/NovaSocialApp/Documentation/TRANSLATION_MATRIX.md",
+        "ios/NovaSocialApp/IMPROVEMENTS_SUMMARY.md",
+        "ios/NovaSocialApp/LOCALIZATION_DELIVERY_CHECKLIST.md",
+        "ios/NovaSocialApp/LOCALIZATION_FINAL_DELIVERY.md",
+        "ios/NovaSocialApp/LOCALIZATION_IMPLEMENTATION_SUMMARY.md",
+        "ios/NovaSocialApp/LOCALIZATION_QUICK_REFERENCE.md",
+        "ios/NovaSocialApp/Localization/README.md",
+        "ios/NovaSocialApp/MEDIAKIT_DELIVERY.md",
+        "ios/NovaSocialApp/Network/REQUEST_DEDUPLICATION_GUIDE.md",
+        "ios/NovaSocialApp/Network/Services/README.md",
+        "ios/NovaSocialApp/PERFORMANCE_CHECKLIST.md",
+        "ios/NovaSocialApp/PERFORMANCE_IMPLEMENTATION_SUMMARY.md",
+        "ios/NovaSocialApp/PERFORMANCE_SETUP_GUIDE.md",
+        "ios/NovaSocialApp/PERSISTENCE_ACCEPTANCE_CHECKLIST.md",
+        "ios/NovaSocialApp/PERSISTENCE_DELIVERY.md",
+        "ios/NovaSocialApp/PROJECT_STRUCTURE.md",
+        "ios/NovaSocialApp/SIMULATOR_QUICK_START.md",
+        "ios/NovaSocialApp/TESTING_SUMMARY.md",
+        "ios/NovaSocialApp/TEST_COVERAGE_DELIVERY.md",
+        "ios/NovaSocialApp/TOKEN_REFRESH_FIX.md",
+        "ios/NovaSocialApp/Tests/README.md",
+        "ios/NovaSocialApp/Tests/QUICK_REFERENCE.md",
+        "ios/NovaSocialApp/UI_PREVIEW_GUIDE.md"
+      ],
+      "legacy": [
+        "ios/NovaSocial/README.md",
+        "ios/NovaSocial/DesignSystem/README.md",
+        "ios/NovaSocial/DesignSystem/INTEGRATION_GUIDE.md",
+        "ios/NovaSocial/DesignSystem/QUICKSTART.md",
+        "ios/NovaSocial/DesignSystem/SUMMARY.md",
+        "ios/NovaSocial/Network/REQUEST_DEDUPLICATION_GUIDE.md",
+        "ios/NovaSocial/Network/Services/README.md",
+        "ios/NovaSocial/Localization/README.md",
+        "ios/NovaSocial/Accessibility/AccessibilityChecklist.md",
+        "ios/NovaSocial/CLAUDE.md"
+      ]
+    },
+    "archive": {
+      "root": [
+        "docs/archive/root/FILES_GENERATED.md",
+        "docs/archive/root/PHASE_1_COMPLETION_SUMMARY.md",
+        "docs/archive/root/PHASE_2_COMPLETE_CHECKLIST.md",
+        "docs/archive/root/PHASE_2_INTEGRATION_COMPLETE.md",
+        "docs/archive/root/REVISED_PROGRESS.md"
+      ],
+      "ios_backups": [
+        "docs/archive/ios/NovaSocial.backup/README.md",
+        "docs/archive/ios/NovaSocial.backup/QUICK_START.md",
+        "docs/archive/ios/NovaSocial.backup/XCODE_SETUP.md",
+        "docs/archive/ios/NovaSocial.backup/ACCESSIBILITY_DEEPLINKING_DELIVERY.md",
+        "docs/archive/ios/NovaSocial.backup/ACCESSIBILITY_QUICKSTART.md",
+        "docs/archive/ios/NovaSocial.backup/Accessibility/AccessibilityChecklist.md",
+        "docs/archive/ios/NovaSocial.backup/CODE_REVIEW_REPORT.md",
+        "docs/archive/ios/NovaSocial.backup/Config/UniversalLinksSetup.md",
+        "docs/archive/ios/NovaSocial.backup/DELIVERY_REPORT.md",
+        "docs/archive/ios/NovaSocial.backup/DesignSystem/README.md",
+        "docs/archive/ios/NovaSocial.backup/DesignSystem/INTEGRATION_GUIDE.md",
+        "docs/archive/ios/NovaSocial.backup/DesignSystem/QUICKSTART.md",
+        "docs/archive/ios/NovaSocial.backup/DesignSystem/SUMMARY.md",
+        "docs/archive/ios/NovaSocial.backup/Documentation/ACCESSIBILITY_CHECKLIST.md",
+        "docs/archive/ios/NovaSocial.backup/Documentation/AccessibilityAuditReport.md",
+        "docs/archive/ios/NovaSocial.backup/Documentation/DEEP_LINKING_GUIDE.md",
+        "docs/archive/ios/NovaSocial.backup/Documentation/DeepLinkingGuide.md",
+        "docs/archive/ios/NovaSocial.backup/Documentation/FeedOptimizationGuide.md",
+        "docs/archive/ios/NovaSocial.backup/Documentation/FeedOptimization_QuickReference.md",
+        "docs/archive/ios/NovaSocial.backup/Documentation/FeedOptimization_Summary.md",
+        "docs/archive/ios/NovaSocial.backup/Documentation/LOCALIZATION_GUIDE.md",
+        "docs/archive/ios/NovaSocial.backup/Documentation/MediaKitGuide.md",
+        "docs/archive/ios/NovaSocial.backup/Documentation/MediaKitPerformanceReport.md",
+        "docs/archive/ios/NovaSocial.backup/Documentation/MediaKitQuickStart.md",
+        "docs/archive/ios/NovaSocial.backup/Documentation/PersistenceGuide.md",
+        "docs/archive/ios/NovaSocial.backup/Documentation/PersistenceMigrationGuide.md",
+        "docs/archive/ios/NovaSocial.backup/Documentation/PersistencePerformanceReport.md",
+        "docs/archive/ios/NovaSocial.backup/Documentation/PersistenceQuickStart.md",
+        "docs/archive/ios/NovaSocial.backup/Documentation/TRANSLATION_MATRIX.md",
+        "docs/archive/ios/NovaSocial.backup/IMPROVEMENTS_SUMMARY.md",
+        "docs/archive/ios/NovaSocial.backup/LOCALIZATION_DELIVERY_CHECKLIST.md",
+        "docs/archive/ios/NovaSocial.backup/LOCALIZATION_FINAL_DELIVERY.md",
+        "docs/archive/ios/NovaSocial.backup/LOCALIZATION_IMPLEMENTATION_SUMMARY.md",
+        "docs/archive/ios/NovaSocial.backup/LOCALIZATION_QUICK_REFERENCE.md",
+        "docs/archive/ios/NovaSocial.backup/Localization/README.md",
+        "docs/archive/ios/NovaSocial.backup/MEDIAKIT_DELIVERY.md",
+        "docs/archive/ios/NovaSocial.backup/Network/REQUEST_DEDUPLICATION_GUIDE.md",
+        "docs/archive/ios/NovaSocial.backup/Network/Services/README.md",
+        "docs/archive/ios/NovaSocial.backup/PERFORMANCE_CHECKLIST.md",
+        "docs/archive/ios/NovaSocial.backup/PERFORMANCE_IMPLEMENTATION_SUMMARY.md",
+        "docs/archive/ios/NovaSocial.backup/PERFORMANCE_SETUP_GUIDE.md",
+        "docs/archive/ios/NovaSocial.backup/PERSISTENCE_ACCEPTANCE_CHECKLIST.md",
+        "docs/archive/ios/NovaSocial.backup/PERSISTENCE_DELIVERY.md",
+        "docs/archive/ios/NovaSocial.backup/PROJECT_STRUCTURE.md",
+        "docs/archive/ios/NovaSocial.backup/SIMULATOR_QUICK_START.md",
+        "docs/archive/ios/NovaSocial.backup/TESTING_SUMMARY.md",
+        "docs/archive/ios/NovaSocial.backup/TEST_COVERAGE_DELIVERY.md",
+        "docs/archive/ios/NovaSocial.backup/TOKEN_REFRESH_FIX.md",
+        "docs/archive/ios/NovaSocial.backup/Tests/README.md",
+        "docs/archive/ios/NovaSocial.backup/Tests/QUICK_REFERENCE.md",
+        "docs/archive/ios/NovaSocial.backup/UI_PREVIEW_GUIDE.md"
+      ]
+    }
+  }
+}
+
