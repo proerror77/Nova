@@ -1,7 +1,6 @@
 /// Integration Tests for Video E2E: Upload → Transcoding → Feed (T134)
 /// Scenario: upload video → process → appear in feed
 /// Assert: video visible within 10 seconds of publish
-
 use std::time::{Duration, Instant};
 use uuid::Uuid;
 
@@ -129,7 +128,10 @@ impl VideoE2EService {
     /// Get video status
     pub fn get_video_status(&self, video_id: Uuid) -> Option<VideoStatus> {
         let videos = self.videos.lock().unwrap();
-        videos.iter().find(|v| v.id == video_id).map(|v| v.status.clone())
+        videos
+            .iter()
+            .find(|v| v.id == video_id)
+            .map(|v| v.status.clone())
     }
 
     /// Get feed (simulated)
@@ -158,13 +160,19 @@ fn test_video_e2e_basic_flow() {
     };
 
     // Step 1: Upload video
-    let video_id = service.upload_video(request).expect("Upload should succeed");
+    let video_id = service
+        .upload_video(request)
+        .expect("Upload should succeed");
 
     // Step 2: Process video
-    service.process_video(video_id).expect("Processing should succeed");
+    service
+        .process_video(video_id)
+        .expect("Processing should succeed");
 
     // Step 3: Add to feed
-    service.add_to_feed(video_id).expect("Add to feed should succeed");
+    service
+        .add_to_feed(video_id)
+        .expect("Add to feed should succeed");
 
     // Step 4: Verify in feed
     assert!(service.is_in_feed(video_id), "Video should be in feed");
@@ -184,7 +192,9 @@ fn test_video_status_progression() {
         mime_type: "video/webm".to_string(),
     };
 
-    let video_id = service.upload_video(request).expect("Upload should succeed");
+    let video_id = service
+        .upload_video(request)
+        .expect("Upload should succeed");
 
     // Check initial status
     assert_eq!(
@@ -194,7 +204,9 @@ fn test_video_status_progression() {
     );
 
     // Process video
-    service.process_video(video_id).expect("Processing should succeed");
+    service
+        .process_video(video_id)
+        .expect("Processing should succeed");
 
     // Check final status
     assert_eq!(
@@ -218,12 +230,17 @@ fn test_video_cannot_be_added_before_publishing() {
         mime_type: "video/mp4".to_string(),
     };
 
-    let video_id = service.upload_video(request).expect("Upload should succeed");
+    let video_id = service
+        .upload_video(request)
+        .expect("Upload should succeed");
 
     // Try to add to feed without processing
     let result = service.add_to_feed(video_id);
 
-    assert!(result.is_err(), "Should not be able to add unpublished video to feed");
+    assert!(
+        result.is_err(),
+        "Should not be able to add unpublished video to feed"
+    );
 }
 
 #[test]
@@ -244,9 +261,15 @@ fn test_multiple_videos_in_feed() {
             mime_type: "video/mp4".to_string(),
         };
 
-        let video_id = service.upload_video(request).expect("Upload should succeed");
-        service.process_video(video_id).expect("Processing should succeed");
-        service.add_to_feed(video_id).expect("Add to feed should succeed");
+        let video_id = service
+            .upload_video(request)
+            .expect("Upload should succeed");
+        service
+            .process_video(video_id)
+            .expect("Processing should succeed");
+        service
+            .add_to_feed(video_id)
+            .expect("Add to feed should succeed");
 
         video_ids.push(video_id);
     }
@@ -256,7 +279,10 @@ fn test_multiple_videos_in_feed() {
     assert_eq!(feed.len(), 5, "Feed should contain 5 videos");
 
     // Most recent video should be first
-    assert_eq!(feed[0], video_ids[4], "Most recent video should be first in feed");
+    assert_eq!(
+        feed[0], video_ids[4],
+        "Most recent video should be first in feed"
+    );
 }
 
 #[test]
@@ -276,9 +302,15 @@ fn test_video_e2e_with_different_codecs() {
             mime_type: "video/mp4".to_string(),
         };
 
-        let video_id = service.upload_video(request).expect("Upload should succeed");
-        service.process_video(video_id).expect("Processing should succeed");
-        service.add_to_feed(video_id).expect("Add to feed should succeed");
+        let video_id = service
+            .upload_video(request)
+            .expect("Upload should succeed");
+        service
+            .process_video(video_id)
+            .expect("Processing should succeed");
+        service
+            .add_to_feed(video_id)
+            .expect("Add to feed should succeed");
 
         assert!(
             service.is_in_feed(video_id),
@@ -306,9 +338,15 @@ fn test_video_visibility_sla() {
 
     let start = Instant::now();
 
-    let video_id = service.upload_video(request).expect("Upload should succeed");
-    service.process_video(video_id).expect("Processing should succeed");
-    service.add_to_feed(video_id).expect("Add to feed should succeed");
+    let video_id = service
+        .upload_video(request)
+        .expect("Upload should succeed");
+    service
+        .process_video(video_id)
+        .expect("Processing should succeed");
+    service
+        .add_to_feed(video_id)
+        .expect("Add to feed should succeed");
 
     let elapsed = start.elapsed();
 
@@ -319,7 +357,10 @@ fn test_video_visibility_sla() {
         elapsed
     );
 
-    assert!(service.is_in_feed(video_id), "Video should be visible in feed");
+    assert!(
+        service.is_in_feed(video_id),
+        "Video should be visible in feed"
+    );
 }
 
 #[test]
@@ -336,12 +377,20 @@ fn test_duplicate_video_in_feed() {
         mime_type: "video/mp4".to_string(),
     };
 
-    let video_id = service.upload_video(request).expect("Upload should succeed");
-    service.process_video(video_id).expect("Processing should succeed");
+    let video_id = service
+        .upload_video(request)
+        .expect("Upload should succeed");
+    service
+        .process_video(video_id)
+        .expect("Processing should succeed");
 
     // Add to feed multiple times
-    service.add_to_feed(video_id).expect("First add should succeed");
-    service.add_to_feed(video_id).expect("Second add should succeed");
+    service
+        .add_to_feed(video_id)
+        .expect("First add should succeed");
+    service
+        .add_to_feed(video_id)
+        .expect("Second add should succeed");
 
     let feed = service.get_feed();
 
@@ -424,14 +473,13 @@ fn test_video_processing_updates_timestamp() {
         mime_type: "video/mp4".to_string(),
     };
 
-    let video_id = service.upload_video(request).expect("Upload should succeed");
+    let video_id = service
+        .upload_video(request)
+        .expect("Upload should succeed");
 
     // Get video before processing
     let videos_before = service.videos.lock().unwrap();
-    let video_before = videos_before
-        .iter()
-        .find(|v| v.id == video_id)
-        .unwrap();
+    let video_before = videos_before.iter().find(|v| v.id == video_id).unwrap();
 
     assert!(
         video_before.published_at.is_none(),
@@ -441,14 +489,13 @@ fn test_video_processing_updates_timestamp() {
     drop(videos_before);
 
     // Process video
-    service.process_video(video_id).expect("Processing should succeed");
+    service
+        .process_video(video_id)
+        .expect("Processing should succeed");
 
     // Get video after processing
     let videos_after = service.videos.lock().unwrap();
-    let video_after = videos_after
-        .iter()
-        .find(|v| v.id == video_id)
-        .unwrap();
+    let video_after = videos_after.iter().find(|v| v.id == video_id).unwrap();
 
     assert!(
         video_after.published_at.is_some(),
@@ -470,11 +517,20 @@ fn test_video_e2e_with_large_file() {
         mime_type: "video/mp4".to_string(),
     };
 
-    let video_id = service.upload_video(request).expect("Upload should succeed");
-    service.process_video(video_id).expect("Processing should succeed");
-    service.add_to_feed(video_id).expect("Add to feed should succeed");
+    let video_id = service
+        .upload_video(request)
+        .expect("Upload should succeed");
+    service
+        .process_video(video_id)
+        .expect("Processing should succeed");
+    service
+        .add_to_feed(video_id)
+        .expect("Add to feed should succeed");
 
-    assert!(service.is_in_feed(video_id), "Large video should appear in feed");
+    assert!(
+        service.is_in_feed(video_id),
+        "Large video should appear in feed"
+    );
 }
 
 #[test]
@@ -495,9 +551,15 @@ fn test_video_e2e_feed_ordering() {
             mime_type: "video/mp4".to_string(),
         };
 
-        let video_id = service.upload_video(request).expect("Upload should succeed");
-        service.process_video(video_id).expect("Processing should succeed");
-        service.add_to_feed(video_id).expect("Add to feed should succeed");
+        let video_id = service
+            .upload_video(request)
+            .expect("Upload should succeed");
+        service
+            .process_video(video_id)
+            .expect("Processing should succeed");
+        service
+            .add_to_feed(video_id)
+            .expect("Add to feed should succeed");
 
         video_ids.push(video_id);
 

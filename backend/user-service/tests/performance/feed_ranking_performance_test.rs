@@ -1,6 +1,5 @@
 /// Performance tests for Feed Ranking System
 /// Measures throughput, latency, and resource usage
-
 use chrono::Utc;
 use std::sync::Arc;
 use std::time::Instant;
@@ -74,10 +73,7 @@ impl PerformanceMetrics {
     }
 
     fn print_report(&self, name: &str) {
-        println!(
-            "\n{} Performance Report:",
-            name
-        );
+        println!("\n{} Performance Report:", name);
         println!("  Min: {}ms", self.min_ms);
         println!("  Max: {}ms", self.max_ms);
         println!("  Avg: {}ms", self.avg_ms);
@@ -97,10 +93,8 @@ fn create_performance_test_service() -> FeedRankingService {
         5000,
     ));
 
-    let redis_client =
-        redis::Client::open("redis://127.0.0.1/").unwrap_or_else(|_| {
-            redis::Client::open("redis://127.0.0.1/").unwrap()
-        });
+    let redis_client = redis::Client::open("redis://127.0.0.1/")
+        .unwrap_or_else(|_| redis::Client::open("redis://127.0.0.1/").unwrap());
 
     let runtime = tokio::runtime::Runtime::new().unwrap();
     let conn_manager = runtime.block_on(async {
@@ -343,7 +337,10 @@ fn bench_memory_efficiency() {
     let end_mem = ALLOCATED.load(Ordering::Relaxed);
     let memory_used = end_mem.saturating_sub(start_mem);
 
-    println!("Memory used for 500 candidates: {:.2}MB", memory_used as f64 / 1024.0 / 1024.0);
+    println!(
+        "Memory used for 500 candidates: {:.2}MB",
+        memory_used as f64 / 1024.0 / 1024.0
+    );
 }
 
 /// Stress test: sustained load

@@ -1,12 +1,11 @@
 /// Integration tests for Feed API
 /// Tests the complete feed ranking pipeline with real dependencies (CH, Redis, Cache)
-
 use chrono::Utc;
 use std::sync::Arc;
 use uuid::Uuid;
 
-use user_service::db::ch_client::ClickHouseClient;
 use user_service::cache::FeedCache;
+use user_service::db::ch_client::ClickHouseClient;
 use user_service::services::feed_ranking::{FeedCandidate, FeedRankingService};
 
 // Helper to create a test service with mocked dependencies
@@ -23,11 +22,10 @@ async fn create_test_service() -> FeedRankingService {
     ));
 
     // Create Redis client (if available in test env)
-    let redis_client = redis::Client::open("redis://127.0.0.1:6379/")
-        .unwrap_or_else(|_| {
-            // Fallback for testing without Redis
-            redis::Client::open("redis://127.0.0.1/").unwrap()
-        });
+    let redis_client = redis::Client::open("redis://127.0.0.1:6379/").unwrap_or_else(|_| {
+        // Fallback for testing without Redis
+        redis::Client::open("redis://127.0.0.1/").unwrap()
+    });
 
     let conn_manager = redis::aio::ConnectionManager::new(redis_client)
         .await
@@ -151,10 +149,7 @@ async fn test_pagination_consistency() {
 
         // Pages should not overlap
         for post_id in &page1 {
-            assert!(
-                !page2.contains(post_id),
-                "Post appeared in multiple pages"
-            );
+            assert!(!page2.contains(post_id), "Post appeared in multiple pages");
         }
     }
 }
