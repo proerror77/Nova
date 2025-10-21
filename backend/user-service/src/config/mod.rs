@@ -267,18 +267,38 @@ impl Config {
                 .unwrap_or(default_rate_limit_window_secs()),
         };
 
-        let s3 = S3Config {
-            bucket_name: env::var("S3_BUCKET_NAME").expect("S3_BUCKET_NAME must be set"),
-            region: env::var("S3_REGION").expect("S3_REGION must be set"),
-            aws_access_key_id: env::var("AWS_ACCESS_KEY_ID")
-                .expect("AWS_ACCESS_KEY_ID must be set"),
-            aws_secret_access_key: env::var("AWS_SECRET_ACCESS_KEY")
-                .expect("AWS_SECRET_ACCESS_KEY must be set"),
-            cloudfront_url: env::var("CLOUDFRONT_URL").expect("CLOUDFRONT_URL must be set"),
-            presigned_url_expiry_secs: env::var("S3_PRESIGNED_URL_EXPIRY_SECS")
-                .unwrap_or_else(|_| default_s3_presigned_url_expiry_secs().to_string())
-                .parse()
-                .unwrap_or(default_s3_presigned_url_expiry_secs()),
+        // Allow disabling S3 via env to avoid mandatory S3 vars in non-S3 deployments
+        let s3_disabled = env::var("DISABLE_S3")
+            .ok()
+            .map(|v| matches!(v.to_lowercase().as_str(), "1" | "true" | "yes"))
+            .unwrap_or(false);
+
+        let s3 = if s3_disabled {
+            S3Config {
+                bucket_name: env::var("S3_BUCKET_NAME").unwrap_or_else(|_| "disabled".to_string()),
+                region: env::var("S3_REGION").unwrap_or_else(|_| "us-east-1".to_string()),
+                aws_access_key_id: env::var("AWS_ACCESS_KEY_ID").unwrap_or_default(),
+                aws_secret_access_key: env::var("AWS_SECRET_ACCESS_KEY").unwrap_or_default(),
+                cloudfront_url: env::var("CLOUDFRONT_URL").unwrap_or_else(|_| "http://localhost".to_string()),
+                presigned_url_expiry_secs: env::var("S3_PRESIGNED_URL_EXPIRY_SECS")
+                    .unwrap_or_else(|_| default_s3_presigned_url_expiry_secs().to_string())
+                    .parse()
+                    .unwrap_or(default_s3_presigned_url_expiry_secs()),
+            }
+        } else {
+            S3Config {
+                bucket_name: env::var("S3_BUCKET_NAME").expect("S3_BUCKET_NAME must be set"),
+                region: env::var("S3_REGION").expect("S3_REGION must be set"),
+                aws_access_key_id: env::var("AWS_ACCESS_KEY_ID")
+                    .expect("AWS_ACCESS_KEY_ID must be set"),
+                aws_secret_access_key: env::var("AWS_SECRET_ACCESS_KEY")
+                    .expect("AWS_SECRET_ACCESS_KEY must be set"),
+                cloudfront_url: env::var("CLOUDFRONT_URL").expect("CLOUDFRONT_URL must be set"),
+                presigned_url_expiry_secs: env::var("S3_PRESIGNED_URL_EXPIRY_SECS")
+                    .unwrap_or_else(|_| default_s3_presigned_url_expiry_secs().to_string())
+                    .parse()
+                    .unwrap_or(default_s3_presigned_url_expiry_secs()),
+            }
         };
 
         let cors = CorsConfig {
