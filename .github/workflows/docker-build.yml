@@ -9,7 +9,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}/nova-user-service
+  IMAGE_NAME: ${{ github.repository_owner }}/nova-user-service
 
 jobs:
   build:

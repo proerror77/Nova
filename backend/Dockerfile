@@ -1,7 +1,7 @@
 # ============================================
 # Builder Stage - Compile Rust application
 # ============================================
-FROM rustlang/rust:nightly-slim as builder
+FROM rustlang/rust:nightly-slim AS builder
 
 # Install build dependencies
 RUN apt-get update && apt-get install -y \
@@ -18,8 +18,8 @@ RUN useradd -m -u 1001 -s /bin/bash appuser
 # Set working directory
 WORKDIR /app
 
-# Copy workspace configuration
-COPY Cargo.toml Cargo.lock ./
+# Copy workspace configuration (Cargo.lock may not be checked in)
+COPY Cargo.toml ./
 
 # Copy service configuration and source
 COPY user-service ./user-service
