@@ -23,25 +23,14 @@ final class PostRepository {
     private let apiClient: APIClient
     private let interceptor: RequestInterceptor
     private let deduplicator = RequestDeduplicator()
-
-    // 可选的离线存储（用于缓存和后台同步）
-    private let localStorage: LocalStorageManager?
-    private let syncManager: SyncManager?
+    private let cacheOrchestrator: CacheOrchestrator
     private let enableOfflineSync: Bool
 
     init(apiClient: APIClient? = nil, enableOfflineSync: Bool = false) {
         self.apiClient = apiClient ?? APIClient(baseURL: AppConfig.baseURL)
         self.interceptor = RequestInterceptor(apiClient: self.apiClient)
+        self.cacheOrchestrator = CacheOrchestrator(enableOfflineSync: enableOfflineSync)
         self.enableOfflineSync = enableOfflineSync
-
-        // 仅在启用离线同步时初始化存储管理器
-        if enableOfflineSync {
-            self.localStorage = LocalStorageManager.shared
-            self.syncManager = SyncManager.shared
-        } else {
-            self.localStorage = nil
-            self.syncManager = nil
-        }
     }
 
     // MARK: - Post CRUD
@@ -106,9 +95,9 @@ final class PostRepository {
         let response: PostResponse = try await interceptor.executeWithRetry(getEndpoint)
 
         // 6. 如果启用离线同步，缓存到本地
-        if enableOfflineSync, let storage = localStorage {
+        if enableOfflineSync {
             let localPost = LocalPost.from(response.post)
-            try await storage.save(localPost)
+            try await LocalStorageManager.shared.save(localPost)
         }
 
         return response.post
@@ -118,8 +107,8 @@ final class PostRepository {
     /// 如果启用了离线同步，会先检查本地缓存，缓存未命中才从服务器获取
     func getPost(id: UUID) async throws -> Post {
         // 如果启用离线同步，先尝试从本地缓存读取
-        if enableOfflineSync, let storage = localStorage {
-            if let localPost = try await storage.fetchFirst(
+        if enableOfflineSync {
+            if let localPost = try await LocalStorageManager.shared.fetchFirst(
                 LocalPost.self,
                 predicate: #Predicate { $0.id == id.uuidString }
             ), let post = localPost.toPost() {
@@ -143,9 +132,9 @@ final class PostRepository {
         let response: PostResponse = try await interceptor.executeWithRetry(endpoint)
 
         // 缓存到本地
-        if enableOfflineSync, let storage = localStorage {
+        if enableOfflineSync {
             let localPost = LocalPost.from(response.post)
-            try await storage.save(localPost)
+            try await LocalStorageManager.shared.save(localPost)
         }
 
         return response.post
@@ -161,8 +150,8 @@ final class PostRepository {
         try await interceptor.executeNoResponseWithRetry(endpoint)
 
         // 从本地缓存删除
-        if enableOfflineSync, let storage = localStorage {
-            try await storage.delete(
+        if enableOfflineSync {
+            try await LocalStorageManager.shared.delete(
                 LocalPost.self,
                 predicate: #Predicate { $0.id == id.uuidString }
             )
@@ -179,8 +168,8 @@ final class PostRepository {
 
         return try await deduplicator.execute(key: key) {
             // 如果启用离线同步，执行乐观更新
-            if self.enableOfflineSync, let storage = self.localStorage {
-                if let localPost = try await storage.fetchFirst(
+            if self.enableOfflineSync {
+                if let localPost = try await LocalStorageManager.shared.fetchFirst(
                     LocalPost.self,
                     predicate: #Predicate { $0.id == id.uuidString }
                 ) {
@@ -188,7 +177,7 @@ final class PostRepository {
                     localPost.likeCount += 1
                     localPost.syncState = .localModified
                     localPost.localModifiedAt = Date()
-                    try await storage.update(localPost)
+                    try await LocalStorageManager.shared.update(localPost)
                 }
             }
 
@@ -202,8 +191,8 @@ final class PostRepository {
                 let response: LikeResponse = try await self.interceptor.executeWithRetry(endpoint)
 
                 // 同步服务器响应到本地
-                if self.enableOfflineSync, let storage = self.localStorage {
-                    if let localPost = try await storage.fetchFirst(
+                if self.enableOfflineSync {
+                    if let localPost = try await LocalStorageManager.shared.fetchFirst(
                         LocalPost.self,
                         predicate: #Predicate { $0.id == id.uuidString }
                     ) {
@@ -211,7 +200,7 @@ final class PostRepository {
                         localPost.likeCount = response.likeCount
                         localPost.syncState = .synced
                         localPost.localModifiedAt = nil
-                        try await storage.update(localPost)
+                        try await LocalStorageManager.shared.update(localPost)
                     }
                 }
 
@@ -219,8 +208,8 @@ final class PostRepository {
 
             } catch {
                 // API 失败，回滚乐观更新
-                if self.enableOfflineSync, let storage = self.localStorage {
-                    if let localPost = try await storage.fetchFirst(
+                if self.enableOfflineSync {
+                    if let localPost = try await LocalStorageManager.shared.fetchFirst(
                         LocalPost.self,
                         predicate: #Predicate { $0.id == id.uuidString }
                     ) {
@@ -228,7 +217,7 @@ final class PostRepository {
                         localPost.likeCount -= 1
                         localPost.syncState = .synced
                         localPost.localModifiedAt = nil
-                        try await storage.update(localPost)
+                        try await LocalStorageManager.shared.update(localPost)
                     }
                 }
 
@@ -243,8 +232,8 @@ final class PostRepository {
 
         return try await deduplicator.execute(key: key) {
             // 如果启用离线同步，执行乐观更新
-            if self.enableOfflineSync, let storage = self.localStorage {
-                if let localPost = try await storage.fetchFirst(
+            if self.enableOfflineSync {
+                if let localPost = try await LocalStorageManager.shared.fetchFirst(
                     LocalPost.self,
                     predicate: #Predicate { $0.id == id.uuidString }
                 ) {
@@ -252,7 +241,7 @@ final class PostRepository {
                     localPost.likeCount -= 1
                     localPost.syncState = .localModified
                     localPost.localModifiedAt = Date()
-                    try await storage.update(localPost)
+                    try await LocalStorageManager.shared.update(localPost)
                 }
             }
 
@@ -266,8 +255,8 @@ final class PostRepository {
                 let response: LikeResponse = try await self.interceptor.executeWithRetry(endpoint)
 
                 // 同步服务器响应到本地
-                if self.enableOfflineSync, let storage = self.localStorage {
-                    if let localPost = try await storage.fetchFirst(
+                if self.enableOfflineSync {
+                    if let localPost = try await LocalStorageManager.shared.fetchFirst(
                         LocalPost.self,
                         predicate: #Predicate { $0.id == id.uuidString }
                     ) {
@@ -275,7 +264,7 @@ final class PostRepository {
                         localPost.likeCount = response.likeCount
                         localPost.syncState = .synced
                         localPost.localModifiedAt = nil
-                        try await storage.update(localPost)
+                        try await LocalStorageManager.shared.update(localPost)
                     }
                 }
 
@@ -283,8 +272,8 @@ final class PostRepository {
 
             } catch {
                 // API 失败，回滚乐观更新
-                if self.enableOfflineSync, let storage = self.localStorage {
-                    if let localPost = try await storage.fetchFirst(
+                if self.enableOfflineSync {
+                    if let localPost = try await LocalStorageManager.shared.fetchFirst(
                         LocalPost.self,
                         predicate: #Predicate { $0.id == id.uuidString }
                     ) {
@@ -292,7 +281,7 @@ final class PostRepository {
                         localPost.likeCount += 1
                         localPost.syncState = .synced
                         localPost.localModifiedAt = nil
-                        try await storage.update(localPost)
+                        try await LocalStorageManager.shared.update(localPost)
                     }
                 }
 
@@ -307,8 +296,8 @@ final class PostRepository {
     /// 如果启用离线同步且无分页游标，会先返回本地缓存，后台同步更新
     func getComments(postId: UUID, cursor: String? = nil, limit: Int = 20) async throws -> [Comment] {
         // 如果启用离线同步且无分页游标，先尝试从本地缓存读取
-        if enableOfflineSync, cursor == nil, let storage = localStorage {
-            let localComments = try await storage.fetch(
+        if enableOfflineSync, cursor == nil {
+            let localComments = try await LocalStorageManager.shared.fetch(
                 LocalComment.self,
                 predicate: #Predicate { $0.postId == postId.uuidString },
                 sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
@@ -344,9 +333,9 @@ final class PostRepository {
         let response: CommentsResponse = try await interceptor.executeWithRetry(endpoint)
 
         // 缓存到本地（仅缓存首页结果）
-        if enableOfflineSync, cursor == nil, let storage = localStorage {
+        if enableOfflineSync, cursor == nil {
             let localComments = response.comments.map { LocalComment.from($0) }
-            try await storage.save(localComments)
+            try await LocalStorageManager.shared.save(localComments)
         }
 
         return response.comments
@@ -373,9 +362,9 @@ final class PostRepository {
             let response: CommentResponse = try await self.interceptor.executeWithRetry(endpoint)
 
             // 缓存到本地
-            if self.enableOfflineSync, let storage = self.localStorage {
+            if self.enableOfflineSync {
                 let localComment = LocalComment.from(response.comment)
-                try await storage.save(localComment)
+                try await LocalStorageManager.shared.save(localComment)
             }
 
             return response.comment
@@ -392,8 +381,8 @@ final class PostRepository {
         try await interceptor.executeNoResponseWithRetry(endpoint)
 
         // 从本地缓存删除
-        if enableOfflineSync, let storage = localStorage {
-            try await storage.delete(
+        if enableOfflineSync {
+            try await LocalStorageManager.shared.delete(
                 LocalComment.self,
                 predicate: #Predicate { $0.id == id.uuidString }
             )
@@ -429,7 +418,7 @@ final class PostRepository {
 
     /// 后台同步 Post（后台更新缓存）
     private func syncPostInBackground(id: UUID) async throws {
-        guard enableOfflineSync, let syncMgr = syncManager else { return }
+        guard enableOfflineSync else { return }
 
         let endpoint = APIEndpoint(
             path: "/api/v1/posts/\(id.uuidString)",
@@ -438,7 +427,7 @@ final class PostRepository {
 
         do {
             let response: PostResponse = try await interceptor.executeWithRetry(endpoint)
-            try await syncMgr.syncPosts([response.post])
+            try await cacheOrchestrator.syncPosts([response.post])
             Logger.log("✅ Background sync completed for post \(id)", level: .debug)
         } catch {
             Logger.log("⚠️ Background sync failed for post \(id): \(error.localizedDescription)", level: .warning)
@@ -447,7 +436,7 @@ final class PostRepository {
 
     /// 后台同步 Comments（后台更新评论缓存）
     private func syncCommentsInBackground(postId: UUID, limit: Int) async throws {
-        guard enableOfflineSync, let syncMgr = syncManager else { return }
+        guard enableOfflineSync else { return }
 
         let queryItems = [
             URLQueryItem(name: "limit", value: "\(limit)")
@@ -461,7 +450,7 @@ final class PostRepository {
 
         do {
             let response: CommentsResponse = try await interceptor.executeWithRetry(endpoint)
-            try await syncMgr.syncComments(response.comments)
+            try await cacheOrchestrator.syncComments(response.comments)
             Logger.log("✅ Background sync completed for comments (post \(postId))", level: .debug)
         } catch {
             Logger.log("⚠️ Background sync failed for comments: \(error.localizedDescription)", level: .warning)
