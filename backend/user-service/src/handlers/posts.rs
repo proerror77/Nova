@@ -6,7 +6,7 @@ use uuid::Uuid;
 
 use crate::config::Config;
 use crate::db::post_repo;
-use crate::handlers::auth::ErrorResponse;
+use crate::error::ErrorResponse;
 use crate::middleware::UserId;
 use crate::services::{job_queue::ImageProcessingJob, job_queue::JobSender, s3_service};
 

@@ -1,22 +1,29 @@
-# Implementation Tasks: Video Live Streaming Infrastructure
+# Implementation Tasks: Phase 2 - Quality Assurance, Observability & Deployment
 
-**Feature**: Video Live Streaming Infrastructure (RTMP + HLS/DASH + Analytics)
-**Branch**: `001-rtmp-hls-streaming`
-**Date**: 2025-10-20
-**Status**: In Progress (~65% complete)
-**Total Tasks**: 106 | **Completed**: ~70 | **Phases**: 6 | **Parallel Opportunities**: 25+
+**Feature**: Video Live Streaming Infrastructure (Phase 2: Testing, Monitoring & Documentation)
+**Branch**: `chore/ios-local-docker`
+**Date**: 2025-10-21
+**Status**: Phase 2 Planning (Target: 65% → 90% completion)
+**Total Tasks**: 24 | **Categories**: 4 | **Timeline**: 15 days | **Parallel Opportunities**: 8+
 
-## 📊 Completion Summary by Phase
+## 📊 Phase 2 Task Categories
 
-| Phase | Tasks | Completed | Status |
-|-------|-------|-----------|--------|
-| Phase 1 (Setup) | 12 | 11 | ✅ 90% |
-| Phase 2 (Foundations) | 11 | 9 | ✅ 80% |
-| Phase 3 (US1 Broadcaster) | 17 | 12 | ✅ 70% |
-| Phase 4 (US2 Viewer) | 24 | 14 | ✅ 60% |
-| Phase 5 (US3 Analytics) | 13 | 5 | ⚠️ 40% |
-| Phase 6 (Polish & Ops) | 29 | 15 | ⚠️ 50% |
-| **TOTAL** | **106** | **66** | **✅ 65%** |
+| Category | Tasks | Est. Days | Status |
+|----------|-------|-----------|--------|
+| Compilation Fixes | 1 | 0.5 | ⏳ TODO |
+| Integration Testing | 8 | 5 | ⏳ TODO |
+| Prometheus Monitoring | 6 | 3 | ⏳ TODO |
+| API Documentation | 5 | 2 | ⏳ TODO |
+| Deployment Guides | 4 | 4.5 | ⏳ TODO |
+| **TOTAL** | **24** | **15** | **⏳ READY** |
+
+## 📋 Overall Project Progress
+
+| Milestone | Completion |
+|-----------|------------|
+| Phase 1 (WebSocket + Code Alignment) | ✅ 65% |
+| Phase 2 (This Sprint - Target) | ⏳ 0% → 90% |
+| Phase 3 (Production Ready) | ⏳ TODO |
 
 ---
 
@@ -74,357 +81,392 @@
 
 ## Overview
 
-This document contains all implementation tasks organized by phase and user story. Each task is independently actionable and includes file paths, dependencies, and success criteria.
+**Phase 2** focuses on moving from 65% to 90% completion through:
+1. Fixing remaining compilation errors
+2. Implementing comprehensive integration tests
+3. Setting up production-grade monitoring
+4. Documenting all deployment procedures
 
-### 🚨 Critical Path Adjustments for Actual Architecture
+This phase builds on Phase 1's WebSocket implementation and addresses the 3 critical gaps identified in the spec alignment analysis.
 
-**Note**: Original spec assumed 5 independent microservices. Current implementation is a pragmatic hybrid:
+### 🏗️ Testing Infrastructure Architecture
 
-**Actual Component Mapping:**
+**重要澄清**: Test simulator 連接到 **真實的生產基礎設施**，不是模擬的：
+
 ```
-Original Spec          →  Actual Implementation
-────────────────────────────────────────────────
-streaming-ingest       →  Nginx-RTMP (external) + stream_service.rs
-streaming-transcode    →  Nginx-RTMP bitrate profiles (external)
-streaming-delivery     →  CloudFront CDN (external) + REST API
-streaming-api          →  user-service/handlers
-streaming-core         →  models.rs + repository.rs + redis_counter.rs
+Test Simulator Layer (Automated Testing)
+├── Test RTMP Client Simulator
+│   └─→ Connects to REAL Nginx-RTMP (port 1935)
+│       ├─→ Sends synthetic H.264 frames
+│       └─→ Verifies RTMP protocol handling
+│
+├── Test WebSocket Clients
+│   └─→ Connect to REAL user-service WebSocket
+│       ├─→ Receive real viewer_count_changed events
+│       └─→ Verify real-time broadcasting
+│
+└── Test Metric Collectors
+    └─→ Query REAL Redis + PostgreSQL
+        ├─→ Verify real metrics collection
+        └─→ Validate real counters
+
+        ↓↓↓ (All connections to real infrastructure) ↓↓↓
+
+Production Infrastructure Layer (Always Real)
+├── Nginx-RTMP Server (real RTMP ingest)
+├── user-service (real WebSocket handler)
+├── PostgreSQL Database (real stream records)
+├── Redis Cache (real metrics storage)
+└── CloudFront CDN (real HLS/DASH delivery)
 ```
 
-**Key Decision Points Needing Clarity:**
-
-1. **WebSocket Real-Time Hub (Critical Gap)**
-   - Spec assumes independent websocket_hub service
-   - Current: No real-time WebSocket support
-   - **Action**: Add websocket_handler.rs to user-service for live viewer count updates
-
-2. **Event Streaming (Medium Gap)**
-   - Spec assumes Kafka for inter-service communication
-   - Current: No Kafka integration
-   - **Action**: Optional - add Kafka producer for audit trail (not critical for MVP)
-
-3. **Monitoring & Observability (Medium Gap)**
-   - Spec assumes Prometheus export + dashboard
-   - Current: No monitoring infrastructure
-   - **Action**: Add prometheus_exporter.rs + basic dashboard
-
-### User Story Priorities
-
-- **P1 (Critical MVP)**: Broadcaster initiates stream + Viewer watches stream
-- **P2 (Important)**: Analytics and monitoring
-
-### Execution Strategy
-
-**MVP Scope (Weeks 1-2)**: Complete P1 stories only
-- Users can broadcast via RTMP
-- Users can watch via HLS/DASH
-- Basic error handling + graceful shutdown
-
-**Phase 2 (Weeks 3-4)**: Add P2 (Analytics)
-- Real-time metrics via WebSocket
-- Historical analytics queries
-- Dashboard support
-
-**Recommended Parallelization**: Within each story, run tests in parallel with implementation
+**關鍵點**:
+- ✅ Nginx-RTMP 是**真實的生產級**服務器，每次測試都運行
+- ✅ Test simulator 是**自動化工具**，用於在 CI/CD 中無需手動啟動 OBS
+- ✅ 真實廣播者仍可使用 OBS/FFmpeg 連接到同一個 Nginx-RTMP
+- ✅ 所有測試驗證真實的端到端管道
 
 ---
 
-## Phase 1: Project Setup & Infrastructure
+## Priority 0: Compilation Fixes
 
 ### Goal
-Initialize Rust workspace, configure development environment, set up databases and containers.
+Ensure `cargo build --release` succeeds with zero errors and warnings.
 
-### Independent Test Criteria
-- Workspace compiles without errors (`cargo build --all`)
-- Docker Compose services start successfully
-- Database migrations run successfully
-- All services can be launched individually
+### Success Criteria
+- ✅ Zero E0603 private import errors
+- ✅ All dependencies resolved
+- ✅ Clippy warnings = 0
 
 ### Tasks
 
-- [ ] T001 Create Cargo workspace structure at `streaming/Cargo.toml` with members: core, ingest, transcode, delivery, api
-- [ ] T002 [P] Initialize `streaming/crates/streaming-core/Cargo.toml` with serde, tokio, uuid dependencies
-- [ ] T003 [P] Initialize `streaming/crates/streaming-ingest/Cargo.toml` with tokio-util, bytes, tracing dependencies
-- [ ] T004 [P] Initialize `streaming/crates/streaming-transcode/Cargo.toml` with process, std::command dependencies
-- [ ] T005 [P] Initialize `streaming/crates/streaming-delivery/Cargo.toml` with actix-web, tokio-tungstenite dependencies
-- [ ] T006 [P] Initialize `streaming/crates/streaming-api/Cargo.toml` with actix-web, sqlx, serde_json dependencies
-- [ ] T007 Create `streaming/docker-compose.yml` with PostgreSQL, Redis, Kafka, Zookeeper services
-- [ ] T008 Create `streaming/k8s/namespace.yaml` for Kubernetes namespace
-- [ ] T009 Create PostgreSQL migration file `streaming/migrations/001_init_schema.sql` with Stream, StreamKey, ViewerSession, StreamMetrics, QualityLevel tables
-- [ ] T010 [P] Create `streaming/Makefile` with targets: build, test, run, clean, docker-up, docker-down
-- [ ] T011 Create `.env.example` with DATABASE_URL, REDIS_URL, KAFKA_BROKERS, RUST_LOG configuration
-- [ ] T012 [P] Add GitHub Actions CI workflow at `.github/workflows/test.yml` for build + test on each commit
+- [ ] **P0-T001** Fix E0603 private import errors in `backend/user-service/src/handlers/posts.rs` and `password_reset.rs`
+  - **File**: `backend/user-service/src/handlers/{posts,password_reset}.rs`
+  - **Action**: Expose ErrorResponse, generate_token, hash_token via pub use or refactor visibility
+  - **Est. Time**: 0.5 days
+  - **Success**: `cargo build --release` shows 0 errors
 
 ---
 
-## Phase 2: Foundational Infrastructure & Shared Code
+## Priority 1: Integration Testing Framework
 
 ### Goal
-Build shared libraries, error handling, logging, and database abstractions used by all services.
+Build comprehensive test suite with mock RTMP client and 5 end-to-end scenarios covering full streaming pipeline.
 
-### Independent Test Criteria
-- `streaming-core` compiles and passes unit tests
-- Shared types can be imported by all 4 service crates
-- Database pool initialization works
-- Kafka producer/consumer clients initialize without errors
-
-### Tasks
-
-- [ ] T013 [P] Create core types module at `streaming/crates/streaming-core/src/models.rs` with Stream, StreamKey, ViewerSession, StreamMetrics, QualityLevel structs (use serde, derive Clone, Debug)
-- [ ] T014 [P] Create error types at `streaming/crates/streaming-core/src/errors.rs` with StreamError enum covering: InvalidKey, NetworkError, TranscodingError, DatabaseError, NotFound
-- [ ] T015 [P] Implement logger initialization at `streaming/crates/streaming-core/src/logging.rs` using tracing subscriber with structured JSON output
-- [ ] T016 Create RTMP protocol types at `streaming/crates/streaming-core/src/rtmp.rs` with RtmpHandshake, RtmpMessage, RtmpCommand, RtmpData structs
-- [ ] T017 Create HLS types at `streaming/crates/streaming-core/src/hls.rs` with HlsPlaylist, HlsSegment, HlsVariant structs
-- [ ] T018 Create DASH types at `streaming/crates/streaming-core/src/dash.rs` with DashMpd, DashPeriod, DashAdaptationSet structs
-- [ ] T019 Create event types at `streaming/crates/streaming-core/src/events.rs` with StreamEvent enum (StreamStarted, StreamEnded, BitrateAdapted, QualitySwitched, etc.) using serde for Kafka serialization
-- [ ] T020 [P] Implement PostgreSQL connection pool module at `streaming/crates/streaming-core/src/db.rs` using sqlx with connection pooling
-- [ ] T021 [P] Implement Kafka producer wrapper at `streaming/crates/streaming-core/src/kafka_producer.rs` for event publishing with Avro serialization support
-- [ ] T022 [P] Implement Redis client wrapper at `streaming/crates/streaming-core/src/redis_client.rs` for segment caching with TTL support
-- [ ] T023 Create configuration module at `streaming/crates/streaming-core/src/config.rs` using config crate to load from .env files
-
----
-
-## Phase 3: User Story 1 - Broadcaster Initiates Live Stream (P1)
-
-### User Story Description
-A content creator connects their encoder (OBS, FFmpeg) via RTMP to the streaming server and begins streaming. The system accepts the connection, validates the streaming key, normalizes the bitrate, and makes the stream available to viewers.
-
-### Acceptance Scenarios
-1. Broadcaster with valid streaming key connects RTMP encoder → server accepts connection → stream ingested
-2. RTMP stream with fluctuating bitrate → system adapts output streams to available quality levels
-3. Broadcaster stops streaming → connection closes → system notifies all viewers within 2 seconds
-
-### Independent Test Criteria (US1 MVP)
-- RTMP server accepts connections on port 1935
-- Streaming key validation works (valid key accepted, invalid key rejected)
-- Bitrate adaptation produces 3 quality levels (480p, 720p, 1080p)
-- Stream transitions to ACTIVE state in database within 1 second
-- Stream cleanup completes within 2 seconds after encoder disconnects
-- Test with FFmpeg RTMP encoder, verify segment production
+### Success Criteria
+- ✅ Mock RTMP client connects to Nginx on port 1935
+- ✅ All 5 test scenarios pass
+- ✅ Test suite runs in <2 minutes
+- ✅ 95%+ coverage of streaming paths
 
 ### Tasks
 
-**US1 Infrastructure & Database**:
+- [ ] **P1-T001** Create RTMP test client simulator at `tests/integration/mock_rtmp_client.rs`
+  - **Purpose**: Automated testing tool (NOT replacing Nginx-RTMP which is production real)
+  - **Connection Target**: Real Nginx-RTMP server (port 1935, already running in docker-compose)
+  - **Components**: TCP socket, RTMP handshake parser, synthetic H.264 frame generator
+  - **Est. Time**: 2 days
+  - **Success**: Test simulator connects to real Nginx-RTMP, authenticates, and sends synthetic frames for automated verification
 
-- [ ] T024 [US1] Create streaming key repository at `streaming/crates/streaming-core/src/repositories/stream_key_repo.rs` with methods: create_key, validate_key, revoke_key, get_by_id
-- [ ] T025 [US1] Create stream repository at `streaming/crates/streaming-core/src/repositories/stream_repo.rs` with methods: create_stream, update_status, get_by_id, get_active_streams
-- [ ] T026 [P] [US1] Create database migrations for StreamKey and Stream tables at `streaming/migrations/002_stream_tables.sql`
+- [ ] **P1-T002** Implement RTMP handshake protocol in test client simulator
+  - **File**: `tests/integration/mock_rtmp_client.rs`
+  - **Protocol**: C0 signature, C1/C2 challenge-response (compatible with real Nginx-RTMP)
+  - **Target**: Real Nginx-RTMP server (production infrastructure)
+  - **Est. Time**: 1 day
+  - **Success**: Real Nginx-RTMP server accepts connection from test simulator
 
-**US1 RTMP Ingestion Service**:
+- [ ] **P1-T003** Create Scenario 1 test: Broadcaster Lifecycle
+  - **File**: `tests/integration/streaming_lifecycle_test.rs`
+  - **Flow**: Test simulator connects to real Nginx-RTMP → Streams frames → Verify DB state → Disconnect → Verify cleanup
+  - **Infrastructure**: Uses real Nginx-RTMP (from docker-compose), user-service, PostgreSQL
+  - **Est. Time**: 1 day
+  - **Success**: Stream transitions PENDING → ACTIVE → COMPLETED in DB via real infrastructure
 
-- [ ] T027 [US1] Implement RTMP handshake parser at `streaming/crates/streaming-ingest/src/rtmp_handler.rs` (parse C0, C1, C2 messages)
-- [ ] T028 [US1] Implement RTMP command handler at `streaming/crates/streaming-ingest/src/rtmp_handler.rs` to process connect, releaseStream, createStream, publish commands
-- [ ] T029 [US1] Create stream manager at `streaming/crates/streaming-ingest/src/stream_manager.rs` to track active RTMP connections and map to Stream entities
-- [ ] T030 [US1] Implement streaming key validation at `streaming/crates/streaming-ingest/src/auth.rs` querying PostgreSQL for valid keys
-- [ ] T031 [US1] Create Kafka producer for stream events at `streaming/crates/streaming-ingest/src/kafka_producer.rs` to emit StreamStarted, BitrateAdapted events
-- [ ] T032 [US1] Implement bitrate adapter at `streaming/crates/streaming-ingest/src/quality_adapter.rs` to normalize input streams to standard bitrates (2M, 5M, 8M)
-- [ ] T033 [US1] Create graceful shutdown handler at `streaming/crates/streaming-ingest/src/shutdown.rs` to close all RTMP connections and emit StreamEnded events
-- [ ] T034 [US1] Implement main RTMP server at `streaming/crates/streaming-ingest/src/main.rs` using Tokio TcpListener on port 1935, spawning tasks per connection
+- [ ] **P1-T004** Create Scenario 2 test: Viewer WebSocket Connection
+  - **File**: `tests/integration/websocket_broadcast_test.rs`
+  - **Flow**: Test simulator connects to real Nginx-RTMP, streams frames → Test client connects to real user-service WebSocket → Receive viewer updates
+  - **Infrastructure**: Real Nginx-RTMP + real user-service WebSocket handler
+  - **Est. Time**: 1.5 days
+  - **Success**: Test client receives viewer_count_changed events within 2 seconds from real infrastructure
 
-**US1 Integration & Frame Forwarding**:
+- [ ] **P1-T005** Create Scenario 3 test: E2E Multi-Viewer Experience
+  - **File**: `tests/integration/e2e_viewer_test.rs`
+  - **Flow**: 1 test simulator → real Nginx-RTMP + 5 test clients → real user-service WebSocket
+  - **Infrastructure**: Real streaming pipeline (RTMP → Nginx → WebSocket → clients)
+  - **Est. Time**: 1.5 days
+  - **Success**: All 5 test clients maintain real-time connection, receive consistent data from real infrastructure
 
-- [ ] T035 [US1] Create raw frame forwarding to Kafka at `streaming/crates/streaming-ingest/src/frame_forwarder.rs` to send H.264/AAC frames to stream-frames Kafka topic
-- [ ] T036 [US1] Implement error recovery at `streaming/crates/streaming-ingest/src/error_handler.rs` to handle network errors, malformed RTMP messages, and invalid bitrates
+- [ ] **P1-T006** Create Scenario 4 test: HLS Playlist Validation
+  - **File**: `tests/integration/hls_playlist_test.rs`
+  - **Flow**: Test simulator streams to real Nginx-RTMP → Verify real HLS m3u8 generation → Validate playlist format
+  - **Infrastructure**: Real Nginx-RTMP HLS output
+  - **Est. Time**: 1 day
+  - **Success**: Real Nginx-RTMP generates valid m3u8 files with correct quality variants
 
-**US1 Testing Tasks**:
+- [ ] **P1-T007** Create Scenario 5 test: Metrics Collection E2E
+  - **File**: `tests/integration/metrics_collection_test.rs`
+  - **Flow**: Test simulator streams to real Nginx-RTMP → real user-service collects metrics → Verify counters → Query via real Redis
+  - **Infrastructure**: Real Nginx-RTMP + real user-service metrics collection + real Redis
+  - **Est. Time**: 1 day
+  - **Success**: Real infrastructure accurately tracks viewers, bitrate, errors in real Redis
 
-- [ ] T037 [US1] Create RTMP protocol tests at `streaming/tests/rtmp_protocol_test.rs` (handshake parsing, command parsing)
-- [ ] T038 [P] [US1] Create mock RTMP encoder at `streaming/tests/mock_encoder.rs` using bytes crate to simulate OBS/FFmpeg RTMP stream
-- [ ] T039 [US1] Create integration test at `streaming/tests/integration/broadcaster_connect_test.rs` to verify full RTMP ingest flow (connect→authenticate→stream→disconnect)
-- [ ] T040 [US1] Create bitrate adaptation tests at `streaming/tests/unit/quality_adapter_test.rs` for input/output bitrate mapping
-
----
-
-## Phase 4: User Story 2 - Viewer Watches Live Stream (P1)
-
-### User Story Description
-A viewer discovers an active live stream and opens the HLS/DASH URL in their browser. The system begins serving segments, supports quality selection, adapts to bandwidth changes, and maintains real-time status via WebSocket. Target: <3 second startup, <2 second quality switches.
-
-### Acceptance Scenarios
-1. Viewer opens HLS/DASH stream URL → playback begins within 3 seconds
-2. Viewer network conditions change → stream quality adapts without interruption (buffer <2s)
-3. Multiple concurrent viewers (10k+) join simultaneously → all viewers maintain stable playback quality
-
-### Independent Test Criteria (US2 MVP)
-- HLS master playlist downloads successfully with quality variants
-- HLS segments playable in modern browsers (Safari, Chrome, Firefox)
-- DASH manifest valid XML, playable with dash.js library
-- Viewer startup time <3 seconds (from URL open to first frame display)
-- Concurrent viewer count tracked accurately in metrics
-- WebSocket delivers status updates within 1-2 seconds
-- Test with 10+ concurrent viewers using HLS.js or dash.js
-
-### Tasks
-
-**US2 Database & Repositories**:
-
-- [ ] T041 [US2] Create viewer session repository at `streaming/crates/streaming-core/src/repositories/viewer_session_repo.rs` with methods: create_session, update_session, end_session, get_by_stream
-- [ ] T042 [US2] Create stream metrics repository at `streaming/crates/streaming-core/src/repositories/metrics_repo.rs` with methods: record_metrics, query_range, get_latest
-
-**US2 Segment Storage & Caching**:
-
-- [ ] T043 [US2] Create segment cache manager at `streaming/crates/streaming-delivery/src/cache_manager.rs` to read segments from Redis with TTL fallback to S3
-
-**US2 HLS Delivery Service**:
-
-- [ ] T044 [US2] Implement HLS master playlist generator at `streaming/crates/streaming-delivery/src/hls_handler.rs` (m3u8 format with variant streams for 480p/720p/1080p)
-- [ ] T045 [US2] Implement HLS quality playlist handler at `streaming/crates/streaming-delivery/src/hls_handler.rs` to serve quality-specific m3u8 files with segment references
-- [ ] T046 [US2] Implement HLS segment serving endpoint at `streaming/crates/streaming-delivery/src/hls_handler.rs` (GET /hls/:stream_id/:quality/segment-N.ts)
-- [ ] T047 [US2] Create HTTP cache headers manager at `streaming/crates/streaming-delivery/src/cache_headers.rs` to set appropriate Cache-Control, ETag, Last-Modified for segment delivery
-
-**US2 DASH Delivery Service**:
-
-- [ ] T048 [US2] Implement DASH MPD manifest generator at `streaming/crates/streaming-delivery/src/dash_handler.rs` (XML format with adaptation sets for quality levels)
-- [ ] T049 [US2] Implement DASH segment serving endpoint at `streaming/crates/streaming-delivery/src/dash_handler.rs` (GET /dash/:stream_id/:quality/segment-N.m4s)
-
-**US2 WebSocket Real-Time Status**:
-
-- [ ] T050 [US2] Create WebSocket hub at `streaming/crates/streaming-delivery/src/websocket_hub.rs` to manage per-stream subscriptions and broadcasts
-- [ ] T051 [US2] Implement WebSocket connection handler at `streaming/crates/streaming-delivery/src/websocket_handler.rs` (GET /ws/stream/:stream_id)
-- [ ] T052 [US2] Create stream status publisher at `streaming/crates/streaming-delivery/src/status_publisher.rs` to emit stream state changes (ACTIVE, ENDED, ERROR) to WebSocket clients
-
-**US2 Adaptive Bitrate & Quality Selection**:
-
-- [ ] T053 [US2] Implement quality level repository at `streaming/crates/streaming-core/src/repositories/quality_level_repo.rs` to load predefined quality profiles
-- [ ] T054 [US2] Create client-side quality selection logic at `streaming/crates/streaming-delivery/src/quality_selector.rs` (recommend quality based on available bandwidth, client preference)
-
-**US2 REST API Endpoints**:
-
-- [ ] T055 [US2] Implement GET /streams/:stream_id endpoint at `streaming/crates/streaming-api/src/handlers/stream_handler.rs` to return stream status, concurrent viewers, quality options
-- [ ] T056 [US2] Implement GET /metrics/:stream_id endpoint at `streaming/crates/streaming-api/src/handlers/metrics_handler.rs` to return historical analytics (viewership, quality distribution, buffering)
-
-**US2 Viewer Session Tracking**:
-
-- [ ] T057 [US2] Implement session creation on stream join at `streaming/crates/streaming-delivery/src/session_manager.rs` to record viewer_id, quality_level, joined_at
-- [ ] T058 [US2] Implement session update on quality switch at `streaming/crates/streaming-delivery/src/session_manager.rs` to track quality_switches, buffer_events
-- [ ] T059 [US2] Implement session finalization on disconnect at `streaming/crates/streaming-delivery/src/session_manager.rs` to record left_at, total duration, bytes_transferred
-
-**US2 Testing Tasks**:
-
-- [ ] T060 [P] [US2] Create HLS playlist parser test at `streaming/tests/unit/hls_playlist_test.rs` (verify m3u8 format, variant streams, segment count)
-- [ ] T061 [P] [US2] Create DASH manifest validator test at `streaming/tests/unit/dash_manifest_test.rs` (verify XML structure, adaptation sets, period duration)
-- [ ] T062 [US2] Create WebSocket integration test at `streaming/tests/integration/websocket_test.rs` (connect, receive status updates, quality switch notifications)
-- [ ] T063 [US2] Create viewer session test at `streaming/tests/integration/viewer_session_test.rs` (create→update quality→finalize, verify database records)
-- [ ] T064 [US2] Create end-to-end test at `streaming/tests/integration/e2e_broadcaster_viewer_test.rs` (broadcaster connects→viewer opens stream→receives video→quality switches)
+- [ ] **P1-T008** Setup Docker test infrastructure
+  - **File**: `docker-compose.test.yml` (extends existing `docker-compose.yml`)
+  - **Services**: PostgreSQL, Redis, real Nginx-RTMP server, user-service
+  - **Purpose**: Provides real production services for automated test clients to connect to
+  - **Est. Time**: 0.5 days
+  - **Success**: `docker-compose -f docker-compose.test.yml up` launches all production services ready for test client connections
 
 ---
 
-## Phase 5: User Story 3 - Analytics and Monitoring (P2)
-
-### User Story Description
-Platform operators and broadcasters monitor stream health, viewer engagement, and performance metrics in real-time. They access a dashboard showing concurrent viewers, bandwidth, quality distribution, error rates, and can query historical analytics.
-
-### Acceptance Scenarios
-1. Active stream metrics (viewers, bitrate, quality) collected every 1 second → available via WebSocket within 1-2 seconds
-2. Viewer quality switch logged → reflected in analytics immediately (quality_distribution updated)
-3. Platform operator views dashboard → sees current metrics (concurrent viewers, health score, bandwidth) updated in real-time
-
-### Independent Test Criteria (P2)
-- Metrics collected at 1-second intervals without performance degradation
-- WebSocket metrics push latency <2 seconds
-- Historical metrics queryable for any time range
-- Metrics API returns accurate concurrent viewer count matching WebSocket subscriptions
-- Dashboard loads within 2 seconds with live data
-- Test with load generator (simulate 100 concurrent viewers + metrics collection)
-
-### Tasks
-
-**US3 Metrics Collection & Aggregation**:
-
-- [ ] T065 [US3] Create metrics collector at `streaming/crates/streaming-delivery/src/metrics_collector.rs` to aggregate concurrent_viewers, ingress_bitrate, egress_bitrate, quality_distribution every 1 second
-- [ ] T066 [US3] Implement metrics persistence at `streaming/crates/streaming-delivery/src/metrics_writer.rs` to write StreamMetrics records to PostgreSQL with 1-second granularity
-- [ ] T067 [US3] Create real-time metrics broadcaster at `streaming/crates/streaming-delivery/src/metrics_broadcaster.rs` to publish metrics to WebSocket clients and update Redis cache
-
-**US3 Analytics API**:
-
-- [ ] T068 [US3] Implement GET /metrics/:stream_id endpoint (historical query) at `streaming/crates/streaming-api/src/handlers/analytics_handler.rs` with time range filtering
-- [ ] T069 [US3] Implement GET /streams/:stream_id/viewers endpoint at `streaming/crates/streaming-api/src/handlers/viewers_handler.rs` to list active viewer sessions
-- [ ] T070 [US3] Create analytics aggregation service at `streaming/crates/streaming-api/src/services/analytics_service.rs` to compute health score, recommendations, trends
-
-**US3 Monitoring & Alerting**:
-
-- [ ] T071 [US3] Create Prometheus metrics exporter at `streaming/crates/streaming-delivery/src/prometheus_exporter.rs` to expose Prometheus-compatible metrics (concurrent_viewers, stream_errors, buffering_rate)
-- [ ] T072 [US3] Create alerting rules at `streaming/monitoring/prometheus-alerts.yaml` for critical thresholds (error rate >1%, buffering >5%, viewer drop >50%)
-
-**US3 Dashboard (Frontend Template)**:
-
-- [ ] T073 [US3] Create HTML dashboard template at `streaming/web/dashboard.html` with real-time metrics display (concurrent viewers gauge, quality distribution pie chart, bitrate graph)
-- [ ] T074 [US3] Implement dashboard WebSocket client at `streaming/web/dashboard.js` to subscribe to metrics and update DOM in real-time
-
-**US3 Testing Tasks**:
-
-- [ ] T075 [P] [US3] Create metrics collection test at `streaming/tests/unit/metrics_collector_test.rs` (verify aggregation accuracy, 1-second granularity)
-- [ ] T076 [P] [US3] Create analytics query test at `streaming/tests/integration/analytics_query_test.rs` (query historical metrics by time range, verify accuracy)
-- [ ] T077 [US3] Create dashboard integration test at `streaming/tests/integration/dashboard_test.rs` (verify WebSocket pushes update DOM correctly, load time <2s)
-
----
-
-## Phase 6: Polish, Optimization & Cross-Cutting Concerns
+## Priority 2: Prometheus Monitoring & Observability
 
 ### Goal
-Finalize implementation with performance optimization, security hardening, error handling, monitoring, documentation, and deployment preparation.
+Implement production-grade metrics collection, Prometheus export, and Kubernetes integration for monitoring streaming health.
 
-### Independent Test Criteria
-- All services compile with zero warnings (clippy)
-- All tests pass (unit + integration)
-- Load test passes: 100 concurrent streams, 10k concurrent viewers
-- Security audit passes: no hardcoded credentials, TLS configured
-- Documentation complete for deployment
+### Success Criteria
+- ✅ 8 metric types exported to Prometheus
+- ✅ ServiceMonitor auto-discovers metrics in Kubernetes
+- ✅ Prometheus scrapes metrics successfully every 30 seconds
+- ✅ Grafana dashboard displays live data
 
 ### Tasks
 
-**Error Handling & Resilience**:
+- [ ] **P2-T001** Create prometheus_exporter.rs module in user-service
+  - **File**: `backend/user-service/src/prometheus_exporter.rs`
+  - **Metrics** (8 types):
+    1. `nova_streaming_active_streams` (gauge) - current active streams
+    2. `nova_streaming_viewers_total` (histogram) - total viewer count
+    3. `nova_streaming_peak_viewers` (gauge) - peak viewers this stream
+    4. `nova_streaming_stream_duration_seconds` (histogram) - stream uptime
+    5. `nova_streaming_websocket_connections` (gauge) - active WebSocket clients
+    6. `nova_streaming_broadcast_errors_total` (counter) - broadcast failures
+    7. `nova_streaming_rtmp_ingestion_latency_seconds` (histogram) - RTMP processing delay
+    8. `nova_streaming_hls_segment_generation_seconds` (histogram) - segment creation time
+  - **Est. Time**: 1.5 days
+  - **Success**: `/metrics` endpoint returns Prometheus-format metrics
 
-- [ ] T078 Create circuit breaker for Kafka producer at `streaming/crates/streaming-core/src/circuit_breaker.rs` (fail-open on producer errors, retry with exponential backoff)
-- [ ] T079 Implement graceful degradation at `streaming/crates/streaming-delivery/src/graceful_degradation.rs` (serve lower quality if transcoding fails, notify viewers)
-- [ ] T080 Create timeout handlers at `streaming/crates/streaming-core/src/timeouts.rs` for RTMP (30s idle), transcoding (5m), segment delivery (10s)
+- [ ] **P2-T002** Integrate metrics collection in handlers
+  - **Files**: `handlers/streaming_websocket.rs`, `handlers/feed.rs`, main.rs
+  - **Action**: Call metric collectors on WebSocket connect/disconnect, stream start/end, segment generation
+  - **Est. Time**: 0.5 days
+  - **Success**: Metrics updated in real-time as streams and viewers connect
 
-**Performance Optimization**:
+- [ ] **P2-T003** Create Kubernetes ServiceMonitor
+  - **File**: `k8s/prometheus-service-monitor.yaml`
+  - **Config**: Scrape /metrics endpoint every 30 seconds
+  - **Est. Time**: 0.5 days
+  - **Success**: Prometheus discovers and scrapes metrics from user-service pods
 
-- [ ] T081 [P] Implement connection pooling at `streaming/crates/streaming-core/src/db.rs` with optimal pool size (20-30 connections)
-- [ ] T082 [P] Add Redis connection pooling at `streaming/crates/streaming-core/src/redis_client.rs` with pool size 10
-- [ ] T083 Implement segment caching strategy at `streaming/crates/streaming-delivery/src/cache_strategy.rs` (hot: Redis 10min TTL, warm: S3 30days)
-- [ ] T084 Create buffer size optimization at `streaming/crates/streaming-ingest/src/buffer_tuning.rs` for RTMP frame buffers
+- [ ] **P2-T004** Create Grafana dashboard
+  - **File**: `monitoring/grafana-dashboard.json`
+  - **Panels** (5 graphs):
+    1. Active Streams (gauge)
+    2. Concurrent Viewers (line chart, real-time)
+    3. Quality Distribution (stacked bar)
+    4. Error Rate (line chart)
+    5. Latency Percentiles (heatmap)
+  - **Est. Time**: 1 day
+  - **Success**: Dashboard displays live data when connected to Prometheus
 
-**Security Hardening**:
+- [ ] **P2-T005** Create alerting rules
+  - **File**: `monitoring/prometheus-alerts.yaml`
+  - **Alerts** (4 critical thresholds):
+    1. Error rate >1%
+    2. WebSocket connection failures >5/min
+    3. HLS segment generation >5 seconds
+    4. Peak viewers drop >50% in 1 minute
+  - **Est. Time**: 0.5 days
+  - **Success**: Prometheus fires alerts when thresholds exceeded
 
-- [ ] T085 [P] Implement TLS for HTTPS at `streaming/crates/streaming-delivery/src/tls_config.rs` (load certificates from secure storage)
-- [ ] T086 Create rate limiter at `streaming/crates/streaming-api/src/middleware/rate_limiter.rs` (100 req/min per IP, 10k concurrent sessions)
-- [ ] T087 Implement CORS headers at `streaming/crates/streaming-delivery/src/cors.rs` (restrict to approved origins)
-- [ ] T088 Create secret management at `streaming/crates/streaming-core/src/secrets.rs` (load API keys, database passwords from environment, never log)
+- [ ] **P2-T006** Document metrics collection and dashboarding
+  - **File**: `docs/MONITORING.md`
+  - **Content**: Metrics definitions, dashboard setup, alert interpretation
+  - **Est. Time**: 0.5 days
+  - **Success**: Operators can understand and troubleshoot all metrics
 
-**Logging & Monitoring**:
+---
 
-- [ ] T089 [P] Add structured logging at `streaming/crates/streaming-ingest/src/logging.rs` for: connection events, authentication, errors (JSON format)
-- [ ] T090 [P] Add distributed tracing at `streaming/crates/streaming-core/src/tracing.rs` using OpenTelemetry (trace RTMP→Kafka→Transcoding→HLS flow)
-- [ ] T091 Implement health check endpoints at `streaming/crates/streaming-api/src/handlers/health_handler.rs` (GET /health, returns service status + dependencies)
+## Priority 3: API Documentation & OpenAPI Spec
 
-**Load Testing & Performance Validation**:
+### Goal
+Create comprehensive OpenAPI 3.0.3 specification and client examples for streaming API.
 
-- [ ] T092 Create load test at `streaming/tests/load_test.rs` (simulate 100 concurrent broadcasters, 10k concurrent viewers, 1M total events/second)
-- [ ] T093 Create benchmarks at `streaming/benches/` for RTMP parsing, HLS generation, metrics aggregation (use criterion crate)
+### Success Criteria
+- ✅ OpenAPI spec covers all 6 endpoints
+- ✅ Spec includes request/response schemas
+- ✅ 3 working client examples (JS, Python, cURL)
+- ✅ Spec validates with Swagger/Redoc
 
-**Deployment & Operations**:
+### Tasks
 
-- [ ] T094 Create Kubernetes deployment manifests at `streaming/k8s/` (ingestion-deployment.yaml, transcode-deployment.yaml, delivery-deployment.yaml, api-deployment.yaml)
-- [ ] T095 Create Helm chart at `streaming/helm/Chart.yaml` for easy cluster deployment
-- [ ] T096 Implement health checks at `streaming/crates/streaming-*/src/health.rs` for Kubernetes liveness/readiness probes
-- [ ] T097 Create Docker images at `streaming/crates/streaming-*/Dockerfile` with multi-stage builds (small final size)
-- [ ] T098 Create database migration scripts at `streaming/scripts/migrate.sh` for production deployments
+- [ ] **P3-T001** Create OpenAPI 3.0.3 specification
+  - **File**: `docs/streaming-api.openapi.yaml`
+  - **Endpoints** (6 total):
+    1. GET /api/v1/streams/{stream_id}/ws - WebSocket upgrade
+    2. GET /api/v1/streams/{stream_id} - Stream status
+    3. GET /api/v1/streams/{stream_id}/metrics - Historical metrics
+    4. GET /api/v1/streams - List active streams
+    5. POST /api/v1/streams - Create stream (for testing)
+    6. DELETE /api/v1/streams/{stream_id} - End stream
+  - **Est. Time**: 1 day
+  - **Success**: Spec validates with swagger-cli
 
-**Documentation**:
+- [ ] **P3-T002** Document WebSocket message schema
+  - **File**: `docs/streaming-api.openapi.yaml`
+  - **Content**: JSON message format, event types, example payloads
+  - **Est. Time**: 0.5 days
+  - **Success**: Schema covers all 4 event types with examples
 
-- [ ] T099 [P] Create deployment guide at `streaming/docs/DEPLOYMENT.md` (local dev, Docker Compose, Kubernetes)
-- [ ] T100 [P] Create API documentation at `streaming/docs/API.md` (OpenAPI, WebSocket messages, error codes)
-- [ ] T101 [P] Create troubleshooting guide at `streaming/docs/TROUBLESHOOTING.md` (common issues, debugging)
-- [ ] T102 Create CONTRIBUTING.md at `streaming/CONTRIBUTING.md` (dev setup, testing, code review process)
+- [ ] **P3-T003** Create JavaScript client example
+  - **File**: `docs/examples/client-js.html`
+  - **Features**: Connect, receive updates, handle disconnection
+  - **Est. Time**: 0.5 days
+  - **Success**: Example connects to real WebSocket and displays viewer count
 
-**Final Integration & Validation**:
+- [ ] **P3-T004** Create Python broadcaster example
+  - **File**: `docs/examples/broadcaster.py`
+  - **Features**: RTMP connection simulation, error handling
+  - **Est. Time**: 0.5 days
+  - **Success**: Script can connect to RTMP server and stream test frames
 
-- [ ] T103 Run full integration test suite (`cargo test --all --release`) and verify 100% pass rate
-- [ ] T104 Run security scan (`cargo audit`, `clippy`, OWASP analysis) and resolve findings
-- [ ] T105 Run performance validation (`cargo bench`) and verify targets met (<3s startup, <5s latency)
-- [ ] T106 Create release checklist at `streaming/RELEASE_CHECKLIST.md` (versioning, tag, deployment steps)
+- [ ] **P3-T005** Create cURL testing guide
+  - **File**: `docs/examples/curl-tests.sh`
+  - **Commands**: Test each endpoint, WebSocket upgrade
+  - **Est. Time**: 0.5 days
+  - **Success**: All curl commands return expected responses
+
+---
+
+## Priority 4: Deployment Guides & Runbooks
+
+### Goal
+Document complete deployment procedures for local, staging, and production environments.
+
+### Success Criteria
+- ✅ Local setup guide (works for new developers)
+- ✅ Staging deployment checklist (pre-deployment verification)
+- ✅ Production deployment guide (zero-downtime deployment)
+- ✅ Troubleshooting runbook (5 common issues + solutions)
+
+### Tasks
+
+- [ ] **P4-T001** Create local development setup guide
+  - **File**: `docs/DEVELOPMENT.md`
+  - **Content**: Prerequisites, environment setup, Docker Compose, running tests
+  - **Est. Time**: 1 day
+  - **Success**: New developer can `make dev` and run full test suite
+
+- [ ] **P4-T002** Create staging deployment checklist
+  - **File**: `docs/STAGING_DEPLOYMENT.md`
+  - **Checklist** (pre-deployment):
+    1. Code review completed
+    2. All tests pass locally
+    3. Dependencies updated
+    4. Security scan passed
+    5. Performance benchmarks acceptable
+  - **Est. Time**: 0.5 days
+  - **Success**: Checklist prevents staging deploys with known issues
+
+- [ ] **P4-T003** Create production deployment guide
+  - **File**: `docs/PRODUCTION_DEPLOYMENT.md`
+  - **Procedures**: Rolling updates, database migrations, rollback procedures
+  - **Est. Time**: 1.5 days
+  - **Success**: Deployment team can follow guide without manual intervention
+
+- [ ] **P4-T004** Create troubleshooting runbook
+  - **File**: `docs/TROUBLESHOOTING.md`
+  - **Issues** (5 common scenarios):
+    1. "Viewers not receiving WebSocket updates" → Check Redis, WebSocket connections
+    2. "HLS segments not generating" → Check Nginx-RTMP, disk space
+    3. "Metrics not appearing in Prometheus" → Check scrape config, endpoint connectivity
+    4. "RTMP connection rejected" → Check streaming key, firewall rules
+    5. "High latency (>3 seconds)" → Check network, resource utilization
+  - **Est. Time**: 1 day
+  - **Success**: Runbook resolves 90% of production issues
+
+---
+
+## Task Dependencies & Parallelization
+
+### Critical Path
+```
+P0 (Compilation Fixes - 0.5 days)
+    ↓
+[P1 Tests ∥ P2 Monitoring ∥ P3 Documentation ∥ P4 Deployment] (Can run in parallel)
+    ↓
+Final validation (compilation + full test suite)
+```
+
+### Parallelizable Tasks
+- P1-T001, P1-T002 (mock client development) - independent
+- P1-T003 → P1-T007 (5 test scenarios) - can start once mock client ready
+- P2-T001 → P2-T006 (monitoring setup) - independent
+- P3-T001 → P3-T005 (documentation) - independent
+- P4-T001 → P4-T004 (deployment guides) - independent
+
+### Suggested Parallelization for 3-Engineer Team
+- **Engineer 1**: P0 fixes → P1 integration tests (critical path)
+- **Engineer 2**: P2 Prometheus monitoring + P3 API documentation
+- **Engineer 3**: P4 deployment guides + operational docs
+
+---
+
+## Timeline & Milestones
+
+| Week | Day | Focus | Deliverables |
+|------|-----|-------|--------------|
+| 1 | 1 | P0 Fixes | ✅ Compilation errors resolved |
+| 1 | 2-3 | P1 Mock Client | ✅ Mock RTMP client complete |
+| 1 | 4-5 | P1 Tests | ✅ First 2-3 test scenarios passing |
+| 2 | 1-3 | P1 Final Tests + P2 Start | ✅ All 5 test scenarios + Prometheus setup |
+| 2 | 4-5 | P2 Monitoring + P3 Docs | ✅ Grafana dashboard + OpenAPI spec |
+| 3 | 1-2 | P4 Deployment Guides | ✅ All deployment docs complete |
+| 3 | 3 | Validation | ✅ Full test suite passes, build clean, staging verification |
+
+**Total: 15 days (3 weeks)**
+**Target Completion**: ~2025-11-10
+
+---
+
+## Acceptance Criteria for Phase 2 Completion
+
+- ✅ **Code Quality**: `cargo build --release` succeeds with 0 errors and 0 warnings
+- ✅ **Integration Tests**: All 5 end-to-end scenarios pass with 100% pass rate
+- ✅ **Prometheus Export**: 8 metrics types exported and scraped successfully
+- ✅ **Kubernetes Integration**: ServiceMonitor discovers metrics, Grafana displays data
+- ✅ **API Documentation**: OpenAPI spec complete with 3 client examples
+- ✅ **Deployment**: Tested in staging, deployment guide written and validated
+- ✅ **Overall Completion**: Project moves from 65% → 90%
+
+---
+
+## Known Risks & Mitigation
+
+| Risk | Impact | Mitigation |
+|------|--------|-----------|
+| Mock RTMP client complexity | May delay P1 | Start early, use reference implementations (nginx-rtmp source code) |
+| Test flakiness (timing issues) | May require reruns | Use deterministic test seeds, fixed delays, Docker container health checks |
+| Prometheus memory overhead | May impact staging | Set metric cardinality limits, implement metric pruning |
+| WebSocket cleanup on disconnect | May cause memory leaks | Implement graceful shutdown, connection timeout handlers |
+
+---
+
+## Success Metrics
+
+Upon completion of Phase 2, the system should demonstrate:
+1. **Reliability**: 99%+ test pass rate, zero data loss during streaming
+2. **Performance**: <3 second viewer startup, <2 second quality switches, <2 second metric updates
+3. **Observability**: All operations visible via Prometheus/Grafana, full audit trail
+4. **Operability**: Deployment, scaling, and troubleshooting fully documented
+
+---
+
+**Generated**: 2025-10-21
+**Status**: Ready for implementation
+**Est. Effort**: 15 days (120 hours)
+**Recommended Team Size**: 3 engineers
+**Estimated Completion**: 2025-11-10
 
 ---
 

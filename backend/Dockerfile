@@ -3,16 +3,19 @@
 # ============================================
 # NOTE: Compiles optimized feed ranking engine with unified ClickHouse queries
 # and simplified CDC offset management (Kafka auto-commit)
-FROM rust:slim as builder
+FROM rust:bookworm as builder
 
 # Install build dependencies
-RUN apt-get update && apt-get install -y \
-    pkg-config \
-    libssl-dev \
-    ca-certificates \
-    cmake \
-    build-essential \
-    && rm -rf /var/lib/apt/lists/*
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+        pkg-config \
+        libssl-dev \
+        ca-certificates \
+        cmake \
+        build-essential \
+    || (apt-get clean && rm -rf /var/lib/apt/lists/* && apt-get update && apt-get install -y --no-install-recommends pkg-config libssl-dev ca-certificates cmake build-essential); \
+    rm -rf /var/lib/apt/lists/*
 
 # Create app user for non-root execution
 RUN useradd -m -u 1001 -s /bin/bash appuser
@@ -21,15 +24,11 @@ RUN useradd -m -u 1001 -s /bin/bash appuser
 WORKDIR /app
 
 # Copy workspace configuration (lockfile optional in dev builds)
-# Copy workspace manifest and lockfile to leverage dependency caching and exact versions
-COPY Cargo.toml ./
-COPY Cargo.lock ./
+# Copy entire backend workspace (respecting .dockerignore)
+COPY . .
 
-# Copy service configuration and source
-COPY user-service ./user-service
-
-# Build application with release optimizations
-RUN cargo build --release --manifest-path user-service/Cargo.toml
+# Build application with release optimizations (workspace-aware)
+RUN cargo build --release --manifest-path Cargo.toml -p user-service
 
 # ============================================
 # Runtime Stage - Minimal production image
@@ -39,11 +38,14 @@ RUN cargo build --release --manifest-path user-service/Cargo.toml
 FROM debian:bookworm-slim AS runtime
 
 # Install runtime dependencies only
-RUN apt-get update && apt-get install -y \
-    ca-certificates \
-    libssl3 \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+        ca-certificates \
+        libssl3 \
+        curl \
+    || (apt-get clean && rm -rf /var/lib/apt/lists/* && apt-get update && apt-get install -y --no-install-recommends ca-certificates libssl3 curl); \
+    rm -rf /var/lib/apt/lists/*
 
 # Create app user (same UID as builder)
 RUN useradd -m -u 1001 -s /bin/bash appuser

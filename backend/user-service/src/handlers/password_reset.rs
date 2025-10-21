@@ -94,8 +94,8 @@ pub async fn forgot_password(
     }
 
     // Generate password reset token
-    let token = password_reset_service::generate_token();
-    let token_hash = password_reset_service::hash_token(&token);
+    let token = crate::security::generate_token();
+    let token_hash = crate::security::hash_token(&token);
 
     // Extract IP address from request
     let ip_address = extract_ip_address(&http_req);
@@ -149,7 +149,7 @@ pub async fn reset_password(
     }
 
     // Hash the token for lookup
-    let token_hash = password_reset_service::hash_token(&req.token);
+    let token_hash = crate::security::hash_token(&req.token);
 
     // Find password reset token
     let reset_token = match password_reset_repo::find_by_token(pool.get_ref(), &token_hash).await {
