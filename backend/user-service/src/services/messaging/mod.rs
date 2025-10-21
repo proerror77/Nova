@@ -14,16 +14,19 @@
 
 // Core encryption module (implemented and tested)
 pub mod encryption;
+pub mod message_service;
+pub mod events;
 
-// TODO: Database schema needed for the following modules
+// TODO: Phase 3 - Future modules
 // pub mod conversation_service;
-// pub mod message_service;
 // pub mod websocket_handler;
 
-// pub use conversation_service::ConversationService;
-// pub use message_service::MessageService;
 pub use encryption::{
     EncryptionService, PublicKey, Nonce, KeyExchange, KeyExchangeStatus,
     EncryptedMessage, UserPublicKey,
 };
+pub use message_service::MessageService;
+pub use events::*;
+
+// pub use conversation_service::ConversationService;
 // pub use websocket_handler::MessagingWebSocketHandler;

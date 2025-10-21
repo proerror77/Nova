@@ -367,6 +367,12 @@ async fn main() -> io::Result<()> {
                                 "/{stream_id}/ws",
                                 web::get().to(handlers::ws_stream_updates),
                             ),
+                    )
+                    // Messaging endpoints (E2E Encryption) - Phase 5 Feature 2
+                    .service(
+                        web::scope("")
+                            .wrap(JwtAuthMiddleware)
+                            .configure(handlers::messaging::configure_routes),
                     ),
             )
     })
