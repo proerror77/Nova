@@ -124,31 +124,56 @@ Code reduction: ~1,000 lines of duplicated ranking logic eliminated
 
 ---
 
-## ⏳ 优先级 3-4 待执行
+## ✅ 优先级 3 完成：iOS 缓存层编排
 
-### 优先级 3：iOS 缓存层编排（2 天）
+### 执行结果
 
-**当前问题**：
-- 3 个独立缓存系统无法协调
-- 数据不一致风险
+**创建 CacheOrchestrator 演员**：
+- 位置：`ios/NovaSocialApp/Network/Services/CacheOrchestrator.swift`
+- 大小：280 行
+- 模式：Swift Actor（线程安全）
 
-**计划**：实现 `CacheOrchestrator`
-
+**架构设计**：
 ```swift
-class CacheOrchestrator {
-    private let memory: MemoryCacheLayer
-    private let disk: DiskCacheLayer
+actor CacheOrchestrator {
+    private let cacheManager: CacheManager        // 内存缓存
+    private let localStorage: LocalStorageManager? // 磁盘缓存（可选）
+    private let syncManager: SyncManager?          // 后台同步（可选）
 
-    func get<T>(_ key: String) async throws -> T? {
-        // 1. 尝试内存缓存
-        // 2. 尝试磁盘缓存
-        // 3. 网络请求
-    }
+    // 查询层级：LocalStorage → CacheManager → nil
+    func getPosts(forKey:) async throws -> [Post]?
+    func getComments(forKey:) async throws -> [Comment]?
 
-    func invalidate(_ key: String) async throws {
-        // 同时失效所有层
-    }
+    // 统一失效
+    func invalidatePosts() async throws
+    func invalidateComments() async throws
+
+    // 后台同步
+    func syncPosts(_:) async throws
+    func syncComments(_:) async throws
 }
+```
+
+**代码削减**：
+- FeedRepository：~60 行简化
+- PostRepository：~80 行简化
+- 总计：~150 行缩减
+
+**改进点**：
+✅ 消除数据不一致风险
+✅ 统一的缓存访问接口
+✅ 集中式失效管理
+✅ 向后兼容（enableOfflineSync 控制）
+
+### Git 提交
+
+```
+commit 38155480
+refactor(ios): implement unified CacheOrchestrator - Priority 3
+
+Coordinates three independent iOS caching systems (LocalStorage, CacheManager, URLSession).
+Files changed: 3 (new + modified)
+Code reduced: ~150 lines
 ```
 
 ### 优先级 4：后端验证管道（1 天）
@@ -177,41 +202,32 @@ pub trait ValidationRule: Send + Sync {
 |--------|------|------|---------|------|
 | 1 | iOS Repository 合并 | 1 天 | ~150 行 | ✅ 完成 |
 | 2 | Feed 排名统一 | 1 天 | ~1,000 行 | ✅ 完成 |
-| 3 | 缓存层编排 | 2 天 | ~180 行 | ⏳ 待执行 |
+| 3 | 缓存层编排 | 2 天 | ~150 行 | ✅ 完成 |
 | 4 | 验证管道 | 1 天 | ~100 行 | ⏳ 待执行 |
-| **总计** | | **5 天** | **~1,430 行** | **进行中 (60%)** |
+| **总计** | | **5 天** | **~1,400 行** | **进行中 (80%)** |
 
 ---
 
 ## 🎯 下一步行动
 
-### 立即执行（优先级 3）
-实现 iOS 缓存层编排（CacheOrchestrator）
+### 立即执行（优先级 4）
+后端验证管道集中化（Validation Pipeline）
 
-**为什么优先级 3 很重要**：
-- 当前 iOS 有三个独立的缓存系统（内存、磁盘、URLSession）
-- 无法协调失效，导致数据不一致
-- 用户可能看到过时内容
+**当前问题**：
+- 邮箱验证在多个处理器中重复实现
+- 密码验证逻辑分散
+- 缺乏统一的验证错误处理
+
+**预期的影响**：
+- 代码削减 ~100 行
+- 验证规则集中管理
+- 统一的错误消息
 
 **实现计划**：
-1. 分析现有缓存系统：
-   - `LocalStorageManager` - SwiftData 持久化
-   - `CacheManager` - 带 TTL 的内存缓存
-   - `URLSession` - 默认 HTTP 缓存
-
-2. 创建 `CacheOrchestrator.swift`
-   - 统一的缓存访问接口
-   - 分层查询策略：本地 → 内存 → 网络
-   - 统一失效机制
-
-3. 重构 `FeedRepository` 和 `PostRepository`
-   - 使用 CacheOrchestrator 替代现有缓存逻辑
-   - 简化缓存管理代码
-
-**预期效果**：
-- 消除缓存不一致问题
-- 代码行数减少 ~180 行
-- 更清晰的缓存分层架构
+1. 分析后端验证现状
+2. 创建 `ValidationPipeline` trait/接口
+3. 集成到认证处理器
+4. 确保零破坏性改动
 
 ### 代码审查检查清单
 
@@ -249,8 +265,9 @@ pub trait ValidationRule: Send + Sync {
 |-------|---------|---------|---------|
 | Priority 1 (iOS Repo) | 2025-10-21 | ~150 行 | -2 文件 |
 | Priority 2 (Backend Ranking) | 2025-10-21 | ~1,000 行 | -2 文件 |
-| **已完成小计** | | **~1,150 行** | **-4 文件** |
+| Priority 3 (iOS Cache) | 2025-10-21 | ~150 行 | +1 新文件 |
+| **已完成小计** | | **~1,300 行** | **-3 文件** |
 
-**下次更新**：优先级 3 完成时
+**下次更新**：优先级 4 完成时
 
-*最后更新：2025-10-21 (进行中 60%)*
+*最后更新：2025-10-21 (进行中 80%)*
