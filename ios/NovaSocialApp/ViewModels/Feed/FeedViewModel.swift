@@ -136,11 +136,8 @@ final class FeedViewModel: ObservableObject {
             posts.append(contentsOf: uniqueNewPosts)
             hasMore = !newPosts.isEmpty
 
-            if hasMore {
-                // Backend expects base64-encoded numeric offset as cursor
-                let offset = posts.count
-                let cursorData = String(offset).data(using: .utf8) ?? Data()
-                currentCursor = cursorData.base64EncodedString()
+            if hasMore, let lastPost = posts.last {
+                currentCursor = lastPost.id.uuidString
             }
         } catch {
             showErrorMessage(error.localizedDescription)
