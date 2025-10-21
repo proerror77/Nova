@@ -52,12 +52,33 @@ pub enum AppError {
     Configuration(String),
 }
 
-#[derive(Serialize)]
-struct ErrorResponse {
-    error: String,
-    message: String,
+/// Unified error response structure used across all API endpoints
+/// Eliminates duplication of error response definitions across handlers
+#[derive(Debug, Clone, Serialize)]
+pub struct ErrorResponse {
+    /// Error code/type (e.g., "Email already registered", "Invalid email format")
+    pub error: String,
+    /// Optional additional details about the error
     #[serde(skip_serializing_if = "Option::is_none")]
-    details: Option<String>,
+    pub details: Option<String>,
+}
+
+impl ErrorResponse {
+    /// Create a new error response with just an error message
+    pub fn new(error: impl Into<String>) -> Self {
+        Self {
+            error: error.into(),
+            details: None,
+        }
+    }
+
+    /// Create a new error response with error message and additional details
+    pub fn with_details(error: impl Into<String>, details: impl Into<String>) -> Self {
+        Self {
+            error: error.into(),
+            details: Some(details.into()),
+        }
+    }
 }
 
 impl ResponseError for AppError {
@@ -101,7 +122,7 @@ impl ResponseError for AppError {
             AppError::Configuration(_) => "CONFIGURATION_ERROR",
         };
 
-        let message = self.to_string();
+        let error_message = self.to_string();
         let details = match self {
             AppError::Database(e) => Some(e.to_string()),
             AppError::Redis(e) => Some(e.to_string()),
@@ -112,8 +133,7 @@ impl ResponseError for AppError {
         };
 
         let error_response = ErrorResponse {
-            error: error_type.to_string(),
-            message,
+            error: error_message,
             details,
         };
 

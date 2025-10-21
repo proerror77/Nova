@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 
 use crate::db::user_repo;
+use crate::error::ErrorResponse;
 use crate::middleware::UserId;
 use crate::security::jwt;
 use crate::security::{hash_password, verify_password};
@@ -39,12 +40,6 @@ pub struct AuthResponse {
     pub refresh_token: String,
     pub token_type: String,
     pub expires_in: i64,
-}
-
-#[derive(Debug, Serialize)]
-pub struct ErrorResponse {
-    pub error: String,
-    pub details: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 
 use crate::db::{oauth_repo, user_repo};
+use crate::error::ErrorResponse;
 use crate::middleware::jwt_auth::UserId;
 use crate::security::jwt;
 use crate::services::oauth::{OAuthProvider, OAuthProviderFactory};
@@ -56,12 +57,6 @@ pub struct OAuthUnlinkResponse {
     pub message: String,
     pub provider: String,
     pub unlinked: bool,
-}
-
-#[derive(Debug, Serialize)]
-pub struct ErrorResponse {
-    pub error: String,
-    pub details: Option<String>,
 }
 
 // ============================================

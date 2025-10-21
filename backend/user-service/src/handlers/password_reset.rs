@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 
 use crate::db::{password_reset_repo, user_repo};
+use crate::error::ErrorResponse;
 use crate::security::{hash_password, verify_password};
 use crate::services::password_reset_service;
 use crate::validators;
@@ -26,12 +27,6 @@ pub struct ResetPasswordRequest {
 #[derive(Debug, Serialize)]
 pub struct ResetPasswordResponse {
     pub message: String,
-}
-
-#[derive(Debug, Serialize)]
-pub struct ErrorResponse {
-    pub error: String,
-    pub details: Option<String>,
 }
 
 /// Extract IP address from HTTP request
