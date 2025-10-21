@@ -1,12 +1,14 @@
--- Migration: Create Videos Table
 -- Created: 2025-10-19
 -- Purpose: Store video metadata for Phase 4 Reels & Video Feed System
 
 -- ========================================
 -- Videos Table (Authoritative Source)
 -- ========================================
+-- Ensure UUID extension is available
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
 CREATE TABLE IF NOT EXISTS videos (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     creator_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     title VARCHAR(255) NOT NULL,
     description TEXT,
@@ -31,11 +33,7 @@ CREATE TABLE IF NOT EXISTS videos (
     published_at TIMESTAMP,
     archived_at TIMESTAMP,
     deleted_at TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_creator_id (creator_id),
-    INDEX idx_status (status),
-    INDEX idx_created_at DESC,
-    INDEX idx_published_at DESC
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- ========================================
@@ -49,9 +47,7 @@ CREATE TABLE IF NOT EXISTS video_engagement (
     comment_count BIGINT NOT NULL DEFAULT 0 CHECK (comment_count >= 0),
     completion_rate NUMERIC(3,2) DEFAULT 0.00 CHECK (completion_rate >= 0 AND completion_rate <= 1.00),
     avg_watch_seconds INT DEFAULT 0 CHECK (avg_watch_seconds >= 0),
-    last_updated TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_view_count DESC,
-    INDEX idx_like_count DESC
+    last_updated TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- ========================================
@@ -65,14 +61,21 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE TRIGGER videos_update_timestamp
+DROP TRIGGER IF EXISTS videos_update_timestamp ON videos;
+CREATE TRIGGER videos_update_timestamp
 BEFORE UPDATE ON videos
 FOR EACH ROW
 EXECUTE FUNCTION update_videos_timestamp();
 
 -- ========================================
--- Indexes for Common Queries
+-- Indexes for Common Queries (PostgreSQL style)
 -- ========================================
+
+-- From inline INDEX declarations in table definitions
+CREATE INDEX IF NOT EXISTS idx_videos_creator_id ON videos(creator_id);
+CREATE INDEX IF NOT EXISTS idx_videos_status ON videos(status);
+CREATE INDEX IF NOT EXISTS idx_videos_created_at ON videos(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_videos_published_at ON videos(published_at DESC);
 
 -- For fetching creator's videos
 CREATE INDEX IF NOT EXISTS idx_videos_creator_status
@@ -87,12 +90,9 @@ WHERE status = 'published' AND deleted_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_videos_hashtags
 ON videos USING GIN (hashtags);
 
--- For trending videos
-CREATE INDEX IF NOT EXISTS idx_videos_engagement_published
-ON video_engagement(view_count DESC)
-WHERE video_id IN (
-    SELECT id FROM videos WHERE status = 'published' AND deleted_at IS NULL
-);
+-- Engagement indexes (cannot reference other tables in partial index predicate)
+CREATE INDEX IF NOT EXISTS idx_video_engagement_view_count ON video_engagement(view_count DESC);
+CREATE INDEX IF NOT EXISTS idx_video_engagement_like_count ON video_engagement(like_count DESC);
 
 -- ========================================
 -- Soft Delete Support
