@@ -1,15 +1,19 @@
-// WebSocket Handler: Real-time message delivery and typing indicators
-// Phase 7B Feature 2: T216 - WebSocket Real-Time Sync
-//
-// This module integrates with Phase 7A WebSocket infrastructure
+//! WebSocket Handler: Real-time message delivery and typing indicators
+//!
+//! Phase 5 Feature 2: T216 - WebSocket Real-Time Sync for E2E Encrypted Messaging
+//!
+//! This module provides Redis Pub/Sub integration for real-time message delivery,
+//! typing indicators, and read receipts via WebSocket connections.
 
-use crate::db::messaging::Message;
 use crate::error::AppError;
 use redis::aio::ConnectionManager;
+use redis::AsyncCommands;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use uuid::Uuid;
+use chrono::{DateTime, Utc};
 
+/// WebSocket handler for real-time messaging
 pub struct MessagingWebSocketHandler {
     redis: Arc<ConnectionManager>,
 }
@@ -19,125 +23,182 @@ impl MessagingWebSocketHandler {
         Self { redis }
     }
 
-    /// Publish a new message event to Redis Pub/Sub
-    /// WebSocket server will receive this and push to all online users
-    pub async fn publish_message_event(&self, message: &Message) -> Result<(), AppError> {
-        let channel = format!("conversation:{}:messages", message.conversation_id);
+    /// Publish a new encrypted message event to Redis Pub/Sub
+    ///
+    /// WebSocket server subscribed to the conversation channel will receive
+    /// this message and broadcast it to all connected clients.
+    pub async fn publish_message_event(
+        &self,
+        message_id: Uuid,
+        sender_id: Uuid,
+        recipient_id: Uuid,
+        encrypted_content: &str,
+        nonce: &str,
+        sender_public_key: &str,
+    ) -> Result<(), AppError> {
+        // Use conversation pair for consistent channel naming
+        let conversation_pair = Self::make_conversation_pair(sender_id, recipient_id);
+        let channel = format!("messaging:conversation:{}:messages", conversation_pair);
+
         let event = MessageEvent {
             event_type: "message.new".to_string(),
             data: MessageEventData {
-                id: message.id,
-                conversation_id: message.conversation_id,
-                sender_id: message.sender_id,
-                encrypted_content: message.encrypted_content.clone(),
-                nonce: message.nonce.clone(),
-                message_type: message.message_type.clone(),
-                created_at: message.created_at,
+                id: message_id,
+                sender_id,
+                recipient_id,
+                encrypted_content: encrypted_content.to_string(),
+                nonce: nonce.to_string(),
+                sender_public_key: sender_public_key.to_string(),
+                timestamp: Utc::now(),
             },
         };
 
         let payload = serde_json::to_string(&event)
-            .map_err(|e| AppError::Internal(format!("Failed to serialize event: {}", e)))?;
+            .map_err(|e| AppError::Internal(format!("Failed to serialize message event: {}", e)))?;
 
-        // TODO: Implement Redis publish
-        // self.redis.publish(&channel, payload).await?;
+        let mut conn = (*self.redis).clone();
+        conn.publish::<_, _, i32>(&channel, &payload)
+            .await
+            .map_err(|e| AppError::Internal(format!("Redis publish failed: {}", e)))?;
 
-        unimplemented!("T216: Implement Redis Pub/Sub publish")
+        Ok(())
     }
 
-    /// Publish a typing indicator event
-    /// Stored in Redis with 3-second TTL
+    /// Publish a typing indicator event to Redis Pub/Sub
+    ///
+    /// When user is typing, stores state in Redis with 3-second TTL and publishes event.
+    /// When user stops typing, removes state and publishes stop event.
     pub async fn publish_typing_event(
         &self,
-        conversation_id: Uuid,
-        user_id: Uuid,
-        username: String,
+        sender_id: Uuid,
+        recipient_id: Uuid,
+        sender_username: &str,
         is_typing: bool,
     ) -> Result<(), AppError> {
-        let channel = format!("conversation:{}:typing", conversation_id);
+        let conversation_pair = Self::make_conversation_pair(sender_id, recipient_id);
+        let channel = format!("messaging:conversation:{}:typing", conversation_pair);
+        let typing_key = format!("messaging:typing:{}:{}", conversation_pair, sender_id);
 
         if is_typing {
-            // Store typing status in Redis with TTL
-            let key = format!("typing:{}:{}", conversation_id, user_id);
-            // TODO: Implement Redis SET with TTL
-            // self.redis.set_ex(&key, "1", 3).await?;
-
-            // Publish typing event
-            let event = TypingEvent {
-                event_type: "typing.indicator".to_string(),
-                data: TypingEventData {
-                    conversation_id,
-                    user_id,
-                    username,
-                    is_typing: true,
-                },
-            };
-
-            let payload = serde_json::to_string(&event)
-                .map_err(|e| AppError::Internal(format!("Failed to serialize event: {}", e)))?;
-
-            // TODO: Implement Redis publish
-            // self.redis.publish(&channel, payload).await?;
+            // Store typing indicator with 3-second TTL
+            let mut conn = (*self.redis).clone();
+            conn.set_ex::<_, _, ()>(&typing_key, "1", 3)
+                .await
+                .map_err(|e| AppError::Internal(format!("Redis SET EX failed: {}", e)))?;
         } else {
-            // Remove typing status
-            let key = format!("typing:{}:{}", conversation_id, user_id);
-            // TODO: Implement Redis DEL
-            // self.redis.del(&key).await?;
-
-            // Publish typing stopped event
-            let event = TypingEvent {
-                event_type: "typing.indicator".to_string(),
-                data: TypingEventData {
-                    conversation_id,
-                    user_id,
-                    username,
-                    is_typing: false,
-                },
-            };
-
-            let payload = serde_json::to_string(&event)
-                .map_err(|e| AppError::Internal(format!("Failed to serialize event: {}", e)))?;
-
-            // TODO: Implement Redis publish
-            // self.redis.publish(&channel, payload).await?;
+            // Remove typing indicator
+            let mut conn = (*self.redis).clone();
+            let _: () = conn.del(&typing_key)
+                .await
+                .map_err(|e| AppError::Internal(format!("Redis DEL failed: {}", e)))?;
         }
 
-        unimplemented!("T216: Implement typing indicator")
+        // Publish typing event
+        let event = TypingEvent {
+            event_type: "typing.indicator".to_string(),
+            data: TypingEventData {
+                sender_id,
+                recipient_id,
+                sender_username: sender_username.to_string(),
+                is_typing,
+                timestamp: Utc::now(),
+            },
+        };
+
+        let payload = serde_json::to_string(&event)
+            .map_err(|e| AppError::Internal(format!("Failed to serialize typing event: {}", e)))?;
+
+        let mut conn = (*self.redis).clone();
+        conn.publish::<_, _, i32>(&channel, &payload)
+            .await
+            .map_err(|e| AppError::Internal(format!("Redis publish failed: {}", e)))?;
+
+        Ok(())
     }
 
-    /// Publish a read receipt event
+    /// Publish a read receipt event to Redis Pub/Sub
+    ///
+    /// Notifies other user that a message was read.
     pub async fn publish_read_receipt_event(
         &self,
-        conversation_id: Uuid,
-        user_id: Uuid,
-        last_read_message_id: Uuid,
+        message_id: Uuid,
+        sender_id: Uuid,
+        recipient_id: Uuid,
     ) -> Result<(), AppError> {
-        let channel = format!("conversation:{}:read", conversation_id);
+        let conversation_pair = Self::make_conversation_pair(sender_id, recipient_id);
+        let channel = format!("messaging:conversation:{}:read_receipts", conversation_pair);
+
         let event = ReadReceiptEvent {
             event_type: "message.read".to_string(),
             data: ReadReceiptEventData {
-                conversation_id,
-                user_id,
-                last_read_message_id,
+                message_id,
+                recipient_id, // The user who read the message
+                read_at: Utc::now(),
             },
         };
 
         let payload = serde_json::to_string(&event)
-            .map_err(|e| AppError::Internal(format!("Failed to serialize event: {}", e)))?;
+            .map_err(|e| AppError::Internal(format!("Failed to serialize read receipt event: {}", e)))?;
 
-        // TODO: Implement Redis publish
-        // self.redis.publish(&channel, payload).await?;
+        let mut conn = (*self.redis).clone();
+        conn.publish::<_, _, i32>(&channel, &payload)
+            .await
+            .map_err(|e| AppError::Internal(format!("Redis publish failed: {}", e)))?;
 
-        unimplemented!("T216: Implement read receipt event")
+        Ok(())
     }
 
-    /// Subscribe to conversation channels when user connects
-    /// Returns list of channels to subscribe to
-    pub async fn get_user_subscription_channels(&self, user_id: Uuid) -> Result<Vec<String>, AppError> {
-        // TODO: Query user's conversations from database
-        // TODO: Return list of channels: conversation:{id}:messages, conversation:{id}:typing, etc.
+    /// Publish a delivered receipt event to Redis Pub/Sub
+    ///
+    /// Notifies other user that a message was delivered to recipient's device.
+    pub async fn publish_delivered_event(
+        &self,
+        message_id: Uuid,
+        sender_id: Uuid,
+        recipient_id: Uuid,
+    ) -> Result<(), AppError> {
+        let conversation_pair = Self::make_conversation_pair(sender_id, recipient_id);
+        let channel = format!("messaging:conversation:{}:deliveries", conversation_pair);
 
-        unimplemented!("T216: Implement channel subscription")
+        let event = DeliveredEvent {
+            event_type: "message.delivered".to_string(),
+            data: DeliveredEventData {
+                message_id,
+                recipient_id, // The user who received the message
+                delivered_at: Utc::now(),
+            },
+        };
+
+        let payload = serde_json::to_string(&event)
+            .map_err(|e| AppError::Internal(format!("Failed to serialize delivered event: {}", e)))?;
+
+        let mut conn = (*self.redis).clone();
+        conn.publish::<_, _, i32>(&channel, &payload)
+            .await
+            .map_err(|e| AppError::Internal(format!("Redis publish failed: {}", e)))?;
+
+        Ok(())
+    }
+
+    /// Get list of channels a user should subscribe to
+    ///
+    /// Returns channels for all active conversations the user is part of.
+    pub async fn get_user_subscription_channels(&self, _user_id: Uuid) -> Result<Vec<String>, AppError> {
+        // TODO (T217): Query user's active conversations from database
+        // For now, return empty list - actual implementation will fetch from DB
+        Ok(vec![])
+    }
+
+    /// Helper: Create deterministic conversation pair identifier
+    ///
+    /// Ensures the same conversation is identified regardless of participant order.
+    fn make_conversation_pair(user_a: Uuid, user_b: Uuid) -> String {
+        let (min, max) = if user_a < user_b {
+            (user_a, user_b)
+        } else {
+            (user_b, user_a)
+        };
+        format!("{}:{}", min, max)
     }
 }
 
@@ -145,6 +206,7 @@ impl MessagingWebSocketHandler {
 // WebSocket Event Structures
 // ============================================
 
+/// New message event pushed via WebSocket
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MessageEvent {
     #[serde(rename = "type")]
@@ -152,17 +214,19 @@ pub struct MessageEvent {
     pub data: MessageEventData,
 }
 
+/// Payload for new message event
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MessageEventData {
     pub id: Uuid,
-    pub conversation_id: Uuid,
     pub sender_id: Uuid,
+    pub recipient_id: Uuid,
     pub encrypted_content: String,
     pub nonce: String,
-    pub message_type: String,
-    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub sender_public_key: String,
+    pub timestamp: DateTime<Utc>,
 }
 
+/// Typing indicator event
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TypingEvent {
     #[serde(rename = "type")]
@@ -170,14 +234,17 @@ pub struct TypingEvent {
     pub data: TypingEventData,
 }
 
+/// Payload for typing indicator event
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TypingEventData {
-    pub conversation_id: Uuid,
-    pub user_id: Uuid,
-    pub username: String,
+    pub sender_id: Uuid,
+    pub recipient_id: Uuid,
+    pub sender_username: String,
     pub is_typing: bool,
+    pub timestamp: DateTime<Utc>,
 }
 
+/// Read receipt event
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReadReceiptEvent {
     #[serde(rename = "type")]
@@ -185,11 +252,28 @@ pub struct ReadReceiptEvent {
     pub data: ReadReceiptEventData,
 }
 
+/// Payload for read receipt event
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReadReceiptEventData {
-    pub conversation_id: Uuid,
-    pub user_id: Uuid,
-    pub last_read_message_id: Uuid,
+    pub message_id: Uuid,
+    pub recipient_id: Uuid, // User who read the message
+    pub read_at: DateTime<Utc>,
+}
+
+/// Delivered event
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeliveredEvent {
+    #[serde(rename = "type")]
+    pub event_type: String, // "message.delivered"
+    pub data: DeliveredEventData,
+}
+
+/// Payload for delivered event
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeliveredEventData {
+    pub message_id: Uuid,
+    pub recipient_id: Uuid, // User who received the message
+    pub delivered_at: DateTime<Utc>,
 }
 
 // ============================================
@@ -320,14 +404,104 @@ pub struct ReadReceiptEventData {
 mod tests {
     use super::*;
 
-    // TODO: Unit tests for WebSocket handler
-    // - publish_message_event: serialize and publish to Redis
-    // - publish_typing_event: TTL management
-    // - publish_read_receipt_event: event format
+    #[test]
+    fn test_make_conversation_pair_idempotent() {
+        let user_a = Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000").unwrap();
+        let user_b = Uuid::parse_str("550e8400-e29b-41d4-a716-446655440001").unwrap();
 
-    #[tokio::test]
-    async fn test_message_event_serialization() {
-        // TODO: Implement test
-        unimplemented!("T217: Add unit test for event serialization");
+        let pair_ab = MessagingWebSocketHandler::make_conversation_pair(user_a, user_b);
+        let pair_ba = MessagingWebSocketHandler::make_conversation_pair(user_b, user_a);
+
+        assert_eq!(pair_ab, pair_ba);
+        assert!(pair_ab.contains(':'));
     }
+
+    #[test]
+    fn test_message_event_serialization() {
+        let event = MessageEvent {
+            event_type: "message.new".to_string(),
+            data: MessageEventData {
+                id: Uuid::new_v4(),
+                sender_id: Uuid::new_v4(),
+                recipient_id: Uuid::new_v4(),
+                encrypted_content: "encrypted_payload".to_string(),
+                nonce: "nonce_value".to_string(),
+                sender_public_key: "public_key".to_string(),
+                timestamp: Utc::now(),
+            },
+        };
+
+        let json = serde_json::to_string(&event).expect("Failed to serialize");
+        assert!(json.contains("message.new"));
+        assert!(json.contains("encrypted_payload"));
+
+        let deserialized: MessageEvent = serde_json::from_str(&json).expect("Failed to deserialize");
+        assert_eq!(deserialized.event_type, "message.new");
+    }
+
+    #[test]
+    fn test_typing_event_serialization() {
+        let event = TypingEvent {
+            event_type: "typing.indicator".to_string(),
+            data: TypingEventData {
+                sender_id: Uuid::new_v4(),
+                recipient_id: Uuid::new_v4(),
+                sender_username: "alice".to_string(),
+                is_typing: true,
+                timestamp: Utc::now(),
+            },
+        };
+
+        let json = serde_json::to_string(&event).expect("Failed to serialize");
+        assert!(json.contains("typing.indicator"));
+        assert!(json.contains("alice"));
+        assert!(json.contains("true"));
+
+        let deserialized: TypingEvent = serde_json::from_str(&json).expect("Failed to deserialize");
+        assert_eq!(deserialized.data.sender_username, "alice");
+        assert!(deserialized.data.is_typing);
+    }
+
+    #[test]
+    fn test_read_receipt_event_serialization() {
+        let message_id = Uuid::new_v4();
+        let event = ReadReceiptEvent {
+            event_type: "message.read".to_string(),
+            data: ReadReceiptEventData {
+                message_id,
+                recipient_id: Uuid::new_v4(),
+                read_at: Utc::now(),
+            },
+        };
+
+        let json = serde_json::to_string(&event).expect("Failed to serialize");
+        assert!(json.contains("message.read"));
+        assert!(json.contains(&message_id.to_string()));
+
+        let deserialized: ReadReceiptEvent = serde_json::from_str(&json).expect("Failed to deserialize");
+        assert_eq!(deserialized.data.message_id, message_id);
+    }
+
+    #[test]
+    fn test_delivered_event_serialization() {
+        let message_id = Uuid::new_v4();
+        let event = DeliveredEvent {
+            event_type: "message.delivered".to_string(),
+            data: DeliveredEventData {
+                message_id,
+                recipient_id: Uuid::new_v4(),
+                delivered_at: Utc::now(),
+            },
+        };
+
+        let json = serde_json::to_string(&event).expect("Failed to serialize");
+        assert!(json.contains("message.delivered"));
+        assert!(json.contains(&message_id.to_string()));
+
+        let deserialized: DeliveredEvent = serde_json::from_str(&json).expect("Failed to deserialize");
+        assert_eq!(deserialized.data.message_id, message_id);
+    }
+
+    // Note: Full integration tests for Redis Pub/Sub (publish_message_event, etc.)
+    // require a running Redis instance and are covered in integration tests
 }

@@ -1,25 +1,37 @@
 //! Private Messaging Service with End-to-End Encryption
 //!
-//! Phase 5 Feature 2: Complete messaging implementation with E2E encryption
+//! Phase 5 Feature 2: Complete messaging implementation with E2E encryption and real-time delivery
 //!
 //! ## Architecture
 //!
-//! This module provides secure 1:1 and group messaging with client-side encryption:
+//! This module provides secure 1:1 messaging with client-side encryption:
 //!
 //! 1. **End-to-End Encryption**: All messages encrypted with NaCl Box (Curve25519 + ChaCha20-Poly1305)
 //! 2. **Key Exchange Protocol**: Diffie-Hellman based public key exchange
 //! 3. **Server-Side Key Management**: Stores and distributes public keys without exposing private keys
-//! 4. **Forward Secrecy**: Per-message nonces, key rotation support
-//! 5. **Delivery Tracking**: Track message delivery and read status
+//! 4. **Forward Secrecy**: Per-message nonces, key rotation support (30-day default)
+//! 5. **Delivery Tracking**: Track message delivery (sent → delivered → read)
+//! 6. **Real-Time Delivery**: Redis Pub/Sub for WebSocket message pushing
+//! 7. **Event Streaming**: Kafka events for analytics and audit trail
 
 // Core encryption module (implemented and tested)
 pub mod encryption;
+
+// Message service with database operations
 pub mod message_service;
+
+// Kafka event definitions for event streaming
 pub mod events;
 
-// TODO: Phase 3 - Future modules
-// pub mod conversation_service;
-// pub mod websocket_handler;
+// Real-time message delivery via Redis Pub/Sub + WebSocket
+pub mod websocket_handler;
+
+// Kafka event publishing for message lifecycle
+pub mod kafka_events_publisher;
+
+// TODO: Phase 3 (Future) - Implement these
+// pub mod conversation_service; // Group messaging support
+// pub mod typing_indicators;    // Typing notification aggregation
 
 pub use encryption::{
     EncryptionService, PublicKey, Nonce, KeyExchange, KeyExchangeStatus,
@@ -27,6 +39,5 @@ pub use encryption::{
 };
 pub use message_service::MessageService;
 pub use events::*;
-
-// pub use conversation_service::ConversationService;
-// pub use websocket_handler::MessagingWebSocketHandler;
+pub use websocket_handler::{MessagingWebSocketHandler, MessageEvent, TypingEvent, ReadReceiptEvent, DeliveredEvent};
+pub use kafka_events_publisher::{MessagingKafkaPublisher, KafkaEvent};
