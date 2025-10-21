@@ -3,7 +3,6 @@ use actix_web::{middleware::Logger, web, App, HttpResponse, HttpServer};
 use std::io;
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use tokio::task::JoinHandle;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use user_service::{
@@ -70,16 +69,10 @@ async fn main() -> io::Result<()> {
     // Run migrations
     if !config.is_production() {
         tracing::info!("Running database migrations...");
-        match run_migrations(&db_pool).await {
-            Ok(_) => {
-                tracing::info!("Database migrations completed successfully");
-            }
-            Err(e) => {
-                // Allow startup even if migrations fail (e.g., tables already exist)
-                tracing::warn!("Migration warning (continuing anyway): {}", e);
-                tracing::info!("Skipping migrations - database schema may already exist");
-            }
-        }
+        run_migrations(&db_pool)
+            .await
+            .expect("Failed to run migrations");
+        tracing::info!("Database migrations completed");
     }
 
     // Create Redis connection manager
@@ -156,7 +149,7 @@ async fn main() -> io::Result<()> {
         max_concurrent_inserts: 10,
     };
 
-    let cdc_consumer = CdcConsumer::new(cdc_config, ch_writable.as_ref().clone())
+    let cdc_consumer = CdcConsumer::new(cdc_config, ch_writable.as_ref().clone(), db_pool.clone())
         .await
         .expect("Failed to create CDC consumer");
 
@@ -195,41 +188,25 @@ async fn main() -> io::Result<()> {
     tracing::info!("Events consumer spawned");
 
     // ========================================
-    // Initialize image processing job queue (S3 optional)
+    // Initialize image processing job queue
     // ========================================
     let (job_sender, job_receiver) = job_queue::create_job_queue(100);
     tracing::info!("Image processing job queue created (capacity: 100)");
 
-    let s3_disabled = std::env::var("DISABLE_S3")
-        .ok()
-        .map(|v| matches!(v.to_lowercase().as_str(), "1" | "true" | "yes"))
-        .unwrap_or(false);
+    // Create S3 client for worker
+    let s3_client = s3_service::get_s3_client(&config.s3)
+        .await
+        .expect("Failed to create S3 client for worker");
+    tracing::info!("S3 client initialized for image processor");
 
-    let mut worker_handle_opt: Option<JoinHandle<()>> = None;
-
-    if s3_disabled {
-        tracing::warn!(
-            "DISABLE_S3 is set; skipping S3 client initialization and image processor worker"
-        );
-        // Drop the receiver so worker won't be expected to drain jobs
-        drop(job_receiver);
-    } else {
-        // Create S3 client for worker
-        let s3_client = s3_service::get_s3_client(&config.s3)
-            .await
-            .expect("Failed to create S3 client for worker");
-        tracing::info!("S3 client initialized for image processor");
-
-        // Spawn image processor worker task
-        let worker_handle = job_queue::spawn_image_processor_worker(
-            db_pool.clone(),
-            s3_client,
-            Arc::new(config.s3.clone()),
-            job_receiver,
-        );
-        worker_handle_opt = Some(worker_handle);
-        tracing::info!("Image processor worker spawned");
-    }
+    // Spawn image processor worker task
+    let worker_handle = job_queue::spawn_image_processor_worker(
+        db_pool.clone(),
+        s3_client,
+        Arc::new(config.s3.clone()),
+        job_receiver,
+    );
+    tracing::info!("Image processor worker spawned");
 
     // Clone config for server closure
     let server_config = config.clone();
@@ -368,17 +345,15 @@ async fn main() -> io::Result<()> {
     drop(job_sender_shutdown);
 
     // Wait for image processor worker
-    if let Some(worker_handle) = worker_handle_opt {
-        match tokio::time::timeout(std::time::Duration::from_secs(30), worker_handle).await {
-            Ok(Ok(())) => {
-                tracing::info!("Image processor worker shut down gracefully");
-            }
-            Ok(Err(e)) => {
-                tracing::error!("Image processor worker panicked: {:?}", e);
-            }
-            Err(_) => {
-                tracing::warn!("Image processor worker did not shut down within timeout");
-            }
+    match tokio::time::timeout(std::time::Duration::from_secs(30), worker_handle).await {
+        Ok(Ok(())) => {
+            tracing::info!("Image processor worker shut down gracefully");
+        }
+        Ok(Err(e)) => {
+            tracing::error!("Image processor worker panicked: {:?}", e);
+        }
+        Err(_) => {
+            tracing::warn!("Image processor worker did not shut down within timeout");
         }
     }
 

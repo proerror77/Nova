@@ -1,7 +1,10 @@
 use rdkafka::config::ClientConfig;
 use rdkafka::consumer::{Consumer, StreamConsumer};
 use rdkafka::message::Message;
+use rdkafka::topic_partition_list::TopicPartitionList;
+use rdkafka::Offset;
 use serde_json::Value;
+use sqlx::PgPool;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Semaphore;
@@ -11,6 +14,7 @@ use crate::db::ch_client::ClickHouseClient;
 use crate::error::{AppError, Result};
 
 use super::models::{CdcMessage, CdcOperation};
+use super::offset_manager::OffsetManager;
 
 /// CDC Consumer configuration
 #[derive(Debug, Clone)]
@@ -44,37 +48,40 @@ impl Default for CdcConsumerConfig {
 /// CDC Consumer service
 ///
 /// Consumes CDC messages from Kafka topics and inserts them into ClickHouse.
-/// Uses Kafka Consumer Group's built-in offset management for simplicity.
-///
-/// Key changes:
-/// - Removed PostgreSQL offset storage (single source of truth: Kafka)
-/// - Auto-commit enabled (commits after message processing)
-/// - Simpler, more maintainable architecture
+/// Ensures exactly-once semantics by:
+/// 1. Manual offset commit (only after successful CH insert)
+/// 2. Offset persistence in PostgreSQL (survives restarts)
+/// 3. Idempotent ClickHouse inserts (ReplacingMergeTree)
 pub struct CdcConsumer {
     consumer: StreamConsumer,
     ch_client: ClickHouseClient,
+    offset_manager: OffsetManager,
     config: CdcConsumerConfig,
     semaphore: Arc<Semaphore>,
 }
 
 impl CdcConsumer {
-    /// Create a new CDC consumer (simplified, no offset storage)
+    /// Create a new CDC consumer
     pub async fn new(
         config: CdcConsumerConfig,
         ch_client: ClickHouseClient,
+        pg_pool: PgPool,
     ) -> Result<Self> {
         info!("Initializing CDC consumer with config: {:?}", config);
 
-        // Create Kafka consumer with auto-commit enabled
+        // Initialize offset manager
+        let offset_manager = OffsetManager::new(pg_pool);
+        offset_manager.initialize().await?;
+
+        // Create Kafka consumer
         let consumer: StreamConsumer = ClientConfig::new()
             .set("group.id", &config.group_id)
             .set("bootstrap.servers", &config.brokers)
-            .set("enable.auto.commit", "true")  // Let Kafka manage offsets
-            .set("auto.commit.interval.ms", "5000")  // Commit every 5 seconds
-            .set("auto.offset.reset", "earliest")  // Start from beginning if no offset
+            .set("enable.auto.commit", "false") // Manual commit for exactly-once
+            .set("auto.offset.reset", "earliest") // Start from beginning if no offset
             .set("session.timeout.ms", "30000")
             .set("heartbeat.interval.ms", "3000")
-            .set("max.poll.interval.ms", "300000")  // 5 minutes
+            .set("max.poll.interval.ms", "300000") // 5 minutes
             .set("enable.partition.eof", "false")
             .create()
             .map_err(|e| {
@@ -91,14 +98,59 @@ impl CdcConsumer {
             })?;
 
         info!("CDC consumer subscribed to topics: {:?}", config.topics);
-        info!("Offsets managed by Kafka Consumer Group (stored in __consumer_offsets topic)");
+
+        // Restore offsets from database
+        Self::restore_offsets(&consumer, &offset_manager, &config.topics).await?;
 
         Ok(Self {
             consumer,
             ch_client,
+            offset_manager,
             semaphore: Arc::new(Semaphore::new(config.max_concurrent_inserts)),
             config,
         })
+    }
+
+    /// Restore Kafka offsets from PostgreSQL
+    async fn restore_offsets(
+        consumer: &StreamConsumer,
+        offset_manager: &OffsetManager,
+        topics: &[String],
+    ) -> Result<()> {
+        info!("Restoring Kafka offsets from database");
+
+        let mut tpl = TopicPartitionList::new();
+
+        for topic in topics {
+            let saved_offsets = offset_manager.get_topic_offsets(topic).await?;
+
+            if saved_offsets.is_empty() {
+                info!(
+                    "No saved offsets for topic {}, will use auto.offset.reset",
+                    topic
+                );
+                continue;
+            }
+
+            for (partition, offset) in saved_offsets {
+                info!(
+                    "Restoring offset: topic={}, partition={}, offset={}",
+                    topic, partition, offset
+                );
+                tpl.add_partition_offset(topic, partition, Offset::Offset(offset))
+                    .map_err(|e| AppError::Kafka(e))?;
+            }
+        }
+
+        if !tpl.elements().is_empty() {
+            consumer.assign(&tpl).map_err(|e| {
+                error!("Failed to restore offsets: {}", e);
+                AppError::Kafka(e)
+            })?;
+            info!("Successfully restored {} partition offsets", tpl.count());
+        }
+
+        Ok(())
     }
 
     /// Run the CDC consumer loop
@@ -133,11 +185,14 @@ impl CdcConsumer {
                         continue;
                     }
 
-                    // Offset is committed automatically by Kafka after processing
-                    debug!(
-                        "CDC message processed successfully (topic={}, partition={}, offset={})",
-                        topic, partition, offset
-                    );
+                    // Commit offset only after successful processing
+                    if let Err(e) = self.commit_offset(topic, partition, offset + 1).await {
+                        error!(
+                            "Failed to commit offset (topic={}, partition={}, offset={}): {}",
+                            topic, partition, offset, e
+                        );
+                        // Continue processing, will retry offset commit on next message
+                    }
                 }
                 Err(e) => {
                     error!("Kafka consumer error: {}", e);
@@ -191,6 +246,32 @@ impl CdcConsumer {
         Ok(())
     }
 
+    /// Commit offset to both Kafka and PostgreSQL
+    async fn commit_offset(&self, topic: &str, partition: i32, offset: i64) -> Result<()> {
+        // Save to PostgreSQL first (source of truth for recovery)
+        self.offset_manager
+            .save_offset(topic, partition, offset)
+            .await?;
+
+        // Then commit to Kafka (for consumer group coordination)
+        let mut tpl = TopicPartitionList::new();
+        tpl.add_partition_offset(topic, partition, Offset::Offset(offset))
+            .map_err(|e| AppError::Kafka(e))?;
+
+        self.consumer
+            .commit(&tpl, rdkafka::consumer::CommitMode::Async)
+            .map_err(|e| {
+                error!("Failed to commit Kafka offset: {}", e);
+                AppError::Kafka(e)
+            })?;
+
+        debug!(
+            "Committed offset: topic={}, partition={}, offset={}",
+            topic, partition, offset
+        );
+
+        Ok(())
+    }
 
     /// Insert posts CDC message into ClickHouse
     async fn insert_posts_cdc(&self, msg: &CdcMessage) -> Result<()> {

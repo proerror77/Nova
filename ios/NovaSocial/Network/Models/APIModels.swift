@@ -136,66 +136,6 @@ struct UploadURLResponse: Codable {
     }
 }
 
-// MARK: - Posts Upload (init/complete)
-
-struct PostUploadInitRequest: Codable {
-    let filename: String
-    let contentType: String
-    let fileSize: Int
-    let caption: String?
-
-    enum CodingKeys: String, CodingKey {
-        case filename
-        case contentType = "content_type"
-        case fileSize = "file_size"
-        case caption
-    }
-}
-
-struct PostUploadInitResponse: Codable {
-    let presignedUrl: String
-    let postId: String
-    let uploadToken: String
-    let expiresIn: Int
-    let instructions: String?
-
-    enum CodingKeys: String, CodingKey {
-        case presignedUrl = "presigned_url"
-        case postId = "post_id"
-        case uploadToken = "upload_token"
-        case expiresIn = "expires_in"
-        case instructions
-    }
-}
-
-struct PostUploadCompleteRequest: Codable {
-    let postId: String
-    let uploadToken: String
-    let fileHash: String
-    let fileSize: Int
-
-    enum CodingKeys: String, CodingKey {
-        case postId = "post_id"
-        case uploadToken = "upload_token"
-        case fileHash = "file_hash"
-        case fileSize = "file_size"
-    }
-}
-
-struct PostUploadCompleteResponse: Codable {
-    let postId: String
-    let status: String
-    let message: String?
-    let imageKey: String?
-
-    enum CodingKeys: String, CodingKey {
-        case postId = "post_id"
-        case status
-        case message
-        case imageKey = "image_key"
-    }
-}
-
 // MARK: - Comment Models
 
 struct Comment: Codable, Identifiable, Equatable {

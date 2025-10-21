@@ -285,9 +285,9 @@ impl SuggestedUsersGenerator {
             SELECT
                 aa.author_id as suggested_user_id,
                 count(distinct aa.user_id) as mutual_followers,
-                sum((aa.likes + aa.comments + aa.views)) as total_interactions,
+                sum(aa.interaction_count) as total_interactions,
                 max(aa.last_interaction) as last_interaction,
-                round(log1p(sum((aa.likes + aa.comments + aa.views))), 4) as affinity_score
+                round(log1p(sum(aa.interaction_count)), 4) as affinity_score
             FROM user_author_90d aa
             INNER JOIN (
                 -- Users with similar interaction history to target user

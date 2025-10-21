@@ -1,30 +1,57 @@
 import SwiftUI
 import PhotosUI
-import AVFoundation
 
 struct CreatePostView: View {
     @StateObject private var viewModel = CreatePostViewModel()
     @Environment(\.dismiss) private var dismiss
     @State private var showSuccessAlert = false
-    @State private var showMediaPicker = false
-    @State private var pickerSelection: PhotosPickerItem?
-    @State private var selectedVideos: [URL] = []
 
     var body: some View {
         NavigationStack {
             ZStack {
                 ScrollView {
                     VStack(spacing: 20) {
-                        // Media Selection
+                        // Image Selection
                         if let image = viewModel.selectedImage {
-                            // 图片预览
-                            mediaImagePreview(image)
-                        } else if viewModel.selectedVideoURL != nil {
-                            // 视频预览
-                            videoPreview
+                            ZStack(alignment: .topTrailing) {
+                                Image(uiImage: image)
+                                    .resizable()
+                                    .aspectRatio(1, contentMode: .fill)
+                                    .frame(maxWidth: .infinity)
+                                    .clipped()
+                                    .cornerRadius(12)
+
+                                // Remove Button
+                                Button {
+                                    viewModel.removeImage()
+                                } label: {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .font(.title)
+                                        .foregroundColor(.white)
+                                        .background(Color.black.opacity(0.6))
+                                        .clipShape(Circle())
+                                }
+                                .padding(8)
+                            }
                         } else {
-                            // 媒体选择按钮
-                            mediaSelectionButtons
+                            // Image Picker Button
+                            Button {
+                                viewModel.showImagePicker = true
+                            } label: {
+                                VStack(spacing: 16) {
+                                    Image(systemName: "photo.on.rectangle.angled")
+                                        .font(.system(size: 60))
+                                        .foregroundColor(.gray)
+
+                                    Text("Select Photo")
+                                        .font(.headline)
+                                        .foregroundColor(.primary)
+                                }
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 300)
+                                .background(Color(.systemGray6))
+                                .cornerRadius(12)
+                            }
                         }
 
                         // Caption Field
@@ -92,23 +119,12 @@ struct CreatePostView: View {
             }
             .navigationTitle("New Post")
             .navigationBarTitleDisplayMode(.inline)
-            .sheet(isPresented: $showMediaPicker) {
-                MediaPickerView(
-                    image: $viewModel.selectedImage,
-                    videoURL: $viewModel.selectedVideoURL,
-                    onImageSelected: { image in
-                        viewModel.selectImage(image)
-                        showMediaPicker = false
-                    },
-                    onVideoSelected: { url in
-                        viewModel.selectVideo(url)
-                        showMediaPicker = false
-                    }
-                )
+            .sheet(isPresented: $viewModel.showImagePicker) {
+                ImagePicker(image: $viewModel.selectedImage)
             }
             .alert("Success", isPresented: $showSuccessAlert) {
                 Button("OK") {
-                    showSuccessAlert = false
+                    // Could navigate back or reset
                 }
             } message: {
                 Text("Your post has been shared!")
@@ -119,239 +135,49 @@ struct CreatePostView: View {
             )
         }
     }
-
-    // MARK: - Subviews
-
-    private var mediaSelectionButtons: some View {
-        VStack(spacing: 12) {
-            // 选择图片
-            Button {
-                showMediaPicker = true
-            } label: {
-                HStack(spacing: 12) {
-                    Image(systemName: "photo.on.rectangle.angled")
-                        .font(.system(size: 24))
-                        .foregroundColor(.blue)
-
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Add Photo")
-                            .font(.headline)
-                            .foregroundColor(.primary)
-
-                        Text("Select from your library")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .foregroundColor(.gray)
-                }
-                .padding()
-                .background(Color(.systemGray6))
-                .cornerRadius(12)
-            }
-
-            // 选择视频
-            Button {
-                showMediaPicker = true
-            } label: {
-                HStack(spacing: 12) {
-                    Image(systemName: "video.fill")
-                        .font(.system(size: 24))
-                        .foregroundColor(.red)
-
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Add Video")
-                            .font(.headline)
-                            .foregroundColor(.primary)
-
-                        Text("Select from your library")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .foregroundColor(.gray)
-                }
-                .padding()
-                .background(Color(.systemGray6))
-                .cornerRadius(12)
-            }
-
-            Text("Caption is required")
-                .font(.caption)
-                .foregroundColor(.secondary)
-                .frame(maxWidth: .infinity, alignment: .center)
-        }
-    }
-
-    private func mediaImagePreview(_ image: UIImage) -> some View {
-        ZStack(alignment: .topTrailing) {
-            Image(uiImage: image)
-                .resizable()
-                .aspectRatio(1, contentMode: .fill)
-                .frame(maxWidth: .infinity)
-                .clipped()
-                .cornerRadius(12)
-
-            // Remove Button
-            Button {
-                viewModel.removeMedia()
-            } label: {
-                Image(systemName: "xmark.circle.fill")
-                    .font(.title)
-                    .foregroundColor(.white)
-                    .background(Color.black.opacity(0.6))
-                    .clipShape(Circle())
-            }
-            .padding(8)
-
-            // Badge
-            VStack(alignment: .leading) {
-                HStack(spacing: 4) {
-                    Image(systemName: "photo.fill")
-                        .font(.caption)
-                    Text("PHOTO")
-                        .font(.caption)
-                        .fontWeight(.semibold)
-                }
-                .padding(6)
-                .background(Color.blue.opacity(0.9))
-                .foregroundColor(.white)
-                .cornerRadius(6)
-                .padding(8)
-
-                Spacer()
-            }
-        }
-    }
-
-    private var videoPreview: some View {
-        ZStack(alignment: .topTrailing) {
-            VStack {
-                if let thumbnail = viewModel.videoThumbnail {
-                    ZStack(alignment: .center) {
-                        Image(uiImage: thumbnail)
-                            .resizable()
-                            .aspectRatio(16 / 9, contentMode: .fill)
-                            .frame(maxWidth: .infinity)
-                            .clipped()
-
-                        Image(systemName: "play.circle.fill")
-                            .font(.system(size: 50))
-                            .foregroundColor(.white)
-                            .shadow(radius: 2)
-                    }
-                } else {
-                    // 加载中
-                    Rectangle()
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 200)
-                        .foregroundColor(Color(.systemGray6))
-                        .overlay {
-                            ProgressView()
-                        }
-                }
-
-                // 视频信息
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Duration: \(viewModel.videoDuration)")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-
-                    Text("Size: \(viewModel.videoFileSize)")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(8)
-            }
-            .cornerRadius(12)
-
-            // Remove Button
-            Button {
-                viewModel.removeMedia()
-            } label: {
-                Image(systemName: "xmark.circle.fill")
-                    .font(.title)
-                    .foregroundColor(.white)
-                    .background(Color.black.opacity(0.6))
-                    .clipShape(Circle())
-            }
-            .padding(8)
-
-            // Badge
-            VStack(alignment: .leading) {
-                HStack(spacing: 4) {
-                    Image(systemName: "video.fill")
-                        .font(.caption)
-                    Text("VIDEO")
-                        .font(.caption)
-                        .fontWeight(.semibold)
-                }
-                .padding(6)
-                .background(Color.red.opacity(0.9))
-                .foregroundColor(.white)
-                .cornerRadius(6)
-                .padding(8)
-
-                Spacer()
-            }
-        }
-    }
 }
 
-// MARK: - Media Picker
+// MARK: - Image Picker
 
-struct MediaPickerView: UIViewControllerRepresentable {
+struct ImagePicker: UIViewControllerRepresentable {
     @Binding var image: UIImage?
-    @Binding var videoURL: URL?
     @Environment(\.dismiss) private var dismiss
 
-    var onImageSelected: (UIImage) -> Void
-    var onVideoSelected: (URL) -> Void
+    func makeUIViewController(context: Context) -> PHPickerViewController {
+        var config = PHPickerConfiguration()
+        config.filter = .images
+        config.selectionLimit = 1
 
-    func makeUIViewController(context: Context) -> UIViewController {
-        let controller = UIImagePickerController()
-        controller.delegate = context.coordinator
-        controller.mediaTypes = ["public.image", "public.movie"]
-        controller.sourceType = .photoLibrary
-        return controller
+        let picker = PHPickerViewController(configuration: config)
+        picker.delegate = context.coordinator
+        return picker
     }
 
-    func updateUIViewController(_ uiViewController: UIViewController, context: Context) {}
+    func updateUIViewController(_ uiViewController: PHPickerViewController, context: Context) {}
 
     func makeCoordinator() -> Coordinator {
         Coordinator(self)
     }
 
-    class Coordinator: NSObject, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
-        let parent: MediaPickerView
+    class Coordinator: NSObject, PHPickerViewControllerDelegate {
+        let parent: ImagePicker
 
-        init(_ parent: MediaPickerView) {
+        init(_ parent: ImagePicker) {
             self.parent = parent
         }
 
-        func imagePickerController(
-            _ picker: UIImagePickerController,
-            didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]
-        ) {
+        func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
             parent.dismiss()
 
-            // 检查选择的是图片还是视频
-            if let image = info[.originalImage] as? UIImage {
-                parent.image = image
-                parent.onImageSelected(image)
-            } else if let videoURL = info[.mediaURL] as? URL {
-                parent.videoURL = videoURL
-                parent.onVideoSelected(videoURL)
+            guard let provider = results.first?.itemProvider else { return }
+
+            if provider.canLoadObject(ofClass: UIImage.self) {
+                provider.loadObject(ofClass: UIImage.self) { image, _ in
+                    DispatchQueue.main.async {
+                        self.parent.image = image as? UIImage
+                    }
+                }
             }
-        }
-
-        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
-            parent.dismiss()
         }
     }
 }
