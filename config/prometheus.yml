@@ -1,0 +1,75 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    monitor: 'nova-phase5'
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []
+
+rule_files:
+  - '/etc/prometheus/rules/*.yml'
+
+scrape_configs:
+  # Prometheus itself
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # User Service (API)
+  - job_name: 'user-service'
+    static_configs:
+      - targets: ['user-service:8080']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  # Kafka
+  - job_name: 'kafka'
+    static_configs:
+      - targets: ['kafka:9308']
+
+  # Elasticsearch
+  - job_name: 'elasticsearch'
+    static_configs:
+      - targets: ['elasticsearch:9200']
+    metrics_path: '/_prometheus/metrics'
+
+  # Neo4j
+  - job_name: 'neo4j'
+    static_configs:
+      - targets: ['neo4j:7687']
+
+  # Redis Cluster
+  - job_name: 'redis-cluster-1'
+    static_configs:
+      - targets: ['redis-cluster-1:6379']
+
+  - job_name: 'redis-cluster-2'
+    static_configs:
+      - targets: ['redis-cluster-2:6380']
+
+  - job_name: 'redis-cluster-3'
+    static_configs:
+      - targets: ['redis-cluster-3:6381']
+
+  # Nginx RTMP
+  - job_name: 'nginx-rtmp'
+    static_configs:
+      - targets: ['nginx-rtmp:80']
+    metrics_path: '/metrics'
+
+  # Ray Head Node
+  - job_name: 'ray'
+    static_configs:
+      - targets: ['ray-head:8265']
+    metrics_path: '/metrics'
+
+  # Node Exporter (if available)
+  - job_name: 'node'
+    static_configs:
+      - targets: ['node-exporter:9100']
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance

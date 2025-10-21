@@ -1,0 +1,296 @@
+version: '3.9'
+
+# Phase 5 Extended Infrastructure Setup
+# Extends base docker-compose with additional services for:
+# - Real-time Notifications (Kafka)
+# - Private Messaging (Elasticsearch)
+# - Video Live Streaming (Nginx-RTMP, HLS)
+# - Social Graph (Neo4j)
+# - Recommendations (Model serving infrastructure)
+
+services:
+  # ============================================
+  # Message Queue - Kafka
+  # ============================================
+  # Used for: Event streaming, notifications, messaging
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: nova-zookeeper
+    restart: unless-stopped
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_SYNC_LIMIT: 2
+      ZOOKEEPER_INIT_LIMIT: 5
+    ports:
+      - "${ZOOKEEPER_PORT:-2181}:2181"
+    volumes:
+      - zookeeper_data:/var/lib/zookeeper/data
+      - zookeeper_logs:/var/lib/zookeeper/log
+    healthcheck:
+      test: ["CMD", "echo", "ruok", "|", "nc", "localhost", "2181"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - nova-network
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: nova-kafka
+    restart: unless-stopped
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_LOG_RETENTION_HOURS: 168
+      KAFKA_LOG_SEGMENT_BYTES: 1073741824
+    ports:
+      - "${KAFKA_PORT:-9092}:9092"
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions.sh", "--bootstrap-server=localhost:9092"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - nova-network
+
+  # ============================================
+  # Search Engine - Elasticsearch
+  # ============================================
+  # Used for: Message search, user discovery, indexing
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.10.0
+    container_name: nova-elasticsearch
+    restart: unless-stopped
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: "-Xms512m -Xmx512m"
+    ports:
+      - "${ELASTICSEARCH_PORT:-9200}:9200"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - nova-network
+
+  # ============================================
+  # Graph Database - Neo4j
+  # ============================================
+  # Used for: Social graph, relationship queries, recommendation traversal
+
+  neo4j:
+    image: neo4j:5.13-community
+    container_name: nova-neo4j
+    restart: unless-stopped
+    environment:
+      NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:-neo4j123}
+      NEO4J_PLUGINS: '["apoc", "graph-data-science"]'
+      NEO4J_dbms_memory_heap_initial__size: 512m
+      NEO4J_dbms_memory_heap_max__size: 512m
+    ports:
+      - "${NEO4J_PORT:-7687}:7687"
+      - "${NEO4J_BROWSER_PORT:-7474}:7474"
+    volumes:
+      - neo4j_data:/var/lib/neo4j/data
+      - neo4j_logs:/var/lib/neo4j/logs
+    healthcheck:
+      test: ["CMD-SHELL", "cypher-shell -u neo4j -p ${NEO4J_PASSWORD:-neo4j123} 'RETURN 1' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - nova-network
+
+  # ============================================
+  # Live Streaming - Nginx with RTMP
+  # ============================================
+  # Used for: RTMP ingest, HLS streaming, manifest generation
+
+  nginx-rtmp:
+    image: alza/nginx-rtmp:latest
+    container_name: nova-nginx-rtmp
+    restart: unless-stopped
+    ports:
+      - "${RTMP_PORT:-1935}:1935"
+      - "${HTTP_PORT:-8080}:80"
+    volumes:
+      - ./config/nginx-rtmp.conf:/etc/nginx/nginx.conf:ro
+      - ./hls_data:/tmp/hls:rw
+      - ./recordings:/tmp/recordings:rw
+    environment:
+      NGINX_WORKER_PROCESSES: 4
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/stat"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - nova-network
+
+  # ============================================
+  # Prometheus - Metrics Collection
+  # ============================================
+  # Used for: Infrastructure monitoring, performance tracking
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: nova-prometheus
+    restart: unless-stopped
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+    volumes:
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    networks:
+      - nova-network
+
+  # ============================================
+  # Grafana - Visualization
+  # ============================================
+  # Used for: Dashboards, alerting, monitoring visualization
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: nova-grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./config/grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      - prometheus
+    networks:
+      - nova-network
+
+  # ============================================
+  # Model Serving - Ray Serve
+  # ============================================
+  # Used for: ML model inference, recommendation serving
+
+  ray-head:
+    image: rayproject/ray:latest
+    container_name: nova-ray-head
+    restart: unless-stopped
+    command: ray start --head --port=6379
+    ports:
+      - "${RAY_DASHBOARD_PORT:-8265}:8265"
+      - "${RAY_PORT:-6379}:6379"
+    environment:
+      RAY_memory: 2000000000
+      RAY_object_store_memory: 1000000000
+    volumes:
+      - ray_data:/tmp/ray
+    healthcheck:
+      test: ["CMD", "python", "-c", "import ray; ray.init(address='localhost:6379')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - nova-network
+
+  # ============================================
+  # Cache Layer - Redis Cluster
+  # ============================================
+  # Used for: Session management, rate limiting, caching
+
+  redis-cluster-1:
+    image: redis:7-alpine
+    container_name: nova-redis-cluster-1
+    restart: unless-stopped
+    command: >
+      redis-server
+      --port 6379
+      --cluster-enabled yes
+      --cluster-config-file /data/nodes.conf
+      --cluster-node-timeout 5000
+      --appendonly yes
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+    ports:
+      - "${REDIS_CLUSTER_1_PORT:-6379}:6379"
+    volumes:
+      - redis_cluster_1_data:/data
+    networks:
+      - nova-network
+
+  redis-cluster-2:
+    image: redis:7-alpine
+    container_name: nova-redis-cluster-2
+    restart: unless-stopped
+    command: >
+      redis-server
+      --port 6380
+      --cluster-enabled yes
+      --cluster-config-file /data/nodes.conf
+      --cluster-node-timeout 5000
+      --appendonly yes
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+    ports:
+      - "${REDIS_CLUSTER_2_PORT:-6380}:6380"
+    volumes:
+      - redis_cluster_2_data:/data
+    networks:
+      - nova-network
+
+  redis-cluster-3:
+    image: redis:7-alpine
+    container_name: nova-redis-cluster-3
+    restart: unless-stopped
+    command: >
+      redis-server
+      --port 6381
+      --cluster-enabled yes
+      --cluster-config-file /data/nodes.conf
+      --cluster-node-timeout 5000
+      --appendonly yes
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+    ports:
+      - "${REDIS_CLUSTER_3_PORT:-6381}:6381"
+    volumes:
+      - redis_cluster_3_data:/data
+    networks:
+      - nova-network
+
+volumes:
+  zookeeper_data:
+  zookeeper_logs:
+  kafka_data:
+  elasticsearch_data:
+  neo4j_data:
+  neo4j_logs:
+  prometheus_data:
+  grafana_data:
+  ray_data:
+  redis_cluster_1_data:
+  redis_cluster_2_data:
+  redis_cluster_3_data:
+
+networks:
+  nova-network:
+    driver: bridge
