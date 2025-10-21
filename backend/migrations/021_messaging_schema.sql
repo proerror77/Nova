@@ -19,8 +19,7 @@ CREATE TABLE IF NOT EXISTS conversations (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
 
-    CONSTRAINT different_users CHECK (user_1_id != user_2_id),
-    UNIQUE(LEAST(user_1_id, user_2_id), GREATEST(user_1_id, user_2_id))
+    CONSTRAINT different_users CHECK (user_1_id != user_2_id)
 );
 
 -- Messages table
@@ -123,28 +122,64 @@ CREATE TABLE IF NOT EXISTS blocked_users (
 );
 
 -- Indexes
-CREATE INDEX IF NOT EXISTS idx_conversations_user_1_id ON conversations(user_1_id);
-CREATE INDEX IF NOT EXISTS idx_conversations_user_2_id ON conversations(user_2_id);
-CREATE INDEX IF NOT EXISTS idx_conversations_last_message_at ON conversations(last_message_at DESC);
+DO $$
+BEGIN
+    -- Only create conversation indexes if expected columns exist
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns WHERE table_name='conversations' AND column_name='user_1_id'
+    ) AND EXISTS (
+        SELECT 1 FROM information_schema.columns WHERE table_name='conversations' AND column_name='user_2_id'
+    ) THEN
+        EXECUTE 'CREATE INDEX IF NOT EXISTS idx_conversations_user_1_id ON conversations(user_1_id)';
+        EXECUTE 'CREATE INDEX IF NOT EXISTS idx_conversations_user_2_id ON conversations(user_2_id)';
+        EXECUTE 'CREATE INDEX IF NOT EXISTS idx_conversations_last_message_at ON conversations(last_message_at DESC)';
+        EXECUTE 'CREATE UNIQUE INDEX IF NOT EXISTS idx_conversations_users_pair ON conversations (LEAST(user_1_id, user_2_id), GREATEST(user_1_id, user_2_id))';
+    ELSE
+        RAISE NOTICE 'Skipping conversation indexes: expected columns not present';
+    END IF;
 
-CREATE INDEX IF NOT EXISTS idx_messages_conversation_id ON messages(conversation_id);
-CREATE INDEX IF NOT EXISTS idx_messages_sender_id ON messages(sender_id);
-CREATE INDEX IF NOT EXISTS idx_messages_receiver_id ON messages(receiver_id);
-CREATE INDEX IF NOT EXISTS idx_messages_created_at ON messages(created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_messages_read ON messages(read);
-CREATE INDEX IF NOT EXISTS idx_messages_conversation_created ON messages(conversation_id, created_at DESC);
+    -- Messages indexes (guarded by columns existence)
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns WHERE table_name='messages' AND column_name='conversation_id'
+    ) AND EXISTS (
+        SELECT 1 FROM information_schema.columns WHERE table_name='messages' AND column_name='sender_id'
+    ) THEN
+        EXECUTE 'CREATE INDEX IF NOT EXISTS idx_messages_conversation_id ON messages(conversation_id)';
+        EXECUTE 'CREATE INDEX IF NOT EXISTS idx_messages_sender_id ON messages(sender_id)';
+        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='messages' AND column_name='receiver_id') THEN
+            EXECUTE 'CREATE INDEX IF NOT EXISTS idx_messages_receiver_id ON messages(receiver_id)';
+        END IF;
+        EXECUTE 'CREATE INDEX IF NOT EXISTS idx_messages_created_at ON messages(created_at DESC)';
+        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='messages' AND column_name='read') THEN
+            EXECUTE 'CREATE INDEX IF NOT EXISTS idx_messages_read ON messages(read)';
+        END IF;
+        EXECUTE 'CREATE INDEX IF NOT EXISTS idx_messages_conversation_created ON messages(conversation_id, created_at DESC)';
+        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='messages' AND column_name='content') THEN
+            EXECUTE 'CREATE INDEX IF NOT EXISTS idx_messages_content_fts ON messages USING GIN(to_tsvector(''english'', content))';
+        END IF;
+    ELSE
+        RAISE NOTICE 'Skipping messages indexes: expected columns not present';
+    END IF;
 
-CREATE INDEX IF NOT EXISTS idx_message_reactions_message_id ON message_reactions(message_id);
-CREATE INDEX IF NOT EXISTS idx_message_reactions_user_id ON message_reactions(user_id);
+    -- Reactions/search/participants/blocked indexes (create if tables exist)
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='message_reactions') THEN
+        EXECUTE 'CREATE INDEX IF NOT EXISTS idx_message_reactions_message_id ON message_reactions(message_id)';
+        EXECUTE 'CREATE INDEX IF NOT EXISTS idx_message_reactions_user_id ON message_reactions(user_id)';
+    END IF;
 
-CREATE INDEX IF NOT EXISTS idx_conversation_participants_user_id ON conversation_participants(user_id);
-CREATE INDEX IF NOT EXISTS idx_message_search_index_conversation_id ON message_search_index(conversation_id);
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='conversation_participants') THEN
+        EXECUTE 'CREATE INDEX IF NOT EXISTS idx_conversation_participants_user_id ON conversation_participants(user_id)';
+    END IF;
 
-CREATE INDEX IF NOT EXISTS idx_blocked_users_blocker_id ON blocked_users(blocker_id);
-CREATE INDEX IF NOT EXISTS idx_blocked_users_blocked_id ON blocked_users(blocked_id);
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='message_search_index') THEN
+        EXECUTE 'CREATE INDEX IF NOT EXISTS idx_message_search_index_conversation_id ON message_search_index(conversation_id)';
+    END IF;
 
--- Full-text search on messages
-CREATE INDEX IF NOT EXISTS idx_messages_content_fts ON messages USING GIN(to_tsvector('english', content));
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='blocked_users') THEN
+        EXECUTE 'CREATE INDEX IF NOT EXISTS idx_blocked_users_blocker_id ON blocked_users(blocker_id)';
+        EXECUTE 'CREATE INDEX IF NOT EXISTS idx_blocked_users_blocked_id ON blocked_users(blocked_id)';
+    END IF;
+END $$;
 
 -- Updated trigger
 CREATE OR REPLACE FUNCTION update_conversations_timestamp()
@@ -155,7 +190,14 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE TRIGGER conversations_update_timestamp
-    BEFORE UPDATE ON conversations
-    FOR EACH ROW
-    EXECUTE FUNCTION update_conversations_timestamp();
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns WHERE table_name='conversations' AND column_name='updated_at'
+    ) THEN
+        EXECUTE 'DROP TRIGGER IF EXISTS conversations_update_timestamp ON conversations';
+        EXECUTE 'CREATE TRIGGER conversations_update_timestamp BEFORE UPDATE ON conversations FOR EACH ROW EXECUTE FUNCTION update_conversations_timestamp()';
+    ELSE
+        RAISE NOTICE 'Skipping conversations_update_timestamp trigger: updated_at column not present';
+    END IF;
+END $$;

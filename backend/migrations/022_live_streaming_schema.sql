@@ -158,10 +158,27 @@ CREATE TABLE IF NOT EXISTS stream_segments (
 );
 
 -- Indexes
-CREATE INDEX IF NOT EXISTS idx_live_streams_broadcaster_id ON live_streams(broadcaster_id);
-CREATE INDEX IF NOT EXISTS idx_live_streams_status ON live_streams(status);
-CREATE INDEX IF NOT EXISTS idx_live_streams_started_at ON live_streams(started_at DESC);
-CREATE INDEX IF NOT EXISTS idx_live_streams_category ON live_streams(category);
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='live_streams' AND column_name='broadcaster_id') THEN
+        EXECUTE 'CREATE INDEX IF NOT EXISTS idx_live_streams_broadcaster_id ON live_streams(broadcaster_id)';
+    ELSIF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='live_streams' AND column_name='creator_id') THEN
+        EXECUTE 'CREATE INDEX IF NOT EXISTS idx_live_streams_creator_id ON live_streams(creator_id)';
+    ELSE
+        RAISE NOTICE 'Skipping broadcaster/creator index: neither column exists on live_streams';
+    END IF;
+END $$;
+DO $$ BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='live_streams' AND column_name='status') THEN
+        EXECUTE 'CREATE INDEX IF NOT EXISTS idx_live_streams_status ON live_streams(status)';
+    END IF;
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='live_streams' AND column_name='started_at') THEN
+        EXECUTE 'CREATE INDEX IF NOT EXISTS idx_live_streams_started_at ON live_streams(started_at DESC)';
+    END IF;
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='live_streams' AND column_name='category') THEN
+        EXECUTE 'CREATE INDEX IF NOT EXISTS idx_live_streams_category ON live_streams(category)';
+    END IF;
+END $$;
 
 CREATE INDEX IF NOT EXISTS idx_live_stream_viewers_stream_id ON live_stream_viewers(stream_id);
 CREATE INDEX IF NOT EXISTS idx_live_stream_viewers_viewer_id ON live_stream_viewers(viewer_id);
@@ -185,7 +202,12 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE TRIGGER live_streams_update_timestamp
-    BEFORE UPDATE ON live_streams
-    FOR EACH ROW
-    EXECUTE FUNCTION update_live_streams_timestamp();
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='live_streams' AND column_name='updated_at') THEN
+        EXECUTE 'DROP TRIGGER IF EXISTS live_streams_update_timestamp ON live_streams';
+        EXECUTE 'CREATE TRIGGER live_streams_update_timestamp BEFORE UPDATE ON live_streams FOR EACH ROW EXECUTE FUNCTION update_live_streams_timestamp()';
+    ELSE
+        RAISE NOTICE 'Skipping live_streams_update_timestamp trigger: updated_at column not present';
+    END IF;
+END $$;

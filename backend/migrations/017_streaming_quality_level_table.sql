@@ -39,8 +39,8 @@ CREATE TABLE IF NOT EXISTS quality_levels (
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
 
     -- Constraints
-    CONSTRAINT resolution_width_positive CHECK (resolution_width > 0),
-    CONSTRAINT resolution_height_positive CHECK (resolution_height > 0),
+    CONSTRAINT resolution_width_positive CHECK (resolution_width > 0 OR name = 'audio'),
+    CONSTRAINT resolution_height_positive CHECK (resolution_height > 0 OR name = 'audio'),
     CONSTRAINT bitrate_min_positive CHECK (bitrate_min_kbps > 0),
     CONSTRAINT bitrate_target_positive CHECK (bitrate_target_kbps > 0),
     CONSTRAINT bitrate_max_positive CHECK (bitrate_max_kbps > 0),
@@ -48,7 +48,7 @@ CREATE TABLE IF NOT EXISTS quality_levels (
         bitrate_min_kbps <= bitrate_target_kbps AND
         bitrate_target_kbps <= bitrate_max_kbps
     ),
-    CONSTRAINT frame_rate_positive CHECK (frame_rate > 0),
+    CONSTRAINT frame_rate_positive CHECK (frame_rate > 0 OR name = 'audio'),
     CONSTRAINT segment_duration_positive CHECK (segment_duration_seconds > 0)
 );
 
