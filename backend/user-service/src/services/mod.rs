@@ -23,6 +23,7 @@ pub mod image_processing;
 pub mod job_queue;
 pub mod jwt_key_rotation;
 pub mod kafka_producer;
+pub mod notifications;
 pub mod oauth;
 pub mod origin_shield;
 pub mod password_reset_service;

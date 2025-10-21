@@ -60,18 +60,16 @@ impl ClickHouseClient {
         query_timeout_ms: u64,
         readonly: bool,
     ) -> Self {
-        let client = Client::default()
+        let mut client = Client::default()
             .with_url(url)
             .with_database(database)
             .with_user(username)
             .with_password(password)
             .with_option("max_execution_time", &(query_timeout_ms / 1000).to_string());
 
-        // Note: We don't explicitly set readonly=1 because:
-        // 1. ClickHouse server might already be in readonly mode
-        // 2. Setting readonly option when server is already readonly causes error
-        // 3. For write operations, use new_writable() which doesn't restrict writes
-        // The readonly parameter is kept for API compatibility but not used
+        if readonly {
+            client = client.with_option("readonly", "1");
+        }
 
         Self {
             client,
@@ -189,7 +187,7 @@ impl ClickHouseClient {
     pub async fn health_check(&self) -> Result<()> {
         #[derive(clickhouse::Row, serde::Deserialize)]
         struct HealthCheck {
-            result: u8,
+            result: u32,
         }
 
         self.client

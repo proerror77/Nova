@@ -7,12 +7,6 @@ use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, TokenData, 
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use base64::engine::general_purpose::{STANDARD as B64, URL_SAFE_NO_PAD as B64URL_NOPAD};
-use base64::Engine;
-use rsa::{RsaPublicKey};
-use rsa::pkcs8::DecodePublicKey as _;
-use rsa::pkcs1::DecodeRsaPublicKey as _;
-use rsa::traits::PublicKeyParts;
 
 const ACCESS_TOKEN_EXPIRY_HOURS: i64 = 1;
 const REFRESH_TOKEN_EXPIRY_DAYS: i64 = 30;
@@ -50,30 +44,13 @@ lazy_static! {
     static ref JWT_KEYS: RwLock<Option<(EncodingKey, DecodingKey)>> = RwLock::new(None);
 }
 
-/// Normalize input that may be raw PEM or base64-encoded PEM.
-fn normalize_pem_bytes(input: &str, which: &str) -> Result<Vec<u8>> {
-    let trimmed = input.trim();
-    if trimmed.starts_with("-----BEGIN") {
-        // Looks like raw PEM content
-        Ok(trimmed.as_bytes().to_vec())
-    } else {
-        // Try base64 decode
-        B64
-            .decode(trimmed)
-            .map_err(|e| anyhow!("Failed to decode {} (base64): {}", which, e))
-    }
-}
-
 /// Initialize JWT keys from PEM-formatted strings
 /// Must be called during application startup before any JWT operations
 pub fn initialize_keys(private_key_pem: &str, public_key_pem: &str) -> Result<()> {
-    let private_bytes = normalize_pem_bytes(private_key_pem, "JWT private key")?;
-    let public_bytes = normalize_pem_bytes(public_key_pem, "JWT public key")?;
-
-    let encoding_key = EncodingKey::from_rsa_pem(&private_bytes)
+    let encoding_key = EncodingKey::from_rsa_pem(private_key_pem.as_bytes())
         .map_err(|e| anyhow!("Failed to load private key from environment: {}", e))?;
 
-    let decoding_key = DecodingKey::from_rsa_pem(&public_bytes)
+    let decoding_key = DecodingKey::from_rsa_pem(public_key_pem.as_bytes())
         .map_err(|e| anyhow!("Failed to load public key from environment: {}", e))?;
 
     let mut keys = JWT_KEYS
@@ -219,80 +196,28 @@ pub struct JWKS {
 ///
 /// # Returns
 /// JWKS structure with all valid public keys
-fn parse_rsa_components_from_pem(pem: &str) -> Result<(String, String)> {
-    // Try PKCS#8 (BEGIN PUBLIC KEY)
-    let parsed = RsaPublicKey::from_public_key_pem(pem)
-        .or_else(|_| RsaPublicKey::from_pkcs1_pem(pem))
-        .map_err(|e| anyhow!("Failed to parse RSA public key PEM: {}", e))?;
-
-    let n = parsed.n().to_bytes_be();
-    let e = parsed.e().to_bytes_be();
-    let n_b64 = B64URL_NOPAD.encode(n);
-    let e_b64 = B64URL_NOPAD.encode(e);
-    Ok((n_b64, e_b64))
-}
-
-fn read_env_public_key_pem() -> Option<String> {
-    if let Ok(val) = std::env::var("JWT_PUBLIC_KEY_PEM") {
-        if val.trim().is_empty() { return None; }
-        let trimmed = val.trim().to_string();
-        if trimmed.starts_with("-----BEGIN") {
-            return Some(trimmed);
-        }
-        // Try base64 decode to PEM string
-        if let Ok(bytes) = B64.decode(trimmed.as_bytes()) {
-            if let Ok(s) = String::from_utf8(bytes) { return Some(s); }
-        }
-    }
-    None
-}
-
 pub async fn get_jwks(pool: &sqlx::PgPool, _grace_period_days: i64) -> Result<JWKS> {
     use crate::services::jwt_key_rotation;
 
-    // Prefer keys from database; if unavailable (e.g., migrations not run), fall back to env key
-    let keys = match jwt_key_rotation::get_valid_keys(pool).await {
-        Ok(k) => k,
-        Err(e) => {
-            tracing::warn!("JWKS DB query failed; using env key fallback if present: {}", e);
-            Vec::new()
-        }
-    };
+    // Get all valid keys from database
+    let keys = jwt_key_rotation::get_valid_keys(pool).await?;
 
     let mut jwks_keys = Vec::new();
 
     for key in keys {
-        match parse_rsa_components_from_pem(&key.public_key_pem) {
-            Ok((n, e)) => jwks_keys.push(JWKSKey {
-                kty: "RSA".to_string(),
-                alg: key.algorithm.clone(),
-                kid: key.key_id.clone(),
-                use_: "sig".to_string(),
-                n,
-                e,
-            }),
-            Err(err) => {
-                tracing::warn!("Failed to parse DB public key (kid={}): {}", key.key_id, err);
-            }
-        }
-    }
+        // Note: Simplified JWKS - in production, would need to parse RSA modulus and exponent
+        // from the PEM public key. For now, we'll return basic key information.
+        // A full implementation would use an RSA library to extract the key parameters.
 
-    // If DB has no keys, fall back to env public key (if present)
-    if jwks_keys.is_empty() {
-        if let Some(pem) = read_env_public_key_pem() {
-            if let Ok((n, e)) = parse_rsa_components_from_pem(&pem) {
-                jwks_keys.push(JWKSKey {
-                    kty: "RSA".to_string(),
-                    alg: "RS256".to_string(),
-                    kid: "env-default".to_string(),
-                    use_: "sig".to_string(),
-                    n,
-                    e,
-                });
-            } else {
-                tracing::warn!("JWT_PUBLIC_KEY_PEM present but failed to parse; JWKS will be empty");
-            }
-        }
+        jwks_keys.push(JWKSKey {
+            kty: "RSA".to_string(),
+            alg: key.algorithm.clone(),
+            kid: key.key_id.clone(),
+            use_: "sig".to_string(),
+            // These would need to be extracted from the PEM public key in production
+            n: "...".to_string(),  // Base64-encoded RSA modulus
+            e: "AQAB".to_string(), // Standard RSA public exponent (65537)
+        });
     }
 
     Ok(JWKS { keys: jwks_keys })

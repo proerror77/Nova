@@ -10,45 +10,47 @@ enum APIEndpoint: Sendable {
     var description: String {
         switch self {
         case .feed:
-            return "/api/v1/feed"
+            return "/feed"
         case .users(let id):
-            return "/api/v1/users/\(id)"
+            return "/users/\(id)"
         case .searchUsers:
-            return "/api/v1/search/users"
+            return "/search/users"
         case .notifications:
-            return "/api/v1/notifications"
+            return "/notifications"
         }
     }
 
     /// Builds the complete URL for this endpoint
     var url: URL {
         let baseURL = APIConfig.baseURL
-        func build(_ path: String, queryItems: [URLQueryItem]? = nil) -> URL {
-            var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: true)!
-            let normalized = path.hasPrefix("/") ? path : "/" + path
-            components.path = (baseURL.path.isEmpty ? "" : baseURL.path) + normalized
-            components.queryItems = queryItems
-            return components.url!
-        }
         switch self {
         case .feed(let page, let limit):
-            return build("/api/v1/feed", queryItems: [
+            var components = URLComponents(url: baseURL.appendingPathComponent("/feed"), resolvingAgainstBaseURL: true)!
+            components.queryItems = [
                 URLQueryItem(name: "page", value: "\(page)"),
                 URLQueryItem(name: "limit", value: "\(limit)")
-            ])
+            ]
+            return components.url!
+
         case .users(let id):
-            return build("/api/v1/users/\(id)")
+            return baseURL.appendingPathComponent("/users/\(id)")
+
         case .searchUsers(let query, let page, let limit):
-            return build("/api/v1/search/users", queryItems: [
+            var components = URLComponents(url: baseURL.appendingPathComponent("/search/users"), resolvingAgainstBaseURL: true)!
+            components.queryItems = [
                 URLQueryItem(name: "q", value: query),
                 URLQueryItem(name: "page", value: "\(page)"),
                 URLQueryItem(name: "limit", value: "\(limit)")
-            ])
+            ]
+            return components.url!
+
         case .notifications(let page, let limit):
-            return build("/api/v1/notifications", queryItems: [
+            var components = URLComponents(url: baseURL.appendingPathComponent("/notifications"), resolvingAgainstBaseURL: true)!
+            components.queryItems = [
                 URLQueryItem(name: "page", value: "\(page)"),
                 URLQueryItem(name: "limit", value: "\(limit)")
-            ])
+            ]
+            return components.url!
         }
     }
 

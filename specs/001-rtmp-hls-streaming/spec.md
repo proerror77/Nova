@@ -91,9 +91,15 @@ Platform operators and broadcasters want to monitor stream health, viewer engage
 - **FR-006**: System MUST broadcast stream availability/status changes to viewers via WebSocket in real-time
 - **FR-007**: System MUST collect and expose analytics metrics (concurrent viewers, bandwidth, quality switches, errors) via WebSocket or REST API
 - **FR-008**: System MUST enforce CDN integration for geographic content distribution and reduced latency
+  - **Clarification**: HLS/DASH segments served via CDN origin (e.g., Cloudflare, Akamai) with Cache-Control headers (10min TTL for segments, 1min for manifests)
+  - **Routing**: Delivery service returns CDN-prefixed URLs in playlists (e.g., https://cdn.example.com/hls/stream-123/480p/segment-1.ts instead of direct server URL)
+  - **Measurement**: Monitor viewer latency from edge nodes; baseline: direct server delivery vs. CDN delivery; target: 30% reduction per SC-010
 - **FR-009**: System MUST support broadcasting authentication and authorization (valid streaming keys, permission validation)
 - **FR-010**: System MUST gracefully handle broadcaster disconnection and stream termination within 2 seconds
 - **FR-011**: System MUST maintain stream state consistency across distributed infrastructure (multiple edge nodes, CDN nodes)
+  - **Clarification**: All services (ingestion, transcoding, delivery) must ensure eventual consistency of stream state within 500ms using distributed consensus (PostgreSQL advisory locks or Redis) + Kafka event ordering by stream_id partition
+  - **State Transitions**: PENDING_INGEST → ACTIVE → ENDED_GRACEFULLY | ERROR must be atomic across all service replicas
+  - **Failure Scenario**: If transcoding service crashes mid-stream, delivery service must not serve stale segments; ingestion service must detect timeout and transition stream to ERROR state within 5 seconds
 - **FR-012**: System MUST log all streaming events (connect, quality switch, disconnect, errors) for auditing and debugging
 
 ### Key Entities
@@ -135,7 +141,7 @@ Platform operators and broadcasters want to monitor stream health, viewer engage
 7. **DRM**: Copy protection / DRM (Digital Rights Management) is not required for initial launch
 8. **Latency Class**: Target is "low latency" (5-10 second end-to-end delay), not ultra-low-latency (RTMP-to-viewer in milliseconds)
 9. **Multi-bitrate Transcoding**: System assumes backend has sufficient compute to transcode to 3-5 quality levels in real-time
-10. **Concurrent Stream Limit**: Initial deployment supports up to 100 concurrent broadcast streams; per-stream viewer limit is 10k+
+10. **Concurrent Stream Limit**: Initial deployment supports exactly 100 concurrent broadcast streams (MVP limit); per-stream viewer limit is 10,000+ concurrent viewers
 
 ## Non-Functional Requirements
 

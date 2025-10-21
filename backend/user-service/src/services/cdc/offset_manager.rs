@@ -42,7 +42,7 @@ impl OffsetManager {
             CREATE TABLE IF NOT EXISTS cdc_offsets (
                 topic VARCHAR(255) NOT NULL,
                 partition INT NOT NULL,
-                "offset" BIGINT NOT NULL,
+                offset BIGINT NOT NULL,
                 updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                 PRIMARY KEY (topic, partition)
             )
@@ -93,11 +93,11 @@ impl OffsetManager {
 
         sqlx::query(
             r#"
-            INSERT INTO cdc_offsets (topic, partition, "offset", updated_at)
+            INSERT INTO cdc_offsets (topic, partition, offset, updated_at)
             VALUES ($1, $2, $3, $4)
             ON CONFLICT (topic, partition)
             DO UPDATE SET
-                "offset" = EXCLUDED."offset",
+                offset = EXCLUDED.offset,
                 updated_at = EXCLUDED.updated_at
             "#,
         )
@@ -137,7 +137,7 @@ impl OffsetManager {
 
         let result = sqlx::query_scalar::<_, i64>(
             r#"
-            SELECT "offset" FROM cdc_offsets
+            SELECT offset FROM cdc_offsets
             WHERE topic = $1 AND partition = $2
             "#,
         )
@@ -177,7 +177,7 @@ impl OffsetManager {
 
         let results = sqlx::query_as::<_, (i32, i64)>(
             r#"
-            SELECT partition, "offset" FROM cdc_offsets
+            SELECT partition, offset FROM cdc_offsets
             WHERE topic = $1
             ORDER BY partition ASC
             "#,

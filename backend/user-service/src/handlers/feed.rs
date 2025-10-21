@@ -91,13 +91,11 @@ pub async fn get_feed(
     http_req: HttpRequest,
     state: web::Data<FeedHandlerState>,
 ) -> Result<HttpResponse> {
-    // Allow demo/unauthenticated access for E2E testing
-    // In production, remove this and require proper authentication
     let user_id = http_req
         .extensions()
         .get::<UserId>()
         .map(|u| u.0)
-        .unwrap_or_else(|| uuid::Uuid::nil()); // Demo user ID (nil UUID)
+        .ok_or_else(|| AppError::Authentication("Missing user context".into()))?;
     let offset = query.decode_cursor()?;
     let limit = query.limit.min(100).max(1) as usize; // Clamp to [1, 100]
 

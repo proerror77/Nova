@@ -152,8 +152,10 @@ streaming/
 
 3. **Adaptive Bitrate Strategy**
    - Task: Research ABR algorithms (bandwidth estimation, quality ladder sizing)
-   - Decision Required: Standard ladder (480p, 720p, 1080p) vs. dynamic
-   - Impact: Affects transcoding load and viewer experience
+   - **Decision LOCKED**: Use standard fixed ladder (480p @ 2Mbps, 720p @ 5Mbps, 1080p @ 8Mbps) for MVP
+     - Rationale: Reduces transcoding complexity, predictable resource usage, sufficient for initial launch
+     - Dynamic ladder deferred to Phase 2 based on usage patterns
+   - Impact: Transcoding service spawns 3 FFmpeg processes per broadcast stream (one per quality)
 
 4. **Kafka Event Schema**
    - Task: Research stream event schema design for system-wide tracing

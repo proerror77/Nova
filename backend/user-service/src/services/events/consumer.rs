@@ -2,7 +2,6 @@ use rdkafka::config::ClientConfig;
 use rdkafka::consumer::{Consumer, StreamConsumer};
 use rdkafka::message::Message;
 use serde::{Deserialize, Serialize};
-use sha1::{Digest, Sha1};
 use serde_json::Value;
 use std::sync::Arc;
 use std::time::Duration;
@@ -250,73 +249,11 @@ impl EventsConsumer {
             .payload()
             .ok_or_else(|| AppError::Validation("Event message has no payload".to_string()))?;
 
-        // Try primary schema first
-        let event: EventMessage = match serde_json::from_slice(payload) {
-            Ok(ev) => ev,
-            Err(primary_err) => {
-                // Try alternate schema (published by /api/v1/events)
-                #[derive(Deserialize)]
-                struct AltEvent {
-                    user_id: serde_json::Value, // UUID string
-                    action: String,
-                    #[serde(default)]
-                    post_id: Option<serde_json::Value>,
-                    #[serde(default)]
-                    author_id: Option<serde_json::Value>,
-                    #[serde(default)]
-                    dwell_ms: Option<u32>,
-                    #[serde(default)]
-                    device: Option<String>,
-                    #[serde(default)]
-                    app_ver: Option<String>,
-                    #[serde(default)]
-                    event_time: Option<String>, // RFC3339 from server
-                    #[serde(default)]
-                    ts: Option<i64>, // millis if provided
-                }
-
-                let alt: AltEvent = serde_json::from_slice(payload).map_err(|_| {
-                    error!("Failed to deserialize event message: {}", primary_err);
-                    AppError::Internal(format!("Invalid event format: {}", primary_err))
-                })?;
-
-                // Map AltEvent -> EventMessage
-                // user_id as i64 via hash to keep ClickHouse schema compatible
-                let user_id_string = alt.user_id.as_str()
-                    .map(|s| s.to_string())
-                    .unwrap_or_else(|| alt.user_id.to_string());
-                let mut hasher = Sha1::new();
-                hasher.update(user_id_string.as_bytes());
-                let digest = hasher.finalize();
-                let mut bytes8 = [0u8; 8];
-                bytes8.copy_from_slice(&digest[..8]);
-                let user_id_num = i64::from_be_bytes(bytes8);
-
-                // timestamp in millis
-                let ts_ms = if let Some(ts) = alt.ts { ts } else if let Some(et) = alt.event_time {
-                    match chrono::DateTime::parse_from_rfc3339(&et) {
-                        Ok(dt) => dt.timestamp_millis(),
-                        Err(_) => chrono::Utc::now().timestamp_millis(),
-                    }
-                } else { chrono::Utc::now().timestamp_millis() };
-
-                // Properties bucket
-                let mut props = serde_json::Map::new();
-                if let Some(p) = alt.post_id { props.insert("post_id".into(), p); }
-                if let Some(a) = alt.author_id { props.insert("author_id".into(), a); }
-                if let Some(d) = alt.dwell_ms { props.insert("dwell_ms".into(), serde_json::json!(d)); }
-                if let Some(dev) = alt.device { props.insert("device".into(), serde_json::json!(dev)); }
-                if let Some(ver) = alt.app_ver { props.insert("app_ver".into(), serde_json::json!(ver)); }
-
-                EventMessage {
-                    event_id: uuid::Uuid::new_v4().to_string(),
-                    event_type: alt.action,
-                    user_id: user_id_num,
-                    timestamp: ts_ms,
-                    properties: serde_json::Value::Object(props),
-                }
-            }
-        };
+        // Deserialize event
+        let event: EventMessage = serde_json::from_slice(payload).map_err(|e| {
+            error!("Failed to deserialize event message: {}", e);
+            AppError::Internal(format!("Invalid event format: {}", e))
+        })?;
 
         // Validate event
         event.validate()?;

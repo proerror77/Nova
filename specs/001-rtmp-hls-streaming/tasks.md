@@ -175,6 +175,12 @@ A viewer discovers an active live stream and opens the HLS/DASH URL in their bro
 - [ ] T046 [US2] Implement HLS segment serving endpoint at `streaming/crates/streaming-delivery/src/hls_handler.rs` (GET /hls/:stream_id/:quality/segment-N.ts)
 - [ ] T047 [US2] Create HTTP cache headers manager at `streaming/crates/streaming-delivery/src/cache_headers.rs` to set appropriate Cache-Control, ETag, Last-Modified for segment delivery
 
+**US2 CDN Integration**:
+
+- [ ] T047a [US2] Implement CDN origin URL rewriter at `streaming/crates/streaming-delivery/src/cdn_url_rewriter.rs` to transform segment URLs in playlists from direct server URLs to CDN-prefixed URLs (e.g., https://cdn.example.com/hls/...)
+- [ ] T047b [US2] Create CDN edge authentication at `streaming/crates/streaming-delivery/src/cdn_auth.rs` to generate signed CDN tokens (if using Cloudflare, Akamai) for private streams
+- [ ] T047c [US2] Implement CDN cache configuration at `streaming/crates/streaming-delivery/src/cdn_config.rs` to set Cache-Control headers: 10min TTL for segments, 1min for manifests, bypass for non-200 responses
+
 **US2 DASH Delivery Service**:
 
 - [ ] T048 [US2] Implement DASH MPD manifest generator at `streaming/crates/streaming-delivery/src/dash_handler.rs` (XML format with adaptation sets for quality levels)
@@ -259,6 +265,8 @@ Platform operators and broadcasters monitor stream health, viewer engagement, an
 - [ ] T075 [P] [US3] Create metrics collection test at `streaming/tests/unit/metrics_collector_test.rs` (verify aggregation accuracy, 1-second granularity)
 - [ ] T076 [P] [US3] Create analytics query test at `streaming/tests/integration/analytics_query_test.rs` (query historical metrics by time range, verify accuracy)
 - [ ] T077 [US3] Create dashboard integration test at `streaming/tests/integration/dashboard_test.rs` (verify WebSocket pushes update DOM correctly, load time <2s)
+- [ ] T077a [US2] Create buffering rate test at `streaming/tests/integration/buffering_rate_test.rs` to measure and verify SC-006 (95% of viewers experience zero buffering); simulate network throttling and variable bandwidth
+- [ ] T077b [US2] Create CDN performance benchmark at `streaming/tests/integration/cdn_performance_test.rs` to validate SC-010 (30% latency reduction); compare direct server delivery vs. CDN-prefixed URLs, measure edge latency
 
 ---
 
@@ -278,6 +286,8 @@ Finalize implementation with performance optimization, security hardening, error
 
 **Error Handling & Resilience**:
 
+- [ ] T077x [P] Implement distributed stream state consistency at `streaming/crates/streaming-core/src/state_consistency.rs` using PostgreSQL advisory locks for atomic state transitions (PENDING_INGEST → ACTIVE → ENDED) across all service replicas; ensure eventual consistency within 500ms via Kafka event ordering by stream_id
+- [ ] T077y [P] Create stream state synchronization checker at `streaming/crates/streaming-delivery/src/state_verifier.rs` to periodically validate state consistency across ingestion, transcoding, and delivery services; alert on divergence >5 seconds
 - [ ] T078 Create circuit breaker for Kafka producer at `streaming/crates/streaming-core/src/circuit_breaker.rs` (fail-open on producer errors, retry with exponential backoff)
 - [ ] T079 Implement graceful degradation at `streaming/crates/streaming-delivery/src/graceful_degradation.rs` (serve lower quality if transcoding fails, notify viewers)
 - [ ] T080 Create timeout handlers at `streaming/crates/streaming-core/src/timeouts.rs` for RTMP (30s idle), transcoding (5m), segment delivery (10s)
