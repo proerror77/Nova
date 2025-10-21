@@ -1,16 +1,9 @@
 /// OAuth Connection repository - handles all database operations for OAuth connections
 use crate::models::OAuthConnection;
+use crate::security::hash_token;
 use chrono::Utc;
-use sha2::{Digest, Sha256};
 use sqlx::PgPool;
 use uuid::Uuid;
-
-/// Hash a token for secure storage
-fn hash_token(token: &str) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(token.as_bytes());
-    hex::encode(hasher.finalize())
-}
 
 /// Create a new OAuth connection
 pub async fn create_connection(

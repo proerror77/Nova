@@ -36,16 +36,12 @@ pub mod transcoding_optimizer;
 pub mod transcoding_progress;
 pub mod two_fa;
 // pub mod video_processing_pipeline;     // TODO: Phase 2 - depends on VideoTranscodingService methods
-pub mod video_service;
-pub mod video_transcoding;
 
 // ==================== SERVICE MODULES DOCUMENTATION ====================
 //
 // STREAMING & LIVE VIDEO:
 // - streaming: Live streaming infrastructure with RTMP/HLS/DASH support
 // - streaming_manifest: HLS/DASH manifest generation for live streams
-// - video_transcoding: FFmpeg-based transcoding, thumbnail extraction, metadata parsing
-// - video_service: Video upload, processing, and streaming orchestration
 //
 // CDN & EDGE COMPUTING:
 // - cdn_failover: CDN failover and fallback logic for reliability

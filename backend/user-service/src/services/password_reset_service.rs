@@ -1,37 +1,6 @@
 /// Password reset service
 /// Generates and validates password reset tokens stored in database
-use rand::Rng;
-use sha2::{Digest, Sha256};
-use std::fmt::Write as FmtWrite;
-
-const TOKEN_LENGTH: usize = 32;
-
-/// Generate a random password reset token
-pub fn generate_token() -> String {
-    let mut rng = rand::thread_rng();
-    let random_bytes: Vec<u8> = (0..TOKEN_LENGTH).map(|_| rng.gen::<u8>()).collect();
-
-    let mut token = String::with_capacity(TOKEN_LENGTH * 2);
-    for byte in random_bytes {
-        let _ = write!(token, "{:02x}", byte);
-    }
-    token
-}
-
-/// Hash a password reset token using SHA256
-/// This is safe for password reset tokens which are high-entropy random values
-pub fn hash_token(token: &str) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(token.as_bytes());
-    let result = hasher.finalize();
-    format!("{:x}", result)
-}
-
-/// Verify a token against its hash
-pub fn verify_token_hash(token: &str, stored_hash: &str) -> bool {
-    let computed_hash = hash_token(token);
-    computed_hash == stored_hash
-}
+use crate::security::{generate_token, hash_token, verify_token_hash};
 
 #[cfg(test)]
 mod tests {

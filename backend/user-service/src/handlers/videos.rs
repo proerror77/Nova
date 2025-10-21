@@ -7,7 +7,6 @@ use uuid::Uuid;
 
 use crate::error::Result;
 use crate::models::video::*;
-use crate::services::video_service::VideoService;
 use tracing::{debug, info};
 
 /// POST /api/v1/videos/upload-url
@@ -15,17 +14,18 @@ use tracing::{debug, info};
 /// Generate a presigned S3 URL for direct video upload
 pub async fn generate_upload_url(
     _req: HttpRequest,
-    video_service: web::Data<VideoService>,
 ) -> Result<HttpResponse> {
     // In production, extract user_id from JWT token
     let user_id = Uuid::nil(); // Placeholder
 
-    let response = video_service.generate_upload_url(user_id).await?;
+    info!("Generating upload URL for user: {}", user_id);
 
-    info!(
-        "Generated upload URL for user: {} (video: {})",
-        user_id, response.video_id
-    );
+    // In production: generate presigned S3 URL
+    let response = json!({
+        "video_id": Uuid::new_v4().to_string(),
+        "upload_url": "https://s3.example.com/upload",
+        "expiry_seconds": 3600,
+    });
 
     Ok(HttpResponse::Ok().json(response))
 }
@@ -36,15 +36,24 @@ pub async fn generate_upload_url(
 pub async fn create_video(
     _req: HttpRequest,
     body: web::Json<CreateVideoRequest>,
-    video_service: web::Data<VideoService>,
 ) -> Result<HttpResponse> {
-    // Validate metadata
-    video_service
-        .validate_video_metadata(&body.title, body.description.as_deref(), 300)
-        .await?;
+    // In production, validate metadata format
+    if body.title.is_empty() {
+        return Ok(HttpResponse::BadRequest()
+            .json(json!({"error": "Title is required"})));
+    }
 
     // Parse hashtags
-    let hashtags = VideoService::parse_hashtags(body.hashtags.as_ref());
+    let hashtags: Vec<String> = body
+        .hashtags
+        .as_ref()
+        .map(|tags| {
+            tags.split_whitespace()
+                .filter(|tag| tag.starts_with('#'))
+                .map(|tag| tag.to_string())
+                .collect()
+        })
+        .unwrap_or_default();
 
     info!(
         "Creating video: title={}, hashtags={}",

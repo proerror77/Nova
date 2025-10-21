@@ -1,25 +1,11 @@
 use anyhow::{anyhow, Result};
-use rand::Rng;
 /// Email verification service
 /// Manages email verification tokens stored in Redis with 1-hour expiration
 use redis::aio::ConnectionManager;
-use std::fmt::Write as FmtWrite;
 use uuid::Uuid;
+use crate::security::generate_token;
 
 const VERIFICATION_TOKEN_EXPIRY_SECS: u64 = 3600; // 1 hour
-const TOKEN_LENGTH: usize = 32;
-
-/// Generate a random verification token
-pub fn generate_token() -> String {
-    let mut rng = rand::thread_rng();
-    let random_bytes: Vec<u8> = (0..TOKEN_LENGTH).map(|_| rng.gen::<u8>()).collect();
-
-    let mut token = String::with_capacity(TOKEN_LENGTH * 2);
-    for byte in random_bytes {
-        let _ = write!(token, "{:02x}", byte);
-    }
-    token
-}
 
 /// Store verification token in Redis linked to user
 pub async fn store_verification_token(
