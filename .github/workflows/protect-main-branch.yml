@@ -1,0 +1,28 @@
+name: Protect Main Branch
+
+on:
+  delete:
+
+jobs:
+  protect-main:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Check if main branch deletion attempted
+        if: github.event.ref == 'main'
+        run: |
+          echo "❌ ERROR: Deleting the 'main' branch is not allowed!"
+          exit 1
+
+      - name: Restore main branch if deleted
+        if: failure() && github.event.ref == 'main'
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Push main branch back
+        if: failure() && github.event.ref == 'main'
+        run: |
+          git push origin main --force
+        continue-on-error: true
