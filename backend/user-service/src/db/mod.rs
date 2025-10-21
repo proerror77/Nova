@@ -2,6 +2,7 @@ use sqlx::postgres::{PgPool, PgPoolOptions};
 use std::time::Duration;
 
 pub mod ch_client;
+// pub mod messaging_repo;           // TODO: Phase 7C - Messaging feature still in development
 pub mod oauth_repo;
 pub mod password_reset_repo;
 pub mod post_repo;

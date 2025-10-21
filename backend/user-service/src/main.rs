@@ -21,7 +21,7 @@ use user_service::{
         feed_ranking::FeedRankingService,
         job_queue,
         kafka_producer::EventProducer,
-        messaging::{MessageService, MessagingWebSocketHandler},
+        // messaging::{MessageService, MessagingWebSocketHandler},  // TODO: Phase 7C - Re-enable after fixing compilation
         notifications::{
             APNsClient, FCMClient, KafkaNotificationConsumer, PlatformRouter, ServiceAccountKey,
             WebSocketHub,
@@ -96,15 +96,16 @@ async fn main() -> io::Result<()> {
     // ========================================
     // Initialize messaging WebSocket handler & services
     // ========================================
+    // TODO: Phase 7C - Re-enable messaging service after fixing compilation errors
     let redis_connection_arc = Arc::new(redis_manager.clone());
-    let messaging_websocket_handler = Arc::new(MessagingWebSocketHandler::new(
-        redis_connection_arc.clone(),
-        db_pool.clone(),
-    ));
-    let message_service = Arc::new(MessageService::new(
-        db_pool.clone(),
-        messaging_websocket_handler.clone(),
-    ));
+    // let messaging_websocket_handler = Arc::new(MessagingWebSocketHandler::new(
+    //     redis_connection_arc.clone(),
+    //     db_pool.clone(),
+    // ));
+    // let message_service = Arc::new(MessageService::new(
+    //     db_pool.clone(),
+    //     messaging_websocket_handler.clone(),
+    // ));
 
     // ========================================
     // Initialize notification platform clients
@@ -286,8 +287,8 @@ async fn main() -> io::Result<()> {
     let server = HttpServer::new(move || {
         let feed_state = feed_state.clone();
         let events_state = events_state.clone();
-        let message_service = message_service.clone();
-        let messaging_ws_handler = messaging_websocket_handler.clone();
+        // let message_service = message_service.clone();  // TODO: Phase 7C - messaging service disabled
+        // let messaging_ws_handler = messaging_websocket_handler.clone();  // TODO: Phase 7C - messaging disabled
         let notification_hub = notification_websocket_hub.clone();
         let platform_router = platform_router.clone();
         // Build CORS configuration from allowed_origins
@@ -315,8 +316,8 @@ async fn main() -> io::Result<()> {
             .app_data(web::Data::new(job_sender.clone()))
             .app_data(feed_state.clone())
             .app_data(events_state.clone())
-            .app_data(web::Data::from(message_service.clone()))
-            .app_data(web::Data::from(messaging_ws_handler.clone()))
+            // .app_data(web::Data::from(message_service.clone()))  // TODO: Phase 7C - messaging disabled
+            // .app_data(web::Data::from(messaging_ws_handler.clone()))  // TODO: Phase 7C - messaging disabled
             .app_data(web::Data::from(notification_hub.clone()))
             .app_data(web::Data::from(platform_router.clone()))
             .wrap(cors)

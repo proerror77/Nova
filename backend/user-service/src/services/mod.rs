@@ -22,7 +22,8 @@ pub mod image_processing;
 pub mod job_queue;
 pub mod jwt_key_rotation;
 pub mod kafka_producer;
-pub mod neo4j_client;
+// pub mod messaging;                // TODO: Phase 7C - Messaging service still has compilation issues
+// pub mod neo4j_client;              // TODO: Phase 7C - Neo4j social graph integration pending
 pub mod notifications;
 pub mod oauth;
 pub mod origin_shield;
@@ -31,7 +32,7 @@ pub mod query_profiler;
 pub mod ranking_engine;
 pub mod recommendation_v2;
 pub mod redis_job;
-pub mod redis_social_cache;
+// pub mod redis_social_cache;        // TODO: Phase 7C - Redis social cache integration pending
 pub mod s3_service;
 pub mod streaming;
 pub mod streaming_manifest;
