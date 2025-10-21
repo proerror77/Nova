@@ -9,17 +9,26 @@
 /// 3. ConnectionPool: Kafka connection pooling
 /// 4. RetryPolicy: Error handling and retry logic
 /// 5. Graceful shutdown with batch flushing
-
 use chrono::{DateTime, Utc};
 use rdkafka::config::ClientConfig;
 use rdkafka::consumer::{Consumer, StreamConsumer};
 use rdkafka::message::Message as KafkaMessage;
 use serde::{Deserialize, Serialize};
+use serde_json::json;
+use sqlx::types::Json;
+use sqlx::PgPool;
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 use tokio::sync::mpsc;
 use tokio::time::{interval, sleep};
+use tracing::{debug, error, info, warn};
 use uuid::Uuid;
+
+use super::{
+    retry_handler::{RetryConfig, RetryHandler},
+    websocket_hub::{Message as WebSocketMessage, WebSocketHub},
+    DeviceInfo, Platform, PlatformRouter,
+};
 
 /// Represents a single notification event from Kafka
 /// Aligned with design.md NotificationEvent schema
@@ -241,6 +250,10 @@ pub struct KafkaNotificationConsumer {
     retry_policy: RetryPolicy,
     connection_pool: Arc<RwLock<ConnectionPool>>,
     shutdown_tx: Option<mpsc::Sender<()>>,
+    db_pool: Option<PgPool>,
+    platform_router: Option<Arc<PlatformRouter>>,
+    websocket_hub: Option<Arc<WebSocketHub>>,
+    retry_config: RetryConfig,
 }
 
 impl KafkaNotificationConsumer {
@@ -267,12 +280,36 @@ impl KafkaNotificationConsumer {
             retry_policy: RetryPolicy::default(),
             connection_pool: Arc::new(RwLock::new(connection_pool)),
             shutdown_tx: None,
+            db_pool: None,
+            platform_router: None,
+            websocket_hub: None,
+            retry_config: RetryConfig::default(),
         })
+    }
+
+    /// Provide PostgreSQL pool for persistence
+    pub fn set_db_pool(&mut self, pool: PgPool) {
+        self.db_pool = Some(pool);
+    }
+
+    /// Provide platform router for push delivery
+    pub fn set_platform_router(&mut self, router: Arc<PlatformRouter>) {
+        self.platform_router = Some(router);
+    }
+
+    /// Provide WebSocket hub for real-time broadcasting
+    pub fn set_websocket_hub(&mut self, hub: Arc<WebSocketHub>) {
+        self.websocket_hub = Some(hub);
+    }
+
+    /// Override retry configuration for push delivery
+    pub fn set_retry_config(&mut self, config: RetryConfig) {
+        self.retry_config = config;
     }
 
     /// Start consuming messages with batching and error recovery
     pub async fn start(&mut self) -> Result<(), String> {
-        let consumer = {
+        let mut consumer = {
             let mut pool = self
                 .connection_pool
                 .write()
@@ -299,8 +336,9 @@ impl KafkaNotificationConsumer {
                 _ = shutdown_rx.recv() => {
                     tracing::info!("Shutdown signal received, flushing pending batch");
                     if !batch.is_empty() {
-                        if let Err(e) = self.flush_batch_with_retry(&batch, &retry_policy).await {
-                            tracing::error!("Failed to flush batch on shutdown: {}", e);
+                        match self.flush_batch_with_retry(&batch, &retry_policy).await {
+                            Ok(_) => batch.clear(),
+                            Err(e) => tracing::error!("Failed to flush batch on shutdown: {}", e),
                         }
                     }
                     break;
@@ -309,10 +347,10 @@ impl KafkaNotificationConsumer {
                 // Check flush timer
                 _ = flush_timer.tick() => {
                     if batch.should_flush_by_time(Duration::from_millis(self.flush_interval_ms)) {
-                        if let Err(e) = self.flush_batch_with_retry(&batch, &retry_policy).await {
-                            tracing::error!("Failed to flush batch by time: {}", e);
+                        match self.flush_batch_with_retry(&batch, &retry_policy).await {
+                            Ok(_) => batch.clear(),
+                            Err(e) => tracing::error!("Failed to flush batch by time: {}", e),
                         }
-                        batch.clear();
                     }
                 }
 
@@ -327,10 +365,10 @@ impl KafkaNotificationConsumer {
 
                                         // Flush if batch size reached
                                         if batch.should_flush_by_size(batch_size) {
-                                            if let Err(e) = self.flush_batch_with_retry(&batch, &retry_policy).await {
-                                                tracing::error!("Failed to flush batch by size: {}", e);
+                                            match self.flush_batch_with_retry(&batch, &retry_policy).await {
+                                                Ok(_) => batch.clear(),
+                                                Err(e) => tracing::error!("Failed to flush batch by size: {}", e),
                                             }
-                                            batch.clear();
                                         }
                                     }
                                     Err(e) => {
@@ -343,9 +381,14 @@ impl KafkaNotificationConsumer {
                         Err(e) => {
                             tracing::error!("Kafka error: {}", e);
                             // Attempt reconnection with retry policy
-                            if let Err(retry_err) = self.handle_connection_error(&retry_policy).await {
-                                tracing::error!("Failed to recover from connection error: {}", retry_err);
-                                return Err(format!("Unrecoverable Kafka error: {}", retry_err));
+                            match self.handle_connection_error(&retry_policy).await {
+                                Ok(new_consumer) => {
+                                    consumer = new_consumer;
+                                }
+                                Err(retry_err) => {
+                                    tracing::error!("Failed to recover from connection error: {}", retry_err);
+                                    return Err(format!("Unrecoverable Kafka error: {}", retry_err));
+                                }
                             }
                         }
                     }
@@ -370,7 +413,7 @@ impl KafkaNotificationConsumer {
         let mut attempt = 0;
 
         loop {
-            match batch.flush().await {
+            match self.persist_batch(batch).await {
                 Ok(count) => {
                     tracing::info!("Flushed {} notifications successfully", count);
                     return Ok(count);
@@ -397,8 +440,286 @@ impl KafkaNotificationConsumer {
         }
     }
 
+    async fn persist_batch(&self, batch: &NotificationBatch) -> Result<usize, String> {
+        if batch.notifications.is_empty() {
+            return Ok(0);
+        }
+
+        self.store_batch_in_db(batch).await?;
+        self.dispatch_notifications(&batch.notifications).await;
+
+        Ok(batch.notifications.len())
+    }
+
+    async fn store_batch_in_db(&self, batch: &NotificationBatch) -> Result<(), String> {
+        let pool = match &self.db_pool {
+            Some(pool) => pool,
+            None => return Ok(()),
+        };
+
+        let mut transaction = pool
+            .begin()
+            .await
+            .map_err(|e| format!("Failed to begin notification transaction: {}", e))?;
+
+        for notification in &batch.notifications {
+            sqlx::query(
+                r#"
+                INSERT INTO notification_events (
+                    event_id,
+                    event_type,
+                    source_user_id,
+                    target_user_id,
+                    payload,
+                    event_timestamp,
+                    created_at
+                )
+                VALUES ($1, $2, $3, $4, $5, $6, $7)
+                ON CONFLICT (event_id) DO NOTHING
+                "#,
+            )
+            .bind(&notification.event_id)
+            .bind(notification.event_type.to_string())
+            .bind(notification.source_user_id)
+            .bind(notification.target_user_id)
+            .bind(Json(notification.payload.clone()))
+            .bind(notification.timestamp)
+            .bind(notification.created_at)
+            .execute(&mut *transaction)
+            .await
+            .map_err(|e| {
+                format!(
+                    "Failed to insert notification {}: {}",
+                    notification.event_id, e
+                )
+            })?;
+        }
+
+        transaction
+            .commit()
+            .await
+            .map_err(|e| format!("Failed to commit notification batch: {}", e))?;
+
+        Ok(())
+    }
+
+    async fn dispatch_notifications(&self, notifications: &[KafkaNotification]) {
+        for notification in notifications {
+            if let Err(err) = self.dispatch_notification(notification).await {
+                error!(
+                    event_id = %notification.event_id,
+                    error = %err,
+                    "Failed to dispatch notification"
+                );
+            }
+        }
+    }
+
+    async fn dispatch_notification(&self, notification: &KafkaNotification) -> Result<(), String> {
+        if let Err(err) = self.push_to_devices(notification).await {
+            warn!(
+                event_id = %notification.event_id,
+                error = %err,
+                "Push delivery failed"
+            );
+        }
+
+        self.push_to_websocket(notification).await;
+        Ok(())
+    }
+
+    async fn push_to_devices(&self, notification: &KafkaNotification) -> Result<(), String> {
+        let router = match &self.platform_router {
+            Some(router) => Arc::clone(router),
+            None => return Ok(()),
+        };
+
+        let devices = Self::extract_devices(router.as_ref(), &notification.payload);
+        if devices.is_empty() {
+            return Ok(());
+        }
+
+        let (title, body, data) = Self::extract_notification_content(notification);
+        let retry_handler = RetryHandler::new(self.retry_config.clone());
+        let devices_clone = devices.clone();
+        let data_clone = data.clone();
+        let title_clone = title.clone();
+        let body_clone = body.clone();
+
+        match retry_handler
+            .execute(|| {
+                let router = Arc::clone(&router);
+                let devices = devices_clone.clone();
+                let data = data_clone.clone();
+                let title = title_clone.clone();
+                let body = body_clone.clone();
+
+                async move {
+                    router
+                        .send_multicast(&devices, &title, &body, data.clone())
+                        .await
+                }
+            })
+            .await
+        {
+            Ok(results) => {
+                let successes = results.iter().filter(|r| r.success).count();
+                let failures = results.len().saturating_sub(successes);
+                debug!(
+                    event_id = %notification.event_id,
+                    successes,
+                    failures,
+                    "Push notification delivery results"
+                );
+            }
+            Err(error) => {
+                return Err(format!(
+                    "Push notification delivery failed after retries: {}",
+                    error
+                ));
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn push_to_websocket(&self, notification: &KafkaNotification) {
+        if let Some(hub) = &self.websocket_hub {
+            let payload = json!({
+                "event_id": notification.event_id,
+                "event_type": notification.event_type,
+                "source_user_id": notification.source_user_id,
+                "payload": notification.payload,
+                "timestamp": notification.timestamp,
+            });
+
+            let message = WebSocketMessage {
+                message_type: format!("notification.{}", notification.event_type),
+                payload,
+                timestamp: Utc::now(),
+            };
+
+            let delivered = hub.send_to_user(notification.target_user_id, message).await;
+
+            debug!(
+                event_id = %notification.event_id,
+                target_user = %notification.target_user_id,
+                delivered,
+                "Dispatched notification via WebSocket"
+            );
+        }
+    }
+
+    fn extract_devices(router: &PlatformRouter, payload: &serde_json::Value) -> Vec<DeviceInfo> {
+        if let Some(devices_value) = payload.get("devices") {
+            if let Some(array) = devices_value.as_array() {
+                return array
+                    .iter()
+                    .filter_map(|entry| {
+                        let token = entry
+                            .get("token")
+                            .and_then(|v| v.as_str())
+                            .map(|s| s.to_string())?;
+                        let platform = entry
+                            .get("platform")
+                            .and_then(|v| Self::parse_platform_value(v));
+                        let platform = platform.unwrap_or_else(|| router.detect_platform(&token));
+                        Some(DeviceInfo { token, platform })
+                    })
+                    .collect();
+            }
+        }
+
+        if let Some(tokens_value) = payload.get("device_tokens") {
+            if let Some(array) = tokens_value.as_array() {
+                return array
+                    .iter()
+                    .filter_map(|token| token.as_str().map(|s| s.to_string()))
+                    .map(|token| DeviceInfo {
+                        platform: router.detect_platform(&token),
+                        token,
+                    })
+                    .collect();
+            }
+        }
+
+        if let Some(token) = payload.get("device_token").and_then(|token| token.as_str()) {
+            return vec![DeviceInfo {
+                platform: router.detect_platform(token),
+                token: token.to_string(),
+            }];
+        }
+
+        Vec::new()
+    }
+
+    fn parse_platform_value(value: &serde_json::Value) -> Option<Platform> {
+        let platform_str = value.as_str()?.to_lowercase();
+        match platform_str.as_str() {
+            "ios" => Some(Platform::iOS),
+            "android" => Some(Platform::Android),
+            "web" => Some(Platform::Web),
+            _ => None,
+        }
+    }
+
+    fn extract_notification_content(
+        notification: &KafkaNotification,
+    ) -> (String, String, Option<serde_json::Value>) {
+        let payload = &notification.payload;
+
+        let title = payload
+            .get("title")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| Self::default_title(&notification.event_type).to_string());
+
+        let body = payload
+            .get("body")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| Self::default_body(&notification.event_type).to_string());
+
+        let data = payload.get("data").cloned().unwrap_or_else(|| {
+            json!({
+                "event_id": notification.event_id,
+                "event_type": notification.event_type,
+                "source_user_id": notification.source_user_id
+            })
+        });
+
+        (title, body, Some(data))
+    }
+
+    fn default_title(event_type: &NotificationEventType) -> &'static str {
+        match event_type {
+            NotificationEventType::UserAction => "New activity",
+            NotificationEventType::Follow => "New follower",
+            NotificationEventType::Like => "Someone liked your post",
+            NotificationEventType::Comment => "New comment",
+            NotificationEventType::Mention => "You were mentioned",
+            NotificationEventType::Repost => "Your post was reposted",
+            NotificationEventType::DirectMessage => "New message",
+        }
+    }
+
+    fn default_body(event_type: &NotificationEventType) -> &'static str {
+        match event_type {
+            NotificationEventType::UserAction => "Open the app to see what's happening.",
+            NotificationEventType::Follow => "A new user started following you.",
+            NotificationEventType::Like => "Your post is getting love!",
+            NotificationEventType::Comment => "Someone commented on your post.",
+            NotificationEventType::Mention => "You were mentioned by another user.",
+            NotificationEventType::Repost => "Your post was shared.",
+            NotificationEventType::DirectMessage => "You received a new direct message.",
+        }
+    }
+
     /// Handle connection errors with retry logic
-    async fn handle_connection_error(&self, retry_policy: &RetryPolicy) -> Result<(), String> {
+    async fn handle_connection_error(
+        &self,
+        retry_policy: &RetryPolicy,
+    ) -> Result<Arc<StreamConsumer>, String> {
         let mut attempt = 0;
 
         while retry_policy.should_retry(attempt) {
@@ -423,7 +744,7 @@ impl KafkaNotificationConsumer {
             match consumer.subscribe(&[&self.topic]) {
                 Ok(_) => {
                     tracing::info!("Successfully reconnected to Kafka");
-                    return Ok(());
+                    return Ok(consumer);
                 }
                 Err(e) => {
                     tracing::error!("Reconnection failed: {}", e);

@@ -5,7 +5,6 @@
 /// 1. Streaming Infrastructure: RTMP/HLS/DASH live streaming with transcoding
 /// 2. CDN & Video Processing: Edge caching, optimization, and video processing
 /// 3. ML Ranking System: Deep learning-based feed personalization and recommendations
-
 pub mod backup_codes;
 pub mod cdc;
 pub mod cdn_failover;
@@ -23,6 +22,7 @@ pub mod image_processing;
 pub mod job_queue;
 pub mod jwt_key_rotation;
 pub mod kafka_producer;
+pub mod neo4j_client;
 pub mod notifications;
 pub mod oauth;
 pub mod origin_shield;
@@ -31,6 +31,7 @@ pub mod query_profiler;
 pub mod ranking_engine;
 pub mod recommendation_v2;
 pub mod redis_job;
+pub mod redis_social_cache;
 pub mod s3_service;
 pub mod streaming;
 pub mod streaming_manifest;

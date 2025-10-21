@@ -16,6 +16,7 @@ pub struct Config {
     pub cors: CorsConfig,
     pub clickhouse: ClickHouseConfig,
     pub kafka: KafkaConfig,
+    pub notifications: NotificationsConfig,
     // pub video: video_config::VideoConfig,
 }
 
@@ -129,6 +130,32 @@ pub struct KafkaConfig {
     pub brokers: String,
     #[serde(default = "default_events_topic")]
     pub events_topic: String,
+    #[serde(default = "default_notifications_topic")]
+    pub notifications_topic: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct NotificationsConfig {
+    pub fcm: FcmConfig,
+    pub apns: ApnsConfig,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct FcmConfig {
+    pub project_id: String,
+    /// Base64-encoded JSON service account credentials
+    pub service_account_json_base64: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct ApnsConfig {
+    pub certificate_path: String,
+    pub key_path: String,
+    pub team_id: String,
+    pub key_id: String,
+    pub bundle_id: String,
+    #[serde(default)]
+    pub is_production: bool,
 }
 
 // Default value functions
@@ -198,6 +225,10 @@ fn default_clickhouse_timeout_ms() -> u64 {
 
 fn default_events_topic() -> String {
     "events".to_string()
+}
+
+fn default_notifications_topic() -> String {
+    "notifications".to_string()
 }
 
 impl Config {
@@ -305,6 +336,28 @@ impl Config {
         let kafka = KafkaConfig {
             brokers: env::var("KAFKA_BROKERS").expect("KAFKA_BROKERS must be set"),
             events_topic: env::var("KAFKA_EVENTS_TOPIC").unwrap_or_else(|_| default_events_topic()),
+            notifications_topic: env::var("KAFKA_NOTIFICATIONS_TOPIC")
+                .unwrap_or_else(|_| default_notifications_topic()),
+        };
+
+        let notifications = NotificationsConfig {
+            fcm: FcmConfig {
+                project_id: env::var("FCM_PROJECT_ID").expect("FCM_PROJECT_ID must be set"),
+                service_account_json_base64: env::var("FCM_SERVICE_ACCOUNT_JSON_BASE64")
+                    .expect("FCM_SERVICE_ACCOUNT_JSON_BASE64 must be set"),
+            },
+            apns: ApnsConfig {
+                certificate_path: env::var("APNS_CERTIFICATE_PATH")
+                    .expect("APNS_CERTIFICATE_PATH must be set"),
+                key_path: env::var("APNS_KEY_PATH").expect("APNS_KEY_PATH must be set"),
+                team_id: env::var("APNS_TEAM_ID").expect("APNS_TEAM_ID must be set"),
+                key_id: env::var("APNS_KEY_ID").expect("APNS_KEY_ID must be set"),
+                bundle_id: env::var("APNS_BUNDLE_ID").expect("APNS_BUNDLE_ID must be set"),
+                is_production: env::var("APNS_IS_PRODUCTION")
+                    .unwrap_or_else(|_| "false".to_string())
+                    .parse()
+                    .unwrap_or(false),
+            },
         };
 
         // let video = video_config::VideoConfig::from_env();
@@ -320,6 +373,7 @@ impl Config {
             cors,
             clickhouse,
             kafka,
+            notifications,
             // video,
         })
     }

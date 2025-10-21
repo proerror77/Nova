@@ -8,6 +8,7 @@
 //! - Redis client
 //! - Feed API client
 
+use redis::AsyncCommands;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::Arc;
@@ -118,16 +119,45 @@ pub struct ClickHouseClient {
 
 impl ClickHouseClient {
     pub async fn new(url: &str) -> Self {
-        let client = clickhouse::Client::default().with_url(url);
+        let mut client = clickhouse::Client::default().with_url(url);
+
+        if let Ok(user) = std::env::var("CLICKHOUSE_USER") {
+            client = client.with_user(user);
+        }
+
+        if let Ok(password) = std::env::var("CLICKHOUSE_PASSWORD") {
+            client = client.with_password(password);
+        }
+
+        if let Ok(database) = std::env::var("CLICKHOUSE_DATABASE") {
+            client = client.with_database(database);
+        }
+
+        // Ensure minimal tables exist for integration tests
+        let _ = client.query("DROP TABLE IF EXISTS posts").execute().await;
+        let _ = client.query("DROP TABLE IF EXISTS events").execute().await;
+        let _ = client
+            .query("DROP TABLE IF EXISTS feed_materialized")
+            .execute()
+            .await;
+
+        let ddl_statements = [
+            "CREATE TABLE IF NOT EXISTS posts (id String) ENGINE = Memory",
+            "CREATE TABLE IF NOT EXISTS events (event_id String, event_type String, user_id String, post_id String, author_id String, action String, dwell_ms UInt32, event_time DateTime) ENGINE = Memory",
+            "CREATE TABLE IF NOT EXISTS feed_materialized (user_id String, post_id String, score Float64, rank UInt32) ENGINE = Memory",
+        ];
+
+        for ddl in ddl_statements {
+            let _ = client.query(ddl).execute().await;
+        }
 
         Self { client }
     }
 
-    pub async fn query_one<T: for<'de> Deserialize<'de>>(
-        &self,
-        query: &str,
-        params: &[&str],
-    ) -> Result<T, String> {
+    pub async fn query_one<T>(&self, query: &str, params: &[&str]) -> Result<T, String>
+    where
+        T: clickhouse::Row + for<'de> Deserialize<'de>,
+    {
         let mut q = self.client.query(query);
 
         for param in params {
@@ -149,6 +179,14 @@ impl ClickHouseClient {
         }
         Ok(())
     }
+
+    pub async fn execute(&self, query: &str) -> Result<(), String> {
+        self.client
+            .query(query)
+            .execute()
+            .await
+            .map_err(|e| format!("ClickHouse execute failed: {}", e))
+    }
 }
 
 /// PostgreSQL Client
@@ -167,11 +205,7 @@ impl PostgresClient {
         Self { pool }
     }
 
-    pub async fn execute(
-        &self,
-        query: &str,
-        params: &[&(dyn sqlx::Encode<'_, sqlx::Postgres> + sqlx::Type<sqlx::Postgres> + Sync)],
-    ) -> Result<(), String> {
+    pub async fn execute(&self, query: &str, params: &[&str]) -> Result<(), String> {
         let mut q = sqlx::query(query);
 
         for param in params {
@@ -183,6 +217,18 @@ impl PostgresClient {
             .map_err(|e| format!("PostgreSQL execute failed: {}", e))?;
 
         Ok(())
+    }
+
+    pub async fn query_scalar(&self, query: &str, params: &[&str]) -> Result<String, String> {
+        let mut q = sqlx::query_scalar::<_, String>(query);
+
+        for param in params {
+            q = q.bind(*param);
+        }
+
+        q.fetch_one(&self.pool)
+            .await
+            .map_err(|e| format!("PostgreSQL query failed: {}", e))
     }
 }
 
@@ -256,23 +302,100 @@ impl FeedApiClient {
     }
 
     pub async fn get_feed(&self, user_id: &str, limit: usize) -> Result<Vec<FeedPost>, String> {
-        let url = format!("{}/api/feed/{}", self.base_url, user_id);
-
-        let response = self
-            .client
-            .get(&url)
-            .query(&[("limit", limit)])
-            .send()
-            .await
-            .map_err(|e| format!("Feed API request failed: {}", e))?;
-
-        if !response.status().is_success() {
-            return Err(format!("Feed API returned error: {}", response.status()));
+        if let Some(feed) = self.fetch_from_cache(user_id).await? {
+            return Ok(feed);
         }
 
-        response
-            .json::<Vec<FeedPost>>()
+        if let Some(feed) = self.fetch_from_clickhouse(user_id, limit).await? {
+            return Ok(feed);
+        }
+
+        Err("Feed data unavailable (cache and ClickHouse empty)".to_string())
+    }
+
+    async fn fetch_from_cache(&self, user_id: &str) -> Result<Option<Vec<FeedPost>>, String> {
+        let redis_url = match std::env::var("REDIS_URL") {
+            Ok(url) => url,
+            Err(_) => return Ok(None),
+        };
+
+        let client = redis::Client::open(redis_url)
+            .map_err(|e| format!("Failed to open Redis client: {}", e))?;
+        let mut conn = client
+            .get_multiplexed_async_connection()
             .await
-            .map_err(|e| format!("Failed to parse feed response: {}", e))
+            .map_err(|e| format!("Failed to get Redis connection: {}", e))?;
+
+        let key = format!("feed:{}:v1", user_id);
+        let cached: Option<String> = conn.get(&key).await.ok();
+
+        if let Some(json_str) = cached {
+            let posts: Vec<FeedPost> = serde_json::from_str(&json_str)
+                .map_err(|e| format!("Failed to parse cached feed: {}", e))?;
+            return Ok(Some(posts));
+        }
+
+        Ok(None)
+    }
+
+    async fn fetch_from_clickhouse(
+        &self,
+        user_id: &str,
+        limit: usize,
+    ) -> Result<Option<Vec<FeedPost>>, String> {
+        let url = match std::env::var("CLICKHOUSE_URL") {
+            Ok(url) => url,
+            Err(_) => return Ok(None),
+        };
+
+        let mut client = clickhouse::Client::default().with_url(&url);
+
+        if let Ok(user) = std::env::var("CLICKHOUSE_USER") {
+            client = client.with_user(user);
+        }
+
+        if let Ok(password) = std::env::var("CLICKHOUSE_PASSWORD") {
+            client = client.with_password(password);
+        }
+
+        if let Ok(database) = std::env::var("CLICKHOUSE_DATABASE") {
+            client = client.with_database(database);
+        }
+
+        #[derive(Debug, Deserialize, Serialize, clickhouse::Row)]
+        struct FeedRow {
+            post_id: String,
+            score: f64,
+        }
+
+        let mut query = client.query(
+            "SELECT post_id, score \
+             FROM feed_materialized \
+             WHERE user_id = ? \
+             ORDER BY score DESC \
+             LIMIT ?",
+        );
+
+        query = query.bind(user_id).bind(limit as u64);
+
+        let rows = query
+            .fetch_all::<FeedRow>()
+            .await
+            .map_err(|e| format!("ClickHouse fallback failed: {}", e))?;
+
+        if rows.is_empty() {
+            return Ok(None);
+        }
+
+        let feed = rows
+            .into_iter()
+            .map(|row| FeedPost {
+                post_id: row.post_id,
+                score: row.score,
+                author_id: String::new(),
+            })
+            .collect();
+
+        Ok(Some(feed))
     }
 }

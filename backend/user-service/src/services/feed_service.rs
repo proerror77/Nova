@@ -395,7 +395,10 @@ impl FeedService {
     ) -> Result<()> {
         let _cache_key = format!("feed:v1:{}:{}:{}", user_id, offset, limit);
         // This module is deprecated. No-op for backward compatibility.
-        debug!("cache_feed called (deprecated module) - no-op for user {} offset={} limit={}", user_id, offset, limit);
+        debug!(
+            "cache_feed called (deprecated module) - no-op for user {} offset={} limit={}",
+            user_id, offset, limit
+        );
         Ok(())
     }
 
@@ -405,7 +408,10 @@ impl FeedService {
     /// This is a placeholder - would use real clickhouse-rs client
     async fn clickhouse_query<T: for<'de> Deserialize<'de>>(&self, query: &str) -> Result<Vec<T>> {
         // This module is deprecated. Always return empty results for backward compatibility.
-        debug!("clickhouse_query called (deprecated module) - returning empty results for: {}", query);
+        debug!(
+            "clickhouse_query called (deprecated module) - returning empty results for: {}",
+            query
+        );
         Ok(Vec::new())
     }
 }

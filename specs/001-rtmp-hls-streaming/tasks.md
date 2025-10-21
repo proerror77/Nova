@@ -45,18 +45,18 @@ Initialize Rust workspace, configure development environment, set up databases a
 
 ### Tasks
 
-- [ ] T001 Create Cargo workspace structure at `streaming/Cargo.toml` with members: core, ingest, transcode, delivery, api
-- [ ] T002 [P] Initialize `streaming/crates/streaming-core/Cargo.toml` with serde, tokio, uuid dependencies
-- [ ] T003 [P] Initialize `streaming/crates/streaming-ingest/Cargo.toml` with tokio-util, bytes, tracing dependencies
-- [ ] T004 [P] Initialize `streaming/crates/streaming-transcode/Cargo.toml` with process, std::command dependencies
-- [ ] T005 [P] Initialize `streaming/crates/streaming-delivery/Cargo.toml` with actix-web, tokio-tungstenite dependencies
-- [ ] T006 [P] Initialize `streaming/crates/streaming-api/Cargo.toml` with actix-web, sqlx, serde_json dependencies
-- [ ] T007 Create `streaming/docker-compose.yml` with PostgreSQL, Redis, Kafka, Zookeeper services
-- [ ] T008 Create `streaming/k8s/namespace.yaml` for Kubernetes namespace
-- [ ] T009 Create PostgreSQL migration file `streaming/migrations/001_init_schema.sql` with Stream, StreamKey, ViewerSession, StreamMetrics, QualityLevel tables
-- [ ] T010 [P] Create `streaming/Makefile` with targets: build, test, run, clean, docker-up, docker-down
-- [ ] T011 Create `.env.example` with DATABASE_URL, REDIS_URL, KAFKA_BROKERS, RUST_LOG configuration
-- [ ] T012 [P] Add GitHub Actions CI workflow at `.github/workflows/test.yml` for build + test on each commit
+- [X] T001 Create Cargo workspace structure at `streaming/Cargo.toml` with members: core, ingest, transcode, delivery, api
+- [X] T002 [P] Initialize `streaming/crates/streaming-core/Cargo.toml` with serde, tokio, uuid dependencies
+- [X] T003 [P] Initialize `streaming/crates/streaming-ingest/Cargo.toml` with tokio-util, bytes, tracing dependencies
+- [X] T004 [P] Initialize `streaming/crates/streaming-transcode/Cargo.toml` with process, std::command dependencies
+- [X] T005 [P] Initialize `streaming/crates/streaming-delivery/Cargo.toml` with actix-web, tokio-tungstenite dependencies
+- [X] T006 [P] Initialize `streaming/crates/streaming-api/Cargo.toml` with actix-web, sqlx, serde_json dependencies
+- [X] T007 Create `streaming/docker-compose.yml` with PostgreSQL, Redis, Kafka, Zookeeper services
+- [X] T008 Create `streaming/k8s/namespace.yaml` for Kubernetes namespace
+- [X] T009 Create PostgreSQL migration file `streaming/migrations/001_init_schema.sql` with Stream, StreamKey, ViewerSession, StreamMetrics, QualityLevel tables
+- [X] T010 [P] Create `streaming/Makefile` with targets: build, test, run, clean, docker-up, docker-down
+- [X] T011 Create `.env.example` with DATABASE_URL, REDIS_URL, KAFKA_BROKERS, RUST_LOG configuration
+- [X] T012 [P] Add GitHub Actions CI workflow at `.github/workflows/test.yml` for build + test on each commit
 
 ---
 
@@ -84,6 +84,17 @@ Build shared libraries, error handling, logging, and database abstractions used 
 - [ ] T021 [P] Implement Kafka producer wrapper at `streaming/crates/streaming-core/src/kafka_producer.rs` for event publishing with Avro serialization support
 - [ ] T022 [P] Implement Redis client wrapper at `streaming/crates/streaming-core/src/redis_client.rs` for segment caching with TTL support
 - [ ] T023 Create configuration module at `streaming/crates/streaming-core/src/config.rs` using config crate to load from .env files
+ - [X] T013 [P] Create core types module at `streaming/crates/streaming-core/src/models.rs` with Stream, StreamKey, ViewerSession, StreamMetrics, QualityLevel structs (use serde, derive Clone, Debug)
+ - [X] T014 [P] Create error types at `streaming/crates/streaming-core/src/errors.rs` with StreamError enum covering: InvalidKey, NetworkError, TranscodingError, DatabaseError, NotFound
+ - [X] T015 [P] Implement logger initialization at `streaming/crates/streaming-core/src/logging.rs` using tracing subscriber with structured JSON output
+ - [X] T016 Create RTMP protocol types at `streaming/crates/streaming-core/src/rtmp.rs` with RtmpHandshake, RtmpMessage, RtmpCommand, RtmpData structs
+ - [X] T017 Create HLS types at `streaming/crates/streaming-core/src/hls.rs` with HlsPlaylist, HlsSegment, HlsVariant structs
+ - [X] T018 Create DASH types at `streaming/crates/streaming-core/src/dash.rs` with DashMpd, DashPeriod, DashAdaptationSet structs
+ - [X] T019 Create event types at `streaming/crates/streaming-core/src/events.rs` with StreamEvent enum (StreamStarted, StreamEnded, BitrateAdapted, QualitySwitched, etc.) using serde for Kafka serialization
+ - [X] T020 [P] Implement PostgreSQL connection pool module at `streaming/crates/streaming-core/src/db.rs` using sqlx with connection pooling
+ - [X] T021 [P] Implement Kafka producer wrapper at `streaming/crates/streaming-core/src/kafka_producer.rs` for event publishing with Avro serialization support
+ - [X] T022 [P] Implement Redis client wrapper at `streaming/crates/streaming-core/src/redis_client.rs` for segment caching with TTL support
+ - [X] T023 Create configuration module at `streaming/crates/streaming-core/src/config.rs` using config crate to load from .env files
 
 ---
 
@@ -109,32 +120,32 @@ A content creator connects their encoder (OBS, FFmpeg) via RTMP to the streaming
 
 **US1 Infrastructure & Database**:
 
-- [ ] T024 [US1] Create streaming key repository at `streaming/crates/streaming-core/src/repositories/stream_key_repo.rs` with methods: create_key, validate_key, revoke_key, get_by_id
-- [ ] T025 [US1] Create stream repository at `streaming/crates/streaming-core/src/repositories/stream_repo.rs` with methods: create_stream, update_status, get_by_id, get_active_streams
-- [ ] T026 [P] [US1] Create database migrations for StreamKey and Stream tables at `streaming/migrations/002_stream_tables.sql`
+- [X] T024 [US1] Create streaming key repository at `streaming/crates/streaming-core/src/repositories/stream_key_repo.rs` with methods: create_key, validate_key, revoke_key, get_by_id
+- [X] T025 [US1] Create stream repository at `streaming/crates/streaming-core/src/repositories/stream_repo.rs` with methods: create_stream, update_status, get_by_id, get_active_streams
+- [X] T026 [P] [US1] Create database migrations for StreamKey and Stream tables at `streaming/migrations/002_stream_tables.sql`
 
 **US1 RTMP Ingestion Service**:
 
-- [ ] T027 [US1] Implement RTMP handshake parser at `streaming/crates/streaming-ingest/src/rtmp_handler.rs` (parse C0, C1, C2 messages)
-- [ ] T028 [US1] Implement RTMP command handler at `streaming/crates/streaming-ingest/src/rtmp_handler.rs` to process connect, releaseStream, createStream, publish commands
-- [ ] T029 [US1] Create stream manager at `streaming/crates/streaming-ingest/src/stream_manager.rs` to track active RTMP connections and map to Stream entities
-- [ ] T030 [US1] Implement streaming key validation at `streaming/crates/streaming-ingest/src/auth.rs` querying PostgreSQL for valid keys
-- [ ] T031 [US1] Create Kafka producer for stream events at `streaming/crates/streaming-ingest/src/kafka_producer.rs` to emit StreamStarted, BitrateAdapted events
-- [ ] T032 [US1] Implement bitrate adapter at `streaming/crates/streaming-ingest/src/quality_adapter.rs` to normalize input streams to standard bitrates (2M, 5M, 8M)
-- [ ] T033 [US1] Create graceful shutdown handler at `streaming/crates/streaming-ingest/src/shutdown.rs` to close all RTMP connections and emit StreamEnded events
-- [ ] T034 [US1] Implement main RTMP server at `streaming/crates/streaming-ingest/src/main.rs` using Tokio TcpListener on port 1935, spawning tasks per connection
+- [X] T027 [US1] Implement RTMP handshake parser at `streaming/crates/streaming-ingest/src/rtmp_handler.rs` (parse C0, C1, C2 messages)
+- [X] T028 [US1] Implement RTMP command handler at `streaming/crates/streaming-ingest/src/rtmp_handler.rs` to process connect, releaseStream, createStream, publish commands
+- [X] T029 [US1] Create stream manager at `streaming/crates/streaming-ingest/src/stream_manager.rs` to track active RTMP connections and map to Stream entities
+- [X] T030 [US1] Implement streaming key validation at `streaming/crates/streaming-ingest/src/auth.rs` querying PostgreSQL for valid keys
+- [X] T031 [US1] Create Kafka producer for stream events at `streaming/crates/streaming-ingest/src/kafka_producer.rs` to emit StreamStarted, BitrateAdapted events
+- [X] T032 [US1] Implement bitrate adapter at `streaming/crates/streaming-ingest/src/quality_adapter.rs` to normalize input streams to standard bitrates (2M, 5M, 8M)
+- [X] T033 [US1] Create graceful shutdown handler at `streaming/crates/streaming-ingest/src/shutdown.rs` to close all RTMP connections and emit StreamEnded events
+- [X] T034 [US1] Implement main RTMP server at `streaming/crates/streaming-ingest/src/main.rs` using Tokio TcpListener on port 1935, spawning tasks per connection
 
 **US1 Integration & Frame Forwarding**:
 
-- [ ] T035 [US1] Create raw frame forwarding to Kafka at `streaming/crates/streaming-ingest/src/frame_forwarder.rs` to send H.264/AAC frames to stream-frames Kafka topic
-- [ ] T036 [US1] Implement error recovery at `streaming/crates/streaming-ingest/src/error_handler.rs` to handle network errors, malformed RTMP messages, and invalid bitrates
+- [X] T035 [US1] Create raw frame forwarding to Kafka at `streaming/crates/streaming-ingest/src/frame_forwarder.rs` to send H.264/AAC frames to stream-frames Kafka topic
+- [X] T036 [US1] Implement error recovery at `streaming/crates/streaming-ingest/src/error_handler.rs` to handle network errors, malformed RTMP messages, and invalid bitrates
 
 **US1 Testing Tasks**:
 
-- [ ] T037 [US1] Create RTMP protocol tests at `streaming/tests/rtmp_protocol_test.rs` (handshake parsing, command parsing)
-- [ ] T038 [P] [US1] Create mock RTMP encoder at `streaming/tests/mock_encoder.rs` using bytes crate to simulate OBS/FFmpeg RTMP stream
-- [ ] T039 [US1] Create integration test at `streaming/tests/integration/broadcaster_connect_test.rs` to verify full RTMP ingest flow (connect→authenticate→stream→disconnect)
-- [ ] T040 [US1] Create bitrate adaptation tests at `streaming/tests/unit/quality_adapter_test.rs` for input/output bitrate mapping
+- [X] T037 [US1] Create RTMP protocol tests at `streaming/tests/rtmp_protocol_test.rs` (handshake parsing, command parsing)
+- [X] T038 [P] [US1] Create mock RTMP encoder at `streaming/tests/mock_encoder.rs` using bytes crate to simulate OBS/FFmpeg RTMP stream
+- [X] T039 [US1] Create integration test at `streaming/tests/integration/broadcaster_connect_test.rs` to verify full RTMP ingest flow (connect→authenticate→stream→disconnect)
+- [X] T040 [US1] Create bitrate adaptation tests at `streaming/tests/unit/quality_adapter_test.rs` for input/output bitrate mapping
 
 ---
 
@@ -161,60 +172,60 @@ A viewer discovers an active live stream and opens the HLS/DASH URL in their bro
 
 **US2 Database & Repositories**:
 
-- [ ] T041 [US2] Create viewer session repository at `streaming/crates/streaming-core/src/repositories/viewer_session_repo.rs` with methods: create_session, update_session, end_session, get_by_stream
-- [ ] T042 [US2] Create stream metrics repository at `streaming/crates/streaming-core/src/repositories/metrics_repo.rs` with methods: record_metrics, query_range, get_latest
+- [X] T041 [US2] Create viewer session repository at `streaming/crates/streaming-core/src/repositories/viewer_session_repo.rs` with methods: create_session, update_session, end_session, get_by_stream
+- [X] T042 [US2] Create stream metrics repository at `streaming/crates/streaming-core/src/repositories/metrics_repo.rs` with methods: record_metrics, query_range, get_latest
 
 **US2 Segment Storage & Caching**:
 
-- [ ] T043 [US2] Create segment cache manager at `streaming/crates/streaming-delivery/src/cache_manager.rs` to read segments from Redis with TTL fallback to S3
+- [X] T043 [US2] Create segment cache manager at `streaming/crates/streaming-delivery/src/cache_manager.rs` to read segments from Redis with TTL fallback to S3
 
 **US2 HLS Delivery Service**:
 
-- [ ] T044 [US2] Implement HLS master playlist generator at `streaming/crates/streaming-delivery/src/hls_handler.rs` (m3u8 format with variant streams for 480p/720p/1080p)
-- [ ] T045 [US2] Implement HLS quality playlist handler at `streaming/crates/streaming-delivery/src/hls_handler.rs` to serve quality-specific m3u8 files with segment references
-- [ ] T046 [US2] Implement HLS segment serving endpoint at `streaming/crates/streaming-delivery/src/hls_handler.rs` (GET /hls/:stream_id/:quality/segment-N.ts)
+- [X] T044 [US2] Implement HLS master playlist generator at `streaming/crates/streaming-delivery/src/hls_handler.rs` (m3u8 format with variant streams for 480p/720p/1080p)
+- [X] T045 [US2] Implement HLS quality playlist handler at `streaming/crates/streaming-delivery/src/hls_handler.rs` to serve quality-specific m3u8 files with segment references
+- [X] T046 [US2] Implement HLS segment serving endpoint at `streaming/crates/streaming-delivery/src/hls_handler.rs` (GET /hls/:stream_id/:quality/segment-N.ts)
 - [ ] T047 [US2] Create HTTP cache headers manager at `streaming/crates/streaming-delivery/src/cache_headers.rs` to set appropriate Cache-Control, ETag, Last-Modified for segment delivery
 
 **US2 CDN Integration**:
 
-- [ ] T047a [US2] Implement CDN origin URL rewriter at `streaming/crates/streaming-delivery/src/cdn_url_rewriter.rs` to transform segment URLs in playlists from direct server URLs to CDN-prefixed URLs (e.g., https://cdn.example.com/hls/...)
-- [ ] T047b [US2] Create CDN edge authentication at `streaming/crates/streaming-delivery/src/cdn_auth.rs` to generate signed CDN tokens (if using Cloudflare, Akamai) for private streams
-- [ ] T047c [US2] Implement CDN cache configuration at `streaming/crates/streaming-delivery/src/cdn_config.rs` to set Cache-Control headers: 10min TTL for segments, 1min for manifests, bypass for non-200 responses
+- [X] T047a [US2] Implement CDN origin URL rewriter at `streaming/crates/streaming-delivery/src/cdn_url_rewriter.rs` to transform segment URLs in playlists from direct server URLs to CDN-prefixed URLs (e.g., https://cdn.example.com/hls/...)
+- [X] T047b [US2] Create CDN edge authentication at `streaming/crates/streaming-delivery/src/cdn_auth.rs` to generate signed CDN tokens (if using Cloudflare, Akamai) for private streams
+- [X] T047c [US2] Implement CDN cache configuration at `streaming/crates/streaming-delivery/src/cdn_config.rs` to set Cache-Control headers: 10min TTL for segments, 1min for manifests, bypass for non-200 responses
 
 **US2 DASH Delivery Service**:
 
-- [ ] T048 [US2] Implement DASH MPD manifest generator at `streaming/crates/streaming-delivery/src/dash_handler.rs` (XML format with adaptation sets for quality levels)
-- [ ] T049 [US2] Implement DASH segment serving endpoint at `streaming/crates/streaming-delivery/src/dash_handler.rs` (GET /dash/:stream_id/:quality/segment-N.m4s)
+- [X] T048 [US2] Implement DASH MPD manifest generator at `streaming/crates/streaming-delivery/src/dash_handler.rs` (XML format with adaptation sets for quality levels)
+- [X] T049 [US2] Implement DASH segment serving endpoint at `streaming/crates/streaming-delivery/src/dash_handler.rs` (GET /dash/:stream_id/:quality/segment-N.m4s)
 
 **US2 WebSocket Real-Time Status**:
 
-- [ ] T050 [US2] Create WebSocket hub at `streaming/crates/streaming-delivery/src/websocket_hub.rs` to manage per-stream subscriptions and broadcasts
-- [ ] T051 [US2] Implement WebSocket connection handler at `streaming/crates/streaming-delivery/src/websocket_handler.rs` (GET /ws/stream/:stream_id)
-- [ ] T052 [US2] Create stream status publisher at `streaming/crates/streaming-delivery/src/status_publisher.rs` to emit stream state changes (ACTIVE, ENDED, ERROR) to WebSocket clients
+- [X] T050 [US2] Create WebSocket hub at `streaming/crates/streaming-delivery/src/websocket_hub.rs` to manage per-stream subscriptions and broadcasts
+- [X] T051 [US2] Implement WebSocket connection handler at `streaming/crates/streaming-delivery/src/websocket_handler.rs` (GET /ws/stream/:stream_id)
+- [X] T052 [US2] Create stream status publisher at `streaming/crates/streaming-delivery/src/status_publisher.rs` to emit stream state changes (ACTIVE, ENDED, ERROR) to WebSocket clients
 
 **US2 Adaptive Bitrate & Quality Selection**:
 
-- [ ] T053 [US2] Implement quality level repository at `streaming/crates/streaming-core/src/repositories/quality_level_repo.rs` to load predefined quality profiles
-- [ ] T054 [US2] Create client-side quality selection logic at `streaming/crates/streaming-delivery/src/quality_selector.rs` (recommend quality based on available bandwidth, client preference)
+- [X] T053 [US2] Implement quality level repository at `streaming/crates/streaming-core/src/repositories/quality_level_repo.rs` to load predefined quality profiles
+- [X] T054 [US2] Create client-side quality selection logic at `streaming/crates/streaming-delivery/src/quality_selector.rs` (recommend quality based on available bandwidth, client preference)
 
 **US2 REST API Endpoints**:
 
-- [ ] T055 [US2] Implement GET /streams/:stream_id endpoint at `streaming/crates/streaming-api/src/handlers/stream_handler.rs` to return stream status, concurrent viewers, quality options
-- [ ] T056 [US2] Implement GET /metrics/:stream_id endpoint at `streaming/crates/streaming-api/src/handlers/metrics_handler.rs` to return historical analytics (viewership, quality distribution, buffering)
+- [X] T055 [US2] Implement GET /streams/:stream_id endpoint at `streaming/crates/streaming-api/src/handlers/stream_handler.rs` to return stream status, concurrent viewers, quality options
+- [X] T056 [US2] Implement GET /metrics/:stream_id endpoint at `streaming/crates/streaming-api/src/handlers/metrics_handler.rs` to return historical analytics (viewership, quality distribution, buffering)
 
 **US2 Viewer Session Tracking**:
 
-- [ ] T057 [US2] Implement session creation on stream join at `streaming/crates/streaming-delivery/src/session_manager.rs` to record viewer_id, quality_level, joined_at
-- [ ] T058 [US2] Implement session update on quality switch at `streaming/crates/streaming-delivery/src/session_manager.rs` to track quality_switches, buffer_events
-- [ ] T059 [US2] Implement session finalization on disconnect at `streaming/crates/streaming-delivery/src/session_manager.rs` to record left_at, total duration, bytes_transferred
+- [X] T057 [US2] Implement session creation on stream join at `streaming/crates/streaming-delivery/src/session_manager.rs` to record viewer_id, quality_level, joined_at
+- [X] T058 [US2] Implement session update on quality switch at `streaming/crates/streaming-delivery/src/session_manager.rs` to track quality_switches, buffer_events
+- [X] T059 [US2] Implement session finalization on disconnect at `streaming/crates/streaming-delivery/src/session_manager.rs` to record left_at, total duration, bytes_transferred
 
 **US2 Testing Tasks**:
 
-- [ ] T060 [P] [US2] Create HLS playlist parser test at `streaming/tests/unit/hls_playlist_test.rs` (verify m3u8 format, variant streams, segment count)
-- [ ] T061 [P] [US2] Create DASH manifest validator test at `streaming/tests/unit/dash_manifest_test.rs` (verify XML structure, adaptation sets, period duration)
-- [ ] T062 [US2] Create WebSocket integration test at `streaming/tests/integration/websocket_test.rs` (connect, receive status updates, quality switch notifications)
-- [ ] T063 [US2] Create viewer session test at `streaming/tests/integration/viewer_session_test.rs` (create→update quality→finalize, verify database records)
-- [ ] T064 [US2] Create end-to-end test at `streaming/tests/integration/e2e_broadcaster_viewer_test.rs` (broadcaster connects→viewer opens stream→receives video→quality switches)
+- [X] T060 [P] [US2] Create HLS playlist parser test at `streaming/tests/hls_playlist_test.rs` (verify m3u8 format, variant streams, segment count)
+- [X] T061 [P] [US2] Create DASH manifest validator test at `streaming/tests/dash_manifest_test.rs` (verify XML structure, adaptation sets, period duration)
+- [X] T062 [US2] Create WebSocket integration test at `streaming/tests/integration/websocket_test.rs` (connect, receive status updates, quality switch notifications)
+- [X] T063 [US2] Create viewer session test at `streaming/tests/integration/viewer_session_test.rs` (create→update quality→finalize, verify database records)
+- [X] T064 [US2] Create end-to-end test at `streaming/tests/integration/e2e_broadcaster_viewer_test.rs` (broadcaster connects→viewer opens stream→receives video→quality switches)
 
 ---
 

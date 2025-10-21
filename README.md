@@ -292,6 +292,7 @@ chore: 构建/工具链
 - **项目维护**: Nova Team
 - **问题反馈**: [GitHub Issues](https://github.com/yourorg/nova/issues)
 - **文档**: [docs/](./docs/)
+ - **文档索引**: [docs/INDEX.md](docs/INDEX.md)
 
 ---
 

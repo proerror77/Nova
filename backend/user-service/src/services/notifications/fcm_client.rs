@@ -1,14 +1,13 @@
+use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
+use reqwest::Client;
 /// T202: Firebase Cloud Messaging (FCM) Integration
 ///
 /// This module implements FCM support for Android/Web push notifications
 /// Part of Phase 7A notifications system
-
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
-use reqwest::Client;
-use jsonwebtoken::{encode, EncodingKey, Header, Algorithm};
 
 /// FCM Send Result
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -200,7 +199,10 @@ impl FCMClient {
                 failed,
             })
         } else {
-            Err(format!("Topic subscription failed with status: {}", response.status()))
+            Err(format!(
+                "Topic subscription failed with status: {}",
+                response.status()
+            ))
         }
     }
 
@@ -275,9 +277,9 @@ impl FCMClient {
         }
 
         // Basic validation - tokens should be alphanumeric with some special chars
-        let valid_chars = device_token.chars().all(|c| {
-            c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == ':'
-        });
+        let valid_chars = device_token
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == ':');
 
         if !valid_chars {
             return Err("Token contains invalid characters".to_string());

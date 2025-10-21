@@ -1,14 +1,13 @@
+use hyper::{Body, Client as HyperClient, Method, Request};
+use hyper_rustls::HttpsConnectorBuilder;
+use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
 /// T202: Apple Push Notification Service (APNs) Integration
 ///
 /// This module implements APNs support for iOS/macOS push notifications
 /// Part of Phase 7A notifications system
-
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use jsonwebtoken::{encode, EncodingKey, Header, Algorithm};
-use hyper::{Client as HyperClient, Body, Request, Method};
-use hyper_rustls::HttpsConnectorBuilder;
+use uuid::Uuid;
 
 /// APNs Send Result
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -347,8 +346,7 @@ impl APNsClient {
             payload["aps"]["badge"] = serde_json::json!(badge_count);
         }
 
-        serde_json::to_string(&payload)
-            .map_err(|e| format!("Failed to serialize payload: {}", e))
+        serde_json::to_string(&payload).map_err(|e| format!("Failed to serialize payload: {}", e))
     }
 
     /// Generate JWT authentication token for APNs
@@ -381,8 +379,7 @@ impl APNsClient {
         let encoding_key = EncodingKey::from_ec_pem(key_content.as_bytes())
             .map_err(|e| format!("Failed to parse EC key: {}", e))?;
 
-        encode(&header, &claims, &encoding_key)
-            .map_err(|e| format!("Failed to encode JWT: {}", e))
+        encode(&header, &claims, &encoding_key).map_err(|e| format!("Failed to encode JWT: {}", e))
     }
 }
 

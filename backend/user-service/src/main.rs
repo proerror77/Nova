@@ -1,5 +1,7 @@
 use actix_cors::Cors;
 use actix_web::{middleware::Logger, web, App, HttpResponse, HttpServer};
+use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
+use base64::Engine as _;
 use std::io;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -19,6 +21,11 @@ use user_service::{
         feed_ranking::FeedRankingService,
         job_queue,
         kafka_producer::EventProducer,
+        messaging::{MessageService, MessagingWebSocketHandler},
+        notifications::{
+            APNsClient, FCMClient, KafkaNotificationConsumer, PlatformRouter, ServiceAccountKey,
+            WebSocketHub,
+        },
         s3_service,
     },
 };
@@ -85,6 +92,45 @@ async fn main() -> io::Result<()> {
         .expect("Failed to create Redis connection manager");
 
     tracing::info!("Redis connection established");
+
+    // ========================================
+    // Initialize messaging WebSocket handler & services
+    // ========================================
+    let redis_connection_arc = Arc::new(redis_manager.clone());
+    let messaging_websocket_handler = Arc::new(MessagingWebSocketHandler::new(
+        redis_connection_arc.clone(),
+        db_pool.clone(),
+    ));
+    let message_service = Arc::new(MessageService::new(
+        db_pool.clone(),
+        messaging_websocket_handler.clone(),
+    ));
+
+    // ========================================
+    // Initialize notification platform clients
+    // ========================================
+    let fcm_service_account_bytes = BASE64_STANDARD
+        .decode(&config.notifications.fcm.service_account_json_base64)
+        .expect("Failed to decode FCM service account JSON (base64)");
+    let fcm_service_account: ServiceAccountKey = serde_json::from_slice(&fcm_service_account_bytes)
+        .expect("Failed to parse FCM service account JSON");
+
+    let fcm_client = FCMClient::new(
+        config.notifications.fcm.project_id.clone(),
+        fcm_service_account,
+    );
+
+    let apns_client = APNsClient::new(
+        config.notifications.apns.certificate_path.clone(),
+        config.notifications.apns.key_path.clone(),
+        config.notifications.apns.team_id.clone(),
+        config.notifications.apns.key_id.clone(),
+        config.notifications.apns.bundle_id.clone(),
+        config.notifications.apns.is_production,
+    );
+
+    let platform_router = Arc::new(PlatformRouter::new(fcm_client, apns_client));
+    let notification_websocket_hub = Arc::new(WebSocketHub::new(20_000));
 
     // ========================================
     // Initialize ClickHouse client & feed services
@@ -188,6 +234,25 @@ async fn main() -> io::Result<()> {
     tracing::info!("Events consumer spawned");
 
     // ========================================
+    // Initialize Notifications Consumer (Kafka → Push + WebSocket)
+    // ========================================
+    let mut notifications_consumer = KafkaNotificationConsumer::new(
+        config.kafka.brokers.clone(),
+        config.kafka.notifications_topic.clone(),
+    )
+    .expect("Failed to create notifications consumer");
+    notifications_consumer.set_db_pool(db_pool.clone());
+    notifications_consumer.set_platform_router(platform_router.clone());
+    notifications_consumer.set_websocket_hub(notification_websocket_hub.clone());
+
+    let notifications_handle = tokio::spawn(async move {
+        if let Err(e) = notifications_consumer.start().await {
+            tracing::error!("Notifications consumer error: {}", e);
+        }
+    });
+    tracing::info!("Notifications consumer spawned");
+
+    // ========================================
     // Initialize image processing job queue
     // ========================================
     let (job_sender, job_receiver) = job_queue::create_job_queue(100);
@@ -221,6 +286,10 @@ async fn main() -> io::Result<()> {
     let server = HttpServer::new(move || {
         let feed_state = feed_state.clone();
         let events_state = events_state.clone();
+        let message_service = message_service.clone();
+        let messaging_ws_handler = messaging_websocket_handler.clone();
+        let notification_hub = notification_websocket_hub.clone();
+        let platform_router = platform_router.clone();
         // Build CORS configuration from allowed_origins
         let cors_builder = Cors::default();
 
@@ -246,6 +315,10 @@ async fn main() -> io::Result<()> {
             .app_data(web::Data::new(job_sender.clone()))
             .app_data(feed_state.clone())
             .app_data(events_state.clone())
+            .app_data(web::Data::from(message_service.clone()))
+            .app_data(web::Data::from(messaging_ws_handler.clone()))
+            .app_data(web::Data::from(notification_hub.clone()))
+            .app_data(web::Data::from(platform_router.clone()))
             .wrap(cors)
             .wrap(Logger::default())
             .wrap(tracing_actix_web::TracingLogger::default())
@@ -382,6 +455,20 @@ async fn main() -> io::Result<()> {
         }
         Err(_) => {
             tracing::warn!("Events consumer did not shut down within timeout");
+        }
+    }
+
+    // Abort Notifications consumer
+    notifications_handle.abort();
+    match tokio::time::timeout(std::time::Duration::from_secs(5), notifications_handle).await {
+        Ok(Ok(())) => {
+            tracing::info!("Notifications consumer shut down gracefully");
+        }
+        Ok(Err(_)) => {
+            tracing::info!("Notifications consumer aborted");
+        }
+        Err(_) => {
+            tracing::warn!("Notifications consumer did not shut down within timeout");
         }
     }
 

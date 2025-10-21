@@ -2,7 +2,7 @@
 // Phase 7B Feature 2: Data access layer
 
 use chrono::{DateTime, Utc};
-use sqlx::{PgPool, postgres::PgRow, Row};
+use sqlx::{postgres::PgRow, PgPool, Row};
 use uuid::Uuid;
 
 use crate::error::AppError;
@@ -206,6 +206,24 @@ impl<'a> MessagingRepository<'a> {
         .map_err(|e| AppError::NotFound(format!("Member not found: {}", e)))?;
 
         Ok(member)
+    }
+
+    /// List conversation IDs that a user participates in (excluding archived chats)
+    pub async fn get_user_conversation_ids(&self, user_id: Uuid) -> Result<Vec<Uuid>, AppError> {
+        let conversation_ids = sqlx::query_scalar::<_, Uuid>(
+            r#"
+            SELECT conversation_id
+            FROM conversation_members
+            WHERE user_id = $1
+              AND (is_archived = false OR is_archived IS NULL)
+            ORDER BY joined_at DESC
+            "#,
+        )
+        .bind(user_id)
+        .fetch_all(self.pool)
+        .await?;
+
+        Ok(conversation_ids)
     }
 
     // ============================================

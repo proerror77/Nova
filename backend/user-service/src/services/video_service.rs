@@ -38,7 +38,12 @@ impl VideoService {
     }
 
     /// Start video processing job
-    pub async fn start_processing(&self, _video_id: &Uuid, _title: &str, _upload_url: &str) -> Result<()> {
+    pub async fn start_processing(
+        &self,
+        _video_id: &Uuid,
+        _title: &str,
+        _upload_url: &str,
+    ) -> Result<()> {
         Err(AppError::Internal(
             "Video processing not yet implemented".to_string(),
         ))

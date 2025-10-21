@@ -18,6 +18,9 @@ pub enum AppError {
     #[error("Authentication error: {0}")]
     Authentication(String),
 
+    #[error("Forbidden: {0}")]
+    Forbidden(String),
+
     #[error("Authorization error: {0}")]
     Authorization(String),
 
@@ -67,6 +70,7 @@ impl ResponseError for AppError {
             AppError::Redis(_) => StatusCode::INTERNAL_SERVER_ERROR,
             AppError::Validation(_) => StatusCode::BAD_REQUEST,
             AppError::Authentication(_) => StatusCode::UNAUTHORIZED,
+            AppError::Forbidden(_) => StatusCode::FORBIDDEN,
             AppError::Authorization(_) => StatusCode::FORBIDDEN,
             AppError::NotFound(_) => StatusCode::NOT_FOUND,
             AppError::Conflict(_) => StatusCode::CONFLICT,
@@ -88,6 +92,7 @@ impl ResponseError for AppError {
             AppError::Redis(_) => "CACHE_ERROR",
             AppError::Validation(_) => "VALIDATION_ERROR",
             AppError::Authentication(_) => "AUTHENTICATION_ERROR",
+            AppError::Forbidden(_) => "FORBIDDEN",
             AppError::Authorization(_) => "AUTHORIZATION_ERROR",
             AppError::NotFound(_) => "NOT_FOUND",
             AppError::Conflict(_) => "CONFLICT",

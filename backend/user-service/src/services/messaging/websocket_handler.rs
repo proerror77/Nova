@@ -3,20 +3,24 @@
 //
 // This module integrates with Phase 7A WebSocket infrastructure
 
-use crate::db::messaging::Message;
+use crate::db::messaging::{Message, MessagingRepository};
 use crate::error::AppError;
 use redis::aio::ConnectionManager;
+use redis::AsyncCommands;
 use serde::{Deserialize, Serialize};
+use sqlx::PgPool;
 use std::sync::Arc;
+use tracing::debug;
 use uuid::Uuid;
 
 pub struct MessagingWebSocketHandler {
     redis: Arc<ConnectionManager>,
+    pool: PgPool,
 }
 
 impl MessagingWebSocketHandler {
-    pub fn new(redis: Arc<ConnectionManager>) -> Self {
-        Self { redis }
+    pub fn new(redis: Arc<ConnectionManager>, pool: PgPool) -> Self {
+        Self { redis, pool }
     }
 
     /// Publish a new message event to Redis Pub/Sub
@@ -39,10 +43,14 @@ impl MessagingWebSocketHandler {
         let payload = serde_json::to_string(&event)
             .map_err(|e| AppError::Internal(format!("Failed to serialize event: {}", e)))?;
 
-        // TODO: Implement Redis publish
-        // self.redis.publish(&channel, payload).await?;
+        let mut redis_conn = (*self.redis).clone();
+        let subscribers: i64 = redis_conn.publish(&channel, payload).await?;
+        debug!(
+            "Published message event to channel {} ({} subscribers)",
+            channel, subscribers
+        );
 
-        unimplemented!("T216: Implement Redis Pub/Sub publish")
+        Ok(())
     }
 
     /// Publish a typing indicator event
@@ -59,8 +67,8 @@ impl MessagingWebSocketHandler {
         if is_typing {
             // Store typing status in Redis with TTL
             let key = format!("typing:{}:{}", conversation_id, user_id);
-            // TODO: Implement Redis SET with TTL
-            // self.redis.set_ex(&key, "1", 3).await?;
+            let mut redis_conn = (*self.redis).clone();
+            redis_conn.set_ex::<_, _, ()>(&key, "1", 3).await?;
 
             // Publish typing event
             let event = TypingEvent {
@@ -76,13 +84,16 @@ impl MessagingWebSocketHandler {
             let payload = serde_json::to_string(&event)
                 .map_err(|e| AppError::Internal(format!("Failed to serialize event: {}", e)))?;
 
-            // TODO: Implement Redis publish
-            // self.redis.publish(&channel, payload).await?;
+            let subscribers: i64 = redis_conn.publish(&channel, payload).await?;
+            debug!(
+                "Published typing start event to channel {} ({} subscribers)",
+                channel, subscribers
+            );
         } else {
             // Remove typing status
             let key = format!("typing:{}:{}", conversation_id, user_id);
-            // TODO: Implement Redis DEL
-            // self.redis.del(&key).await?;
+            let mut redis_conn = (*self.redis).clone();
+            redis_conn.del::<_, ()>(&key).await?;
 
             // Publish typing stopped event
             let event = TypingEvent {
@@ -98,11 +109,14 @@ impl MessagingWebSocketHandler {
             let payload = serde_json::to_string(&event)
                 .map_err(|e| AppError::Internal(format!("Failed to serialize event: {}", e)))?;
 
-            // TODO: Implement Redis publish
-            // self.redis.publish(&channel, payload).await?;
+            let subscribers: i64 = redis_conn.publish(&channel, payload).await?;
+            debug!(
+                "Published typing stop event to channel {} ({} subscribers)",
+                channel, subscribers
+            );
         }
 
-        unimplemented!("T216: Implement typing indicator")
+        Ok(())
     }
 
     /// Publish a read receipt event
@@ -125,19 +139,33 @@ impl MessagingWebSocketHandler {
         let payload = serde_json::to_string(&event)
             .map_err(|e| AppError::Internal(format!("Failed to serialize event: {}", e)))?;
 
-        // TODO: Implement Redis publish
-        // self.redis.publish(&channel, payload).await?;
+        let mut redis_conn = (*self.redis).clone();
+        let subscribers: i64 = redis_conn.publish(&channel, payload).await?;
+        debug!(
+            "Published read receipt event to channel {} ({} subscribers)",
+            channel, subscribers
+        );
 
-        unimplemented!("T216: Implement read receipt event")
+        Ok(())
     }
 
     /// Subscribe to conversation channels when user connects
     /// Returns list of channels to subscribe to
-    pub async fn get_user_subscription_channels(&self, user_id: Uuid) -> Result<Vec<String>, AppError> {
-        // TODO: Query user's conversations from database
-        // TODO: Return list of channels: conversation:{id}:messages, conversation:{id}:typing, etc.
+    pub async fn get_user_subscription_channels(
+        &self,
+        user_id: Uuid,
+    ) -> Result<Vec<String>, AppError> {
+        let repo = MessagingRepository::new(&self.pool);
+        let conversation_ids = repo.get_user_conversation_ids(user_id).await?;
 
-        unimplemented!("T216: Implement channel subscription")
+        let mut channels = Vec::with_capacity(conversation_ids.len() * 3);
+        for conversation_id in conversation_ids {
+            channels.push(format!("conversation:{}:messages", conversation_id));
+            channels.push(format!("conversation:{}:typing", conversation_id));
+            channels.push(format!("conversation:{}:read", conversation_id));
+        }
+
+        Ok(channels)
     }
 }
 

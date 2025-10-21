@@ -1,7 +1,6 @@
 /// Retry handler for push notification failures
 ///
 /// Implements exponential backoff retry strategy with dead-letter queue
-
 use std::time::Duration;
 use tokio::time::sleep;
 

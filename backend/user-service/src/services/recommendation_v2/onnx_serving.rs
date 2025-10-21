@@ -133,10 +133,7 @@ mod tests {
             extract_version_from_path("/models/collaborative_v1.0.onnx"),
             "v1.0"
         );
-        assert_eq!(
-            extract_version_from_path("collaborative_v2.5.onnx"),
-            "v2.5"
-        );
+        assert_eq!(extract_version_from_path("collaborative_v2.5.onnx"), "v2.5");
     }
 
     #[tokio::test]

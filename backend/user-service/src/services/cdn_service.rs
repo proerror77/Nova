@@ -3,7 +3,6 @@
 /// Manages content delivery through CDN providers with caching, failover,
 /// and geographic routing capabilities. Supports CloudFront, Cloudflare,
 /// and fallback to S3 origin.
-
 use crate::config::video_config::CdnConfig;
 use crate::error::{AppError, Result};
 use std::collections::HashMap;
@@ -101,7 +100,11 @@ impl CdnService {
             _ => format!("videos/{}/index.m3u8", video_id),
         };
 
-        format!("{}/{}", self.config.endpoint_url.trim_end_matches('/'), path)
+        format!(
+            "{}/{}",
+            self.config.endpoint_url.trim_end_matches('/'),
+            path
+        )
     }
 
     /// Get manifest with caching support
@@ -247,7 +250,10 @@ impl CdnService {
         );
 
         // ETag for conditional requests
-        headers.insert("ETag".to_string(), format!("W/\"{}\"", chrono::Utc::now().timestamp()));
+        headers.insert(
+            "ETag".to_string(),
+            format!("W/\"{}\"", chrono::Utc::now().timestamp()),
+        );
 
         // CDN-specific headers
         match self.provider {
@@ -305,7 +311,9 @@ impl CdnService {
         let geo_routing = self.get_geo_routing(client_ip);
 
         // Try to get from cache first
-        let manifest = self.get_cached_manifest(cache_key, manifest_generator).await;
+        let manifest = self
+            .get_cached_manifest(cache_key, manifest_generator)
+            .await;
 
         // Get CDN URL and fallback
         let cdn_url = self.get_manifest_url(video_id, quality, format);

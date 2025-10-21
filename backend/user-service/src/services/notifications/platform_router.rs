@@ -2,8 +2,7 @@
 ///
 /// Automatically routes notifications to the correct platform (FCM or APNs)
 /// based on device token format and metadata
-
-use super::{FCMClient, APNsClient, FCMSendResult, APNsSendResult, APNsPriority};
+use super::{APNsClient, APNsPriority, APNsSendResult, FCMClient, FCMSendResult};
 use serde::{Deserialize, Serialize};
 
 /// Platform type for routing
@@ -56,7 +55,8 @@ impl PlatformRouter {
         }
 
         // FCM tokens are longer and contain special characters
-        if token.len() >= 140 && (token.contains(':') || token.contains('-') || token.contains('_')) {
+        if token.len() >= 140 && (token.contains(':') || token.contains('-') || token.contains('_'))
+        {
             return Platform::Android;
         }
 
@@ -160,7 +160,7 @@ impl PlatformRouter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::services::notifications::{ServiceAccountKey};
+    use crate::services::notifications::ServiceAccountKey;
 
     fn create_test_fcm_client() -> FCMClient {
         let creds = ServiceAccountKey {

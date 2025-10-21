@@ -1,18 +1,24 @@
 // Message Service: Handles message sending, receiving, and history
 // Phase 7B Feature 2: T211 - Message Storage Service
 
+use super::websocket_handler::MessagingWebSocketHandler;
 use crate::db::messaging::{Message, MessageType, MessagingRepository};
 use crate::error::AppError;
 use sqlx::PgPool;
+use std::sync::Arc;
 use uuid::Uuid;
 
 pub struct MessageService {
     pool: PgPool,
+    websocket_handler: Arc<MessagingWebSocketHandler>,
 }
 
 impl MessageService {
-    pub fn new(pool: PgPool) -> Self {
-        Self { pool }
+    pub fn new(pool: PgPool, websocket_handler: Arc<MessagingWebSocketHandler>) -> Self {
+        Self {
+            pool,
+            websocket_handler,
+        }
     }
 
     /// Send a new message to a conversation
@@ -60,8 +66,9 @@ impl MessageService {
             )
             .await?;
 
-        // TODO: Publish to Redis Pub/Sub for WebSocket delivery
-        // self.publish_message_event(&message).await?;
+        self.websocket_handler
+            .publish_message_event(&message)
+            .await?;
 
         Ok(message)
     }
@@ -88,9 +95,7 @@ impl MessageService {
         }
 
         // Fetch messages
-        let messages = repo
-            .get_messages(conversation_id, limit, before)
-            .await?;
+        let messages = repo.get_messages(conversation_id, limit, before).await?;
 
         let has_more = messages.len() == limit as usize;
         let next_cursor = messages.last().map(|m| m.id);
@@ -134,8 +139,9 @@ impl MessageService {
         repo.update_last_read(conversation_id, user_id, message_id)
             .await?;
 
-        // TODO: Publish read receipt event to Redis Pub/Sub
-        // self.publish_read_receipt_event(conversation_id, user_id, message_id).await?;
+        self.websocket_handler
+            .publish_read_receipt_event(conversation_id, user_id, message_id)
+            .await?;
 
         Ok(())
     }
@@ -150,6 +156,30 @@ impl MessageService {
 
         let count = repo.get_unread_count(conversation_id, user_id).await?;
         Ok(count)
+    }
+
+    /// Publish typing indicator for a conversation after validating membership
+    pub async fn publish_typing_indicator(
+        &self,
+        conversation_id: Uuid,
+        user_id: Uuid,
+        username: String,
+        is_typing: bool,
+    ) -> Result<(), AppError> {
+        let repo = MessagingRepository::new(&self.pool);
+        let is_member = repo
+            .is_conversation_member(conversation_id, user_id)
+            .await?;
+
+        if !is_member {
+            return Err(AppError::Forbidden(
+                "You are not a member of this conversation".to_string(),
+            ));
+        }
+
+        self.websocket_handler
+            .publish_typing_event(conversation_id, user_id, username, is_typing)
+            .await
     }
 
     // ============================================

@@ -1,6 +1,5 @@
 /// Integration tests for Events API
 /// Tests event ingestion, Kafka production, and data pipeline
-
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -278,22 +277,14 @@ fn test_device_tracking() {
             app_ver: None,
         };
 
-        assert_eq!(
-            event.device,
-            device.map(|d| d.to_string())
-        );
+        assert_eq!(event.device, device.map(|d| d.to_string()));
     }
 }
 
 /// Test app version tracking
 #[test]
 fn test_app_version_tracking() {
-    let versions = vec![
-        Some("1.0.0"),
-        Some("2.1.3"),
-        Some("0.9.0-beta"),
-        None,
-    ];
+    let versions = vec![Some("1.0.0"), Some("2.1.3"), Some("0.9.0-beta"), None];
 
     for version in versions {
         let event = EventRecord {
@@ -307,10 +298,7 @@ fn test_app_version_tracking() {
             app_ver: version.map(|v| v.to_string()),
         };
 
-        assert_eq!(
-            event.app_ver,
-            version.map(|v| v.to_string())
-        );
+        assert_eq!(event.app_ver, version.map(|v| v.to_string()));
     }
 }
 
@@ -318,11 +306,11 @@ fn test_app_version_tracking() {
 #[test]
 fn test_dwell_time_tracking() {
     let dwell_times = vec![
-        Some(0),      // Instant view
-        Some(500),    // Half second
-        Some(5000),   // 5 seconds
-        Some(60000),  // 1 minute
-        None,         // Not tracked
+        Some(0),     // Instant view
+        Some(500),   // Half second
+        Some(5000),  // 5 seconds
+        Some(60000), // 1 minute
+        None,        // Not tracked
     ];
 
     for dwell_ms in dwell_times {
@@ -393,8 +381,14 @@ fn test_uuid_parsing_in_events() {
     };
 
     // Verify UUIDs are correctly stored
-    assert_eq!(event.user_id.to_string(), "550e8400-e29b-41d4-a716-446655440000");
-    assert_eq!(event.post_id.to_string(), "660e8400-e29b-41d4-a716-446655440000");
+    assert_eq!(
+        event.user_id.to_string(),
+        "550e8400-e29b-41d4-a716-446655440000"
+    );
+    assert_eq!(
+        event.post_id.to_string(),
+        "660e8400-e29b-41d4-a716-446655440000"
+    );
 }
 
 /// Test JSON payload generation for Kafka
