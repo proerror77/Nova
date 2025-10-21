@@ -7,6 +7,7 @@ pub mod jobs;
 pub mod metrics;
 pub mod middleware;
 pub mod models;
+pub mod redis;
 pub mod security;
 pub mod services;
 pub mod utils;

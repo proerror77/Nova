@@ -1,9 +1,10 @@
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 /// Email verification service
 /// Manages email verification tokens stored in Redis with 1-hour expiration
 use redis::aio::ConnectionManager;
 use uuid::Uuid;
 use crate::security::generate_token;
+use crate::redis::{operations::*, keys::EmailVerificationKey};
 
 const VERIFICATION_TOKEN_EXPIRY_SECS: u64 = 3600; // 1 hour
 
@@ -13,26 +14,26 @@ pub async fn store_verification_token(
     user_id: Uuid,
     email: &str,
 ) -> Result<String> {
-    use redis::AsyncCommands;
-
     let token = generate_token();
-    let key = format!("verify_email:{}:{}", user_id, email);
-    let reverse_key = format!("verify_email_token:{}", token);
     let token_value = format!("{}:{}", user_id, email);
 
-    let mut redis_conn = redis.clone();
-
     // Store forward mapping: user_id:email -> token
-    let _: () = redis_conn
-        .set_ex(&key, &token, VERIFICATION_TOKEN_EXPIRY_SECS)
-        .await
-        .map_err(|e| anyhow!("Failed to store verification token: {}", e))?;
+    redis_set_ex(
+        redis,
+        &EmailVerificationKey::forward(user_id, email),
+        &token,
+        VERIFICATION_TOKEN_EXPIRY_SECS,
+    )
+    .await?;
 
     // Store reverse mapping: token -> user_id:email
-    let _: () = redis_conn
-        .set_ex(&reverse_key, &token_value, VERIFICATION_TOKEN_EXPIRY_SECS)
-        .await
-        .map_err(|e| anyhow!("Failed to store reverse verification token: {}", e))?;
+    redis_set_ex(
+        redis,
+        &EmailVerificationKey::reverse(&token),
+        &token_value,
+        VERIFICATION_TOKEN_EXPIRY_SECS,
+    )
+    .await?;
 
     Ok(token)
 }
@@ -43,21 +44,13 @@ pub async fn get_user_from_token(
     redis: &ConnectionManager,
     token: &str,
 ) -> Result<Option<(Uuid, String)>> {
-    use redis::AsyncCommands;
-
-    let reverse_key = format!("verify_email_token:{}", token);
-
-    let mut redis_conn = redis.clone();
-    let token_value: Option<String> = redis_conn
-        .get(&reverse_key)
-        .await
-        .map_err(|e| anyhow!("Failed to retrieve token mapping: {}", e))?;
+    let token_value = redis_get(redis, &EmailVerificationKey::reverse(token)).await?;
 
     if let Some(token_value) = token_value {
         let parts: Vec<&str> = token_value.split(':').collect();
         if parts.len() == 2 {
             let user_id = Uuid::parse_str(parts[0])
-                .map_err(|e| anyhow!("Invalid user ID in token: {}", e))?;
+                .map_err(|e| anyhow::anyhow!("Invalid user ID in token: {}", e))?;
             let email = parts[1].to_string();
             return Ok(Some((user_id, email)));
         }
@@ -73,22 +66,16 @@ pub async fn verify_token(
     email: &str,
     token: &str,
 ) -> Result<bool> {
-    use redis::AsyncCommands;
+    let forward_key = EmailVerificationKey::forward(user_id, email);
+    let reverse_key = EmailVerificationKey::reverse(token);
 
-    let key = format!("verify_email:{}:{}", user_id, email);
-    let reverse_key = format!("verify_email_token:{}", token);
-
-    let mut redis_conn = redis.clone();
-    let stored_token: Option<String> = redis_conn
-        .get(&key)
-        .await
-        .map_err(|e| anyhow!("Failed to retrieve verification token: {}", e))?;
+    let stored_token = redis_get(redis, &forward_key).await?;
 
     if let Some(stored_token) = stored_token {
         if stored_token == token {
             // Delete both token mappings after verification (one-time use)
-            let _: () = redis_conn.del(&key).await.unwrap_or(());
-            let _: () = redis_conn.del(&reverse_key).await.unwrap_or(());
+            let _ = redis_delete(redis, &forward_key).await;
+            let _ = redis_delete(redis, &reverse_key).await;
             return Ok(true);
         }
     }
@@ -98,41 +85,20 @@ pub async fn verify_token(
 
 /// Check if a verification token exists and is still valid
 pub async fn token_exists(redis: &ConnectionManager, user_id: Uuid, email: &str) -> Result<bool> {
-    use redis::AsyncCommands;
-
-    let key = format!("verify_email:{}:{}", user_id, email);
-
-    let mut redis_conn = redis.clone();
-    let exists: bool = redis_conn
-        .exists(&key)
-        .await
-        .map_err(|e| anyhow!("Failed to check token existence: {}", e))?;
-
-    Ok(exists)
+    redis_exists(redis, &EmailVerificationKey::forward(user_id, email)).await
 }
 
 /// Revoke a verification token (e.g., for security or manual refresh)
 pub async fn revoke_token(redis: &ConnectionManager, user_id: Uuid, email: &str) -> Result<()> {
-    use redis::AsyncCommands;
-
-    let key = format!("verify_email:{}:{}", user_id, email);
-
-    let mut redis_conn = redis.clone();
+    let forward_key = EmailVerificationKey::forward(user_id, email);
 
     // Get the token first to delete its reverse mapping
-    let token: Option<String> = redis_conn.get(&key).await.ok().flatten();
+    if let Ok(Some(token)) = redis_get(redis, &forward_key).await {
+        let _ = redis_delete(redis, &EmailVerificationKey::reverse(&token)).await;
+    }
 
     // Delete forward mapping
-    let _: () = redis_conn
-        .del(&key)
-        .await
-        .map_err(|e| anyhow!("Failed to revoke verification token: {}", e))?;
-
-    // Delete reverse mapping if token was found
-    if let Some(token) = token {
-        let reverse_key = format!("verify_email_token:{}", token);
-        let _: () = redis_conn.del(&reverse_key).await.unwrap_or(());
-    }
+    redis_delete(redis, &forward_key).await?;
 
     Ok(())
 }
