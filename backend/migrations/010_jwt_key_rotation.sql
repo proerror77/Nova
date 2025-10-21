@@ -9,7 +9,7 @@
 -- Table: jwt_signing_keys
 -- Description: Store RSA key pairs for JWT signing with rotation support
 -- ============================================
-CREATE TABLE jwt_signing_keys (
+CREATE TABLE IF NOT EXISTS jwt_signing_keys (
     id BIGSERIAL PRIMARY KEY,
     key_id VARCHAR(36) UNIQUE NOT NULL,  -- UUID format (e.g., "key-2025-10-18-v1")
     version INT NOT NULL,
@@ -32,10 +32,10 @@ CREATE TABLE jwt_signing_keys (
 );
 
 -- Indexes for jwt_signing_keys table
-CREATE INDEX idx_jwt_keys_active ON jwt_signing_keys(is_active, activated_at DESC) WHERE is_active = TRUE;
-CREATE INDEX idx_jwt_keys_expires ON jwt_signing_keys(expires_at);
-CREATE INDEX idx_jwt_keys_key_id ON jwt_signing_keys(key_id);
-CREATE INDEX idx_jwt_keys_version ON jwt_signing_keys(version DESC);
+CREATE INDEX IF NOT EXISTS idx_jwt_keys_active ON jwt_signing_keys(is_active, activated_at DESC) WHERE is_active = TRUE;
+CREATE INDEX IF NOT EXISTS idx_jwt_keys_expires ON jwt_signing_keys(expires_at);
+CREATE INDEX IF NOT EXISTS idx_jwt_keys_key_id ON jwt_signing_keys(key_id);
+CREATE INDEX IF NOT EXISTS idx_jwt_keys_version ON jwt_signing_keys(version DESC);
 
 -- ============================================
 -- Comments for documentation

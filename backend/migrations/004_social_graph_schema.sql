@@ -4,7 +4,7 @@
 -- ============================================
 
 -- 用户关系表 (Follows)
-CREATE TABLE follows (
+CREATE TABLE IF NOT EXISTS follows (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   follower_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   following_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -13,12 +13,12 @@ CREATE TABLE follows (
   CHECK (follower_id != following_id)
 );
 
-CREATE INDEX idx_follows_follower ON follows(follower_id);
-CREATE INDEX idx_follows_following ON follows(following_id);
-CREATE INDEX idx_follows_created_at ON follows(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_follows_follower ON follows(follower_id);
+CREATE INDEX IF NOT EXISTS idx_follows_following ON follows(following_id);
+CREATE INDEX IF NOT EXISTS idx_follows_created_at ON follows(created_at DESC);
 
 -- 点赞表 (Likes)
-CREATE TABLE likes (
+CREATE TABLE IF NOT EXISTS likes (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   post_id UUID NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
@@ -26,12 +26,12 @@ CREATE TABLE likes (
   UNIQUE(user_id, post_id)
 );
 
-CREATE INDEX idx_likes_user_id ON likes(user_id);
-CREATE INDEX idx_likes_post_id ON likes(post_id);
-CREATE INDEX idx_likes_created_at ON likes(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_likes_user_id ON likes(user_id);
+CREATE INDEX IF NOT EXISTS idx_likes_post_id ON likes(post_id);
+CREATE INDEX IF NOT EXISTS idx_likes_created_at ON likes(created_at DESC);
 
 -- 评论表 (Comments) - 支持回复
-CREATE TABLE comments (
+CREATE TABLE IF NOT EXISTS comments (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   post_id UUID NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -42,13 +42,13 @@ CREATE TABLE comments (
   soft_delete TIMESTAMP
 );
 
-CREATE INDEX idx_comments_post_id ON comments(post_id);
-CREATE INDEX idx_comments_user_id ON comments(user_id);
-CREATE INDEX idx_comments_parent_id ON comments(parent_comment_id);
-CREATE INDEX idx_comments_created_at ON comments(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_comments_post_id ON comments(post_id);
+CREATE INDEX IF NOT EXISTS idx_comments_user_id ON comments(user_id);
+CREATE INDEX IF NOT EXISTS idx_comments_parent_id ON comments(parent_comment_id);
+CREATE INDEX IF NOT EXISTS idx_comments_created_at ON comments(created_at DESC);
 
 -- 社交元数据表 (用于实时计数)
-CREATE TABLE social_metadata (
+CREATE TABLE IF NOT EXISTS social_metadata (
   post_id UUID PRIMARY KEY REFERENCES posts(id) ON DELETE CASCADE,
   follower_count INT DEFAULT 0,
   like_count INT DEFAULT 0,
@@ -71,6 +71,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS trg_update_like_count ON likes;
 CREATE TRIGGER trg_update_like_count
 AFTER INSERT OR DELETE ON likes
 FOR EACH ROW
@@ -91,6 +92,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS trg_update_comment_count ON comments;
 CREATE TRIGGER trg_update_comment_count
 AFTER INSERT OR DELETE ON comments
 FOR EACH ROW
@@ -109,6 +111,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS trg_update_follower_count ON follows;
 CREATE TRIGGER trg_update_follower_count
 AFTER INSERT OR DELETE ON follows
 FOR EACH ROW

@@ -9,7 +9,7 @@
 -- Type: quality_level_enum
 -- Description: Video quality tiers
 -- ============================================
-CREATE TYPE quality_level_enum AS ENUM (
+CREATE TYPE IF NOT EXISTS quality_level_enum AS ENUM (
     'source',  -- Original broadcaster quality
     '1080p',   -- Full HD
     '720p',    -- HD
@@ -24,7 +24,7 @@ COMMENT ON TYPE quality_level_enum IS 'Adaptive bitrate streaming quality levels
 -- Table: viewer_sessions
 -- Description: Individual viewer playback sessions for analytics
 -- ============================================
-CREATE TABLE viewer_sessions (
+CREATE TABLE IF NOT EXISTS viewer_sessions (
     session_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     viewer_id UUID REFERENCES users(id) ON DELETE SET NULL,
     stream_id UUID NOT NULL REFERENCES streams(stream_id) ON DELETE CASCADE,
@@ -66,26 +66,26 @@ CREATE TABLE viewer_sessions (
 -- Indexes for viewer_sessions table
 -- ============================================
 -- Query active sessions for a stream (for concurrent viewer count)
-CREATE INDEX idx_viewer_sessions_stream_active
+CREATE INDEX IF NOT EXISTS idx_viewer_sessions_stream_active
     ON viewer_sessions(stream_id, joined_at DESC)
     WHERE left_at IS NULL;
 
 -- Analytics: viewer history per user
-CREATE INDEX idx_viewer_sessions_viewer_id
+CREATE INDEX IF NOT EXISTS idx_viewer_sessions_viewer_id
     ON viewer_sessions(viewer_id, joined_at DESC)
     WHERE viewer_id IS NOT NULL;
 
 -- Analytics: time-series queries
-CREATE INDEX idx_viewer_sessions_joined_at
+CREATE INDEX IF NOT EXISTS idx_viewer_sessions_joined_at
     ON viewer_sessions(joined_at DESC);
 
 -- QoS analysis: find sessions with poor quality
-CREATE INDEX idx_viewer_sessions_qos
+CREATE INDEX IF NOT EXISTS idx_viewer_sessions_qos
     ON viewer_sessions(stream_id, buffer_events DESC, total_buffer_time_ms DESC)
     WHERE buffer_events > 5 OR total_buffer_time_ms > 10000;
 
 -- CDN routing optimization
-CREATE INDEX idx_viewer_sessions_cdn_edge
+CREATE INDEX IF NOT EXISTS idx_viewer_sessions_cdn_edge
     ON viewer_sessions(cdn_edge_node, joined_at DESC)
     WHERE cdn_edge_node IS NOT NULL;
 

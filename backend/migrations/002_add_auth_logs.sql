@@ -9,7 +9,7 @@
 -- Table: auth_logs
 -- Description: Comprehensive authentication audit trail
 -- ============================================
-CREATE TABLE auth_logs (
+CREATE TABLE IF NOT EXISTS auth_logs (
     id BIGSERIAL PRIMARY KEY,
     user_id UUID REFERENCES users(id) ON DELETE SET NULL,
     event_type VARCHAR(50) NOT NULL,
@@ -38,18 +38,18 @@ CREATE TABLE auth_logs (
 );
 
 -- Indexes for auth_logs table
-CREATE INDEX idx_auth_logs_user_id ON auth_logs(user_id);
-CREATE INDEX idx_auth_logs_event_type ON auth_logs(event_type);
-CREATE INDEX idx_auth_logs_status ON auth_logs(status);
-CREATE INDEX idx_auth_logs_created_at ON auth_logs(created_at DESC);
-CREATE INDEX idx_auth_logs_ip_address ON auth_logs(ip_address);
-CREATE INDEX idx_auth_logs_email ON auth_logs(email);
+CREATE INDEX IF NOT EXISTS idx_auth_logs_user_id ON auth_logs(user_id);
+CREATE INDEX IF NOT EXISTS idx_auth_logs_event_type ON auth_logs(event_type);
+CREATE INDEX IF NOT EXISTS idx_auth_logs_status ON auth_logs(status);
+CREATE INDEX IF NOT EXISTS idx_auth_logs_created_at ON auth_logs(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_auth_logs_ip_address ON auth_logs(ip_address);
+CREATE INDEX IF NOT EXISTS idx_auth_logs_email ON auth_logs(email);
 
 -- GIN index for JSONB metadata searching
-CREATE INDEX idx_auth_logs_metadata ON auth_logs USING GIN (metadata);
+CREATE INDEX IF NOT EXISTS idx_auth_logs_metadata ON auth_logs USING GIN (metadata);
 
 -- Composite index for common queries
-CREATE INDEX idx_auth_logs_user_event_created ON auth_logs(user_id, event_type, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_auth_logs_user_event_created ON auth_logs(user_id, event_type, created_at DESC);
 
 -- ============================================
 -- Function: Clean up old auth logs (retention policy)

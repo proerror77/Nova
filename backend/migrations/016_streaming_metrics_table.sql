@@ -9,7 +9,7 @@
 -- Table: stream_metrics (Partitioned)
 -- Description: Time-series metrics for stream health monitoring
 -- ============================================
-CREATE TABLE stream_metrics (
+CREATE TABLE IF NOT EXISTS stream_metrics (
     metrics_id UUID DEFAULT uuid_generate_v4(),
     stream_id UUID NOT NULL REFERENCES streams(stream_id) ON DELETE CASCADE,
     timestamp TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
@@ -53,47 +53,47 @@ CREATE TABLE stream_metrics (
 -- ============================================
 
 -- January 2025
-CREATE TABLE stream_metrics_2025_01 PARTITION OF stream_metrics
+CREATE TABLE IF NOT EXISTS stream_metrics_2025_01 PARTITION OF stream_metrics
     FOR VALUES FROM ('2025-01-01') TO ('2025-02-01');
 
 -- February 2025
-CREATE TABLE stream_metrics_2025_02 PARTITION OF stream_metrics
+CREATE TABLE IF NOT EXISTS stream_metrics_2025_02 PARTITION OF stream_metrics
     FOR VALUES FROM ('2025-02-01') TO ('2025-03-01');
 
 -- March 2025
-CREATE TABLE stream_metrics_2025_03 PARTITION OF stream_metrics
+CREATE TABLE IF NOT EXISTS stream_metrics_2025_03 PARTITION OF stream_metrics
     FOR VALUES FROM ('2025-03-01') TO ('2025-04-01');
 
 -- April 2025
-CREATE TABLE stream_metrics_2025_04 PARTITION OF stream_metrics
+CREATE TABLE IF NOT EXISTS stream_metrics_2025_04 PARTITION OF stream_metrics
     FOR VALUES FROM ('2025-04-01') TO ('2025-05-01');
 
 -- May 2025
-CREATE TABLE stream_metrics_2025_05 PARTITION OF stream_metrics
+CREATE TABLE IF NOT EXISTS stream_metrics_2025_05 PARTITION OF stream_metrics
     FOR VALUES FROM ('2025-05-01') TO ('2025-06-01');
 
 -- June 2025
-CREATE TABLE stream_metrics_2025_06 PARTITION OF stream_metrics
+CREATE TABLE IF NOT EXISTS stream_metrics_2025_06 PARTITION OF stream_metrics
     FOR VALUES FROM ('2025-06-01') TO ('2025-07-01');
 
 -- ============================================
 -- Indexes for stream_metrics table
 -- ============================================
 -- Query recent metrics for a specific stream (time-series analysis)
-CREATE INDEX idx_stream_metrics_stream_timestamp
+CREATE INDEX IF NOT EXISTS idx_stream_metrics_stream_timestamp
     ON stream_metrics(stream_id, timestamp DESC);
 
 -- Query metrics by timestamp (monitoring dashboards)
-CREATE INDEX idx_stream_metrics_timestamp
+CREATE INDEX IF NOT EXISTS idx_stream_metrics_timestamp
     ON stream_metrics(timestamp DESC);
 
 -- Query streams with health issues
-CREATE INDEX idx_stream_metrics_health
+CREATE INDEX IF NOT EXISTS idx_stream_metrics_health
     ON stream_metrics(stream_id, timestamp DESC)
     WHERE dropped_frames > 100 OR buffering_events > 50;
 
 -- Analyze quality distribution
-CREATE INDEX idx_stream_metrics_quality_distribution_gin
+CREATE INDEX IF NOT EXISTS idx_stream_metrics_quality_distribution_gin
     ON stream_metrics USING gin(quality_distribution);
 
 -- ============================================

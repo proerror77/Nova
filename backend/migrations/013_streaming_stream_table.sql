@@ -9,7 +9,7 @@
 -- Type: stream_status_enum
 -- Description: Enumeration of possible stream states
 -- ============================================
-CREATE TYPE stream_status_enum AS ENUM (
+CREATE TYPE IF NOT EXISTS stream_status_enum AS ENUM (
     'idle',         -- Stream key created but never started
     'pending',      -- Starting up, not yet accepting viewers
     'live',         -- Actively broadcasting
@@ -25,7 +25,7 @@ COMMENT ON TYPE stream_status_enum IS 'Stream lifecycle states';
 -- Table: streams
 -- Description: Live broadcast stream metadata and lifecycle
 -- ============================================
-CREATE TABLE streams (
+CREATE TABLE IF NOT EXISTS streams (
     stream_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     broadcaster_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
 
@@ -66,31 +66,31 @@ CREATE TABLE streams (
 -- Indexes for streams table
 -- ============================================
 -- Query live streams by status and start time
-CREATE INDEX idx_streams_status_started_at
+CREATE INDEX IF NOT EXISTS idx_streams_status_started_at
     ON streams(status, started_at DESC)
     WHERE status IN ('live', 'pending');
 
 -- Query all streams by broadcaster
-CREATE INDEX idx_streams_broadcaster_id
+CREATE INDEX IF NOT EXISTS idx_streams_broadcaster_id
     ON streams(broadcaster_id);
 
 -- Query recent live streams
-CREATE INDEX idx_streams_started_at
+CREATE INDEX IF NOT EXISTS idx_streams_started_at
     ON streams(started_at DESC NULLS LAST);
 
 -- Query streams by creation time
-CREATE INDEX idx_streams_created_at
+CREATE INDEX IF NOT EXISTS idx_streams_created_at
     ON streams(created_at DESC);
 
 -- Full-text search on stream title and tags
-CREATE INDEX idx_streams_title_trgm
+CREATE INDEX IF NOT EXISTS idx_streams_title_trgm
     ON streams USING gin(title gin_trgm_ops);
 
-CREATE INDEX idx_streams_tags_gin
+CREATE INDEX IF NOT EXISTS idx_streams_tags_gin
     ON streams USING gin(tags);
 
 -- Query by language
-CREATE INDEX idx_streams_language_code
+CREATE INDEX IF NOT EXISTS idx_streams_language_code
     ON streams(language_code)
     WHERE language_code IS NOT NULL;
 

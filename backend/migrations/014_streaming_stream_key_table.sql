@@ -9,7 +9,7 @@
 -- Table: stream_keys
 -- Description: Broadcaster authentication tokens for RTMP ingest
 -- ============================================
-CREATE TABLE stream_keys (
+CREATE TABLE IF NOT EXISTS stream_keys (
     key_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     broadcaster_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
 
@@ -45,20 +45,20 @@ CREATE TABLE stream_keys (
 -- Indexes for stream_keys table
 -- ============================================
 -- Query active keys by broadcaster
-CREATE INDEX idx_stream_keys_broadcaster_active
+CREATE INDEX IF NOT EXISTS idx_stream_keys_broadcaster_active
     ON stream_keys(broadcaster_id, is_active)
     WHERE is_active = TRUE;
 
 -- Authenticate by key hash during RTMP handshake
-CREATE UNIQUE INDEX idx_stream_keys_key_hash
+CREATE UNIQUE INDEX IF NOT EXISTS idx_stream_keys_key_hash
     ON stream_keys(key_hash);
 
 -- Query keys by creation time
-CREATE INDEX idx_stream_keys_created_at
+CREATE INDEX IF NOT EXISTS idx_stream_keys_created_at
     ON stream_keys(created_at DESC);
 
 -- Query recently used keys
-CREATE INDEX idx_stream_keys_last_used_at
+CREATE INDEX IF NOT EXISTS idx_stream_keys_last_used_at
     ON stream_keys(last_used_at DESC NULLS LAST);
 
 -- ============================================

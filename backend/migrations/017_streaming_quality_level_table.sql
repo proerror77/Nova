@@ -9,7 +9,7 @@
 -- Table: quality_levels
 -- Description: Adaptive bitrate streaming quality tier definitions
 -- ============================================
-CREATE TABLE quality_levels (
+CREATE TABLE IF NOT EXISTS quality_levels (
     level_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
 
     -- Quality identifier
@@ -55,10 +55,10 @@ CREATE TABLE quality_levels (
 -- ============================================
 -- Indexes for quality_levels table
 -- ============================================
-CREATE UNIQUE INDEX idx_quality_levels_name
+CREATE UNIQUE INDEX IF NOT EXISTS idx_quality_levels_name
     ON quality_levels(name);
 
-CREATE INDEX idx_quality_levels_resolution
+CREATE INDEX IF NOT EXISTS idx_quality_levels_resolution
     ON quality_levels(resolution_width DESC, resolution_height DESC);
 
 -- ============================================
@@ -78,7 +78,7 @@ INSERT INTO quality_levels (
     5000, 6000, 8000,
     'h264', 'aac',
     60, 4
-);
+) ON CONFLICT (name) DO NOTHING;
 
 -- 1080p Full HD
 INSERT INTO quality_levels (
@@ -93,7 +93,7 @@ INSERT INTO quality_levels (
     4000, 5000, 6000,
     'h264', 'aac',
     60, 4
-);
+) ON CONFLICT (name) DO NOTHING;
 
 -- 720p HD
 INSERT INTO quality_levels (
@@ -108,7 +108,7 @@ INSERT INTO quality_levels (
     2000, 2500, 3500,
     'h264', 'aac',
     60, 4
-);
+) ON CONFLICT (name) DO NOTHING;
 
 -- 480p SD
 INSERT INTO quality_levels (
@@ -123,7 +123,7 @@ INSERT INTO quality_levels (
     800, 1000, 1500,
     'h264', 'aac',
     30, 4
-);
+) ON CONFLICT (name) DO NOTHING;
 
 -- 360p Low
 INSERT INTO quality_levels (
@@ -138,7 +138,7 @@ INSERT INTO quality_levels (
     400, 600, 900,
     'h264', 'aac',
     30, 4
-);
+) ON CONFLICT (name) DO NOTHING;
 
 -- Audio-only fallback
 INSERT INTO quality_levels (

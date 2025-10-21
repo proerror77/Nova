@@ -12,7 +12,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 -- Table: posts
 -- Description: User-created image posts
 -- ============================================
-CREATE TABLE posts (
+CREATE TABLE IF NOT EXISTS posts (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     caption TEXT,
@@ -31,22 +31,22 @@ CREATE TABLE posts (
 );
 
 -- Indexes for posts table
-CREATE INDEX idx_posts_user_id ON posts(user_id);
-CREATE INDEX idx_posts_created_at ON posts(created_at DESC);
-CREATE INDEX idx_posts_status ON posts(status);
-CREATE INDEX idx_posts_soft_delete ON posts(soft_delete) WHERE soft_delete IS NULL;
+CREATE INDEX IF NOT EXISTS idx_posts_user_id ON posts(user_id);
+CREATE INDEX IF NOT EXISTS idx_posts_created_at ON posts(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_posts_status ON posts(status);
+CREATE INDEX IF NOT EXISTS idx_posts_soft_delete ON posts(soft_delete) WHERE soft_delete IS NULL;
 
 -- Composite index for common query: user's posts ordered by recent
-CREATE INDEX idx_posts_user_created ON posts(user_id, created_at DESC) WHERE soft_delete IS NULL;
+CREATE INDEX IF NOT EXISTS idx_posts_user_created ON posts(user_id, created_at DESC) WHERE soft_delete IS NULL;
 
 -- Index for feed queries (Phase 3)
-CREATE INDEX idx_posts_created_published ON posts(created_at DESC) WHERE status = 'published' AND soft_delete IS NULL;
+CREATE INDEX IF NOT EXISTS idx_posts_created_published ON posts(created_at DESC) WHERE status = 'published' AND soft_delete IS NULL;
 
 -- ============================================
 -- Table: post_images
 -- Description: Transcoded image variants tracking
 -- ============================================
-CREATE TABLE post_images (
+CREATE TABLE IF NOT EXISTS post_images (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     post_id UUID NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
     s3_key VARCHAR(512) NOT NULL,
@@ -67,18 +67,18 @@ CREATE TABLE post_images (
 );
 
 -- Indexes for post_images table
-CREATE INDEX idx_post_images_post_id ON post_images(post_id);
-CREATE INDEX idx_post_images_status ON post_images(status);
-CREATE INDEX idx_post_images_size_variant ON post_images(size_variant);
+CREATE INDEX IF NOT EXISTS idx_post_images_post_id ON post_images(post_id);
+CREATE INDEX IF NOT EXISTS idx_post_images_status ON post_images(status);
+CREATE INDEX IF NOT EXISTS idx_post_images_size_variant ON post_images(size_variant);
 
 -- Composite index for checking if all variants are ready
-CREATE INDEX idx_post_images_post_status ON post_images(post_id, status);
+CREATE INDEX IF NOT EXISTS idx_post_images_post_status ON post_images(post_id, status);
 
 -- ============================================
 -- Table: post_metadata
 -- Description: Post statistics and engagement metrics
 -- ============================================
-CREATE TABLE post_metadata (
+CREATE TABLE IF NOT EXISTS post_metadata (
     post_id UUID PRIMARY KEY REFERENCES posts(id) ON DELETE CASCADE,
     like_count INT NOT NULL DEFAULT 0,
     comment_count INT NOT NULL DEFAULT 0,
@@ -90,14 +90,14 @@ CREATE TABLE post_metadata (
 );
 
 -- Index for sorting posts by engagement
-CREATE INDEX idx_post_metadata_like_count ON post_metadata(like_count DESC);
-CREATE INDEX idx_post_metadata_updated_at ON post_metadata(updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_post_metadata_like_count ON post_metadata(like_count DESC);
+CREATE INDEX IF NOT EXISTS idx_post_metadata_updated_at ON post_metadata(updated_at DESC);
 
 -- ============================================
 -- Table: upload_sessions
 -- Description: Track ongoing file uploads with tokens
 -- ============================================
-CREATE TABLE upload_sessions (
+CREATE TABLE IF NOT EXISTS upload_sessions (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     post_id UUID NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
     upload_token VARCHAR(512) NOT NULL UNIQUE,
@@ -112,14 +112,15 @@ CREATE TABLE upload_sessions (
 );
 
 -- Indexes for upload_sessions table
-CREATE INDEX idx_upload_sessions_post_id ON upload_sessions(post_id);
-CREATE INDEX idx_upload_sessions_upload_token ON upload_sessions(upload_token);
-CREATE INDEX idx_upload_sessions_expires_at ON upload_sessions(expires_at);
-CREATE INDEX idx_upload_sessions_is_completed ON upload_sessions(is_completed) WHERE is_completed = FALSE;
+CREATE INDEX IF NOT EXISTS idx_upload_sessions_post_id ON upload_sessions(post_id);
+CREATE INDEX IF NOT EXISTS idx_upload_sessions_upload_token ON upload_sessions(upload_token);
+CREATE INDEX IF NOT EXISTS idx_upload_sessions_expires_at ON upload_sessions(expires_at);
+CREATE INDEX IF NOT EXISTS idx_upload_sessions_is_completed ON upload_sessions(is_completed) WHERE is_completed = FALSE;
 
 -- ============================================
 -- Trigger: Update updated_at timestamp on posts
 -- ============================================
+DROP TRIGGER IF EXISTS update_posts_updated_at ON posts;
 CREATE TRIGGER update_posts_updated_at
     BEFORE UPDATE ON posts
     FOR EACH ROW
@@ -128,6 +129,7 @@ CREATE TRIGGER update_posts_updated_at
 -- ============================================
 -- Trigger: Update updated_at timestamp on post_images
 -- ============================================
+DROP TRIGGER IF EXISTS update_post_images_updated_at ON post_images;
 CREATE TRIGGER update_post_images_updated_at
     BEFORE UPDATE ON post_images
     FOR EACH ROW
@@ -136,6 +138,7 @@ CREATE TRIGGER update_post_images_updated_at
 -- ============================================
 -- Trigger: Update updated_at timestamp on post_metadata
 -- ============================================
+DROP TRIGGER IF EXISTS update_post_metadata_updated_at ON post_metadata;
 CREATE TRIGGER update_post_metadata_updated_at
     BEFORE UPDATE ON post_metadata
     FOR EACH ROW
@@ -154,6 +157,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS create_metadata_on_post_insert ON posts;
 CREATE TRIGGER create_metadata_on_post_insert
     AFTER INSERT ON posts
     FOR EACH ROW
