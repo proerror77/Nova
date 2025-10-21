@@ -71,6 +71,18 @@ impl FeedCacheKey {
     }
 }
 
+/// Two-Factor Authentication (2FA) temporary session keys
+pub struct TwoFactorKey;
+
+impl TwoFactorKey {
+    /// Key for 2FA pending session: session_type + session_id
+    /// Stores user_id during 2FA verification flow
+    /// Pattern: nova:2fa_pending:session_id or nova:2fa_setup:session_id
+    pub fn temp_session(session_type: &str, session_id: &str) -> String {
+        format!("{}:{}:{}", NOVA_NAMESPACE, session_type, session_id)
+    }
+}
+
 /// Generic Redis key builder for consistency
 pub struct RedisKeyBuilder {
     namespace: String,
@@ -166,12 +178,24 @@ mod tests {
     }
 
     #[test]
+    fn test_two_factor_keys() {
+        let session_key = TwoFactorKey::temp_session("2fa_pending", "session123");
+        assert!(session_key.contains("2fa_pending"));
+        assert!(session_key.contains("session123"));
+
+        let setup_key = TwoFactorKey::temp_session("2fa_setup", "setup456");
+        assert!(setup_key.contains("2fa_setup"));
+        assert!(setup_key.contains("setup456"));
+    }
+
+    #[test]
     fn test_consistent_key_format() {
         // All keys should follow pattern: nova:category:id:...
         let keys = vec![
             EmailVerificationKey::forward(Uuid::nil(), "test@example.com"),
             FeedCacheKey::hot_posts(),
             TokenRevocationKey::blacklist("token"),
+            TwoFactorKey::temp_session("2fa_pending", "session123"),
         ];
 
         for key in keys {
