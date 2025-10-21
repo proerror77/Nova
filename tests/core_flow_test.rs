@@ -18,7 +18,8 @@ use tokio::time::{sleep, Duration, Instant};
 
 mod test_harness;
 use test_harness::{
-    ClickHouseClient, FeedApiClient, KafkaProducer, PostgresClient, RedisClient, TestEnvironment,
+    ClickHouseClient, EventRow, FeedApiClient, KafkaProducer, PostgresClient, RedisClient,
+    TestEnvironment,
 };
 
 #[tokio::test]
@@ -30,7 +31,7 @@ async fn test_cdc_consumption_from_kafka() {
 
     // Action: Insert a post in PostgreSQL
     let post_id = "test-post-001";
-    pg.execute(
+    pg.execute_simple(
         "INSERT INTO posts (id, author_id, content, created_at)
          VALUES ($1, $2, $3, NOW())",
         &[&post_id, &"author-123", &"Test post content"],
@@ -115,7 +116,7 @@ async fn test_clickhouse_data_correctness() {
     sleep(Duration::from_secs(2)).await;
 
     // Assert: Data fields should match exactly
-    let row: serde_json::Value = ch
+    let row: EventRow = ch
         .query_one(
             "SELECT event_type, user_id, post_id FROM events WHERE event_id = ?",
             &["evt-correctness-001"],
@@ -123,9 +124,9 @@ async fn test_clickhouse_data_correctness() {
         .await
         .expect("Failed to query event");
 
-    assert_eq!(row["event_type"], "like", "Event type mismatch");
-    assert_eq!(row["user_id"], "user-correctness", "User ID mismatch");
-    assert_eq!(row["post_id"], "post-correctness", "Post ID mismatch");
+    assert_eq!(row.event_type, "like", "Event type mismatch");
+    assert_eq!(row.user_id, "user-correctness", "User ID mismatch");
+    assert_eq!(row.post_id, "post-correctness", "Post ID mismatch");
 
     env.cleanup().await;
 }
@@ -232,7 +233,7 @@ async fn test_complete_event_to_feed_flow() {
 
     // Step 1: Create a post in PostgreSQL
     let post_id = "golden-post-001";
-    pg.execute(
+    pg.execute_simple(
         "INSERT INTO posts (id, author_id, content, created_at) VALUES ($1, $2, $3, NOW())",
         &[&post_id, &"author-golden", &"Golden path test post"],
     )

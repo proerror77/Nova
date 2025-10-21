@@ -52,6 +52,15 @@ async fn load_test_concurrent_logins() {
 
     let config = Config::from_env();
 
+    // Initialize app once (not per-request)
+    let app = test::init_service(
+        App::new()
+            .app_data(web::Data::new(pool.clone()))
+            .app_data(web::Data::new(config.clone()))
+            .route("/auth/login", web::post().to(login)),
+    )
+    .await;
+
     // Run concurrent login requests
     println!("Running {} concurrent login requests...", num_users * 10);
 
@@ -60,59 +69,34 @@ async fn load_test_concurrent_logins() {
 
     let semaphore = Arc::new(Semaphore::new(50)); // Limit to 50 concurrent requests
 
-    let mut tasks = Vec::new();
+    let mut results = Vec::new();
 
     for _ in 0..(num_users * 10) {
-        let pool_clone = pool.clone();
-        let config_clone = config.clone();
         let user = users[rand::random::<usize>() % users.len()].clone();
-        let sem_clone = Arc::clone(&semaphore);
 
-        let task = tokio::spawn(async move {
-            let _permit = sem_clone.acquire().await.unwrap();
+        let _permit = semaphore.acquire().await.unwrap();
 
-            let app = test::init_service(
-                App::new()
-                    .app_data(web::Data::new(pool_clone))
-                    .app_data(web::Data::new(config_clone))
-                    .route("/auth/login", web::post().to(login)),
-            )
-            .await;
+        let start = Instant::now();
 
-            let start = Instant::now();
+        let req = test::TestRequest::post()
+            .uri("/auth/login")
+            .set_json(&json!({
+                "email": user.email,
+                "password": "password" // fixtures use this
+            }))
+            .to_request();
 
-            let req = test::TestRequest::post()
-                .uri("/auth/login")
-                .set_json(&json!({
-                    "email": user.email,
-                    "password": "password" // fixtures use this
-                }))
-                .to_request();
+        let resp = test::call_service(&app, req).await;
+        let duration = start.elapsed();
 
-            let resp = test::call_service(&app, req).await;
-            let duration = start.elapsed();
-
-            (resp.status().is_success(), duration)
-        });
-
-        tasks.push(task);
+        results.push((resp.status().is_success(), duration));
     }
 
-    // Collect results
-    let results = join_all(tasks).await;
-
-    for result in results {
-        match result {
-            Ok((success, duration)) => {
-                if success {
-                    durations.push(duration);
-                } else {
-                    failed_count += 1;
-                }
-            }
-            Err(_) => {
-                failed_count += 1;
-            }
+    for (success, duration) in results {
+        if success {
+            durations.push(duration);
+        } else {
+            failed_count += 1;
         }
     }
 
@@ -157,6 +141,15 @@ async fn load_test_concurrent_registrations() {
     let pool = create_test_pool().await;
     let redis = create_test_redis().await;
 
+    // Initialize app once (not per-request)
+    let app = test::init_service(
+        App::new()
+            .app_data(web::Data::new(pool.clone()))
+            .app_data(web::Data::new(redis.clone()))
+            .route("/auth/register", web::post().to(register)),
+    )
+    .await;
+
     let num_registrations = 100;
 
     println!(
@@ -169,62 +162,36 @@ async fn load_test_concurrent_registrations() {
 
     let semaphore = Arc::new(Semaphore::new(20)); // Lower concurrency for writes
 
-    let mut tasks = Vec::new();
+    let mut results = Vec::new();
 
     for i in 0..num_registrations {
-        let pool_clone = pool.clone();
-        let redis_clone = redis.clone();
-        let sem_clone = Arc::clone(&semaphore);
+        let _permit = semaphore.acquire().await.unwrap();
 
-        let task = tokio::spawn(async move {
-            let _permit = sem_clone.acquire().await.unwrap();
+        let start = Instant::now();
 
-            let app = test::init_service(
-                App::new()
-                    .app_data(web::Data::new(pool_clone))
-                    .app_data(web::Data::new(redis_clone))
-                    .route("/auth/register", web::post().to(register)),
-            )
-            .await;
+        let email = format!("loadtest-register-{}@example.com", i);
+        let username = format!("loaduser{}", i);
 
-            let start = Instant::now();
+        let req = test::TestRequest::post()
+            .uri("/auth/register")
+            .set_json(&json!({
+                "email": email,
+                "username": username,
+                "password": "ValidP@ssw0rd123"
+            }))
+            .to_request();
 
-            let email = format!("loadtest-register-{}@example.com", i);
-            let username = format!("loaduser{}", i);
+        let resp = test::call_service(&app, req).await;
+        let duration = start.elapsed();
 
-            let req = test::TestRequest::post()
-                .uri("/auth/register")
-                .set_json(&json!({
-                    "email": email,
-                    "username": username,
-                    "password": "ValidP@ssw0rd123"
-                }))
-                .to_request();
-
-            let resp = test::call_service(&app, req).await;
-            let duration = start.elapsed();
-
-            (resp.status().is_success(), duration)
-        });
-
-        tasks.push(task);
+        results.push((resp.status().is_success(), duration));
     }
 
-    // Collect results
-    let results = join_all(tasks).await;
-
-    for result in results {
-        match result {
-            Ok((success, duration)) => {
-                if success {
-                    durations.push(duration);
-                } else {
-                    failed_count += 1;
-                }
-            }
-            Err(_) => {
-                failed_count += 1;
-            }
+    for (success, duration) in results {
+        if success {
+            durations.push(duration);
+        } else {
+            failed_count += 1;
         }
     }
 
@@ -304,6 +271,15 @@ async fn load_test_concurrent_email_verifications() {
         verification_tokens.push(token);
     }
 
+    // Initialize app once (not per-request)
+    let app = test::init_service(
+        App::new()
+            .app_data(web::Data::new(pool.clone()))
+            .app_data(web::Data::new(redis.clone()))
+            .route("/auth/verify-email", web::post().to(verify_email)),
+    )
+    .await;
+
     println!("Running {} concurrent verification requests...", num_users);
 
     let mut durations = Vec::new();
@@ -311,57 +287,31 @@ async fn load_test_concurrent_email_verifications() {
 
     let semaphore = Arc::new(Semaphore::new(100)); // High concurrency for reads
 
-    let mut tasks = Vec::new();
+    let mut results = Vec::new();
 
     for token in verification_tokens {
-        let pool_clone = pool.clone();
-        let redis_clone = redis.clone();
-        let sem_clone = Arc::clone(&semaphore);
+        let _permit = semaphore.acquire().await.unwrap();
 
-        let task = tokio::spawn(async move {
-            let _permit = sem_clone.acquire().await.unwrap();
+        let start = Instant::now();
 
-            let app = test::init_service(
-                App::new()
-                    .app_data(web::Data::new(pool_clone))
-                    .app_data(web::Data::new(redis_clone))
-                    .route("/auth/verify-email", web::post().to(verify_email)),
-            )
-            .await;
+        let req = test::TestRequest::post()
+            .uri("/auth/verify-email")
+            .set_json(&json!({
+                "token": token
+            }))
+            .to_request();
 
-            let start = Instant::now();
+        let resp = test::call_service(&app, req).await;
+        let duration = start.elapsed();
 
-            let req = test::TestRequest::post()
-                .uri("/auth/verify-email")
-                .set_json(&json!({
-                    "token": token
-                }))
-                .to_request();
-
-            let resp = test::call_service(&app, req).await;
-            let duration = start.elapsed();
-
-            (resp.status().is_success(), duration)
-        });
-
-        tasks.push(task);
+        results.push((resp.status().is_success(), duration));
     }
 
-    // Collect results
-    let results = join_all(tasks).await;
-
-    for result in results {
-        match result {
-            Ok((success, duration)) => {
-                if success {
-                    durations.push(duration);
-                } else {
-                    failed_count += 1;
-                }
-            }
-            Err(_) => {
-                failed_count += 1;
-            }
+    for (success, duration) in results {
+        if success {
+            durations.push(duration);
+        } else {
+            failed_count += 1;
         }
     }
 
@@ -416,89 +366,66 @@ async fn load_test_concurrent_oauth_callbacks() {
 
     let semaphore = Arc::new(Semaphore::new(50));
 
-    let mut tasks = Vec::new();
+    let mut results = Vec::new();
 
     for (idx, state_token) in state_tokens.into_iter().enumerate() {
-        let pool_clone = pool.clone();
         let mut redis_clone = redis.clone();
-        let sem_clone = Arc::clone(&semaphore);
+        let _permit = semaphore.acquire().await.unwrap();
 
-        let task = tokio::spawn(async move {
-            let _permit = sem_clone.acquire().await.unwrap();
+        let start = Instant::now();
 
-            let start = Instant::now();
+        // Simulate OAuth callback processing:
+        // 1. Verify state token
+        // 2. Create/find user
+        // 3. Create OAuth connection
 
-            // Simulate OAuth callback processing:
-            // 1. Verify state token
-            // 2. Create/find user
-            // 3. Create OAuth connection
+        // Verify state token manually
+        use redis::AsyncCommands;
+        let key = format!("oauth_state:{}", state_token);
+        let state_value: Result<String, redis::RedisError> = redis_clone.get(&key).await;
+        let _: Result<(), redis::RedisError> = redis_clone.del(&key).await;
 
-            // Verify state token manually
-            use redis::AsyncCommands;
-            let key = format!("oauth_state:{}", state_token);
-            let state_value: Result<String, redis::RedisError> = redis_clone.get(&key).await;
-            let _: Result<(), redis::RedisError> = redis_clone.del(&key).await;
+        if state_value.is_ok() {
+            // Create a new user for this OAuth login
+            let email = format!("oauth-{}@google.com", idx);
+            let provider_user_id = format!("google_{}", idx);
 
-            if state_value.is_ok() {
-                // Create a new user for this OAuth login
-                let email = format!("oauth-{}@google.com", idx);
-                let provider_user_id = format!("google_{}", idx);
+            // Check if user exists
+            let existing_conn =
+                find_oauth_connection(&pool, "google", &provider_user_id).await;
 
-                // Check if user exists
-                let existing_conn =
-                    find_oauth_connection(&pool_clone, "google", &provider_user_id).await;
+            let success = if existing_conn.is_none() {
+                // Create new user
+                let user = create_test_user_with_email(&pool, &email).await;
 
-                let user = if existing_conn.is_none() {
-                    // Create new user
-                    let password_hash = hash_password("RandomP@ssw0rd").unwrap();
-                    let user = create_test_user_with_email(&pool_clone, &email).await;
+                // Create OAuth connection
+                let _conn = create_test_oauth_connection(
+                    &pool,
+                    user.id,
+                    "google",
+                    &provider_user_id,
+                )
+                .await;
 
-                    // Create OAuth connection
-                    let _conn = create_test_oauth_connection(
-                        &pool_clone,
-                        user.id,
-                        "google",
-                        &provider_user_id,
-                    )
-                    .await;
-
-                    Some(user)
-                } else {
-                    // User already exists
-                    existing_conn.map(|conn| {
-                        // In real code, we'd fetch user by conn.user_id
-                        // For this test, we just verify the connection exists
-                        conn.user_id
-                    });
-                    None
-                };
-
-                let duration = start.elapsed();
-                (user.is_some(), duration)
+                true
             } else {
-                let duration = start.elapsed();
-                (false, duration)
-            }
-        });
+                // User already exists
+                existing_conn.is_some()
+            };
 
-        tasks.push(task);
+            let duration = start.elapsed();
+            results.push((success, duration));
+        } else {
+            let duration = start.elapsed();
+            results.push((false, duration));
+        }
     }
 
-    // Collect results
-    let results = join_all(tasks).await;
-
-    for result in results {
-        match result {
-            Ok((success, duration)) => {
-                if success {
-                    durations.push(duration);
-                } else {
-                    failed_count += 1;
-                }
-            }
-            Err(_) => {
-                failed_count += 1;
-            }
+    for (success, duration) in results {
+        if success {
+            durations.push(duration);
+        } else {
+            failed_count += 1;
         }
     }
 
@@ -533,6 +460,7 @@ async fn load_test_concurrent_oauth_callbacks() {
 async fn stress_test_mixed_workload() {
     let pool = create_test_pool().await;
     let mut redis = create_test_redis().await;
+    let config = Config::from_env();
 
     println!("Running mixed workload stress test...");
 
@@ -546,112 +474,95 @@ async fn stress_test_mixed_workload() {
         existing_users.push(user);
     }
 
+    // Initialize apps once (not per-request)
+    let login_app = test::init_service(
+        App::new()
+            .app_data(web::Data::new(pool.clone()))
+            .app_data(web::Data::new(config.clone()))
+            .route("/auth/login", web::post().to(login)),
+    )
+    .await;
+
+    let register_app = test::init_service(
+        App::new()
+            .app_data(web::Data::new(pool.clone()))
+            .app_data(web::Data::new(redis.clone()))
+            .route("/auth/register", web::post().to(register)),
+    )
+    .await;
+
     let total_requests = 500;
     let mut durations = Vec::new();
     let mut failed_count = 0;
 
     let semaphore = Arc::new(Semaphore::new(50));
 
-    let mut tasks = Vec::new();
+    let mut results = Vec::new();
 
     for i in 0..total_requests {
-        let pool_clone = pool.clone();
-        let redis_clone = redis.clone();
-        let config = Config::from_env();
-        let sem_clone = Arc::clone(&semaphore);
+        let _permit = semaphore.acquire().await.unwrap();
+
         let user = existing_users[i % existing_users.len()].clone();
 
-        let task = tokio::spawn(async move {
-            let _permit = sem_clone.acquire().await.unwrap();
+        let start = Instant::now();
 
-            let start = Instant::now();
+        // Randomly choose operation type
+        let operation = i % 3;
 
-            // Randomly choose operation type
-            let operation = i % 3;
+        let success = match operation {
+            0 => {
+                // Login
+                let req = test::TestRequest::post()
+                    .uri("/auth/login")
+                    .set_json(&json!({
+                        "email": user.email,
+                        "password": "password"
+                    }))
+                    .to_request();
 
-            let success = match operation {
-                0 => {
-                    // Login
-                    let app = test::init_service(
-                        App::new()
-                            .app_data(web::Data::new(pool_clone))
-                            .app_data(web::Data::new(config))
-                            .route("/auth/login", web::post().to(login)),
-                    )
-                    .await;
+                let resp = test::call_service(&login_app, req).await;
+                resp.status().is_success()
+            }
+            1 => {
+                // Registration
+                let email = format!("mixed-{}@example.com", i);
+                let username = format!("mixed{}", i);
 
-                    let req = test::TestRequest::post()
-                        .uri("/auth/login")
-                        .set_json(&json!({
-                            "email": user.email,
-                            "password": "password"
-                        }))
-                        .to_request();
+                let req = test::TestRequest::post()
+                    .uri("/auth/register")
+                    .set_json(&json!({
+                        "email": email,
+                        "username": username,
+                        "password": "ValidP@ssw0rd123"
+                    }))
+                    .to_request();
 
-                    let resp = test::call_service(&app, req).await;
-                    resp.status().is_success()
-                }
-                1 => {
-                    // Registration
-                    let app = test::init_service(
-                        App::new()
-                            .app_data(web::Data::new(pool_clone))
-                            .app_data(web::Data::new(redis_clone))
-                            .route("/auth/register", web::post().to(register)),
-                    )
-                    .await;
+                let resp = test::call_service(&register_app, req).await;
+                resp.status().is_success()
+            }
+            _ => {
+                // Token validation (simulated)
+                use user_service::security::jwt;
+                jwt::initialize_keys(
+                    &std::env::var("JWT_PRIVATE_KEY").unwrap(),
+                    &std::env::var("JWT_PUBLIC_KEY").unwrap(),
+                )
+                .ok();
 
-                    let email = format!("mixed-{}@example.com", i);
-                    let username = format!("mixed{}", i);
+                let token = jwt::generate_access_token(user.id, &user.email, &user.username);
+                token.is_ok()
+            }
+        };
 
-                    let req = test::TestRequest::post()
-                        .uri("/auth/register")
-                        .set_json(&json!({
-                            "email": email,
-                            "username": username,
-                            "password": "ValidP@ssw0rd123"
-                        }))
-                        .to_request();
-
-                    let resp = test::call_service(&app, req).await;
-                    resp.status().is_success()
-                }
-                _ => {
-                    // Token validation (simulated)
-                    use user_service::security::jwt;
-                    jwt::initialize_keys(
-                        &std::env::var("JWT_PRIVATE_KEY").unwrap(),
-                        &std::env::var("JWT_PUBLIC_KEY").unwrap(),
-                    )
-                    .ok();
-
-                    let token = jwt::generate_access_token(user.id, &user.email, &user.username);
-                    token.is_ok()
-                }
-            };
-
-            let duration = start.elapsed();
-            (success, duration)
-        });
-
-        tasks.push(task);
+        let duration = start.elapsed();
+        results.push((success, duration));
     }
 
-    // Collect results
-    let results = join_all(tasks).await;
-
-    for result in results {
-        match result {
-            Ok((success, duration)) => {
-                if success {
-                    durations.push(duration);
-                } else {
-                    failed_count += 1;
-                }
-            }
-            Err(_) => {
-                failed_count += 1;
-            }
+    for (success, duration) in results {
+        if success {
+            durations.push(duration);
+        } else {
+            failed_count += 1;
         }
     }
 
