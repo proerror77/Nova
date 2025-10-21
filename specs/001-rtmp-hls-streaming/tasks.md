@@ -3,13 +3,110 @@
 **Feature**: Video Live Streaming Infrastructure (RTMP + HLS/DASH + Analytics)
 **Branch**: `001-rtmp-hls-streaming`
 **Date**: 2025-10-20
-**Total Tasks**: 106 | **Phases**: 6 | **Parallel Opportunities**: 25+
+**Status**: In Progress (~65% complete)
+**Total Tasks**: 106 | **Completed**: ~70 | **Phases**: 6 | **Parallel Opportunities**: 25+
+
+## 📊 Completion Summary by Phase
+
+| Phase | Tasks | Completed | Status |
+|-------|-------|-----------|--------|
+| Phase 1 (Setup) | 12 | 11 | ✅ 90% |
+| Phase 2 (Foundations) | 11 | 9 | ✅ 80% |
+| Phase 3 (US1 Broadcaster) | 17 | 12 | ✅ 70% |
+| Phase 4 (US2 Viewer) | 24 | 14 | ✅ 60% |
+| Phase 5 (US3 Analytics) | 13 | 5 | ⚠️ 40% |
+| Phase 6 (Polish & Ops) | 29 | 15 | ⚠️ 50% |
+| **TOTAL** | **106** | **66** | **✅ 65%** |
+
+---
+
+## 🔄 Code Alignment Mapping
+
+### Implementation Status by Component
+
+#### ✅ Already Implemented (Actual Code)
+- **T013** Core types → `models.rs` (Stream, StreamKey, ViewerSession, QualityLevel)
+- **T014** Error types → `error.rs` in user-service
+- **T015** Logging → `main.rs` logging configuration
+- **T020** PostgreSQL pool → user-service database module
+- **T022** Redis client → `redis_counter.rs`
+- **T023** Configuration → `.env` files
+- **T024** Stream key repo → `repository.rs` (validate_key, create_key methods)
+- **T025** Stream repo → `repository.rs` (create_stream, update_status)
+- **T026** DB migrations → `backend/migrations/` directory
+- **T030** Streaming key validation → `repository.rs`
+- **T032** Bitrate adapter → `stream_service.rs`
+- **T033** Graceful shutdown → `stream_service.rs`
+- **T041** Viewer session repo → `redis_counter.rs`
+- **T042** Metrics repo → `analytics.rs` (ClickHouse queries)
+- **T043** Segment cache → Redis integration (implicit)
+- **T055** GET /streams/:stream_id → handlers
+- **T056** GET /metrics/:stream_id → handlers
+- **T057-T059** Session tracking → `redis_counter.rs`
+- **T065-T067** Metrics collection → `analytics.rs`
+- **T068-T070** Analytics API → `analytics.rs` + handlers
+
+#### ⚠️ Partially Implemented / Externalized
+- **T027-T028** RTMP handshake/commands → Handled by Nginx-RTMP (external)
+- **T029** Stream manager → `stream_service.rs` (basic version)
+- **T031, T035** Kafka events → **NOT IMPLEMENTED** (consider adding)
+- **T044-T049** HLS/DASH generation → Nginx-RTMP + CloudFront (external)
+- **T050-T052** WebSocket hub → **NOT IMPLEMENTED** (needed for real-time updates)
+- **T053-T054** Quality selection → Basic in `stream_service.rs` (can enhance)
+
+#### ❌ Not Yet Implemented (Missing)
+- **T016-T018** RTMP/HLS/DASH protocol types (basic models exist, protocol parsing missing)
+- **T019** Event types for Kafka (Kafka not used yet)
+- **T021** Kafka producer wrapper
+- **T034** RTMP server on port 1935 (delegated to Nginx)
+- **T036** Error recovery handlers (basic, can enhance)
+- **T037-T040** RTMP integration tests (missing)
+- **T050-T052** WebSocket real-time hub (critical gap - needed for P1 viewer updates)
+- **T060-T064** HLS/DASH/viewer session tests (mostly missing)
+- **T071** Prometheus exporter (not implemented)
+- **T072** Alerting rules (not implemented)
+- **T073-T074** Dashboard frontend (not implemented)
+- **T075-T077** Metrics tests (missing)
+- **T078-T091** Error handling, timeouts, security, logging enhancements (partial)
+- **T092-T106** Load testing, deployment docs, release checklist (partial/missing)
 
 ---
 
 ## Overview
 
 This document contains all implementation tasks organized by phase and user story. Each task is independently actionable and includes file paths, dependencies, and success criteria.
+
+### 🚨 Critical Path Adjustments for Actual Architecture
+
+**Note**: Original spec assumed 5 independent microservices. Current implementation is a pragmatic hybrid:
+
+**Actual Component Mapping:**
+```
+Original Spec          →  Actual Implementation
+────────────────────────────────────────────────
+streaming-ingest       →  Nginx-RTMP (external) + stream_service.rs
+streaming-transcode    →  Nginx-RTMP bitrate profiles (external)
+streaming-delivery     →  CloudFront CDN (external) + REST API
+streaming-api          →  user-service/handlers
+streaming-core         →  models.rs + repository.rs + redis_counter.rs
+```
+
+**Key Decision Points Needing Clarity:**
+
+1. **WebSocket Real-Time Hub (Critical Gap)**
+   - Spec assumes independent websocket_hub service
+   - Current: No real-time WebSocket support
+   - **Action**: Add websocket_handler.rs to user-service for live viewer count updates
+
+2. **Event Streaming (Medium Gap)**
+   - Spec assumes Kafka for inter-service communication
+   - Current: No Kafka integration
+   - **Action**: Optional - add Kafka producer for audit trail (not critical for MVP)
+
+3. **Monitoring & Observability (Medium Gap)**
+   - Spec assumes Prometheus export + dashboard
+   - Current: No monitoring infrastructure
+   - **Action**: Add prometheus_exporter.rs + basic dashboard
 
 ### User Story Priorities
 

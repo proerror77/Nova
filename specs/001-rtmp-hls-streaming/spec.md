@@ -2,8 +2,27 @@
 
 **Feature Branch**: `001-rtmp-hls-streaming`
 **Created**: 2025-10-20
-**Status**: Draft
+**Status**: In Progress (Code Aligned)
+**Architecture**: Hybrid - Nginx-RTMP ingestion + user-service coordination + CloudFront CDN delivery
+**Implementation Location**: `backend/user-service/src/services/streaming/`
 **Input**: Video live streaming infrastructure with RTMP ingestion, HLS/DASH output, adaptive bitrate streaming, and real-time WebSocket notifications. Support concurrent viewers (10k+), sub-5s latency, sub-3s startup time. Include Nginx RTMP module, bitrate adaptation, viewer analytics, and CDN integration
+
+## 📋 Code Alignment Notes
+
+**⚠️ Architecture Note**: Initial spec planned 5 independent microservices. Current implementation uses:
+- ✅ **user-service streaming module** (coordination + API)
+- ✅ **Nginx-RTMP** (separate container, RTMP ingestion)
+- ✅ **CloudFront CDN** (HLS/DASH delivery)
+- ✅ **PostgreSQL + Redis** (state management)
+- ✅ **ClickHouse** (analytics, replaces PostgreSQL for metrics)
+
+This is a **pragmatic architecture** that sacrifices some microservices modularity for:
+- Faster deployment (single service to manage)
+- Lower operational overhead
+- Better cost efficiency
+- Suitable for current scale (<100 concurrent streams)
+
+**Future Evolution**: If scale reaches 1k+ concurrent streams, can decompose into independent services.
 
 ## User Scenarios & Testing *(mandatory)*
 

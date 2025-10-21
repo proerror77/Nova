@@ -1,13 +1,25 @@
 # Implementation Plan: Video Live Streaming Infrastructure
 
 **Branch**: `001-rtmp-hls-streaming` | **Date**: 2025-10-20 | **Spec**: [spec.md](./spec.md)
-**Input**: Feature specification from `/specs/001-rtmp-hls-streaming/spec.md`
-
-**Note**: This template is filled in by the `/speckit.plan` command. See `.specify/templates/commands/plan.md` for the execution workflow.
+**Status**: In Progress | **Completion**: ~65% (aligned with actual code)
+**Implementation Location**: `backend/user-service/src/services/streaming/`
 
 ## Summary
 
-Build a scalable, distributed live streaming infrastructure supporting RTMP ingest, adaptive bitrate output (HLS/DASH), and real-time analytics. Target: <3s viewer startup, <5s ingestion latency, 10k+ concurrent viewers. Implemented as a Rust microservices system with independent ingestion, transcoding, and delivery services communicating via Kafka. Prioritize MTV (Broadcaster + Viewer P1 stories) before analytics (P2) to enable rapid deployment.
+Build a scalable, pragmatic live streaming infrastructure supporting RTMP ingest, adaptive bitrate output (HLS/DASH), and real-time analytics. Target: <3s viewer startup, <5s ingestion latency, 10k+ concurrent viewers.
+
+**Architecture Decision**: Hybrid approach combining:
+- **Nginx-RTMP** container for protocol ingestion (external)
+- **user-service streaming module** for coordination/API
+- **CloudFront CDN** for HLS/DASH delivery (external)
+- **PostgreSQL + Redis** for state management
+- **ClickHouse** for analytics
+
+This pragmatic choice prioritizes:
+1. **Simplicity**: Single service to maintain (vs 5 microservices)
+2. **Speed**: Faster iteration and deployment
+3. **Cost**: Lower operational overhead
+4. **Scalability**: Can decompose to microservices if needed (>1k streams)
 
 ## Technical Context
 
