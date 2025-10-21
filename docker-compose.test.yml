@@ -1,0 +1,254 @@
+version: '3.9'
+
+# Test Infrastructure for Phase 2 Integration Tests
+# Extends base docker-compose.yml with Nginx-RTMP server for automated testing
+# Purpose: Provides real production services for test clients to connect to
+
+services:
+  # ============================================
+  # Nginx-RTMP Server (Real RTMP Infrastructure)
+  # ============================================
+  # Production-grade RTMP server that test simulators connect to
+  # This is REAL infrastructure, not mocked
+  # Uses existing nginx/rtmp.conf configuration
+  nginx-rtmp:
+    image: alfg/nginx-rtmp:latest
+    container_name: nova-nginx-rtmp-test
+    restart: unless-stopped
+    ports:
+      # RTMP ingestion port (broadcasters/test simulators)
+      - "1935:1935"
+      # Stats endpoint for monitoring
+      - "8888:8080"
+    volumes:
+      - ./backend/nginx/rtmp.conf:/etc/nginx/nginx.conf:ro
+      - rtmp_data_test:/tmp/rtmp
+      - rtmp_hls_test:/tmp/hls
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - nova-network
+
+  # ============================================
+  # PostgreSQL Database (shared with main compose)
+  # ============================================
+  postgres:
+    image: debezium/postgres:15-alpine
+    container_name: nova-postgres-test
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-nova_auth_test}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    ports:
+      - "${POSTGRES_PORT:-55433}:5432"
+    volumes:
+      - postgres_data_test:/var/lib/postgresql/data
+      - ./backend/migrations:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - nova-network
+
+  # ============================================
+  # Redis Cache (shared with main compose)
+  # ============================================
+  redis:
+    image: redis:7-alpine
+    container_name: nova-redis-test
+    restart: unless-stopped
+    command: >
+      redis-server
+      --appendonly yes
+      --requirepass ${REDIS_PASSWORD:-redis123}
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+    ports:
+      - "${REDIS_PORT:-6380}:6379"
+    volumes:
+      - redis_data_test:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - nova-network
+
+  # ============================================
+  # Kafka (for event streaming tests)
+  # ============================================
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.6.1
+    container_name: nova-zookeeper-test
+    restart: unless-stopped
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2182:2181"
+    volumes:
+      - zookeeper_data_test:/var/lib/zookeeper/data
+    networks:
+      - nova-network
+
+  kafka:
+    image: confluentinc/cp-kafka:7.6.1
+    container_name: nova-kafka-test
+    restart: unless-stopped
+    depends_on:
+      - zookeeper
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29093
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,PLAINTEXT_HOST://0.0.0.0:29093
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_OFFSETS_RETENTION_MINUTES: 10080
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+    ports:
+      - "29093:29093"
+    volumes:
+      - kafka_data_test:/var/lib/kafka/data
+    networks:
+      - nova-network
+
+  # ============================================
+  # ClickHouse (for analytics tests)
+  # ============================================
+  clickhouse:
+    image: clickhouse/clickhouse-server:23.8
+    container_name: nova-clickhouse-test
+    restart: unless-stopped
+    environment:
+      CLICKHOUSE_DB: nova_feed_test
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: clickhouse
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+    ports:
+      - "8124:8123"
+      - "9001:9000"
+    volumes:
+      - clickhouse_data_test:/var/lib/clickhouse
+      - clickhouse_logs_test:/var/log/clickhouse-server
+      - ./backend/clickhouse/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "bash",
+          "-c",
+          "clickhouse-client --user=default --password=clickhouse --query='SELECT 1'"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - nova-network
+
+  # ============================================
+  # User Service (Real Streaming Service)
+  # ============================================
+  # Test clients connect to this real service
+  # This hosts the WebSocket handler that tests verify
+  user-service:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: runtime
+    container_name: nova-user-service-test
+    restart: unless-stopped
+    environment:
+      # Application
+      APP_ENV: test
+      APP_HOST: 0.0.0.0
+      APP_PORT: 8080
+      RUST_LOG: debug
+
+      # Database (separate test DB)
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-nova_auth_test}
+      DATABASE_MAX_CONNECTIONS: 20
+
+      # Redis (separate test Redis)
+      REDIS_URL: redis://:${REDIS_PASSWORD:-redis123}@redis:6379/0
+      REDIS_POOL_SIZE: 10
+
+      # Kafka (separate test Kafka)
+      KAFKA_BROKERS: kafka:9092
+
+      # ClickHouse (separate test instance)
+      CLICKHOUSE_URL: http://clickhouse:8123
+      CLICKHOUSE_DB: nova_feed_test
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: clickhouse
+
+      # JWT
+      JWT_SECRET: ${JWT_SECRET:-test_secret_for_testing_32char}
+      JWT_ACCESS_TOKEN_TTL: 900
+      JWT_REFRESH_TOKEN_TTL: 604800
+      JWT_PRIVATE_KEY_PEM: ${JWT_PRIVATE_KEY_PEM}
+      JWT_PUBLIC_KEY_PEM: ${JWT_PUBLIC_KEY_PEM}
+
+      # Feature flags
+      DISABLE_S3: "true"
+    ports:
+      - "8081:8080"
+    volumes:
+      - ./backend/keys:/etc/nova/jwt:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+      clickhouse:
+        condition: service_healthy
+      nginx-rtmp:
+        condition: service_healthy
+    networks:
+      - nova-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/api/v1/health >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+
+# ============================================
+# Volumes (Separate from main compose)
+# ============================================
+volumes:
+  postgres_data_test:
+    driver: local
+  redis_data_test:
+    driver: local
+  zookeeper_data_test:
+    driver: local
+  kafka_data_test:
+    driver: local
+  clickhouse_data_test:
+    driver: local
+  clickhouse_logs_test:
+    driver: local
+  rtmp_data_test:
+    driver: local
+  rtmp_hls_test:
+    driver: local
+
+# ============================================
+# Networks
+# ============================================
+networks:
+  nova-network:
+    driver: bridge
