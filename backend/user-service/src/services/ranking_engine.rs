@@ -1,8 +1,3 @@
-/// Ranking Engine Service
-///
-/// Implements multi-signal personalized video ranking with weighted scoring.
-/// Combines 5 ranking signals: freshness, completion rate, engagement, affinity, and deep learning.
-use tracing::{debug, info};
 use uuid::Uuid;
 
 /// Ranking configuration with signal weights

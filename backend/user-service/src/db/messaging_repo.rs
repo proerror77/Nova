@@ -2,7 +2,7 @@
 // Phase 7B Feature 2: Data access layer
 
 use chrono::{DateTime, Utc};
-use sqlx::{PgPool, postgres::PgRow, Row};
+use sqlx::{PgPool, Row};
 use uuid::Uuid;
 
 use crate::error::AppError;
@@ -118,7 +118,7 @@ impl<'a> MessagingRepository<'a> {
         .bind(created_by)
         .fetch_one(self.pool)
         .await
-        .map_err(|e| AppError::Database(e.to_string()))?;
+        .map_err(|e| AppError::Database(e))?;
 
         Ok(conversation)
     }
@@ -157,7 +157,7 @@ impl<'a> MessagingRepository<'a> {
         .bind(conversation_id)
         .fetch_all(self.pool)
         .await
-        .map_err(|e| AppError::Database(e.to_string()))?;
+        .map_err(|e| AppError::Database(e))?;
 
         Ok(members)
     }
@@ -180,7 +180,7 @@ impl<'a> MessagingRepository<'a> {
         .bind(user_id)
         .fetch_optional(self.pool)
         .await
-        .map_err(|e| AppError::Database(e.to_string()))?;
+        .map_err(|e| AppError::Database(e))?;
 
         Ok(result.map(|(exists,)| exists).unwrap_or(false))
     }
@@ -233,7 +233,7 @@ impl<'a> MessagingRepository<'a> {
         .bind(role)
         .fetch_one(self.pool)
         .await
-        .map_err(|e| AppError::Database(e.to_string()))?;
+        .map_err(|e| AppError::Database(e))?;
 
         Ok(member)
     }
@@ -254,7 +254,7 @@ impl<'a> MessagingRepository<'a> {
         .bind(user_id)
         .execute(self.pool)
         .await
-        .map_err(|e| AppError::Database(e.to_string()))?;
+        .map_err(|e| AppError::Database(e))?;
 
         Ok(())
     }
@@ -304,7 +304,7 @@ impl<'a> MessagingRepository<'a> {
         let member = q
             .fetch_one(self.pool)
             .await
-            .map_err(|e| AppError::Database(e.to_string()))?;
+            .map_err(|e| AppError::Database(e))?;
 
         Ok(member)
     }
@@ -336,7 +336,7 @@ impl<'a> MessagingRepository<'a> {
         .bind(message_type.to_string())
         .fetch_one(self.pool)
         .await
-        .map_err(|e| AppError::Database(e.to_string()))?;
+        .map_err(|e| AppError::Database(e))?;
 
         Ok(message)
     }
@@ -398,7 +398,7 @@ impl<'a> MessagingRepository<'a> {
             .fetch_all(self.pool)
             .await
         }
-        .map_err(|e| AppError::Database(e.to_string()))?;
+        .map_err(|e| AppError::Database(e))?;
 
         Ok(messages)
     }
@@ -422,7 +422,7 @@ impl<'a> MessagingRepository<'a> {
         .bind(user_id)
         .execute(self.pool)
         .await
-        .map_err(|e| AppError::Database(e.to_string()))?;
+        .map_err(|e| AppError::Database(e))?;
 
         Ok(())
     }
@@ -442,7 +442,7 @@ impl<'a> MessagingRepository<'a> {
         .bind(user_id)
         .fetch_one(self.pool)
         .await
-        .map_err(|e| AppError::Database(e.to_string()))?;
+        .map_err(|e| AppError::Database(e))?;
 
         Ok(result.0)
     }

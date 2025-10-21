@@ -449,7 +449,7 @@ fn generate_username_from_email(email: &str) -> String {
         .to_string()
         .split('-')
         .next()
-        .unwrap()
+        .unwrap_or("rand")  // UUID is guaranteed to have format, but be defensive
         .to_string();
     format!("{}_{}", username_part, random_suffix)
 }

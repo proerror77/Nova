@@ -1,6 +1,23 @@
 import Foundation
 import Combine
 
+/// FeedViewModel - Feed 视图模型（统一版本）
+///
+/// 这是FeedViewModel和FeedViewModelEnhanced的合并版本。
+/// 增强功能（状态恢复、滚动位置保存等）可通过 enableStateRestoration 参数可选启用。
+///
+/// 迁移指南（从 FeedViewModelEnhanced → FeedViewModel）：
+/// 旧代码：
+///   let vm = FeedViewModelEnhanced()
+///
+/// 新代码：
+///   let vm = FeedViewModel(enableStateRestoration: true)
+///
+/// Linus原则应用：
+/// - 消除了不必要的 *Enhanced 特殊后缀
+/// - 零破坏性：所有功能都可选启用
+/// - 单一真实来源：只维护一个ViewModel类
+
 @MainActor
 final class FeedViewModel: ObservableObject {
     // MARK: - Published Properties
@@ -10,6 +27,9 @@ final class FeedViewModel: ObservableObject {
     @Published var isLoadingMore = false
     @Published var errorMessage: String?
     @Published var showError = false
+
+    // 新增：状态恢复（可选）
+    @Published var scrollPosition: String?
 
     // MARK: - Private Properties
     private let feedRepository: FeedRepository
@@ -30,9 +50,27 @@ final class FeedViewModel: ObservableObject {
     private let maxRetries = 3
     private var retryCount = 0
 
+    // 新增：状态持久化管理（可选启用）
+    private let stateManager = ViewStateManager.shared
+    private let enableStateRestoration: Bool
+
     // MARK: - Initialization
-    init(feedRepository: FeedRepository = FeedRepository()) {
+    init(feedRepository: FeedRepository = FeedRepository(), enableStateRestoration: Bool = false) {
         self.feedRepository = feedRepository
+        self.enableStateRestoration = enableStateRestoration
+
+        // 恢复滚动位置（如果启用）
+        if enableStateRestoration {
+            Task {
+                await self.restoreScrollPositionAsync()
+            }
+        }
+    }
+
+    // MARK: - Async State Restoration
+
+    private func restoreScrollPositionAsync() async {
+        scrollPosition = await stateManager.getScrollPosition(for: .feed)
     }
 
     // MARK: - Public Methods
@@ -251,6 +289,33 @@ final class FeedViewModel: ObservableObject {
         showError = false
     }
 
+    // MARK: - State Persistence (新增)
+
+    /// 保存滚动位置
+    func saveScrollPosition(_ postId: String) {
+        scrollPosition = postId
+        if enableStateRestoration {
+            Task {
+                await stateManager.saveScrollPosition(postId, for: .feed)
+            }
+        }
+    }
+
+    /// 恢复滚动位置
+    func restoreScrollPosition() {
+        Task {
+            scrollPosition = await stateManager.getScrollPosition(for: .feed)
+        }
+    }
+
+    /// 清除滚动位置
+    func clearScrollPosition() {
+        scrollPosition = nil
+        Task {
+            await stateManager.clearScrollPosition(for: .feed)
+        }
+    }
+
     // MARK: - Private Helpers
 
     private func showErrorMessage(_ message: String) {
@@ -269,5 +334,62 @@ final class FeedViewModel: ObservableObject {
         }
 
         optimisticUpdateBackup.removeValue(forKey: postId)
+    }
+}
+
+// MARK: - View State Manager (状态管理器)
+
+/// 视图状态管理器 - 管理应用级别的状态持久化
+actor ViewStateManager {
+    static let shared = ViewStateManager()
+
+    private let defaults = UserDefaults.standard
+
+    private init() {}
+
+    // MARK: - Scroll Position
+
+    enum ViewType: String {
+        case feed
+        case explore
+        case profile
+        case notifications
+    }
+
+    func saveScrollPosition(_ postId: String, for viewType: ViewType) {
+        let key = "scroll_position_\(viewType.rawValue)"
+        defaults.set(postId, forKey: key)
+    }
+
+    func getScrollPosition(for viewType: ViewType) -> String? {
+        let key = "scroll_position_\(viewType.rawValue)"
+        return defaults.string(forKey: key)
+    }
+
+    func clearScrollPosition(for viewType: ViewType) {
+        let key = "scroll_position_\(viewType.rawValue)"
+        defaults.removeObject(forKey: key)
+    }
+
+    // MARK: - Tab Selection
+
+    func saveSelectedTab(_ index: Int) {
+        defaults.set(index, forKey: "selected_tab")
+    }
+
+    func getSelectedTab() -> Int {
+        defaults.integer(forKey: "selected_tab")
+    }
+
+    // MARK: - Filter Preferences
+
+    func saveFilterPreferences(_ preferences: [String: Any], for viewType: ViewType) {
+        let key = "filter_preferences_\(viewType.rawValue)"
+        defaults.set(preferences, forKey: key)
+    }
+
+    func getFilterPreferences(for viewType: ViewType) -> [String: Any]? {
+        let key = "filter_preferences_\(viewType.rawValue)"
+        return defaults.dictionary(forKey: key)
     }
 }

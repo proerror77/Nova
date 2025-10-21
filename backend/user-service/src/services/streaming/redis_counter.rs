@@ -85,7 +85,7 @@ impl ViewerCounter {
 
         // Ensure count never goes negative (idempotency)
         if new_count < 0 {
-            self.redis.set(&key, 0).await?;
+            self.redis.set::<_, _, ()>(&key, 0).await?;
             return Ok(0);
         }
 
@@ -117,7 +117,7 @@ impl ViewerCounter {
 
         if peak.unwrap_or(0) < current {
             // Set new peak with 24-hour TTL
-            self.redis.set_ex(&peak_key, current, 86400).await?;
+            self.redis.set_ex::<_, _, ()>(&peak_key, current, 86400).await?;
         }
 
         Ok(())
@@ -145,7 +145,7 @@ impl ViewerCounter {
     pub async fn update_heartbeat(&mut self, stream_id: Uuid) -> Result<()> {
         let key = format!("stream:{}:heartbeat", stream_id);
         let timestamp = chrono::Utc::now().timestamp();
-        self.redis.set_ex(&key, timestamp, 30).await?; // 30s TTL
+        self.redis.set_ex::<_, _, ()>(&key, timestamp, 30).await?; // 30s TTL
         Ok(())
     }
 

@@ -1,6 +1,6 @@
 /// 备用码管理服务
 /// 用于 2FA 账户恢复 (当 Authenticator 应用丢失时)
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result};
 use chrono::Utc;
 use sha2::{Digest, Sha256};
 use sqlx::PgPool;

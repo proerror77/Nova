@@ -1,5 +1,5 @@
 /// Unified validation error messages and response builders
-use actix_web::{http::StatusCode, HttpResponse};
+use actix_web::HttpResponse;
 use serde::Serialize;
 
 #[derive(Debug, Serialize)]

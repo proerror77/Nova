@@ -31,7 +31,7 @@ pub struct AppConfig {
     pub port: u16,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Clone, Deserialize)]
 pub struct DatabaseConfig {
     pub url: String,
 
@@ -39,7 +39,16 @@ pub struct DatabaseConfig {
     pub max_connections: u32,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+impl std::fmt::Debug for DatabaseConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DatabaseConfig")
+            .field("url", &"***REDACTED***")
+            .field("max_connections", &self.max_connections)
+            .finish()
+    }
+}
+
+#[derive(Clone, Deserialize)]
 pub struct RedisConfig {
     pub url: String,
 
@@ -47,7 +56,16 @@ pub struct RedisConfig {
     pub pool_size: u32,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+impl std::fmt::Debug for RedisConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RedisConfig")
+            .field("url", &"***REDACTED***")
+            .field("pool_size", &self.pool_size)
+            .finish()
+    }
+}
+
+#[derive(Clone, Deserialize)]
 pub struct JwtConfig {
     pub secret: String,
 
@@ -64,7 +82,19 @@ pub struct JwtConfig {
     pub public_key_pem: String,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+impl std::fmt::Debug for JwtConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("JwtConfig")
+            .field("secret", &"***REDACTED***")
+            .field("access_token_ttl", &self.access_token_ttl)
+            .field("refresh_token_ttl", &self.refresh_token_ttl)
+            .field("private_key_pem", &"***REDACTED***")
+            .field("public_key_pem", &"***REDACTED***")
+            .finish()
+    }
+}
+
+#[derive(Clone, Deserialize)]
 pub struct EmailConfig {
     pub smtp_host: String,
 
@@ -80,6 +110,18 @@ pub struct EmailConfig {
     pub smtp_from: String,
 }
 
+impl std::fmt::Debug for EmailConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("EmailConfig")
+            .field("smtp_host", &self.smtp_host)
+            .field("smtp_port", &self.smtp_port)
+            .field("smtp_username", &if self.smtp_username.is_empty() { "".to_string() } else { "***REDACTED***".to_string() })
+            .field("smtp_password", &"***REDACTED***")
+            .field("smtp_from", &self.smtp_from)
+            .finish()
+    }
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct RateLimitConfig {
     #[serde(default = "default_rate_limit_max_requests")]
@@ -89,7 +131,7 @@ pub struct RateLimitConfig {
     pub window_secs: u64,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Clone, Deserialize)]
 pub struct S3Config {
     pub bucket_name: String,
     pub region: String,
@@ -99,6 +141,19 @@ pub struct S3Config {
 
     #[serde(default = "default_s3_presigned_url_expiry_secs")]
     pub presigned_url_expiry_secs: u64,
+}
+
+impl std::fmt::Debug for S3Config {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("S3Config")
+            .field("bucket_name", &self.bucket_name)
+            .field("region", &self.region)
+            .field("aws_access_key_id", &"***REDACTED***")
+            .field("aws_secret_access_key", &"***REDACTED***")
+            .field("cloudfront_url", &self.cloudfront_url)
+            .field("presigned_url_expiry_secs", &self.presigned_url_expiry_secs)
+            .finish()
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -111,7 +166,7 @@ pub struct CorsConfig {
     pub max_age: u64,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Clone, Deserialize)]
 pub struct ClickHouseConfig {
     pub url: String,
     #[serde(default = "default_clickhouse_database")]
@@ -122,6 +177,18 @@ pub struct ClickHouseConfig {
     pub password: String,
     #[serde(default = "default_clickhouse_timeout_ms")]
     pub timeout_ms: u64,
+}
+
+impl std::fmt::Debug for ClickHouseConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ClickHouseConfig")
+            .field("url", &self.url)
+            .field("database", &self.database)
+            .field("username", &self.username)
+            .field("password", &"***REDACTED***")
+            .field("timeout_ms", &self.timeout_ms)
+            .finish()
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]

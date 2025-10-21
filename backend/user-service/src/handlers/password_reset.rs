@@ -5,7 +5,6 @@ use sqlx::PgPool;
 use crate::db::{password_reset_repo, user_repo};
 use crate::error::ErrorResponse;
 use crate::security::{hash_password, verify_password};
-use crate::services::password_reset_service;
 use crate::validators;
 
 #[derive(Debug, Deserialize)]

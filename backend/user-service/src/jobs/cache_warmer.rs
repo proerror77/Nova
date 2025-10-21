@@ -150,7 +150,7 @@ impl CacheWarmerJob {
             .arg(&data)
             .arg("EX")
             .arg(ttl)
-            .query_async(&mut conn)
+            .query_async::<_, ()>(&mut conn)
             .await
             .context("Failed to write warmup cache to Redis")?;
 

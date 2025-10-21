@@ -1,13 +1,12 @@
 //! Kafka consumer for notification events with batch aggregation
 
 use crate::services::notifications::models::{
-    NotificationEvent, NotificationBatch, NotificationType,
+    NotificationEvent, NotificationBatch,
 };
 use serde_json;
-use tracing::{info, warn, error};
+use tracing::info;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use chrono::Utc;
 
 /// Configuration for notification consumer
 #[derive(Debug, Clone)]

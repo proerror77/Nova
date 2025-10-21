@@ -11,7 +11,7 @@
 //                                                ↓
 //                                         Recommendations
 
-use crate::error::{AppError, Result};
+use crate::error::Result;
 use std::collections::HashMap;
 use uuid::Uuid;
 

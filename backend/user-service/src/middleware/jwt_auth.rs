@@ -58,45 +58,57 @@ where
         let service = self.service.clone();
 
         Box::pin(async move {
-            // TEMPORARY: Optional authentication for E2E testing
-            // Extract Authorization header (optional)
-            if let Some(header) = req.headers().get("Authorization") {
-                // Parse Authorization header
-                let auth_header = match header.to_str() {
-                    Ok(h) => h,
-                    Err(_) => {
-                        return Err(ErrorUnauthorized("Invalid Authorization header"));
-                    }
-                };
+            // Extract Authorization header (required)
+            let header = match req.headers().get("Authorization") {
+                Some(h) => h,
+                None => {
+                    return Err(ErrorUnauthorized("Missing Authorization header"));
+                }
+            };
 
-                // Extract Bearer token
-                let token = match auth_header.strip_prefix("Bearer ") {
-                    Some(t) => t,
-                    None => {
+            // Parse Authorization header
+            let auth_header = match header.to_str() {
+                Ok(h) => h,
+                Err(_) => {
+                    return Err(ErrorUnauthorized("Invalid Authorization header"));
+                }
+            };
+
+            // Extract Bearer token
+            let token = match auth_header.strip_prefix("Bearer ") {
+                Some(t) => t,
+                None => {
+                    return Err(ErrorUnauthorized(
+                        "Invalid Authorization scheme, expected Bearer",
+                    ));
+                }
+            };
+
+            // Validate token and extract user_id (required)
+            let user_id = match jwt::validate_token(token) {
+                Ok(token_data) => {
+                    // Verify token type is "access" (not "refresh")
+                    if token_data.claims.token_type != "access" {
                         return Err(ErrorUnauthorized(
-                            "Invalid Authorization scheme, expected Bearer",
+                            "Invalid token type for API access",
                         ));
                     }
-                };
 
-                // Validate token and extract user_id
-                let user_id = match jwt::validate_token(token) {
-                    Ok(token_data) => match Uuid::parse_str(&token_data.claims.sub) {
+                    match Uuid::parse_str(&token_data.claims.sub) {
                         Ok(id) => id,
                         Err(_) => {
                             return Err(ErrorUnauthorized("Invalid user ID in token"));
                         }
-                    },
-                    Err(e) => {
-                        tracing::debug!("Token validation failed: {}", e);
-                        return Err(ErrorUnauthorized("Invalid or expired token"));
                     }
-                };
+                },
+                Err(e) => {
+                    tracing::warn!("Token validation failed: {}", e);
+                    return Err(ErrorUnauthorized("Invalid or expired token"));
+                }
+            };
 
-                // Add user_id to request extensions
-                req.extensions_mut().insert(UserId(user_id));
-            }
-            // If no Authorization header, continue without UserId (demo mode)
+            // Add user_id to request extensions
+            req.extensions_mut().insert(UserId(user_id));
 
             // Continue to next middleware/handler
             let res = service.call(req).await?;
@@ -111,10 +123,16 @@ impl FromRequest for UserId {
 
     fn from_request(req: &HttpRequest, _: &mut Payload) -> Self::Future {
         match req.extensions().get::<UserId>().cloned() {
-            Some(user_id) => ready(Ok(user_id)),
-            None => ready(Err(ErrorUnauthorized(
-                "User ID missing in request extensions",
-            ))),
+            Some(user_id) => {
+                tracing::debug!("User authenticated: {}", user_id.0);
+                ready(Ok(user_id))
+            },
+            None => {
+                tracing::warn!("JWT middleware did not extract user_id from token");
+                ready(Err(ErrorUnauthorized(
+                    "Authentication failed: User ID missing from token",
+                )))
+            }
         }
     }
 }

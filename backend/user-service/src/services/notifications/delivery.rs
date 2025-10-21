@@ -1,9 +1,8 @@
 //! Notification delivery service for multi-channel dispatch
 
 use crate::services::notifications::models::{
-    Notification, DeliveryChannel, DeliveryStatus, NotificationEvent,
+    Notification, DeliveryChannel, DeliveryStatus,
 };
-use serde_json::json;
 use tracing::{info, warn};
 
 /// Result of delivery attempt

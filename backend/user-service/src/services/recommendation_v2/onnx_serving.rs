@@ -7,7 +7,7 @@
 // - Hot-reload capability
 // - Graceful degradation to v1.0 fallback
 
-use crate::error::{AppError, Result};
+use crate::error::Result;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::RwLock;

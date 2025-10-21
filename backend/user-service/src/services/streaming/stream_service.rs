@@ -5,7 +5,7 @@
 use super::models::*;
 use super::redis_counter::ViewerCounter;
 use super::repository::StreamRepository;
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, Result};
 use uuid::Uuid;
 
 /// Stream service (business logic)

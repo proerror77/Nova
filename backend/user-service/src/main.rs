@@ -359,6 +359,20 @@ async fn main() -> io::Result<()> {
                             )
                             .route("/{id}", web::get().to(handlers::get_post_request)),
                     )
+                    // Social graph endpoints (protected with JWT authentication)
+                    .service(
+                        web::scope("")
+                            .wrap(JwtAuthMiddleware)
+                            .service(handlers::follow_user)
+                            .service(handlers::unfollow_user)
+                            .service(handlers::block_user)
+                            .service(handlers::unblock_user)
+                            .service(handlers::mute_user)
+                            .service(handlers::unmute_user)
+                            .service(handlers::get_followers)
+                            .service(handlers::get_following)
+                            .service(handlers::get_user_stats)
+                    )
                     // Streaming endpoints
                     .service(
                         web::scope("/streams")

@@ -7,6 +7,7 @@ pub mod messaging;
 pub mod oauth;
 pub mod password_reset;
 pub mod posts;
+pub mod social;
 pub mod streaming_websocket;
 
 pub use auth::*;
@@ -18,6 +19,7 @@ pub use messaging::*;
 pub use oauth::*;
 pub use password_reset::*;
 pub use posts::*;
+pub use social::*;
 pub use streaming_websocket::*;
 
 // Phase 6+ Handlers (not yet implemented)

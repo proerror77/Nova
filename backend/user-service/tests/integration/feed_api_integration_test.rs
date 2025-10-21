@@ -45,15 +45,14 @@ async fn test_feed_api_basic_flow() {
     let service = create_test_service().await;
     let user_id = Uuid::new_v4();
 
-    // This would normally query ClickHouse for candidates
-    // For now, we're testing the structure
-    match service.get_feed_candidates(user_id, 20).await {
-        Ok(candidates) => {
-            // Verify candidates structure
-            for candidate in candidates {
-                assert!(!candidate.post_id.is_empty());
-                assert!(!candidate.author_id.is_empty());
-                assert!(candidate.combined_score >= 0.0 && candidate.combined_score <= 1.0);
+    // Query ranked feed using new unified API
+    match service.get_ranked_feed(user_id, 20).await {
+        Ok(ranked_posts) => {
+            // Verify ranked posts structure
+            for post in ranked_posts {
+                assert!(!post.post_id.to_string().is_empty());
+                assert!(!post.reason.is_empty());
+                assert!(post.combined_score >= 0.0 && post.combined_score <= 1.0);
             }
         }
         Err(_) => {
@@ -76,7 +75,7 @@ async fn test_feed_ranking_e2e() {
             assert!(posts.len() <= 20);
 
             // Verify all are valid UUIDs
-            for post_id in posts {
+            for post_id in &posts {
                 assert!(!post_id.to_string().is_empty());
             }
 
@@ -186,9 +185,9 @@ async fn test_circuit_breaker_integration() {
     // After multiple failures, should trip
     let _user_id = Uuid::new_v4();
 
-    // Make several requests
+    // Make several requests using new unified API
     for _i in 0..5 {
-        let _result = service.get_feed_candidates(Uuid::new_v4(), 20).await;
+        let _result = service.get_ranked_feed(Uuid::new_v4(), 20).await;
     }
 
     // Check state after operations

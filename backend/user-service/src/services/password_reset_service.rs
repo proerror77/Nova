@@ -1,6 +1,3 @@
-/// Password reset service
-/// Generates and validates password reset tokens stored in database
-use crate::security::{generate_token, hash_token, verify_token_hash};
 
 #[cfg(test)]
 mod tests {

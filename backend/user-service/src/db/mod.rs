@@ -2,10 +2,14 @@ use sqlx::postgres::{PgPool, PgPoolOptions};
 use std::time::Duration;
 
 pub mod ch_client;
+pub mod messaging_repo;
 pub mod oauth_repo;
 pub mod password_reset_repo;
 pub mod post_repo;
+pub mod social_repo;
 pub mod user_repo;
+
+pub use social_repo::SocialRepository;
 
 pub async fn create_pool(database_url: &str, max_connections: u32) -> Result<PgPool, sqlx::Error> {
     PgPoolOptions::new()

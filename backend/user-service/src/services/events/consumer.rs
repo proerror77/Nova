@@ -7,7 +7,7 @@ use sha1::{Digest, Sha1};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Semaphore;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info};
 
 use crate::db::ch_client::ClickHouseClient;
 use crate::error::{AppError, Result};
