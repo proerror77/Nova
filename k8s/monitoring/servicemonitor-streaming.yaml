@@ -1,0 +1,199 @@
+---
+# Prometheus ServiceMonitor for Streaming Metrics
+#
+# This resource tells the Prometheus Operator to scrape metrics from the user-service
+# Requires: prometheus-operator to be installed in the cluster
+#
+# Install Prometheus Operator:
+# helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+# helm install prometheus-operator prometheus-community/kube-prometheus-stack
+
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: nova-streaming-monitor
+  namespace: default
+  labels:
+    app: nova-streaming
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app: user-service
+      component: streaming
+
+  # Scrape configuration
+  endpoints:
+  - port: metrics
+    interval: 30s
+    scrapeTimeout: 10s
+    path: /metrics
+    scheme: http
+    relabelings:
+    # Add cluster label
+    - sourceLabels: [__address__]
+      targetLabel: cluster
+      replacement: 'nova-production'
+
+    # Add namespace label
+    - sourceLabels: [__meta_kubernetes_namespace]
+      targetLabel: namespace
+
+    # Add pod name label
+    - sourceLabels: [__meta_kubernetes_pod_name]
+      targetLabel: pod
+
+    # Add service label
+    - sourceLabels: [__meta_kubernetes_service_name]
+      targetLabel: service
+      replacement: 'user-service'
+
+---
+# Service for Prometheus scraping
+# This should already exist in your user-service deployment,
+# but we label it explicitly for monitoring
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: user-service-metrics
+  namespace: default
+  labels:
+    app: user-service
+    component: streaming
+spec:
+  ports:
+  - name: metrics
+    port: 8081
+    targetPort: 8081
+    protocol: TCP
+  selector:
+    app: user-service
+  type: ClusterIP
+
+---
+# PrometheusRule for Streaming Alerts
+# This defines alert rules that Prometheus will evaluate
+
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: nova-streaming-alerts
+  namespace: default
+  labels:
+    app: nova-streaming
+    prometheus: kube-prometheus
+spec:
+  groups:
+  - name: nova-streaming.rules
+    interval: 30s
+    rules:
+
+    # Alert: High Error Rate
+    - alert: StreamingHighErrorRate
+      expr: |
+        (
+          rate(nova_streaming_broadcast_errors_total[5m])
+          /
+          (rate(nova_streaming_active_streams[5m]) + 0.001)
+        ) > 0.1
+      for: 5m
+      labels:
+        severity: warning
+        component: streaming
+      annotations:
+        summary: "High streaming error rate ({{ $value | humanizePercentage }})"
+        description: "Stream {{ $labels.stream_id }} has error rate {{ $value | humanizePercentage }} over 5m"
+
+    # Alert: Peak Viewers Exceeded Threshold
+    - alert: StreamingPeakViewersHigh
+      expr: nova_streaming_peak_viewers > 10000
+      for: 2m
+      labels:
+        severity: warning
+        component: streaming
+      annotations:
+        summary: "Peak viewers exceeded threshold"
+        description: "Stream {{ $labels.stream_id }} reached {{ $value }} peak viewers"
+
+    # Alert: High RTMP Ingestion Latency
+    - alert: StreamingHighIngestionLatency
+      expr: |
+        histogram_quantile(0.95,
+          rate(nova_streaming_rtmp_ingestion_latency_seconds_bucket[5m])
+        ) > 1.0
+      for: 3m
+      labels:
+        severity: warning
+        component: streaming
+      annotations:
+        summary: "RTMP ingestion latency is high"
+        description: "95th percentile latency: {{ $value | humanizeDuration }}"
+
+    # Alert: No Active Streams
+    - alert: StreamingNoActiveStreams
+      expr: nova_streaming_active_streams{region="production"} == 0
+      for: 10m
+      labels:
+        severity: info
+        component: streaming
+      annotations:
+        summary: "No active streams in production"
+        description: "Production region has no active streams for 10 minutes"
+
+    # Alert: WebSocket Connection Drop
+    - alert: StreamingWebSocketConnectionDrop
+      expr: |
+        (
+          nova_streaming_websocket_connections
+          and ignoring(stream_id) group_left()
+          nova_streaming_active_streams > 0
+        ) < 1
+      for: 5m
+      labels:
+        severity: warning
+        component: streaming
+      annotations:
+        summary: "WebSocket connection dropped for active stream"
+        description: "Stream {{ $labels.stream_id }} has no connected viewers despite being active"
+
+---
+# Recording Rules for Aggregation
+# These create pre-computed aggregates for faster dashboard queries
+
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: nova-streaming-recording
+  namespace: default
+  labels:
+    app: nova-streaming
+    prometheus: kube-prometheus
+spec:
+  groups:
+  - name: nova_streaming_recording.rules
+    interval: 15s
+    rules:
+
+    # Average viewers across all regions
+    - record: nova:streaming:viewers:avg
+      expr: avg(nova_streaming_websocket_connections) by (region)
+
+    # Max viewers across all regions
+    - record: nova:streaming:viewers:max
+      expr: max(nova_streaming_peak_viewers) by (region)
+
+    # Average stream duration
+    - record: nova:streaming:duration:avg
+      expr: avg(rate(nova_streaming_stream_duration_seconds[5m])) by (stream_type)
+
+    # Error rate per region
+    - record: nova:streaming:error_rate:5m
+      expr: |
+        (
+          rate(nova_streaming_broadcast_errors_total[5m])
+        )
+
+    # Total active streams by region
+    - record: nova:streaming:active:by_region
+      expr: sum(nova_streaming_active_streams) by (region)

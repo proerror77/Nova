@@ -38,6 +38,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use uuid::Uuid;
 
+use crate::metrics::streaming_metrics;
 use crate::services::streaming::ViewerCounter;
 
 // =========================================================================
@@ -169,6 +170,9 @@ impl Actor for StreamingWebSocket {
             stream_id: self.stream_id,
             client_addr: addr,
         });
+
+        // Record WebSocket connection
+        streaming_metrics::helpers::record_websocket_connection(&self.stream_id.to_string());
     }
 
     fn stopped(&mut self, _: &mut Self::Context) {
@@ -177,6 +181,9 @@ impl Actor for StreamingWebSocket {
             stream_id: self.stream_id,
             session_id: self.session_id,
         });
+
+        // Record WebSocket disconnection
+        streaming_metrics::helpers::record_websocket_disconnection(&self.stream_id.to_string());
     }
 }
 
@@ -251,6 +258,14 @@ pub async fn notify_viewer_count_changed(
     let viewer_count = counter.get_viewer_count(stream_id).await?;
     let peak_viewers = counter.get_peak_viewers(stream_id).await?;
 
+    // Record viewer count change to Prometheus
+    // Note: Using default region "us-west-2" - should be configurable in production
+    streaming_metrics::helpers::record_viewer_count_change(
+        &stream_id.to_string(),
+        viewer_count as i32,
+        "us-west-2",
+    );
+
     // Build message
     let message = WsMessage {
         event: "viewer_count_changed".to_string(),
@@ -276,6 +291,10 @@ pub fn notify_stream_started(
     hub: &Addr<StreamingHub>,
     stream_id: Uuid,
 ) {
+    // Record stream started to Prometheus
+    // Note: Using default region "us-west-2" - should be configurable in production
+    streaming_metrics::helpers::record_stream_started(&stream_id.to_string(), "us-west-2");
+
     let message = WsMessage {
         event: "stream_started".to_string(),
         data: serde_json::json!({
@@ -295,6 +314,11 @@ pub fn notify_stream_ended(
     hub: &Addr<StreamingHub>,
     stream_id: Uuid,
 ) {
+    // Record stream ended to Prometheus
+    // Note: Duration and final viewer count should be obtained from session tracking
+    // Using defaults here - should be integrated with session store
+    streaming_metrics::helpers::record_stream_ended(&stream_id.to_string(), "us-west-2", 0.0, 0);
+
     let message = WsMessage {
         event: "stream_ended".to_string(),
         data: serde_json::json!({

@@ -12,6 +12,9 @@ pub mod events_metrics;
 pub mod feed_metrics;
 pub mod job_metrics;
 
+// Export Phase 2 streaming metrics
+pub mod streaming_metrics;
+
 lazy_static! {
     /// Global registry for all metrics
     pub static ref REGISTRY: Registry = Registry::new();
