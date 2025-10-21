@@ -136,29 +136,17 @@ pub async fn register(
 ) -> impl Responder {
     // Validate email format
     if !validators::validate_email(&req.email) {
-        return HttpResponse::BadRequest().json(ErrorResponse {
-            error: "Invalid email format".to_string(),
-            details: Some("Email must be a valid RFC 5322 format".to_string()),
-        });
+        return validators::errors::ValidationError::invalid_email();
     }
 
     // Validate username
     if !validators::validate_username(&req.username) {
-        return HttpResponse::BadRequest().json(ErrorResponse {
-            error: "Invalid username".to_string(),
-            details: Some("Username must be 3-32 characters, alphanumeric with - or _".to_string()),
-        });
+        return validators::errors::ValidationError::invalid_username();
     }
 
     // Validate password strength
     if !validators::validate_password(&req.password) {
-        return HttpResponse::BadRequest().json(ErrorResponse {
-            error: "Password too weak".to_string(),
-            details: Some(
-                "Password must be 8+ chars with uppercase, lowercase, number, and special char"
-                    .to_string(),
-            ),
-        });
+        return validators::errors::ValidationError::weak_password();
     }
 
     // Check if email already exists
@@ -253,10 +241,7 @@ pub async fn login(
 ) -> impl Responder {
     // Validate email format
     if !validators::validate_email(&req.email) {
-        return HttpResponse::BadRequest().json(ErrorResponse {
-            error: "Invalid email".to_string(),
-            details: None,
-        });
+        return validators::errors::ValidationError::invalid_email();
     }
 
     // Find user by email

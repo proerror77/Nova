@@ -1,4 +1,6 @@
 /// Input validation utilities for auth service
+pub mod errors;
+
 use validator::ValidateEmail;
 
 /// Validates email format according to RFC 5322

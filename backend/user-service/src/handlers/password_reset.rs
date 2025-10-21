@@ -67,10 +67,7 @@ pub async fn forgot_password(
 ) -> impl Responder {
     // Validate email format
     if !validators::validate_email(&req.email) {
-        return HttpResponse::BadRequest().json(ErrorResponse {
-            error: "Invalid email format".to_string(),
-            details: Some("Email must be a valid RFC 5322 format".to_string()),
-        });
+        return validators::errors::ValidationError::invalid_email();
     }
 
     // Find user by email
@@ -139,36 +136,21 @@ pub async fn reset_password(
 ) -> impl Responder {
     // Validate token format
     if req.token.is_empty() {
-        return HttpResponse::BadRequest().json(ErrorResponse {
-            error: "Token required".to_string(),
-            details: None,
-        });
+        return validators::errors::ValidationError::empty_token();
     }
 
     if req.token.len() > 1000 {
-        return HttpResponse::BadRequest().json(ErrorResponse {
-            error: "Token too long".to_string(),
-            details: None,
-        });
+        return validators::errors::ValidationError::token_too_long();
     }
 
     // Check if token contains only hex characters
     if !req.token.chars().all(|c| c.is_ascii_hexdigit()) {
-        return HttpResponse::BadRequest().json(ErrorResponse {
-            error: "Invalid token format".to_string(),
-            details: Some("Token must be hexadecimal".to_string()),
-        });
+        return validators::errors::ValidationError::invalid_token_format();
     }
 
     // Validate new password strength
     if !validators::validate_password(&req.new_password) {
-        return HttpResponse::BadRequest().json(ErrorResponse {
-            error: "Password too weak".to_string(),
-            details: Some(
-                "Password must be 8+ chars with uppercase, lowercase, number, and special char"
-                    .to_string(),
-            ),
-        });
+        return validators::errors::ValidationError::weak_password();
     }
 
     // Hash the token for lookup
