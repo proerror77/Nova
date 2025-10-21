@@ -13,6 +13,14 @@ use serde_json::Value;
 use std::sync::Arc;
 use std::time::Duration;
 
+/// Generic event row for ClickHouse queries
+#[derive(Debug, Clone, Serialize, Deserialize, clickhouse::Row)]
+pub struct EventRow {
+    pub event_type: String,
+    pub user_id: String,
+    pub post_id: String,
+}
+
 /// Test Environment
 pub struct TestEnvironment {
     pub pg_url: String,
@@ -123,7 +131,7 @@ impl ClickHouseClient {
         Self { client }
     }
 
-    pub async fn query_one<T: for<'de> Deserialize<'de>>(
+    pub async fn query_one<T: for<'de> Deserialize<'de> + clickhouse::Row>(
         &self,
         query: &str,
         params: &[&str],
@@ -167,15 +175,15 @@ impl PostgresClient {
         Self { pool }
     }
 
-    pub async fn execute(
+    pub async fn execute_simple(
         &self,
         query: &str,
-        params: &[&(dyn sqlx::Encode<'_, sqlx::Postgres> + sqlx::Type<sqlx::Postgres> + Sync)],
+        params: &[&str],
     ) -> Result<(), String> {
         let mut q = sqlx::query(query);
 
         for param in params {
-            q = q.bind(*param);
+            q = q.bind(param);
         }
 
         q.execute(&self.pool)
