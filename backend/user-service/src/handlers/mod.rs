@@ -1,5 +1,4 @@
 pub mod auth;
-// pub mod discover;  // TODO: Phase 2 - needs VideoService implementation
 pub mod events;
 pub mod feed;
 pub mod health;
@@ -9,11 +8,8 @@ pub mod oauth;
 pub mod password_reset;
 pub mod posts;
 pub mod streaming_websocket;
-// pub mod reels;     // TODO: Phase 2 - needs VideoService implementation
-// pub mod videos;    // TODO: Phase 2 - needs VideoService implementation
 
 pub use auth::*;
-// pub use discover::*;  // Disabled - Phase 2 pending
 pub use events::*;
 pub use feed::*;
 pub use health::*;
@@ -23,5 +19,10 @@ pub use oauth::*;
 pub use password_reset::*;
 pub use posts::*;
 pub use streaming_websocket::*;
-// pub use reels::*;  // Disabled - Phase 2 pending
-// pub use videos::*; // Disabled - Phase 2 pending
+
+// Phase 6+ Handlers (not yet implemented)
+// - discover: Video discovery and recommendations (requires VideoService)
+// - reels: Short-form video handler (requires VideoService)
+// - videos: Full video management (requires VideoService)
+//
+// See GitHub Issue #T141 for Phase 6 Video System roadmap

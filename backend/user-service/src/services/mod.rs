@@ -10,8 +10,6 @@ pub mod cdc;
 pub mod cdn_failover;
 pub mod cdn_handler_integration;
 pub mod cdn_service;
-// pub mod clickhouse_feature_extractor;  // TODO: Phase 2 - needs RankingSignals with Serialize/Deserialize
-// pub mod deep_learning_inference;       // TODO: Phase 2 - pending implementation
 pub mod email_verification;
 pub mod events;
 pub mod feed_ranking;
@@ -36,9 +34,15 @@ pub mod token_revocation;
 pub mod transcoding_optimizer;
 pub mod transcoding_progress;
 pub mod two_fa;
-// pub mod video_processing_pipeline;     // TODO: Phase 2 - depends on VideoTranscodingService methods
 
 // ==================== SERVICE MODULES DOCUMENTATION ====================
+//
+// Phase 6+ Modules (not yet implemented):
+// - clickhouse_feature_extractor: Feature extraction for ML model training
+// - deep_learning_inference: TensorFlow Serving + Milvus integration for embeddings
+// - video_processing_pipeline: Orchestrates entire video processing workflow
+//
+// See GitHub Issue #T141 for Phase 6 Video System roadmap
 //
 // STREAMING & LIVE VIDEO:
 // - streaming: Live streaming infrastructure with RTMP/HLS/DASH support
@@ -57,8 +61,6 @@ pub mod two_fa;
 // - video_processing_pipeline: Orchestrates entire video processing workflow (Phase 7)
 //
 // MACHINE LEARNING & RANKING:
-// - clickhouse_feature_extractor: Feature extraction for ML model training
-// - deep_learning_inference: TensorFlow Serving + Milvus integration for embeddings
 // - recommendation_v2: Hybrid recommendation engine v2 (collaborative filtering + content-based + AB testing)
 //
 // PHASE 5 FEATURES:
