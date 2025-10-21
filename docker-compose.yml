@@ -235,9 +235,10 @@ services:
     networks:
       - nova-network
     healthcheck:
-      test: ["CMD", "/app/user-service", "healthcheck"]
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/api/v1/health >/dev/null || exit 1"]
       interval: 30s
       timeout: 5s
+      start_period: 20s
       retries: 3
 
 # ============================================

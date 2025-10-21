@@ -16,8 +16,6 @@ pub mod cdn_service;
 pub mod email_verification;
 pub mod events;
 pub mod feed_ranking;
-// pub mod feed_ranking_service;          // TODO: Phase 2 - depends on incomplete VideoService
-pub mod feed_service;
 pub mod ffmpeg_optimizer;
 pub mod image_processing;
 pub mod job_queue;
@@ -64,7 +62,6 @@ pub mod video_transcoding;
 // MACHINE LEARNING & RANKING:
 // - clickhouse_feature_extractor: Feature extraction for ML model training
 // - deep_learning_inference: TensorFlow Serving + Milvus integration for embeddings
-// - feed_ranking_service: Advanced ML-based feed ranking orchestration (Phase 7)
 // - recommendation_v2: Hybrid recommendation engine v2 (collaborative filtering + content-based + AB testing)
 //
 // COMMON SERVICES:
@@ -72,8 +69,7 @@ pub mod video_transcoding;
 // - cdc: Change Data Capture consumer (PostgreSQL → Kafka → ClickHouse sync)
 // - email_verification: Email verification token management with Redis
 // - events: Application events consumer (Kafka → ClickHouse for analytics)
-// - feed_ranking: Core feed ranking algorithm with user preferences
-// - feed_service: Personalized feed ranking with ClickHouse integration
+// - feed_ranking: Core feed ranking algorithm with ClickHouse integration and caching
 // - image_processing: Image resizing and variant generation (thumbnail, medium, original)
 // - job_queue: Background job queue for async image processing (MPSC channel-based)
 // - jwt_key_rotation: JWT signing key rotation for enhanced security
