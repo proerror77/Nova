@@ -20,6 +20,7 @@ pub mod image_processing;
 pub mod job_queue;
 pub mod jwt_key_rotation;
 pub mod kafka_producer;
+pub mod messaging;
 pub mod notifications;
 pub mod oauth;
 pub mod origin_shield;
@@ -63,6 +64,8 @@ pub mod two_fa;
 // PHASE 5 FEATURES:
 // - notifications: Real-time multi-channel notifications (Phase 5, Feature 1)
 //   Kafka consumer with batch aggregation, multi-channel delivery (FCM, APNs, Email, In-App)
+// - messaging: Private messaging with end-to-end encryption (Phase 5, Feature 2)
+//   NaCl Box E2E encryption, key exchange protocol, key rotation, forward secrecy
 //
 // COMMON SERVICES:
 // - backup_codes: Two-factor authentication backup codes management
