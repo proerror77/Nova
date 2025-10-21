@@ -30,11 +30,10 @@ async fn test_cdc_consumption_from_kafka() {
 
     // Action: Insert a post in PostgreSQL
     let post_id = "test-post-001";
-    pg.execute(
-        "INSERT INTO posts (id, author_id, content, created_at)
-         VALUES ($1, $2, $3, NOW())",
-        &[&post_id, &"author-123", &"Test post content"],
-    )
+    pg.execute(&format!(
+        "INSERT INTO posts (id, author_id, content, created_at) VALUES ('{}', '{}', '{}', NOW())",
+        post_id, "author-123", "Test post content"
+    ))
     .await
     .expect("Failed to insert post into PostgreSQL");
 
@@ -42,10 +41,14 @@ async fn test_cdc_consumption_from_kafka() {
     sleep(Duration::from_secs(2)).await;
 
     // Assert: ClickHouse should have the post
-    let count: u64 = ch
+    let result = ch
         .query_one("SELECT count() FROM posts WHERE id = ?", &[post_id])
         .await
         .expect("Failed to query ClickHouse");
+
+    let count: u64 = result[0]["count()"]
+        .as_u64()
+        .expect("Failed to extract count from ClickHouse response");
 
     assert_eq!(
         count, 1,
@@ -82,10 +85,14 @@ async fn test_events_consumption_from_kafka() {
     sleep(Duration::from_secs(2)).await;
 
     // Assert: ClickHouse should have the event
-    let count: u64 = ch
+    let result = ch
         .query_one("SELECT count() FROM events WHERE event_id = ?", &[event_id])
         .await
         .expect("Failed to query ClickHouse");
+
+    let count: u64 = result[0]["count()"]
+        .as_u64()
+        .expect("Failed to extract count from ClickHouse response");
 
     assert_eq!(
         count, 1,
@@ -232,10 +239,10 @@ async fn test_complete_event_to_feed_flow() {
 
     // Step 1: Create a post in PostgreSQL
     let post_id = "golden-post-001";
-    pg.execute(
-        "INSERT INTO posts (id, author_id, content, created_at) VALUES ($1, $2, $3, NOW())",
-        &[&post_id, &"author-golden", &"Golden path test post"],
-    )
+    pg.execute(&format!(
+        "INSERT INTO posts (id, author_id, content, created_at) VALUES ('{}', '{}', '{}', NOW())",
+        post_id, "author-golden", "Golden path test post"
+    ))
     .await
     .unwrap();
 

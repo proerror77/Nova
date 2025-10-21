@@ -43,10 +43,14 @@ async fn test_dedup_prevents_duplicate_events() {
     sleep(Duration::from_secs(2)).await;
 
     // Assert: ClickHouse should have exactly 1 record
-    let count: u64 = ch
+    let result = ch
         .query_one("SELECT count() FROM events WHERE event_id = ?", &[event_id])
         .await
         .expect("Failed to query ClickHouse");
+
+    let count: u64 = result[0]["count()"]
+        .as_u64()
+        .expect("Failed to extract count from ClickHouse response");
 
     assert_eq!(
         count, 1,
@@ -233,10 +237,14 @@ async fn test_dedup_with_different_timestamps() {
 
     sleep(Duration::from_secs(2)).await;
 
-    let count: u64 = ch
+    let result = ch
         .query_one("SELECT count() FROM events WHERE event_id = ?", &[event_id])
         .await
         .unwrap();
+
+    let count: u64 = result[0]["count()"]
+        .as_u64()
+        .expect("Failed to extract count from ClickHouse response");
 
     assert_eq!(
         count, 1,

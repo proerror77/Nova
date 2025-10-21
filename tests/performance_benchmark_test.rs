@@ -11,7 +11,6 @@
 //! Expected Duration: ~60s per test
 
 use serde_json::json;
-use std::collections::HashMap;
 use tokio::time::{sleep, Duration, Instant};
 
 mod test_harness;
@@ -156,13 +155,17 @@ async fn test_events_throughput_sustained() {
     sleep(Duration::from_secs(10)).await;
 
     // Verify: All events should be in ClickHouse
-    let received_count: u64 = ch
+    let result = ch
         .query_one(
             "SELECT count() FROM events WHERE event_id LIKE 'evt-throughput-%'",
             &[],
         )
         .await
         .expect("Failed to query ClickHouse");
+
+    let received_count: u64 = result[0]["count()"]
+        .as_u64()
+        .expect("Failed to extract count from ClickHouse response");
 
     println!("Received: {} events in ClickHouse", received_count);
 

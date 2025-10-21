@@ -123,20 +123,25 @@ impl ClickHouseClient {
         Self { client }
     }
 
-    pub async fn query_one<T: for<'de> Deserialize<'de>>(
+    pub async fn query_one(
         &self,
         query: &str,
         params: &[&str],
-    ) -> Result<T, String> {
+    ) -> Result<serde_json::Value, String> {
         let mut q = self.client.query(query);
 
         for param in params {
             q = q.bind(param);
         }
 
-        q.fetch_one()
+        // ClickHouse returns JSON, convert to serde_json::Value
+        let result: String = q
+            .fetch_one()
             .await
-            .map_err(|e| format!("ClickHouse query failed: {}", e))
+            .map_err(|e| format!("ClickHouse query failed: {}", e))?;
+
+        serde_json::from_str(&result)
+            .map_err(|e| format!("Failed to parse ClickHouse response: {}", e))
     }
 
     pub async fn execute_batch(&self, queries: &[&str]) -> Result<(), String> {
@@ -167,18 +172,9 @@ impl PostgresClient {
         Self { pool }
     }
 
-    pub async fn execute(
-        &self,
-        query: &str,
-        params: &[&(dyn sqlx::Encode<'_, sqlx::Postgres> + sqlx::Type<sqlx::Postgres> + Sync)],
-    ) -> Result<(), String> {
-        let mut q = sqlx::query(query);
-
-        for param in params {
-            q = q.bind(*param);
-        }
-
-        q.execute(&self.pool)
+    pub async fn execute(&self, query: &str) -> Result<(), String> {
+        sqlx::query(query)
+            .execute(&self.pool)
             .await
             .map_err(|e| format!("PostgreSQL execute failed: {}", e))?;
 
