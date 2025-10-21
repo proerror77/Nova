@@ -9,17 +9,26 @@
 -- Type: stream_status_enum
 -- Description: Enumeration of possible stream states
 -- ============================================
-CREATE TYPE IF NOT EXISTS stream_status_enum AS ENUM (
-    'idle',         -- Stream key created but never started
-    'pending',      -- Starting up, not yet accepting viewers
-    'live',         -- Actively broadcasting
-    'paused',       -- Temporarily paused by broadcaster
-    'ended',        -- Gracefully ended by broadcaster
-    'interrupted',  -- Unexpectedly disconnected
-    'error'         -- Failed to start or encountered fatal error
-);
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'stream_status_enum') THEN
+        CREATE TYPE stream_status_enum AS ENUM (
+            'idle',         -- Stream key created but never started
+            'pending',      -- Starting up, not yet accepting viewers
+            'live',         -- Actively broadcasting
+            'paused',       -- Temporarily paused by broadcaster
+            'ended',        -- Gracefully ended by broadcaster
+            'interrupted',  -- Unexpectedly disconnected
+            'error'         -- Failed to start or encountered fatal error
+        );
+    END IF;
+END$$;
 
-COMMENT ON TYPE stream_status_enum IS 'Stream lifecycle states';
+DO $$ BEGIN
+    IF EXISTS (SELECT 1 FROM pg_type WHERE typname = 'stream_status_enum') THEN
+        EXECUTE 'COMMENT ON TYPE stream_status_enum IS ''Stream lifecycle states''';
+    END IF;
+END $$;
 
 -- ============================================
 -- Table: streams

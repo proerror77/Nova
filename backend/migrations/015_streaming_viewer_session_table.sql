@@ -9,16 +9,25 @@
 -- Type: quality_level_enum
 -- Description: Video quality tiers
 -- ============================================
-CREATE TYPE IF NOT EXISTS quality_level_enum AS ENUM (
-    'source',  -- Original broadcaster quality
-    '1080p',   -- Full HD
-    '720p',    -- HD
-    '480p',    -- SD
-    '360p',    -- Low
-    'audio'    -- Audio-only fallback
-);
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'quality_level_enum') THEN
+        CREATE TYPE quality_level_enum AS ENUM (
+            'source',  -- Original broadcaster quality
+            '1080p',   -- Full HD
+            '720p',    -- HD
+            '480p',    -- SD
+            '360p',    -- Low
+            'audio'    -- Audio-only fallback
+        );
+    END IF;
+END $$;
 
-COMMENT ON TYPE quality_level_enum IS 'Adaptive bitrate streaming quality levels';
+DO $$ BEGIN
+    IF EXISTS (SELECT 1 FROM pg_type WHERE typname = 'quality_level_enum') THEN
+        EXECUTE 'COMMENT ON TYPE quality_level_enum IS ''Adaptive bitrate streaming quality levels''';
+    END IF;
+END $$;
 
 -- ============================================
 -- Table: viewer_sessions
@@ -32,9 +41,7 @@ CREATE TABLE IF NOT EXISTS viewer_sessions (
     -- Session lifecycle
     joined_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
     left_at TIMESTAMP WITH TIME ZONE,
-    duration_seconds INTEGER GENERATED ALWAYS AS (
-        EXTRACT(EPOCH FROM (COALESCE(left_at, NOW()) - joined_at))::INTEGER
-    ) STORED,
+    duration_seconds INTEGER NOT NULL DEFAULT 0,
 
     -- Quality of Service (QoS) metrics
     initial_quality quality_level_enum NOT NULL,
@@ -61,6 +68,25 @@ CREATE TABLE IF NOT EXISTS viewer_sessions (
     CONSTRAINT total_buffer_time_non_negative CHECK (total_buffer_time_ms >= 0),
     CONSTRAINT bytes_transferred_non_negative CHECK (bytes_transferred >= 0)
 );
+
+-- Maintain duration_seconds via trigger to avoid non-immutable expression in generated column
+CREATE OR REPLACE FUNCTION set_viewer_session_duration()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.left_at IS NOT NULL THEN
+        NEW.duration_seconds := GREATEST(0, EXTRACT(EPOCH FROM (NEW.left_at - NEW.joined_at))::INTEGER);
+    ELSE
+        NEW.duration_seconds := 0;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_viewer_sessions_duration ON viewer_sessions;
+CREATE TRIGGER trg_viewer_sessions_duration
+BEFORE INSERT OR UPDATE OF left_at ON viewer_sessions
+FOR EACH ROW
+EXECUTE FUNCTION set_viewer_session_duration();
 
 -- ============================================
 -- Indexes for viewer_sessions table
