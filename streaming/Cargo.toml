@@ -1,0 +1,31 @@
+[package]
+name = "streaming-workspace"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[workspace]
+members = [
+    "crates/streaming-core",
+    "crates/streaming-ingest",
+    "crates/streaming-transcode",
+    "crates/streaming-delivery",
+    "crates/streaming-api",
+]
+resolver = "2"
+
+[dependencies]
+streaming-ingest = { path = "crates/streaming-ingest" }
+
+[dev-dependencies]
+tokio = { version = "1.36", features = ["rt-multi-thread", "macros", "time", "net"] }
+anyhow = "1.0"
+awc = "3.3"
+futures-util = "0.3"
+actix-web = "4.5"
+actix-rt = "2.9"
+async-trait = "0.1"
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1.7", features = ["v4", "serde"] }
+streaming-delivery = { path = "crates/streaming-delivery" }
+streaming-core = { path = "crates/streaming-core" }
