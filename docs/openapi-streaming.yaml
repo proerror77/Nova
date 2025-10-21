@@ -1,0 +1,518 @@
+openapi: 3.0.3
+info:
+  title: Nova Streaming API
+  version: 1.0.0
+  description: |
+    Real-time streaming API for Nova Social platform
+
+    ## Overview
+
+    The Nova Streaming API enables broadcasters to stream live content and viewers to watch streams in real-time.
+    The API uses RTMP for broadcaster ingestion and WebSocket for real-time viewer updates.
+
+    ## Authentication
+
+    - **RTMP Streams**: Authenticated via JWT token in RTMP URL or `connect` command
+    - **WebSocket Viewers**: Authenticated via JWT token in query parameter
+
+    ## Architecture
+
+    ```
+    Broadcaster (OBS/FFmpeg)
+           ↓
+         RTMP Protocol
+           ↓
+    Nginx-RTMP Server (1935)
+           ↓
+    Nova User Service (8081/metrics, WebSocket)
+           ↓
+    Viewers (HTTP/WebSocket)
+    ```
+
+  contact:
+    name: Nova Team
+    url: https://nova-social.io
+
+  license:
+    name: MIT
+
+servers:
+  - url: https://api.nova-social.io/api/v1
+    description: Production
+  - url: http://localhost:8081/api/v1
+    description: Local Development
+
+tags:
+  - name: Streaming
+    description: Streaming broadcast and viewer endpoints
+  - name: WebSocket
+    description: Real-time WebSocket connections
+  - name: Metrics
+    description: Prometheus metrics endpoint
+
+paths:
+  /streams:
+    post:
+      tags:
+        - Streaming
+      summary: Create a new stream
+      operationId: createStream
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateStreamRequest'
+      responses:
+        '201':
+          description: Stream created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StreamResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+        - BearerAuth: []
+
+  /streams/{stream_id}:
+    get:
+      tags:
+        - Streaming
+      summary: Get stream details
+      operationId: getStream
+      parameters:
+        - name: stream_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Unique stream identifier
+      responses:
+        '200':
+          description: Stream details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StreamResponse'
+        '404':
+          description: Stream not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+        - BearerAuth: []
+
+    delete:
+      tags:
+        - Streaming
+      summary: End/delete a stream
+      operationId: deleteStream
+      parameters:
+        - name: stream_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Stream ended successfully
+        '404':
+          description: Stream not found
+        '403':
+          description: Not authorized to end this stream
+      security:
+        - BearerAuth: []
+
+  /streams/{stream_id}/ws:
+    get:
+      tags:
+        - WebSocket
+      summary: WebSocket connection for stream updates
+      operationId: connectStreamWebSocket
+      parameters:
+        - name: stream_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: token
+          in: query
+          required: true
+          schema:
+            type: string
+          description: JWT authentication token
+      responses:
+        '101':
+          description: Switching Protocols - WebSocket connection established
+        '400':
+          description: Invalid stream_id or missing token
+        '401':
+          description: Invalid or expired token
+        '404':
+          description: Stream not found
+      security:
+        - BearerAuth: []
+
+  /streams/active:
+    get:
+      tags:
+        - Streaming
+      summary: List active streams
+      operationId: listActiveStreams
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+        - name: region
+          in: query
+          schema:
+            type: string
+            description: Filter by region (e.g., us-west-2, eu-central-1)
+      responses:
+        '200':
+          description: List of active streams
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StreamListResponse'
+      security:
+        - BearerAuth: []
+
+  /metrics:
+    get:
+      tags:
+        - Metrics
+      summary: Prometheus metrics endpoint
+      operationId: getMetrics
+      description: |
+        Prometheus-format metrics for streaming service.
+        Includes real-time gauges, error counters, and latency histograms.
+      responses:
+        '200':
+          description: Prometheus metrics in text format
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: |
+                  # HELP nova_streaming_active_streams Number of currently active streaming broadcasts
+                  # TYPE nova_streaming_active_streams gauge
+                  nova_streaming_active_streams{region="us-west-2"} 42
+                  nova_streaming_active_streams{region="eu-central-1"} 15
+
+components:
+  schemas:
+    # Stream Schemas
+    CreateStreamRequest:
+      type: object
+      required:
+        - title
+        - description
+      properties:
+        title:
+          type: string
+          maxLength: 255
+          description: Stream title
+          example: "Live Gaming Session"
+        description:
+          type: string
+          maxLength: 2000
+          description: Detailed stream description
+          example: "Playing competitive games with viewers"
+        region:
+          type: string
+          description: Streaming region for latency optimization
+          enum: ["us-west-2", "us-east-1", "eu-central-1", "ap-southeast-1"]
+          default: "us-west-2"
+        tags:
+          type: array
+          maxItems: 10
+          items:
+            type: string
+          description: Stream category tags
+          example: ["gaming", "live", "competitive"]
+        thumbnail_url:
+          type: string
+          format: uri
+          description: Stream thumbnail image URL
+          example: "https://cdn.nova-social.io/thumbnails/stream-123.jpg"
+
+    StreamResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique stream identifier
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        broadcaster_id:
+          type: string
+          format: uuid
+          description: User ID of broadcaster
+        title:
+          type: string
+          description: Stream title
+        description:
+          type: string
+          description: Stream description
+        status:
+          type: string
+          enum: ["active", "ended", "scheduled"]
+          description: Current stream status
+        region:
+          type: string
+          description: Streaming region
+        rtmp_url:
+          type: string
+          format: uri
+          description: RTMP ingest URL for broadcaster
+          example: "rtmp://ingest.nova-social.io/live/stream-123"
+        rtmp_key:
+          type: string
+          description: RTMP stream key/token
+        viewer_count:
+          type: integer
+          minimum: 0
+          description: Current number of connected viewers
+        peak_viewers:
+          type: integer
+          minimum: 0
+          description: Peak viewer count during stream
+        duration_seconds:
+          type: integer
+          minimum: 0
+          description: Stream duration in seconds (0 if active)
+        created_at:
+          type: string
+          format: date-time
+          description: Stream creation timestamp
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Broadcast start timestamp
+        ended_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Broadcast end timestamp
+        hls_playlist_url:
+          type: string
+          format: uri
+          description: HLS playlist URL for viewers
+          example: "https://cdn.nova-social.io/streams/stream-123/master.m3u8"
+        metadata:
+          type: object
+          properties:
+            quality:
+              type: string
+              enum: ["720p", "1080p", "4k"]
+            fps:
+              type: integer
+            bitrate_kbps:
+              type: integer
+
+    StreamListResponse:
+      type: object
+      properties:
+        streams:
+          type: array
+          items:
+            $ref: '#/components/schemas/StreamResponse'
+        total_count:
+          type: integer
+          description: Total number of active streams
+        limit:
+          type: integer
+        offset:
+          type: integer
+
+    # WebSocket Message Schemas
+    WebSocketMessage:
+      type: object
+      required:
+        - event
+        - data
+      properties:
+        event:
+          type: string
+          enum:
+            - viewer_count_changed
+            - stream_started
+            - stream_ended
+            - quality_changed
+            - error
+          description: Message event type
+        data:
+          oneOf:
+            - $ref: '#/components/schemas/ViewerCountChanged'
+            - $ref: '#/components/schemas/StreamStarted'
+            - $ref: '#/components/schemas/StreamEnded'
+            - $ref: '#/components/schemas/QualityChanged'
+            - $ref: '#/components/schemas/WebSocketError'
+
+    ViewerCountChanged:
+      type: object
+      properties:
+        stream_id:
+          type: string
+          format: uuid
+        viewer_count:
+          type: integer
+          minimum: 0
+        peak_viewers:
+          type: integer
+          minimum: 0
+        timestamp:
+          type: string
+          format: date-time
+
+    StreamStarted:
+      type: object
+      properties:
+        stream_id:
+          type: string
+          format: uuid
+        timestamp:
+          type: string
+          format: date-time
+
+    StreamEnded:
+      type: object
+      properties:
+        stream_id:
+          type: string
+          format: uuid
+        duration_seconds:
+          type: integer
+        peak_viewers:
+          type: integer
+        timestamp:
+          type: string
+          format: date-time
+
+    QualityChanged:
+      type: object
+      properties:
+        stream_id:
+          type: string
+          format: uuid
+        quality:
+          type: string
+          enum: ["720p", "1080p", "4k"]
+        bitrate_kbps:
+          type: integer
+        timestamp:
+          type: string
+          format: date-time
+
+    WebSocketError:
+      type: object
+      properties:
+        stream_id:
+          type: string
+          format: uuid
+        error_type:
+          type: string
+          example: "stream_not_found"
+        message:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+
+    # Error Response
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error code
+          example: "STREAM_NOT_FOUND"
+        message:
+          type: string
+          description: Human-readable error message
+          example: "Stream with ID 550e8400-e29b-41d4-a716-446655440000 not found"
+        request_id:
+          type: string
+          format: uuid
+          description: Unique request identifier for debugging
+
+    # RTMP Handshake Schema
+    RtmpHandshakeRequest:
+      type: object
+      description: RTMP C1 handshake message (after C0 byte)
+      properties:
+        timestamp:
+          type: integer
+          description: Epoch timestamp in milliseconds
+        version:
+          type: integer
+          description: RTMP protocol version (currently 3)
+        extra:
+          type: string
+          description: 1528 bytes of randomized data
+
+    # Metrics Schema
+    PrometheusMetrics:
+      type: string
+      format: text/plain
+      description: |
+        Prometheus format metrics including:
+        - nova_streaming_active_streams (gauge)
+        - nova_streaming_websocket_connections (gauge)
+        - nova_streaming_peak_viewers (gauge)
+        - nova_streaming_quality_bitrate_kbps (gauge)
+        - nova_streaming_broadcast_errors_total (counter)
+        - nova_streaming_viewers_total (histogram)
+        - nova_streaming_stream_duration_seconds (histogram)
+        - nova_streaming_rtmp_ingestion_latency_seconds (histogram)
+
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        JWT token for authentication.
+
+        Format: `Authorization: Bearer <token>`
+
+        Token claims:
+        - `sub`: User ID (UUID)
+        - `exp`: Token expiration (Unix timestamp)
+        - `aud`: Audience ("nova-streaming")
+
+# Security Applied to All Operations
+security:
+  - BearerAuth: []
+
+# Additional Info
+externalDocs:
+  description: Nova Streaming Documentation
+  url: https://docs.nova-social.io/streaming
