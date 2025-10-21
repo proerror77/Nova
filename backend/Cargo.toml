@@ -13,7 +13,9 @@ rust-version = "1.75"
 
 [workspace.dependencies]
 # Web framework
+actix = "0.13"
 actix-web = "4.5"
+actix-web-actors = "4.2"
 actix-rt = "2.9"
 actix-cors = "0.7"
 

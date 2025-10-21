@@ -32,6 +32,7 @@
 //! - `rtmp_webhook.rs` - RTMP authentication webhook handlers
 //! - `discovery.rs` - Stream discovery and listing
 //! - `analytics.rs` - Analytics aggregation (ClickHouse queries)
+//! - `websocket_handler.rs` - Real-time WebSocket updates for viewers (exported from handlers)
 
 pub mod analytics;
 pub mod discovery;

@@ -7,6 +7,7 @@ pub mod jwks;
 pub mod oauth;
 pub mod password_reset;
 pub mod posts;
+pub mod streaming_websocket;
 // pub mod reels;     // TODO: Phase 2 - needs VideoService implementation
 // pub mod videos;    // TODO: Phase 2 - needs VideoService implementation
 
@@ -19,5 +20,6 @@ pub use jwks::*;
 pub use oauth::*;
 pub use password_reset::*;
 pub use posts::*;
+pub use streaming_websocket::*;
 // pub use reels::*;  // Disabled - Phase 2 pending
 // pub use videos::*; // Disabled - Phase 2 pending

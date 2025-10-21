@@ -11,7 +11,7 @@ use user_service::{
     config::Config,
     db::{ch_client::ClickHouseClient, create_pool, run_migrations},
     handlers,
-    handlers::{events::EventHandlerState, feed::FeedHandlerState},
+    handlers::{events::EventHandlerState, feed::FeedHandlerState, streaming_websocket::StreamingHub},
     metrics,
     middleware::{JwtAuthMiddleware, MetricsMiddleware},
     services::{
@@ -23,6 +23,7 @@ use user_service::{
         s3_service,
     },
 };
+use actix::Actor;
 
 #[actix_web::main]
 async fn main() -> io::Result<()> {
@@ -240,10 +241,16 @@ async fn main() -> io::Result<()> {
     // Clone job_sender for graceful shutdown (will be dropped after server stops)
     let job_sender_shutdown = job_sender.clone();
 
+    // ========================================
+    // Initialize WebSocket Streaming Hub
+    // ========================================
+    let streaming_hub = StreamingHub::new().start();
+
     // Create and run HTTP server
     let server = HttpServer::new(move || {
         let feed_state = feed_state.clone();
         let events_state = events_state.clone();
+        let streaming_hub = streaming_hub.clone();
         // Build CORS configuration from allowed_origins
         let cors_builder = Cors::default();
 
@@ -267,6 +274,7 @@ async fn main() -> io::Result<()> {
             .app_data(web::Data::new(redis_manager.clone()))
             .app_data(web::Data::new(server_config.clone()))
             .app_data(web::Data::new(job_sender.clone()))
+            .app_data(web::Data::new(streaming_hub.clone()))
             .app_data(feed_state.clone())
             .app_data(events_state.clone())
             .wrap(cors)
@@ -348,6 +356,15 @@ async fn main() -> io::Result<()> {
                                 web::post().to(handlers::upload_complete_request),
                             )
                             .route("/{id}", web::get().to(handlers::get_post_request)),
+                    )
+                    // Streaming endpoints
+                    .service(
+                        web::scope("/streams")
+                            // WebSocket real-time updates
+                            .route(
+                                "/{stream_id}/ws",
+                                web::get().to(handlers::ws_stream_updates),
+                            ),
                     ),
             )
     })

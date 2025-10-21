@@ -24,7 +24,7 @@ pub async fn redis_set_ex(
 ) -> Result<()> {
     let mut conn = redis.clone();
     let _: () = conn
-        .set_ex(key, value, ttl_seconds as usize)
+        .set_ex(key, value, ttl_seconds)
         .await
         .map_err(|e| anyhow!("Failed to set Redis key '{}': {}", key, e))?;
     Ok(())
@@ -147,7 +147,7 @@ pub async fn redis_expire(
 ) -> Result<bool> {
     let mut conn = redis.clone();
     let expired: bool = conn
-        .expire(key, ttl_seconds as usize)
+        .expire(key, ttl_seconds as i64)
         .await
         .map_err(|e| anyhow!("Failed to set expiration on Redis key '{}': {}", key, e))?;
     Ok(expired)

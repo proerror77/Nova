@@ -21,7 +21,9 @@ path = "src/lib.rs"
 
 [dependencies]
 # Workspace dependencies
+actix.workspace = true
 actix-web.workspace = true
+actix-web-actors.workspace = true
 actix-rt.workspace = true
 actix-cors.workspace = true
 tokio.workspace = true

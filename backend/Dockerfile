@@ -21,7 +21,9 @@ RUN useradd -m -u 1001 -s /bin/bash appuser
 WORKDIR /app
 
 # Copy workspace configuration (lockfile optional in dev builds)
+# Copy workspace manifest and lockfile to leverage dependency caching and exact versions
 COPY Cargo.toml ./
+COPY Cargo.lock ./
 
 # Copy service configuration and source
 COPY user-service ./user-service
@@ -66,7 +68,7 @@ EXPOSE 8080
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD ["/app/user-service", "healthcheck"] || exit 1
+    CMD ["bash", "-lc", "curl -fsS http://localhost:8080/api/v1/health >/dev/null || exit 1"]
 
 # Set environment variables
 ENV RUST_LOG=info
