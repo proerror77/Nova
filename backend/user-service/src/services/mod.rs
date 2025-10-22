@@ -32,6 +32,7 @@ pub mod ranking_engine;
 pub mod recommendation_v2;
 pub mod redis_job;
 pub mod s3_service;
+pub mod messaging;
 pub mod streaming;
 pub mod streaming_manifest;
 pub mod token_revocation;
