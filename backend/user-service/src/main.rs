@@ -66,13 +66,16 @@ async fn main() -> io::Result<()> {
         config.database.max_connections
     );
 
-    // Run migrations
-    if !config.is_production() {
+    // Run migrations in non-production unless explicitly skipped
+    let run_migrations_env = std::env::var("RUN_MIGRATIONS").unwrap_or_else(|_| "true".into());
+    if !config.is_production() && run_migrations_env != "false" {
         tracing::info!("Running database migrations...");
         run_migrations(&db_pool)
             .await
             .expect("Failed to run migrations");
         tracing::info!("Database migrations completed");
+    } else {
+        tracing::info!("Skipping database migrations (RUN_MIGRATIONS={})", run_migrations_env);
     }
 
     // Create Redis connection manager
@@ -127,7 +130,7 @@ async fn main() -> io::Result<()> {
     });
 
     // ========================================
-    // Initialize CDC Consumer (PostgreSQL → Kafka → ClickHouse)
+    // Initialize CDC Consumer (PostgreSQL → Kafka → ClickHouse) if enabled
     // ========================================
     let ch_writable = Arc::new(ClickHouseClient::new_writable(
         &config.clickhouse.url,
@@ -137,28 +140,40 @@ async fn main() -> io::Result<()> {
         config.clickhouse.timeout_ms,
     ));
 
-    let cdc_config = CdcConsumerConfig {
-        brokers: config.kafka.brokers.clone(),
-        group_id: "nova-cdc-consumer-v1".to_string(),
-        topics: vec![
-            "cdc.posts".to_string(),
-            "cdc.follows".to_string(),
-            "cdc.comments".to_string(),
-            "cdc.likes".to_string(),
-        ],
-        max_concurrent_inserts: 10,
-    };
+    let enable_cdc = std::env::var("ENABLE_CDC").unwrap_or_else(|_| "false".into()) == "true";
+    let mut cdc_handle_opt: Option<tokio::task::JoinHandle<()>> = None;
+    if enable_cdc {
 
-    let cdc_consumer = CdcConsumer::new(cdc_config, ch_writable.as_ref().clone(), db_pool.clone())
+        let cdc_config = CdcConsumerConfig {
+            brokers: config.kafka.brokers.clone(),
+            group_id: "nova-cdc-consumer-v1".to_string(),
+            topics: vec![
+                "cdc.posts".to_string(),
+                "cdc.follows".to_string(),
+                "cdc.comments".to_string(),
+                "cdc.likes".to_string(),
+            ],
+            max_concurrent_inserts: 10,
+        };
+
+        let cdc_consumer = CdcConsumer::new(
+            cdc_config,
+            ch_writable.as_ref().clone(),
+            db_pool.clone(),
+        )
         .await
         .expect("Failed to create CDC consumer");
 
-    let cdc_handle = tokio::spawn(async move {
-        if let Err(e) = cdc_consumer.run().await {
-            tracing::error!("CDC consumer error: {}", e);
-        }
-    });
-    tracing::info!("CDC consumer spawned");
+        let cdc_handle = tokio::spawn(async move {
+            if let Err(e) = cdc_consumer.run().await {
+                tracing::error!("CDC consumer error: {}", e);
+            }
+        });
+        tracing::info!("CDC consumer spawned");
+        cdc_handle_opt = Some(cdc_handle);
+    } else {
+        tracing::info!("CDC consumer disabled (ENABLE_CDC=false)");
+    }
 
     // ========================================
     // Initialize Events Consumer (Kafka → ClickHouse for analytics)
@@ -357,17 +372,19 @@ async fn main() -> io::Result<()> {
         }
     }
 
-    // Abort CDC consumer (long-running Kafka consumer loop)
-    cdc_handle.abort();
-    match tokio::time::timeout(std::time::Duration::from_secs(5), cdc_handle).await {
-        Ok(Ok(())) => {
-            tracing::info!("CDC consumer shut down gracefully");
-        }
-        Ok(Err(_)) => {
-            tracing::info!("CDC consumer aborted");
-        }
-        Err(_) => {
-            tracing::warn!("CDC consumer did not shut down within timeout");
+    // Abort CDC consumer (long-running Kafka consumer loop) if running
+    if let Some(cdc_handle) = cdc_handle_opt {
+        cdc_handle.abort();
+        match tokio::time::timeout(std::time::Duration::from_secs(5), cdc_handle).await {
+            Ok(Ok(())) => {
+                tracing::info!("CDC consumer shut down gracefully");
+            }
+            Ok(Err(_)) => {
+                tracing::info!("CDC consumer aborted");
+            }
+            Err(_) => {
+                tracing::warn!("CDC consumer did not shut down within timeout");
+            }
         }
     }
 
