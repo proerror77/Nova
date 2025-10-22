@@ -67,9 +67,10 @@ impl ClickHouseClient {
             .with_password(password)
             .with_option("max_execution_time", &(query_timeout_ms / 1000).to_string());
 
-        if readonly {
-            client = client.with_option("readonly", "1");
-        }
+        // Do not force `readonly` via session setting here.
+        // Some ClickHouse deployments run in readonly mode at the user/profile level,
+        // and attempting to set `readonly` again causes: "Cannot modify 'readonly' setting in readonly mode".
+        // We rely on the DB user/profile to enforce read-only access for SELECT-only clients.
 
         Self {
             client,
@@ -190,8 +191,11 @@ impl ClickHouseClient {
             result: u32,
         }
 
+        // Use explicit cast to avoid row type mismatches across CH deployments
+        let q = "SELECT toUInt32(1) AS result";
+
         self.client
-            .query("SELECT 1 as result")
+            .query(q)
             .fetch_one::<HealthCheck>()
             .await
             .map(|_| ())

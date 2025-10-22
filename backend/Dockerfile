@@ -23,6 +23,9 @@ COPY Cargo.toml ./
 
 # Copy service configuration and source
 COPY user-service ./user-service
+COPY messaging-service ./messaging-service
+COPY search-service ./search-service
+COPY libs ./libs
 
 # Copy migrations (sqlx::migrate!("../migrations") expects /app/migrations at compile-time)
 COPY migrations ./migrations

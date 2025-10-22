@@ -230,7 +230,6 @@ Add members to a group conversation (owner/admin only).
   "added_members": [
     {
       "user_id": "user-uuid-3",
-      "username": "charlie",
       "role": "member",
       "joined_at": "2025-10-19T13:00:00Z"
     }
@@ -388,9 +387,7 @@ Mark messages as read in a conversation.
 **Response** (200 OK):
 ```json
 {
-  "conversation_id": "conv-uuid",
-  "last_read_message_id": "msg-uuid",
-  "last_read_at": "2025-10-19T13:10:00Z"
+  "message": "Read status updated"
 }
 ```
 
@@ -433,6 +430,212 @@ Real-time message delivery and typing indicators.
 
 ---
 
+## End-to-End Walkthrough
+
+The following sequence demonstrates a minimal direct-message flow using curl. Replace placeholders with real values and export your JWT once.
+
+1) Export JWT
+
+```bash
+export TOKEN="<your-jwt-access-token>"
+```
+
+2) Create a 1:1 conversation
+
+```bash
+PEER_ID="00000000-0000-0000-0000-000000000000"  # replace with the other user's UUID
+CREATE_RES=$(curl -sS -X POST http://localhost:8080/api/v1/conversations \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"type":"direct","participant_ids":["'"$PEER_ID"'"]}')
+echo "$CREATE_RES" | jq .
+CONV_ID=$(echo "$CREATE_RES" | jq -r .id)
+```
+
+Example response:
+
+```json
+{
+  "id": "f3f7d7e4-889d-4a9f-9b8b-7b6dc3b9b0f2",
+  "type": "direct",
+  "name": null,
+  "created_by": "11111111-1111-1111-1111-111111111111",
+  "created_at": "2025-10-22T12:00:00Z",
+  "updated_at": "2025-10-22T12:00:00Z",
+  "members": [
+    { "user_id": "11111111-1111-1111-1111-111111111111", "username": "alice", "role": "owner", "joined_at": "2025-10-22T12:00:00Z" },
+    { "user_id": "22222222-2222-2222-2222-222222222222", "username": "bob",   "role": "member", "joined_at": "2025-10-22T12:00:00Z" }
+  ]
+}
+```
+
+3) Send a message
+
+```bash
+SEND_RES=$(curl -sS -X POST http://localhost:8080/api/v1/messages \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "conversation_id":"'"$CONV_ID"'",
+    "encrypted_content":"YmFzZTY0LWNpcGhlcnRleHQtY29udGVudA==",
+    "nonce":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+    "message_type":"text"
+  }')
+echo "$SEND_RES" | jq .
+MSG_ID=$(echo "$SEND_RES" | jq -r .id)
+```
+
+Example response (201 Created):
+
+```json
+{
+  "id": "a1b2c3d4-0000-0000-0000-000000000001",
+  "conversation_id": "f3f7d7e4-889d-4a9f-9b8b-7b6dc3b9b0f2",
+  "sender_id": "11111111-1111-1111-1111-111111111111",
+  "encrypted_content": "YmFzZTY0LWNpcGhlcnRleHQtY29udGVudA==",
+  "nonce": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+  "message_type": "text",
+  "created_at": "2025-10-22T12:05:00Z"
+}
+```
+
+4) Fetch message history
+
+```bash
+curl -sS -G http://localhost:8080/api/v1/conversations/$CONV_ID/messages \
+  -H "Authorization: Bearer $TOKEN" \
+  --data-urlencode "limit=50" | jq .
+```
+
+Example response:
+
+```json
+{
+  "messages": [
+    {
+      "id": "a1b2c3d4-0000-0000-0000-000000000001",
+      "conversation_id": "f3f7d7e4-889d-4a9f-9b8b-7b6dc3b9b0f2",
+      "sender_id": "11111111-1111-1111-1111-111111111111",
+      "encrypted_content": "YmFzZTY0LWNpcGhlcnRleHQtY29udGVudA==",
+      "nonce": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+      "message_type": "text",
+      "created_at": "2025-10-22T12:05:00Z"
+    }
+  ],
+  "has_more": false,
+  "next_cursor": null
+}
+```
+
+5) Mark as read
+
+```bash
+curl -sS -X POST http://localhost:8080/api/v1/conversations/$CONV_ID/read \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"message_id":"'"$MSG_ID"'"}' | jq .
+```
+
+Example response (200 OK):
+
+```json
+{ "message": "Read status updated" }
+```
+
+6) List conversations and verify unread_count
+
+```bash
+curl -sS "http://localhost:8080/api/v1/conversations?limit=20&offset=0&archived=false" \
+  -H "Authorization: Bearer $TOKEN" | jq .
+```
+
+Example item:
+
+```json
+{
+  "id": "f3f7d7e4-889d-4a9f-9b8b-7b6dc3b9b0f2",
+  "type": "direct",
+  "name": null,
+  "last_message": {
+    "id": "a1b2c3d4-0000-0000-0000-000000000001",
+    "sender_id": "11111111-1111-1111-1111-111111111111",
+    "encrypted_content": "YmFzZTY0LWNpcGhlcnRleHQtY29udGVudA==",
+    "nonce": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+    "created_at": "2025-10-22T12:05:00Z"
+  },
+  "unread_count": 0,
+  "updated_at": "2025-10-22T12:05:00Z",
+  "is_muted": false,
+  "is_archived": false
+}
+```
+
+### Scripted E2E (local dev)
+
+Run the automated example script to exercise the same flow:
+
+```bash
+# Fully auto (register + verify + login 3 users)
+bash scripts/examples/messaging_e2e.sh
+
+# Or reuse an existing actor token but auto-create other users
+TOKEN=your_jwt_here bash scripts/examples/messaging_e2e.sh
+
+# Or provide everything explicitly
+TOKEN=... PEER_ID=... NEW_MEMBER_ID=... bash scripts/examples/messaging_e2e.sh
+```
+
+Environment overrides for Redis (if not default compose): `REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD`.
+
+### Group Conversation Walkthrough (optional)
+
+1) Create a group conversation
+
+```bash
+G_CREATE_RES=$(curl -sS -X POST http://localhost:8080/api/v1/conversations \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "type":"group",
+    "name":"Team Chat",
+    "participant_ids":["'"$PEER_ID"'"]
+  }')
+echo "$G_CREATE_RES" | jq .
+G_CONV_ID=$(echo "$G_CREATE_RES" | jq -r .id)
+```
+
+2) Add a member (owner/admin only)
+
+```bash
+NEW_MEMBER_ID="33333333-3333-3333-3333-333333333333"
+curl -sS -X POST http://localhost:8080/api/v1/conversations/$G_CONV_ID/members \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"user_ids":["'"$NEW_MEMBER_ID"'"]}' | jq .
+```
+
+3) Update my settings (mute / archive)
+
+```bash
+curl -sS -X PATCH http://localhost:8080/api/v1/conversations/$G_CONV_ID/settings \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"is_muted":true,"is_archived":true}' | jq .
+```
+
+4) List conversations without archived
+
+```bash
+curl -sS "http://localhost:8080/api/v1/conversations?limit=20&offset=0&archived=false" \
+  -H "Authorization: Bearer $TOKEN" | jq '.conversations | length'
+```
+
+5) Remove a member (owner/admin or self)
+
+```bash
+curl -sS -X DELETE http://localhost:8080/api/v1/conversations/$G_CONV_ID/members/$NEW_MEMBER_ID \
+  -H "Authorization: Bearer $TOKEN" -i | head -n1   # Expect HTTP/1.1 204 No Content
+```
 ### Events: Server → Client
 
 #### New Message
