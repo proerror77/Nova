@@ -1,0 +1,29 @@
+use redis::AsyncCommands;
+use redis::Client;
+use crate::websocket::ConnectionRegistry;
+use uuid::Uuid;
+use axum::extract::ws::Message;
+
+fn channel_for_conversation(id: Uuid) -> String { format!("conversation:{}", id) }
+
+pub async fn publish(client: &Client, conversation_id: Uuid, payload: &str) -> redis::RedisResult<()> {
+    let mut conn = client.get_multiplexed_async_connection().await?;
+    let ch = channel_for_conversation(conversation_id);
+    conn.publish::<_, _, ()>(ch, payload).await
+}
+
+pub async fn start_psub_listener(client: Client, registry: ConnectionRegistry) -> redis::RedisResult<()> {
+    let mut conn = client.get_async_connection().await?;
+    let mut pubsub = conn.as_pubsub();
+    pubsub.psubscribe("conversation:*").await?;
+    loop {
+        let msg = pubsub.on_message().await;
+        let channel: String = msg.get_channel_name().into();
+        let payload: String = msg.get_payload()?;
+        if let Some(id_str) = channel.strip_prefix("conversation:") {
+            if let Ok(uuid) = Uuid::parse_str(id_str) {
+                registry.broadcast(uuid, Message::Text(payload.clone())).await;
+            }
+        }
+    }
+}
