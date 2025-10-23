@@ -8,6 +8,7 @@ use testcontainers::{clients::Cli, images::postgres::Postgres as TcPostgres, ima
 use sqlx::{Pool, Postgres};
 use uuid::Uuid;
 use redis::Client as RedisClient;
+use base64::{engine::general_purpose, Engine as _};
 
 async fn start_db() -> (Cli, Pool<Postgres>) {
     let docker = Cli::default();
@@ -53,6 +54,10 @@ async fn start_redis() -> (Cli, RedisClient) {
 
 #[tokio::test]
 async fn direct_message_send_and_receive() {
+    // Provide server-side secretbox key for encrypt_at_rest
+    let mut key = [0u8;32];
+    let key_b64 = general_purpose::STANDARD.encode(key);
+    std::env::set_var("SECRETBOX_KEY_B64", key_b64);
     let (_docker_db, pool) = start_db().await;
     let (_docker_redis, redis) = start_redis().await;
     // seed two users
