@@ -6,6 +6,7 @@
 use crate::db::messaging::Message;
 use crate::error::AppError;
 use redis::aio::ConnectionManager;
+use redis::AsyncCommands;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use uuid::Uuid;
@@ -39,10 +40,13 @@ impl MessagingWebSocketHandler {
         let payload = serde_json::to_string(&event)
             .map_err(|e| AppError::Internal(format!("Failed to serialize event: {}", e)))?;
 
-        // TODO: Implement Redis publish
-        // self.redis.publish(&channel, payload).await?;
+        let mut conn = self.redis.as_ref().clone();
+        let _: () = conn
+            .publish(&channel, payload)
+            .await
+            .map_err(|e| AppError::Internal(format!("Redis publish failed: {}", e)))?;
 
-        unimplemented!("T216: Implement Redis Pub/Sub publish")
+        Ok(())
     }
 
     /// Publish a typing indicator event
@@ -59,8 +63,11 @@ impl MessagingWebSocketHandler {
         if is_typing {
             // Store typing status in Redis with TTL
             let key = format!("typing:{}:{}", conversation_id, user_id);
-            // TODO: Implement Redis SET with TTL
-            // self.redis.set_ex(&key, "1", 3).await?;
+            let mut conn = self.redis.as_ref().clone();
+            let _: () = conn
+                .set_ex(&key, "1", 3)
+                .await
+                .map_err(|e| AppError::Internal(format!("Redis SETEX failed: {}", e)))?;
 
             // Publish typing event
             let event = TypingEvent {
@@ -76,13 +83,18 @@ impl MessagingWebSocketHandler {
             let payload = serde_json::to_string(&event)
                 .map_err(|e| AppError::Internal(format!("Failed to serialize event: {}", e)))?;
 
-            // TODO: Implement Redis publish
-            // self.redis.publish(&channel, payload).await?;
+            let _: () = conn
+                .publish(&channel, payload)
+                .await
+                .map_err(|e| AppError::Internal(format!("Redis publish failed: {}", e)))?;
         } else {
             // Remove typing status
             let key = format!("typing:{}:{}", conversation_id, user_id);
-            // TODO: Implement Redis DEL
-            // self.redis.del(&key).await?;
+            let mut conn = self.redis.as_ref().clone();
+            let _: () = conn
+                .del(&key)
+                .await
+                .map_err(|e| AppError::Internal(format!("Redis DEL failed: {}", e)))?;
 
             // Publish typing stopped event
             let event = TypingEvent {
@@ -98,11 +110,13 @@ impl MessagingWebSocketHandler {
             let payload = serde_json::to_string(&event)
                 .map_err(|e| AppError::Internal(format!("Failed to serialize event: {}", e)))?;
 
-            // TODO: Implement Redis publish
-            // self.redis.publish(&channel, payload).await?;
+            let _: () = conn
+                .publish(&channel, payload)
+                .await
+                .map_err(|e| AppError::Internal(format!("Redis publish failed: {}", e)))?;
         }
 
-        unimplemented!("T216: Implement typing indicator")
+        Ok(())
     }
 
     /// Publish a read receipt event
@@ -125,10 +139,13 @@ impl MessagingWebSocketHandler {
         let payload = serde_json::to_string(&event)
             .map_err(|e| AppError::Internal(format!("Failed to serialize event: {}", e)))?;
 
-        // TODO: Implement Redis publish
-        // self.redis.publish(&channel, payload).await?;
+        let mut conn = self.redis.as_ref().clone();
+        let _: () = conn
+            .publish(&channel, payload)
+            .await
+            .map_err(|e| AppError::Internal(format!("Redis publish failed: {}", e)))?;
 
-        unimplemented!("T216: Implement read receipt event")
+        Ok(())
     }
 
     /// Subscribe to conversation channels when user connects

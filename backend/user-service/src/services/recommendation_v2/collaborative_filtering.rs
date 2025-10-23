@@ -45,11 +45,17 @@ impl CollaborativeFilteringModel {
         item_sim_path: &str,
         k_neighbors: usize,
     ) -> Result<Self> {
-        // TODO: Implement loading from bincode files
-        // let user_similarity = load_bincode(user_sim_path)?;
-        // let item_similarity = load_bincode(item_sim_path)?;
+        // Minimal implementation: return empty model to avoid panic
+        // TODO: Implement actual loading from bincode files when offline computation is ready
+        let _ = user_sim_path;
+        let _ = item_sim_path;
 
-        todo!("Implement load from disk")
+        Ok(Self {
+            user_similarity: HashMap::new(),
+            item_similarity: HashMap::new(),
+            k_neighbors,
+            metric: SimilarityMetric::Cosine,
+        })
     }
 
     /// Get recommended posts using user-user collaborative filtering
@@ -65,13 +71,18 @@ impl CollaborativeFilteringModel {
         seen_posts: &[Uuid],
         n: usize,
     ) -> Result<Vec<(Uuid, f64)>> {
-        // TODO: Implement user-based CF
+        // Minimal implementation: return empty list to avoid panic
+        // TODO: Implement full user-based CF when user similarity matrix is available
         // 1. Get similar users from self.user_similarity
         // 2. Query their liked posts from ClickHouse
         // 3. Aggregate scores: score[post] = Σ(similarity[user] * interaction[user, post])
         // 4. Sort by score, filter seen_posts, return top-N
 
-        todo!("Implement recommend_user_based")
+        let _ = user_id;
+        let _ = seen_posts;
+        let _ = n;
+
+        Ok(Vec::new())
     }
 
     /// Get recommended posts using item-item collaborative filtering

@@ -44,10 +44,13 @@ pub struct UserProfile {
 impl ContentBasedModel {
     /// Load post features from parquet file (generated offline by Python script)
     pub fn load_post_features(path: &str) -> Result<HashMap<Uuid, Vec<f32>>> {
-        // TODO: Load parquet file using arrow-rs
+        // Minimal implementation: return empty map to avoid panic
+        // TODO: Load parquet file using arrow-rs when offline feature extraction is ready
         // Expected format: (post_id, feature_0, feature_1, ..., feature_999)
 
-        todo!("Implement load_post_features")
+        let _ = path;
+
+        Ok(HashMap::new())
     }
 
     /// Build user profile from interaction history

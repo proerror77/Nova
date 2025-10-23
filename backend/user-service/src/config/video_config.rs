@@ -57,6 +57,9 @@ pub struct VideoProcessingConfig {
     pub extract_thumbnails: bool,
     /// Thumbnail dimensions (width, height)
     pub thumbnail_dimensions: (u32, u32),
+    /// Use mock processing instead of real ffmpeg execution
+    #[serde(default)]
+    pub enable_mock: bool,
 }
 
 impl Default for VideoProcessingConfig {
@@ -75,6 +78,7 @@ impl Default for VideoProcessingConfig {
             s3_processed_prefix: "processed/".to_string(),
             extract_thumbnails: true,
             thumbnail_dimensions: (320, 180),
+            enable_mock: true,
         }
     }
 }
@@ -108,7 +112,7 @@ impl Default for DeepLearningConfig {
             tf_serving_url: "http://tf-serving:8500".to_string(),
             model_name: "video_embeddings".to_string(),
             model_version: "1".to_string(),
-            embedding_dim: 256,
+            embedding_dim: 512, // Updated to 512 for feature-based embeddings
             milvus_url: "http://milvus:19530".to_string(),
             milvus_collection: "video_embeddings".to_string(),
             inference_timeout_seconds: 30,
@@ -224,6 +228,10 @@ impl VideoConfig {
                     .unwrap_or_else(|_| "processed/".to_string()),
                 extract_thumbnails: true,
                 thumbnail_dimensions: (320, 180),
+                enable_mock: env::var("VIDEO_MOCK_PROCESSING")
+                    .ok()
+                    .and_then(|v| v.parse().ok())
+                    .unwrap_or(true),
             },
             inference: DeepLearningConfig {
                 tf_serving_url: env::var("TF_SERVING_URL")
@@ -234,7 +242,7 @@ impl VideoConfig {
                 embedding_dim: env::var("EMBEDDING_DIM")
                     .ok()
                     .and_then(|v| v.parse().ok())
-                    .unwrap_or(256),
+                    .unwrap_or(512), // Default to 512 for feature-based embeddings
                 milvus_url: env::var("MILVUS_URL")
                     .unwrap_or_else(|_| "http://milvus:19530".to_string()),
                 milvus_collection: env::var("MILVUS_COLLECTION")
@@ -267,7 +275,7 @@ mod tests {
         let config = VideoConfig::from_env();
         assert_eq!(config.upload.max_file_size_bytes, 500 * 1024 * 1024);
         assert_eq!(config.upload.max_duration_seconds, 600);
-        assert_eq!(config.inference.embedding_dim, 256);
+        assert_eq!(config.inference.embedding_dim, 512); // Updated to 512
     }
 
     #[test]

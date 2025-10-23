@@ -10,7 +10,8 @@ pub mod posts;
 pub mod messaging;
 pub mod stories;
 // pub mod reels;     // TODO: Phase 2 - needs VideoService implementation
-// pub mod videos;    // TODO: Phase 2 - needs VideoService implementation
+pub mod videos;    // Enable basic Video handlers
+pub mod users;     // Public user profile endpoints (minimal)
 
 pub use auth::*;
 // pub use discover::*;  // Disabled - Phase 2 pending
@@ -24,4 +25,5 @@ pub use posts::*;
 pub use messaging::*;
 pub use stories::*;
 // pub use reels::*;  // Disabled - Phase 2 pending
-// pub use videos::*; // Disabled - Phase 2 pending
+pub use videos::*; // Enable basic Video handlers
+pub use users::*;

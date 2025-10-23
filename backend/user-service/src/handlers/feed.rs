@@ -8,6 +8,7 @@ use crate::error::{AppError, Result};
 use crate::middleware::jwt_auth::UserId;
 use crate::models::FeedResponse;
 use crate::services::feed_ranking::FeedRankingService;
+use crate::services::recommendation_v2::RecommendationServiceV2;
 
 /// Feed query parameters
 #[derive(Debug, Deserialize)]
@@ -65,6 +66,7 @@ impl FeedQueryParams {
 /// Feed handler state
 pub struct FeedHandlerState {
     pub feed_ranking: Arc<FeedRankingService>,
+    pub rec_v2: Option<Arc<RecommendationServiceV2>>, // optional re-ranker
 }
 
 /// GET /api/v1/feed
@@ -112,7 +114,7 @@ pub async fn get_feed(
     }
 
     // Get feed from ranking service
-    let (post_ids, has_more) = state
+    let (mut post_ids, has_more) = state
         .feed_ranking
         .get_feed(user_id, limit, offset)
         .await
@@ -120,6 +122,27 @@ pub async fn get_feed(
             error!("Failed to get feed for user {}: {}", user_id, e);
             e
         })?;
+
+    // Optional: Re-rank using Recommendation V2 (graceful, best-effort)
+    if let Some(rec) = &state.rec_v2 {
+        // Feature flag via env
+        let enable = std::env::var("RECOMMENDATION_V2_ENABLED").unwrap_or_else(|_| "false".into()) == "true";
+        if enable {
+            if let Ok(prioritized) = rec.get_recommendations(user_id, post_ids.len()).await {
+                if !prioritized.is_empty() {
+                    // Stable reorder: move items in `prioritized` to front, keep others order
+                    let set: std::collections::HashSet<uuid::Uuid> = prioritized.iter().cloned().collect();
+                    let mut front: Vec<uuid::Uuid> = Vec::new();
+                    let mut back: Vec<uuid::Uuid> = Vec::new();
+                    for id in &post_ids {
+                        if set.contains(id) { front.push(*id); } else { back.push(*id); }
+                    }
+                    front.extend(back);
+                    post_ids = front;
+                }
+            }
+        }
+    }
 
     // Build response
     let response = FeedResponse {

@@ -21,12 +21,21 @@ struct GoogleTokenResponse {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-struct GoogleUserInfo {
+pub struct GoogleUserInfo {
+    pub sub: String,
+    pub email: String,
+    pub email_verified: bool,
+    pub name: Option<String>,
+    pub picture: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct GoogleTokenInfo {
+    aud: String,
     sub: String,
-    email: String,
-    email_verified: bool,
-    name: Option<String>,
-    picture: Option<String>,
+    email: Option<String>,
+    email_verified: Option<String>,
+    exp: String,
 }
 
 impl GoogleOAuthProvider {
@@ -44,6 +53,51 @@ impl GoogleOAuthProvider {
             redirect_uri,
             http_client: Arc::new(Client::new()),
         })
+    }
+
+    /// Verify Google ID token using tokeninfo endpoint
+    /// Validates the token by calling https://oauth2.googleapis.com/tokeninfo
+    pub async fn verify_google_token(&self, id_token: &str) -> Result<GoogleUserInfo, OAuthError> {
+        // Validate token using Google's tokeninfo endpoint
+        let token_info = self
+            .http_client
+            .get("https://oauth2.googleapis.com/tokeninfo")
+            .query(&[("id_token", id_token)])
+            .send()
+            .await
+            .map_err(|e| OAuthError::NetworkError(format!("Failed to verify token: {}", e)))?;
+
+        if !token_info.status().is_success() {
+            return Err(OAuthError::InvalidAuthCode(
+                "Token validation failed".to_string(),
+            ));
+        }
+
+        let token_data = token_info
+            .json::<GoogleTokenInfo>()
+            .await
+            .map_err(|e| OAuthError::NetworkError(format!("Failed to parse token info: {}", e)))?;
+
+        // Verify audience matches our client ID
+        if token_data.aud != self.client_id {
+            return Err(OAuthError::InvalidAuthCode(
+                "Token audience mismatch".to_string(),
+            ));
+        }
+
+        // Fetch full user info
+        let user_info = self
+            .http_client
+            .get("https://openidconnect.googleapis.com/v1/userinfo")
+            .bearer_auth(id_token)
+            .send()
+            .await
+            .map_err(|e| OAuthError::UserInfoFetch(format!("HTTP error: {}", e)))?
+            .json::<GoogleUserInfo>()
+            .await
+            .map_err(|e| OAuthError::UserInfoFetch(format!("JSON parse error: {}", e)))?;
+
+        Ok(user_info)
     }
 }
 

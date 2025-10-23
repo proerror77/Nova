@@ -342,15 +342,82 @@ class DeepLinkHandler: ObservableObject {
             return
         }
 
-        // TODO: Handle OAuth callback with auth service
         Task {
             do {
-                // try await authService?.handleOAuthCallback(provider: provider, code: code)
+                // Minimal OAuth authorize call → save tokens → load user → navigate
+                try await self.authorizeOAuth(provider: provider, code: code)
                 navigateToFeed()
             } catch {
                 self.error = .oauthFailed(provider: provider, error: error)
             }
         }
+    }
+
+    // Calls backend /api/v1/auth/oauth/authorize and stores tokens via AuthManager
+    private func authorizeOAuth(provider: String, code: String) async throws {
+        struct OAuthAuthorizeRequest: Encodable {
+            let provider: String
+            let code: String
+            let state: String
+            let redirectUri: String
+        }
+
+        struct OAuthAuthorizeResponse: Decodable {
+            let accessToken: String
+            let refreshToken: String
+            let tokenType: String
+            let expiresIn: Int
+            let userId: String
+            let email: String
+
+            enum CodingKeys: String, CodingKey {
+                case accessToken = "access_token"
+                case refreshToken = "refresh_token"
+                case tokenType = "token_type"
+                case expiresIn = "expires_in"
+                case userId = "user_id"
+                case email
+            }
+        }
+
+        let apiClient = APIClient(baseURL: AppConfig.baseURL)
+        let req = OAuthAuthorizeRequest(
+            provider: provider,
+            code: code,
+            state: "ios-app", // TODO: generate and validate CSRF state
+            redirectUri: "novasocial://auth/oauth/\(provider)"
+        )
+
+        let endpoint = APIEndpoint(
+            path: "/auth/oauth/authorize",
+            method: .post,
+            body: req
+        )
+
+        let resp: OAuthAuthorizeResponse = try await apiClient.request(endpoint, authenticated: false)
+
+        // Create a minimal User to satisfy current AuthManager schema
+        let userId = UUID(uuidString: resp.userId) ?? UUID()
+        let username = resp.email.split(separator: "@").first.map(String.init) ?? "user"
+        let user = User(
+            id: userId,
+            username: username,
+            email: resp.email,
+            displayName: nil,
+            bio: nil,
+            avatarUrl: nil,
+            isVerified: false,
+            createdAt: Date()
+        )
+
+        let tokens = AuthTokens(
+            accessToken: resp.accessToken,
+            refreshToken: resp.refreshToken,
+            expiresIn: resp.expiresIn,
+            tokenType: resp.tokenType
+        )
+
+        AuthManager.shared.saveAuth(user: user, tokens: tokens)
     }
 
     // MARK: - Error Handling
