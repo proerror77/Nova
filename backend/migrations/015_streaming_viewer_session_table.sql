@@ -32,9 +32,7 @@ CREATE TABLE viewer_sessions (
     -- Session lifecycle
     joined_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
     left_at TIMESTAMP WITH TIME ZONE,
-    duration_seconds INTEGER GENERATED ALWAYS AS (
-        EXTRACT(EPOCH FROM (COALESCE(left_at, NOW()) - joined_at))::INTEGER
-    ) STORED,
+    duration_seconds INTEGER NOT NULL DEFAULT 0,
 
     -- Quality of Service (QoS) metrics
     initial_quality quality_level_enum NOT NULL,
@@ -61,6 +59,34 @@ CREATE TABLE viewer_sessions (
     CONSTRAINT total_buffer_time_non_negative CHECK (total_buffer_time_ms >= 0),
     CONSTRAINT bytes_transferred_non_negative CHECK (bytes_transferred >= 0)
 );
+
+-- Maintain duration_seconds via trigger to allow NOW() usage outside GENERATED expression constraints
+CREATE OR REPLACE FUNCTION update_viewer_session_duration() RETURNS trigger AS $$
+DECLARE
+    effective_end TIMESTAMPTZ;
+BEGIN
+    effective_end := COALESCE(NEW.left_at, NOW());
+    NEW.duration_seconds :=
+        GREATEST(
+            FLOOR(EXTRACT(EPOCH FROM (effective_end - NEW.joined_at))),
+            0
+        )::INTEGER;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS viewer_sessions_duration_trigger ON viewer_sessions;
+
+CREATE TRIGGER viewer_sessions_duration_trigger
+BEFORE INSERT OR UPDATE ON viewer_sessions
+FOR EACH ROW EXECUTE FUNCTION update_viewer_session_duration();
+
+UPDATE viewer_sessions
+SET duration_seconds =
+    GREATEST(
+        FLOOR(EXTRACT(EPOCH FROM (COALESCE(left_at, NOW()) - joined_at))),
+        0
+    )::INTEGER;
 
 -- ============================================
 -- Indexes for viewer_sessions table

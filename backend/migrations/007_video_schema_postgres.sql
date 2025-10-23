@@ -29,11 +29,11 @@ CREATE TABLE IF NOT EXISTS videos (
     allow_comments BOOLEAN DEFAULT TRUE,
     allow_duet BOOLEAN DEFAULT TRUE,
     allow_react BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    published_at TIMESTAMP,
-    archived_at TIMESTAMP,
-    deleted_at TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    published_at TIMESTAMPTZ,
+    archived_at TIMESTAMPTZ,
+    deleted_at TIMESTAMPTZ,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- Video engagement table (idempotent)
@@ -43,9 +43,9 @@ CREATE TABLE IF NOT EXISTS video_engagement (
     like_count BIGINT NOT NULL DEFAULT 0 CHECK (like_count >= 0),
     share_count BIGINT NOT NULL DEFAULT 0 CHECK (share_count >= 0),
     comment_count BIGINT NOT NULL DEFAULT 0 CHECK (comment_count >= 0),
-    completion_rate NUMERIC(3,2) DEFAULT 0.00 CHECK (completion_rate >= 0 AND completion_rate <= 1.00),
+    completion_rate DOUBLE PRECISION DEFAULT 0.0 CHECK (completion_rate >= 0 AND completion_rate <= 1.0),
     avg_watch_seconds INT DEFAULT 0 CHECK (avg_watch_seconds >= 0),
-    last_updated TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    last_updated TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- Trigger to keep updated_at fresh
