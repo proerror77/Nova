@@ -41,11 +41,11 @@ BEGIN
             allow_comments BOOLEAN DEFAULT TRUE,
             allow_duet BOOLEAN DEFAULT TRUE,
             allow_react BOOLEAN DEFAULT TRUE,
-            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            published_at TIMESTAMP,
-            archived_at TIMESTAMP,
-            deleted_at TIMESTAMP,
-            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            published_at TIMESTAMPTZ,
+            archived_at TIMESTAMPTZ,
+            deleted_at TIMESTAMPTZ,
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         );
     END IF;
 END
@@ -59,10 +59,10 @@ ALTER TABLE IF EXISTS videos
     ALTER COLUMN id SET DEFAULT uuid_generate_v4();
 
 ALTER TABLE IF EXISTS videos
-    ALTER COLUMN created_at SET DEFAULT CURRENT_TIMESTAMP;
+    ALTER COLUMN created_at SET DEFAULT NOW();
 
 ALTER TABLE IF EXISTS videos
-    ALTER COLUMN updated_at SET DEFAULT CURRENT_TIMESTAMP;
+    ALTER COLUMN updated_at SET DEFAULT NOW();
 
 -- ------------------------------------------------------------------
 -- Create video_engagement table for Postgres installs if missing.
@@ -81,9 +81,9 @@ BEGIN
             like_count BIGINT NOT NULL DEFAULT 0 CHECK (like_count >= 0),
             share_count BIGINT NOT NULL DEFAULT 0 CHECK (share_count >= 0),
             comment_count BIGINT NOT NULL DEFAULT 0 CHECK (comment_count >= 0),
-            completion_rate NUMERIC(3,2) DEFAULT 0.00 CHECK (completion_rate >= 0 AND completion_rate <= 1.00),
+            completion_rate DOUBLE PRECISION DEFAULT 0.0 CHECK (completion_rate >= 0 AND completion_rate <= 1.0),
             avg_watch_seconds INT DEFAULT 0 CHECK (avg_watch_seconds >= 0),
-            last_updated TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            last_updated TIMESTAMPTZ NOT NULL DEFAULT NOW()
         );
     END IF;
 END
@@ -129,3 +129,58 @@ CREATE INDEX IF NOT EXISTS idx_video_engagement_view_count
 
 CREATE INDEX IF NOT EXISTS idx_video_engagement_like_count
     ON video_engagement (like_count);
+
+-- ------------------------------------------------------------------
+-- Convert legacy TIMESTAMP columns to TIMESTAMPTZ (UTC).
+-- ------------------------------------------------------------------
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'videos'
+          AND column_name = 'created_at'
+          AND data_type = 'timestamp without time zone'
+    ) THEN
+        ALTER TABLE videos
+            ALTER COLUMN created_at TYPE TIMESTAMPTZ USING created_at AT TIME ZONE 'UTC',
+            ALTER COLUMN published_at TYPE TIMESTAMPTZ USING published_at AT TIME ZONE 'UTC',
+            ALTER COLUMN archived_at TYPE TIMESTAMPTZ USING archived_at AT TIME ZONE 'UTC',
+            ALTER COLUMN deleted_at TYPE TIMESTAMPTZ USING deleted_at AT TIME ZONE 'UTC',
+            ALTER COLUMN updated_at TYPE TIMESTAMPTZ USING updated_at AT TIME ZONE 'UTC';
+    END IF;
+END
+$$;
+
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'video_engagement'
+          AND column_name = 'last_updated'
+          AND data_type = 'timestamp without time zone'
+    ) THEN
+        ALTER TABLE video_engagement
+            ALTER COLUMN last_updated TYPE TIMESTAMPTZ USING last_updated AT TIME ZONE 'UTC';
+    END IF;
+END
+$$;
+
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'video_engagement'
+          AND column_name = 'completion_rate'
+          AND data_type = 'numeric'
+    ) THEN
+        ALTER TABLE video_engagement
+            ALTER COLUMN completion_rate TYPE DOUBLE PRECISION USING completion_rate::DOUBLE PRECISION;
+    END IF;
+END
+$$;

@@ -1,5 +1,5 @@
 -- ============================================
--- Migration: 024_jwt_signing_keys_pg
+-- Migration: 025_jwt_signing_keys_pg
 -- Description: Postgres-compatible JWT signing keys schema
 -- Notes: Legacy 010 migration used MySQL-style CHECK with subquery (unsupported)
 -- ============================================
