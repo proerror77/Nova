@@ -16,4 +16,12 @@ pub enum AppError {
     Config(String),
     #[error("server start failure: {0}")]
     StartServer(String),
+    #[error("bad request: {0}")]
+    BadRequest(String),
+    #[error("unauthorized: {0}")]
+    Unauthorized(String),
+    #[error("forbidden: {0}")]
+    Forbidden(String),
+    #[error("not found: {0}")]
+    NotFound(String),
 }
