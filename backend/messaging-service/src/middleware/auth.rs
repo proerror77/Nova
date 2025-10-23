@@ -15,5 +15,5 @@ pub async fn verify_jwt(token: &str) -> Result<(), AppError> {
     let key = DecodingKey::from_secret(secret.as_bytes());
     decode::<Claims>(token, &key, &Validation::default())
         .map(|_| ())
-        .map_err(|e| AppError::Config(format!("invalid token: {e}")))
+        .map_err(|_| AppError::Unauthorized("invalid token".into()))
 }

@@ -14,9 +14,10 @@ impl MessageService {
         idempotency_key: Option<&str>,
     ) -> Result<(Uuid, i64), crate::error::AppError> {
         let id = Uuid::new_v4();
-        // Stub encryption using crypto-core
+        // Encrypt-at-rest using secretbox with server key
         let nonce = crypto_core::generate_nonce();
-        let ciphertext = crypto_core::encrypt(plaintext, b"pub", b"sec", &nonce)
+        let key = crate::security::keys::secretbox_key_from_env()?;
+        let ciphertext = crypto_core::encrypt_at_rest(plaintext, &key, &nonce)
             .map_err(|_| crate::error::AppError::Config("encrypt failed".into()))?;
         // Insert with conflict on idempotency_key
         if let Some(key) = idempotency_key {
@@ -105,7 +106,8 @@ impl MessageService {
 
     pub async fn update_message_db(db: &Pool<Postgres>, message_id: Uuid, plaintext: &[u8]) -> Result<(), crate::error::AppError> {
         let nonce = crypto_core::generate_nonce();
-        let ciphertext = crypto_core::encrypt(plaintext, b"pub", b"sec", &nonce)
+        let key = crate::security::keys::secretbox_key_from_env()?;
+        let ciphertext = crypto_core::encrypt_at_rest(plaintext, &key, &nonce)
             .map_err(|_| crate::error::AppError::Config("encrypt failed".into()))?;
         sqlx::query(
             "UPDATE messages SET content_encrypted=$1, content_nonce=$2, edited_at=NOW() WHERE id=$3"

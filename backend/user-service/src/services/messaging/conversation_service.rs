@@ -103,7 +103,7 @@ impl ConversationService {
         // Verify user is a member
         let is_member = repo.is_conversation_member(conversation_id, user_id).await?;
         if !is_member {
-            return Err(AppError::Forbidden(
+            return Err(AppError::Authorization(
                 "You are not a member of this conversation".to_string(),
             ));
         }
@@ -131,7 +131,7 @@ impl ConversationService {
         // Verify user is a member
         let is_member = repo.is_conversation_member(conversation_id, user_id).await?;
         if !is_member {
-            return Err(AppError::Forbidden(
+            return Err(AppError::Authorization(
                 "You are not a member of this conversation".to_string(),
             ));
         }
@@ -155,7 +155,7 @@ impl ConversationService {
             .get_conversation_member(conversation_id, requester_id)
             .await?;
         if member.role != MemberRole::Owner && member.role != MemberRole::Admin {
-            return Err(AppError::Forbidden(
+            return Err(AppError::Authorization(
                 "Only owners and admins can add members".to_string(),
             ));
         }
@@ -204,7 +204,7 @@ impl ConversationService {
             .get_conversation_member(conversation_id, requester_id)
             .await?;
         if member.role != MemberRole::Owner && member.role != MemberRole::Admin {
-            return Err(AppError::Forbidden(
+            return Err(AppError::Authorization(
                 "Only owners and admins can remove members".to_string(),
             ));
         }
@@ -240,7 +240,7 @@ pub struct MessagePreview {
 #[derive(Debug, Clone)]
 pub struct ConversationWithMembers {
     pub conversation: Conversation,
-    pub members: Vec<ConversationMemberWithUser>,
+    pub members: Vec<ConversationMember>,
 }
 
 #[derive(Debug, Clone)]

@@ -32,7 +32,7 @@ impl MessageService {
             .is_conversation_member(conversation_id, sender_id)
             .await?;
         if !is_member {
-            return Err(AppError::Forbidden(
+            return Err(AppError::Authorization(
                 "You are not a member of this conversation".to_string(),
             ));
         }
@@ -82,7 +82,7 @@ impl MessageService {
             .is_conversation_member(conversation_id, user_id)
             .await?;
         if !is_member {
-            return Err(AppError::Forbidden(
+            return Err(AppError::Authorization(
                 "You are not a member of this conversation".to_string(),
             ));
         }
@@ -117,7 +117,7 @@ impl MessageService {
             .is_conversation_member(conversation_id, user_id)
             .await?;
         if !is_member {
-            return Err(AppError::Forbidden(
+            return Err(AppError::Authorization(
                 "You are not a member of this conversation".to_string(),
             ));
         }

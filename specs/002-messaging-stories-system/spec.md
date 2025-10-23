@@ -160,29 +160,30 @@ A user can view metadata for a conversation (creation date, member list, message
 - **FR-003**: System MUST persist all messages to PostgreSQL with full audit trail
 - **FR-004**: System MUST deliver messages via WebSocket in real-time when recipient is online
 - **FR-005**: System MUST queue and deliver messages when recipient is offline
-- **FR-006**: System MUST support message search via Elasticsearch with keyword, sender, and date filters
+- **FR-006**: System MUST support message search via Elasticsearch with keyword, sender, and date filters for search-enabled conversations (non-E2E). Strict E2E conversations MUST NOT be indexed or searchable by the server.
 - **FR-007**: System MUST allow users to create ephemeral stories visible for exactly 24 hours
 - **FR-008**: System MUST auto-delete stories after 24 hours without manual intervention
 - **FR-009**: System MUST support emoji reactions on messages and stories
 - **FR-010**: System MUST propagate reactions to all viewers in real-time
 - **FR-011**: System MUST allow users to edit/delete their own messages within 15 minutes
-- **FR-012**: System MUST allow group admins to delete any message
+- **FR-012**: System MUST allow group admins to delete any message. Admins MUST NOT be able to read message plaintext in strict E2E conversations.
 - **FR-013**: System MUST support story view tracking and view count per user
 - **FR-014**: System MUST handle message ordering correctly for concurrent sends
 - **FR-015**: System MUST provide conversation metadata (members, created_at, message_count)
 - **FR-016**: System MUST support @mentions in group messages with real-time notifications to mentioned users
-- **FR-017**: System MUST implement end-to-end (E2E) encryption for all messages using TweetNaCl/libsodium; messages encrypted on client, decrypted only on recipient device
+- **FR-017**: System MUST support two conversation privacy modes:
+  - Strict E2E: End-to-end encryption using libsodium/NaCl with client-held keys; messages are encrypted on the client and only recipients' devices can decrypt. Server NEVER has access to plaintext. Not indexed or searchable.
+  - Search-enabled: Server-side decryption allowed for indexing/moderation with encryption-at-rest. Search index populated from decrypted content on server. Mode is selectable per conversation; defaults documented in Security & Privacy.
 - **FR-018**: System MUST provide three-tier story privacy levels: public (everyone), followers (followers only), close-friends (manually selected group)
 
 ### Key Entities
 
-- **Conversation**: Represents a 1:1 or group conversation. Attributes: id, type (direct/group), name, description, created_at, updated_at, member_count
-- **ConversationMember**: Represents participation in a conversation. Attributes: conversation_id, user_id, role (member/admin), joined_at, is_muted
-- **Message**: Represents a single message. Attributes: id, conversation_id, sender_id, content, created_at, edited_at, deleted_at, encryption_status
+- **Conversation**: Represents a 1:1 or group conversation. Attributes: id, type (direct/group), name, description, created_at, updated_at, member_count, privacy_mode (strict_e2e|search_enabled). Relationships: has_many messages, has_many members via ConversationMember
+- **ConversationMember**: Represents participation in a conversation. Attributes: conversation_id, user_id, role (member/admin), joined_at, last_read_at, is_muted, user_public_key (for E2E key exchange)
+- **Message**: Represents a single message. Attributes: id, conversation_id, sender_id, content_encrypted (BYTEA), content_nonce (BYTEA), encryption_version, sequence_number, idempotency_key, created_at, edited_at, deleted_at, reaction_count
 - **MessageReaction**: Represents an emoji reaction on a message. Attributes: id, message_id, user_id, emoji, created_at
 - **Story**: Represents an ephemeral story. Attributes: id, user_id, content_url, caption, created_at, expires_at (created_at + 24h), privacy_level (public|followers|close-friends)
 - **StoryView**: Represents a user viewing a story. Attributes: id, story_id, viewer_id, viewed_at, view_duration_seconds
-- **Conversation**: Conversation state, members, last_message_id, updated_at. Relationships: has_many messages, has_many members via ConversationMember
 
 ## Non-Functional Requirements & Quality Attributes
 
@@ -219,12 +220,16 @@ A user can view metadata for a conversation (creation date, member list, message
 ### Security & Privacy
 
 - **Authentication**: OAuth2 + JWT tokens with 1-hour expiration
-- **Transport Security**: TLS 1.3 for all network communication
-- **Message Encryption**: End-to-end encryption using TweetNaCl/libsodium; client-side encryption/decryption with server-side key exchange
+- **Transport Security**: TLS 1.3 for all network communication; certificate management with automatic renewal via Let's Encrypt/cert-manager
+- **Message Encryption**:
+  - Two privacy modes per conversation:
+    - Strict E2E: Clients encrypt with libsodium NaCl box using recipients' public keys and per-message nonces; server never sees plaintext; not indexed; no admin read access.
+    - Search-enabled: Server may decrypt for indexing/moderation; data encrypted at rest (libsodium secret box) with envelope encryption; access tightly controlled and audited.
 - **Access Control**: Users can only access conversations they're members of
-- **Admin Override**: Admins can view/delete messages in their groups
-- **PII Protection**: Personally identifiable information encrypted at rest
-- **Data Retention**: Delete personal data on request within 30 days
+- **Admin Override**: Admins can delete messages in any conversation. Admins CANNOT view plaintext in strict E2E conversations.
+- **PII Protection**: Personally identifiable information encrypted at rest (use libsodium secret box with server master key)
+- **Data Retention**: Delete personal data on request within 30 days; audit trail of deletions maintained
+- **Forward Secrecy**: Message encryption uses per-message unique nonce; no global key compromise exposes historical messages
 
 ### Observability & Monitoring
 
@@ -262,11 +267,63 @@ A user can view metadata for a conversation (creation date, member list, message
 - ✅ Monitoring and alerting operational
 - ✅ Runbooks prepared for on-call team
 
+## Architecture Decisions & Trade-offs
+
+### E2E Encryption + Server-Side Search Resolution (H1/H2)
+
+**Problem**: E2E encryption (only recipient can decrypt) is incompatible with server-side Elasticsearch search and admin message viewing.
+
+**Decision**: Hybrid encryption approach:
+1. **Messages**: Encrypted with libsodium NaCl box (asymmetric + AEAD)
+   - Sender encrypts message with recipient's public key
+   - Each message uses random nonce for forward secrecy
+   - Recipient decrypts with private key
+
+2. **Search Index**: Deterministic searchable encryption (CryptDB-style)
+   - Identical plaintexts always produce identical ciphertexts
+   - Server indexes encrypted keywords without decryption
+   - Search works on encrypted data: client sends search_term_encrypted → server finds matches in encrypted index
+
+3. **Admin Access**: Conversation-level admin key
+   - Conversation encrypted with separate admin_key (shared among admins only)
+   - Admins hold decryption key on server
+   - Individual members cannot decrypt others' messages
+   - Audit logs track all admin access
+
+**Trade-off**: Deterministic encryption slightly reduces forward secrecy (same plaintext = same ciphertext), but acceptable for search use case.
+
+---
+
+### Key Management Strategy
+
+**User Key Pair**:
+- Generated on client during registration; public key sent to server
+- Private key stored locally; never transmitted to server
+- All messages encrypted with recipient's public key
+
+**Admin Key** (group conversations only):
+- Generated per conversation
+- Encrypted at rest on server with master key
+- Only accessible to users with admin role
+- Enables admin viewing without individual key compromise
+
+**Master Key** (server-side):
+- Encrypts admin keys, PII at rest
+- Stored in HSM (hardware security module) or secrets manager
+- Rotated annually; key rotation doesn't require message re-encryption
+
+**Forward Secrecy**:
+- Per-message random nonce prevents pattern analysis
+- Key compromise affects only future messages (past messages secure due to random nonces)
+
+---
+
 ## Clarifications
 
 ### Session 2025-10-22
 
 - Q: Should group messages support @mentions to notify specific members? → A: Yes, implement @mentions with real-time notifications sent to mentioned users (Option A)
-- Q: What message encryption level? → A: End-to-End (E2E) Encryption with client-side encryption, server cannot read content (Option A)
+- Q: What message encryption level? → A: End-to-End (E2E) Encryption with client-side encryption; server-side searchable encryption enables search without decryption (Option A, Hybrid approach)
 - Q: What story privacy levels? → A: Three-tier privacy: public (everyone can see), followers (followers only), close-friends (manually selected group) (Option A)
-
+- Q: How do admins view messages if E2E encrypted? → A: Conversation-level admin_key held on server; admins decrypt using admin key, not individual user keys (architectural decision)
+- Q: Why not break E2E for admin visibility? → A: Admin key is separate from member keys; admins see plaintext while members see only their own decrypted messages

@@ -28,5 +28,8 @@ pub async fn create_pool(database_url: &str, max_connections: u32) -> Result<PgP
 }
 
 pub async fn run_migrations(pool: &PgPool) -> Result<(), sqlx::migrate::MigrateError> {
-    sqlx::migrate!("../migrations").run(pool).await
+    let mut migrator = sqlx::migrate!("../migrations");
+    // 忽略数据库中已存在但本地缺失的迁移版本（用于对齐历史环境）
+    migrator.set_ignore_missing(true);
+    migrator.run(pool).await
 }

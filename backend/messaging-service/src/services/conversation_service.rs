@@ -49,4 +49,16 @@ impl ConversationService {
     pub async fn list_conversations(_user_id: Uuid) -> Result<Vec<Uuid>, crate::error::AppError> {
         Err(crate::error::AppError::Config("not implemented".into()))
     }
+
+    pub async fn is_member(db: &Pool<Postgres>, conversation_id: Uuid, user_id: Uuid) -> Result<bool, crate::error::AppError> {
+        let rec = sqlx::query(
+            "SELECT 1 FROM conversation_members WHERE conversation_id=$1 AND user_id=$2 LIMIT 1"
+        )
+        .bind(conversation_id)
+        .bind(user_id)
+        .fetch_optional(db)
+        .await
+        .map_err(|e| crate::error::AppError::StartServer(format!("is_member: {e}")))?;
+        Ok(rec.is_some())
+    }
 }
