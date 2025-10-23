@@ -99,6 +99,8 @@ pub struct StreamDetails {
     pub started_at: Option<DateTime<Utc>>,
     pub ended_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
+    pub total_unique_viewers: i64,
+    pub total_messages: i32,
 }
 
 /// Creator information (embedded in stream details)
