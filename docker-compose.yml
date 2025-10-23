@@ -138,8 +138,6 @@ services:
       KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
       KAFKA_CLUSTERS_0_KAFKACONNECT_0_NAME: debezium
       KAFKA_CLUSTERS_0_KAFKACONNECT_0_ADDRESS: http://debezium:8083
-    ports:
-      - "8080:8080"
     networks:
       - nova-network
 
@@ -409,6 +407,29 @@ services:
         condition: service_healthy
       kafka:
         condition: service_started
+      redis:
+        condition: service_healthy
+    networks:
+      - nova-network
+
+  # ============================================
+  # Search Service (Axum)
+  # ============================================
+  search-service:
+    build:
+      context: ./backend/search-service
+    container_name: nova-search-service
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-nova_auth}
+      REDIS_URL: redis://:${REDIS_PASSWORD:-redis123}@redis:6379/0
+      PORT: 8081
+      RUST_LOG: search_service=debug,tower_http=debug
+    ports:
+      - "8081:8081"
+    depends_on:
+      postgres:
+        condition: service_healthy
       redis:
         condition: service_healthy
     networks:

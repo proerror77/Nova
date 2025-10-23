@@ -363,8 +363,8 @@ async fn test_offline_message_delivery() {
 // Encryption Tests
 // ============================================
 
-#[test]
-fn test_public_key_validation() {
+#[tokio::test]
+async fn test_public_key_validation() {
     // TODO: T213 - Encryption validation test
     use base64::{engine::general_purpose, Engine as _};
 
@@ -379,8 +379,8 @@ fn test_public_key_validation() {
     unimplemented!("T213: Implement encryption validation test")
 }
 
-#[test]
-fn test_nonce_validation() {
+#[tokio::test]
+async fn test_nonce_validation() {
     // TODO: T213 - Nonce validation test
     use base64::{engine::general_purpose, Engine as _};
 

@@ -188,7 +188,8 @@ class DeepLinkRouter: ObservableObject {
                     return .invalid(error: "Missing OAuth provider")
                 }
                 let code = queryItems?.first(where: { $0.name == "code" })?.value
-                return .oauth(provider: provider, code: code)
+                let state = queryItems?.first(where: { $0.name == "state" })?.value
+                return .oauth(provider: provider, code: code, state: state)
 
             default:
                 return .invalid(error: "Unknown auth action: \(action)")

@@ -7,6 +7,7 @@ pub mod oauth_repo;
 pub mod password_reset_repo;
 pub mod post_repo;
 pub mod user_repo;
+pub mod video_repo;
 
 // Compatibility shim for messaging module path expected by services
 // Re-exports types and repository from `messaging_repo` under `db::messaging`

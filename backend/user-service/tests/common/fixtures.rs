@@ -1,7 +1,9 @@
 /// Test fixtures and utilities for integration tests
 /// Provides database setup, test data creation, and cleanup
 use chrono::Utc;
+use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
+use std::time::Duration;
 use user_service::models::{OAuthConnection, Post, PostImage, User};
 use uuid::Uuid;
 
@@ -11,20 +13,66 @@ use uuid::Uuid;
 
 /// Create a test database pool with migrations
 pub async fn create_test_pool() -> PgPool {
-    let database_url = std::env::var("DATABASE_URL")
-        .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:5432/nova_test".to_string());
+    // 默认指向 docker-compose 暴露的 Postgres 端口与默认数据库
+    // 可通过环境变量 DATABASE_URL 覆盖
+    let database_url = std::env::var("DATABASE_URL").unwrap_or_else(|_| {
+        // postgres://user:pass@host:port/db
+        "postgres://postgres:postgres@localhost:55432/nova_auth".to_string()
+    });
 
-    let pool = sqlx::PgPool::connect(&database_url)
-        .await
-        .expect("Failed to connect to test database");
+    eprintln!("[tests] Connecting to PostgreSQL at {}", database_url);
 
-    // Run migrations (path relative to workspace root)
-    sqlx::migrate!("../migrations")
-        .run(&pool)
-        .await
-        .expect("Failed to run migrations");
+    // 尝试重试连接，适配 CI/本地环境中容器启动的延迟
+    let mut last_err: Option<anyhow::Error> = None;
+    for attempt in 1..=30u32 {
+        // 固定 1 秒间隔，最多 30 秒
+        let backoff = Duration::from_secs(1);
 
-    pool
+        match PgPoolOptions::new()
+            .max_connections(5)
+            .acquire_timeout(Duration::from_secs(3)) // 增加超时到 3 秒
+            .connect(&database_url)
+            .await
+        {
+            Ok(pool) => {
+                // 健康检查：确保数据库真正就绪（能执行查询）
+                match sqlx::query("SELECT 1").fetch_one(&pool).await {
+                    Ok(_) => {
+                        eprintln!("[tests] PostgreSQL ready after {} attempts", attempt);
+                        // 迁移：忽略历史环境中缺失的版本，避免阻塞本地/CI
+                        let mut migrator = sqlx::migrate!("../migrations");
+                        migrator.set_ignore_missing(true);
+                        if let Err(e) = migrator.run(&pool).await {
+                            panic!("Failed to run migrations: {}", e);
+                        }
+                        return pool;
+                    }
+                    Err(e) => {
+                        eprintln!(
+                            "[tests] PostgreSQL connected but not ready (attempt {}): {}",
+                            attempt, e
+                        );
+                        last_err = Some(anyhow::anyhow!(e));
+                        tokio::time::sleep(backoff).await;
+                        continue;
+                    }
+                }
+            }
+            Err(e) => {
+                last_err = Some(anyhow::anyhow!(e));
+                eprintln!(
+                    "[tests] waiting for Postgres (attempt {}/30): {:?}",
+                    attempt, backoff
+                );
+                tokio::time::sleep(backoff).await;
+            }
+        }
+    }
+
+    panic!(
+        "Failed to connect to test database after 30 retries (30 seconds): {}",
+        last_err.unwrap()
+    );
 }
 
 /// Clean up test data after tests
@@ -444,11 +492,50 @@ pub async fn create_test_redis() -> redis::aio::ConnectionManager {
     let redis_url =
         std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://localhost:6379".to_string());
 
-    let client = redis::Client::open(redis_url).expect("Failed to create Redis client");
+    eprintln!("[tests] Connecting to Redis at {}", redis_url);
 
-    redis::aio::ConnectionManager::new(client)
-        .await
-        .expect("Failed to connect to Redis")
+    let client = redis::Client::open(redis_url.clone()).expect("Failed to create Redis client");
+
+    // 简单重试，适配容器启动延迟
+    let mut last_err: Option<redis::RedisError> = None;
+    for attempt in 1..=30u32 {
+        // 固定 1 秒间隔，最多 30 秒
+        let backoff = Duration::from_secs(1);
+
+        match redis::aio::ConnectionManager::new(client.clone()).await {
+            Ok(mut conn) => {
+                // 健康检查：确保 Redis 真正就绪（能执行命令）
+                match redis::cmd("PING").query_async::<_, String>(&mut conn).await {
+                    Ok(_) => {
+                        eprintln!("[tests] Redis ready after {} attempts", attempt);
+                        return conn;
+                    }
+                    Err(e) => {
+                        eprintln!(
+                            "[tests] Redis connected but not ready (attempt {}): {}",
+                            attempt, e
+                        );
+                        last_err = Some(e);
+                        tokio::time::sleep(backoff).await;
+                        continue;
+                    }
+                }
+            }
+            Err(e) => {
+                last_err = Some(e);
+                eprintln!(
+                    "[tests] waiting for Redis (attempt {}/30): {:?}",
+                    attempt, backoff
+                );
+                tokio::time::sleep(backoff).await;
+            }
+        }
+    }
+
+    panic!(
+        "Failed to connect to Redis after 30 retries (30 seconds): {}",
+        last_err.unwrap()
+    );
 }
 
 /// Clear all Redis keys (for test isolation)

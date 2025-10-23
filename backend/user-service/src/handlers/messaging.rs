@@ -2,11 +2,12 @@ use actix_web::{error::ResponseError, web, HttpResponse, Responder};
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use uuid::Uuid;
+use redis::aio::ConnectionManager;
 
 use crate::db::{messaging::*, user_repo};
 use crate::AppError;
 use crate::middleware::UserId;
-use crate::services::messaging::{ConversationService, MessageService};
+use crate::services::messaging::{ConversationService, MessageService, MessagingWebSocketHandler};
 
 // ============================================
 // Request/Response DTOs
@@ -349,6 +350,42 @@ pub async fn add_conversation_members(
     body: web::Json<AddMembersRequest>,
 ) -> impl Responder {
     let conversation_id = path.into_inner();
+    // Handler-level pre-checks to avoid bypass and return precise errors earlier
+    let repo = MessagingRepository::new(pool.get_ref());
+
+    // Must be group conversation
+    let conversation = match repo.get_conversation(conversation_id).await {
+        Ok(c) => c,
+        Err(e) => return e.error_response(),
+    };
+    if conversation.conversation_type != ConversationType::Group {
+        return AppError::BadRequest("Cannot add members to direct conversations".to_string())
+            .error_response();
+    }
+
+    // Requester must be owner or admin
+    let requester_member = match repo
+        .get_conversation_member(conversation_id, user.0)
+        .await
+    {
+        Ok(m) => m,
+        Err(_) => {
+            return AppError::Authorization(
+                "You are not a member of this conversation".to_string(),
+            )
+            .error_response()
+        }
+    };
+    if requester_member.role != MemberRole::Owner && requester_member.role != MemberRole::Admin {
+        return AppError::Authorization("Only owners and admins can add members".to_string())
+            .error_response();
+    }
+
+    // Basic input validation
+    if body.user_ids.is_empty() {
+        return AppError::BadRequest("user_ids cannot be empty".to_string()).error_response();
+    }
+
     let service = ConversationService::new(pool.get_ref().clone());
     match service
         .add_members(conversation_id, user.0, body.user_ids.clone())
@@ -435,6 +472,7 @@ pub struct MessageHistoryQuery {
 pub async fn send_message(
     pool: web::Data<PgPool>,
     user: UserId,
+    redis: web::Data<ConnectionManager>,
     req: web::Json<SendMessageRequest>,
 ) -> impl Responder {
     let msg_type = match parse_message_type(&req.message_type) {
@@ -458,7 +496,14 @@ pub async fn send_message(
         )
         .await
     {
-        Ok(message) => HttpResponse::Created().json(message),
+        Ok(message) => {
+            // Publish to Redis for WebSocket delivery (best-effort)
+            let publisher = MessagingWebSocketHandler::new(std::sync::Arc::new(redis.get_ref().clone()));
+            if let Err(e) = publisher.publish_message_event(&message).await {
+                tracing::warn!("failed to publish message event: {}", e);
+            }
+            HttpResponse::Created().json(message)
+        }
         Err(e) => e.error_response(),
     }
 }
@@ -468,6 +513,7 @@ pub async fn mark_as_read(
     pool: web::Data<PgPool>,
     user: UserId,
     path: web::Path<Uuid>,
+    redis: web::Data<ConnectionManager>,
     req: web::Json<MarkReadRequest>,
 ) -> impl Responder {
     let conversation_id = path.into_inner();
@@ -476,9 +522,19 @@ pub async fn mark_as_read(
         .mark_as_read(conversation_id, user.0, req.message_id)
         .await
     {
-        Ok(()) => HttpResponse::Ok().json(SimpleOkResponse {
-            message: "Read status updated".to_string(),
-        }),
+        Ok(()) => {
+            // Publish read receipt (best-effort)
+            let publisher = MessagingWebSocketHandler::new(std::sync::Arc::new(redis.get_ref().clone()));
+            if let Err(e) = publisher
+                .publish_read_receipt_event(conversation_id, user.0, req.message_id)
+                .await
+            {
+                tracing::warn!("failed to publish read receipt: {}", e);
+            }
+            HttpResponse::Ok().json(SimpleOkResponse {
+                message: "Read status updated".to_string(),
+            })
+        }
         Err(e) => e.error_response(),
     }
 }

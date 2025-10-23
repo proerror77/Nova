@@ -1,5 +1,6 @@
 use super::{OAuthError, OAuthProvider, OAuthUserInfo};
 use async_trait::async_trait;
+use jsonwebtoken::{decode, decode_header, jwk::JwkSet, Algorithm, DecodingKey, Validation};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -20,15 +21,27 @@ struct AppleTokenResponse {
     expires_in: i64,
     refresh_token: Option<String>,
     token_type: String,
+    id_token: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-struct AppleUserInfo {
-    sub: String,
-    email: String,
-    email_verified: Option<bool>,
+pub struct AppleUserInfo {
+    pub sub: String,
+    pub email: String,
+    pub email_verified: Option<bool>,
     #[serde(default)]
-    is_private_email: bool,
+    pub is_private_email: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct AppleIdTokenClaims {
+    iss: String,
+    aud: String,
+    sub: String,
+    exp: i64,
+    iat: i64,
+    email: Option<String>,
+    email_verified: Option<String>,
 }
 
 impl AppleOAuthProvider {
@@ -77,6 +90,62 @@ impl AppleOAuthProvider {
         encode(&Header::new(jsonwebtoken::Algorithm::RS256), &claims, &key)
             .map_err(|e| OAuthError::ConfigError(format!("Failed to encode JWT: {}", e)))
     }
+
+    /// Verify Apple ID token and extract user information
+    /// Fetches Apple's public keys from https://appleid.apple.com/auth/keys
+    /// and validates the JWT signature
+    pub async fn verify_apple_token(&self, id_token: &str) -> Result<AppleUserInfo, OAuthError> {
+        // Fetch Apple's public keys
+        let jwks = self
+            .http_client
+            .get("https://appleid.apple.com/auth/keys")
+            .send()
+            .await
+            .map_err(|e| OAuthError::NetworkError(format!("Failed to fetch Apple keys: {}", e)))?
+            .json::<JwkSet>()
+            .await
+            .map_err(|e| {
+                OAuthError::NetworkError(format!("Failed to parse Apple keys: {}", e))
+            })?;
+
+        // Decode JWT header to get key ID
+        let header = decode_header(id_token)
+            .map_err(|e| OAuthError::InvalidAuthCode(format!("Invalid JWT header: {}", e)))?;
+
+        let kid = header
+            .kid
+            .ok_or_else(|| OAuthError::InvalidAuthCode("Missing kid in JWT header".to_string()))?;
+
+        // Find matching key
+        let jwk = jwks
+            .keys
+            .iter()
+            .find(|k| k.common.key_id.as_ref() == Some(&kid))
+            .ok_or_else(|| OAuthError::InvalidAuthCode("Key not found in JWKS".to_string()))?;
+
+        // Create decoding key from JWK
+        let decoding_key = DecodingKey::from_jwk(jwk)
+            .map_err(|e| OAuthError::InvalidAuthCode(format!("Invalid JWK: {}", e)))?;
+
+        // Validate token
+        let mut validation = Validation::new(Algorithm::RS256);
+        validation.set_audience(&[&self.client_id]);
+        validation.set_issuer(&["https://appleid.apple.com"]);
+
+        let token_data = decode::<AppleIdTokenClaims>(id_token, &decoding_key, &validation)
+            .map_err(|e| OAuthError::InvalidAuthCode(format!("JWT validation failed: {}", e)))?;
+
+        // Extract user info from claims
+        Ok(AppleUserInfo {
+            sub: token_data.claims.sub,
+            email: token_data.claims.email.unwrap_or_default(),
+            email_verified: token_data
+                .claims
+                .email_verified
+                .and_then(|v| v.parse().ok()),
+            is_private_email: false,
+        })
+    }
 }
 
 #[async_trait]
@@ -115,24 +184,25 @@ impl OAuthProvider for AppleOAuthProvider {
             .await
             .map_err(|e| OAuthError::TokenExchange(format!("JSON parse error: {}", e)))?;
 
-        // Decode id_token to get user info
-        // For simplicity, we'll use the access_token to fetch user info
-        // In production, you would validate the id_token JWT
-
         let token_expires_at = if token_response.expires_in > 0 {
             Some(chrono::Utc::now().timestamp() + token_response.expires_in)
         } else {
             None
         };
 
-        // Note: Apple doesn't provide a standard userinfo endpoint for server-side flow
-        // The user info comes in the id_token. For this example, we'll create a placeholder.
-        // In production, you should decode and validate the JWT id_token.
+        // Verify and decode ID token to get user info
+        let user_info = if let Some(id_token) = &token_response.id_token {
+            self.verify_apple_token(id_token).await?
+        } else {
+            return Err(OAuthError::TokenExchange(
+                "No id_token in response".to_string(),
+            ));
+        };
 
         Ok(OAuthUserInfo {
             provider: "apple".to_string(),
-            provider_user_id: format!("apple_{}", uuid::Uuid::new_v4()), // Placeholder
-            email: "user@example.com".to_string(),                       // Would come from id_token
+            provider_user_id: user_info.sub,
+            email: user_info.email,
             display_name: None,
             access_token: token_response.access_token,
             refresh_token: token_response.refresh_token,

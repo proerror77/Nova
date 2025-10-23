@@ -5,9 +5,10 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-use user_service::{
+    use user_service::{
     cache::FeedCache,
     config::Config,
+    config::video_config,
     db::{ch_client::ClickHouseClient, create_pool, run_migrations},
     handlers,
     handlers::{events::EventHandlerState, feed::FeedHandlerState},
@@ -20,6 +21,10 @@ use user_service::{
         job_queue,
         kafka_producer::EventProducer,
         s3_service,
+        stories::StoriesService,
+        video_service::VideoService,
+        deep_learning_inference::DeepLearningInferenceService,
+        recommendation_v2::{RecommendationServiceV2, RecommendationConfig, HybridWeights},
     },
 };
 
@@ -116,8 +121,36 @@ async fn main() -> io::Result<()> {
         feed_cache.clone(),
     ));
 
+    // Optional: init Recommendation V2 re-ranker (disabled by default)
+    let rec_v2 = {
+        let enabled = std::env::var("RECOMMENDATION_V2_INIT")
+            .unwrap_or_else(|_| "false".into())
+            == "true";
+        if enabled {
+            let onnx_path = std::env::var("REC_ONNX_MODEL_PATH")
+                .unwrap_or_else(|_| "models/collaborative_v1.0.onnx".into());
+            let cfg = RecommendationConfig {
+                collaborative_model_path: std::env::var("REC_CF_MODEL").unwrap_or_default(),
+                content_model_path: std::env::var("REC_CB_MODEL").unwrap_or_default(),
+                onnx_model_path: onnx_path,
+                hybrid_weights: HybridWeights::balanced(),
+                enable_ab_testing: false,
+            };
+            match RecommendationServiceV2::new(cfg).await {
+                Ok(svc) => Some(Arc::new(svc)),
+                Err(e) => {
+                    tracing::warn!("Failed to initialize Recommendation V2: {}", e);
+                    None
+                }
+            }
+        } else {
+            None
+        }
+    };
+
     let feed_state = web::Data::new(FeedHandlerState {
         feed_ranking: feed_ranking.clone(),
+        rec_v2,
     });
 
     // ========================================
@@ -235,6 +268,23 @@ async fn main() -> io::Result<()> {
     // Clone job_sender for graceful shutdown (will be dropped after server stops)
     let job_sender_shutdown = job_sender.clone();
 
+    // Background: spawn stories cleanup worker (every 5 minutes)
+    {
+        let pool = db_pool.clone();
+        tokio::spawn(async move {
+            let svc = StoriesService::new(pool);
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(300));
+            loop {
+                interval.tick().await;
+                if let Ok(affected) = svc.cleanup_expired().await {
+                    if affected > 0 {
+                        tracing::info!("stories cleanup marked deleted: {}", affected);
+                    }
+                }
+            }
+        });
+    }
+
     // Create and run HTTP server
     let server = HttpServer::new(move || {
         let feed_state = feed_state.clone();
@@ -262,6 +312,8 @@ async fn main() -> io::Result<()> {
             .app_data(web::Data::new(redis_manager.clone()))
             .app_data(web::Data::new(server_config.clone()))
             .app_data(web::Data::new(job_sender.clone()))
+            .app_data(web::Data::new(VideoService::new(video_config::VideoConfig::from_env())))
+            .app_data(web::Data::new(DeepLearningInferenceService::new(video_config::VideoConfig::from_env().inference)))
             .app_data(feed_state.clone())
             .app_data(events_state.clone())
             .wrap(cors)
@@ -341,13 +393,60 @@ async fn main() -> io::Result<()> {
                             .wrap(JwtAuthMiddleware)
                             .service(
                                 web::resource("")
-                                    .route(web::get().to(handlers::stories_not_implemented))
-                                    .route(web::post().to(handlers::stories_not_implemented)),
+                                    .route(web::get().to(handlers::list_stories))
+                                    .route(web::post().to(handlers::create_story)),
                             )
                             .route(
                                 "/{id}",
-                                web::get().to(handlers::stories_not_implemented),
+                                web::get().to(handlers::get_story),
+                            )
+                            .route(
+                                "/{id}",
+                                web::delete().to(handlers::delete_story),
+                            )
+                            .route(
+                                "/{id}/privacy",
+                                web::patch().to(handlers::update_story_privacy),
+                            )
+                            .route(
+                                "/user/{user_id}",
+                                web::get().to(handlers::list_user_stories),
+                            )
+                            .route(
+                                "/close-friends/{friend_id}",
+                                web::post().to(handlers::add_close_friend),
+                            )
+                            .route(
+                                "/close-friends/{friend_id}",
+                                web::delete().to(handlers::remove_close_friend),
+                            )
+                            .route(
+                                "/close-friends",
+                                web::get().to(handlers::list_close_friends),
                             ),
+                    )
+                    .service(
+                        web::scope("/videos")
+                            .wrap(JwtAuthMiddleware)
+                            .route("/upload-url", web::post().to(handlers::generate_upload_url))
+                            .route("", web::post().to(handlers::create_video))
+                            .route("/{id}", web::get().to(handlers::get_video))
+                            .route("/{id}", web::patch().to(handlers::update_video))
+                            .route("/{id}", web::delete().to(handlers::delete_video))
+                            .route(
+                                "/{id}/stream",
+                                web::get().to(handlers::get_stream_manifest),
+                            )
+                            .route(
+                                "/{id}/progress",
+                                web::get().to(handlers::get_processing_progress),
+                            )
+                            .route(
+                                "/{id}/similar",
+                                web::get().to(handlers::get_similar_videos),
+                            )
+                            .route("/{id}/like", web::post().to(handlers::like_video))
+                            .route("/{id}/share", web::post().to(handlers::share_video)),
                     )
                     // Auth endpoints
                     .service(
@@ -381,6 +480,11 @@ async fn main() -> io::Result<()> {
                                         web::delete().to(handlers::unlink_provider),
                                     ),
                             ),
+                    )
+                    // Users endpoints (public profile fetch)
+                    .service(
+                        web::scope("/users")
+                            .route("/{id}", web::get().to(handlers::get_user)),
                     )
                     // Posts endpoints (protected with JWT authentication)
                     .service(
