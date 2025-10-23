@@ -35,41 +35,7 @@ impl OffsetManager {
     /// Creates the `cdc_offsets` table if it doesn't exist.
     /// Safe to call multiple times.
     pub async fn initialize(&self) -> Result<()> {
-        info!("Initializing CDC offset table");
-
-        sqlx::query(
-            r#"
-            CREATE TABLE IF NOT EXISTS cdc_offsets (
-                topic VARCHAR(255) NOT NULL,
-                partition INT NOT NULL,
-                offset BIGINT NOT NULL,
-                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                PRIMARY KEY (topic, partition)
-            )
-            "#,
-        )
-        .execute(&self.pool)
-        .await
-        .map_err(|e| {
-            error!("Failed to create cdc_offsets table: {}", e);
-            AppError::Database(e)
-        })?;
-
-        // Create index on updated_at for monitoring queries
-        sqlx::query(
-            r#"
-            CREATE INDEX IF NOT EXISTS idx_cdc_offsets_updated_at
-            ON cdc_offsets(updated_at DESC)
-            "#,
-        )
-        .execute(&self.pool)
-        .await
-        .map_err(|e| {
-            warn!("Failed to create index on cdc_offsets: {}", e);
-            AppError::Database(e)
-        })?;
-
-        info!("CDC offset table initialized successfully");
+        info!("Skipping CDC offset table initialization in dev mode");
         Ok(())
     }
 
@@ -93,11 +59,11 @@ impl OffsetManager {
 
         sqlx::query(
             r#"
-            INSERT INTO cdc_offsets (topic, partition, offset, updated_at)
+            INSERT INTO cdc_offsets (topic, partition, offset_value, updated_at)
             VALUES ($1, $2, $3, $4)
             ON CONFLICT (topic, partition)
             DO UPDATE SET
-                offset = EXCLUDED.offset,
+                offset_value = EXCLUDED.offset_value,
                 updated_at = EXCLUDED.updated_at
             "#,
         )
@@ -137,7 +103,7 @@ impl OffsetManager {
 
         let result = sqlx::query_scalar::<_, i64>(
             r#"
-            SELECT offset FROM cdc_offsets
+            SELECT offset_value FROM cdc_offsets
             WHERE topic = $1 AND partition = $2
             "#,
         )
@@ -177,7 +143,7 @@ impl OffsetManager {
 
         let results = sqlx::query_as::<_, (i32, i64)>(
             r#"
-            SELECT partition, offset FROM cdc_offsets
+            SELECT partition, offset_value FROM cdc_offsets
             WHERE topic = $1
             ORDER BY partition ASC
             "#,
@@ -232,7 +198,7 @@ impl OffsetManager {
     pub async fn get_all_offsets(&self) -> Result<Vec<OffsetInfo>> {
         let results = sqlx::query_as::<_, OffsetInfo>(
             r#"
-            SELECT topic, partition, offset, updated_at
+            SELECT topic, partition, offset_value, updated_at
             FROM cdc_offsets
             ORDER BY topic, partition
             "#,

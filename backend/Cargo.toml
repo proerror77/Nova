@@ -1,6 +1,9 @@
 [workspace]
 members = [
-    "user-service"
+    "user-service",
+    "messaging-service",
+    "search-service",
+    "libs/crypto-core"
 ]
 resolver = "2"
 
