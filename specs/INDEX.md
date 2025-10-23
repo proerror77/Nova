@@ -1,6 +1,12 @@
 # Nova Specs Index
 
-This index anchors living specs to implementation. It focuses on Phase 7B for now.
+**Status**: Phase 7B ✅ Complete in main | Phase 7C 🚀 Ready in develop/phase-7c
+
+This index anchors living specs to implementation. Latest state:
+- **main**: Phase 7B Messaging + Stories (complete, PR #21 merged)
+- **develop/phase-7c**: Phase 7C development baseline
+
+Branch cleanup completed: 43 → 2 branches (see BRANCH_CLEANUP_SUMMARY.md)
 
 - Messaging (7B)
   - API handlers: `backend/user-service/src/handlers/messaging.rs`
