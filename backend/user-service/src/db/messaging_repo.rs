@@ -2,7 +2,8 @@
 // Phase 7B Feature 2: Data access layer
 
 use chrono::{DateTime, Utc};
-use sqlx::{PgPool, postgres::PgRow, Row};
+use serde::{Deserialize, Serialize};
+use sqlx::{postgres::PgRow, PgPool, Row};
 use uuid::Uuid;
 
 use crate::error::AppError;
@@ -11,7 +12,7 @@ use crate::error::AppError;
 // Domain Models
 // ============================================
 
-#[derive(Debug, Clone, PartialEq, Eq, sqlx::Type)]
+#[derive(Debug, Clone, PartialEq, Eq, sqlx::Type, Serialize, Deserialize)]
 #[sqlx(type_name = "VARCHAR", rename_all = "lowercase")]
 pub enum ConversationType {
     #[sqlx(rename = "direct")]
@@ -20,7 +21,7 @@ pub enum ConversationType {
     Group,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, sqlx::Type)]
+#[derive(Debug, Clone, PartialEq, Eq, sqlx::Type, Serialize, Deserialize)]
 #[sqlx(type_name = "VARCHAR", rename_all = "lowercase")]
 pub enum MemberRole {
     #[sqlx(rename = "owner")]
@@ -31,7 +32,7 @@ pub enum MemberRole {
     Member,
 }
 
-#[derive(Debug, Clone, sqlx::FromRow)]
+#[derive(Debug, Clone, sqlx::FromRow, Serialize)]
 pub struct Conversation {
     pub id: Uuid,
     pub conversation_type: ConversationType,
@@ -41,7 +42,7 @@ pub struct Conversation {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Clone, sqlx::FromRow)]
+#[derive(Debug, Clone, sqlx::FromRow, Serialize)]
 pub struct ConversationMember {
     pub id: Uuid,
     pub conversation_id: Uuid,
@@ -54,7 +55,7 @@ pub struct ConversationMember {
     pub is_archived: bool,
 }
 
-#[derive(Debug, Clone, sqlx::FromRow)]
+#[derive(Debug, Clone, sqlx::FromRow, Serialize)]
 pub struct Message {
     pub id: Uuid,
     pub conversation_id: Uuid,
@@ -67,7 +68,7 @@ pub struct Message {
     pub deleted_at: Option<DateTime<Utc>>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum MessageType {
     Text,
     System,
@@ -118,7 +119,7 @@ impl<'a> MessagingRepository<'a> {
         .bind(created_by)
         .fetch_one(self.pool)
         .await
-        .map_err(|e| AppError::Database(e.to_string()))?;
+        .map_err(AppError::Database)?;
 
         Ok(conversation)
     }
@@ -157,7 +158,7 @@ impl<'a> MessagingRepository<'a> {
         .bind(conversation_id)
         .fetch_all(self.pool)
         .await
-        .map_err(|e| AppError::Database(e.to_string()))?;
+        .map_err(AppError::Database)?;
 
         Ok(members)
     }
@@ -180,7 +181,7 @@ impl<'a> MessagingRepository<'a> {
         .bind(user_id)
         .fetch_optional(self.pool)
         .await
-        .map_err(|e| AppError::Database(e.to_string()))?;
+        .map_err(AppError::Database)?;
 
         Ok(result.map(|(exists,)| exists).unwrap_or(false))
     }
@@ -233,7 +234,7 @@ impl<'a> MessagingRepository<'a> {
         .bind(role)
         .fetch_one(self.pool)
         .await
-        .map_err(|e| AppError::Database(e.to_string()))?;
+        .map_err(AppError::Database)?;
 
         Ok(member)
     }
@@ -254,7 +255,7 @@ impl<'a> MessagingRepository<'a> {
         .bind(user_id)
         .execute(self.pool)
         .await
-        .map_err(|e| AppError::Database(e.to_string()))?;
+        .map_err(AppError::Database)?;
 
         Ok(())
     }
@@ -304,7 +305,7 @@ impl<'a> MessagingRepository<'a> {
         let member = q
             .fetch_one(self.pool)
             .await
-            .map_err(|e| AppError::Database(e.to_string()))?;
+            .map_err(AppError::Database)?;
 
         Ok(member)
     }
@@ -336,7 +337,7 @@ impl<'a> MessagingRepository<'a> {
         .bind(message_type.to_string())
         .fetch_one(self.pool)
         .await
-        .map_err(|e| AppError::Database(e.to_string()))?;
+        .map_err(AppError::Database)?;
 
         Ok(message)
     }
@@ -398,7 +399,7 @@ impl<'a> MessagingRepository<'a> {
             .fetch_all(self.pool)
             .await
         }
-        .map_err(|e| AppError::Database(e.to_string()))?;
+        .map_err(AppError::Database)?;
 
         Ok(messages)
     }
@@ -422,7 +423,7 @@ impl<'a> MessagingRepository<'a> {
         .bind(user_id)
         .execute(self.pool)
         .await
-        .map_err(|e| AppError::Database(e.to_string()))?;
+        .map_err(AppError::Database)?;
 
         Ok(())
     }
@@ -442,7 +443,7 @@ impl<'a> MessagingRepository<'a> {
         .bind(user_id)
         .fetch_one(self.pool)
         .await
-        .map_err(|e| AppError::Database(e.to_string()))?;
+        .map_err(AppError::Database)?;
 
         Ok(result.0)
     }

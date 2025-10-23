@@ -1,7 +1,7 @@
 # ============================================
 # Builder Stage - Compile Rust application
 # ============================================
-FROM rustlang/rust:nightly-slim as builder
+FROM rust:1.88-slim-bookworm AS builder
 
 # Install build dependencies
 RUN apt-get update && apt-get install -y \
@@ -19,10 +19,16 @@ RUN useradd -m -u 1001 -s /bin/bash appuser
 WORKDIR /app
 
 # Copy workspace configuration
-COPY Cargo.toml Cargo.lock ./
+COPY Cargo.toml ./
 
 # Copy service configuration and source
 COPY user-service ./user-service
+COPY messaging-service ./messaging-service
+COPY search-service ./search-service
+COPY libs ./libs
+
+# Copy migrations (sqlx::migrate!("../migrations") expects /app/migrations at compile-time)
+COPY migrations ./migrations
 
 # Build application
 RUN cargo build --release --manifest-path user-service/Cargo.toml
