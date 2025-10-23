@@ -21,21 +21,34 @@ struct FacebookTokenResponse {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-struct FacebookUserInfo {
-    id: String,
-    email: String,
-    name: Option<String>,
-    picture: Option<FacebookPicture>,
+pub struct FacebookUserInfo {
+    pub id: String,
+    pub email: String,
+    pub name: Option<String>,
+    pub picture: Option<FacebookPicture>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-struct FacebookPicture {
-    data: Option<FacebookPictureData>,
+pub struct FacebookPicture {
+    pub data: Option<FacebookPictureData>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-struct FacebookPictureData {
-    url: Option<String>,
+pub struct FacebookPictureData {
+    pub url: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct FacebookDebugToken {
+    data: FacebookDebugTokenData,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct FacebookDebugTokenData {
+    app_id: String,
+    is_valid: bool,
+    user_id: String,
+    expires_at: Option<i64>,
 }
 
 impl FacebookOAuthProvider {
@@ -53,6 +66,67 @@ impl FacebookOAuthProvider {
             redirect_uri,
             http_client: Arc::new(Client::new()),
         })
+    }
+
+    /// Verify Facebook access token and fetch user information
+    /// First validates the token using debug_token endpoint, then fetches user info
+    pub async fn verify_facebook_token(
+        &self,
+        access_token: &str,
+    ) -> Result<FacebookUserInfo, OAuthError> {
+        // Create app access token for validation
+        let app_token = format!("{}|{}", self.client_id, self.client_secret);
+
+        // Verify access token using debug_token endpoint
+        let debug_response = self
+            .http_client
+            .get("https://graph.facebook.com/v18.0/debug_token")
+            .query(&[
+                ("input_token", access_token),
+                ("access_token", &app_token),
+            ])
+            .send()
+            .await
+            .map_err(|e| OAuthError::NetworkError(format!("Failed to verify token: {}", e)))?;
+
+        if !debug_response.status().is_success() {
+            return Err(OAuthError::InvalidAuthCode(
+                "Token validation failed".to_string(),
+            ));
+        }
+
+        let debug_data = debug_response
+            .json::<FacebookDebugToken>()
+            .await
+            .map_err(|e| OAuthError::NetworkError(format!("Failed to parse debug response: {}", e)))?;
+
+        // Verify token is valid and matches our app
+        if !debug_data.data.is_valid {
+            return Err(OAuthError::InvalidAuthCode("Invalid token".to_string()));
+        }
+
+        if debug_data.data.app_id != self.client_id {
+            return Err(OAuthError::InvalidAuthCode(
+                "Token app ID mismatch".to_string(),
+            ));
+        }
+
+        // Fetch user info using the validated token
+        let user_info = self
+            .http_client
+            .get("https://graph.facebook.com/v18.0/me")
+            .query(&[
+                ("fields", "id,email,name,picture"),
+                ("access_token", access_token),
+            ])
+            .send()
+            .await
+            .map_err(|e| OAuthError::UserInfoFetch(format!("HTTP error: {}", e)))?
+            .json::<FacebookUserInfo>()
+            .await
+            .map_err(|e| OAuthError::UserInfoFetch(format!("JSON parse error: {}", e)))?;
+
+        Ok(user_info)
     }
 }
 

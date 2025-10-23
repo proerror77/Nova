@@ -87,6 +87,10 @@ name = "oauth_test"
 path = "tests/oauth_test.rs"
 
 [[test]]
+name = "oauth_token_verification_test"
+path = "tests/oauth_token_verification_test.rs"
+
+[[test]]
 name = "feed_ranking_test"
 path = "tests/feed_ranking_test.rs"
 
@@ -146,6 +150,10 @@ path = "tests/unit/video/video_ranking_tests.rs"
 [[test]]
 name = "embedding_tests"
 path = "tests/unit/video/embedding_tests.rs"
+
+[[test]]
+name = "feature_extraction_test"
+path = "tests/unit/video/feature_extraction_test.rs"
 
 # Phase 6: Video System Integration Tests (T134-T137)
 [[test]]

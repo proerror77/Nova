@@ -12,9 +12,9 @@ enum APIEndpoint: Sendable {
         case .feed:
             return "/feed"
         case .users(let id):
-            return "/users/\(id)"
+            return "/api/v1/users/\(id)"
         case .searchUsers:
-            return "/search/users"
+            return "/api/v1/search/users"
         case .notifications:
             return "/notifications"
         }
@@ -36,7 +36,7 @@ enum APIEndpoint: Sendable {
             return baseURL.appendingPathComponent("/users/\(id)")
 
         case .searchUsers(let query, let page, let limit):
-            var components = URLComponents(url: baseURL.appendingPathComponent("/search/users"), resolvingAgainstBaseURL: true)!
+            var components = URLComponents(url: baseURL.appendingPathComponent("/api/v1/search/users"), resolvingAgainstBaseURL: true)!
             components.queryItems = [
                 URLQueryItem(name: "q", value: query),
                 URLQueryItem(name: "page", value: "\(page)"),
