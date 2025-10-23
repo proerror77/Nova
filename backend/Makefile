@@ -1,4 +1,5 @@
 .PHONY: help build test clean fmt lint docker-up docker-down db-migrate db-reset dev watch logs
+ .PHONY: spec-validate
 
 # Variables
 RUST_LOG ?= info
@@ -34,6 +35,7 @@ help:
 	@echo ""
 	@echo "Development:"
 	@echo "  make dev                - Run all services locally (non-Docker)"
+	@echo "  make spec-validate      - Validate specs vs implementation (Phase 7B)"
 	@echo ""
 
 # Build targets
@@ -114,5 +116,9 @@ status:
 
 setup: docker-up db-migrate
 	@echo "✅ Setup complete!"
+
+spec-validate:
+	@echo "🔎 Validating specs vs implementation..."
+	bash ../scripts/spec-validate.sh
 
 .DEFAULT_GOAL := help
