@@ -3,7 +3,7 @@ use axum::http::StatusCode;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::{services::message_service::MessageService, state::AppState};
+use crate::{services::{message_service::MessageService, conversation_service::ConversationService}, state::AppState};
 use crate::websocket::pubsub;
 
 #[derive(Deserialize)]
@@ -24,6 +24,10 @@ pub async fn send_message(
     Path(conversation_id): Path<Uuid>,
     Json(body): Json<SendMessageRequest>,
 ) -> Result<Json<SendMessageResponse>, crate::error::AppError> {
+    // Permission: sender must be member of conversation
+    if !ConversationService::is_member(&state.db, conversation_id, body.sender_id).await? {
+        return Err(crate::error::AppError::Forbidden("not a member".into()));
+    }
     let (id, seq) = MessageService::send_message_db(
         &state.db,
         conversation_id,

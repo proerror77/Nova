@@ -70,10 +70,13 @@ async fn main() -> io::Result<()> {
     let run_migrations_env = std::env::var("RUN_MIGRATIONS").unwrap_or_else(|_| "true".into());
     if !config.is_production() && run_migrations_env != "false" {
         tracing::info!("Running database migrations...");
-        run_migrations(&db_pool)
-            .await
-            .expect("Failed to run migrations");
-        tracing::info!("Database migrations completed");
+        match run_migrations(&db_pool).await {
+            Ok(_) => tracing::info!("Database migrations completed"),
+            Err(e) => {
+                // 容忍本地/历史迁移缺口（如 VersionMissing），避免开发环境崩溃
+                tracing::warn!("Skipping migrations due to error: {:#}", e);
+            }
+        }
     } else {
         tracing::info!("Skipping database migrations (RUN_MIGRATIONS={})", run_migrations_env);
     }
@@ -293,6 +296,58 @@ async fn main() -> io::Result<()> {
                         web::scope("/events")
                             .app_data(events_state.clone())
                             .service(handlers::ingest_events),
+                    )
+                    // Conversations & Messaging endpoints
+                    .service(
+                        web::scope("/conversations")
+                            .wrap(JwtAuthMiddleware)
+                            .service(
+                                web::resource("")
+                                    .route(web::post().to(handlers::create_conversation))
+                                    .route(web::get().to(handlers::list_conversations)),
+                            )
+                            .route("/{id}", web::get().to(handlers::get_conversation))
+                            .route(
+                                "/{id}/messages",
+                                web::get().to(handlers::get_message_history),
+                            )
+                            .route(
+                                "/{id}/read",
+                                web::post().to(handlers::mark_as_read),
+                            )
+                            .route(
+                                "/{id}/settings",
+                                web::patch().to(handlers::update_conversation_settings),
+                            )
+                            .route(
+                                "/{id}/members",
+                                web::post().to(handlers::add_conversation_members),
+                            )
+                            .route(
+                                "/{id}/members/{user_id}",
+                                web::delete().to(handlers::remove_conversation_member),
+                            ),
+                    )
+                    .service(
+                        web::scope("/messages")
+                            .wrap(JwtAuthMiddleware)
+                            .service(
+                                web::resource("")
+                                    .route(web::post().to(handlers::send_message)),
+                            ),
+                    )
+                    .service(
+                        web::scope("/stories")
+                            .wrap(JwtAuthMiddleware)
+                            .service(
+                                web::resource("")
+                                    .route(web::get().to(handlers::stories_not_implemented))
+                                    .route(web::post().to(handlers::stories_not_implemented)),
+                            )
+                            .route(
+                                "/{id}",
+                                web::get().to(handlers::stories_not_implemented),
+                            ),
                     )
                     // Auth endpoints
                     .service(

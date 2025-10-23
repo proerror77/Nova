@@ -22,6 +22,7 @@ jsonwebtoken = { workspace = true }
 crypto-core = { path = "../libs/crypto-core" }
 chrono = { workspace = true }
 once_cell = "1.19"
+base64 = { workspace = true }
 
 [profile.release]
 codegen-units = 1

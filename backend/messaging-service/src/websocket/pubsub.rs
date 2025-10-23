@@ -13,11 +13,12 @@ pub async fn publish(client: &Client, conversation_id: Uuid, payload: &str) -> r
 }
 
 pub async fn start_psub_listener(client: Client, registry: ConnectionRegistry) -> redis::RedisResult<()> {
-    let mut conn = client.get_async_connection().await?;
-    let mut pubsub = conn.as_pubsub();
+    let conn = client.get_async_connection().await?;
+    let mut pubsub = conn.into_pubsub();
     pubsub.psubscribe("conversation:*").await?;
-    loop {
-        let msg = pubsub.on_message().await;
+    let mut stream = pubsub.on_message();
+    use futures_util::StreamExt;
+    while let Some(msg) = stream.next().await {
         let channel: String = msg.get_channel_name().into();
         let payload: String = msg.get_payload()?;
         if let Some(id_str) = channel.strip_prefix("conversation:") {
@@ -26,4 +27,5 @@ pub async fn start_psub_listener(client: Client, registry: ConnectionRegistry) -
             }
         }
     }
+    Ok(())
 }

@@ -1,8 +1,9 @@
 use messaging_service::{routes, state::AppState, db};
 use axum::Router;
-use testcontainers::{clients::Cli, images::postgres::Postgres as TcPostgres, RunnableImage};
+use testcontainers::{clients::Cli, images::postgres::Postgres as TcPostgres, images::generic::GenericImage, RunnableImage};
 use sqlx::{Pool, Postgres};
 use uuid::Uuid;
+use redis::Client as RedisClient;
 
 async fn start_db() -> (Cli, Pool<Postgres>) {
     let docker = Cli::default();
@@ -20,23 +21,39 @@ async fn start_db() -> (Cli, Pool<Postgres>) {
     (docker, test_pool)
 }
 
-async fn start_app(db: Pool<Postgres>) -> String {
-    let state = AppState { db, registry: messaging_service::websocket::ConnectionRegistry::new() };
+async fn start_app(db: Pool<Postgres>, redis: RedisClient) -> String {
+    let registry = messaging_service::websocket::ConnectionRegistry::new();
+    let state = AppState { db, registry: registry.clone(), redis: redis.clone() };
     let app: Router<AppState> = routes::build_router().with_state(state);
     let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
     let addr = listener.local_addr().unwrap();
+    tokio::spawn({
+        let registry = registry.clone();
+        async move { let _ = messaging_service::websocket::pubsub::start_psub_listener(redis, registry).await; }
+    });
     tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
     format!("http://{}:{}", addr.ip(), addr.port())
 }
 
+async fn start_redis() -> (Cli, RedisClient) {
+    let docker = Cli::default();
+    let image = GenericImage::new("redis:7-alpine").with_wait_for(testcontainers::core::WaitFor::message_on_stdout("Ready to accept connections"));
+    let container = docker.run(image);
+    let host = "127.0.0.1";
+    let port = container.get_host_port_ipv4(6379);
+    let client = RedisClient::open(format!("redis://{}:{}/", host, port)).unwrap();
+    (docker, client)
+}
+
 #[tokio::test]
 async fn message_history_ordering() {
-    let (_docker, pool) = start_db().await;
+    let (_docker_db, pool) = start_db().await;
+    let (_docker_redis, redis) = start_redis().await;
     let u1 = Uuid::new_v4();
     let u2 = Uuid::new_v4();
     sqlx::query("INSERT INTO users (id, username) VALUES ($1, $2)").bind(u1).bind("alice").execute(&pool).await.unwrap();
     sqlx::query("INSERT INTO users (id, username) VALUES ($1, $2)").bind(u2).bind("bob").execute(&pool).await.unwrap();
-    let base = start_app(pool.clone()).await;
+    let base = start_app(pool.clone(), redis).await;
 
     let body = serde_json::json!({"user_a": u1, "user_b": u2});
     let resp = reqwest::Client::new().post(format!("{}/conversations", base)).json(&body).send().await.unwrap();

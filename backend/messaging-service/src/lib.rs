@@ -7,3 +7,4 @@ pub mod state;
 pub mod services;
 pub mod middleware;
 pub mod websocket;
+pub mod security;
