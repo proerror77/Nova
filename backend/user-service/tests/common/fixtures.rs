@@ -4,6 +4,7 @@ use chrono::Utc;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
 use std::time::Duration;
+use user_service::db;
 use user_service::models::{OAuthConnection, Post, PostImage, User};
 use uuid::Uuid;
 
@@ -39,11 +40,15 @@ pub async fn create_test_pool() -> PgPool {
                 match sqlx::query("SELECT 1").fetch_one(&pool).await {
                     Ok(_) => {
                         eprintln!("[tests] PostgreSQL ready after {} attempts", attempt);
+                        // 遷移前先打上 legacy 011 專案的兼容旗標，避免 MySQL 語法撞上 Postgres
+                        db::ensure_legacy_video_migration_marker(&pool)
+                            .await
+                            .expect("Failed to prepare legacy video migration workaround");
                         // 迁移：忽略历史环境中缺失的版本，避免阻塞本地/CI
                         let mut migrator = sqlx::migrate!("../migrations");
                         migrator.set_ignore_missing(true);
                         if let Err(e) = migrator.run(&pool).await {
-                            panic!("Failed to run migrations: {}", e);
+                            panic!("Failed to run migrations: {:#?}", e);
                         }
                         return pool;
                     }

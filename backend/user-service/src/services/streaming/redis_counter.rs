@@ -85,7 +85,10 @@ impl ViewerCounter {
 
         // Ensure count never goes negative (idempotency)
         if new_count < 0 {
-            self.redis.set(&key, 0).await?;
+            self.redis
+                .set::<_, _, ()>(&key, 0)
+                .await
+                .context("Failed to reset negative viewer count")?;
             return Ok(0);
         }
 
@@ -117,7 +120,10 @@ impl ViewerCounter {
 
         if peak.unwrap_or(0) < current {
             // Set new peak with 24-hour TTL
-            self.redis.set_ex(&peak_key, current, 86400).await?;
+            self.redis
+                .set_ex::<_, _, ()>(&peak_key, current, 86400)
+                .await
+                .context("Failed to set new peak viewers")?;
         }
 
         Ok(())
@@ -145,7 +151,10 @@ impl ViewerCounter {
     pub async fn update_heartbeat(&mut self, stream_id: Uuid) -> Result<()> {
         let key = format!("stream:{}:heartbeat", stream_id);
         let timestamp = chrono::Utc::now().timestamp();
-        self.redis.set_ex(&key, timestamp, 30).await?; // 30s TTL
+        self.redis
+            .set_ex::<_, _, ()>(&key, timestamp, 30)
+            .await
+            .context("Failed to set heartbeat")?; // 30s TTL
         Ok(())
     }
 
@@ -171,7 +180,11 @@ impl ViewerCounter {
             .map(|id| format!("stream:{}:viewers", id))
             .collect();
 
-        let counts: Vec<Option<i32>> = self.redis.get(&keys).await?;
+        let counts: Vec<Option<i32>> = self
+            .redis
+            .get::<_, Vec<Option<i32>>>(&keys)
+            .await
+            .context("Failed to batch fetch viewer counts")?;
         Ok(counts.into_iter().map(|c| c.unwrap_or(0)).collect())
     }
 
@@ -187,7 +200,10 @@ impl ViewerCounter {
             format!("stream:{}:heartbeat", stream_id),
         ];
 
-        self.redis.del::<_, ()>(keys).await?;
+        self.redis
+            .del::<_, ()>(keys)
+            .await
+            .context("Failed to cleanup stream keys")?;
         self.remove_active_stream(stream_id).await?;
 
         Ok(())
