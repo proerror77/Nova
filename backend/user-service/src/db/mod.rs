@@ -79,15 +79,18 @@ pub async fn ensure_legacy_video_migration_marker(pool: &PgPool) -> Result<(), s
         }
     }
 
-    // 將 legacy 011 標記為已執行（對新庫避免執行 MySQL 語法）
+    // 將 legacy 011 checkum 與描述對齊，避免舊 MySQL 語法造成校驗失敗
     const LEGACY_V11_CHECKSUM: &str =
-        "77c0ee73b9b22df7a25c0f7f69cfdd8556c9037ffe240c49217313989714b54803dea6070b53d3d60136dd1a51d2975c";
+        "2d56dd2dcf7d92303c120a3eb47a7038ddc0e1efd77dbf09e64619a4f74b406bc69f509e4d01c9e0389c5d56be694db42ae5c1ade5c692cfd45c7dbae9020b6c";
 
     sqlx::query(
         r#"
-        INSERT INTO _sqlx_migrations (version, description, success, checksum, execution_time)
-        VALUES (11, 'Create Videos Table', TRUE, decode($1, 'hex'), 0)
-        ON CONFLICT (version) DO NOTHING
+        UPDATE _sqlx_migrations
+           SET checksum = decode($1, 'hex'),
+               description = 'Create Videos Table',
+               success = TRUE
+         WHERE version = 11
+           AND description <> 'videos table'
         "#,
     )
     .bind(LEGACY_V11_CHECKSUM)
@@ -95,13 +98,17 @@ pub async fn ensure_legacy_video_migration_marker(pool: &PgPool) -> Result<(), s
     .await?;
 
     const LEGACY_V10_CHECKSUM: &str =
-        "410b255b6c2422b3b04aaaadd28868810120561a7c13a4272a32ed64451e1578bc3b98fa973d9e133d9b61e4017b1f4db4981ca86f33078bf8b0e12e446f8ae2";
+        "6a928190843d45c586a1e6152ea0f2a0a90186ce77617e8f48555d3445545661b9f3ed07737c1519f23e791d71f84953173cf3b9c13b09fc0a0c740586ed454b";
 
+    // 如果舊資料庫已存在版本 10，對齊 checksum，讓新的 Postgres 版本遷移可順利比對
     sqlx::query(
         r#"
-        INSERT INTO _sqlx_migrations (version, description, success, checksum, execution_time)
-        VALUES (10, 'JWT signing key rotation support', TRUE, decode($1, 'hex'), 0)
-        ON CONFLICT (version) DO NOTHING
+        UPDATE _sqlx_migrations
+           SET checksum = decode($1, 'hex'),
+               description = 'JWT signing key rotation support',
+               success = TRUE
+         WHERE version = 10
+           AND description <> 'jwt key rotation'
         "#,
     )
     .bind(LEGACY_V10_CHECKSUM)

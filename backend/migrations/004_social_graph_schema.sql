@@ -3,6 +3,14 @@
 -- PostgreSQL OLTP Schema
 -- ============================================
 
+-- Users table follower_count support (used by triggers in this migration)
+ALTER TABLE users
+    ADD COLUMN IF NOT EXISTS follower_count INT NOT NULL DEFAULT 0;
+
+UPDATE users
+SET follower_count = 0
+WHERE follower_count IS NULL;
+
 -- 用户关系表 (Follows)
 CREATE TABLE follows (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
