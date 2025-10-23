@@ -1,134 +1,163 @@
 # 分支管理策略 (Branch Management Strategy)
 
-**最后更新**: 2025-10-21
-**版本**: 1.0
-**状态**: 🚀 Active
+**最后更新**: 2025-10-23
+**版本**: 2.0 (重写，与 Phase 7B 合并后的实际状态一致)
+**状态**: ✅ 生产就绪
 
 ---
 
 ## 📋 概述
 
-本文档定义了 Nova 项目的统一分支管理策略，适用于所有开发者。采用 **Feature Branch Model** 结合 **Task Tracking**，确保清晰的工作流和版本控制。
+本文档定义了 Nova 项目的分支管理策略。采用 **Simplified Feature Branch Model**（经 Phase 7B 分支整合优化），确保清晰的工作流、版本控制和极简的分支维护。
+
+### 当前状态 (2025-10-23)
+- ✅ Phase 7B 已完全合并到 main
+- ✅ 所有开发分支已整合，仅保留 2 个活跃分支
+- 🔄 Phase 7C 开发准备启动
 
 ---
 
 ## 🌳 分支结构
 
 ```
-main (生产环境主分支)
+main (生产环境 - Phase 7B 已完全集成)
 │
-└─ develop/phase-7 (当前开发分支 - Phase 7A/7B/7C/7D)
-   ├─ feature/T201-kafka-notifications (Week 2)
-   ├─ feature/T202-fcm-apns-integration (Week 2)
-   ├─ feature/T203-websocket-handler (Week 2)
-   ├─ feature/T234-neo4j-social-graph (Week 3)
-   ├─ feature/T235-redis-social-cache (Week 3)
-   └─ feature/T236-social-graph-tests (Week 3)
+│  (长期开发分支)
+└─ develop/phase-7c (Phase 7C 开发 - Message Search + Stories)
 
-发布分支（按需创建）:
-├─ release/v1.0 (发布候选)
-└─ hotfix/critical-bug (紧急补丁)
+发布/修复分支（按需创建，临时）:
+├─ feature/US{ID}-{description} (功能开发)
+├─ bugfix/US{ID}-{description} (缺陷修复)
+└─ hotfix/critical-{issue} (紧急补丁)
 ```
+
+**关键变化**:
+- ✅ 43 个分支 → 2 个分支 (来自 PR #20-#23 的清理)
+- ✅ `develop/phase-7b` 已合并到 main (完成 PR #21)
+- ✅ 新创建 `develop/phase-7c` 用于 Phase 7C 开发
 
 ---
 
 ## 📝 分支命名约定
 
 ### 功能分支 (Feature Branches)
-**格式**: `feature/T{ID}-{description}`
+**格式**: `feature/US{ID}-{description}`
 
 **说明**:
-- `T{ID}`: 任务编号（从规划文档中取）
+- `US{ID}`: User Story 编号（从规范文档 specs/ 中取，例如 US1, US2, US3）
 - `{description}`: 简洁的功能描述（英文，kebab-case）
 - 长度: 不超过 50 字符
+- 基于分支: `develop/phase-7c`
 
-**示例**:
+**示例** (Phase 7C 示例):
 ```
-✅ feature/T201-kafka-notifications
-✅ feature/T202-fcm-apns-integration
-✅ feature/T234-neo4j-social-graph
-❌ feature/kafka-integration (缺少 T ID)
-❌ feature/T201-this-is-a-very-long-description-that-exceeds-limits (太长)
+✅ feature/US3-message-search-fulltext
+✅ feature/US4-stories-api-create
+✅ feature/US5-notification-db-storage
+❌ feature/message-search (缺少 US ID)
+❌ feature/US3-this-is-a-very-long-description-exceeding-limits (太长)
 ```
 
 ### 缺陷修复分支 (Bugfix Branches)
-**格式**: `bugfix/T{ID}-{description}`
+**格式**: `bugfix/US{ID}-{description}`
+
+**说明**:
+- 针对已知的 bug，引用对应的 User Story ID
+- 存活周期: 3-5 天
+- 基于分支: `develop/phase-7c` 或 `main`（紧急）
 
 **示例**:
 ```
-✅ bugfix/T206-notification-race-condition
-✅ bugfix/T235-redis-timeout-issue
+✅ bugfix/US1-message-encryption-race-condition
+✅ bugfix/US2-websocket-reconnection-timeout
 ```
 
-### 重构/维护分支 (Chore Branches)
-**格式**: `chore/T{ID}-{description}`
+### 清理/维护分支 (Chore Branches)
+**格式**: `chore/{scope}-{description}`
+
+**说明**:
+- 不涉及新功能或缺陷修复
+- 例: 依赖更新、文档更新、测试改进
 
 **示例**:
 ```
-✅ chore/T250-refactor-kafka-producer
-✅ chore/T251-update-dependencies
+✅ chore/docs-cleanup
+✅ chore/dependencies-update-2025-10
+✅ chore/test-coverage-improvements
 ```
 
 ### 发布分支 (Release Branches)
-**格式**: `release/v{major}.{minor}`
+**格式**: `release/v{major}.{minor}` (临时，合并后删除)
+
+**说明**:
+- 从 main 创建发布候选
+- 包含版本号更新、CHANGELOG 等
+- 合并后立即删除
 
 **示例**:
 ```
 ✅ release/v1.0
-✅ release/v1.1
+✅ release/v1.1-phase-7b
 ```
 
 ### 紧急补丁 (Hotfix Branches)
-**格式**: `hotfix/v{major}.{minor}.{patch}`
+**格式**: `hotfix/critical-{issue}`
+
+**说明**:
+- 仅用于生产级别的紧急修复
+- 直接从 main 创建，合并回 main 和 develop
+- 合并后立即删除
 
 **示例**:
 ```
-✅ hotfix/v1.0.1
-✅ hotfix/critical-auth-bug
+✅ hotfix/critical-auth-bypass
+✅ hotfix/critical-data-corruption
 ```
 
 ---
 
-## 🔄 开发工作流
+## 🔄 开发工作流 (Phase 7C 示例)
 
 ### 1️⃣ 开始新任务
 
 ```bash
-# Step 1: 确保 develop/phase-7 是最新的
-git checkout develop/phase-7
-git pull origin develop/phase-7
+# Step 1: 确保 develop/phase-7c 是最新的
+git checkout develop/phase-7c
+git pull origin develop/phase-7c
 
-# Step 2: 创建新分支（对标任务 T201）
-git checkout -b feature/T201-kafka-notifications
+# Step 2: 创建新分支（对标 User Story，例如 US3-Message Search）
+git checkout -b feature/US3-message-search-fulltext
 
 # Step 3: 推送到远程（建立上游跟踪）
-git push -u origin feature/T201-kafka-notifications
+git push -u origin feature/US3-message-search-fulltext
 ```
 
 ### 2️⃣ 开发实现
 
 ```bash
-# 在分支上进行开发
+# 在分支上进行开发（遵循 TDD）
 git add .
-git commit -m "feat(T201): implement Kafka consumer batching logic"
-git commit -m "test(T201): add 30+ test cases for batch aggregation"
-git push origin feature/T201-kafka-notifications
+git commit -m "feat(US3): implement Elasticsearch integration"
+git commit -m "test(US3): add full-text search test cases"
+git commit -m "docs(US3): document search API endpoints"
+git push origin feature/US3-message-search-fulltext
 ```
 
-**提交消息约定**:
+**提交消息约定** (Conventional Commits):
 ```
 <type>(<scope>): <subject>
 
-<type>: feat|fix|test|chore|docs|refactor
-<scope>: T{ID} (任务号) 或功能名
+<type>: feat|fix|test|chore|docs|refactor|perf
+<scope>: US{ID} (User Story 号) 或功能名
 <subject>: 简洁描述 (现在时，命令式)
 
 示例:
-✅ feat(T201): implement Kafka consumer with batch processing
-✅ test(T201): add 30+ test cases for batch aggregation
-✅ fix(T206): resolve race condition in notification queue
-❌ feat: implement kafka stuff
-❌ fixed the issue
+✅ feat(US3): implement Elasticsearch full-text search
+✅ test(US3): add search ranking algorithm tests
+✅ fix(US2): resolve WebSocket reconnection timeout
+✅ docs(US4): document Stories API schema
+❌ feat: add search stuff
+❌ fixed the bug
 ```
 
 ### 3️⃣ 提交拉取请求 (PR)
@@ -136,71 +165,79 @@ git push origin feature/T201-kafka-notifications
 ```bash
 # 创建 PR（推荐通过 GitHub CLI）
 gh pr create \
-  --title "feat(T201): Implement Kafka consumer batching" \
+  --title "feat(US3): Implement message full-text search with Elasticsearch" \
   --body "
 ## Summary
-Implement Kafka consumer with batch processing for notifications.
+Implement full-text search for messages using Elasticsearch integration.
 
 ## Changes
-- [x] Kafka consumer initialization (src/kafka_consumer.rs)
-- [x] Batch aggregation logic (src/batch_aggregator.rs)
-- [x] 30+ unit tests
-- [x] Integration test with local Kafka
+- [x] Elasticsearch client setup (backend/search-service/src/elastic/)
+- [x] CDC pipeline for message indexing
+- [x] Search API endpoint with ranking
+- [x] 25+ test cases for search accuracy
 
 ## Testing
 \`\`\`bash
 cargo test --all
+# 或运行特定测试
+cargo test --package search-service
 \`\`\`
 
 ## Performance
-- Batch throughput: 10k msg/sec
-- Latency (P95): <50ms
+- Search latency (P95): <200ms
+- Index update delay: <5 seconds
+
+## Related
+- Spec: specs/002-messaging-stories-system/spec.md
+- Checklist: See tasks.md US3 section
 " \
-  --base develop/phase-7
+  --base develop/phase-7c
 ```
 
 **PR 检查清单**:
 - [ ] 代码通过 `cargo clippy` (无警告)
 - [ ] 所有测试通过 (`cargo test --all`)
-- [ ] 代码覆盖率 >85%
+- [ ] 代码覆盖率 >85% (新增代码)
 - [ ] 提交消息遵循约定
 - [ ] 文档/注释已更新
 - [ ] 无 merge conflicts
+- [ ] 性能指标已验证
 
 ### 4️⃣ 代码审查与合并
 
 ```bash
-# 审查者检查后，合并到 develop/phase-7
-git checkout develop/phase-7
-git pull origin develop/phase-7
-git merge --squash feature/T201-kafka-notifications
-git push origin develop/phase-7
+# 审查者审查后，使用 GitHub UI 合并（推荐 squash or rebase）
+# 或使用 GitHub CLI 合并
+gh pr merge <PR_NUMBER> --merge
 
-# 删除已合并的分支
-git push origin --delete feature/T201-kafka-notifications
-git branch -d feature/T201-kafka-notifications
+# 本地清理
+git checkout develop/phase-7c
+git pull origin develop/phase-7c
+git branch -d feature/US3-message-search-fulltext
 ```
 
-### 5️⃣ 周期性同步到 main
+### 5️⃣ 定期同步到 main
 
-每周五 (发布日期):
+**时机**: Phase 完成时（不是每周，而是按 Phase 周期）
+
 ```bash
-# 1. 从 develop/phase-7 创建 release 分支
-git checkout -b release/v1.0 develop/phase-7
-git push -u origin release/v1.0
+# 1. 确保 develop/phase-7c 已充分测试
+git checkout develop/phase-7c
+git pull origin develop/phase-7c
 
-# 2. 版本号更新 + 发布笔记
-# 编辑 Cargo.toml, CHANGELOG.md
-
-# 3. 创建 PR 合并到 main
+# 2. 创建 PR 合并到 main
 gh pr create \
-  --title "release(v1.0): Phase 7A Week 2-3 release" \
+  --title "merge: integrate Phase 7C features to main" \
+  --body "Phase 7C development cycle complete. Ready for production." \
   --base main \
-  --head release/v1.0
+  --head develop/phase-7c
 
-# 4. 审批后合并到 main
-# 5. 删除 release 分支
-git push origin --delete release/v1.0
+# 3. 经过审查和测试后，合并到 main
+gh pr merge <PR_NUMBER> --merge
+
+# 4. 验证 main 已更新
+git checkout main
+git pull origin main
 ```
 
 ---
@@ -210,132 +247,195 @@ git push origin --delete release/v1.0
 ### 场景 1: 在已有分支上继续开发
 
 ```bash
-# 切换到任务分支
-git checkout feature/T201-kafka-notifications
+# 切换到功能分支（例如 US3-message-search）
+git checkout feature/US3-message-search-fulltext
 
 # 更新到最新
-git pull origin feature/T201-kafka-notifications
+git pull origin feature/US3-message-search-fulltext
 
 # 继续开发
-git add . && git commit -m "..." && git push
+git add . && git commit -m "feat(US3): add search ranking" && git push
 ```
 
 ### 场景 2: 从主开发分支更新代码
 
 ```bash
-# 在任务分支上，同步最新的 develop/phase-7 代码
-git checkout feature/T201-kafka-notifications
+# 在功能分支上，同步最新的 develop/phase-7c 代码
+git checkout feature/US3-message-search-fulltext
 git fetch origin
-git rebase origin/develop/phase-7
+git rebase origin/develop/phase-7c
 
 # 如果有冲突，解决冲突后:
-git add . && git rebase --continue && git push -f origin feature/T201-kafka-notifications
+git add . && git rebase --continue && git push -f origin feature/US3-message-search-fulltext
 ```
 
-### 场景 3: 放弃任务或合并失败
+### 场景 3: 放弃任务或重新开始
 
 ```bash
 # 删除本地分支
-git branch -d feature/T201-kafka-notifications
+git branch -d feature/US3-message-search-fulltext
 
 # 删除远程分支
-git push origin --delete feature/T201-kafka-notifications
+git push origin --delete feature/US3-message-search-fulltext
 
 # 如果要重新开始
-git checkout develop/phase-7
-git pull origin develop/phase-7
-git checkout -b feature/T201-kafka-notifications
+git checkout develop/phase-7c
+git pull origin develop/phase-7c
+git checkout -b feature/US3-message-search-fulltext
 ```
 
-### 场景 4: 紧急修复 (Hotfix)
+### 场景 4: 紧急修复 (Hotfix - 仅用于生产级别 bug)
 
 ```bash
-# 从 main 创建紧急修复分支
+# 从 main 创建紧急修复分支（仅针对生产级别问题）
 git checkout main
 git pull origin main
-git checkout -b hotfix/critical-auth-bug
+git checkout -b hotfix/critical-data-corruption
 
-# 开发修复
-git add . && git commit -m "fix: resolve critical auth bug"
-git push -u origin hotfix/critical-auth-bug
+# 开发最小化修复
+git add . && git commit -m "fix(critical): resolve data corruption in messages table"
+git push -u origin hotfix/critical-data-corruption
 
 # 创建 PR 直接到 main（绕过 develop）
-gh pr create --base main --head hotfix/critical-auth-bug
+gh pr create --base main --head hotfix/critical-data-corruption
 
-# 合并后，同步回 develop/phase-7
-git checkout develop/phase-7
+# 审查和合并后，同步回 develop/phase-7c
+git checkout develop/phase-7c
 git pull origin main
-git push origin develop/phase-7
+git push origin develop/phase-7c
+
+# 删除 hotfix 分支
+git push origin --delete hotfix/critical-data-corruption
+```
+
+### 场景 5: 合并多个 PR 到 develop 后同步到 main
+
+```bash
+# 当 Phase 开发完成，多个 PR 已合并到 develop/phase-7c
+git checkout develop/phase-7c
+git pull origin develop/phase-7c
+
+# 验证所有测试通过
+cargo test --all
+
+# 创建一个统一的 PR 合并到 main
+gh pr create \
+  --title "merge(phase-7c): integrate completed features to main" \
+  --body "Phase 7C development complete. All tests passing." \
+  --base main \
+  --head develop/phase-7c
+
+# 合并
+gh pr merge <PR_NUMBER> --merge
 ```
 
 ---
 
 ## 📊 分支生命周期
 
+### 短期功能分支 (Feature/Bugfix)
+
 ```
-创建
+创建 (从 develop/phase-7c)
   │
-  ├─ 推送到远程 (git push -u)
+  ├─ 推送到远程 (git push -u origin)
   │
-  ├─ 开发 (git add/commit/push)
+  ├─ 开发实现 (TDD: Red → Green → Refactor)
   │
-  ├─ 创建 PR
+  ├─ 定期同步 develop (git rebase)
   │
-  ├─ 代码审查 (review)
+  ├─ 创建 PR (标题: feat/fix(US#): ...)
   │
-  ├─ 合并 (merge --squash)
+  ├─ 代码审查 (至少 1 个批准)
   │
-  └─ 删除 (git push origin --delete + git branch -d)
+  ├─ 合并到 develop (GitHub UI: squash 推荐)
+  │
+  └─ 删除 (自动或手动删除)
 ```
 
-**分支存活周期**: 3-5 天 (单个任务通常 2-3 天，可根据任务规模调整)
+**存活周期**: 3-7 天
+- 短期任务: 2-3 天
+- 中等任务: 3-5 天
+- 大型任务: 5-7 天
+- 超过 1 周: 重新评估设计或分解任务
+
+### 长期开发分支 (develop/phase-7c)
+
+```
+创建于 Phase 7C 启动
+  │
+  ├─ 接收多个 feature/bugfix PR
+  │
+  ├─ 定期集成测试 (每个 PR 合并后)
+  │
+  ├─ 当 Phase 完成
+  │
+  ├─ 创建 Phase 完成 PR (merge 到 main)
+  │
+  └─ 保留至下一 Phase
+```
+
+**存活周期**: 4-8 周 (单个 Phase 周期)
 
 ---
 
-## ✅ 检查清单
+## ✅  检查清单
 
 ### 创建分支前
-- [ ] 任务编号确认 (T###)
-- [ ] 任务在规划文档中存在
-- [ ] 基于最新的 `develop/phase-7`
+- [ ] User Story 编号确认 (US#)
+- [ ] US 在规范文档 `specs/002-messaging-stories-system/` 中存在
+- [ ] 基于最新的 `develop/phase-7c` (运行 `git pull origin develop/phase-7c`)
+- [ ] 分支名符合命名约定 (`feature/US#-description`)
 
-### 开发过程中
-- [ ] 每次提交都有清晰的消息
+### 开发过程中 (TDD 循环)
+- [ ] 每次提交都有清晰的 Conventional Commit 消息
 - [ ] 提交粒度合理 (不超过 500 行改动/commit)
-- [ ] 代码自测通过
+- [ ] 测试驱动: 先写测试，再实现功能
 - [ ] 定期 push 到远程 (至少每天一次)
+- [ ] 代码能在本地通过所有测试
 
 ### 提交 PR 前
-- [ ] `cargo clippy` 通过 (无警告)
-- [ ] `cargo test --all` 通过
-- [ ] 代码覆盖率 >85%
-- [ ] 没有 merge conflicts
-- [ ] PR 标题清晰，描述完整
+- [ ] `cargo clippy --all` 通过 (零警告)
+- [ ] `cargo test --all` 通过 (所有测试)
+- [ ] 新代码覆盖率 >85%
+- [ ] 没有 merge conflicts (运行 `git rebase origin/develop/phase-7c`)
+- [ ] PR 标题按约定: `feat(US#): description` 或 `fix(US#): description`
+- [ ] PR 描述包含: Summary, Changes, Testing, Performance
 
 ### 合并前
-- [ ] 获得至少 1 个批准 (code review)
-- [ ] 所有 CI/CD 检查通过
-- [ ] 解决了所有反馈
+- [ ] 至少获得 1 个代码审查批准
+- [ ] 所有 CI/CD 检查通过 (GitHub Actions)
+- [ ] 解决了所有审查反馈
+- [ ] PR 创建者确认已修复所有问题
 
 ### 合并后
-- [ ] 删除远程分支
-- [ ] 删除本地分支
-- [ ] 更新任务追踪系统 (标记为 Done)
+- [ ] 使用 GitHub UI 合并 (推荐 squash 方式)
+- [ ] 删除远程分支 (GitHub UI 会提示)
+- [ ] 本地删除分支: `git branch -d feature/US#-...`
+- [ ] 在规范文档中标记 US 为完成
 
 ---
 
 ## 🔐 分支保护规则
 
-**main 分支**: ⛔ 受保护
-- 必须通过 PR 合并（不能直接 push）
-- 必须获得 1 个代码审查批准
-- 必须通过所有 CI/CD 检查
-- 禁止强制 push
+### main 分支 ⛔ 严格受保护
+- **必须**: 通过 PR 合并（禁止直接 push）
+- **必须**: 获得至少 1 个代码审查批准
+- **必须**: 所有 CI/CD 检查通过
+- **必须**: 禁止强制 push (`--force` 或 `--force-with-lease`)
+- **用途**: 生产环境，Phase 完成时整合
 
-**develop/phase-7 分支**: ⚠️ 部分受保护
-- 推荐通过 PR 合并（便于追踪）
-- 必须通过 CI/CD 检查
-- 允许快进 (fast-forward) 提交
+### develop/phase-7c 分支 ⚠️ 建议受保护
+- **推荐**: 通过 PR 合并（便于追踪）
+- **推荐**: 简单改动可直接 push (快进提交)
+- **必须**: 通过 CI/CD 检查
+- **禁止**: 强制 push
+- **用途**: Phase 开发，接收多个 feature PR
+
+### 临时分支 (feature/bugfix/hotfix) ✅ 无保护
+- **允许**: 直接 push (个人工作空间)
+- **允许**: 强制 push (重新整理历史)
+- **必须**: 代码审查后才能合并到 develop 或 main
 
 ---
 
@@ -414,13 +514,27 @@ git reset --hard HEAD~1  # 撤销最后一次提交，丢弃改动
 
 ## 📚 参考资源
 
+**Nova 项目规范**:
+- [`specs/002-messaging-stories-system/spec.md`](./specs/002-messaging-stories-system/spec.md) - Phase 7C User Stories
+- [`specs/002-messaging-stories-system/tasks.md`](./specs/002-messaging-stories-system/tasks.md) - 具体任务清单
+- [`BRANCH_CLEANUP_SUMMARY.md`](./docs/BRANCH_CLEANUP_SUMMARY.md) - 分支整合历史 (Phase 7B)
+- [`PHASE_7B_KICKOFF.md`](./PHASE_7B_KICKOFF.md) - Phase 7B 实现指南
+
+**Git/GitHub 最佳实践**:
 - [Git Documentation](https://git-scm.com/doc)
 - [GitHub Flow Guide](https://guides.github.com/introduction/flow/)
 - [Conventional Commits](https://www.conventionalcommits.org/)
-- [Nova Phase 7 Planning](./specs/007-phase-7-notifications-social/)
+- [GitHub CLI Documentation](https://cli.github.com/manual/)
 
 ---
 
-**版本历史**:
-- v1.0 (2025-10-21): 初始版本，定义 Phase 7 分支策略
+## 📋 版本历史
+
+- **v2.0** (2025-10-23): 重写，适应 Phase 7B 合并后的简化分支结构
+  - 从 43 分支简化为 2 分支
+  - 更新 User Story 编号约定 (T## → US#)
+  - 新增 `develop/phase-7c` 长期开发分支
+  - 优化 Phase 级别的整合策略
+
+- **v1.0** (2025-10-21): 初始版本，定义 Phase 7 分支策略（已过时）
 
