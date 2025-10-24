@@ -15,6 +15,10 @@ path = "src/main.rs"
 # path = "src/bin/job_worker.rs"
 # TODO: Uncomment when job_worker.rs is implemented
 
+[[bin]]
+name = "graph_backfill"
+path = "src/bin/graph_backfill.rs"
+
 [lib]
 name = "user_service"
 path = "src/lib.rs"
@@ -24,6 +28,9 @@ path = "src/lib.rs"
 actix-web.workspace = true
 actix-rt.workspace = true
 actix-cors.workspace = true
+actix = "0.13"
+actix-web-actors = "4.3"
+actix-http = "3.9"
 tokio.workspace = true
 sqlx.workspace = true
 redis.workspace = true
@@ -65,6 +72,9 @@ futures = "0.3"
 lazy_static = "1.4"
 image = "0.24"
 num_cpus = "1.16"
+neo4rs = "0.8"
+tokio-stream = "0.1"
+regex = "1"
 
 # Phase 4: Video Processing
 tonic = "0.10"
@@ -184,3 +194,19 @@ path = "tests/performance/video/video_model_inference_test.rs"
 [[test]]
 name = "video_bitrate_switching_test"
 path = "tests/performance/video/video_bitrate_switching_test.rs"
+
+[[test]]
+name = "social_graph_tests"
+path = "tests/integration/social_graph_tests.rs"
+
+[[test]]
+name = "neo4j_suggest_tests"
+path = "tests/integration/neo4j_suggest_tests.rs"
+
+[[test]]
+name = "streaming_integration_test"
+path = "tests/streaming_integration_test.rs"
+
+[[test]]
+name = "cache_test"
+path = "tests/integration/cache_test.rs"
