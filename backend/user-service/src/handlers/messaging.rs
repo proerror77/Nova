@@ -1,13 +1,15 @@
 use actix_web::{error::ResponseError, web, HttpResponse, Responder};
+use redis::aio::ConnectionManager;
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use uuid::Uuid;
-use redis::aio::ConnectionManager;
 
 use crate::db::{messaging::*, user_repo};
-use crate::AppError;
+use crate::middleware::rate_limit::{RateLimitConfig, RateLimiter};
 use crate::middleware::UserId;
-use crate::services::messaging::{ConversationService, MessageService, MessagingWebSocketHandler};
+use crate::services::messaging::{ConversationService, MessageService};
+use crate::AppError;
+use crate::Config;
 
 // ============================================
 // Request/Response DTOs
@@ -45,8 +47,9 @@ pub struct CreateConversationResponse {
 pub struct SendMessageRequest {
     pub conversation_id: Uuid,
     pub encrypted_content: String,
-    pub nonce: String, // base64, 32 chars (24 bytes)
+    pub nonce: String,        // base64, 32 chars (24 bytes)
     pub message_type: String, // "text" | "system"
+    pub search_text: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -325,21 +328,34 @@ pub async fn update_conversation_settings(
 ) -> impl Responder {
     let conversation_id = path.into_inner();
     let service = ConversationService::new(pool.get_ref().clone());
-    match service
-        .update_member_settings(
-            conversation_id,
-            user.0,
-            body.is_muted,
-            body.is_archived,
-        )
-        .await
-    {
-        Ok(member) => HttpResponse::Ok().json(serde_json::json!({
-            "is_muted": member.is_muted,
-            "is_archived": member.is_archived,
-        })),
-        Err(e) => e.error_response(),
+    let mut resp = serde_json::Map::new();
+
+    if body.is_muted.is_some() || body.is_archived.is_some() {
+        match service
+            .update_member_settings(conversation_id, user.0, body.is_muted, body.is_archived)
+            .await
+        {
+            Ok(member) => {
+                resp.insert("is_muted".into(), serde_json::json!(member.is_muted));
+                resp.insert("is_archived".into(), serde_json::json!(member.is_archived));
+            }
+            Err(e) => return e.error_response(),
+        }
     }
+
+    if let Some(mode) = &body.privacy_mode {
+        match service
+            .update_privacy_mode(conversation_id, user.0, mode.clone())
+            .await
+        {
+            Ok(()) => {
+                resp.insert("privacy_mode".into(), serde_json::json!(mode));
+            }
+            Err(e) => return e.error_response(),
+        }
+    }
+
+    HttpResponse::Ok().json(serde_json::Value::Object(resp))
 }
 
 /// POST /api/v1/conversations/{id}/members
@@ -364,16 +380,11 @@ pub async fn add_conversation_members(
     }
 
     // Requester must be owner or admin
-    let requester_member = match repo
-        .get_conversation_member(conversation_id, user.0)
-        .await
-    {
+    let requester_member = match repo.get_conversation_member(conversation_id, user.0).await {
         Ok(m) => m,
         Err(_) => {
-            return AppError::Authorization(
-                "You are not a member of this conversation".to_string(),
-            )
-            .error_response()
+            return AppError::Authorization("You are not a member of this conversation".to_string())
+                .error_response()
         }
     };
     if requester_member.role != MemberRole::Owner && requester_member.role != MemberRole::Admin {
@@ -434,6 +445,7 @@ pub struct ListConversationsQuery {
 pub struct UpdateSettingsRequest {
     pub is_muted: Option<bool>,
     pub is_archived: Option<bool>,
+    pub privacy_mode: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -473,8 +485,29 @@ pub async fn send_message(
     pool: web::Data<PgPool>,
     user: UserId,
     redis: web::Data<ConnectionManager>,
+    config: web::Data<Config>,
     req: web::Json<SendMessageRequest>,
 ) -> impl Responder {
+    // Rate limit per user+conversation (overrides via env)
+    let send_max: u32 = std::env::var("MSG_SEND_MAX_REQUESTS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(config.rate_limit.max_requests);
+    let send_window: u64 = std::env::var("MSG_SEND_WINDOW_SECS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(config.rate_limit.window_secs);
+    let limiter = RateLimiter::new(
+        redis.get_ref().clone(),
+        RateLimitConfig {
+            max_requests: send_max,
+            window_seconds: send_window,
+        },
+    );
+    let rl_key = format!("msg:send:{}:{}", user.0, req.conversation_id);
+    if limiter.is_rate_limited(&rl_key).await.unwrap_or(false) {
+        return crate::error::AppError::RateLimitExceeded.error_response();
+    }
     let msg_type = match parse_message_type(&req.message_type) {
         Some(t) => t,
         None => {
@@ -485,7 +518,10 @@ pub async fn send_message(
         }
     };
 
-    let service = MessageService::new(pool.get_ref().clone());
+    // Create MessageService with WebSocket support for real-time delivery
+    let service =
+        MessageService::with_websocket(pool.get_ref().clone(), std::sync::Arc::new(redis.get_ref().clone()));
+
     match service
         .send_message(
             user.0,
@@ -493,17 +529,164 @@ pub async fn send_message(
             req.encrypted_content.clone(),
             req.nonce.clone(),
             msg_type,
+            req.search_text.clone(),
         )
         .await
     {
-        Ok(message) => {
-            // Publish to Redis for WebSocket delivery (best-effort)
-            let publisher = MessagingWebSocketHandler::new(std::sync::Arc::new(redis.get_ref().clone()));
-            if let Err(e) = publisher.publish_message_event(&message).await {
-                tracing::warn!("failed to publish message event: {}", e);
+        Ok(message) => HttpResponse::Created().json(message),
+        Err(e) => e.error_response(),
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct EditMessageRequest {
+    pub encrypted_content: String,
+    pub nonce: String,
+    pub search_text: Option<String>,
+}
+
+/// PATCH /api/v1/messages/{id}
+pub async fn edit_message(
+    pool: web::Data<PgPool>,
+    user: UserId,
+    redis: web::Data<ConnectionManager>,
+    config: web::Data<Config>,
+    path: web::Path<Uuid>,
+    body: web::Json<EditMessageRequest>,
+) -> impl Responder {
+    let edit_max: u32 = std::env::var("MSG_EDIT_MAX_REQUESTS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(config.rate_limit.max_requests);
+    let edit_window: u64 = std::env::var("MSG_EDIT_WINDOW_SECS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(config.rate_limit.window_secs);
+    let limiter = RateLimiter::new(
+        redis.get_ref().clone(),
+        RateLimitConfig {
+            max_requests: edit_max,
+            window_seconds: edit_window,
+        },
+    );
+    let rl_key = format!("msg:edit:{}", user.0);
+    if limiter.is_rate_limited(&rl_key).await.unwrap_or(false) {
+        return crate::error::AppError::RateLimitExceeded.error_response();
+    }
+    let message_id = path.into_inner();
+    let service =
+        MessageService::with_websocket(pool.get_ref().clone(), std::sync::Arc::new(redis.get_ref().clone()));
+
+    match service
+        .edit_message(
+            message_id,
+            user.0,
+            body.encrypted_content.clone(),
+            body.nonce.clone(),
+        )
+        .await
+    {
+        Ok(updated) => {
+            if let Some(text) = &body.search_text {
+                let repo = MessagingRepository::new(pool.get_ref());
+                let _ = repo
+                    .upsert_message_search(
+                        updated.id,
+                        updated.conversation_id,
+                        updated.sender_id,
+                        text,
+                    )
+                    .await;
             }
-            HttpResponse::Created().json(message)
+            HttpResponse::Ok().json(updated)
         }
+        Err(e) => e.error_response(),
+    }
+}
+
+/// DELETE /api/v1/messages/{id}
+pub async fn delete_message(
+    pool: web::Data<PgPool>,
+    user: UserId,
+    redis: web::Data<ConnectionManager>,
+    config: web::Data<Config>,
+    path: web::Path<Uuid>,
+) -> impl Responder {
+    let del_max: u32 = std::env::var("MSG_DELETE_MAX_REQUESTS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(config.rate_limit.max_requests);
+    let del_window: u64 = std::env::var("MSG_DELETE_WINDOW_SECS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(config.rate_limit.window_secs);
+    let limiter = RateLimiter::new(
+        redis.get_ref().clone(),
+        RateLimitConfig {
+            max_requests: del_max,
+            window_seconds: del_window,
+        },
+    );
+    let rl_key = format!("msg:delete:{}", user.0);
+    if limiter.is_rate_limited(&rl_key).await.unwrap_or(false) {
+        return crate::error::AppError::RateLimitExceeded.error_response();
+    }
+    let message_id = path.into_inner();
+    let service =
+        MessageService::with_websocket(pool.get_ref().clone(), std::sync::Arc::new(redis.get_ref().clone()));
+
+    match service.delete_message(message_id, user.0).await {
+        Ok(()) => HttpResponse::NoContent().finish(),
+        Err(e) => e.error_response(),
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct MessageSearchQuery {
+    pub conversation_id: Uuid,
+    pub q: String,
+    pub limit: Option<i64>,
+}
+
+/// GET /api/v1/messages/search
+pub async fn search_messages(
+    pool: web::Data<PgPool>,
+    user: UserId,
+    query: web::Query<MessageSearchQuery>,
+) -> impl Responder {
+    let conversation_id = query.conversation_id;
+    let q = query.q.trim();
+    if q.is_empty() {
+        return HttpResponse::BadRequest().json(crate::handlers::auth::ErrorResponse {
+            error: "Query cannot be empty".to_string(),
+            details: None,
+        });
+    }
+
+    let repo = MessagingRepository::new(pool.get_ref());
+    match repo.is_conversation_member(conversation_id, user.0).await {
+        Ok(true) => {}
+        Ok(false) => {
+            return AppError::Authorization("You are not a member of this conversation".to_string())
+                .error_response()
+        }
+        Err(e) => return e.error_response(),
+    }
+
+    let limit = query.limit.unwrap_or(20).clamp(1, 100);
+    // Enforce privacy: disallow searching strict_e2e
+    if let Ok(mode) = repo.get_conversation_privacy(conversation_id).await {
+        if mode == "strict_e2e" {
+            return AppError::Authorization("Search is disabled for this conversation".to_string())
+                .error_response();
+        }
+    }
+
+    match repo.search_messages(conversation_id, q, limit).await {
+        Ok(rows) => HttpResponse::Ok().json(serde_json::json!({
+            "messages": rows,
+            "count": rows.len(),
+        })),
         Err(e) => e.error_response(),
     }
 }
@@ -517,24 +700,16 @@ pub async fn mark_as_read(
     req: web::Json<MarkReadRequest>,
 ) -> impl Responder {
     let conversation_id = path.into_inner();
-    let service = MessageService::new(pool.get_ref().clone());
+    let service =
+        MessageService::with_websocket(pool.get_ref().clone(), std::sync::Arc::new(redis.get_ref().clone()));
+
     match service
         .mark_as_read(conversation_id, user.0, req.message_id)
         .await
     {
-        Ok(()) => {
-            // Publish read receipt (best-effort)
-            let publisher = MessagingWebSocketHandler::new(std::sync::Arc::new(redis.get_ref().clone()));
-            if let Err(e) = publisher
-                .publish_read_receipt_event(conversation_id, user.0, req.message_id)
-                .await
-            {
-                tracing::warn!("failed to publish read receipt: {}", e);
-            }
-            HttpResponse::Ok().json(SimpleOkResponse {
-                message: "Read status updated".to_string(),
-            })
-        }
+        Ok(()) => HttpResponse::Ok().json(SimpleOkResponse {
+            message: "Read status updated".to_string(),
+        }),
         Err(e) => e.error_response(),
     }
 }

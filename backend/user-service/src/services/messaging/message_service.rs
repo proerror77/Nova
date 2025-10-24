@@ -3,16 +3,31 @@
 
 use crate::db::messaging::{Message, MessageType, MessagingRepository};
 use crate::error::AppError;
+use crate::services::messaging::websocket_handler::MessagingWebSocketHandler;
+use redis::aio::ConnectionManager;
 use sqlx::PgPool;
+use std::sync::Arc;
 use uuid::Uuid;
 
 pub struct MessageService {
     pool: PgPool,
+    ws_handler: Option<Arc<MessagingWebSocketHandler>>,
 }
 
 impl MessageService {
     pub fn new(pool: PgPool) -> Self {
-        Self { pool }
+        Self {
+            pool,
+            ws_handler: None,
+        }
+    }
+
+    /// Create MessageService with Redis pub/sub support for real-time delivery
+    pub fn with_websocket(pool: PgPool, redis: Arc<ConnectionManager>) -> Self {
+        Self {
+            pool,
+            ws_handler: Some(Arc::new(MessagingWebSocketHandler::new(redis))),
+        }
     }
 
     /// Send a new message to a conversation
@@ -24,6 +39,7 @@ impl MessageService {
         encrypted_content: String,
         nonce: String,
         message_type: MessageType,
+        search_text: Option<String>,
     ) -> Result<Message, AppError> {
         let repo = MessagingRepository::new(&self.pool);
 
@@ -60,8 +76,39 @@ impl MessageService {
             )
             .await?;
 
-        // TODO: Publish to Redis Pub/Sub for WebSocket delivery
-        // self.publish_message_event(&message).await?;
+        // Optional: index plaintext for searchable conversations (client-provided)
+        if let Some(text) = search_text {
+            // Only index when conversation privacy allows
+            if let Ok(mode) = repo.get_conversation_privacy(conversation_id).await {
+                if mode == "search_enabled" {
+                    let _ = repo
+                        .upsert_message_search(message.id, conversation_id, sender_id, &text)
+                        .await;
+                }
+            }
+        }
+
+        // Publish to Redis Pub/Sub for WebSocket delivery (best-effort)
+        if let Some(ws_handler) = &self.ws_handler {
+            if let Err(e) = ws_handler.publish_message_event(&message).await {
+                // Log error but don't fail the entire operation
+                // Message is already persisted to database
+                tracing::warn!(
+                    "Failed to publish message {} to Redis pub/sub: {}. Message saved to DB successfully.",
+                    message.id, e
+                );
+            } else {
+                tracing::debug!(
+                    "Published message {} to Redis channel conversation:{}:messages",
+                    message.id, conversation_id
+                );
+            }
+        } else {
+            tracing::warn!(
+                "MessageService created without WebSocket support. Message {} will not be delivered in real-time.",
+                message.id
+            );
+        }
 
         Ok(message)
     }
@@ -88,9 +135,7 @@ impl MessageService {
         }
 
         // Fetch messages
-        let messages = repo
-            .get_messages(conversation_id, limit, before)
-            .await?;
+        let messages = repo.get_messages(conversation_id, limit, before).await?;
 
         let has_more = messages.len() == limit as usize;
         let next_cursor = messages.last().map(|m| m.id);
@@ -134,8 +179,18 @@ impl MessageService {
         repo.update_last_read(conversation_id, user_id, message_id)
             .await?;
 
-        // TODO: Publish read receipt event to Redis Pub/Sub
-        // self.publish_read_receipt_event(conversation_id, user_id, message_id).await?;
+        // Publish read receipt event to Redis Pub/Sub (best-effort)
+        if let Some(ws_handler) = &self.ws_handler {
+            if let Err(e) = ws_handler
+                .publish_read_receipt_event(conversation_id, user_id, message_id)
+                .await
+            {
+                tracing::warn!(
+                    "Failed to publish read receipt for conversation {} user {}: {}",
+                    conversation_id, user_id, e
+                );
+            }
+        }
 
         Ok(())
     }
@@ -164,12 +219,84 @@ impl MessageService {
         new_encrypted_content: String,
         new_nonce: String,
     ) -> Result<Message, AppError> {
-        unimplemented!("Phase 2: Message editing not implemented yet")
+        let repo = MessagingRepository::new(&self.pool);
+
+        // Validate input
+        if new_encrypted_content.is_empty() {
+            return Err(AppError::BadRequest(
+                "Message content cannot be empty".to_string(),
+            ));
+        }
+        if new_nonce.len() != 32 {
+            return Err(AppError::BadRequest("Invalid nonce length".to_string()));
+        }
+
+        // Load and authorize
+        let existing = repo.get_message(message_id).await?;
+        if existing.sender_id != user_id {
+            return Err(AppError::Authorization(
+                "You can only edit your own message".to_string(),
+            ));
+        }
+        if existing.deleted_at.is_some() {
+            return Err(AppError::BadRequest(
+                "Cannot edit a deleted message".to_string(),
+            ));
+        }
+
+        // Update content
+        let updated = repo
+            .update_message_content(message_id, new_encrypted_content, new_nonce)
+            .await?;
+
+        // Publish message updated event to Redis Pub/Sub (best-effort)
+        if let Some(ws_handler) = &self.ws_handler {
+            if let Err(e) = ws_handler.publish_message_updated_event(&updated).await {
+                tracing::warn!(
+                    "Failed to publish message.updated event for message {}: {}",
+                    message_id, e
+                );
+            }
+        }
+
+        Ok(updated)
     }
 
     /// Delete a message (future feature)
     pub async fn delete_message(&self, message_id: Uuid, user_id: Uuid) -> Result<(), AppError> {
-        unimplemented!("Phase 2: Message deletion not implemented yet")
+        let repo = MessagingRepository::new(&self.pool);
+
+        // Load and authorize
+        let existing = repo.get_message(message_id).await?;
+        if existing.sender_id != user_id {
+            return Err(AppError::Authorization(
+                "You can only delete your own message".to_string(),
+            ));
+        }
+        if existing.deleted_at.is_some() {
+            // idempotent
+            return Ok(());
+        }
+
+        let conversation_id = existing.conversation_id;
+
+        // Soft delete
+        repo.soft_delete_message(message_id).await?;
+
+        // Publish message deleted event to Redis Pub/Sub (best-effort)
+        if let Some(ws_handler) = &self.ws_handler {
+            if let Err(e) = ws_handler
+                .publish_message_deleted_event(conversation_id, message_id, user_id)
+                .await
+            {
+                tracing::warn!(
+                    "Failed to publish message.deleted event for message {}: {}",
+                    message_id, e
+                );
+            }
+        }
+
+        Ok(())
     }
 }
 
