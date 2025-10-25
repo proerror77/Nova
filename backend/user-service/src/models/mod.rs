@@ -1,5 +1,8 @@
 pub mod video;
 
+// Re-export commonly used types from video module
+pub use video::{UploadStatus, ResumableUpload, UploadChunk, VideoEntity, VideoStatus};
+
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;

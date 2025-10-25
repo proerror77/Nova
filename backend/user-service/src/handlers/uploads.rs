@@ -229,7 +229,7 @@ pub async fn upload_chunk(
         let next_index =
             ResumableUploadService::get_next_chunk_index(pool.get_ref(), upload_id).await?;
         let progress = ResumableUploadService::calculate_progress(
-            upload.chunks_uploaded,
+            upload.chunks_completed,
             upload.chunks_total,
         );
 
@@ -311,7 +311,7 @@ pub async fn upload_chunk(
     let next_index =
         ResumableUploadService::get_next_chunk_index(pool.get_ref(), upload_id).await?;
     let progress = ResumableUploadService::calculate_progress(
-        updated_upload.chunks_uploaded,
+        updated_upload.chunks_completed,
         updated_upload.chunks_total,
     );
 
@@ -427,7 +427,7 @@ pub async fn get_upload_status(
         .ok_or_else(|| AppError::NotFound("Upload not found".into()))?;
 
     let progress = ResumableUploadService::calculate_progress(
-        upload.chunks_uploaded,
+        upload.chunks_completed,
         upload.chunks_total,
     );
 
@@ -442,7 +442,7 @@ pub async fn get_upload_status(
         upload_id: upload.id,
         status: status_str.to_string(),
         chunks_total: upload.chunks_total,
-        chunks_uploaded: upload.chunks_uploaded,
+        chunks_uploaded: upload.chunks_completed,
         progress_percent: progress,
         expires_at: upload.expires_at.to_rfc3339(),
     }))

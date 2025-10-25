@@ -62,7 +62,7 @@ impl ResumableUploadService {
         s3_key: &str,
         chunk_index: i32,
         chunk_data: Vec<u8>,
-    ) -> Result<UploadChunkEntity> {
+    ) -> Result<crate::models::video::UploadChunk> {
         // Compute SHA256 hash for integrity
         let chunk_hash = Self::compute_sha256(&chunk_data);
         let chunk_size = chunk_data.len() as i64;
@@ -85,7 +85,7 @@ impl ResumableUploadService {
             })?;
 
         // Extract ETag (required for completing multipart upload)
-        let s3_etag = upload_part_resp
+        let etag = upload_part_resp
             .e_tag()
             .ok_or_else(|| AppError::Internal(format!("Missing ETag for chunk {}", chunk_index)))?
             .to_string();
@@ -96,9 +96,8 @@ impl ResumableUploadService {
             upload_id,
             chunk_index,
             chunk_size,
-            chunk_hash,
-            s3_etag,
-            s3_key.to_string(),
+            &etag,
+            Some(&chunk_hash),
         )
         .await
         .map_err(|e| AppError::Internal(format!("Failed to record chunk: {}", e)))?;
@@ -143,8 +142,8 @@ impl ResumableUploadService {
             .iter()
             .map(|chunk| {
                 CompletedPart::builder()
-                    .part_number(chunk.chunk_index + 1) // 1-indexed
-                    .e_tag(&chunk.s3_etag)
+                    .part_number(chunk.chunk_number + 1) // 1-indexed
+                    .e_tag(chunk.etag.as_ref().unwrap_or(&"".to_string()))
                     .build()
             })
             .collect();
@@ -207,7 +206,7 @@ impl ResumableUploadService {
             .map_err(|e| AppError::Internal(format!("Failed to fetch chunks: {}", e)))?;
 
         // Find first missing chunk index
-        let uploaded_indices: Vec<i32> = chunks.iter().map(|c| c.chunk_index).collect();
+        let uploaded_indices: Vec<i32> = chunks.iter().map(|c| c.chunk_number).collect();
 
         for i in 0..upload.chunks_total {
             if !uploaded_indices.contains(&i) {
@@ -228,7 +227,7 @@ impl ResumableUploadService {
             .map_err(|e| AppError::Internal(format!("Failed to fetch upload: {}", e)))?
             .ok_or_else(|| AppError::NotFound("Upload not found".to_string()))?;
 
-        Ok(upload.chunks_uploaded >= upload.chunks_total)
+        Ok(upload.chunks_completed >= upload.chunks_total)
     }
 
     /// Compute SHA256 hash of data
