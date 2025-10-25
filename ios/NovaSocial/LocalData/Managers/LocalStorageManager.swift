@@ -31,7 +31,8 @@ actor LocalStorageManager {
                 LocalUser.self,
                 LocalComment.self,
                 LocalNotification.self,
-                LocalDraft.self
+                LocalDraft.self,
+                LocalMessage.self
             ])
 
             let modelConfiguration = ModelConfiguration(

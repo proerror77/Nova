@@ -62,10 +62,7 @@ impl EmbeddingSimilarityCalculator {
             return f32::NAN;
         }
 
-        a.iter()
-            .zip(b.iter())
-            .map(|(x, y)| (x - y).abs())
-            .sum()
+        a.iter().zip(b.iter()).map(|(x, y)| (x - y).abs()).sum()
     }
 
     /// Calculate Chebyshev (L∞) distance
@@ -338,9 +335,7 @@ fn test_similarity_range() {
     let mut similarities = vec![];
 
     for i in 0..10 {
-        let emb1: VideoEmbedding = (0..100)
-            .map(|j| if j == i { 1.0 } else { 0.0 })
-            .collect();
+        let emb1: VideoEmbedding = (0..100).map(|j| if j == i { 1.0 } else { 0.0 }).collect();
         let emb2: VideoEmbedding = (0..100)
             .map(|j| if j == (i + 1) % 100 { 1.0 } else { 0.0 })
             .collect();

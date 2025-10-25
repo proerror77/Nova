@@ -55,9 +55,7 @@ async fn test_create_direct_conversation() {
     let bob = create_test_user(&pool).await;
 
     let app = test::init_service(
-        App::new()
-            .app_data(web::Data::new(pool.clone()))
-            // TODO: Configure routes
+        App::new().app_data(web::Data::new(pool.clone())), // TODO: Configure routes
     )
     .await;
 
@@ -88,9 +86,7 @@ async fn test_create_group_conversation_requires_name() {
     let alice = create_test_user(&pool).await;
 
     let app = test::init_service(
-        App::new()
-            .app_data(web::Data::new(pool.clone()))
-            // TODO: Configure routes
+        App::new().app_data(web::Data::new(pool.clone())), // TODO: Configure routes
     )
     .await;
 
@@ -121,9 +117,7 @@ async fn test_send_message() {
     let conversation = create_test_conversation(&pool, &alice).await;
 
     let app = test::init_service(
-        App::new()
-            .app_data(web::Data::new(pool.clone()))
-            // TODO: Configure routes
+        App::new().app_data(web::Data::new(pool.clone())), // TODO: Configure routes
     )
     .await;
 
@@ -158,9 +152,7 @@ async fn test_send_message_non_member_forbidden() {
     let conversation = create_test_conversation(&pool, &alice).await;
 
     let app = test::init_service(
-        App::new()
-            .app_data(web::Data::new(pool.clone()))
-            // TODO: Configure routes
+        App::new().app_data(web::Data::new(pool.clone())), // TODO: Configure routes
     )
     .await;
 
@@ -196,9 +188,7 @@ async fn test_get_message_history_pagination() {
     }
 
     let app = test::init_service(
-        App::new()
-            .app_data(web::Data::new(pool.clone()))
-            // TODO: Configure routes
+        App::new().app_data(web::Data::new(pool.clone())), // TODO: Configure routes
     )
     .await;
 
@@ -238,9 +228,7 @@ async fn test_mark_as_read() {
     let message_id = Uuid::new_v4();
 
     let app = test::init_service(
-        App::new()
-            .app_data(web::Data::new(pool.clone()))
-            // TODO: Configure routes
+        App::new().app_data(web::Data::new(pool.clone())), // TODO: Configure routes
     )
     .await;
 
@@ -275,9 +263,7 @@ async fn test_list_conversations() {
     }
 
     let app = test::init_service(
-        App::new()
-            .app_data(web::Data::new(pool.clone()))
-            // TODO: Configure routes
+        App::new().app_data(web::Data::new(pool.clone())), // TODO: Configure routes
     )
     .await;
 

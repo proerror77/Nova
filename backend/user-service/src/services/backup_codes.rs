@@ -2,27 +2,33 @@
 /// 用于 2FA 账户恢复 (当 Authenticator 应用丢失时)
 use anyhow::{anyhow, Context, Result};
 use chrono::Utc;
-use sha2::{Digest, Sha256};
 use sqlx::PgPool;
 use uuid::Uuid;
+use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier};
+use argon2::password_hash::SaltString;
+use rand::rngs::OsRng;
 
-/// 生成 10 个备用码并存储到数据库
+/// CRITICAL FIX: Use Argon2 for secure backup code hashing
+/// SHA256 is not sufficient for security-sensitive operations like 2FA recovery codes.
+/// Argon2 provides key stretching and is resistant to GPU/ASIC attacks.
+
+/// Generate 10 backup codes and store to database
 ///
-/// # 参数
-/// - `pool`: PostgreSQL 连接池
-/// - `user_id`: 用户 ID
+/// # Parameters
+/// - `pool`: PostgreSQL connection pool
+/// - `user_id`: user ID
 ///
-/// # 返回
-/// 10 个明文备用码 (仅此一次返回给用户保存)
-/// 数据库中存储的是 SHA256 哈希
+/// # Returns
+/// 10 plaintext backup codes (only returned once)
+/// Database stores Argon2 hash
 ///
-/// # 注意
-/// 明文码不会再次返回给用户，所以用户必须立即保存
+/// # Note
+/// Plaintext codes are not returned again, so user must save immediately
 pub async fn generate_backup_codes(pool: &PgPool, user_id: Uuid) -> Result<Vec<String>> {
-    // 1. 生成 10 个备用码
+    // 1. Generate 10 backup codes
     let codes = crate::security::TOTPGenerator::generate_backup_codes();
 
-    // 2. 删除用户的旧备用码
+    // 2. Delete old backup codes
     sqlx::query(
         r#"
         DELETE FROM two_fa_backup_codes
@@ -34,10 +40,10 @@ pub async fn generate_backup_codes(pool: &PgPool, user_id: Uuid) -> Result<Vec<S
     .await
     .context("Failed to delete old backup codes")?;
 
-    // 3. 计算哈希并存储新的备用码
+    // 3. Hash with Argon2 and store new codes
     let now = Utc::now();
     for code in &codes {
-        let code_hash = hash_code(code);
+        let code_hash = hash_backup_code(code).context("Failed to hash backup code")?;
         sqlx::query(
             r#"
             INSERT INTO two_fa_backup_codes (id, user_id, code_hash, is_used, created_at)
@@ -53,6 +59,7 @@ pub async fn generate_backup_codes(pool: &PgPool, user_id: Uuid) -> Result<Vec<S
         .context("Failed to insert backup code")?;
     }
 
+    tracing::info!("Generated 10 new backup codes for user: {}", user_id);
     Ok(codes)
 }
 
@@ -66,38 +73,43 @@ pub async fn generate_backup_codes(pool: &PgPool, user_id: Uuid) -> Result<Vec<S
 /// # 返回
 /// true 如果备用码有效且未使用过
 pub async fn verify_backup_code(pool: &PgPool, user_id: Uuid, code: &str) -> Result<bool> {
-    // 1. 校验码格式: 8 位十六进制
+    // 1. Validate code format: 8 hex digits
     if code.len() != 8 || !code.chars().all(|c| c.is_ascii_hexdigit()) {
         return Ok(false);
     }
 
-    // 2. 计算码的 SHA256 哈希
-    let code_hash = hash_code(code);
-
-    // 3. 查询未使用的备用码
-    let record = sqlx::query_as::<_, (Uuid, bool)>(
+    // 2. Query unused backup codes
+    let record = sqlx::query_as::<_, (Uuid, String, bool)>(
         r#"
-        SELECT id, is_used FROM two_fa_backup_codes
-        WHERE user_id = $1 AND code_hash = $2
+        SELECT id, code_hash, is_used FROM two_fa_backup_codes
+        WHERE user_id = $1 AND is_used = FALSE
         "#,
     )
     .bind(user_id)
-    .bind(code_hash)
     .fetch_optional(pool)
     .await
-    .context("Failed to query backup code")?;
+    .context("Failed to query backup codes")?;
 
-    let (record_id, is_used) = match record {
+    let (record_id, code_hash, _is_used) = match record {
         Some(r) => r,
-        None => return Ok(false), // 码不存在或不属于此用户
+        None => return Ok(false), // No unused codes found
     };
 
-    // 4. 检查是否已使用
-    if is_used {
+    // 3. Verify code against stored Argon2 hash
+    let password_hash = match PasswordHash::new(&code_hash) {
+        Ok(hash) => hash,
+        Err(_) => return Ok(false), // Invalid hash format stored
+    };
+
+    let is_valid = Argon2::default()
+        .verify_password(code.as_bytes(), &password_hash)
+        .is_ok();
+
+    if !is_valid {
         return Ok(false);
     }
 
-    // 5. 标记为已使用
+    // 4. Mark as used
     sqlx::query(
         r#"
         UPDATE two_fa_backup_codes
@@ -110,6 +122,7 @@ pub async fn verify_backup_code(pool: &PgPool, user_id: Uuid, code: &str) -> Res
     .await
     .context("Failed to mark backup code as used")?;
 
+    tracing::info!("Backup code used successfully for user: {}", user_id);
     Ok(true)
 }
 
@@ -146,7 +159,7 @@ pub async fn count_unused_backup_codes(pool: &PgPool, user_id: Uuid) -> Result<i
 /// # 返回
 /// Ok 如果所有码都存储成功
 pub async fn store_backup_codes(pool: &PgPool, user_id: Uuid, codes: &[String]) -> Result<()> {
-    // 1. 删除用户的旧备用码
+    // 1. Delete old backup codes
     sqlx::query(
         r#"
         DELETE FROM two_fa_backup_codes
@@ -158,10 +171,10 @@ pub async fn store_backup_codes(pool: &PgPool, user_id: Uuid, codes: &[String]) 
     .await
     .context("Failed to delete old backup codes")?;
 
-    // 2. 计算哈希并存储新的备用码
+    // 2. Hash with Argon2 and store new codes
     let now = Utc::now();
     for code in codes {
-        let code_hash = hash_code(code);
+        let code_hash = hash_backup_code(code).context("Failed to hash backup code")?;
         sqlx::query(
             r#"
             INSERT INTO two_fa_backup_codes (id, user_id, code_hash, is_used, created_at)
@@ -177,6 +190,7 @@ pub async fn store_backup_codes(pool: &PgPool, user_id: Uuid, codes: &[String]) 
         .context("Failed to insert backup code")?;
     }
 
+    tracing::info!("Stored {} backup codes for user: {}", codes.len(), user_id);
     Ok(())
 }
 
@@ -200,17 +214,32 @@ pub async fn revoke_backup_codes(pool: &PgPool, user_id: Uuid) -> Result<()> {
     Ok(())
 }
 
-/// 计算备用码的 SHA256 哈希 (常定时间)
+/// Hash backup code using Argon2 (memory-hard KDF resistant to GPU attacks)
 ///
-/// # 参数
-/// - `code`: 备用码
+/// Argon2 is the winner of the Password Hashing Competition and provides:
+/// - Memory-hard computation resistant to GPU/ASIC attacks
+/// - Time cost parameter for adaptive hashing
+/// - Per-code unique salt for protection against rainbow tables
 ///
-/// # 返回
-/// 64 字符十六进制 SHA256 哈希
-fn hash_code(code: &str) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(code.as_bytes());
-    format!("{:x}", hasher.finalize())
+/// # Parameters
+/// - `code`: backup code to hash
+///
+/// # Returns
+/// Argon2 PHC string format hash (includes algorithm, parameters, salt, and hash)
+fn hash_backup_code(code: &str) -> Result<String> {
+    // Generate random salt for this code
+    let salt = SaltString::generate(&mut OsRng);
+
+    // Use Argon2 with default parameters (Argon2id variant)
+    // This provides good security without excessive computation time
+    let argon2 = Argon2::default();
+
+    // Hash the backup code
+    let password_hash = argon2
+        .hash_password(code.as_bytes(), &salt)
+        .map_err(|e| anyhow!("Failed to hash backup code: {}", e))?;
+
+    Ok(password_hash.to_string())
 }
 
 #[cfg(test)]
@@ -218,20 +247,61 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_hash_code() {
+    fn test_hash_backup_code_success() {
         let code = "a1b2c3d4";
-        let hash = hash_code(code);
-        assert_eq!(hash.len(), 64);
-        assert!(hash.chars().all(|c| c.is_ascii_hexdigit()));
-        // 哈希应该是确定性的
-        let hash2 = hash_code(code);
-        assert_eq!(hash, hash2);
+        let result = hash_backup_code(code);
+        assert!(result.is_ok());
+
+        let hash = result.unwrap();
+        // Argon2 hashes are in PHC format: $argon2id$v=19$m=19456,t=2,p=1$...
+        assert!(hash.starts_with("$argon2"));
+        assert!(hash.len() > 50); // Argon2 hashes are longer due to salt encoding
     }
 
     #[test]
-    fn test_hash_different_codes() {
-        let hash1 = hash_code("a1b2c3d4");
-        let hash2 = hash_code("e5f6g7h8");
+    fn test_hash_backup_code_different_codes_different_hashes() {
+        let code1 = "a1b2c3d4";
+        let code2 = "e5f6g7h8";
+
+        let hash1 = hash_backup_code(code1).unwrap();
+        let hash2 = hash_backup_code(code2).unwrap();
+
+        // Different codes should produce different hashes
         assert_ne!(hash1, hash2);
+    }
+
+    #[test]
+    fn test_hash_backup_code_verification() {
+        let code = "a1b2c3d4";
+        let hash = hash_backup_code(code).unwrap();
+
+        // Verify the hash is in correct format
+        assert!(hash.starts_with("$argon2"));
+
+        // Try to parse it as a PasswordHash (this is what verify_backup_code does)
+        let password_hash = PasswordHash::new(&hash);
+        assert!(password_hash.is_ok());
+
+        // Verify the code against the hash
+        let password_hash = password_hash.unwrap();
+        let is_valid = Argon2::default()
+            .verify_password(code.as_bytes(), &password_hash)
+            .is_ok();
+        assert!(is_valid);
+    }
+
+    #[test]
+    fn test_hash_backup_code_rejects_wrong_code() {
+        let code = "a1b2c3d4";
+        let wrong_code = "ffffffff";
+
+        let hash = hash_backup_code(code).unwrap();
+        let password_hash = PasswordHash::new(&hash).unwrap();
+
+        // Wrong code should not verify
+        let is_valid = Argon2::default()
+            .verify_password(wrong_code.as_bytes(), &password_hash)
+            .is_ok();
+        assert!(!is_valid);
     }
 }

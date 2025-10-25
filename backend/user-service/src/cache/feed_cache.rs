@@ -313,7 +313,7 @@ impl FeedCache {
 
     /// Batch invalidate feeds for multiple users
     ///
-    /// Uses Redis pipelining for efficiency
+    /// Iterates with SCAN and deletes matched keys in chunks to avoid blocking.
     pub async fn batch_invalidate(&mut self, user_ids: Vec<Uuid>) -> Result<()> {
         if user_ids.is_empty() {
             return Ok(());
@@ -321,22 +321,37 @@ impl FeedCache {
 
         debug!("Batch invalidating feeds for {} users", user_ids.len());
 
-        // Use pipeline for atomic batch operations
-        let mut pipe = redis::pipe();
-
+        // Iterate per user to control memory and latency
         for user_id in &user_ids {
             let pattern = format!("feed:v1:{}:*", user_id);
+            let mut cursor: u64 = 0;
 
-            // Note: SCAN in pipeline is not efficient, better to do sequentially
-            // In production: use Lua script or iterate in chunks
-            pipe.del(&pattern);
+            loop {
+                // SCAN cursor MATCH pattern COUNT 1000
+                let (next_cursor, keys): (u64, Vec<String>) = redis::cmd("SCAN")
+                    .arg(cursor)
+                    .arg("MATCH")
+                    .arg(&pattern)
+                    .arg("COUNT")
+                    .arg(1000)
+                    .query_async(&mut self.redis)
+                    .await
+                    .map_err(AppError::Redis)?;
+
+                if !keys.is_empty() {
+                    let mut pipe = redis::pipe();
+                    for k in keys {
+                        pipe.del(k);
+                    }
+                    let _: () = pipe.query_async(&mut self.redis).await.map_err(AppError::Redis)?;
+                }
+
+                if next_cursor == 0 {
+                    break;
+                }
+                cursor = next_cursor;
+            }
         }
-
-        // Execute pipeline
-        let _: () = pipe
-            .query_async(&mut self.redis)
-            .await
-            .map_err(AppError::Redis)?;
 
         debug!("Batch invalidation complete for {} users", user_ids.len());
         Ok(())

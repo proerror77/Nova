@@ -21,6 +21,10 @@ pub async fn create_test_pool() -> PgPool {
         "postgres://postgres:postgres@localhost:55432/nova_auth".to_string()
     });
 
+    let skip_migrations = std::env::var("SKIP_TEST_MIGRATIONS")
+        .map(|val| val == "1" || val.eq_ignore_ascii_case("true"))
+        .unwrap_or(false);
+
     eprintln!("[tests] Connecting to PostgreSQL at {}", database_url);
 
     // 尝试重试连接，适配 CI/本地环境中容器启动的延迟
@@ -40,15 +44,17 @@ pub async fn create_test_pool() -> PgPool {
                 match sqlx::query("SELECT 1").fetch_one(&pool).await {
                     Ok(_) => {
                         eprintln!("[tests] PostgreSQL ready after {} attempts", attempt);
-                        // 遷移前先打上 legacy 011 專案的兼容旗標，避免 MySQL 語法撞上 Postgres
-                        db::ensure_legacy_video_migration_marker(&pool)
-                            .await
-                            .expect("Failed to prepare legacy video migration workaround");
-                        // 迁移：忽略历史环境中缺失的版本，避免阻塞本地/CI
-                        let mut migrator = sqlx::migrate!("../migrations");
-                        migrator.set_ignore_missing(true);
-                        if let Err(e) = migrator.run(&pool).await {
-                            panic!("Failed to run migrations: {:#?}", e);
+                        if !skip_migrations {
+                            // 遷移前先打上 legacy 011 專案的兼容旗標，避免 MySQL 語法撞上 Postgres
+                            db::ensure_legacy_video_migration_marker(&pool)
+                                .await
+                                .expect("Failed to prepare legacy video migration workaround");
+                            // 迁移：忽略历史环境中缺失的版本，避免阻塞本地/CI
+                            let mut migrator = sqlx::migrate!("../migrations");
+                            migrator.set_ignore_missing(true);
+                            if let Err(e) = migrator.run(&pool).await {
+                                panic!("Failed to run migrations: {:#?}", e);
+                            }
                         }
                         return pool;
                     }
@@ -146,6 +152,7 @@ pub async fn create_test_user_with_email(pool: &PgPool, email: &str) -> User {
         INSERT INTO users (email, username, password_hash, email_verified, is_active)
         VALUES ($1, $2, $3, true, true)
         RETURNING id, email, username, password_hash, email_verified, is_active,
+                  totp_secret, totp_enabled, two_fa_enabled_at,
                   failed_login_attempts, locked_until, created_at, updated_at, last_login_at
         "#,
     )

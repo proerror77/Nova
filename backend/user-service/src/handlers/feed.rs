@@ -126,16 +126,22 @@ pub async fn get_feed(
     // Optional: Re-rank using Recommendation V2 (graceful, best-effort)
     if let Some(rec) = &state.rec_v2 {
         // Feature flag via env
-        let enable = std::env::var("RECOMMENDATION_V2_ENABLED").unwrap_or_else(|_| "false".into()) == "true";
+        let enable =
+            std::env::var("RECOMMENDATION_V2_ENABLED").unwrap_or_else(|_| "false".into()) == "true";
         if enable {
             if let Ok(prioritized) = rec.get_recommendations(user_id, post_ids.len()).await {
                 if !prioritized.is_empty() {
                     // Stable reorder: move items in `prioritized` to front, keep others order
-                    let set: std::collections::HashSet<uuid::Uuid> = prioritized.iter().cloned().collect();
+                    let set: std::collections::HashSet<uuid::Uuid> =
+                        prioritized.iter().cloned().collect();
                     let mut front: Vec<uuid::Uuid> = Vec::new();
                     let mut back: Vec<uuid::Uuid> = Vec::new();
                     for id in &post_ids {
-                        if set.contains(id) { front.push(*id); } else { back.push(*id); }
+                        if set.contains(id) {
+                            front.push(*id);
+                        } else {
+                            back.push(*id);
+                        }
                     }
                     front.extend(back);
                     post_ids = front;

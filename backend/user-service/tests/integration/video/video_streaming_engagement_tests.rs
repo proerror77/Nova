@@ -1,8 +1,7 @@
+use std::collections::HashMap;
 /// Integration Tests for Streaming Manifest Generation (T136) and
 /// Video Engagement Tracking (T137)
-
 use uuid::Uuid;
-use std::collections::HashMap;
 
 // ============================================
 // T136: Streaming Manifest Generation
@@ -195,11 +194,7 @@ impl EngagementTracker {
     }
 
     /// Get engagement count for specific action
-    pub fn get_engagement_count(
-        &self,
-        video_id: Uuid,
-        action: EngagementAction,
-    ) -> u32 {
+    pub fn get_engagement_count(&self, video_id: Uuid, action: EngagementAction) -> u32 {
         self.engagement_counts
             .get(&video_id)
             .and_then(|counts| counts.get(&format!("{:?}", action)).copied())
@@ -217,8 +212,7 @@ impl EngagementTracker {
     /// Get watch completion rate
     pub fn get_watch_completion_rate(&self, video_id: Uuid) -> f64 {
         let starts = self.get_engagement_count(video_id, EngagementAction::WatchStart) as f64;
-        let completes =
-            self.get_engagement_count(video_id, EngagementAction::WatchComplete) as f64;
+        let completes = self.get_engagement_count(video_id, EngagementAction::WatchComplete) as f64;
 
         if starts == 0.0 {
             0.0
@@ -333,14 +327,8 @@ fn test_different_codecs_manifest() {
     let h265_dash = generator.generate_dash_manifest(video_id, 300, "h265");
 
     // Both should have representations with correct codecs
-    assert!(h264_dash
-        .representations
-        .iter()
-        .all(|r| r.codec == "h264"));
-    assert!(h265_dash
-        .representations
-        .iter()
-        .all(|r| r.codec == "h265"));
+    assert!(h264_dash.representations.iter().all(|r| r.codec == "h264"));
+    assert!(h265_dash.representations.iter().all(|r| r.codec == "h265"));
 }
 
 // ============================================
@@ -423,7 +411,10 @@ fn test_watch_milestone_tracking() {
         tracker.track_event(event).expect("Track should succeed");
     }
 
-    assert_eq!(tracker.get_engagement_count(video_id, EngagementAction::WatchStart), 1);
+    assert_eq!(
+        tracker.get_engagement_count(video_id, EngagementAction::WatchStart),
+        1
+    );
     assert_eq!(
         tracker.get_engagement_count(video_id, EngagementAction::WatchComplete),
         1
@@ -481,7 +472,10 @@ fn test_engagement_accumulation() {
         tracker.track_event(event).expect("Track should succeed");
     }
 
-    assert_eq!(tracker.get_engagement_count(video_id, EngagementAction::Like), 50);
+    assert_eq!(
+        tracker.get_engagement_count(video_id, EngagementAction::Like),
+        50
+    );
     assert_eq!(tracker.get_total_engagement(video_id), 50);
 }
 
@@ -500,7 +494,9 @@ fn test_unlike_action() {
         action: EngagementAction::Like,
         timestamp_ms: 1000,
     };
-    tracker.track_event(like_event).expect("Track should succeed");
+    tracker
+        .track_event(like_event)
+        .expect("Track should succeed");
 
     let unlike_event = EngagementEvent {
         id: Uuid::new_v4(),
@@ -509,10 +505,18 @@ fn test_unlike_action() {
         action: EngagementAction::Unlike,
         timestamp_ms: 2000,
     };
-    tracker.track_event(unlike_event).expect("Track should succeed");
+    tracker
+        .track_event(unlike_event)
+        .expect("Track should succeed");
 
-    assert_eq!(tracker.get_engagement_count(video_id, EngagementAction::Like), 1);
-    assert_eq!(tracker.get_engagement_count(video_id, EngagementAction::Unlike), 1);
+    assert_eq!(
+        tracker.get_engagement_count(video_id, EngagementAction::Like),
+        1
+    );
+    assert_eq!(
+        tracker.get_engagement_count(video_id, EngagementAction::Unlike),
+        1
+    );
 }
 
 #[test]
@@ -594,7 +598,11 @@ fn test_engagement_timestamp_ordering() {
     let user_id = Uuid::new_v4();
 
     // Track events with different timestamps
-    let events_data = vec![(1000, EngagementAction::WatchStart), (2000, EngagementAction::Like), (3000, EngagementAction::Comment)];
+    let events_data = vec![
+        (1000, EngagementAction::WatchStart),
+        (2000, EngagementAction::Like),
+        (3000, EngagementAction::Comment),
+    ];
 
     for (ts, action) in events_data {
         let event = EngagementEvent {

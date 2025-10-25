@@ -1,6 +1,5 @@
 use actix_web::{
-    web, Either, Error as ActixError, HttpMessage, HttpRequest, HttpResponse,
-    Result as ActixResult,
+    web, Either, Error as ActixError, HttpMessage, HttpRequest, HttpResponse, Result as ActixResult,
 };
 use anyhow::Error;
 use serde::Deserialize;

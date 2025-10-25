@@ -391,21 +391,15 @@ async fn load_test_concurrent_oauth_callbacks() {
             let provider_user_id = format!("google_{}", idx);
 
             // Check if user exists
-            let existing_conn =
-                find_oauth_connection(&pool, "google", &provider_user_id).await;
+            let existing_conn = find_oauth_connection(&pool, "google", &provider_user_id).await;
 
             let success = if existing_conn.is_none() {
                 // Create new user
                 let user = create_test_user_with_email(&pool, &email).await;
 
                 // Create OAuth connection
-                let _conn = create_test_oauth_connection(
-                    &pool,
-                    user.id,
-                    "google",
-                    &provider_user_id,
-                )
-                .await;
+                let _conn =
+                    create_test_oauth_connection(&pool, user.id, "google", &provider_user_id).await;
 
                 true
             } else {

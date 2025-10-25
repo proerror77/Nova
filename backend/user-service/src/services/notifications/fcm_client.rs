@@ -2,7 +2,6 @@
 ///
 /// This module implements FCM support for Android/Web push notifications
 /// Part of Phase 7A notifications system
-
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use uuid::Uuid;
@@ -175,9 +174,7 @@ mod tests {
         };
 
         let client = FCMClient::new("test-project".to_string(), creds);
-        let result = client
-            .send("device-token-123", "Title", "Body", None)
-            .await;
+        let result = client.send("device-token-123", "Title", "Body", None).await;
 
         assert!(result.is_ok());
         let send_result = result.unwrap();

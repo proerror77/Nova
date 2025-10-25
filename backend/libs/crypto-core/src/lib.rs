@@ -1,4 +1,7 @@
 use rand::{rngs::OsRng, RngCore};
+use std::ptr;
+use std::slice;
+use std::os::raw::{c_uchar, c_ulong};
 
 #[derive(Debug, thiserror::Error)]
 pub enum CryptoError {
@@ -46,4 +49,77 @@ pub fn decrypt_at_rest(ciphertext: &[u8], key32: &[u8], nonce: &[u8]) -> Result<
     let key = secretbox::Key::from_slice(key32).ok_or(CryptoError::Decryption)?;
     let nonce = secretbox::Nonce::from_slice(nonce).ok_or(CryptoError::Decryption)?;
     secretbox::open(ciphertext, &nonce, &key).map_err(|_| CryptoError::Decryption)
+}
+
+// =============================
+// C FFI (for iOS xcframework)
+// =============================
+
+#[no_mangle]
+pub extern "C" fn cryptocore_generate_nonce(out_buf: *mut c_uchar, out_len: c_ulong) -> c_ulong {
+    let len = out_len as usize;
+    if out_buf.is_null() || len < 24 { return 0; }
+    let mut nonce = generate_nonce();
+    unsafe {
+        ptr::copy_nonoverlapping(nonce.as_ptr(), out_buf, 24);
+    }
+    24
+}
+
+#[no_mangle]
+pub extern "C" fn cryptocore_encrypt(
+    plaintext_ptr: *const c_uchar, plaintext_len: c_ulong,
+    recipient_pk_ptr: *const c_uchar, recipient_pk_len: c_ulong,
+    sender_sk_ptr: *const c_uchar, sender_sk_len: c_ulong,
+    nonce_ptr: *const c_uchar, nonce_len: c_ulong,
+    out_len_ptr: *mut c_ulong,
+) -> *mut c_uchar {
+    let pt = unsafe { slice::from_raw_parts(plaintext_ptr, plaintext_len as usize) };
+    let rpk = unsafe { slice::from_raw_parts(recipient_pk_ptr, recipient_pk_len as usize) };
+    let ssk = unsafe { slice::from_raw_parts(sender_sk_ptr, sender_sk_len as usize) };
+    let nonce = unsafe { slice::from_raw_parts(nonce_ptr, nonce_len as usize) };
+    match encrypt(pt, rpk, ssk, nonce) {
+        Ok(ct) => {
+            let mut v = ct;
+            let len = v.len() as c_ulong;
+            unsafe { if !out_len_ptr.is_null() { *out_len_ptr = len; } }
+            let ptr = v.as_mut_ptr();
+            std::mem::forget(v);
+            ptr
+        }
+        Err(_) => ptr::null_mut(),
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn cryptocore_decrypt(
+    ciphertext_ptr: *const c_uchar, ciphertext_len: c_ulong,
+    sender_pk_ptr: *const c_uchar, sender_pk_len: c_ulong,
+    recipient_sk_ptr: *const c_uchar, recipient_sk_len: c_ulong,
+    nonce_ptr: *const c_uchar, nonce_len: c_ulong,
+    out_len_ptr: *mut c_ulong,
+) -> *mut c_uchar {
+    let ct = unsafe { slice::from_raw_parts(ciphertext_ptr, ciphertext_len as usize) };
+    let spk = unsafe { slice::from_raw_parts(sender_pk_ptr, sender_pk_len as usize) };
+    let rsk = unsafe { slice::from_raw_parts(recipient_sk_ptr, recipient_sk_len as usize) };
+    let nonce = unsafe { slice::from_raw_parts(nonce_ptr, nonce_len as usize) };
+    match decrypt(ct, spk, rsk, nonce) {
+        Ok(pt) => {
+            let mut v = pt;
+            let len = v.len() as c_ulong;
+            unsafe { if !out_len_ptr.is_null() { *out_len_ptr = len; } }
+            let ptr = v.as_mut_ptr();
+            std::mem::forget(v);
+            ptr
+        }
+        Err(_) => ptr::null_mut(),
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn cryptocore_free(buf_ptr: *mut c_uchar, buf_len: c_ulong) {
+    if buf_ptr.is_null() { return; }
+    unsafe {
+        let _ = Vec::from_raw_parts(buf_ptr, buf_len as usize, buf_len as usize);
+    }
 }

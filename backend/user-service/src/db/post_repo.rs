@@ -13,9 +13,9 @@ pub async fn create_post(
 ) -> Result<Post, sqlx::Error> {
     let post = sqlx::query_as::<_, Post>(
         r#"
-        INSERT INTO posts (user_id, caption, image_key, status)
-        VALUES ($1, $2, $3, 'pending')
-        RETURNING id, user_id, caption, image_key, image_sizes, status, created_at, updated_at, soft_delete
+        INSERT INTO posts (user_id, caption, image_key, status, content_type)
+        VALUES ($1, $2, $3, 'pending', 'image')
+        RETURNING id, user_id, caption, image_key, image_sizes, status, content_type, created_at, updated_at, soft_delete
         "#,
     )
     .bind(user_id)
@@ -31,7 +31,7 @@ pub async fn create_post(
 pub async fn find_post_by_id(pool: &PgPool, post_id: Uuid) -> Result<Option<Post>, sqlx::Error> {
     let post = sqlx::query_as::<_, Post>(
         r#"
-        SELECT id, user_id, caption, image_key, image_sizes, status, created_at, updated_at, soft_delete
+        SELECT id, user_id, caption, image_key, image_sizes, status, content_type, created_at, updated_at, soft_delete
         FROM posts
         WHERE id = $1 AND soft_delete IS NULL
         "#,
@@ -53,7 +53,7 @@ pub async fn find_posts_by_user(
 ) -> Result<Vec<Post>, sqlx::Error> {
     let posts = sqlx::query_as::<_, Post>(
         r#"
-        SELECT id, user_id, caption, image_key, image_sizes, status, created_at, updated_at, soft_delete
+        SELECT id, user_id, caption, image_key, image_sizes, status, content_type, created_at, updated_at, soft_delete
         FROM posts
         WHERE user_id = $1 AND soft_delete IS NULL
         ORDER BY created_at DESC
@@ -177,7 +177,7 @@ pub async fn get_post_with_images(
     let row = sqlx::query(
         r#"
         SELECT
-            p.id, p.user_id, p.caption, p.image_key, p.image_sizes, p.status,
+            p.id, p.user_id, p.caption, p.image_key, p.image_sizes, p.status, p.content_type,
             p.created_at, p.updated_at, p.soft_delete,
             COALESCE(pm.like_count, 0) as like_count,
             COALESCE(pm.comment_count, 0) as comment_count,
@@ -203,6 +203,7 @@ pub async fn get_post_with_images(
             image_key: r.get("image_key"),
             image_sizes: r.get("image_sizes"),
             status: r.get("status"),
+            content_type: r.get("content_type"),
             created_at: r.get("created_at"),
             updated_at: r.get("updated_at"),
             soft_delete: r.get("soft_delete"),
@@ -547,4 +548,127 @@ pub async fn increment_view_count(pool: &PgPool, post_id: Uuid) -> Result<(), sq
     .await?;
 
     Ok(())
+}
+
+// ============================================
+// PostVideo Operations
+// ============================================
+
+/// Create a post_videos association (link video to post)
+pub async fn create_post_video(
+    pool: &PgPool,
+    post_id: Uuid,
+    video_id: Uuid,
+    position: i32,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        r#"
+        INSERT INTO post_videos (post_id, video_id, position)
+        VALUES ($1, $2, $3)
+        "#,
+    )
+    .bind(post_id)
+    .bind(video_id)
+    .bind(position)
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
+/// Get all videos for a post ordered by position
+pub async fn get_post_videos(
+    pool: &PgPool,
+    post_id: Uuid,
+) -> Result<Vec<(Uuid, i32)>, sqlx::Error> {
+    let rows = sqlx::query(
+        r#"
+        SELECT pv.video_id, pv.position
+        FROM post_videos pv
+        WHERE pv.post_id = $1
+        ORDER BY pv.position ASC
+        "#,
+    )
+    .bind(post_id)
+    .fetch_all(pool)
+    .await?;
+
+    let videos = rows.iter().map(|r| {
+        let video_id: Uuid = r.get("video_id");
+        let position: i32 = r.get("position");
+        (video_id, position)
+    }).collect();
+
+    Ok(videos)
+}
+
+/// Get video metadata for a post (with CDN URLs and details)
+pub async fn get_post_videos_with_metadata(
+    pool: &PgPool,
+    post_id: Uuid,
+) -> Result<Vec<(Uuid, String, Option<String>, Option<String>, Option<i32>, i32)>, sqlx::Error> {
+    let rows = sqlx::query(
+        r#"
+        SELECT
+            v.id,
+            v.id::text as video_id_str,
+            v.cdn_url,
+            v.thumbnail_url,
+            v.duration_seconds,
+            pv.position
+        FROM post_videos pv
+        JOIN videos v ON pv.video_id = v.id
+        WHERE pv.post_id = $1
+        ORDER BY pv.position ASC
+        "#,
+    )
+    .bind(post_id)
+    .fetch_all(pool)
+    .await?;
+
+    let videos = rows.iter().map(|r| {
+        let video_id: Uuid = r.get("id");
+        let video_id_str: String = r.get("video_id_str");
+        let cdn_url: Option<String> = r.get("cdn_url");
+        let thumbnail_url: Option<String> = r.get("thumbnail_url");
+        let duration_seconds: Option<i32> = r.get("duration_seconds");
+        let position: i32 = r.get("position");
+        (video_id, video_id_str, cdn_url, thumbnail_url, duration_seconds, position)
+    }).collect();
+
+    Ok(videos)
+}
+
+/// Remove a video from a post
+pub async fn remove_post_video(
+    pool: &PgPool,
+    post_id: Uuid,
+    video_id: Uuid,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        r#"
+        DELETE FROM post_videos
+        WHERE post_id = $1 AND video_id = $2
+        "#,
+    )
+    .bind(post_id)
+    .bind(video_id)
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
+/// Check if post has any videos
+pub async fn post_has_videos(pool: &PgPool, post_id: Uuid) -> Result<bool, sqlx::Error> {
+    let row = sqlx::query(
+        r#"
+        SELECT EXISTS(SELECT 1 FROM post_videos WHERE post_id = $1) as has_videos
+        "#,
+    )
+    .bind(post_id)
+    .fetch_one(pool)
+    .await?;
+
+    Ok(row.get::<bool, _>("has_videos"))
 }

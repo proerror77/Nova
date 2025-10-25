@@ -2,7 +2,6 @@
 ///
 /// Combines CDN Service, Origin Shield, and Failover Manager into a unified
 /// interface for video streaming manifest delivery.
-
 use crate::config::video_config::VideoConfig;
 use crate::error::Result;
 use crate::services::cdn_failover::FailoverManager;
@@ -48,10 +47,7 @@ impl CdnHandler {
         let should_fallback = self.failover_manager.should_use_fallback().await;
 
         let manifest = if should_fallback {
-            debug!(
-                "Using fallback due to CDN issues: video_id={}",
-                video_id
-            );
+            debug!("Using fallback due to CDN issues: video_id={}", video_id);
 
             // Use manifest directly (no caching on fallback)
             generated_manifest
@@ -73,10 +69,7 @@ impl CdnHandler {
                     // Then cache it via CDN service
                     let cached_manifest = self
                         .cdn_service
-                        .get_cached_manifest(
-                            &cache_key,
-                            async { manifest_content.clone() },
-                        )
+                        .get_cached_manifest(&cache_key, async { manifest_content.clone() })
                         .await;
 
                     // Record success for failover tracking
@@ -94,14 +87,9 @@ impl CdnHandler {
         // Get CDN routing info
         let response = self
             .cdn_service
-            .get_manifest_with_routing(
-                &cache_key,
-                video_id,
-                quality,
-                format,
-                client_ip,
-                async { manifest.clone() },
-            )
+            .get_manifest_with_routing(&cache_key, video_id, quality, format, client_ip, async {
+                manifest.clone()
+            })
             .await;
 
         // Get cache statistics
@@ -162,8 +150,12 @@ impl CdnHandler {
     /// Invalidate cache for a video
     pub async fn invalidate_video_cache(&self, video_id: &str) {
         info!("Invalidating cache for video: {}", video_id);
-        self.cdn_service.invalidate_cache(&format!("{}:", video_id)).await;
-        self.origin_shield.invalidate(&format!("{}:", video_id)).await;
+        self.cdn_service
+            .invalidate_cache(&format!("{}:", video_id))
+            .await;
+        self.origin_shield
+            .invalidate(&format!("{}:", video_id))
+            .await;
     }
 
     /// Clear all caches

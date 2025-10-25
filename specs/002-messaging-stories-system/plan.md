@@ -189,7 +189,7 @@ Dockerfile (frontend)                    # Container image build
 - Backend: axum REST API + WebSocket server (stateless, horizontally scalable)
 - Frontend: SPA (Vite build) served from CDN or static hosting
 - Database: PostgreSQL with sqlx async client (connection pooling)
-- Search: Elasticsearch for full-text search (deterministic encrypted keywords)
+- Search: Elasticsearch for full-text search in search-enabled conversations (server-side decryption under audit). Strict E2E conversations are not indexed/searchable.
 - Real-time: Redis pub/sub for WebSocket fanout across backend instances
 - All business logic in Rust backend; frontend is presentation + offline queue only
 
@@ -199,7 +199,7 @@ Dockerfile (frontend)                    # Container image build
 
 | Violation | Why Needed | Simpler Alternative Rejected |
 |-----------|------------|------------------------------|
-| Searchable Encryption (deterministic) | Enable server-side Elasticsearch search while maintaining E2E encryption | Pure E2E: search impossible server-side; Plaintext search: breaks privacy |
+| Search indexing via server-side decryption (search-enabled) | Enable Elasticsearch search while preserving strict E2E isolation | Deterministic encrypted search: deferred to Phase 7C; Plaintext search everywhere: breaks privacy |
 | Admin Key (separate from user keys) | Allow admins to view group messages without compromising E2E of individual members | Break E2E entirely: violates constitutional principle; Per-user admin decryption: admin key exposure compromises all users |
 | Redis pub/sub in single service | Enable WebSocket broadcasting across multiple backend instances without Kafka overhead | Single instance: no horizontal scaling; Full Kafka: overkill for 50k concurrent (defer to Phase 7C microservices) |
 | 215 tasks (vs. smaller batch) | Cover all FR + NFR + TDD gates + E2E test scenarios thoroughly | Smaller task set: risks incomplete coverage, hard to parallelize team work |

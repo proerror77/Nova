@@ -1,6 +1,5 @@
 /// Performance and Load Tests for Event Ingestion
 /// Tests throughput, latency, and concurrent event processing
-
 use std::time::{Duration, Instant};
 use uuid::Uuid;
 
@@ -82,7 +81,10 @@ fn bench_event_throughput_1k() {
     println!("Throughput: {:.0} events/sec", throughput);
     println!("Avg latency: {:.2}ms/event", avg_latency);
 
-    assert!(throughput > 1000.0, "Throughput should be > 1000 events/sec");
+    assert!(
+        throughput > 1000.0,
+        "Throughput should be > 1000 events/sec"
+    );
 }
 
 #[test]
@@ -115,7 +117,10 @@ fn bench_event_throughput_10k() {
     println!("Throughput: {:.0} events/sec", throughput);
     println!("Avg latency: {:.2}ms/event", avg_latency);
 
-    assert!(throughput > 5000.0, "Throughput should be > 5000 events/sec");
+    assert!(
+        throughput > 5000.0,
+        "Throughput should be > 5000 events/sec"
+    );
 }
 
 #[test]
@@ -344,7 +349,10 @@ fn bench_stress_test_30_seconds() {
     println!("\n=== Stress Test ({} seconds) ===", duration_secs);
     println!("Total events: {}", event_count);
     println!("Throughput: {:.0} events/sec", throughput);
-    println!("Average latency: {:.2}ms/event", (duration.as_millis() as f64) / event_count as f64);
+    println!(
+        "Average latency: {:.2}ms/event",
+        (duration.as_millis() as f64) / event_count as f64
+    );
 }
 
 #[test]

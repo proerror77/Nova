@@ -2,7 +2,6 @@
 ///
 /// Demonstrates the video feature extraction and embedding generation.
 /// This replaces the previous all-zero embedding with real feature-based vectors.
-
 use user_service::config::video_config::DeepLearningConfig;
 use user_service::services::deep_learning_inference::DeepLearningInferenceService;
 
@@ -26,10 +25,10 @@ async fn main() {
     // Example: 1920x1080, 120s duration, 3 Mbps bitrate, 30 fps, H.264
     features[0] = 1920.0 / 1920.0; // Width: 1.0
     features[1] = 1080.0 / 1080.0; // Height: 1.0
-    features[2] = 120.0 / 300.0;   // Duration: 0.4 (120s / 300s max)
+    features[2] = 120.0 / 300.0; // Duration: 0.4 (120s / 300s max)
     features[3] = 3_000_000.0 / 5_000_000.0; // Bitrate: 0.6 (3 Mbps / 5 Mbps max)
-    features[4] = 30.0 / 60.0;     // FPS: 0.5 (30 fps / 60 fps max)
-    features[5] = 1.0;             // H.264 codec
+    features[4] = 30.0 / 60.0; // FPS: 0.5 (30 fps / 60 fps max)
+    features[5] = 1.0; // H.264 codec
 
     println!("  Width: 1920px (normalized: {:.2})", features[0]);
     println!("  Height: 1080px (normalized: {:.2})", features[1]);
@@ -61,8 +60,10 @@ async fn main() {
             println!("Embedding Statistics:");
             println!("  Non-zero values: {}", non_zero_count);
             println!("  Zero values: {}", zero_count);
-            println!("  Non-zero percentage: {:.2}%",
-                (non_zero_count as f64 / embedding.embedding.len() as f64) * 100.0);
+            println!(
+                "  Non-zero percentage: {:.2}%",
+                (non_zero_count as f64 / embedding.embedding.len() as f64) * 100.0
+            );
             println!();
 
             // Show first 10 feature values
@@ -90,7 +91,10 @@ async fn main() {
                 println!("❌ ERROR: Embedding is all zeros!");
                 println!("   This indicates the bug is NOT fixed.");
             } else {
-                println!("✅ SUCCESS: Embedding has {} non-zero values!", non_zero_count);
+                println!(
+                    "✅ SUCCESS: Embedding has {} non-zero values!",
+                    non_zero_count
+                );
                 println!("   The all-zero embedding bug is FIXED!");
             }
         }

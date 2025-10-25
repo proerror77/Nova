@@ -11,6 +11,7 @@ pub mod cdc_metrics;
 pub mod events_metrics;
 pub mod feed_metrics;
 pub mod job_metrics;
+pub mod messaging_metrics;
 
 lazy_static! {
     /// Global registry for all metrics
@@ -173,6 +174,18 @@ lazy_static! {
         "Number of failed login attempts in the last hour"
     )
     .unwrap();
+
+    // ======================
+    // Social Graph Metrics
+    // ======================
+
+    /// Total follow graph events processed (labels: event=new_follow|unfollow, phase=request|processed)
+    pub static ref SOCIAL_FOLLOW_EVENTS_TOTAL: CounterVec = register_counter_vec!(
+        "social_follow_events_total",
+        "Total number of follow/unfollow events by phase",
+        &["event", "phase"]
+    )
+    .unwrap();
 }
 
 /// Initialize all metrics (register to global registry)
@@ -248,6 +261,13 @@ pub fn init_metrics() {
     REGISTRY
         .register(Box::new(FAILED_LOGIN_ATTEMPTS_GAUGE.clone()))
         .expect("Failed to register FAILED_LOGIN_ATTEMPTS_GAUGE");
+
+    REGISTRY
+        .register(Box::new(SOCIAL_FOLLOW_EVENTS_TOTAL.clone()))
+        .expect("Failed to register SOCIAL_FOLLOW_EVENTS_TOTAL");
+
+    // Initialize messaging metrics
+    messaging_metrics::init_messaging_metrics();
 
     tracing::info!("Prometheus metrics initialized");
 }
@@ -378,6 +398,13 @@ pub mod helpers {
                 .with_label_values(&label_refs)
                 .observe(duration);
         }
+    }
+
+    /// Record a follow graph event
+    pub fn record_social_follow_event(event: &str, phase: &str) {
+        SOCIAL_FOLLOW_EVENTS_TOTAL
+            .with_label_values(&[event, phase])
+            .inc();
     }
 }
 

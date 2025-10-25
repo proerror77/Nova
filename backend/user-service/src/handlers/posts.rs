@@ -15,6 +15,23 @@ use crate::services::{job_queue::ImageProcessingJob, job_queue::JobSender, s3_se
 // ============================================
 
 #[derive(Debug, Deserialize, Serialize)]
+pub struct CreatePostRequest {
+    pub caption: Option<String>,
+    pub image_ids: Option<Vec<String>>, // Image IDs from upload
+    pub video_ids: Option<Vec<String>>, // Video IDs from upload
+}
+
+#[derive(Debug, Serialize)]
+pub struct CreatePostResponse {
+    pub id: String,
+    pub user_id: String,
+    pub caption: Option<String>,
+    pub content_type: String,
+    pub status: String,
+    pub created_at: String,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
 pub struct UploadInitRequest {
     pub filename: String,
     pub content_type: String,
@@ -62,6 +79,152 @@ const ALLOWED_CONTENT_TYPES: &[&str] = &["image/jpeg", "image/png", "image/webp"
 // ============================================
 // Handler Functions
 // ============================================
+
+/// Create a new post with videos and/or images
+/// POST /api/v1/posts
+pub async fn create_post_with_media(
+    http_req: HttpRequest,
+    pool: web::Data<PgPool>,
+    req: web::Json<CreatePostRequest>,
+) -> impl Responder {
+    // ========================================
+    // Extract user_id from JWT middleware
+    // ========================================
+
+    let user_id = match http_req.extensions().get::<UserId>() {
+        Some(user_id_wrapper) => user_id_wrapper.0,
+        None => {
+            return HttpResponse::Unauthorized().json(ErrorResponse {
+                error: "Unauthorized".to_string(),
+                details: Some(
+                    "User ID not found in request. JWT middleware may not be active.".to_string(),
+                ),
+            });
+        }
+    };
+
+    // ========================================
+    // Validation
+    // ========================================
+
+    // At least one of image_ids or video_ids must be provided
+    let has_images = req.image_ids.as_ref().map_or(false, |ids| !ids.is_empty());
+    let has_videos = req.video_ids.as_ref().map_or(false, |ids| !ids.is_empty());
+
+    if !has_images && !has_videos {
+        return HttpResponse::BadRequest().json(ErrorResponse {
+            error: "Invalid request".to_string(),
+            details: Some("At least one of image_ids or video_ids must be provided".to_string()),
+        });
+    }
+
+    // Validate caption length
+    if let Some(ref caption) = req.caption {
+        if caption.len() > MAX_CAPTION_LENGTH {
+            return HttpResponse::BadRequest().json(ErrorResponse {
+                error: "Invalid request".to_string(),
+                details: Some(format!(
+                    "Caption exceeds maximum allowed length ({} characters)",
+                    MAX_CAPTION_LENGTH
+                )),
+            });
+        }
+    }
+
+    // Determine content_type
+    let content_type = match (has_images, has_videos) {
+        (true, true) => "mixed",
+        (false, true) => "video",
+        _ => "image",
+    };
+
+    // ========================================
+    // Create post in database
+    // ========================================
+
+    // Create post with temporary image_key (will be overridden if images are provided)
+    let post = match post_repo::create_post(
+        pool.get_ref(),
+        user_id,
+        req.caption.as_deref(),
+        "temp", // Temporary, will be updated if images provided
+    )
+    .await
+    {
+        Ok(post) => post,
+        Err(e) => {
+            tracing::error!("Failed to create post: {:?}", e);
+            return HttpResponse::InternalServerError().json(ErrorResponse {
+                error: "Database error".to_string(),
+                details: None,
+            });
+        }
+    };
+
+    // ========================================
+    // Link videos to post
+    // ========================================
+
+    if let Some(video_ids) = &req.video_ids {
+        for (position, video_id_str) in video_ids.iter().enumerate() {
+            let video_id = match Uuid::parse_str(video_id_str) {
+                Ok(id) => id,
+                Err(_) => {
+                    tracing::warn!("Invalid video UUID: {}", video_id_str);
+                    continue;
+                }
+            };
+
+            if let Err(e) = post_repo::create_post_video(
+                pool.get_ref(),
+                post.id,
+                video_id,
+                position as i32,
+            )
+            .await
+            {
+                tracing::error!(
+                    "Failed to link video {} to post {}: {:?}",
+                    video_id,
+                    post.id,
+                    e
+                );
+            }
+        }
+    }
+
+    // ========================================
+    // Update post content_type
+    // ========================================
+
+    if content_type != "image" {
+        if let Err(e) = sqlx::query(
+            "UPDATE posts SET content_type = $1 WHERE id = $2"
+        )
+        .bind(content_type)
+        .bind(post.id)
+        .execute(pool.get_ref())
+        .await
+        {
+            tracing::error!("Failed to update post content_type: {:?}", e);
+        }
+    }
+
+    // ========================================
+    // Return response
+    // ========================================
+
+    let response = CreatePostResponse {
+        id: post.id.to_string(),
+        user_id: post.user_id.to_string(),
+        caption: post.caption,
+        content_type: content_type.to_string(),
+        status: post.status,
+        created_at: post.created_at.to_rfc3339(),
+    };
+
+    HttpResponse::Created().json(response)
+}
 
 /// Complete upload and verify file integrity
 /// POST /api/v1/posts/upload/complete
@@ -411,6 +574,33 @@ pub async fn get_post_request(
         original_url.or_else(|| Some(format!("{}/posts/{}/original.jpg", cloudfront_url, post.id)));
 
     // ========================================
+    // Fetch videos if post has content_type = 'video' or 'mixed'
+    // ========================================
+
+    let videos = if post.content_type == "video" || post.content_type == "mixed" {
+        match post_repo::get_post_videos_with_metadata(pool.get_ref(), post_uuid).await {
+            Ok(video_rows) => {
+                let videos_vec: Vec<crate::models::VideoMetadata> = video_rows.iter().map(|(_, video_id_str, cdn_url, thumbnail_url, duration_seconds, position)| {
+                    crate::models::VideoMetadata {
+                        id: video_id_str.clone(),
+                        cdn_url: cdn_url.clone(),
+                        thumbnail_url: thumbnail_url.clone(),
+                        duration_seconds: *duration_seconds,
+                        position: *position,
+                    }
+                }).collect();
+                if videos_vec.is_empty() { None } else { Some(videos_vec) }
+            }
+            Err(e) => {
+                tracing::error!("Failed to fetch post videos: {:?}", e);
+                None
+            }
+        }
+    } else {
+        None
+    };
+
+    // ========================================
     // Build response
     // ========================================
 
@@ -421,6 +611,8 @@ pub async fn get_post_request(
         thumbnail_url: thumbnail_cf_url,
         medium_url: medium_cf_url,
         original_url: original_cf_url,
+        videos,
+        content_type: post.content_type,
         like_count: metadata.like_count,
         comment_count: metadata.comment_count,
         view_count: metadata.view_count,

@@ -23,7 +23,6 @@ use uuid::Uuid;
 pub struct ABTestingFramework {
     /// Active experiments loaded from PostgreSQL
     pub experiments: HashMap<String, Experiment>,
-
     // Redis client for caching variant assignments (optional)
     // pub redis_client: Arc<Redis>,
 }
@@ -44,8 +43,8 @@ pub struct Experiment {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Variant {
     pub name: String,
-    pub allocation: u8,  // Percentage (0-100)
-    pub config: serde_json::Value,  // Variant-specific config
+    pub allocation: u8,            // Percentage (0-100)
+    pub config: serde_json::Value, // Variant-specific config
 }
 
 /// Experiment status
@@ -65,7 +64,7 @@ pub struct ExperimentEvent {
     pub variant_name: String,
     pub user_id: Uuid,
     pub post_id: Option<Uuid>,
-    pub action: String,  // impression, click, like, share, dwell, feed_request
+    pub action: String, // impression, click, like, share, dwell, feed_request
     pub dwell_ms: u32,
     pub session_id: Uuid,
     pub timestamp: DateTime<Utc>,
@@ -282,9 +281,21 @@ mod tests {
         let variant_a_count = *counts.get("variant_a").unwrap_or(&0);
         let variant_b_count = *counts.get("variant_b").unwrap_or(&0);
 
-        assert!(control_count > 400 && control_count < 600, "Control: {}", control_count); // ~50%
-        assert!(variant_a_count > 200 && variant_a_count < 400, "Variant A: {}", variant_a_count); // ~30%
-        assert!(variant_b_count > 100 && variant_b_count < 300, "Variant B: {}", variant_b_count); // ~20%
+        assert!(
+            control_count > 400 && control_count < 600,
+            "Control: {}",
+            control_count
+        ); // ~50%
+        assert!(
+            variant_a_count > 200 && variant_a_count < 400,
+            "Variant A: {}",
+            variant_a_count
+        ); // ~30%
+        assert!(
+            variant_b_count > 100 && variant_b_count < 300,
+            "Variant B: {}",
+            variant_b_count
+        ); // ~20%
     }
 
     #[test]
@@ -299,13 +310,11 @@ mod tests {
             description: "Test".to_string(),
             start_date: Utc::now(),
             end_date: None,
-            variants: vec![
-                Variant {
-                    name: "control".to_string(),
-                    allocation: 40,  // Only 40%, should fail
-                    config: serde_json::json!({"algorithm": "v1.0"}),
-                },
-            ],
+            variants: vec![Variant {
+                name: "control".to_string(),
+                allocation: 40, // Only 40%, should fail
+                config: serde_json::json!({"algorithm": "v1.0"}),
+            }],
             status: ExperimentStatus::Running,
         };
 

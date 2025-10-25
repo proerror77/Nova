@@ -3,7 +3,6 @@
 /// Implements origin shield pattern to reduce load on CDN origin by placing
 /// an additional cache layer between the CDN edge and the origin server.
 /// Handles request coalescing, cache warming, and origin failover.
-
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -104,7 +103,10 @@ impl OriginShield {
     pub async fn set_state(&self, state: ShieldState) {
         let mut current_state = self.state.write().await;
         if *current_state != state {
-            info!("Origin Shield state transition: {:?} → {:?}", current_state, state);
+            info!(
+                "Origin Shield state transition: {:?} → {:?}",
+                current_state, state
+            );
             *current_state = state;
         }
     }
@@ -132,10 +134,7 @@ impl OriginShield {
             let mut in_flight = self.in_flight.write().await;
             if let Some(count) = in_flight.get_mut(request_path) {
                 *count += 1;
-                debug!(
-                    "Request coalesced: {} (total: {})",
-                    request_path, count
-                );
+                debug!("Request coalesced: {} (total: {})", request_path, count);
                 // In production, would wait for first request to complete
                 // For now, proceed with fetch
             } else {
@@ -197,7 +196,10 @@ impl OriginShield {
 
     /// Warm up cache with common requests
     pub async fn warm_cache(&self, warmup_requests: Vec<(String, u32)>) {
-        info!("Starting Origin Shield cache warmup: {} requests", warmup_requests.len());
+        info!(
+            "Starting Origin Shield cache warmup: {} requests",
+            warmup_requests.len()
+        );
 
         let mut cache = self.cache.write().await;
         let now = std::time::SystemTime::now()
@@ -218,7 +220,10 @@ impl OriginShield {
             );
         }
 
-        info!("Origin Shield cache warmup completed: {} entries", cache.len());
+        info!(
+            "Origin Shield cache warmup completed: {} entries",
+            cache.len()
+        );
     }
 
     /// Get shield statistics

@@ -29,6 +29,13 @@
         "identifier" : "8B41F65B2DEDD0D6001A66F9",
         "name" : "NovaSocialUITests"
       }
+    },
+    {
+      "target" : {
+        "containerPath" : "container:NovaSocial.xcodeproj",
+        "identifier" : "8B41F6A62DEDE010001A66F9",
+        "name" : "NovaSocialTests"
+      }
     }
   ],
   "version" : 1

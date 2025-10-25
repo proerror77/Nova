@@ -127,6 +127,36 @@ pub struct Verify2FAResponse {
     pub expires_in: i64,
 }
 
+// Dev-only: verify email without token (APP_ENV != production)
+#[derive(Debug, Deserialize)]
+pub struct DevVerifyRequest { pub user_id: Option<String>, pub email: Option<String> }
+
+pub async fn dev_verify_email(
+    pool: web::Data<PgPool>,
+    req: web::Json<DevVerifyRequest>,
+) -> impl Responder {
+    if std::env::var("APP_ENV").unwrap_or_else(|_| "development".into()) == "production" {
+        return HttpResponse::Forbidden().json(ErrorResponse { error: "Not allowed in production".into(), details: None });
+    }
+
+    // Resolve user id
+    use uuid::Uuid;
+    let uid = if let Some(ref id) = req.user_id {
+        match Uuid::parse_str(id) { Ok(u)=> Some(u), Err(_) => None }
+    } else if let Some(ref email) = req.email {
+        match user_repo::find_by_email(pool.get_ref(), email).await { Ok(Some(u)) => Some(u.id), _ => None }
+    } else { None };
+
+    let Some(user_id) = uid else {
+        return HttpResponse::BadRequest().json(ErrorResponse { error: "Provide user_id or email".into(), details: None });
+    };
+
+    match user_repo::verify_email(pool.get_ref(), user_id).await {
+        Ok(_) => HttpResponse::Ok().json(VerifyEmailResponse { message: "Email verified (dev)".into(), email_verified: true }),
+        Err(e) => HttpResponse::InternalServerError().json(ErrorResponse { error: "Failed to verify".into(), details: Some(e.to_string()) }),
+    }
+}
+
 /// Handle user registration
 /// POST /auth/register
 pub async fn register(
@@ -233,6 +263,11 @@ pub async fn register(
                 details: None,
             });
         }
+    }
+
+    // Dev convenience: auto-verify email when DEV_AUTO_VERIFY_EMAIL=true
+    if std::env::var("DEV_AUTO_VERIFY_EMAIL").unwrap_or_else(|_| "false".into()) == "true" {
+        let _ = user_repo::verify_email(pool.get_ref(), user.id).await;
     }
 
     HttpResponse::Created().json(RegisterResponse {
@@ -476,8 +511,8 @@ pub async fn logout(
     };
 
     // Add token to Redis blacklist
-    use crate::services::token_revocation;
-    match token_revocation::revoke_token(redis.get_ref(), &req.access_token, expires_at).await {
+    use crate::security::token_revocation;
+    match token_revocation::revoke_token(redis.get_ref(), &req.access_token, Some(expires_at)).await {
         Ok(_) => {
             return HttpResponse::Ok().json(LogoutResponse {
                 message: "Logged out successfully".to_string(),

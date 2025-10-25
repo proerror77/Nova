@@ -5,11 +5,14 @@ use crate::error::AppError;
 pub fn map_error(err: &AppError) -> (StatusCode, String) {
     match err {
         AppError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg.clone()),
-        AppError::Unauthorized(_) => (StatusCode::UNAUTHORIZED, "unauthorized".into()),
-        AppError::Forbidden(_) => (StatusCode::FORBIDDEN, "forbidden".into()),
-        AppError::NotFound(_) => (StatusCode::NOT_FOUND, "not found".into()),
-        AppError::Config(_) => (StatusCode::INTERNAL_SERVER_ERROR, "config error".into()),
-        AppError::StartServer(_) => (StatusCode::INTERNAL_SERVER_ERROR, "server error".into()),
+        AppError::Unauthorized => (StatusCode::UNAUTHORIZED, "unauthorized".into()),
+        AppError::Forbidden => (StatusCode::FORBIDDEN, "forbidden".into()),
+        AppError::NotFound => (StatusCode::NOT_FOUND, "not found".into()),
+        AppError::Config(msg) => (StatusCode::INTERNAL_SERVER_ERROR, format!("config error: {}", msg)),
+        AppError::StartServer(msg) => (StatusCode::INTERNAL_SERVER_ERROR, format!("server error: {}", msg)),
+        AppError::Database(e) => (StatusCode::INTERNAL_SERVER_ERROR, format!("database error: {}", e)),
+        AppError::Encryption(msg) => (StatusCode::INTERNAL_SERVER_ERROR, format!("encryption error: {}", msg)),
+        AppError::Internal => (StatusCode::INTERNAL_SERVER_ERROR, "internal server error".into()),
     }
 }
 

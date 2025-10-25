@@ -1,6 +1,5 @@
 /// Integration tests for Feed Ranking Algorithm
 /// Tests the ranking logic with realistic data scenarios
-
 use chrono::Utc;
 use std::sync::Arc;
 use uuid::Uuid;
@@ -19,10 +18,8 @@ fn create_mock_ranking_service() -> FeedRankingService {
     ));
 
     // Create minimal Redis client
-    let redis_client =
-        redis::Client::open("redis://127.0.0.1/").unwrap_or_else(|_| {
-            redis::Client::open("redis://127.0.0.1/").unwrap()
-        });
+    let redis_client = redis::Client::open("redis://127.0.0.1/")
+        .unwrap_or_else(|_| redis::Client::open("redis://127.0.0.1/").unwrap());
 
     let runtime = tokio::runtime::Runtime::new().unwrap();
     let conn_manager = runtime.block_on(async {
@@ -33,8 +30,7 @@ fn create_mock_ranking_service() -> FeedRankingService {
 
     let cache = Arc::new(tokio::sync::Mutex::new(FeedCache::new(conn_manager, 120)));
 
-    FeedRankingService::new(ch_client, cache)
-        .with_weights(0.3, 0.4, 0.3, 0.1)
+    FeedRankingService::new(ch_client, cache).with_weights(0.3, 0.4, 0.3, 0.1)
 }
 
 /// Test realistic feed ranking with mixed content
@@ -95,7 +91,11 @@ fn test_ranking_with_realistic_data() {
 
     // Verify reasons are assigned correctly
     let reasons: Vec<&str> = ranked.iter().map(|p| p.reason.as_str()).collect();
-    assert!(reasons.contains(&"follow") || reasons.contains(&"trending") || reasons.contains(&"affinity"));
+    assert!(
+        reasons.contains(&"follow")
+            || reasons.contains(&"trending")
+            || reasons.contains(&"affinity")
+    );
 }
 
 /// Test that high-engagement content ranks above fresh content when engagement is dominant
@@ -153,10 +153,7 @@ fn test_saturation_control_large_feed() {
         for post_idx in 0..5 {
             candidates.push(FeedCandidate {
                 post_id: Uuid::new_v4().to_string(),
-                author_id: format!(
-                    "{}00000000-0000-0000-0000-000000000000",
-                    author_idx
-                ),
+                author_id: format!("{}00000000-0000-0000-0000-000000000000", author_idx),
                 likes: 100 - (post_idx as u32 * 10),
                 comments: 10,
                 shares: 5,
@@ -170,22 +167,31 @@ fn test_saturation_control_large_feed() {
         }
     }
 
-    let deduped = service.dedup_and_saturation_with_authors(candidates).ok().unwrap_or_default();
-    let ranked = service.rank_with_clickhouse(
-        deduped.into_iter().map(|rp| FeedCandidate {
-            post_id: rp.post_id.to_string(),
-            author_id: "test".to_string(),
-            likes: 0,
-            comments: 0,
-            shares: 0,
-            impressions: 0,
-            freshness_score: 0.0,
-            engagement_score: 0.0,
-            affinity_score: 0.0,
-            combined_score: rp.combined_score,
-            created_at: Utc::now(),
-        }).collect()
-    ).ok().unwrap_or_default();
+    let deduped = service
+        .dedup_and_saturation_with_authors(candidates)
+        .ok()
+        .unwrap_or_default();
+    let ranked = service
+        .rank_with_clickhouse(
+            deduped
+                .into_iter()
+                .map(|rp| FeedCandidate {
+                    post_id: rp.post_id.to_string(),
+                    author_id: "test".to_string(),
+                    likes: 0,
+                    comments: 0,
+                    shares: 0,
+                    impressions: 0,
+                    freshness_score: 0.0,
+                    engagement_score: 0.0,
+                    affinity_score: 0.0,
+                    combined_score: rp.combined_score,
+                    created_at: Utc::now(),
+                })
+                .collect(),
+        )
+        .ok()
+        .unwrap_or_default();
     let final_posts = ranked;
 
     // Should have at most 100 posts

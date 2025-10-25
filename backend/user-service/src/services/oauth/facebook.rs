@@ -81,10 +81,7 @@ impl FacebookOAuthProvider {
         let debug_response = self
             .http_client
             .get("https://graph.facebook.com/v18.0/debug_token")
-            .query(&[
-                ("input_token", access_token),
-                ("access_token", &app_token),
-            ])
+            .query(&[("input_token", access_token), ("access_token", &app_token)])
             .send()
             .await
             .map_err(|e| OAuthError::NetworkError(format!("Failed to verify token: {}", e)))?;
@@ -98,7 +95,9 @@ impl FacebookOAuthProvider {
         let debug_data = debug_response
             .json::<FacebookDebugToken>()
             .await
-            .map_err(|e| OAuthError::NetworkError(format!("Failed to parse debug response: {}", e)))?;
+            .map_err(|e| {
+                OAuthError::NetworkError(format!("Failed to parse debug response: {}", e))
+            })?;
 
         // Verify token is valid and matches our app
         if !debug_data.data.is_valid {

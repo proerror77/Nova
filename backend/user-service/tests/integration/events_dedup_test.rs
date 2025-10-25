@@ -1,6 +1,5 @@
 /// Unit Tests for Event Deduplication
 /// Tests Redis-based deduplication logic with atomic check-and-set
-
 use std::time::Duration;
 
 /// Mock deduplicator for testing without Redis
@@ -91,7 +90,11 @@ fn test_dedup_multiple_events() {
     let mut dedup = MockEventDeduplicator::new();
 
     let event_ids = vec![
-        "event-001", "event-002", "event-003", "event-004", "event-005",
+        "event-001",
+        "event-002",
+        "event-003",
+        "event-004",
+        "event-005",
     ];
 
     // Mark all events

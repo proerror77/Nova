@@ -2,7 +2,6 @@
 ///
 /// Manages failover between CDN and origin, with circuit breaker pattern,
 /// exponential backoff, and comprehensive error tracking.
-
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -135,8 +134,11 @@ impl FailoverManager {
     pub async fn set_state(&self, state: FailoverState) {
         let mut current_state = self.state.write().await;
         if *current_state != state {
-            info!("Failover state transition: {} → {}",
-                  current_state.as_str(), state.as_str());
+            info!(
+                "Failover state transition: {} → {}",
+                current_state.as_str(),
+                state.as_str()
+            );
             *current_state = state;
         }
     }
@@ -158,8 +160,8 @@ impl FailoverManager {
         let base_delay = 100u32; // 100ms base
 
         // Exponential backoff: base * multiplier^count, capped at 10 seconds
-        let delay = base_delay
-            .saturating_mul(self.backoff_multiplier.saturating_pow(failure_count));
+        let delay =
+            base_delay.saturating_mul(self.backoff_multiplier.saturating_pow(failure_count));
 
         delay.min(10000) // Cap at 10 seconds
     }
@@ -228,9 +230,7 @@ impl ErrorHandler {
         ];
 
         let lower_error = error.to_lowercase();
-        fallback_errors
-            .iter()
-            .any(|e| lower_error.contains(e))
+        fallback_errors.iter().any(|e| lower_error.contains(e))
     }
 
     /// Get error severity level
@@ -364,10 +364,7 @@ mod tests {
             ErrorHandler::get_severity("fatal error"),
             ErrorSeverity::Critical
         );
-        assert_eq!(
-            ErrorHandler::get_severity("timeout"),
-            ErrorSeverity::High
-        );
+        assert_eq!(ErrorHandler::get_severity("timeout"), ErrorSeverity::High);
         assert_eq!(
             ErrorHandler::get_severity("retry later"),
             ErrorSeverity::Medium

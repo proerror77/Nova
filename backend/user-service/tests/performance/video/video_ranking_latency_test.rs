@@ -1,10 +1,9 @@
+use std::collections::HashMap;
 /// Performance Tests for Video Ranking Latency (T138)
 /// Validates ranking algorithm performance within SLA bounds
 /// - P95 latency < 300ms (with cache)
 /// - P95 latency < 800ms (fresh/cold)
-
 use std::time::{Duration, Instant};
-use std::collections::HashMap;
 use uuid::Uuid;
 
 /// Mock video record
@@ -98,7 +97,8 @@ impl VideoRankingAlgorithm {
 
     pub fn rank_video(&self, video: &VideoRecord) -> VideoRankingScore {
         let view_score = self.calculate_view_score(video.view_count);
-        let engagement_score = self.calculate_engagement_score(video.likes, video.comments, video.shares);
+        let engagement_score =
+            self.calculate_engagement_score(video.likes, video.comments, video.shares);
         let recency_score = self.calculate_recency_score(video.minutes_ago);
         let quality_score = self.calculate_quality_score(video.average_rating, video.flag_count);
 

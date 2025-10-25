@@ -1,8 +1,8 @@
 use crate::error::{AppError, Result};
 use chrono::{DateTime, Utc};
+use serde::Serialize;
 use sqlx::{postgres::PgRow, PgPool, Row};
 use uuid::Uuid;
-use serde::Serialize;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PrivacyLevel {
@@ -51,7 +51,9 @@ pub struct StoriesService {
 }
 
 impl StoriesService {
-    pub fn new(pool: PgPool) -> Self { Self { pool } }
+    pub fn new(pool: PgPool) -> Self {
+        Self { pool }
+    }
 
     pub async fn create_story(
         &self,
@@ -98,11 +100,17 @@ impl StoriesService {
         .fetch_optional(&self.pool)
         .await?;
 
-        let row = match row_opt { Some(r) => r, None => return Ok(None) };
+        let row = match row_opt {
+            Some(r) => r,
+            None => return Ok(None),
+        };
         let story = Self::row_to_story(&row);
 
         // 权限检查
-        if self.can_view(viewer_id, story.user_id, &story.privacy_level).await? {
+        if self
+            .can_view(viewer_id, story.user_id, &story.privacy_level)
+            .await?
+        {
             Ok(Some(story))
         } else {
             Ok(None)
@@ -180,13 +188,11 @@ impl StoriesService {
     }
 
     pub async fn remove_close_friend(&self, owner_id: Uuid, friend_id: Uuid) -> Result<()> {
-        sqlx::query(
-            r#"DELETE FROM story_close_friends WHERE owner_id = $1 AND friend_id = $2"#,
-        )
-        .bind(owner_id)
-        .bind(friend_id)
-        .execute(&self.pool)
-        .await?;
+        sqlx::query(r#"DELETE FROM story_close_friends WHERE owner_id = $1 AND friend_id = $2"#)
+            .bind(owner_id)
+            .bind(friend_id)
+            .execute(&self.pool)
+            .await?;
         Ok(())
     }
 
@@ -197,7 +203,10 @@ impl StoriesService {
         .bind(owner_id)
         .fetch_all(&self.pool)
         .await?;
-        Ok(rows.into_iter().map(|r| r.get::<Uuid, _>("friend_id")).collect())
+        Ok(rows
+            .into_iter()
+            .map(|r| r.get::<Uuid, _>("friend_id"))
+            .collect())
     }
 
     pub async fn delete_story(&self, owner_id: Uuid, story_id: Uuid) -> Result<bool> {
@@ -211,7 +220,12 @@ impl StoriesService {
         Ok(result.rows_affected() > 0)
     }
 
-    pub async fn update_privacy(&self, owner_id: Uuid, story_id: Uuid, privacy: PrivacyLevel) -> Result<bool> {
+    pub async fn update_privacy(
+        &self,
+        owner_id: Uuid,
+        story_id: Uuid,
+        privacy: PrivacyLevel,
+    ) -> Result<bool> {
         let result = sqlx::query(
             r#"UPDATE stories SET privacy_level = $1 WHERE id = $2 AND user_id = $3 AND deleted_at IS NULL"#,
         )
@@ -223,7 +237,12 @@ impl StoriesService {
         Ok(result.rows_affected() > 0)
     }
 
-    pub async fn list_user_stories(&self, owner_id: Uuid, viewer_id: Uuid, limit: i64) -> Result<Vec<Story>> {
+    pub async fn list_user_stories(
+        &self,
+        owner_id: Uuid,
+        viewer_id: Uuid,
+        limit: i64,
+    ) -> Result<Vec<Story>> {
         let rows = sqlx::query(
             r#"
             SELECT s.id, s.user_id, s.content_url, s.thumbnail_url, s.caption, s.content_type, s.privacy_level, s.expires_at, s.created_at
@@ -253,7 +272,9 @@ impl StoriesService {
     }
 
     async fn can_view(&self, viewer_id: Uuid, owner_id: Uuid, privacy_level: &str) -> Result<bool> {
-        if owner_id == viewer_id { return Ok(true); }
+        if owner_id == viewer_id {
+            return Ok(true);
+        }
         match privacy_level {
             "public" => Ok(true),
             "followers" => {

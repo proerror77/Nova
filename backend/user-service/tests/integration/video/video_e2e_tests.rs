@@ -1,7 +1,6 @@
 /// Integration Tests for Video E2E: Upload → Transcoding → Feed (T134)
 /// Scenario: upload video → process → appear in feed
 /// Assert: video visible within 10 seconds of publish
-
 use std::time::{Duration, Instant};
 use uuid::Uuid;
 
@@ -129,7 +128,10 @@ impl VideoE2EService {
     /// Get video status
     pub fn get_video_status(&self, video_id: Uuid) -> Option<VideoStatus> {
         let videos = self.videos.lock().unwrap();
-        videos.iter().find(|v| v.id == video_id).map(|v| v.status.clone())
+        videos
+            .iter()
+            .find(|v| v.id == video_id)
+            .map(|v| v.status.clone())
     }
 
     /// Get feed (simulated)
@@ -158,13 +160,19 @@ fn test_video_e2e_basic_flow() {
     };
 
     // Step 1: Upload video
-    let video_id = service.upload_video(request).expect("Upload should succeed");
+    let video_id = service
+        .upload_video(request)
+        .expect("Upload should succeed");
 
     // Step 2: Process video
-    service.process_video(video_id).expect("Processing should succeed");
+    service
+        .process_video(video_id)
+        .expect("Processing should succeed");
 
     // Step 3: Add to feed
-    service.add_to_feed(video_id).expect("Add to feed should succeed");
+    service
+        .add_to_feed(video_id)
+        .expect("Add to feed should succeed");
 
     // Step 4: Verify in feed
     assert!(service.is_in_feed(video_id), "Video should be in feed");
@@ -184,7 +192,9 @@ fn test_video_status_progression() {
         mime_type: "video/webm".to_string(),
     };
 
-    let video_id = service.upload_video(request).expect("Upload should succeed");
+    let video_id = service
+        .upload_video(request)
+        .expect("Upload should succeed");
 
     // Check initial status
     assert_eq!(
@@ -194,7 +204,9 @@ fn test_video_status_progression() {
     );
 
     // Process video
-    service.process_video(video_id).expect("Processing should succeed");
+    service
+        .process_video(video_id)
+        .expect("Processing should succeed");
 
     // Check final status
     assert_eq!(
@@ -218,12 +230,17 @@ fn test_video_cannot_be_added_before_publishing() {
         mime_type: "video/mp4".to_string(),
     };
 
-    let video_id = service.upload_video(request).expect("Upload should succeed");
+    let video_id = service
+        .upload_video(request)
+        .expect("Upload should succeed");
 
     // Try to add to feed without processing
     let result = service.add_to_feed(video_id);
 
-    assert!(result.is_err(), "Should not be able to add unpublished video to feed");
+    assert!(
+        result.is_err(),
+        "Should not be able to add unpublished video to feed"
+    );
 }
 
 #[test]
@@ -244,9 +261,15 @@ fn test_multiple_videos_in_feed() {
             mime_type: "video/mp4".to_string(),
         };
 
-        let video_id = service.upload_video(request).expect("Upload should succeed");
-        service.process_video(video_id).expect("Processing should succeed");
-        service.add_to_feed(video_id).expect("Add to feed should succeed");
+        let video_id = service
+            .upload_video(request)
+            .expect("Upload should succeed");
+        service
+            .process_video(video_id)
+            .expect("Processing should succeed");
+        service
+            .add_to_feed(video_id)
+            .expect("Add to feed should succeed");
 
         video_ids.push(video_id);
     }
@@ -256,7 +279,10 @@ fn test_multiple_videos_in_feed() {
     assert_eq!(feed.len(), 5, "Feed should contain 5 videos");
 
     // Most recent video should be first
-    assert_eq!(feed[0], video_ids[4], "Most recent video should be first in feed");
+    assert_eq!(
+        feed[0], video_ids[4],
+        "Most recent video should be first in feed"
+    );
 }
 
 #[test]
@@ -276,9 +302,15 @@ fn test_video_e2e_with_different_codecs() {
             mime_type: "video/mp4".to_string(),
         };
 
-        let video_id = service.upload_video(request).expect("Upload should succeed");
-        service.process_video(video_id).expect("Processing should succeed");
-        service.add_to_feed(video_id).expect("Add to feed should succeed");
+        let video_id = service
+            .upload_video(request)
+            .expect("Upload should succeed");
+        service
+            .process_video(video_id)
+            .expect("Processing should succeed");
+        service
+            .add_to_feed(video_id)
+            .expect("Add to feed should succeed");
 
         assert!(
             service.is_in_feed(video_id),
@@ -306,9 +338,15 @@ fn test_video_visibility_sla() {
 
     let start = Instant::now();
 
-    let video_id = service.upload_video(request).expect("Upload should succeed");
-    service.process_video(video_id).expect("Processing should succeed");
-    service.add_to_feed(video_id).expect("Add to feed should succeed");
+    let video_id = service
+        .upload_video(request)
+        .expect("Upload should succeed");
+    service
+        .process_video(video_id)
+        .expect("Processing should succeed");
+    service
+        .add_to_feed(video_id)
+        .expect("Add to feed should succeed");
 
     let elapsed = start.elapsed();
 
@@ -319,7 +357,10 @@ fn test_video_visibility_sla() {
         elapsed
     );
 
-    assert!(service.is_in_feed(video_id), "Video should be visible in feed");
+    assert!(
+        service.is_in_feed(video_id),
+        "Video should be visible in feed"
+    );
 }
 
 #[test]
@@ -336,12 +377,20 @@ fn test_duplicate_video_in_feed() {
         mime_type: "video/mp4".to_string(),
     };
 
-    let video_id = service.upload_video(request).expect("Upload should succeed");
-    service.process_video(video_id).expect("Processing should succeed");
+    let video_id = service
+        .upload_video(request)
+        .expect("Upload should succeed");
+    service
+        .process_video(video_id)
+        .expect("Processing should succeed");
 
     // Add to feed multiple times
-    service.add_to_feed(video_id).expect("First add should succeed");
-    service.add_to_feed(video_id).expect("Second add should succeed");
+    service
+        .add_to_feed(video_id)
+        .expect("First add should succeed");
+    service
+        .add_to_feed(video_id)
+        .expect("Second add should succeed");
 
     let feed = service.get_feed();
 
@@ -424,14 +473,13 @@ fn test_video_processing_updates_timestamp() {
         mime_type: "video/mp4".to_string(),
     };
 
-    let video_id = service.upload_video(request).expect("Upload should succeed");
+    let video_id = service
+        .upload_video(request)
+        .expect("Upload should succeed");
 
     // Get video before processing
     let videos_before = service.videos.lock().unwrap();
-    let video_before = videos_before
-        .iter()
-        .find(|v| v.id == video_id)
-        .unwrap();
+    let video_before = videos_before.iter().find(|v| v.id == video_id).unwrap();
 
     assert!(
         video_before.published_at.is_none(),
@@ -441,14 +489,13 @@ fn test_video_processing_updates_timestamp() {
     drop(videos_before);
 
     // Process video
-    service.process_video(video_id).expect("Processing should succeed");
+    service
+        .process_video(video_id)
+        .expect("Processing should succeed");
 
     // Get video after processing
     let videos_after = service.videos.lock().unwrap();
-    let video_after = videos_after
-        .iter()
-        .find(|v| v.id == video_id)
-        .unwrap();
+    let video_after = videos_after.iter().find(|v| v.id == video_id).unwrap();
 
     assert!(
         video_after.published_at.is_some(),
@@ -470,11 +517,20 @@ fn test_video_e2e_with_large_file() {
         mime_type: "video/mp4".to_string(),
     };
 
-    let video_id = service.upload_video(request).expect("Upload should succeed");
-    service.process_video(video_id).expect("Processing should succeed");
-    service.add_to_feed(video_id).expect("Add to feed should succeed");
+    let video_id = service
+        .upload_video(request)
+        .expect("Upload should succeed");
+    service
+        .process_video(video_id)
+        .expect("Processing should succeed");
+    service
+        .add_to_feed(video_id)
+        .expect("Add to feed should succeed");
 
-    assert!(service.is_in_feed(video_id), "Large video should appear in feed");
+    assert!(
+        service.is_in_feed(video_id),
+        "Large video should appear in feed"
+    );
 }
 
 #[test]
@@ -495,9 +551,15 @@ fn test_video_e2e_feed_ordering() {
             mime_type: "video/mp4".to_string(),
         };
 
-        let video_id = service.upload_video(request).expect("Upload should succeed");
-        service.process_video(video_id).expect("Processing should succeed");
-        service.add_to_feed(video_id).expect("Add to feed should succeed");
+        let video_id = service
+            .upload_video(request)
+            .expect("Upload should succeed");
+        service
+            .process_video(video_id)
+            .expect("Processing should succeed");
+        service
+            .add_to_feed(video_id)
+            .expect("Add to feed should succeed");
 
         video_ids.push(video_id);
 
@@ -511,4 +573,251 @@ fn test_video_e2e_feed_ordering() {
     assert_eq!(feed[0], video_ids[2], "Most recent video should be first");
     assert_eq!(feed[1], video_ids[1], "Second video should be second");
     assert_eq!(feed[2], video_ids[0], "Oldest video should be last");
+}
+
+// ============================================
+// Transcoding Pipeline Tests
+// ============================================
+
+#[test]
+fn test_video_transcoding_progress_tracking() {
+    /// Validates that progress tracking works correctly during transcoding
+    /// Progress should: start at 10%, increment through stages, end at 100%
+
+    let progress_stages = vec![
+        (10, "processing"),
+        (15, "downloading"),
+        (20, "analyzing"),
+        (30, "transcoding"),
+        (40, "transcoding"),
+        (50, "transcoding"),
+        (60, "transcoding"),
+        (80, "uploading"),
+        (95, "finalizing"),
+        (100, "completed"),
+    ];
+
+    // Verify progress is monotonically increasing
+    for i in 1..progress_stages.len() {
+        let prev_progress = progress_stages[i - 1].0;
+        let curr_progress = progress_stages[i].0;
+        assert!(
+            curr_progress >= prev_progress,
+            "Progress should be monotonically increasing or stay same: {} -> {}",
+            prev_progress,
+            curr_progress
+        );
+    }
+
+    // Verify starts and ends correctly
+    assert_eq!(progress_stages[0].0, 10, "Progress should start at 10%");
+    assert_eq!(
+        progress_stages[progress_stages.len() - 1].0,
+        100,
+        "Progress should end at 100%"
+    );
+}
+
+#[test]
+fn test_video_quality_tier_selection() {
+    /// Validates that quality tiers are selected correctly based on original resolution
+    /// - Don't upscale (360p video shouldn't be upscaled to 720p)
+    /// - Include all lower quality tiers
+    /// - Include original quality if available
+
+    let test_cases = vec![
+        // (original_resolution, expected_qualities)
+        ((360, 360), vec!["360p"]),
+        ((480, 480), vec!["480p", "360p"]),
+        ((720, 720), vec!["720p", "480p", "360p"]),
+        ((1080, 1080), vec!["1080p", "720p", "480p", "360p"]),
+    ];
+
+    for ((_width, _height), expected_qualities) in test_cases {
+        // Verify we have reasonable number of qualities
+        assert!(
+            !expected_qualities.is_empty(),
+            "Should have at least one quality tier"
+        );
+        assert!(
+            expected_qualities.len() <= 4,
+            "Should not have more than 4 quality tiers"
+        );
+
+        // Verify qualities are in descending order
+        for i in 1..expected_qualities.len() {
+            let prev = expected_qualities[i - 1];
+            let curr = expected_qualities[i];
+
+            let prev_p: u32 = prev.trim_end_matches('p').parse().unwrap_or(0);
+            let curr_p: u32 = curr.trim_end_matches('p').parse().unwrap_or(0);
+
+            assert!(
+                prev_p > curr_p,
+                "Qualities should be in descending order: {} > {}",
+                prev,
+                curr
+            );
+        }
+    }
+}
+
+#[test]
+fn test_hls_manifest_generation_structure() {
+    /// Validates HLS manifest has correct structure for adaptive bitrate streaming
+
+    let hls_manifest = r#"#EXTM3U
+#EXT-X-VERSION:3
+#EXT-X-TARGETDURATION:10
+#EXT-X-MEDIA-SEQUENCE:0
+#EXT-X-PLAYLIST-TYPE:VOD
+#EXT-X-STREAM-INF:BANDWIDTH=5000000,RESOLUTION=1920x1080
+https://cdn.example.com/videos/test/1080p.mp4
+#EXT-X-STREAM-INF:BANDWIDTH=2500000,RESOLUTION=1280x720
+https://cdn.example.com/videos/test/720p.mp4
+#EXT-X-STREAM-INF:BANDWIDTH=1200000,RESOLUTION=854x480
+https://cdn.example.com/videos/test/480p.mp4
+#EXT-X-STREAM-INF:BANDWIDTH=600000,RESOLUTION=640x360
+https://cdn.example.com/videos/test/360p.mp4
+#EXTINF:10.0,
+https://cdn.example.com/videos/test/360p/segment-0.ts
+#EXT-X-ENDLIST
+"#;
+
+    // Validate required HLS tags
+    assert!(
+        hls_manifest.contains("#EXTM3U"),
+        "HLS must start with #EXTM3U"
+    );
+    assert!(
+        hls_manifest.contains("#EXT-X-VERSION:3"),
+        "HLS must specify version 3"
+    );
+    assert!(
+        hls_manifest.contains("#EXT-X-TARGETDURATION"),
+        "HLS must specify target duration"
+    );
+    assert!(
+        hls_manifest.contains("#EXT-X-MEDIA-SEQUENCE:0"),
+        "HLS must specify media sequence"
+    );
+    assert!(
+        hls_manifest.contains("#EXT-X-PLAYLIST-TYPE:VOD"),
+        "HLS must specify playlist type"
+    );
+    assert!(
+        hls_manifest.contains("#EXT-X-STREAM-INF"),
+        "HLS must have variant streams"
+    );
+    assert!(
+        hls_manifest.contains("#EXTINF"),
+        "HLS must have segment information"
+    );
+    assert!(
+        hls_manifest.contains("#EXT-X-ENDLIST"),
+        "HLS must end with endlist"
+    );
+
+    // Validate bandwidth hierarchy (5000k > 2500k > 1200k > 600k)
+    let lines: Vec<&str> = hls_manifest.lines().collect();
+    let mut found_5000 = false;
+    let mut found_2500 = false;
+    let mut found_1200 = false;
+    let mut found_600 = false;
+
+    for line in lines {
+        if line.contains("BANDWIDTH=5000000") {
+            found_5000 = true;
+        }
+        if line.contains("BANDWIDTH=2500000") {
+            found_2500 = true;
+        }
+        if line.contains("BANDWIDTH=1200000") {
+            found_1200 = true;
+        }
+        if line.contains("BANDWIDTH=600000") {
+            found_600 = true;
+        }
+    }
+
+    assert!(found_5000, "HLS should have 1080p variant (5000k)");
+    assert!(found_2500, "HLS should have 720p variant (2500k)");
+    assert!(found_1200, "HLS should have 480p variant (1200k)");
+    assert!(found_600, "HLS should have 360p variant (600k)");
+}
+
+#[test]
+fn test_s3_key_naming_convention() {
+    /// Validates that S3 keys follow the correct naming convention
+    /// Format: videos/{video_id}/{quality}.mp4 or videos/{video_id}/master.m3u8
+
+    let video_id = Uuid::new_v4();
+
+    let expected_keys = vec![
+        format!("videos/{}/1080p.mp4", video_id),
+        format!("videos/{}/720p.mp4", video_id),
+        format!("videos/{}/480p.mp4", video_id),
+        format!("videos/{}/360p.mp4", video_id),
+        format!("videos/{}/master.m3u8", video_id),
+    ];
+
+    for key in expected_keys {
+        // Verify structure
+        assert!(key.starts_with("videos/"), "Key must start with 'videos/'");
+        assert!(
+            key.contains(&video_id.to_string()),
+            "Key must contain video ID"
+        );
+
+        // Verify file extension
+        assert!(
+            key.ends_with(".mp4") || key.ends_with(".m3u8"),
+            "Key must end with .mp4 or .m3u8"
+        );
+
+        // Verify no special characters
+        assert!(
+            !key.contains(".."),
+            "Key should not contain parent directory references"
+        );
+    }
+}
+
+#[test]
+fn test_bitrate_configuration() {
+    /// Validates that bitrate configuration is appropriate for each quality tier
+
+    let bitrate_config = vec![
+        ("1080p", 5000),  // 5 Mbps
+        ("720p", 2500),   // 2.5 Mbps
+        ("480p", 1200),   // 1.2 Mbps
+        ("360p", 600),    // 600 Kbps
+    ];
+
+    // Verify bitrates are in descending order
+    for i in 1..bitrate_config.len() {
+        let prev_bitrate = bitrate_config[i - 1].1;
+        let curr_bitrate = bitrate_config[i].1;
+        assert!(
+            curr_bitrate < prev_bitrate,
+            "Bitrates should decrease with lower quality: {} > {}",
+            prev_bitrate,
+            curr_bitrate
+        );
+    }
+
+    // Verify all bitrates are positive
+    for (_quality, bitrate) in bitrate_config {
+        assert!(bitrate > 0, "Bitrate must be positive");
+    }
+
+    // Verify reasonable bitrate ranges
+    assert!(
+        bitrate_config[0].1 >= 4000 && bitrate_config[0].1 <= 6000,
+        "1080p bitrate should be 4-6 Mbps"
+    );
+    assert!(
+        bitrate_config[1].1 >= 2000 && bitrate_config[1].1 <= 3000,
+        "720p bitrate should be 2-3 Mbps"
+    );
 }

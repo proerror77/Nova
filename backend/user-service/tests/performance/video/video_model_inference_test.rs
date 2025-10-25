@@ -2,7 +2,6 @@
 /// Validates deep learning model inference within SLA bounds
 /// - P95 latency < 200ms for single inference
 /// - Batch inference efficiency
-
 use std::time::{Duration, Instant};
 use uuid::Uuid;
 
@@ -96,7 +95,7 @@ impl DeepLearningModel {
             let content_idx = i % features.content_features.len();
             let temporal_idx = i % features.temporal_features.len();
             let value = features.content_features[content_idx] * 0.6
-                      + features.temporal_features[temporal_idx] * 0.4;
+                + features.temporal_features[temporal_idx] * 0.4;
             embedding[i] = (seed * value * (i as f32 + 1.0).sin().abs()).abs();
         }
 
@@ -129,9 +128,7 @@ impl InferenceLatencyStats {
     pub fn new(latencies: Vec<Duration>) -> Self {
         let mut sorted = latencies;
         sorted.sort();
-        Self {
-            latencies: sorted,
-        }
+        Self { latencies: sorted }
     }
 
     pub fn min(&self) -> Duration {
@@ -304,8 +301,16 @@ fn test_model_inference_embedding_quality() {
     let embedding_dissimilar = model.infer_single(&features_dissimilar);
 
     // Verify embeddings are normalized (magnitude ~= 1.0)
-    let norm_base: f32 = embedding_base.embedding.iter().map(|x| x * x).sum::<f32>().sqrt();
-    assert!((norm_base - 1.0).abs() < 0.01, "Base embedding should be normalized");
+    let norm_base: f32 = embedding_base
+        .embedding
+        .iter()
+        .map(|x| x * x)
+        .sum::<f32>()
+        .sqrt();
+    assert!(
+        (norm_base - 1.0).abs() < 0.01,
+        "Base embedding should be normalized"
+    );
 
     let similarity_similar = embedding_base.cosine_similarity(&embedding_similar);
     let similarity_dissimilar = embedding_base.cosine_similarity(&embedding_dissimilar);
@@ -317,10 +322,16 @@ fn test_model_inference_embedding_quality() {
 
     // For normalized embeddings, cosine similarity should ideally be between -1 and 1
     // Due to numerical precision, we allow a small margin
-    assert!(similarity_similar >= -1.01 && similarity_similar <= 1.01,
-        "Similar similarity should be roughly in [-1, 1], got {}", similarity_similar);
-    assert!(similarity_dissimilar >= -1.01 && similarity_dissimilar <= 1.01,
-        "Dissimilar similarity should be roughly in [-1, 1], got {}", similarity_dissimilar);
+    assert!(
+        similarity_similar >= -1.01 && similarity_similar <= 1.01,
+        "Similar similarity should be roughly in [-1, 1], got {}",
+        similarity_similar
+    );
+    assert!(
+        similarity_dissimilar >= -1.01 && similarity_dissimilar <= 1.01,
+        "Dissimilar similarity should be roughly in [-1, 1], got {}",
+        similarity_dissimilar
+    );
 }
 
 #[test]
@@ -406,7 +417,11 @@ fn test_model_inference_embedding_dimension() {
         .map(|x| x * x)
         .sum::<f32>()
         .sqrt();
-    assert!((norm - 1.0).abs() < 0.01, "Embedding should be normalized, norm: {}", norm);
+    assert!(
+        (norm - 1.0).abs() < 0.01,
+        "Embedding should be normalized, norm: {}",
+        norm
+    );
 }
 
 #[test]
@@ -440,7 +455,11 @@ fn test_model_inference_latency_consistency() {
 
     // For a mock implementation with very fast operations, allow higher variance
     // Real production systems would have more consistent timing
-    assert!(variance < 50.0, "Latency variance should be < 50x, was {:.2}x", variance);
+    assert!(
+        variance < 50.0,
+        "Latency variance should be < 50x, was {:.2}x",
+        variance
+    );
 }
 
 #[test]
@@ -516,7 +535,10 @@ fn test_model_inference_sla_compliance() {
         latencies.push(start.elapsed());
     }
 
-    let violations = latencies.iter().filter(|l| **l >= Duration::from_millis(200)).count();
+    let violations = latencies
+        .iter()
+        .filter(|l| **l >= Duration::from_millis(200))
+        .count();
     let stats = InferenceLatencyStats::new(latencies);
     let p95 = stats.p95();
 

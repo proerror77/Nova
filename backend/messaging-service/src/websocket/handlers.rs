@@ -15,76 +15,159 @@ use tracing::{warn, error};
 #[derive(Debug, Deserialize)]
 pub struct WsParams { pub conversation_id: Uuid, pub user_id: Uuid, pub token: Option<String> }
 
+// === Extracted: Extract message ID from broadcast message (简化逻辑) ===
+fn extract_message_id(text: &str) -> String {
+    // Try JSON first
+    if let Ok(json) = serde_json::from_str::<serde_json::Value>(text) {
+        if let Some(id) = json.get("stream_id").and_then(|v| v.as_str()) {
+            return id.to_string();
+        }
+        if let Some(id) = json.get("id").and_then(|v| v.as_str()) {
+            return id.to_string();
+        }
+    }
+
+    // Fallback: hash-based ID
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+
+    let mut hasher = DefaultHasher::new();
+    text.hash(&mut hasher);
+    let hash = hasher.finish();
+    let now_ms = chrono::Utc::now().timestamp_millis();
+
+    warn!("No stream_id found in message, generating ID from content");
+    format!("{}-{}", now_ms, hash % 10000)
+}
+
+// === Extracted: Handle broadcast message ===
+async fn handle_broadcast_message(msg: &Message, last_received_id: &Arc<Mutex<String>>) {
+    if let Message::Text(ref txt) = msg {
+        let msg_id = extract_message_id(txt);
+        *last_received_id.lock().await = msg_id;
+    }
+}
+
+// === Extracted: Handle client message ===
+async fn handle_client_message(
+    incoming: &Option<Result<Message, axum::Error>>,
+    params: &WsParams,
+    state: &AppState,
+) -> bool {
+    match incoming {
+        Some(Ok(Message::Text(txt))) => {
+            if let Ok(evt) = serde_json::from_str::<WsInboundEvent>(txt) {
+                handle_ws_event(&evt, params, state).await;
+            }
+            true
+        }
+        Some(Ok(Message::Ping(_))) => {
+            // Pong is handled by framework
+            true
+        }
+        Some(Ok(Message::Close(_))) | None => false,
+        _ => true,
+    }
+}
+
+// === Extracted: Handle WebSocket event ===
+async fn handle_ws_event(evt: &WsInboundEvent, params: &WsParams, state: &AppState) {
+    match evt {
+        WsInboundEvent::Typing { conversation_id, user_id } => {
+            // Validate event belongs to this connection
+            if conversation_id != &params.conversation_id || user_id != &params.user_id {
+                return;
+            }
+
+            let out = WsOutboundEvent::Typing {
+                conversation_id: *conversation_id,
+                user_id: *user_id
+            };
+
+            if let Ok(out_txt) = serde_json::to_string(&out) {
+                state.registry.broadcast(*conversation_id, Message::Text(out_txt.clone())).await;
+                let _ = crate::websocket::pubsub::publish(&state.redis, *conversation_id, &out_txt).await;
+            } else {
+                error!("Failed to serialize typing event for conversation {}, user {}", conversation_id, user_id);
+            }
+        }
+    }
+}
+
+// === Extracted: Token validation (消除嵌套) ===
+async fn validate_ws_token(params: &WsParams, headers: &HeaderMap) -> Result<(), axum::http::StatusCode> {
+    let dev_allow = std::env::var("WS_DEV_ALLOW_ALL").unwrap_or_else(|_| "false".into()) == "true";
+
+    if dev_allow {
+        warn!("⚠️  JWT validation BYPASSED (WS_DEV_ALLOW_ALL=true) - DO NOT USE IN PRODUCTION ⚠️");
+        return Ok(());
+    }
+
+    let token = params.token.clone()
+        .or_else(|| {
+            headers.get(axum::http::header::AUTHORIZATION)
+                .and_then(|v| v.to_str().ok())
+                .and_then(|s| s.strip_prefix("Bearer "))
+                .map(|s| s.to_string())
+        });
+
+    match token {
+        None => {
+            error!("WebSocket connection rejected: No JWT token provided");
+            Err(axum::http::StatusCode::UNAUTHORIZED)
+        }
+        Some(t) => {
+            verify_jwt(&t).await
+                .map(|_| ()) // Extract the Claims, return ()
+                .map_err(|e| {
+                    error!("WebSocket connection rejected: Invalid JWT token: {:?}", e);
+                    axum::http::StatusCode::UNAUTHORIZED
+                })
+        }
+    }
+}
+
 pub async fn ws_handler(
     State(state): State<AppState>,
     Query(params): Query<WsParams>,
     headers: HeaderMap,
     ws: WebSocketUpgrade,
 ) -> impl IntoResponse {
-    // Check for development mode bypass (DANGEROUS - only for testing)
-    let dev_allow = std::env::var("WS_DEV_ALLOW_ALL").unwrap_or_else(|_| "false".into()) == "true";
-
-    if dev_allow {
-        warn!(
-            "⚠️  JWT validation BYPASSED (WS_DEV_ALLOW_ALL=true) - DO NOT USE IN PRODUCTION ⚠️"
-        );
-    } else {
-        // PRODUCTION MODE: Enforce JWT validation
-        // Accept JWT from query ?token= or Authorization: Bearer <token>
-        let token_from_query = params.token.clone();
-        let token_from_header = headers
-            .get(axum::http::header::AUTHORIZATION)
-            .and_then(|v| v.to_str().ok())
-            .and_then(|s| s.strip_prefix("Bearer "))
-            .map(|s| s.to_string());
-
-        let token = token_from_query.or(token_from_header);
-
-        match token {
-            None => {
-                error!("WebSocket connection rejected: No JWT token provided");
-                return axum::http::StatusCode::UNAUTHORIZED.into_response();
-            }
-            Some(t) => {
-                if let Err(e) = verify_jwt(&t).await {
-                    error!("WebSocket connection rejected: Invalid JWT token: {:?}", e);
-                    return axum::http::StatusCode::UNAUTHORIZED.into_response();
-                }
-            }
-        }
+    // Early return on authentication failure
+    if let Err(status) = validate_ws_token(&params, &headers).await {
+        return status.into_response();
     }
 
     ws.on_upgrade(move |socket| handle_socket(state, params, socket))
 }
 
-async fn handle_socket(state: AppState, params: WsParams, mut socket: WebSocket) {
-    // In development, allow skipping membership check (WS_DEV_ALLOW_ALL=true)
+// === Extracted: Membership verification (消除嵌套) ===
+async fn verify_conversation_membership(state: &AppState, params: &WsParams) -> Result<(), ()> {
     let dev_allow = std::env::var("WS_DEV_ALLOW_ALL").unwrap_or_else(|_| "false".into()) == "true";
-    if !dev_allow {
-        // Explicit membership check with proper error handling
-        match ConversationService::is_member(&state.db, params.conversation_id, params.user_id).await {
-            Ok(true) => {
-                // User is member, proceed
-            }
-            Ok(false) => {
-                // User is not a member - reject access
-                warn!(
-                    "WebSocket rejected: user {} is not a member of conversation {}",
-                    params.user_id, params.conversation_id
-                );
-                let _ = socket.send(Message::Close(None)).await;
-                return;
-            }
-            Err(e) => {
-                // Database or other error - fail secure (reject access)
-                error!(
-                    "WebSocket rejected: membership check failed for user {} in conversation {}: {:?}",
-                    params.user_id, params.conversation_id, e
-                );
-                let _ = socket.send(Message::Close(None)).await;
-                return;
-            }
+    if dev_allow {
+        return Ok(());
+    }
+
+    match ConversationService::is_member(&state.db, params.conversation_id, params.user_id).await {
+        Ok(true) => Ok(()),
+        Ok(false) => {
+            warn!("WebSocket rejected: user {} is not a member of conversation {}",
+                params.user_id, params.conversation_id);
+            Err(())
         }
+        Err(e) => {
+            error!("WebSocket rejected: membership check failed for user {} in conversation {}: {:?}",
+                params.user_id, params.conversation_id, e);
+            Err(())
+        }
+    }
+}
+
+async fn handle_socket(state: AppState, params: WsParams, mut socket: WebSocket) {
+    // Early return on membership check failure
+    if verify_conversation_membership(&state, &params).await.is_err() {
+        let _ = socket.send(Message::Close(None)).await;
+        return;
     }
 
     // === OFFLINE MESSAGE QUEUE RECOVERY - STEP 1 ===
@@ -170,89 +253,18 @@ async fn handle_socket(state: AppState, params: WsParams, mut socket: WebSocket)
         tokio::select! {
             // Handle outgoing broadcast messages
             maybe = rx.recv() => {
-                match maybe {
-                    Some(msg) => {
-                        // === CRITICAL FIX: Extract stream ID robustly ===
-                        // Handle both JSON and non-JSON messages
-                        // Fallback: use message hash as pseudo-ID if stream_id not provided
-                        if let Message::Text(ref txt) = msg {
-                            let mut extracted_id = None;
-
-                            // Strategy 1: Try to parse as JSON and extract stream_id
-                            if let Ok(json) = serde_json::from_str::<serde_json::Value>(txt) {
-                                if let Some(id) = json.get("stream_id").and_then(|v| v.as_str()) {
-                                    extracted_id = Some(id.to_string());
-                                } else if let Some(id) = json.get("id").and_then(|v| v.as_str()) {
-                                    // Fallback: use "id" field if available
-                                    extracted_id = Some(id.to_string());
-                                }
-                            }
-
-                            // Strategy 2: If no ID found in JSON, generate one from message content
-                            // This ensures we track all messages, even non-standard ones
-                            if extracted_id.is_none() {
-                                // Use SHA256 hash of message content as fallback ID
-                                // This is a pseudo-ID for tracking purposes
-                                use std::collections::hash_map::DefaultHasher;
-                                use std::hash::{Hash, Hasher};
-
-                                let mut hasher = DefaultHasher::new();
-                                txt.hash(&mut hasher);
-                                let hash = hasher.finish();
-
-                                // Create a pseudo stream ID based on hash
-                                // Format: timestamp-hash (mimics Redis stream ID format)
-                                let now_ms = chrono::Utc::now().timestamp_millis();
-                                extracted_id = Some(format!("{}-{}", now_ms, hash % 10000));
-
-                                warn!(
-                                    "No stream_id found in message, using generated ID: {:?}",
-                                    extracted_id
-                                );
-                            }
-
-                            // Update last_received_id if we have one
-                            if let Some(id) = extracted_id {
-                                *last_received_id.lock().await = id;
-                            }
-                        }
-
-                        if sender.send(msg).await.is_err() { break; }
-                    }
-                    None => break,
+                if let Some(msg) = maybe {
+                    handle_broadcast_message(&msg, &last_received_id).await;
+                    if sender.send(msg).await.is_err() { break; }
+                } else {
+                    break;
                 }
             }
 
             // Handle incoming client messages
             incoming = receiver.next() => {
-                match incoming {
-                    Some(Ok(Message::Text(txt))) => {
-                        if let Ok(evt) = serde_json::from_str::<WsInboundEvent>(&txt) {
-                            match evt {
-                                WsInboundEvent::Typing { conversation_id, user_id } => {
-                                    if conversation_id == params.conversation_id && user_id == params.user_id {
-                                        let out = WsOutboundEvent::Typing { conversation_id, user_id };
-                                        match serde_json::to_string(&out) {
-                                            Ok(out_txt) => {
-                                                state.registry.broadcast(params.conversation_id, Message::Text(out_txt.clone())).await;
-                                                let _ = crate::websocket::pubsub::publish(&state.redis, params.conversation_id, &out_txt).await;
-                                            }
-                                            Err(e) => {
-                                                error!(
-                                                    "Failed to serialize typing event for conversation {}, user {}: {:?}",
-                                                    conversation_id, user_id, e
-                                                );
-                                                // Continue processing - don't kill the WebSocket connection
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    Some(Ok(Message::Ping(data))) => { let _ = sender.send(Message::Pong(data)).await; }
-                    Some(Ok(Message::Close(_))) | None => break,
-                    _ => {}
+                if !handle_client_message(&incoming, &params, &state).await {
+                    break;
                 }
             }
         }

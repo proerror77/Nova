@@ -71,18 +71,35 @@ impl VideoTranscodingService {
                 if codec_type == "video" {
                     width = s.get("width").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
                     height = s.get("height").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
-                    vcodec = s.get("codec_name").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                    vcodec = s
+                        .get("codec_name")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string();
                     if let Some(r) = s.get("avg_frame_rate").and_then(|v| v.as_str()) {
                         if let Some((n, d)) = r.split_once('/') {
                             if let (Ok(n), Ok(d)) = (n.parse::<f32>(), d.parse::<f32>()) {
-                                if d > 0.0 { fps = n / d; }
+                                if d > 0.0 {
+                                    fps = n / d;
+                                }
                             }
                         }
                     }
-                    br_kbps = s.get("bit_rate").and_then(|v| v.as_str()).and_then(|s| s.parse::<u32>().ok()).unwrap_or(0) / 1000;
+                    br_kbps = s
+                        .get("bit_rate")
+                        .and_then(|v| v.as_str())
+                        .and_then(|s| s.parse::<u32>().ok())
+                        .unwrap_or(0)
+                        / 1000;
                 } else if codec_type == "audio" {
-                    acodec = s.get("codec_name").and_then(|v| v.as_str()).map(|s| s.to_string());
-                    asr = s.get("sample_rate").and_then(|v| v.as_str()).and_then(|s| s.parse::<u32>().ok());
+                    acodec = s
+                        .get("codec_name")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string());
+                    asr = s
+                        .get("sample_rate")
+                        .and_then(|v| v.as_str())
+                        .and_then(|s| s.parse::<u32>().ok());
                 }
             }
         }
@@ -96,7 +113,11 @@ impl VideoTranscodingService {
 
         Ok(VideoMetadata {
             duration_seconds: duration_seconds.max(1),
-            video_codec: if vcodec.is_empty() { "unknown".into() } else { vcodec },
+            video_codec: if vcodec.is_empty() {
+                "unknown".into()
+            } else {
+                vcodec
+            },
             resolution: (width.max(1), height.max(1)),
             frame_rate: fps,
             bitrate_kbps: br_kbps,
@@ -108,11 +129,15 @@ impl VideoTranscodingService {
     /// Generate thumbnail from video
     pub async fn generate_thumbnail(&self, input_file: &Path, output_file: &Path) -> Result<()> {
         if self.cfg.enable_mock {
-            if let Some(parent) = output_file.parent() { let _ = fs::create_dir_all(parent); }
+            if let Some(parent) = output_file.parent() {
+                let _ = fs::create_dir_all(parent);
+            }
             fs::write(output_file, &[])?;
             return Ok(());
         }
-        if let Some(parent) = output_file.parent() { let _ = fs::create_dir_all(parent); }
+        if let Some(parent) = output_file.parent() {
+            let _ = fs::create_dir_all(parent);
+        }
         let status = Command::new(&self.cfg.ffmpeg_path)
             .args([
                 "-y",
@@ -139,7 +164,9 @@ impl VideoTranscodingService {
         output_dir: &Path,
         bitrates: Vec<u32>,
     ) -> Result<Vec<PathBuf>> {
-        if !input_file.exists() { return Err(AppError::NotFound("input video not found".into())); }
+        if !input_file.exists() {
+            return Err(AppError::NotFound("input video not found".into()));
+        }
         let _ = fs::create_dir_all(output_dir);
         let mut outputs = Vec::new();
         if self.cfg.enable_mock {
@@ -185,11 +212,17 @@ impl VideoTranscodingService {
 
     // Pipeline 适配的附加方法
     pub async fn validate_video_file(&self, path: &Path) -> Result<()> {
-        if !path.exists() { return Err(AppError::NotFound("input video not found".into())); }
+        if !path.exists() {
+            return Err(AppError::NotFound("input video not found".into()));
+        }
         Ok(())
     }
 
-    pub async fn create_transcoding_jobs(&self, video_id: &str, input_file: &Path) -> Result<Vec<String>> {
+    pub async fn create_transcoding_jobs(
+        &self,
+        video_id: &str,
+        input_file: &Path,
+    ) -> Result<Vec<String>> {
         debug!("create jobs for {} from {}", video_id, input_file.display());
         Ok(vec!["360p".into(), "480p".into(), "720p".into()])
     }
@@ -201,7 +234,10 @@ impl VideoTranscodingService {
     pub fn get_config_summary(&self) -> std::collections::HashMap<String, String> {
         let mut m = std::collections::HashMap::new();
         m.insert("ffmpeg_path".into(), self.cfg.ffmpeg_path.clone());
-        m.insert("targets".into(), format!("{}", self.cfg.target_bitrates.len()));
+        m.insert(
+            "targets".into(),
+            format!("{}", self.cfg.target_bitrates.len()),
+        );
         m.insert("mock".into(), format!("{}", self.cfg.enable_mock));
         m
     }

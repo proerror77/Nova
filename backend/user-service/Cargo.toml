@@ -69,7 +69,9 @@ qrcode.workspace = true
 
 # Service-specific dependencies
 futures = "0.3"
+futures-util = "0.3"
 lazy_static = "1.4"
+actix-multipart = "0.4"
 image = "0.24"
 num_cpus = "1.16"
 neo4rs = "0.8"
@@ -81,6 +83,10 @@ tonic = "0.10"
 prost = "0.12"
 ndarray = "0.15"
 http = "0.2"
+
+# ONNX Model Serving
+tract-onnx = "0.21"
+once_cell = "1.19"
 
 [dev-dependencies]
 tokio-test = "0.4"

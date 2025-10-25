@@ -1,6 +1,5 @@
 /// Advanced integration tests for Events system
 /// Tests complex scenarios, edge cases, and system interactions
-
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -98,7 +97,11 @@ fn test_multi_user_concurrent_events() {
                 author_id: None,
                 action: format!("action-{}", event_idx % 5),
                 dwell_ms: Some((user_idx as u32 * 100) + (event_idx as u32)),
-                device: if user_idx % 2 == 0 { Some("web".to_string()) } else { Some("mobile".to_string()) },
+                device: if user_idx % 2 == 0 {
+                    Some("web".to_string())
+                } else {
+                    Some("mobile".to_string())
+                },
                 app_ver: Some(format!("{}.0.0", user_idx % 3 + 1)),
             });
         }
@@ -236,9 +239,21 @@ fn test_event_enrichment() {
 #[test]
 fn test_event_type_diversity() {
     let action_types = vec![
-        "view", "impression", "click", "like", "unlike",
-        "share", "comment", "save", "report", "follow",
-        "unfollow", "mute", "unmute", "block", "unblock",
+        "view",
+        "impression",
+        "click",
+        "like",
+        "unlike",
+        "share",
+        "comment",
+        "save",
+        "report",
+        "follow",
+        "unfollow",
+        "mute",
+        "unmute",
+        "block",
+        "unblock",
     ];
 
     let events: Vec<EventRecord> = action_types
@@ -354,22 +369,23 @@ fn test_event_correlation_analysis() {
     }
 
     // Analyze correlation: dwell time increases with engagement
-    let views: Vec<_> = events_for_user.iter()
+    let views: Vec<_> = events_for_user
+        .iter()
         .filter(|e| e.action == "view")
         .collect();
-    let likes: Vec<_> = events_for_user.iter()
+    let likes: Vec<_> = events_for_user
+        .iter()
         .filter(|e| e.action == "like")
         .collect();
 
-    let avg_dwell_view = views.iter()
-        .filter_map(|e| e.dwell_ms)
-        .sum::<u32>() / views.len() as u32;
-    let avg_dwell_like = likes.iter()
-        .filter_map(|e| e.dwell_ms)
-        .sum::<u32>() / likes.len() as u32;
+    let avg_dwell_view = views.iter().filter_map(|e| e.dwell_ms).sum::<u32>() / views.len() as u32;
+    let avg_dwell_like = likes.iter().filter_map(|e| e.dwell_ms).sum::<u32>() / likes.len() as u32;
 
     // Likes should have higher average dwell time
-    assert!(avg_dwell_like > avg_dwell_view, "Engagement events should have higher dwell");
+    assert!(
+        avg_dwell_like > avg_dwell_view,
+        "Engagement events should have higher dwell"
+    );
 }
 
 /// Test event serialization round-trip

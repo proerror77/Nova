@@ -1,0 +1,70 @@
+# ============================================
+# Builder Stage - Compile messaging-service in Linux
+# ============================================
+FROM rust:1.88-slim-bookworm AS builder
+
+# Update APT and install with retries
+RUN apt-get update --fix-missing || true
+
+RUN apt-get install -y --fix-broken \
+    pkg-config \
+    libssl-dev \
+    ca-certificates \
+    cmake \
+    build-essential \
+    curl \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create app user
+RUN useradd -m -u 1001 -s /bin/bash appuser
+
+WORKDIR /app
+
+# Copy all sources
+COPY Cargo.toml ./
+COPY Cargo.lock ./
+COPY messaging-service ./messaging-service
+COPY user-service ./user-service
+COPY search-service ./search-service
+COPY libs ./libs
+
+# Build with explicit target
+RUN cargo build --release --manifest-path messaging-service/Cargo.toml --target x86_64-unknown-linux-gnu 2>&1 || \
+    cargo build --release --manifest-path messaging-service/Cargo.toml
+
+# ============================================
+# Runtime Stage
+# ============================================
+FROM debian:bookworm-slim
+
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    libssl3 \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN useradd -m -u 1001 -s /bin/bash appuser
+
+WORKDIR /app
+
+# Copy binary from builder (try both possible target paths)
+COPY --from=builder /app/target/*/release/messaging-service /app/messaging-service || \
+    COPY --from=builder /app/target/release/messaging-service /app/messaging-service
+
+COPY messaging-service/migrations /app/migrations
+
+RUN chown -R appuser:appuser /app && chmod +x /app/messaging-service
+
+USER appuser
+
+EXPOSE 3000
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost:3000/health || exit 1
+
+ENV RUST_LOG=info
+ENV APP_ENV=production
+ENV PORT=3000
+
+CMD ["/app/messaging-service"]

@@ -1,7 +1,6 @@
 /// Video Feature Extraction Test
 ///
 /// Tests the FFprobe-based feature extraction for video embeddings.
-
 use user_service::config::video_config::DeepLearningConfig;
 use user_service::services::deep_learning_inference::DeepLearningInferenceService;
 
@@ -60,10 +59,7 @@ async fn test_generate_embeddings_non_zero_vector() {
         "Embedding should have non-zero values, found {} non-zero values",
         non_zero_count
     );
-    assert_eq!(
-        non_zero_count, 6,
-        "Expected 6 non-zero feature values"
-    );
+    assert_eq!(non_zero_count, 6, "Expected 6 non-zero feature values");
 }
 
 #[tokio::test]

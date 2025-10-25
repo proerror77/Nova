@@ -1,0 +1,426 @@
+# Prometheus Alert Rules for Nova Platform
+# Critical, warning, and informational alerts for monitoring system health
+
+groups:
+  - name: websocket.rules
+    interval: 30s
+    rules:
+      # =====================
+      # WebSocket Alerts
+      # =====================
+
+      - alert: HighWebSocketErrorRate
+        expr: |
+          (rate(ws_errors_total[5m]) / rate(ws_messages_sent_total[5m])) > 0.02
+        for: 3m
+        labels:
+          severity: warning
+          component: websocket
+        annotations:
+          summary: "High WebSocket error rate (>2%)"
+          description: "WebSocket error rate is {{ $value | humanizePercentage }} over the last 5 minutes"
+          dashboard: "http://grafana:3000/d/websocket"
+          investigation: "Check WebSocket server logs, network conditions, and client behavior"
+
+      - alert: CriticalWebSocketErrorRate
+        expr: |
+          (rate(ws_errors_total[5m]) / rate(ws_messages_sent_total[5m])) > 0.15
+        for: 1m
+        labels:
+          severity: critical
+          component: websocket
+        annotations:
+          summary: "Critical WebSocket error rate (>15%)"
+          description: "WebSocket error rate is {{ $value | humanizePercentage }} - immediate investigation required"
+          action: "Check WebSocket server logs and network connectivity"
+
+      - alert: HighWebSocketReconnectionRate
+        expr: rate(ws_reconnections_total[5m]) > 10
+        for: 3m
+        labels:
+          severity: warning
+          component: websocket
+        annotations:
+          summary: "High WebSocket reconnection rate (>10/min)"
+          description: "{{ $value | humanize }} reconnections per minute"
+          investigation: "Check network stability and server logs"
+
+      - alert: WebSocketConnectionTimeoutExceeded
+        expr: |
+          histogram_quantile(0.95, rate(ws_message_latency_seconds_bucket[5m])) > 5
+        for: 2m
+        labels:
+          severity: warning
+          component: websocket
+        annotations:
+          summary: "WebSocket message latency exceeding threshold"
+          description: "P95 latency is {{ $value }}s (threshold: 5s)"
+
+      - alert: WebSocketHeartbeatFailures
+        expr: |
+          increase(ws_errors_total{error_type="heartbeat_timeout"}[5m]) > 10
+        for: 2m
+        labels:
+          severity: warning
+          component: websocket
+        annotations:
+          summary: "Elevated WebSocket heartbeat failures"
+          description: "{{ $value }} heartbeat timeouts in last 5 minutes"
+
+  - name: messaging.rules
+    interval: 30s
+    rules:
+      # =====================
+      # Messaging API Alerts
+      # =====================
+
+      - alert: HighMessageDeliveryFailureRate
+        expr: |
+          (rate(message_delivery_failures_total[5m]) / rate(messages_sent_total[5m])) > 0.02
+        for: 2m
+        labels:
+          severity: warning
+          component: messaging
+        annotations:
+          summary: "High message delivery failure rate (>2%)"
+          description: "Message delivery failure rate is {{ $value | humanizePercentage }}"
+          dashboard: "http://grafana:3000/d/messaging"
+
+      - alert: CriticalMessageDeliveryFailure
+        expr: |
+          (rate(message_delivery_failures_total[5m]) / rate(messages_sent_total[5m])) > 0.1
+        for: 1m
+        labels:
+          severity: critical
+          component: messaging
+        annotations:
+          summary: "Critical message delivery failure rate (>10%)"
+          description: "{{ $value | humanizePercentage }} of messages failing to deliver"
+          action: "Check message queue and database connectivity"
+
+      - alert: MessageQueueBacklog
+        expr: message_queue_depth{queue_type="pending"} > 1000
+        for: 5m
+        labels:
+          severity: warning
+          component: messaging
+        annotations:
+          summary: "Large message queue backlog"
+          description: "{{ $value | humanize }} messages pending delivery"
+          impact: "Messages may be delayed for users"
+
+      - alert: FailedMessageQueueCritical
+        expr: message_queue_depth{queue_type="failed"} > 500
+        for: 2m
+        labels:
+          severity: critical
+          component: messaging
+        annotations:
+          summary: "Critical number of failed messages in queue"
+          description: "{{ $value | humanize }} messages in failed queue"
+          action: "Investigate failed message root cause immediately"
+
+      - alert: HighMessageSearchLatency
+        expr: |
+          histogram_quantile(0.95, rate(message_search_latency_seconds_bucket[5m])) > 2
+        for: 3m
+        labels:
+          severity: warning
+          component: messaging
+        annotations:
+          summary: "High message search latency (>2s)"
+          description: "P95 search latency is {{ $value | humanizeDuration }}"
+          investigation: "Check search index health and query performance"
+
+      - alert: MessageSearchFailures
+        expr: |
+          (rate(message_searches_total{status="failed"}[5m]) /
+           rate(message_searches_total[5m])) > 0.01
+        for: 5m
+        labels:
+          severity: warning
+          component: messaging
+        annotations:
+          summary: "High message search failure rate (>1%)"
+          description: "{{ $value | humanizePercentage }} of message searches failing"
+
+      - alert: ConversationCreationFailure
+        expr: |
+          (rate(conversations_created_total{status="failed"}[5m]) /
+           rate(conversations_created_total[5m])) > 0.05
+        for: 2m
+        labels:
+          severity: warning
+          component: messaging
+        annotations:
+          summary: "High conversation creation failure rate (>5%)"
+          description: "{{ $value | humanizePercentage }} of conversation creation attempts failing"
+
+  - name: api.rules
+    interval: 30s
+    rules:
+      # =====================
+      # REST API Alerts
+      # =====================
+
+      - alert: MessageAPILatencyHigh
+        expr: |
+          histogram_quantile(0.99, rate(message_api_latency_seconds_bucket[5m])) > 1
+        for: 3m
+        labels:
+          severity: warning
+          component: messaging_api
+        annotations:
+          summary: "High message API latency (P99 > 1s)"
+          description: "Message API P99 latency is {{ $value | humanizeDuration }}"
+          endpoint: "{{ $labels.endpoint }}"
+
+      - alert: MessageDeliveryLatencyHigh
+        expr: |
+          histogram_quantile(0.95, rate(message_delivery_latency_seconds_bucket[5m])) > 0.5
+        for: 2m
+        labels:
+          severity: warning
+          component: messaging
+        annotations:
+          summary: "High message delivery latency (P95 > 500ms)"
+          description: "Message delivery P95 latency is {{ $value | humanizeDuration }}"
+          delivery_type: "{{ $labels.delivery_type }}"
+
+  - name: connection.rules
+    interval: 30s
+    rules:
+      # =====================
+      # Connection Pool Alerts
+      # =====================
+
+      - alert: ActiveConnectionsDropped
+        expr: |
+          increase(ws_active_connections[5m]) < 0 and
+          increase(ws_connections_total{status="closed"}[5m]) > 5
+        for: 2m
+        labels:
+          severity: warning
+          component: websocket
+        annotations:
+          summary: "Abnormal WebSocket connection drop"
+          description: "{{ $value | humanize }} connections closed in last 5 minutes"
+
+      - alert: IdleConversationsTooHigh
+        expr: |
+          active_conversations{status="idle"} /
+          (active_conversations{status="idle"} + active_conversations{status="active"}) > 0.9
+        for: 5m
+        labels:
+          severity: info
+          component: messaging
+        annotations:
+          summary: "High percentage of idle conversations"
+          description: "{{ $value | humanizePercentage }} of conversations are idle"
+
+  - name: system.rules
+    interval: 30s
+    rules:
+      # =====================
+      # System Health Alerts
+      # =====================
+
+      - alert: ServiceDown
+        expr: up == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: system
+        annotations:
+          summary: "Service is down"
+          description: "{{ $labels.job }} on {{ $labels.instance }} is down"
+          action: "Check service status and restart if necessary"
+
+      # =====================
+      # P0: Database Alerts
+      # =====================
+
+      - alert: DatabaseConnectionPoolExhausted
+        expr: |
+          db_connections_active / (db_connections_active + db_connections_idle) > 0.95
+        for: 1m
+        labels:
+          severity: critical
+          component: database
+        annotations:
+          summary: "Database connection pool 95%+ utilized"
+          description: "Connection pool utilization: {{ $value | humanizePercentage }}"
+          action: "Check database queries for N+1 patterns, connection leaks, or long-running transactions"
+          impact: "Application may start timing out on database requests"
+
+      - alert: DatabaseConnectionAcquisitionSlow
+        expr: |
+          histogram_quantile(0.99, db_connection_acquire_seconds_bucket) > 1
+        for: 2m
+        labels:
+          severity: warning
+          component: database
+        annotations:
+          summary: "Database connection acquisition P99 latency > 1s"
+          description: "P99 connection acquisition time: {{ $value | humanizeDuration }}"
+          investigation: "Check database load, available connections, and connection pool configuration"
+
+      - alert: DatabaseQueryDurationHigh
+        expr: |
+          histogram_quantile(0.95, rate(db_query_duration_seconds_bucket[5m])) > 1
+        for: 3m
+        labels:
+          severity: warning
+          component: database
+        annotations:
+          summary: "Database query P95 latency > 1s"
+          description: "P95 query duration: {{ $value | humanizeDuration }}"
+          investigation: "Check query execution plans, missing indexes, or full table scans"
+
+      # =====================
+      # P0: Redis Cache Alerts
+      # =====================
+
+      - alert: RedisLowCacheHitRate
+        expr: |
+          (rate(redis_cache_hits_total[5m]) /
+           (rate(redis_cache_hits_total[5m]) + rate(redis_cache_misses_total[5m]))) < 0.7
+        for: 5m
+        labels:
+          severity: warning
+          component: redis
+        annotations:
+          summary: "Redis cache hit rate < 70%"
+          description: "Cache hit rate: {{ $value | humanizePercentage }} for {{ $labels.cache_key_prefix }}"
+          impact: "Increased database load due to cache misses"
+          investigation: "Review cache TTL settings, cache warming strategy, and key eviction policies"
+
+      - alert: RedisMemoryNearLimit
+        expr: |
+          redis_memory_used_bytes / 1073741824 > 0.9
+        for: 2m
+        labels:
+          severity: warning
+          component: redis
+        annotations:
+          summary: "Redis memory usage > 90%"
+          description: "Memory used: {{ $value | humanizePercentage }} of 1GB limit"
+          action: "Monitor for key evictions, consider scaling cache or reviewing TTL settings"
+
+      - alert: RedisHighEvictionRate
+        expr: increase(redis_evictions_total[5m]) > 100
+        for: 2m
+        labels:
+          severity: warning
+          component: redis
+        annotations:
+          summary: "High Redis key eviction rate (>100 evictions in 5m)"
+          description: "Keys evicted: {{ $value | humanize }}"
+          action: "Cache is under memory pressure - consider increasing Redis memory or shortening TTLs"
+
+      - alert: RedisOperationLatencyHigh
+        expr: |
+          histogram_quantile(0.99, redis_get_latency_seconds_bucket) > 0.05
+        for: 2m
+        labels:
+          severity: warning
+          component: redis
+        annotations:
+          summary: "Redis GET operation P99 latency > 50ms"
+          description: "P99 GET latency: {{ $value | humanizeDuration }}"
+          investigation: "Check Redis server load, network latency, or connection pool issues"
+
+      # =====================
+      # P0: Message Size Alerts
+      # =====================
+
+      - alert: OversizedMessageDetected
+        expr: increase(oversized_message_total[5m]) > 10
+        for: 1m
+        labels:
+          severity: warning
+          component: messaging
+        annotations:
+          summary: "Oversized messages detected (10+ in 5min)"
+          description: "{{ $labels.size_category }} category: {{ $value | humanize }} messages"
+          action: "Investigate message sources - may indicate abuse or legitimate large content"
+
+      - alert: MessageSizeP99Spike
+        expr: |
+          histogram_quantile(0.99, message_size_bytes_bucket) > 5000000
+        for: 2m
+        labels:
+          severity: critical
+          component: messaging
+        annotations:
+          summary: "Message size P99 > 5MB detected"
+          description: "P99 message size: {{ $value | humanize1024 }}B"
+          action: "Check for large file uploads, base64-encoded data, or DoS attack"
+          impact: "Large messages consume more memory and bandwidth; may cause OOM if sustained"
+
+      # =====================
+      # P1: Rate & Queue Alerts
+      # =====================
+
+      - alert: GlobalMessageRateBurst
+        expr: global_message_rate_per_second > 10000
+        for: 30s
+        labels:
+          severity: warning
+          component: messaging
+        annotations:
+          summary: "Global message rate > 10k msg/sec"
+          description: "Current rate: {{ $value | humanize }} msg/sec"
+          investigation: "Check for bot activity, user surge, or legitimate traffic increase"
+
+      - alert: ExcessivePerUserRateLimit
+        expr: increase(high_rate_users_total[5m]) > 5
+        for: 2m
+        labels:
+          severity: warning
+          component: messaging
+        annotations:
+          summary: "Multiple users exceeding per-user rate limits"
+          description: "{{ $value | humanize }} users rate-limited in last 5 minutes"
+          action: "Investigate for bot accounts or legitimate power users; may need rate limit adjustment"
+
+      - alert: MessageQueueBacklogAccumulating
+        expr: |
+          histogram_quantile(0.95, message_age_in_queue_seconds_bucket) > 10
+        for: 5m
+        labels:
+          severity: warning
+          component: messaging_queue
+        annotations:
+          summary: "Messages stuck in queue > 10s (P95 latency)"
+          description: "P95 queue age: {{ $value | humanizeDuration }}"
+          investigation: "Check Kafka consumer lag, processing throughput, and queue depth"
+
+      - alert: QueueProcessingSlowing
+        expr: queue_consumer_rate_per_second < 100
+        for: 3m
+        labels:
+          severity: warning
+          component: messaging_queue
+        annotations:
+          summary: "Queue consumption rate dropped < 100 msg/sec"
+          description: "Current rate: {{ $value | humanize }} msg/sec"
+          action: "Check consumer health, database write performance, and processing latency"
+          impact: "Message delivery to users will be delayed"
+
+      - alert: QueueLagIncreasing
+        expr: increase(queue_processing_lag_messages[5m]) > 1000
+        for: 2m
+        labels:
+          severity: critical
+          component: messaging_queue
+        annotations:
+          summary: "Queue processing lag increased by 1000+ messages in 5 minutes"
+          description: "Lag increase: {{ $value | humanize }} messages"
+          action: "Critical queue processing issue - check consumer logs and database health immediately"
+
+# Runbook Reference:
+# - WebSocket Issues: See backend/docs/WEBSOCKET_TROUBLESHOOTING.md
+# - Message Delivery: See backend/docs/MESSAGE_DELIVERY_SLA.md
+# - Performance Tuning: See backend/docs/PERFORMANCE_TUNING.md
+# - On-Call: Check PagerDuty escalation policy

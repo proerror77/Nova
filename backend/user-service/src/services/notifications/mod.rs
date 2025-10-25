@@ -4,7 +4,6 @@
 /// - Kafka-based event consumption
 /// - FCM/APNs integration for push notifications
 /// - WebSocket support for real-time delivery
-
 pub mod apns_client;
 pub mod fcm_client;
 pub mod kafka_consumer;

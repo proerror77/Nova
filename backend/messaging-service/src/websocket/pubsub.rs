@@ -13,6 +13,7 @@ pub async fn publish(client: &Client, conversation_id: Uuid, payload: &str) -> r
 }
 
 pub async fn start_psub_listener(client: Client, registry: ConnectionRegistry) -> redis::RedisResult<()> {
+    // PubSub requires a dedicated connection, not multiplexed
     let conn = client.get_async_connection().await?;
     let mut pubsub = conn.into_pubsub();
     pubsub.psubscribe("conversation:*").await?;
@@ -21,8 +22,10 @@ pub async fn start_psub_listener(client: Client, registry: ConnectionRegistry) -
     while let Some(msg) = stream.next().await {
         let channel: String = msg.get_channel_name().into();
         let payload: String = msg.get_payload()?;
-        if let Some(id_str) = channel.strip_prefix("conversation:") {
-            if let Ok(uuid) = Uuid::parse_str(id_str) {
+        if let Some(rest) = channel.strip_prefix("conversation:") {
+            // Accept both `conversation:<uuid>` and `conversation:<uuid>:<suffix>`
+            let id_part = rest.split(':').next().unwrap_or(rest);
+            if let Ok(uuid) = Uuid::parse_str(id_part) {
                 registry.broadcast(uuid, Message::Text(payload.clone())).await;
             }
         }

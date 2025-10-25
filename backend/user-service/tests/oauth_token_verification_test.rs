@@ -168,8 +168,7 @@ mod tests {
         match result {
             Err(OAuthError::ConfigError(msg)) => {
                 assert!(
-                    msg.contains("FACEBOOK_CLIENT_ID")
-                        || msg.contains("FACEBOOK_CLIENT_SECRET")
+                    msg.contains("FACEBOOK_CLIENT_ID") || msg.contains("FACEBOOK_CLIENT_SECRET")
                 );
             }
             _ => panic!("Expected ConfigError"),
@@ -228,10 +227,14 @@ mod tests {
     #[test]
     fn test_oauth_error_types() {
         let invalid_code = OAuthError::InvalidAuthCode("test".to_string());
-        assert!(invalid_code.to_string().contains("Invalid authorization code"));
+        assert!(invalid_code
+            .to_string()
+            .contains("Invalid authorization code"));
 
         let token_exchange = OAuthError::TokenExchange("test".to_string());
-        assert!(token_exchange.to_string().contains("Failed to exchange token"));
+        assert!(token_exchange
+            .to_string()
+            .contains("Failed to exchange token"));
 
         let user_info_fetch = OAuthError::UserInfoFetch("test".to_string());
         assert!(user_info_fetch

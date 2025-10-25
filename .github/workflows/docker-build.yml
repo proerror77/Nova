@@ -7,12 +7,18 @@ on:
   pull_request:
     branches: [ main, master, develop ]
 
+permissions:
+  contents: read
+
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: proerror77/nova/nova-user-service
 
 jobs:
   build:
+    concurrency:
+      group: docker-${{ github.ref }}
+      cancel-in-progress: true
     runs-on: ubuntu-latest
     permissions:
       contents: read
