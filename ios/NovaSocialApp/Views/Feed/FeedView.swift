@@ -174,7 +174,7 @@ struct FeedView: View {
                 launchConversationId = nil
             }) {
                 if let convo = launchConversationId, let peer = launchPeerId {
-                    NavigationStack { ChatView(vm: ChatViewModel(conversationId: convo, peerUserId: peer)) }
+                    NavigationStack { ChatView(conversationId: convo, peerUserId: peer) }
                 } else {
                     StartChatSheetView { peer in
                         Task {
