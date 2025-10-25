@@ -2,7 +2,6 @@
 ///
 /// Optimizes FFmpeg encoding parameters for better performance/quality tradeoff.
 /// Provides preset configurations for different quality tiers with benchmarked values.
-
 use std::collections::HashMap;
 use tracing::{debug, info};
 
@@ -238,8 +237,8 @@ impl FFmpegOptimizer {
             _ => 1.0,
         };
 
-        let estimated_minutes = ((input_duration_secs as f32 / 60.0) * quality_multiplier)
-            / speed_multiplier;
+        let estimated_minutes =
+            ((input_duration_secs as f32 / 60.0) * quality_multiplier) / speed_multiplier;
 
         Some(estimated_minutes as u32)
     }
@@ -251,13 +250,13 @@ impl FFmpegOptimizer {
         // Benchmarked on typical 8-core i7 @ 3.5GHz
         // These are rough estimates
         match (quality, preset.preset) {
-            ("480p", "faster") => Some(120),    // Very fast for 480p
+            ("480p", "faster") => Some(120), // Very fast for 480p
             ("480p", "medium") => Some(80),
-            ("720p", "medium") => Some(60),     // ~1 minute per minute of video
-            ("1080p", "medium") => Some(40),    // ~1.5 minutes per minute of video
-            ("1080p", "slow") => Some(20),      // ~3 minutes per minute of video
-            ("4K", "slow") => Some(10),         // ~6 minutes per minute of video
-            _ => Some(50),                      // Default estimate
+            ("720p", "medium") => Some(60), // ~1 minute per minute of video
+            ("1080p", "medium") => Some(40), // ~1.5 minutes per minute of video
+            ("1080p", "slow") => Some(20),  // ~3 minutes per minute of video
+            ("4K", "slow") => Some(10),     // ~6 minutes per minute of video
+            _ => Some(50),                  // Default estimate
         }
     }
 

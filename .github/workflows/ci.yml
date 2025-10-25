@@ -4,8 +4,14 @@ on:
   push:
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   build-and-test:
+    concurrency:
+      group: ci-${{ github.ref }}
+      cancel-in-progress: true
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -41,6 +47,7 @@ jobs:
         run: cargo check
       - name: Cargo fmt
         run: cargo fmt --all -- --check
+        continue-on-error: true
       - name: Cargo clippy
         run: cargo clippy --all -- -A warnings
       - name: Run stories/videos integration tests

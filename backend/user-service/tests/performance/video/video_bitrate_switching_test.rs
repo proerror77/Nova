@@ -2,7 +2,6 @@
 /// Validates adaptive bitrate switching within SLA bounds
 /// - Bitrate switch latency < 500ms
 /// - Minimal buffering on switch
-
 use std::time::{Duration, Instant};
 use uuid::Uuid;
 
@@ -106,7 +105,9 @@ impl AdaptiveBitrateAlgorithm {
 
         // Find highest bitrate that fits in available bandwidth
         for tier in &tiers {
-            if tier.kbps() <= available_bandwidth_kbps && buffer_size_ms >= tier.buffer_requirement_ms() {
+            if tier.kbps() <= available_bandwidth_kbps
+                && buffer_size_ms >= tier.buffer_requirement_ms()
+            {
                 if tier != &current_bitrate {
                     return Some(*tier);
                 }
@@ -324,7 +325,8 @@ fn test_bitrate_switch_no_stall() {
     );
 
     if let Some(new_bitrate) = recommended {
-        let switch_time_ms = AdaptiveBitrateAlgorithm::calculate_switch_time(session.current_bitrate, new_bitrate);
+        let switch_time_ms =
+            AdaptiveBitrateAlgorithm::calculate_switch_time(session.current_bitrate, new_bitrate);
         let buffer_impact = AdaptiveBitrateAlgorithm::calculate_buffer_impact(
             session.current_bitrate,
             new_bitrate,
@@ -343,7 +345,11 @@ fn test_bitrate_switch_no_stall() {
 
         println!(
             "Switch from {:?} to {:?}: switch_time={}ms, buffer_impact={}ms, final_buffer={}ms",
-            session.current_bitrate, new_bitrate, switch_time_ms, buffer_impact, session.buffer_size_ms
+            session.current_bitrate,
+            new_bitrate,
+            switch_time_ms,
+            buffer_impact,
+            session.buffer_size_ms
         );
     }
 }
@@ -378,8 +384,10 @@ fn test_bitrate_switch_network_excellent_to_poor() {
         );
 
         if let Some(new_bitrate) = recommended {
-            let switch_time_ms =
-                AdaptiveBitrateAlgorithm::calculate_switch_time(session.current_bitrate, new_bitrate);
+            let switch_time_ms = AdaptiveBitrateAlgorithm::calculate_switch_time(
+                session.current_bitrate,
+                new_bitrate,
+            );
 
             assert!(
                 switch_time_ms <= 500,
@@ -416,9 +424,15 @@ fn test_bitrate_recommendation_accuracy() {
         // Verify algorithm produces valid output
         if let Some(tier) = recommended {
             // If a recommendation is made, it should be different from current
-            assert!(tier != current, "Recommended tier should differ from current");
+            assert!(
+                tier != current,
+                "Recommended tier should differ from current"
+            );
             // Recommended bitrate should fit available bandwidth
-            assert!(tier.kbps() <= available, "Recommended bitrate should fit available bandwidth");
+            assert!(
+                tier.kbps() <= available,
+                "Recommended bitrate should fit available bandwidth"
+            );
         }
     }
 }
@@ -440,7 +454,8 @@ fn test_bitrate_switch_burst_requests() {
     ];
 
     for target in sequence {
-        let switch_time_ms = AdaptiveBitrateAlgorithm::calculate_switch_time(current_bitrate, target);
+        let switch_time_ms =
+            AdaptiveBitrateAlgorithm::calculate_switch_time(current_bitrate, target);
         switch_times.push(switch_time_ms);
         current_bitrate = target;
     }
@@ -511,7 +526,8 @@ fn test_bitrate_switch_percentile_distribution() {
         for from in &tiers {
             for to in &tiers {
                 if from != to {
-                    let switch_time_ms = AdaptiveBitrateAlgorithm::calculate_switch_time(*from, *to);
+                    let switch_time_ms =
+                        AdaptiveBitrateAlgorithm::calculate_switch_time(*from, *to);
                     switch_times.push(switch_time_ms);
                 }
             }
@@ -542,19 +558,20 @@ fn test_bitrate_buffer_management() {
         // Note: Realistic scenarios where initial buffer is sufficient for the switch
         (BitrateTier::Medium, BitrateTier::High, 2500),
         (BitrateTier::High, BitrateTier::Medium, 2500),
-        (BitrateTier::Low, BitrateTier::Ultra, 5000),  // Extra buffer for quality increase
+        (BitrateTier::Low, BitrateTier::Ultra, 5000), // Extra buffer for quality increase
         (BitrateTier::Ultra, BitrateTier::Low, 4000),
     ];
 
     for (from, to, buffer) in test_scenarios {
         let switch_time_ms = AdaptiveBitrateAlgorithm::calculate_switch_time(from, to);
-        let buffer_impact = AdaptiveBitrateAlgorithm::calculate_buffer_impact(from, to, switch_time_ms);
+        let buffer_impact =
+            AdaptiveBitrateAlgorithm::calculate_buffer_impact(from, to, switch_time_ms);
 
         let final_buffer = (buffer as i32) + buffer_impact;
 
         // In realistic scenarios with adequate initial buffer, we should avoid stalls
         assert!(
-            final_buffer > -500,  // Allow small negative as computation artifact, not actual stall
+            final_buffer > -500, // Allow small negative as computation artifact, not actual stall
             "Buffer management: {:?} → {:?}, buffer: {} + {} = {} (possibly acceptable)",
             from,
             to,
@@ -588,7 +605,8 @@ fn test_bitrate_switch_sla_compliance() {
             BitrateTier::Ultra,
         ];
 
-        let switch_time_ms = AdaptiveBitrateAlgorithm::calculate_switch_time(tiers[from_idx], tiers[to_idx]);
+        let switch_time_ms =
+            AdaptiveBitrateAlgorithm::calculate_switch_time(tiers[from_idx], tiers[to_idx]);
         switch_times.push(switch_time_ms);
 
         if switch_time_ms > 500 {

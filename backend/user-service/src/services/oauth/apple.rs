@@ -104,9 +104,7 @@ impl AppleOAuthProvider {
             .map_err(|e| OAuthError::NetworkError(format!("Failed to fetch Apple keys: {}", e)))?
             .json::<JwkSet>()
             .await
-            .map_err(|e| {
-                OAuthError::NetworkError(format!("Failed to parse Apple keys: {}", e))
-            })?;
+            .map_err(|e| OAuthError::NetworkError(format!("Failed to parse Apple keys: {}", e)))?;
 
         // Decode JWT header to get key ID
         let header = decode_header(id_token)

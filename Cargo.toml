@@ -14,6 +14,8 @@ rust-version = "1.75"
 actix-web = "4.5"
 actix-rt = "2.9"
 actix-cors = "0.7"
+actix = "0.13"
+actix-web-actors = "4.3"
 
 # Async runtime
 tokio = { version = "1.36", features = ["full"] }
@@ -89,6 +91,7 @@ urlencoding = "2.1"
 # ClickHouse and Kafka
 clickhouse = { version = "0.12" }
 rdkafka = { version = "0.36", features = ["tokio", "cmake-build"] }
+neo4rs = "0.8"
 
 # Phase 4: Video Processing
 # gRPC for TensorFlow Serving and Milvus
@@ -100,6 +103,10 @@ ndarray = "0.15"
 
 # HTTP utilities for streaming
 http = "0.2"
+
+# ONNX Model Serving
+tract-onnx = "0.21"
+once_cell = "1.19"
 
 [package]
 name = "nova"

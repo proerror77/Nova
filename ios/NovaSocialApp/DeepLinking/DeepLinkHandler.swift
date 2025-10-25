@@ -183,8 +183,8 @@ class DeepLinkHandler: ObservableObject {
         case .passwordReset(let token):
             navigationState.presentedSheet = .passwordReset(token: token)
 
-        case .oauth(let provider, let code):
-            handleOAuth(provider: provider, code: code)
+        case .oauth(let provider, let code, let state):
+            handleOAuth(provider: provider, code: code, state: state)
 
         // Settings routes
         case .settings:

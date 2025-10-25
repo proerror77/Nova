@@ -18,7 +18,21 @@ enum Environment {
     var baseURL: URL {
         switch self {
         case .development:
-            return URL(string: "http://192.168.31.154:8001")!
+            // Read from Info.plist, environment variable, or default to localhost
+            if let customURL = ProcessInfo.processInfo.environment["API_BASE_URL"],
+               let url = URL(string: customURL) {
+                return url
+            }
+
+            // Try reading from Info.plist
+            if let plistURL = Bundle.main.infoDictionary?["API_BASE_URL"] as? String,
+               let url = URL(string: plistURL) {
+                return url
+            }
+
+            // Default to localhost (works on simulator and with port forwarding)
+            return URL(string: "http://localhost:8080")!
+
         case .staging:
             return URL(string: "https://api-staging.nova.social")!
         case .production:
@@ -38,6 +52,31 @@ struct AppConfig {
 
     static var timeout: TimeInterval {
         Environment.current.timeout
+    }
+
+    // Messaging WebSocket base URL (without path)
+    // Development uses local messaging-service exposed at 8085 (see docker-compose)
+    static var messagingWebSocketBaseURL: URL {
+        switch Environment.current {
+        case .development:
+            // Read from environment or use localhost
+            if let customURL = ProcessInfo.processInfo.environment["WS_BASE_URL"],
+               let url = URL(string: customURL) {
+                return url
+            }
+
+            // Try reading from Info.plist
+            if let plistURL = Bundle.main.infoDictionary?["WS_BASE_URL"] as? String,
+               let url = URL(string: plistURL) {
+                return url
+            }
+
+            return URL(string: "ws://localhost:8085")!
+
+        case .staging, .production:
+            // If you have a gateway, set to wss://api.nova.social or dedicated WS endpoint
+            return URL(string: "wss://api.nova.social")!
+        }
     }
 }
 

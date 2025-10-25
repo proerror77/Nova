@@ -5,7 +5,6 @@
 ///
 /// Feature extraction uses FFprobe to extract video metadata and constructs
 /// normalized feature vectors for video similarity search.
-
 use crate::config::video_config::DeepLearningConfig;
 use crate::error::{AppError, Result};
 use crate::models::video::*;
@@ -82,9 +81,7 @@ impl DeepLearningInferenceService {
             .arg("-show_streams")
             .arg(video_path)
             .output()
-            .map_err(|e| {
-                AppError::Internal(format!("Failed to execute ffprobe: {}", e))
-            })?;
+            .map_err(|e| AppError::Internal(format!("Failed to execute ffprobe: {}", e)))?;
 
         if !output.status.success() {
             return Err(AppError::Internal(format!(
@@ -94,9 +91,8 @@ impl DeepLearningInferenceService {
         }
 
         // Parse JSON output
-        let probe: ProbeOutput = serde_json::from_slice(&output.stdout).map_err(|e| {
-            AppError::Internal(format!("Failed to parse ffprobe output: {}", e))
-        })?;
+        let probe: ProbeOutput = serde_json::from_slice(&output.stdout)
+            .map_err(|e| AppError::Internal(format!("Failed to parse ffprobe output: {}", e)))?;
 
         // Find video stream
         let video_stream = probe
@@ -184,7 +180,11 @@ impl DeepLearningInferenceService {
     /// This method extracts video features from the file path and generates
     /// a normalized embedding vector. If TensorFlow Serving is available,
     /// it can be used for more sophisticated ML-based embeddings.
-    pub async fn generate_embeddings(&self, video_id: &str, features: Vec<f32>) -> Result<VideoEmbedding> {
+    pub async fn generate_embeddings(
+        &self,
+        video_id: &str,
+        features: Vec<f32>,
+    ) -> Result<VideoEmbedding> {
         info!(
             "Generating embeddings for video: {} (feature_dim={})",
             video_id,
@@ -210,7 +210,10 @@ impl DeepLearningInferenceService {
             generated_at: chrono::Utc::now(),
         };
 
-        info!("✓ Embeddings generated: {}-d vector", self.config.embedding_dim);
+        info!(
+            "✓ Embeddings generated: {}-d vector",
+            self.config.embedding_dim
+        );
 
         Ok(embedding_obj)
     }
@@ -224,6 +227,45 @@ impl DeepLearningInferenceService {
         video_path: &Path,
     ) -> Result<VideoEmbedding> {
         let features = self.extract_features(video_path)?;
+        self.generate_embeddings(video_id, features).await
+    }
+
+    /// Generate embeddings from existing video metadata (no file IO)
+    pub async fn generate_embeddings_from_metadata(
+        &self,
+        video_id: &str,
+        meta: &crate::services::video_transcoding::VideoMetadata,
+    ) -> Result<VideoEmbedding> {
+        // Map VideoMetadata to 512-d normalized feature vector (align with extract_features mapping)
+        let mut features = vec![0.0f32; self.config.embedding_dim];
+
+        // Resolution normalized to 1920x1080
+        features[0] = (meta.resolution.0 as f32) / 1920.0;
+        features[1] = (meta.resolution.1 as f32) / 1080.0;
+
+        // Duration normalized to 300 seconds
+        features[2] = (meta.duration_seconds as f32) / 300.0;
+
+        // Bitrate normalized to 5 Mbps = 5000 kbps
+        features[3] = (meta.bitrate_kbps as f32) / 5000.0;
+
+        // FPS normalized to 60
+        features[4] = meta.frame_rate / 60.0;
+
+        // Codec one-hot (h264, hevc, vp8, vp9, av1, other)
+        match meta.video_codec.as_str() {
+            "h264" => features[5] = 1.0,
+            "hevc" | "h265" => features[6] = 1.0,
+            "vp8" => features[7] = 1.0,
+            "vp9" => features[8] = 1.0,
+            "av1" => features[9] = 1.0,
+            _ => features[10] = 1.0,
+        }
+
+        // Clamp to [0,1]
+        for v in &mut features {
+            *v = v.clamp(0.0, 1.0);
+        }
         self.generate_embeddings(video_id, features).await
     }
 
@@ -320,10 +362,7 @@ impl DeepLearningInferenceService {
             return Ok(Vec::new());
         }
 
-        info!(
-            "Batch generating embeddings for {} videos",
-            requests.len()
-        );
+        info!("Batch generating embeddings for {} videos", requests.len());
 
         // In production, would batch these requests to TensorFlow Serving
         // for more efficient processing
@@ -342,29 +381,149 @@ impl DeepLearningInferenceService {
             embeddings.push(embedding);
         }
 
-        info!(
-            "✓ Batch generated {} embeddings",
-            embeddings.len()
-        );
+        info!("✓ Batch generated {} embeddings", embeddings.len());
 
         Ok(embeddings)
     }
 
-    /// Milvus: Insert embeddings (placeholder; integrate with Milvus SDK/REST in production)
-    pub async fn insert_embeddings_milvus(&self, _embeddings: &[VideoEmbedding]) -> Result<()> {
-        // TODO: Implement Milvus insert via REST/gRPC
-        Ok(())
+    /// Milvus: Insert embeddings via HTTP (REST gateway). Falls back to error on failure.
+    pub async fn insert_embeddings_milvus(&self, embeddings: &[VideoEmbedding]) -> Result<()> {
+        if embeddings.is_empty() {
+            return Ok(());
+        }
+        let base = self.config.milvus_url.trim_end_matches('/');
+        let url = format!(
+            "{}/v1/vector_db/collections/{}/entities",
+            base, self.config.milvus_collection
+        );
+
+        let payload = serde_json::json!({
+            "entities": embeddings.iter().map(|e| serde_json::json!({
+                "video_id": e.video_id,
+                "embedding": e.embedding,
+                "model_version": e.model_version,
+                "generated_at": e.generated_at,
+            })).collect::<Vec<_>>()
+        });
+
+        let client = reqwest::Client::new();
+        let res = client.post(&url).json(&payload).send().await;
+        match res {
+            Ok(resp) if resp.status().is_success() => {
+                info!("Milvus: inserted {} embeddings", embeddings.len());
+                Ok(())
+            }
+            Ok(resp) => {
+                let status = resp.status();
+                let text = resp.text().await.unwrap_or_default();
+                warn!("Milvus insert failed: {} - {}", status, text);
+                Err(AppError::Internal(format!(
+                    "Milvus insert failed: {}",
+                    status
+                )))
+            }
+            Err(e) => {
+                warn!("Milvus insert error: {}", e);
+                Err(AppError::Internal(format!("Milvus insert error: {}", e)))
+            }
+        }
     }
 
     /// Milvus: Find similar videos (primary when enabled)
     pub async fn find_similar_videos_milvus(
         &self,
-        _query_embedding: &[f32],
-        _limit: usize,
+        query_embedding: &[f32],
+        limit: usize,
     ) -> Result<Vec<SimilarVideo>> {
-        // TODO: Implement real Milvus search
-        // For now, return an error to trigger PG fallback when Milvus is not integrated yet
-        Err(AppError::Internal("Milvus search not configured".to_string()))
+        let base = self.config.milvus_url.trim_end_matches('/');
+        let url = format!(
+            "{}/v1/vector_db/collections/{}/entities/search",
+            base, self.config.milvus_collection
+        );
+        let payload = serde_json::json!({
+            "vector": query_embedding,
+            "limit": limit
+        });
+
+        let client = reqwest::Client::new();
+        let res = client.post(&url).json(&payload).send().await;
+        match res {
+            Ok(resp) if resp.status().is_success() => {
+                let json = resp.json::<serde_json::Value>().await.unwrap_or_default();
+                let mut out: Vec<SimilarVideo> = Vec::new();
+                if let Some(results) = json.get("results").and_then(|v| v.as_array()) {
+                    for r in results {
+                        let video_id = r
+                            .get("video_id")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or_default()
+                            .to_string();
+                        let score = r.get("score").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
+                        out.push(SimilarVideo {
+                            video_id,
+                            similarity_score: score,
+                            title: "".into(),
+                            creator_id: Uuid::nil().to_string(),
+                            thumbnail_url: None,
+                        });
+                    }
+                }
+                Ok(out)
+            }
+            Ok(resp) => {
+                let status = resp.status();
+                let text = resp.text().await.unwrap_or_default();
+                warn!("Milvus search failed: {} - {}", status, text);
+                Err(AppError::Internal(format!(
+                    "Milvus search failed: {}",
+                    status
+                )))
+            }
+            Err(e) => {
+                warn!("Milvus search error: {}", e);
+                Err(AppError::Internal(format!("Milvus search error: {}", e)))
+            }
+        }
+    }
+
+    /// Ensure Milvus collection exists (idempotent)
+    pub async fn ensure_milvus_collection(&self) -> Result<bool> {
+        let base = self.config.milvus_url.trim_end_matches('/');
+        let coll = &self.config.milvus_collection;
+        let client = reqwest::Client::new();
+
+        // Try GET collection
+        let get_url = format!("{}/v1/vector_db/collections/{}", base, coll);
+        if let Ok(resp) = client.get(&get_url).send().await {
+            if resp.status().is_success() {
+                info!("Milvus collection exists: {}", coll);
+                return Ok(true);
+            }
+        }
+
+        // Create collection
+        let create_url = format!("{}/v1/vector_db/collections", base);
+        let payload = serde_json::json!({
+            "name": coll,
+            "dimension": self.config.embedding_dim,
+            "metric": "cosine",
+            "shards": 1
+        });
+
+        match client.post(&create_url).json(&payload).send().await {
+            Ok(resp) if resp.status().is_success() => {
+                info!("Milvus collection created: {}", coll);
+                Ok(true)
+            }
+            Ok(resp) => {
+                warn!("Milvus create collection failed: {}", resp.status());
+                Ok(false)
+            }
+            Err(e) => {
+                warn!("Milvus create collection error: {}", e);
+                Ok(false)
+            }
+        }
     }
 
     /// Get embedding for a video from Milvus
@@ -393,7 +552,9 @@ impl DeepLearningInferenceService {
         if let Some(r) = row {
             return Ok(Some(VideoEmbedding {
                 video_id: r.get::<String, _>("video_id"),
-                embedding: r.get::<Option<Vec<f32>>, _>("embedding").unwrap_or_default(),
+                embedding: r
+                    .get::<Option<Vec<f32>>, _>("embedding")
+                    .unwrap_or_default(),
                 model_version: r.get::<String, _>("model_version"),
                 generated_at: r.get::<chrono::DateTime<chrono::Utc>, _>("generated_at"),
             }));
@@ -402,10 +563,7 @@ impl DeepLearningInferenceService {
     }
 
     /// Update embedding cache
-    pub async fn update_embedding_cache(
-        &self,
-        embeddings: &[VideoEmbedding],
-    ) -> Result<()> {
+    pub async fn update_embedding_cache(&self, embeddings: &[VideoEmbedding]) -> Result<()> {
         if embeddings.is_empty() {
             return Ok(());
         }
@@ -422,7 +580,10 @@ impl DeepLearningInferenceService {
 
     /// Health check for TensorFlow Serving
     pub async fn check_tf_serving_health(&self) -> Result<bool> {
-        debug!("Checking TensorFlow Serving health: {}", self.config.tf_serving_url);
+        debug!(
+            "Checking TensorFlow Serving health: {}",
+            self.config.tf_serving_url
+        );
 
         // In production, would call health endpoint:
         // GET {tf_serving_url}/v1/models/{model_name}
@@ -435,22 +596,40 @@ impl DeepLearningInferenceService {
     /// Health check for Milvus
     pub async fn check_milvus_health(&self) -> Result<bool> {
         debug!("Checking Milvus health: {}", self.config.milvus_url);
-
-        // In production, would call health endpoint:
-        // GET {milvus_url}/api/v1/health
-
-        info!("✓ Milvus is healthy");
-
-        Ok(true)
+        let url = format!(
+            "{}/api/v1/health",
+            self.config.milvus_url.trim_end_matches('/')
+        );
+        let client = reqwest::Client::new();
+        match client.get(&url).send().await {
+            Ok(resp) if resp.status().is_success() => {
+                info!("✓ Milvus health OK at {}", url);
+                Ok(true)
+            }
+            Ok(resp) => {
+                warn!("Milvus health check failed: status {}", resp.status());
+                Ok(false)
+            }
+            Err(e) => {
+                warn!("Milvus health check error: {}", e);
+                Ok(false)
+            }
+        }
     }
 
     /// Get inference service configuration
     pub fn get_config_info(&self) -> std::collections::HashMap<String, String> {
         let mut info = std::collections::HashMap::new();
 
-        info.insert("tf_serving_url".to_string(), self.config.tf_serving_url.clone());
+        info.insert(
+            "tf_serving_url".to_string(),
+            self.config.tf_serving_url.clone(),
+        );
         info.insert("model_name".to_string(), self.config.model_name.clone());
-        info.insert("model_version".to_string(), self.config.model_version.clone());
+        info.insert(
+            "model_version".to_string(),
+            self.config.model_version.clone(),
+        );
         info.insert(
             "embedding_dim".to_string(),
             self.config.embedding_dim.to_string(),
@@ -492,9 +671,7 @@ mod tests {
         let service = DeepLearningInferenceService::new(config);
 
         let features = vec![0.1, 0.2, 0.3, 0.4, 0.5];
-        let result = service
-            .generate_embeddings("video-123", features)
-            .await;
+        let result = service.generate_embeddings("video-123", features).await;
 
         assert!(result.is_ok());
 
@@ -513,9 +690,7 @@ mod tests {
         let config = DeepLearningConfig::default();
         let service = DeepLearningInferenceService::new(config);
 
-        let result = service
-            .generate_embeddings("video-456", vec![])
-            .await;
+        let result = service.generate_embeddings("video-456", vec![]).await;
 
         assert!(result.is_ok());
 

@@ -44,8 +44,8 @@ impl StreamRepository {
             VALUES ($1, $2, $3, $4, $5, $6, 'preparing')
             RETURNING
                 id, creator_id, stream_key, title, description,
-                category as "category: StreamCategory",
-                status as "status: StreamStatus",
+                category,
+                status,
                 rtmp_url, hls_url, thumbnail_url,
                 current_viewers, peak_viewers, total_unique_viewers, total_messages,
                 auto_archive, created_at, started_at, ended_at
@@ -74,8 +74,8 @@ impl StreamRepository {
             r#"
             SELECT
                 id, creator_id, stream_key, title, description,
-                category as "category: StreamCategory",
-                status as "status: StreamStatus",
+                category,
+                status,
                 rtmp_url, hls_url, thumbnail_url,
                 current_viewers, peak_viewers, total_unique_viewers, total_messages,
                 auto_archive, created_at, started_at, ended_at
@@ -97,8 +97,8 @@ impl StreamRepository {
             r#"
             SELECT
                 id, creator_id, stream_key, title, description,
-                category as "category: StreamCategory",
-                status as "status: StreamStatus",
+                category,
+                status,
                 rtmp_url, hls_url, thumbnail_url,
                 current_viewers, peak_viewers, total_unique_viewers, total_messages,
                 auto_archive, created_at, started_at, ended_at
@@ -143,8 +143,8 @@ impl StreamRepository {
                 r#"
                 SELECT
                     id, creator_id, stream_key, title, description,
-                    category as "category: StreamCategory",
-                    status as "status: StreamStatus",
+                    category,
+                    status,
                     rtmp_url, hls_url, thumbnail_url,
                     current_viewers, peak_viewers, total_unique_viewers, total_messages,
                     auto_archive, created_at, started_at, ended_at
@@ -164,8 +164,8 @@ impl StreamRepository {
                 r#"
                 SELECT
                     id, creator_id, stream_key, title, description,
-                    category as "category: StreamCategory",
-                    status as "status: StreamStatus",
+                    category,
+                    status,
                     rtmp_url, hls_url, thumbnail_url,
                     current_viewers, peak_viewers, total_unique_viewers, total_messages,
                     auto_archive, created_at, started_at, ended_at
@@ -210,6 +210,34 @@ impl StreamRepository {
         };
 
         Ok(count)
+    }
+
+    /// Search live streams by title or description (case-insensitive)
+    pub async fn search_streams(&self, query: &str, limit: i64) -> Result<Vec<StreamRow>> {
+        let pattern = format!("%{}%", query.trim());
+        let rows = sqlx::query_as::<_, StreamRow>(
+            r#"
+            SELECT
+                id, creator_id, stream_key, title, description,
+                category,
+                status,
+                rtmp_url, hls_url, thumbnail_url,
+                current_viewers, peak_viewers, total_unique_viewers, total_messages,
+                auto_archive, created_at, started_at, ended_at
+            FROM live_streams
+            WHERE status = 'live'
+              AND (title ILIKE $1 OR description ILIKE $1)
+            ORDER BY current_viewers DESC, started_at DESC
+            LIMIT $2
+            "#,
+        )
+        .bind(pattern)
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await
+        .context("Failed to search live streams")?;
+
+        Ok(rows)
     }
 
     // =========================================================================

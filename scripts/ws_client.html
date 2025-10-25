@@ -1,0 +1,69 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Nova Messaging WS Client</title>
+    <style>
+      body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 24px; }
+      input { width: 520px; padding: 6px 8px; }
+      button { padding: 6px 10px; margin-left: 8px; }
+      #log { border: 1px solid #ddd; padding: 12px; height: 320px; overflow: auto; margin-top: 12px; white-space: pre-wrap; }
+      .row { margin: 8px 0; }
+      label { display:inline-block; width: 180px; }
+    </style>
+  </head>
+  <body>
+    <h2>Nova Messaging WebSocket Client</h2>
+    <div class="row"><label>WS URL:</label><input id="wsurl" value="ws://localhost:8085/ws" /></div>
+    <div class="row"><label>Conversation ID:</label><input id="conv" /></div>
+    <div class="row"><label>User ID:</label><input id="uid" /></div>
+    <div class="row"><label>JWT (access_token):</label><input id="jwt" /></div>
+    <div class="row">
+      <button id="connect">Connect</button>
+      <button id="disconnect">Disconnect</button>
+      <button id="sendTyping">Send Typing</button>
+    </div>
+    <div id="log"></div>
+    <script>
+      const $ = sel => document.querySelector(sel);
+      const log = (...args) => { const el=$('#log'); el.textContent += args.join(' ') + "\n"; el.scrollTop = el.scrollHeight; };
+      let socket;
+
+      // Autofill from URL query
+      const params = new URLSearchParams(location.search);
+      if (params.get('conversation_id')) $('#conv').value = params.get('conversation_id');
+      if (params.get('user_id')) $('#uid').value = params.get('user_id');
+      if (params.get('token')) $('#jwt').value = params.get('token');
+
+      $('#connect').onclick = () => {
+        const base = $('#wsurl').value.trim();
+        const conversation_id = $('#conv').value.trim();
+        const user_id = $('#uid').value.trim();
+        const token = $('#jwt').value.trim();
+        if (!base || !conversation_id || !user_id || !token) { log('Please fill all fields'); return; }
+
+        const url = `${base}?conversation_id=${encodeURIComponent(conversation_id)}&user_id=${encodeURIComponent(user_id)}&token=${encodeURIComponent(token)}`;
+        log('Connecting to', url);
+        socket = new WebSocket(url);
+        socket.onopen = () => log('WS open');
+        socket.onclose = ev => log('WS close', ev.code, ev.reason || '');
+        socket.onerror = err => log('WS error', err?.message || err);
+        socket.onmessage = ev => log('WS message:', ev.data);
+      };
+
+      $('#disconnect').onclick = () => { if (socket) socket.close(); };
+
+      $('#sendTyping').onclick = () => {
+        if (!socket || socket.readyState !== 1) return log('Not connected');
+        const payload = {
+          type: 'typing',
+          conversation_id: $('#conv').value.trim(),
+          user_id: $('#uid').value.trim(),
+        };
+        socket.send(JSON.stringify(payload));
+        log('Sent typing', JSON.stringify(payload));
+      };
+    </script>
+  </body>
+  </html>
+

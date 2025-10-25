@@ -8,6 +8,7 @@ use std::time::Duration;
 use tokio::sync::Semaphore;
 use tracing::{debug, error, info, warn};
 
+use crate::cache::FeedCache;
 use crate::db::ch_client::ClickHouseClient;
 use crate::error::{AppError, Result};
 
@@ -87,12 +88,15 @@ impl EventMessage {
             return Err(AppError::Validation("Event type is empty".to_string()));
         }
 
-        // User ID should be positive
-        if self.user_id <= 0 {
-            return Err(AppError::Validation(format!(
-                "Invalid user_id: {}",
-                self.user_id
-            )));
+        // User ID checks: allow system events to omit numeric user_id
+        // For events like new_follow/unfollow, UUIDs are provided in `properties`.
+        if self.event_type != "new_follow" && self.event_type != "unfollow" {
+            if self.user_id <= 0 {
+                return Err(AppError::Validation(format!(
+                    "Invalid user_id: {}",
+                    self.user_id
+                )));
+            }
         }
 
         // Timestamp should be reasonable (within 1 year of now)
@@ -126,6 +130,7 @@ pub struct EventsConsumer {
     ch_client: ClickHouseClient,
     deduplicator: EventDeduplicator,
     config: EventsConsumerConfig,
+    redis_client: redis::Client,
     semaphore: Arc<Semaphore>,
 }
 
@@ -135,6 +140,7 @@ impl EventsConsumer {
         config: EventsConsumerConfig,
         ch_client: ClickHouseClient,
         deduplicator: EventDeduplicator,
+        redis_client: redis::Client,
     ) -> Result<Self> {
         info!("Initializing Events consumer with config: {:?}", config);
 
@@ -169,6 +175,7 @@ impl EventsConsumer {
             deduplicator,
             semaphore: Arc::new(Semaphore::new(config.max_concurrent_inserts)),
             config,
+            redis_client,
         })
     }
 
@@ -316,6 +323,11 @@ impl EventsConsumer {
         self.ch_client.execute(&query).await?;
 
         info!("Successfully flushed {} events", batch.len());
+
+        // Apply side effects (e.g., cache invalidation) non-critically
+        if let Err(e) = self.apply_side_effects(&batch).await {
+            warn!("Event side-effects failed: {}", e);
+        }
         Ok(())
     }
 
@@ -326,6 +338,48 @@ impl EventsConsumer {
             .replace('\n', "\\n")
             .replace('\r', "\\r")
             .replace('\t', "\\t")
+    }
+}
+
+impl EventsConsumer {
+    /// Apply non-critical side effects for events (cache invalidation)
+    async fn apply_side_effects(&self, events: &[EventMessage]) -> Result<()> {
+        // Build a FeedCache on demand
+        let manager = self
+            .redis_client
+            .get_connection_manager()
+            .await
+            .map_err(AppError::Redis)?;
+        let mut cache = FeedCache::new(manager, 120);
+
+        for ev in events {
+            match ev.event_type.as_str() {
+                "new_follow" | "unfollow" => {
+                    if let Some(props) = ev.properties.as_object() {
+                        let follower_id = props
+                            .get("follower_id")
+                            .and_then(|v| v.as_str())
+                            .and_then(|s| uuid::Uuid::parse_str(s).ok());
+                        let followee_id = props
+                            .get("followee_id")
+                            .and_then(|v| v.as_str())
+                            .and_then(|s| uuid::Uuid::parse_str(s).ok());
+                        if let (Some(follower), Some(followee)) = (follower_id, followee_id) {
+                            // Use unified invalidation path
+                            let _ = cache
+                                .invalidate_by_event("new_follow", follower, Some(followee))
+                                .await;
+                            crate::metrics::helpers::record_social_follow_event(
+                                ev.event_type.as_str(),
+                                "processed",
+                            );
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        Ok(())
     }
 }
 

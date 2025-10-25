@@ -36,7 +36,7 @@ enum DeepLinkRoute: Equatable {
     case signup
     case emailVerification(token: String)
     case passwordReset(token: String)
-    case oauth(provider: String, code: String?)
+    case oauth(provider: String, code: String?, state: String?)
 
     // MARK: - Settings Routes
     case settings

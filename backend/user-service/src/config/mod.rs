@@ -16,6 +16,7 @@ pub struct Config {
     pub cors: CorsConfig,
     pub clickhouse: ClickHouseConfig,
     pub kafka: KafkaConfig,
+    pub graph: GraphConfig,
     // pub video: video_config::VideoConfig,
 }
 
@@ -131,6 +132,20 @@ pub struct KafkaConfig {
     pub events_topic: String,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+pub struct GraphConfig {
+    /// Enable Neo4j graph integration
+    #[serde(default = "default_graph_enabled")]
+    pub enabled: bool,
+    /// Bolt URI, e.g., bolt://neo4j:7687
+    #[serde(default = "default_neo4j_uri")]
+    pub neo4j_uri: String,
+    #[serde(default = "default_neo4j_user")]
+    pub neo4j_user: String,
+    #[serde(default = "default_neo4j_password")]
+    pub neo4j_password: String,
+}
+
 // Default value functions
 fn default_app_env() -> String {
     "development".to_string()
@@ -198,6 +213,22 @@ fn default_clickhouse_timeout_ms() -> u64 {
 
 fn default_events_topic() -> String {
     "events".to_string()
+}
+
+fn default_graph_enabled() -> bool {
+    false
+}
+
+fn default_neo4j_uri() -> String {
+    "bolt://localhost:7687".to_string()
+}
+
+fn default_neo4j_user() -> String {
+    "neo4j".to_string()
+}
+
+fn default_neo4j_password() -> String {
+    "password".to_string()
 }
 
 impl Config {
@@ -307,6 +338,16 @@ impl Config {
             events_topic: env::var("KAFKA_EVENTS_TOPIC").unwrap_or_else(|_| default_events_topic()),
         };
 
+        let graph = GraphConfig {
+            enabled: env::var("NEO4J_ENABLED")
+                .unwrap_or_else(|_| default_graph_enabled().to_string())
+                .parse()
+                .unwrap_or(default_graph_enabled()),
+            neo4j_uri: env::var("NEO4J_URI").unwrap_or_else(|_| default_neo4j_uri()),
+            neo4j_user: env::var("NEO4J_USER").unwrap_or_else(|_| default_neo4j_user()),
+            neo4j_password: env::var("NEO4J_PASSWORD").unwrap_or_else(|_| default_neo4j_password()),
+        };
+
         // let video = video_config::VideoConfig::from_env();
 
         Ok(Config {
@@ -320,6 +361,7 @@ impl Config {
             cors,
             clickhouse,
             kafka,
+            graph,
             // video,
         })
     }

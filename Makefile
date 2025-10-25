@@ -85,3 +85,15 @@ audit: ## Run security audit
 
 coverage: ## Generate test coverage report
 	cd backend && cargo tarpaulin --out Html
+
+.PHONY: graph-backfill
+graph-backfill: ## Run follows -> Neo4j backfill (requires DB + Neo4j)
+	./scripts/graph_backfill.sh
+
+.PHONY: neo4j-init
+neo4j-init: ## Apply Neo4j schema (constraints/indexes)
+	./scripts/neo4j_init.sh || docker exec -i nova-neo4j cypher-shell -u $${NEO4J_USER:-neo4j} -p $${NEO4J_PASSWORD:-neo4j} < scripts/neo4j_schema.cypher
+
+.PHONY: test-social
+test-social: ## Run social graph lightweight tests only
+	cd backend/user-service && cargo test --test social_graph_tests -- --nocapture

@@ -2,7 +2,9 @@
 ///
 /// Handles video uploads, processing, and storage integration
 use crate::config::video_config::VideoConfig;
+use crate::config::S3Config;
 use crate::error::{AppError, Result};
+use crate::services::s3_service;
 use chrono::Utc;
 use uuid::Uuid;
 
@@ -19,14 +21,27 @@ impl VideoService {
         Self { _config: config }
     }
 
-    /// Generate presigned URL for video upload
+    /// Generate presigned S3 URL for video upload with proper S3 integration
     ///
-    /// Returns URL that client can use to upload directly to S3
-    pub async fn generate_upload_url(&self, user_id: Uuid) -> Result<PresignedUploadResponse> {
-        // 最小实现：返回占位的上传 URL（前端可据此走直传逻辑）
-        let token = uuid::Uuid::new_v4().to_string();
-        let url = format!("/upload/videos/{}?user={}", token, user_id);
-        Ok(PresignedUploadResponse { video_id: token, upload_url: url, expiry_seconds: 900 })
+    /// Returns presigned URL that client can use to upload directly to S3
+    pub async fn generate_presigned_upload_url(
+        &self,
+        s3_config: &S3Config,
+        video_id: Uuid,
+        content_type: &str,
+    ) -> Result<String> {
+        // Generate S3 key: videos/{video_id}/original.mp4
+        let s3_key = format!("videos/{}/original.mp4", video_id);
+
+        // Create S3 client
+        let s3_client = s3_service::get_s3_client(s3_config).await?;
+
+        // Generate presigned URL for PUT upload
+        let presigned_url =
+            s3_service::generate_presigned_url(&s3_client, s3_config, &s3_key, content_type)
+                .await?;
+
+        Ok(presigned_url)
     }
 
     /// Validate uploaded video metadata
@@ -37,13 +52,22 @@ impl VideoService {
         _duration_seconds: u32,
     ) -> Result<()> {
         // 最小校验：标题非空，时长 > 0
-        if _title.trim().is_empty() { return Err(AppError::BadRequest("title required".into())); }
-        if _duration_seconds == 0 { return Err(AppError::BadRequest("duration must be > 0".into())); }
+        if _title.trim().is_empty() {
+            return Err(AppError::BadRequest("title required".into()));
+        }
+        if _duration_seconds == 0 {
+            return Err(AppError::BadRequest("duration must be > 0".into()));
+        }
         Ok(())
     }
 
     /// Start video processing job
-    pub async fn start_processing(&self, video_id: &Uuid, title: &str, _upload_url: &str) -> Result<()> {
+    pub async fn start_processing(
+        &self,
+        video_id: &Uuid,
+        title: &str,
+        _upload_url: &str,
+    ) -> Result<()> {
         // 最小实现：仅记录开始处理的日志
         info!("start processing video: {} - {}", video_id, title);
         Ok(())
@@ -60,12 +84,3 @@ impl VideoService {
     }
 }
 
-/// Presigned upload response
-use serde::Serialize;
-
-#[derive(Debug, Clone, Serialize)]
-pub struct PresignedUploadResponse {
-    pub video_id: String,
-    pub upload_url: String,
-    pub expiry_seconds: u32,
-}
