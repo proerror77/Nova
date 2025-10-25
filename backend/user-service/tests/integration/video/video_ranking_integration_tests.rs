@@ -1,9 +1,8 @@
+use std::collections::HashMap;
 /// Integration Tests for Video Ranking with Deep Model (T135)
 /// Scenario: Milvus similarity search returns relevant videos
 /// Assert: ranking orders videos by score correctly
-
 use uuid::Uuid;
-use std::collections::HashMap;
 
 /// Mock deep learning model embedding
 pub type VideoEmbedding = Vec<f32>;
@@ -101,7 +100,9 @@ impl MilvusVectorDB {
             .videos
             .values()
             .map(|video| {
-                let similarity = self.model.cosine_similarity(query_embedding, &video.embedding);
+                let similarity = self
+                    .model
+                    .cosine_similarity(query_embedding, &video.embedding);
                 let distance = 1.0 - similarity; // Convert to distance
 
                 MilvusSearchResult {
@@ -133,11 +134,11 @@ impl MilvusVectorDB {
             .filter_map(|result| {
                 self.videos.get(&result.video_id).map(|video| {
                     // Calculate engagement score (normalized)
-                    let total_engagement =
-                        (video.views as f32 / 1000.0 + video.likes as f32 / 100.0
-                            + video.comments as f32 / 10.0
-                            + video.shares as f32 / 5.0)
-                            / 4.0;
+                    let total_engagement = (video.views as f32 / 1000.0
+                        + video.likes as f32 / 100.0
+                        + video.comments as f32 / 10.0
+                        + video.shares as f32 / 5.0)
+                        / 4.0;
                     let engagement_score = total_engagement.min(1.0);
 
                     // Combined score: model similarity + engagement
@@ -182,9 +183,7 @@ fn test_milvus_basic_search() {
     }
 
     // Create query embedding
-    let query_embedding: VideoEmbedding = (0..256)
-        .map(|i| ((i as f32) * 0.1).sin())
-        .collect();
+    let query_embedding: VideoEmbedding = (0..256).map(|i| ((i as f32) * 0.1).sin()).collect();
 
     // Search
     let results = db.search_similar(&query_embedding, 5);
@@ -204,7 +203,10 @@ fn test_embedding_similarity_scores() {
     let sim_same = db.model.cosine_similarity(&emb1, &emb2);
     let sim_ortho = db.model.cosine_similarity(&emb1, &emb3);
 
-    assert!((sim_same - 1.0).abs() < 0.0001, "Identical embeddings should have similarity 1.0");
+    assert!(
+        (sim_same - 1.0).abs() < 0.0001,
+        "Identical embeddings should have similarity 1.0"
+    );
     assert!(
         (sim_ortho - 0.0).abs() < 0.0001,
         "Orthogonal embeddings should have similarity 0.0"
@@ -249,7 +251,10 @@ fn test_ranking_with_engagement_metrics() {
 
     // High engagement video should rank higher
     assert_eq!(ranked.len(), 2);
-    assert!(ranked[0].1 > ranked[1].1, "High engagement video should rank higher");
+    assert!(
+        ranked[0].1 > ranked[1].1,
+        "High engagement video should rank higher"
+    );
 }
 
 #[test]
@@ -274,9 +279,7 @@ fn test_ranking_stability() {
         db.insert_video(video);
     }
 
-    let query_embedding: VideoEmbedding = (0..256)
-        .map(|i| ((i as f32) * 0.02).cos())
-        .collect();
+    let query_embedding: VideoEmbedding = (0..256).map(|i| ((i as f32) * 0.02).cos()).collect();
 
     // Run ranking multiple times
     let ranked1 = db.rank_videos_with_engagement(&query_embedding, 3, 0.6, 0.4);
@@ -285,7 +288,11 @@ fn test_ranking_stability() {
     // Results should be consistent
     assert_eq!(ranked1.len(), ranked2.len());
     for (i, ((id1, score1), (_id2, score2))) in ranked1.iter().zip(ranked2.iter()).enumerate() {
-        assert_eq!(score1, score2, "Score at position {} should be consistent", i);
+        assert_eq!(
+            score1, score2,
+            "Score at position {} should be consistent",
+            i
+        );
     }
 }
 
@@ -307,9 +314,7 @@ fn test_model_weight_impact() {
 
     db.insert_video(video);
 
-    let query_embedding: VideoEmbedding = (0..256)
-        .map(|i| ((i as f32) * 0.015).sin())
-        .collect();
+    let query_embedding: VideoEmbedding = (0..256).map(|i| ((i as f32) * 0.015).sin()).collect();
 
     // High model weight
     let ranked_model_heavy = db.rank_videos_with_engagement(&query_embedding, 1, 0.8, 0.2);
@@ -416,9 +421,7 @@ fn test_search_limit_boundary() {
         db.insert_video(video);
     }
 
-    let query_embedding: VideoEmbedding = (0..256)
-        .map(|i| ((i as f32 * 0.01).tan()))
-        .collect();
+    let query_embedding: VideoEmbedding = (0..256).map(|i| ((i as f32 * 0.01).tan())).collect();
 
     // Request more results than available
     let results = db.search_similar(&query_embedding, 10);
@@ -454,9 +457,8 @@ fn test_deep_model_ranking_consistency() {
         })
         .collect();
 
-    let query_embedding: VideoEmbedding = (0..256)
-        .map(|i| ((i as f32).sqrt() * 0.01).sin())
-        .collect();
+    let query_embedding: VideoEmbedding =
+        (0..256).map(|i| ((i as f32).sqrt() * 0.01).sin()).collect();
 
     // Query same embedding twice
     let ranked1 = db.rank_videos_with_engagement(&query_embedding, 3, 0.5, 0.5);
@@ -539,12 +541,14 @@ fn test_high_engagement_boost() {
     db.insert_video(similar_low_engagement);
     db.insert_video(similar_high_engagement);
 
-    let query_embedding: VideoEmbedding = (0..256)
-        .map(|i| ((i as f32 * 0.02 + 0.5).sin()))
-        .collect();
+    let query_embedding: VideoEmbedding =
+        (0..256).map(|i| ((i as f32 * 0.02 + 0.5).sin())).collect();
 
     let ranked = db.rank_videos_with_engagement(&query_embedding, 2, 0.5, 0.5);
 
     // High engagement video should rank higher
-    assert!(ranked[0].1 > ranked[1].1, "High engagement should result in higher ranking");
+    assert!(
+        ranked[0].1 > ranked[1].1,
+        "High engagement should result in higher ranking"
+    );
 }

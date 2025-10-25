@@ -76,6 +76,42 @@ pub async fn find_by_id(pool: &PgPool, id: Uuid) -> Result<Option<User>, sqlx::E
     .await
 }
 
+/// Update a user's public key for E2E messaging
+pub async fn update_public_key(
+    pool: &PgPool,
+    user_id: Uuid,
+    public_key_b64: &str,
+) -> Result<(), sqlx::Error> {
+    let now = Utc::now();
+    sqlx::query(
+        r#"
+        UPDATE users
+        SET public_key = $1, updated_at = $2
+        WHERE id = $3
+        "#,
+    )
+    .bind(public_key_b64)
+    .bind(now)
+    .bind(user_id)
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
+/// Fetch a user's public key (if any)
+pub async fn get_public_key(pool: &PgPool, user_id: Uuid) -> Result<Option<String>, sqlx::Error> {
+    let row = sqlx::query_scalar::<_, Option<String>>(
+        r#"
+        SELECT public_key FROM users WHERE id = $1 AND deleted_at IS NULL
+        "#,
+    )
+    .bind(user_id)
+    .fetch_one(pool)
+    .await?;
+    Ok(row)
+}
+
 /// Update a user's email verification status
 pub async fn verify_email(pool: &PgPool, user_id: Uuid) -> Result<User, sqlx::Error> {
     let now = Utc::now();
@@ -272,6 +308,133 @@ pub async fn disable_totp(pool: &PgPool, user_id: Uuid) -> Result<User, sqlx::Er
     .bind(user_id)
     .fetch_one(pool)
     .await
+}
+
+/// Update user profile fields
+pub async fn update_profile(
+    pool: &PgPool,
+    user_id: Uuid,
+    display_name: Option<&str>,
+    bio: Option<&str>,
+    avatar_url: Option<&str>,
+    cover_photo_url: Option<&str>,
+    location: Option<&str>,
+    private_account: Option<bool>,
+) -> Result<User, sqlx::Error> {
+    let now = Utc::now();
+
+    sqlx::query_as::<_, User>(
+        r#"
+        UPDATE users
+        SET
+            display_name = COALESCE($1, display_name),
+            bio = COALESCE($2, bio),
+            avatar_url = COALESCE($3, avatar_url),
+            cover_photo_url = COALESCE($4, cover_photo_url),
+            location = COALESCE($5, location),
+            private_account = COALESCE($6, private_account),
+            updated_at = $7
+        WHERE id = $8
+        RETURNING id, email, username, password_hash, email_verified, is_active, totp_secret, totp_enabled, two_fa_enabled_at, failed_login_attempts, locked_until, created_at, updated_at, last_login_at, display_name, bio, avatar_url, cover_photo_url, location, private_account
+        "#,
+    )
+    .bind(display_name)
+    .bind(bio)
+    .bind(avatar_url)
+    .bind(cover_photo_url)
+    .bind(location)
+    .bind(private_account)
+    .bind(now)
+    .bind(user_id)
+    .fetch_one(pool)
+    .await
+}
+
+/// Check if a user has blocked another user
+/// Check if two users are blocked in either direction (bidirectional)
+/// OPTIMIZED: Single query instead of two separate is_blocked calls
+pub async fn are_blocked(
+    pool: &PgPool,
+    user_a: Uuid,
+    user_b: Uuid,
+) -> Result<bool, sqlx::Error> {
+    let result = sqlx::query_scalar::<_, bool>(
+        r#"
+        SELECT EXISTS(
+            SELECT 1 FROM blocked_users
+            WHERE (blocker_id = $1 AND blocked_user_id = $2)
+               OR (blocker_id = $2 AND blocked_user_id = $1)
+        )
+        "#,
+    )
+    .bind(user_a)
+    .bind(user_b)
+    .fetch_one(pool)
+    .await?;
+
+    Ok(result)
+}
+
+pub async fn is_blocked(
+    pool: &PgPool,
+    blocker_id: Uuid,
+    blocked_id: Uuid,
+) -> Result<bool, sqlx::Error> {
+    let result = sqlx::query_scalar::<_, bool>(
+        r#"
+        SELECT EXISTS(
+            SELECT 1 FROM blocked_users
+            WHERE blocker_id = $1 AND blocked_user_id = $2
+        )
+        "#,
+    )
+    .bind(blocker_id)
+    .bind(blocked_id)
+    .fetch_one(pool)
+    .await?;
+
+    Ok(result)
+}
+
+/// Block a user
+pub async fn block_user(
+    pool: &PgPool,
+    blocker_id: Uuid,
+    blocked_id: Uuid,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        r#"
+        INSERT INTO blocked_users (blocker_id, blocked_user_id)
+        VALUES ($1, $2)
+        ON CONFLICT (blocker_id, blocked_user_id) DO NOTHING
+        "#,
+    )
+    .bind(blocker_id)
+    .bind(blocked_id)
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
+/// Unblock a user
+pub async fn unblock_user(
+    pool: &PgPool,
+    blocker_id: Uuid,
+    blocked_id: Uuid,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        r#"
+        DELETE FROM blocked_users
+        WHERE blocker_id = $1 AND blocked_user_id = $2
+        "#,
+    )
+    .bind(blocker_id)
+    .bind(blocked_id)
+    .execute(pool)
+    .await?;
+
+    Ok(())
 }
 
 #[cfg(test)]

@@ -54,11 +54,16 @@ pub struct RankingSignals {
 impl RankingSignals {
     /// Validate that all scores are in [0, 1] range
     pub fn is_valid(&self) -> bool {
-        self.freshness_score >= 0.0 && self.freshness_score <= 1.0
-            && self.completion_rate >= 0.0 && self.completion_rate <= 1.0
-            && self.engagement_score >= 0.0 && self.engagement_score <= 1.0
-            && self.affinity_score >= 0.0 && self.affinity_score <= 1.0
-            && self.deep_model_score >= 0.0 && self.deep_model_score <= 1.0
+        self.freshness_score >= 0.0
+            && self.freshness_score <= 1.0
+            && self.completion_rate >= 0.0
+            && self.completion_rate <= 1.0
+            && self.engagement_score >= 0.0
+            && self.engagement_score <= 1.0
+            && self.affinity_score >= 0.0
+            && self.affinity_score <= 1.0
+            && self.deep_model_score >= 0.0
+            && self.deep_model_score <= 1.0
     }
 }
 

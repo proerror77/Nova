@@ -53,12 +53,18 @@ env:
   COMPOSE_FILE: backend/docker-compose.yml
   COMPOSE_PROJECT_NAME: ci-streaming
 
+permissions:
+  contents: read
+
 jobs:
   # ===========================================================================
   # Job 1: Validate Configuration
   # ===========================================================================
   validate:
     name: Validate Configuration
+    concurrency:
+      group: streaming-infra-validate-${{ github.ref }}
+      cancel-in-progress: true
     runs-on: ubuntu-latest
     timeout-minutes: 5
 
@@ -107,6 +113,9 @@ jobs:
   # ===========================================================================
   test:
     name: Test Infrastructure
+    concurrency:
+      group: streaming-infra-test-${{ github.ref }}
+      cancel-in-progress: true
     runs-on: ubuntu-latest
     needs: validate
     timeout-minutes: 20
@@ -248,6 +257,9 @@ jobs:
   # ===========================================================================
   security:
     name: Security Scanning
+    concurrency:
+      group: streaming-infra-sec-${{ github.ref }}
+      cancel-in-progress: true
     runs-on: ubuntu-latest
     needs: validate
     timeout-minutes: 10
@@ -288,6 +300,9 @@ jobs:
   # ===========================================================================
   summary:
     name: Build Summary
+    concurrency:
+      group: streaming-infra-summary-${{ github.ref }}
+      cancel-in-progress: true
     runs-on: ubuntu-latest
     needs: [validate, test, security]
     if: always()

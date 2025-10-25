@@ -7,6 +7,10 @@ struct FeedView: View {
     @State private var scrollProxy: ScrollViewProxy?
     @State private var showScrollToTopButton = false
     @State private var lastScrollOffset: CGFloat = 0
+    // Chat launcher
+    @State private var showChatLauncher = false
+    @State private var launchPeerId: UUID? = nil
+    @State private var launchConversationId: UUID? = nil
 
     var body: some View {
         NavigationStack {
@@ -158,9 +162,33 @@ struct FeedView: View {
 
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button {
-                        // TODO: Navigate to messages
+                        showChatLauncher = true
                     } label: {
                         Image(systemName: "paperplane")
+                    }
+                }
+            }
+            .sheet(isPresented: $showChatLauncher, onDismiss: {
+                // Reset for next time
+                launchPeerId = nil
+                launchConversationId = nil
+            }) {
+                if let convo = launchConversationId, let peer = launchPeerId {
+                    NavigationStack { ChatView(conversationId: convo, peerUserId: peer) }
+                } else {
+                    StartChatSheetView { peer in
+                        Task {
+                            do {
+                                let convo = try await MessagingRepository().createDirectConversation(with: peer)
+                                await MainActor.run {
+                                    launchPeerId = peer
+                                    launchConversationId = convo
+                                }
+                            } catch {
+                                // You can surface an error toast here via existing ErrorMessageView pattern
+                                print("Failed to create conversation: \(error)")
+                            }
+                        }
                     }
                 }
             }

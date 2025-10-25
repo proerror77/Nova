@@ -175,11 +175,7 @@ impl PostgresClient {
         Self { pool }
     }
 
-    pub async fn execute_simple(
-        &self,
-        query: &str,
-        params: &[&str],
-    ) -> Result<(), String> {
+    pub async fn execute_simple(&self, query: &str, params: &[&str]) -> Result<(), String> {
         let mut q = sqlx::query(query);
 
         for param in params {

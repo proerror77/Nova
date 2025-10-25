@@ -11,8 +11,12 @@
 //                                                ↓
 //                                         Recommendations
 
-use crate::error::{AppError, Result};
+use crate::error::Result;
+use serde::Deserialize;
 use std::collections::HashMap;
+use std::fs;
+use std::path::{Path, PathBuf};
+use tracing::{info, warn};
 use uuid::Uuid;
 
 /// Similarity metric for collaborative filtering
@@ -24,6 +28,7 @@ pub enum SimilarityMetric {
 }
 
 /// Collaborative filtering model
+#[derive(Debug, Clone)]
 pub struct CollaborativeFilteringModel {
     /// User-User similarity: user_id → [(similar_user_id, similarity_score)]
     pub user_similarity: HashMap<Uuid, Vec<(Uuid, f64)>>,
@@ -40,16 +45,25 @@ impl CollaborativeFilteringModel {
     /// Load pre-computed similarity matrices from disk
     ///
     /// Expected file format: bincode serialized HashMap<Uuid, Vec<(Uuid, f64)>>
-    pub fn load(
-        user_sim_path: &str,
-        item_sim_path: &str,
-        k_neighbors: usize,
-    ) -> Result<Self> {
-        // TODO: Implement loading from bincode files
-        // let user_similarity = load_bincode(user_sim_path)?;
-        // let item_similarity = load_bincode(item_sim_path)?;
+    pub fn load(user_sim_path: &str, item_sim_path: &str, k_neighbors: usize) -> Result<Self> {
+        let user_path = normalize_path(user_sim_path, "user_similarity.json");
+        let item_path = normalize_path(item_sim_path, "item_similarity.json");
 
-        todo!("Implement load from disk")
+        let user_similarity = load_similarity_map(&user_path, k_neighbors)?;
+        let item_similarity = load_similarity_map(&item_path, k_neighbors)?;
+
+        info!(
+            user_entries = user_similarity.len(),
+            item_entries = item_similarity.len(),
+            "Collaborative filtering similarity matrices loaded"
+        );
+
+        Ok(Self {
+            user_similarity,
+            item_similarity,
+            k_neighbors,
+            metric: SimilarityMetric::Cosine,
+        })
     }
 
     /// Get recommended posts using user-user collaborative filtering
@@ -65,13 +79,18 @@ impl CollaborativeFilteringModel {
         seen_posts: &[Uuid],
         n: usize,
     ) -> Result<Vec<(Uuid, f64)>> {
-        // TODO: Implement user-based CF
+        // Minimal implementation: return empty list to avoid panic
+        // TODO: Implement full user-based CF when user similarity matrix is available
         // 1. Get similar users from self.user_similarity
         // 2. Query their liked posts from ClickHouse
         // 3. Aggregate scores: score[post] = Σ(similarity[user] * interaction[user, post])
         // 4. Sort by score, filter seen_posts, return top-N
 
-        todo!("Implement recommend_user_based")
+        let _ = user_id;
+        let _ = seen_posts;
+        let _ = n;
+
+        Ok(Vec::new())
     }
 
     /// Get recommended posts using item-item collaborative filtering
@@ -161,7 +180,91 @@ impl CollaborativeFilteringModel {
     }
 }
 
-#[derive(Debug, Clone)]
+fn normalize_path(path: &str, default_file: &str) -> PathBuf {
+    let candidate = Path::new(path);
+    if candidate.is_dir() {
+        candidate.join(default_file)
+    } else {
+        candidate.to_path_buf()
+    }
+}
+
+fn load_similarity_map(path: &Path, k_neighbors: usize) -> Result<HashMap<Uuid, Vec<(Uuid, f64)>>> {
+    if path.as_os_str().is_empty() {
+        return Ok(HashMap::new());
+    }
+
+    if !path.exists() {
+        warn!("Similarity file missing: {}", path.display());
+        return Ok(HashMap::new());
+    }
+
+    let data = fs::read(path)?;
+    if data.is_empty() {
+        return Ok(HashMap::new());
+    }
+
+    let parsed: HashMap<String, SimilarityEntries> = serde_json::from_slice(&data)?;
+    let mut result = HashMap::with_capacity(parsed.len());
+
+    for (key, entries) in parsed {
+        let entity_id = match Uuid::parse_str(&key) {
+            Ok(id) => id,
+            Err(err) => {
+                warn!("Invalid UUID in similarity map key {}: {}", key, err);
+                continue;
+            }
+        };
+
+        let mut neighbours = Vec::new();
+        for entry in entries.flatten() {
+            if entry.score <= 0.0 {
+                continue;
+            }
+
+            match Uuid::parse_str(&entry.id) {
+                Ok(id) => neighbours.push((id, entry.score)),
+                Err(err) => warn!("Invalid UUID in similarity entry {}: {}", entry.id, err),
+            }
+        }
+
+        if !neighbours.is_empty() {
+            neighbours.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+            neighbours.truncate(k_neighbors);
+            result.insert(entity_id, neighbours);
+        }
+    }
+
+    Ok(result)
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+enum SimilarityEntries {
+    List(Vec<SimilarityEntry>),
+    Map(HashMap<String, f64>),
+}
+
+impl SimilarityEntries {
+    fn flatten(self) -> Vec<SimilarityEntry> {
+        match self {
+            SimilarityEntries::List(list) => list,
+            SimilarityEntries::Map(map) => map
+                .into_iter()
+                .map(|(id, score)| SimilarityEntry { id, score })
+                .collect(),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct SimilarityEntry {
+    #[serde(alias = "user_id", alias = "post_id", alias = "id")]
+    id: String,
+    #[serde(alias = "similarity", alias = "score", alias = "value")]
+    score: f64,
+}
+
 pub struct ModelMetadata {
     pub user_count: usize,
     pub item_count: usize,

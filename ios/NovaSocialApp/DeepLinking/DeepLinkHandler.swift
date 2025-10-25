@@ -183,8 +183,8 @@ class DeepLinkHandler: ObservableObject {
         case .passwordReset(let token):
             navigationState.presentedSheet = .passwordReset(token: token)
 
-        case .oauth(let provider, let code):
-            handleOAuth(provider: provider, code: code)
+        case .oauth(let provider, let code, let state):
+            handleOAuth(provider: provider, code: code, state: state)
 
         // Settings routes
         case .settings:
@@ -336,21 +336,98 @@ class DeepLinkHandler: ObservableObject {
 
     // MARK: - OAuth Handling
 
-    private func handleOAuth(provider: String, code: String?) {
+    private func handleOAuth(provider: String, code: String?, state: String?) {
         guard let code = code else {
             error = .invalidOAuthCallback(provider: provider)
             return
         }
 
-        // TODO: Handle OAuth callback with auth service
+        // Verify state (CSRF protection)
+        if let expected = OAuthStateManager.shared.currentState() {
+            guard let incoming = state, incoming == expected else {
+                self.error = .invalidOAuthCallback(provider: provider)
+                return
+            }
+        }
+
         Task {
             do {
-                // try await authService?.handleOAuthCallback(provider: provider, code: code)
+                // Exchange code → tokens
+                try await authorizeOAuth(provider: provider, code: code, state: state ?? "ios")
                 navigateToFeed()
             } catch {
                 self.error = .oauthFailed(provider: provider, error: error)
             }
         }
+    }
+
+    // Calls backend /api/v1/auth/oauth/authorize and stores tokens via AuthManager
+    private func authorizeOAuth(provider: String, code: String, state: String) async throws {
+        struct OAuthAuthorizeRequest: Encodable {
+            let provider: String
+            let code: String
+            let state: String
+            let redirectUri: String
+        }
+
+        struct OAuthAuthorizeResponse: Decodable {
+            let accessToken: String
+            let refreshToken: String
+            let tokenType: String
+            let expiresIn: Int
+            let userId: String
+            let email: String
+
+            enum CodingKeys: String, CodingKey {
+                case accessToken = "access_token"
+                case refreshToken = "refresh_token"
+                case tokenType = "token_type"
+                case expiresIn = "expires_in"
+                case userId = "user_id"
+                case email
+            }
+        }
+
+        let apiClient = APIClient(baseURL: AppConfig.baseURL)
+        let req = OAuthAuthorizeRequest(
+            provider: provider,
+            code: code,
+            state: state,
+            redirectUri: "novasocial://auth/oauth/\(provider)"
+        )
+
+        let endpoint = APIEndpoint(
+            path: "/auth/oauth/authorize",
+            method: .post,
+            body: req
+        )
+
+        let resp: OAuthAuthorizeResponse = try await apiClient.request(endpoint, authenticated: false)
+
+        // Minimal user placeholder
+        let userId = UUID(uuidString: resp.userId) ?? UUID()
+        let username = resp.email.split(separator: "@").first.map(String.init) ?? "user"
+        let user = User(
+            id: userId,
+            username: username,
+            email: resp.email,
+            displayName: nil,
+            bio: nil,
+            avatarUrl: nil,
+            isVerified: false,
+            createdAt: Date()
+        )
+
+        let tokens = AuthTokens(
+            accessToken: resp.accessToken,
+            refreshToken: resp.refreshToken,
+            expiresIn: resp.expiresIn,
+            tokenType: resp.tokenType
+        )
+
+        AuthManager.shared.saveAuth(user: user, tokens: tokens)
+        OAuthStateManager.shared.clearState()
+        OAuthStateManager.shared.clearNonce()
     }
 
     // MARK: - Error Handling

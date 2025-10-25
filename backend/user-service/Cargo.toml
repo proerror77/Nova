@@ -15,6 +15,10 @@ path = "src/main.rs"
 # path = "src/bin/job_worker.rs"
 # TODO: Uncomment when job_worker.rs is implemented
 
+[[bin]]
+name = "graph_backfill"
+path = "src/bin/graph_backfill.rs"
+
 [lib]
 name = "user_service"
 path = "src/lib.rs"
@@ -24,6 +28,9 @@ path = "src/lib.rs"
 actix-web.workspace = true
 actix-rt.workspace = true
 actix-cors.workspace = true
+actix = "0.13"
+actix-web-actors = "4.3"
+actix-http = "3.9"
 tokio.workspace = true
 sqlx.workspace = true
 redis.workspace = true
@@ -62,15 +69,24 @@ qrcode.workspace = true
 
 # Service-specific dependencies
 futures = "0.3"
+futures-util = "0.3"
 lazy_static = "1.4"
+actix-multipart = "0.4"
 image = "0.24"
 num_cpus = "1.16"
+neo4rs = "0.8"
+tokio-stream = "0.1"
+regex = "1"
 
 # Phase 4: Video Processing
 tonic = "0.10"
 prost = "0.12"
 ndarray = "0.15"
 http = "0.2"
+
+# ONNX Model Serving
+tract-onnx = "0.21"
+once_cell = "1.19"
 
 [dev-dependencies]
 tokio-test = "0.4"
@@ -85,6 +101,10 @@ path = "tests/posts_test.rs"
 [[test]]
 name = "oauth_test"
 path = "tests/oauth_test.rs"
+
+[[test]]
+name = "oauth_token_verification_test"
+path = "tests/oauth_token_verification_test.rs"
 
 [[test]]
 name = "feed_ranking_test"
@@ -147,6 +167,10 @@ path = "tests/unit/video/video_ranking_tests.rs"
 name = "embedding_tests"
 path = "tests/unit/video/embedding_tests.rs"
 
+[[test]]
+name = "feature_extraction_test"
+path = "tests/unit/video/feature_extraction_test.rs"
+
 # Phase 6: Video System Integration Tests (T134-T137)
 [[test]]
 name = "video_e2e_tests"
@@ -176,3 +200,19 @@ path = "tests/performance/video/video_model_inference_test.rs"
 [[test]]
 name = "video_bitrate_switching_test"
 path = "tests/performance/video/video_bitrate_switching_test.rs"
+
+[[test]]
+name = "social_graph_tests"
+path = "tests/integration/social_graph_tests.rs"
+
+[[test]]
+name = "neo4j_suggest_tests"
+path = "tests/integration/neo4j_suggest_tests.rs"
+
+[[test]]
+name = "streaming_integration_test"
+path = "tests/streaming_integration_test.rs"
+
+[[test]]
+name = "cache_test"
+path = "tests/integration/cache_test.rs"

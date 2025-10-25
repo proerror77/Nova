@@ -2,32 +2,31 @@
 /// Validates transcoding completes within SLA bounds
 /// - 99.9% of videos complete within 5 minutes
 /// - Throughput: at least 1 video per minute baseline
-
 use std::time::{Duration, Instant};
 use uuid::Uuid;
 
 /// Video file size tiers
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum FileSizeTier {
-    Small,   // 10-50 MB
-    Medium,  // 50-200 MB
-    Large,   // 200-500 MB
+    Small,  // 10-50 MB
+    Medium, // 50-200 MB
+    Large,  // 200-500 MB
 }
 
 impl FileSizeTier {
     pub fn base_latency(&self) -> Duration {
         match self {
-            FileSizeTier::Small => Duration::from_secs(25),   // ~25 seconds
-            FileSizeTier::Medium => Duration::from_secs(55),  // ~55 seconds
-            FileSizeTier::Large => Duration::from_secs(160),  // ~2.7 minutes
+            FileSizeTier::Small => Duration::from_secs(25), // ~25 seconds
+            FileSizeTier::Medium => Duration::from_secs(55), // ~55 seconds
+            FileSizeTier::Large => Duration::from_secs(160), // ~2.7 minutes
         }
     }
 
     pub fn variation(&self) -> f64 {
         match self {
-            FileSizeTier::Small => 0.05,    // ±5%
-            FileSizeTier::Medium => 0.1,    // ±10%
-            FileSizeTier::Large => 0.15,    // ±15%
+            FileSizeTier::Small => 0.05, // ±5%
+            FileSizeTier::Medium => 0.1, // ±10%
+            FileSizeTier::Large => 0.15, // ±15%
         }
     }
 }
@@ -69,8 +68,9 @@ impl MockTranscodingService {
         // Simulate some variation based on job ID (deterministic)
         let seed = job.id.as_bytes()[0] as f64 / 255.0;
         let variation_factor = 1.0 + ((seed - 0.5) * 2.0 * variation);
-        let adjusted_latency =
-            Duration::from_secs_f64(base_latency.as_secs_f64() * variation_factor * self.processing_factor);
+        let adjusted_latency = Duration::from_secs_f64(
+            base_latency.as_secs_f64() * variation_factor * self.processing_factor,
+        );
 
         TranscodingResult {
             job_id: job.id,
@@ -215,7 +215,11 @@ fn test_transcoding_throughput_baseline() {
 fn test_transcoding_throughput_by_file_size() {
     let service = MockTranscodingService::new(1.0);
 
-    for tier in &[FileSizeTier::Small, FileSizeTier::Medium, FileSizeTier::Large] {
+    for tier in &[
+        FileSizeTier::Small,
+        FileSizeTier::Medium,
+        FileSizeTier::Large,
+    ] {
         let mut results = Vec::new();
 
         for _ in 0..50 {
@@ -293,7 +297,8 @@ fn test_transcoding_sla_compliance_99_9_percent() {
         p999
     );
 
-    let violation_rate = (analyzer.sla_violations().len() as f64 / analyzer.results.len() as f64) * 100.0;
+    let violation_rate =
+        (analyzer.sla_violations().len() as f64 / analyzer.results.len() as f64) * 100.0;
     assert!(
         violation_rate <= 0.1,
         "SLA violation rate {:.2}% exceeds 0.1% threshold",
@@ -512,7 +517,11 @@ fn test_transcoding_throughput_degradation_under_load() {
             factor,
             p999,
             analyzer.avg_throughput(),
-            if p999 <= Duration::from_secs(300) { "✓" } else { "✗" }
+            if p999 <= Duration::from_secs(300) {
+                "✓"
+            } else {
+                "✗"
+            }
         );
 
         // All should meet SLA

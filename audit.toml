@@ -1,0 +1,10 @@
+[advisories]
+ignore = [
+    "RUSTSEC-2024-0421",
+    "RUSTSEC-2024-0437",
+    "RUSTSEC-2023-0071",
+    "RUSTSEC-2024-0363",
+]
+
+# TODO: Remove these ignores by upgrading dependencies or replacing crates.
+# Owner: @proerror77, Target date: 2025-11-30

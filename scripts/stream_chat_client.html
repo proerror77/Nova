@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nova Stream Chat Client</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #1a1a1a;
+            color: #e0e0e0;
+        }
+
+        h1 {
+            color: #00bcd4;
+            text-align: center;
+        }
+
+        .config {
+            background: #2a2a2a;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .config label {
+            display: block;
+            margin-bottom: 10px;
+            color: #b0b0b0;
+        }
+
+        .config input {
+            width: 100%;
+            padding: 8px;
+            margin-top: 5px;
+            background: #3a3a3a;
+            border: 1px solid #4a4a4a;
+            border-radius: 4px;
+            color: #e0e0e0;
+        }
+
+        .chat-container {
+            border: 1px solid #4a4a4a;
+            border-radius: 8px;
+            background: #2a2a2a;
+            overflow: hidden;
+        }
+
+        #messages {
+            height: 400px;
+            overflow-y: auto;
+            padding: 20px;
+            border-bottom: 1px solid #4a4a4a;
+        }
+
+        .message {
+            margin-bottom: 12px;
+            padding: 10px;
+            background: #3a3a3a;
+            border-radius: 6px;
+        }
+
+        .message .username {
+            font-weight: bold;
+            color: #00bcd4;
+            margin-right: 8px;
+        }
+
+        .message .time {
+            font-size: 0.85em;
+            color: #888;
+            margin-left: 8px;
+        }
+
+        .message.system {
+            background: #4a3a2a;
+            color: #ffb74d;
+        }
+
+        .message.error {
+            background: #4a2a2a;
+            color: #ff5252;
+        }
+
+        .input-area {
+            display: flex;
+            gap: 10px;
+            padding: 20px;
+        }
+
+        #messageInput {
+            flex: 1;
+            padding: 10px;
+            background: #3a3a3a;
+            border: 1px solid #4a4a4a;
+            border-radius: 4px;
+            color: #e0e0e0;
+        }
+
+        button {
+            padding: 10px 20px;
+            background: #00bcd4;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        button:hover {
+            background: #00acc1;
+        }
+
+        button:disabled {
+            background: #555;
+            cursor: not-allowed;
+        }
+
+        .status {
+            text-align: center;
+            padding: 10px;
+            margin-bottom: 20px;
+            border-radius: 4px;
+        }
+
+        .status.connected {
+            background: #2a4a2a;
+            color: #4caf50;
+        }
+
+        .status.disconnected {
+            background: #4a2a2a;
+            color: #ff5252;
+        }
+
+        .status.connecting {
+            background: #4a4a2a;
+            color: #ffeb3b;
+        }
+    </style>
+</head>
+<body>
+    <h1>🎥 Nova Stream Chat Client</h1>
+
+    <div class="config">
+        <label>
+            WebSocket URL:
+            <input type="text" id="wsUrl" value="ws://localhost:8080/ws/streams/00000000-0000-0000-0000-000000000001/chat">
+        </label>
+        <label>
+            JWT Token:
+            <input type="password" id="jwtToken" placeholder="Bearer token (without 'Bearer ' prefix)">
+        </label>
+        <button id="connectBtn" onclick="toggleConnection()">Connect</button>
+    </div>
+
+    <div id="status" class="status disconnected">Disconnected</div>
+
+    <div class="chat-container">
+        <div id="messages"></div>
+        <div class="input-area">
+            <input type="text" id="messageInput" placeholder="Type a message..." disabled>
+            <button id="sendBtn" onclick="sendMessage()" disabled>Send</button>
+        </div>
+    </div>
+
+    <script>
+        let ws = null;
+        let reconnectAttempts = 0;
+        const maxReconnectAttempts = 5;
+
+        const statusEl = document.getElementById('status');
+        const messagesEl = document.getElementById('messages');
+        const messageInput = document.getElementById('messageInput');
+        const sendBtn = document.getElementById('sendBtn');
+        const connectBtn = document.getElementById('connectBtn');
+
+        function updateStatus(status, text) {
+            statusEl.className = `status ${status}`;
+            statusEl.textContent = text;
+        }
+
+        function addMessage(username, text, timestamp, type = 'normal') {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${type}`;
+
+            if (type === 'system' || type === 'error') {
+                messageDiv.textContent = text;
+            } else {
+                const time = new Date(timestamp).toLocaleTimeString();
+                messageDiv.innerHTML = `
+                    <span class="username">${username}:</span>
+                    ${escapeHtml(text)}
+                    <span class="time">${time}</span>
+                `;
+            }
+
+            messagesEl.appendChild(messageDiv);
+            messagesEl.scrollTop = messagesEl.scrollHeight;
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function toggleConnection() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                disconnect();
+            } else {
+                connect();
+            }
+        }
+
+        function connect() {
+            const wsUrl = document.getElementById('wsUrl').value;
+            const jwtToken = document.getElementById('jwtToken').value;
+
+            if (!jwtToken) {
+                alert('Please enter a JWT token');
+                return;
+            }
+
+            updateStatus('connecting', 'Connecting...');
+
+            // WebSocket doesn't support custom headers, so we'll try auth via URL param
+            // Alternative: send token in first message after connection
+            const urlWithToken = `${wsUrl}?token=${encodeURIComponent(jwtToken)}`;
+
+            try {
+                ws = new WebSocket(wsUrl);
+
+                ws.onopen = () => {
+                    updateStatus('connected', 'Connected');
+                    messageInput.disabled = false;
+                    sendBtn.disabled = false;
+                    connectBtn.textContent = 'Disconnect';
+                    reconnectAttempts = 0;
+
+                    addMessage('System', 'Connected to stream chat', new Date().toISOString(), 'system');
+
+                    // Send ping every 30 seconds
+                    ws.pingInterval = setInterval(() => {
+                        if (ws.readyState === WebSocket.OPEN) {
+                            ws.send(JSON.stringify({ type: 'ping' }));
+                        }
+                    }, 30000);
+                };
+
+                ws.onmessage = (event) => {
+                    try {
+                        const data = JSON.parse(event.data);
+
+                        if (data.type === 'error') {
+                            addMessage('Error', data.message, new Date().toISOString(), 'error');
+                        } else if (data.comment) {
+                            const comment = data.comment;
+                            addMessage(
+                                comment.username || `User ${comment.user_id.slice(0, 8)}`,
+                                comment.message,
+                                comment.created_at
+                            );
+                        }
+                    } catch (e) {
+                        console.error('Failed to parse message:', e);
+                    }
+                };
+
+                ws.onerror = (error) => {
+                    console.error('WebSocket error:', error);
+                    addMessage('Error', 'WebSocket error occurred', new Date().toISOString(), 'error');
+                };
+
+                ws.onclose = (event) => {
+                    if (ws.pingInterval) {
+                        clearInterval(ws.pingInterval);
+                    }
+
+                    updateStatus('disconnected', 'Disconnected');
+                    messageInput.disabled = true;
+                    sendBtn.disabled = true;
+                    connectBtn.textContent = 'Connect';
+
+                    addMessage('System', `Disconnected (code: ${event.code})`, new Date().toISOString(), 'system');
+
+                    // Auto-reconnect logic
+                    if (!event.wasClean && reconnectAttempts < maxReconnectAttempts) {
+                        reconnectAttempts++;
+                        const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000);
+                        addMessage('System', `Reconnecting in ${delay/1000}s... (attempt ${reconnectAttempts}/${maxReconnectAttempts})`, new Date().toISOString(), 'system');
+                        setTimeout(connect, delay);
+                    }
+                };
+            } catch (e) {
+                console.error('Failed to create WebSocket:', e);
+                updateStatus('disconnected', 'Connection failed');
+                addMessage('Error', `Failed to connect: ${e.message}`, new Date().toISOString(), 'error');
+            }
+        }
+
+        function disconnect() {
+            if (ws) {
+                ws.close(1000, 'User disconnected');
+                ws = null;
+            }
+        }
+
+        function sendMessage() {
+            const text = messageInput.value.trim();
+
+            if (!text) {
+                return;
+            }
+
+            if (text.length > 500) {
+                addMessage('Error', 'Message too long (max 500 chars)', new Date().toISOString(), 'error');
+                return;
+            }
+
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                const payload = {
+                    type: 'message',
+                    text: text
+                };
+
+                ws.send(JSON.stringify(payload));
+                messageInput.value = '';
+            } else {
+                addMessage('Error', 'Not connected', new Date().toISOString(), 'error');
+            }
+        }
+
+        // Send message on Enter key
+        messageInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+
+        // Clean up on page unload
+        window.addEventListener('beforeunload', () => {
+            if (ws) {
+                ws.close();
+            }
+        });
+    </script>
+</body>
+</html>

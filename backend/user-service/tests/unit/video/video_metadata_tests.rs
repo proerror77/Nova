@@ -1,6 +1,5 @@
 /// Unit Tests for Video Metadata Validation (T131)
 /// Tests file size validation, codec detection, metadata extraction
-
 use std::collections::HashMap;
 
 /// Mock video metadata structure
@@ -407,16 +406,16 @@ fn test_all_supported_codecs() {
 fn test_all_supported_resolutions() {
     let validator = VideoMetadataValidator::new();
 
-    let resolutions = vec![
-        (1920, 1080),
-        (1280, 720),
-        (854, 480),
-        (640, 360),
-    ];
+    let resolutions = vec![(1920, 1080), (1280, 720), (854, 480), (640, 360)];
 
     for (width, height) in resolutions {
         let result = validator.validate_resolution(width, height);
-        assert!(result.is_ok(), "Resolution {}x{} should be valid", width, height);
+        assert!(
+            result.is_ok(),
+            "Resolution {}x{} should be valid",
+            width,
+            height
+        );
     }
 }
 

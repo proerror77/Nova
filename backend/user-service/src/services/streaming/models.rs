@@ -13,14 +13,17 @@ use uuid::Uuid;
 
 /// Stream lifecycle status (simplified from 5 to 3 states)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
-#[sqlx(type_name = "VARCHAR(20)")]
+#[sqlx(type_name = "VARCHAR")]
 #[serde(rename_all = "lowercase")]
 pub enum StreamStatus {
     /// Stream created but RTMP not yet connected
+    #[sqlx(rename = "preparing")]
     Preparing,
     /// RTMP connected, actively streaming
+    #[sqlx(rename = "live")]
     Live,
     /// Stream ended
+    #[sqlx(rename = "ended")]
     Ended,
 }
 
@@ -52,14 +55,20 @@ pub struct CreateStreamRequest {
 
 /// Stream category (for discovery/filtering)
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::Type)]
-#[sqlx(type_name = "VARCHAR(50)")]
+#[sqlx(type_name = "VARCHAR")]
 #[serde(rename_all = "lowercase")]
 pub enum StreamCategory {
+    #[sqlx(rename = "gaming")]
     Gaming,
+    #[sqlx(rename = "music")]
     Music,
+    #[sqlx(rename = "tech")]
     Tech,
+    #[sqlx(rename = "lifestyle")]
     Lifestyle,
+    #[sqlx(rename = "education")]
     Education,
+    #[sqlx(rename = "other")]
     Other,
 }
 
@@ -99,6 +108,8 @@ pub struct StreamDetails {
     pub started_at: Option<DateTime<Utc>>,
     pub ended_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
+    pub total_unique_viewers: i64,
+    pub total_messages: i32,
 }
 
 /// Creator information (embedded in stream details)
@@ -200,9 +211,9 @@ pub(crate) struct StreamRow {
     pub total_unique_viewers: i32,
     pub total_messages: i32,
     pub auto_archive: bool,
-    pub created_at: DateTime<Utc>,
-    pub started_at: Option<DateTime<Utc>>,
-    pub ended_at: Option<DateTime<Utc>>,
+    pub created_at: chrono::NaiveDateTime,
+    pub started_at: Option<chrono::NaiveDateTime>,
+    pub ended_at: Option<chrono::NaiveDateTime>,
 }
 
 /// Database row for stream_metadata table

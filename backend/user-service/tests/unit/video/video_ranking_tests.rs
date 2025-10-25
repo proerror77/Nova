@@ -45,14 +45,9 @@ impl VideoRankingAlgorithm {
     }
 
     /// Calculate engagement score (likes + comments + shares)
-    pub fn calculate_engagement_score(
-        &self,
-        likes: u32,
-        comments: u32,
-        shares: u32,
-    ) -> f64 {
-        let engagement_rate = (likes as f64 * 0.3 + comments as f64 * 0.5 + shares as f64 * 0.2)
-            / 100.0; // Normalize
+    pub fn calculate_engagement_score(&self, likes: u32, comments: u32, shares: u32) -> f64 {
+        let engagement_rate =
+            (likes as f64 * 0.3 + comments as f64 * 0.5 + shares as f64 * 0.2) / 100.0; // Normalize
         engagement_rate.min(1.0).max(0.0)
     }
 
@@ -64,11 +59,7 @@ impl VideoRankingAlgorithm {
     }
 
     /// Calculate quality score (user ratings, flags, etc.)
-    pub fn calculate_quality_score(
-        &self,
-        average_rating: f64,
-        flag_count: u32,
-    ) -> f64 {
+    pub fn calculate_quality_score(&self, average_rating: f64, flag_count: u32) -> f64 {
         let rating_score = (average_rating / 5.0).min(1.0).max(0.0);
         let flag_penalty = (flag_count as f64 * 0.05).min(1.0);
         (rating_score - flag_penalty).min(1.0).max(0.0)
@@ -82,7 +73,8 @@ impl VideoRankingAlgorithm {
         recency_score: f64,
         quality_score: f64,
     ) -> f64 {
-        let total_weight = self.view_weight + self.engagement_weight + self.recency_weight + self.quality_weight;
+        let total_weight =
+            self.view_weight + self.engagement_weight + self.recency_weight + self.quality_weight;
 
         (view_score * self.view_weight
             + engagement_score * self.engagement_weight
@@ -275,13 +267,13 @@ fn test_rank_video_viral() {
     let algo = VideoRankingAlgorithm::with_default_weights();
 
     let ranking = algo.rank_video(
-        10000,  // views
-        500,    // likes
-        200,    // comments
-        100,    // shares
-        30,     // 30 minutes ago (fresh)
-        4.8,    // rating
-        0,      // no flags
+        10000, // views
+        500,   // likes
+        200,   // comments
+        100,   // shares
+        30,    // 30 minutes ago (fresh)
+        4.8,   // rating
+        0,     // no flags
     );
 
     assert!(ranking.combined_score > 0.7);
@@ -292,13 +284,13 @@ fn test_rank_video_low_engagement() {
     let algo = VideoRankingAlgorithm::with_default_weights();
 
     let ranking = algo.rank_video(
-        100,   // few views
-        5,     // few likes
-        2,     // few comments
-        1,     // few shares
-        1440,  // 24 hours old
-        2.0,   // low rating
-        10,    // many flags
+        100,  // few views
+        5,    // few likes
+        2,    // few comments
+        1,    // few shares
+        1440, // 24 hours old
+        2.0,  // low rating
+        10,   // many flags
     );
 
     assert!(ranking.combined_score < 0.3);
@@ -309,13 +301,13 @@ fn test_rank_video_balanced() {
     let algo = VideoRankingAlgorithm::with_default_weights();
 
     let ranking = algo.rank_video(
-        1000,  // medium views
-        50,    // medium likes
-        20,    // medium comments
-        10,    // medium shares
-        240,   // 4 hours ago (medium age)
-        3.5,   // medium rating
-        2,     // few flags
+        1000, // medium views
+        50,   // medium likes
+        20,   // medium comments
+        10,   // medium shares
+        240,  // 4 hours ago (medium age)
+        3.5,  // medium rating
+        2,    // few flags
     );
 
     assert!(ranking.combined_score > 0.3 && ranking.combined_score < 0.7);
@@ -343,7 +335,11 @@ fn test_custom_weights() {
 
     // Custom weights should produce notably different scores
     let diff = (ranking_default.combined_score - ranking_custom.combined_score).abs();
-    assert!(diff > 0.01, "Weights should produce different scores, diff: {}", diff);
+    assert!(
+        diff > 0.01,
+        "Weights should produce different scores, diff: {}",
+        diff
+    );
 }
 
 #[test]
@@ -362,13 +358,13 @@ fn test_edge_case_very_large_numbers() {
     let algo = VideoRankingAlgorithm::with_default_weights();
 
     let ranking = algo.rank_video(
-        1_000_000,  // 1M views
-        100_000,    // 100k likes
-        50_000,     // 50k comments
-        25_000,     // 25k shares
-        1,          // just published
-        5.0,        // perfect rating
-        0,          // no flags
+        1_000_000, // 1M views
+        100_000,   // 100k likes
+        50_000,    // 50k comments
+        25_000,    // 25k shares
+        1,         // just published
+        5.0,       // perfect rating
+        0,         // no flags
     );
 
     assert!(ranking.combined_score >= 0.0 && ranking.combined_score <= 1.0);

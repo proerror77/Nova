@@ -5,24 +5,23 @@
 /// 1. Streaming Infrastructure: RTMP/HLS/DASH live streaming with transcoding
 /// 2. CDN & Video Processing: Edge caching, optimization, and video processing
 /// 3. ML Ranking System: Deep learning-based feed personalization and recommendations
-
 pub mod backup_codes;
 pub mod cdc;
 pub mod cdn_failover;
 pub mod cdn_handler_integration;
 pub mod cdn_service;
 // pub mod clickhouse_feature_extractor;  // TODO: Phase 2 - needs RankingSignals with Serialize/Deserialize
-// pub mod deep_learning_inference;       // TODO: Phase 2 - pending implementation
+pub mod deep_learning_inference;
 pub mod email_verification;
 pub mod events;
+pub mod experiments;
 pub mod feed_ranking;
-// pub mod feed_ranking_service;          // TODO: Phase 2 - depends on incomplete VideoService
-pub mod feed_service;
 pub mod ffmpeg_optimizer;
 pub mod image_processing;
 pub mod job_queue;
 pub mod jwt_key_rotation;
 pub mod kafka_producer;
+// pub mod messaging; // REMOVED - moved to messaging-service (port 8085)
 pub mod notifications;
 pub mod oauth;
 pub mod origin_shield;
@@ -31,17 +30,23 @@ pub mod query_profiler;
 pub mod ranking_engine;
 pub mod recommendation_v2;
 pub mod redis_job;
+pub mod resumable_upload_service;
+pub mod graph;
 pub mod s3_service;
-pub mod messaging;
 pub mod streaming;
 pub mod streaming_manifest;
 pub mod token_revocation;
 pub mod transcoding_optimizer;
 pub mod transcoding_progress;
+pub mod transcoding_progress_handler;
+pub mod trending;
 pub mod two_fa;
 // pub mod video_processing_pipeline;     // TODO: Phase 2 - depends on VideoTranscodingService methods
+pub mod stories;
 pub mod video_service;
 pub mod video_transcoding;
+pub mod video_job_queue;
+pub mod webhooks;
 
 // ==================== SERVICE MODULES DOCUMENTATION ====================
 //
@@ -64,9 +69,7 @@ pub mod video_transcoding;
 // - video_processing_pipeline: Orchestrates entire video processing workflow (Phase 7)
 //
 // MACHINE LEARNING & RANKING:
-// - clickhouse_feature_extractor: Feature extraction for ML model training
-// - deep_learning_inference: TensorFlow Serving + Milvus integration for embeddings
-// - feed_ranking_service: Advanced ML-based feed ranking orchestration (Phase 7)
+// - feed_ranking: Core feed ranking algorithm with ClickHouse integration, caching, and circuit breaker
 // - recommendation_v2: Hybrid recommendation engine v2 (collaborative filtering + content-based + AB testing)
 //
 // COMMON SERVICES:
@@ -74,8 +77,6 @@ pub mod video_transcoding;
 // - cdc: Change Data Capture consumer (PostgreSQL → Kafka → ClickHouse sync)
 // - email_verification: Email verification token management with Redis
 // - events: Application events consumer (Kafka → ClickHouse for analytics)
-// - feed_ranking: Core feed ranking algorithm with user preferences
-// - feed_service: Personalized feed ranking with ClickHouse integration
 // - image_processing: Image resizing and variant generation (thumbnail, medium, original)
 // - job_queue: Background job queue for async image processing (MPSC channel-based)
 // - jwt_key_rotation: JWT signing key rotation for enhanced security

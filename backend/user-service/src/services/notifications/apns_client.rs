@@ -2,7 +2,6 @@
 ///
 /// This module implements APNs support for iOS/macOS push notifications
 /// Part of Phase 7A notifications system
-
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -164,12 +163,7 @@ impl APNsClient {
     }
 
     /// Build APNs payload
-    fn build_payload(
-        &self,
-        title: &str,
-        body: &str,
-        sound: bool,
-    ) -> Result<String, String> {
+    fn build_payload(&self, title: &str, body: &str, sound: bool) -> Result<String, String> {
         // TODO: Build JSON payload for APNs
         // {
         //   "aps": {
@@ -304,7 +298,12 @@ mod tests {
         );
 
         let result = client
-            .send("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", "Title", "Body", APNsPriority::High)
+            .send(
+                "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                "Title",
+                "Body",
+                APNsPriority::High,
+            )
             .await;
 
         assert!(result.is_ok());

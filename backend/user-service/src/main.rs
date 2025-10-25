@@ -7,24 +7,57 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use user_service::{
     cache::FeedCache,
+    config::video_config,
     config::Config,
     db::{ch_client::ClickHouseClient, create_pool, run_migrations},
+    jobs::{self, suggested_users_generator::SuggestedUsersJob, suggested_users_generator::SuggestionConfig, JobContext, run_jobs},
     handlers,
-    handlers::{events::EventHandlerState, feed::FeedHandlerState},
+    handlers::{events::EventHandlerState, feed::FeedHandlerState, streams::StreamHandlerState},
     metrics,
-    middleware::{JwtAuthMiddleware, MetricsMiddleware},
+    middleware::{GlobalRateLimitMiddleware, JwtAuthMiddleware, MetricsMiddleware, RateLimiter},
     services::{
         cdc::{CdcConsumer, CdcConsumerConfig},
+        deep_learning_inference::DeepLearningInferenceService,
         events::{EventDeduplicator, EventsConsumer, EventsConsumerConfig},
         feed_ranking::FeedRankingService,
         job_queue,
         kafka_producer::EventProducer,
+        recommendation_v2::{HybridWeights, RecommendationConfig, RecommendationServiceV2},
         s3_service,
+        graph::GraphService,
+        stories::StoriesService,
+        streaming::{
+            RtmpWebhookHandler, StreamAnalyticsService, StreamChatStore, StreamDiscoveryService,
+            StreamRepository, StreamService, ViewerCounter, StreamChatHandlerState,
+        },
+        video_service::VideoService,
     },
 };
 
 #[actix_web::main]
 async fn main() -> io::Result<()> {
+    // Support container healthchecks via CLI subcommand: `healthcheck-http` or legacy `healthcheck`
+    // It checks the HTTP endpoint /api/v1/health on localhost:8080 and exits accordingly.
+    {
+        let mut args = std::env::args();
+        let _bin = args.next();
+        if let Some(cmd) = args.next() {
+            if cmd == "healthcheck" || cmd == "healthcheck-http" {
+                let url = "http://127.0.0.1:8080/api/v1/health";
+                match reqwest::Client::new().get(url).send().await {
+                    Ok(resp) if resp.status().is_success() => return Ok(()),
+                    Ok(resp) => {
+                        eprintln!("healthcheck HTTP status: {}", resp.status());
+                        return Err(io::Error::new(io::ErrorKind::Other, "healthcheck failed"));
+                    }
+                    Err(e) => {
+                        eprintln!("healthcheck HTTP error: {}", e);
+                        return Err(io::Error::new(io::ErrorKind::Other, "healthcheck error"));
+                    }
+                }
+            }
+        }
+    }
     // Initialize tracing
     tracing_subscriber::registry()
         .with(
@@ -78,7 +111,10 @@ async fn main() -> io::Result<()> {
             }
         }
     } else {
-        tracing::info!("Skipping database migrations (RUN_MIGRATIONS={})", run_migrations_env);
+        tracing::info!(
+            "Skipping database migrations (RUN_MIGRATIONS={})",
+            run_migrations_env
+        );
     }
 
     // Create Redis connection manager
@@ -91,6 +127,16 @@ async fn main() -> io::Result<()> {
         .expect("Failed to create Redis connection manager");
 
     tracing::info!("Redis connection established");
+
+    // Initialize global rate limiter (100 requests per 15 minutes per IP/user)
+    use user_service::middleware::rate_limit::RateLimitConfig;
+    let rate_limit_config = RateLimitConfig {
+        max_requests: 100,
+        window_seconds: 900, // 15 minutes
+    };
+    let rate_limiter = RateLimiter::new(redis_manager.clone(), rate_limit_config);
+    let global_rate_limit = GlobalRateLimitMiddleware::new(rate_limiter);
+    tracing::info!("Global rate limiter initialized: 100 requests per 15 minutes");
 
     // ========================================
     // Initialize ClickHouse client & feed services
@@ -116,18 +162,118 @@ async fn main() -> io::Result<()> {
         feed_cache.clone(),
     ));
 
+    // Optional: init Recommendation V2 re-ranker (disabled by default)
+    let rec_v2 = {
+        let enabled =
+            std::env::var("RECOMMENDATION_V2_INIT").unwrap_or_else(|_| "false".into()) == "true";
+        if enabled {
+            let onnx_path = std::env::var("REC_ONNX_MODEL_PATH")
+                .unwrap_or_else(|_| "models/collaborative_v1.0.onnx".into());
+            let cfg = RecommendationConfig {
+                collaborative_model_path: std::env::var("REC_CF_MODEL").unwrap_or_default(),
+                content_model_path: std::env::var("REC_CB_MODEL").unwrap_or_default(),
+                onnx_model_path: onnx_path,
+                hybrid_weights: HybridWeights::balanced(),
+                enable_ab_testing: false,
+            };
+            match RecommendationServiceV2::new(cfg, db_pool.clone()).await {
+                Ok(svc) => Some(Arc::new(svc)),
+                Err(e) => {
+                    tracing::warn!("Failed to initialize Recommendation V2: {}", e);
+                    None
+                }
+            }
+        } else {
+            None
+        }
+    };
+
     let feed_state = web::Data::new(FeedHandlerState {
         feed_ranking: feed_ranking.clone(),
+        rec_v2,
     });
 
+    // Initialize Neo4j Graph service (optional)
+    let graph_service = match GraphService::new(&config.graph).await {
+        Ok(svc) => {
+            if svc.is_enabled() {
+                tracing::info!("Neo4j graph service enabled");
+            } else {
+                tracing::info!("Neo4j graph service disabled");
+            }
+            svc
+        }
+        Err(e) => {
+            tracing::warn!("Neo4j service init failed: {} (graph disabled)", e);
+            GraphService::new(&user_service::config::GraphConfig { enabled: false, neo4j_uri: String::new(), neo4j_user: String::new(), neo4j_password: String::new() }).await.expect("GraphService disabled init should succeed")
+        }
+    };
+    let graph_data = web::Data::new(graph_service);
+
     // ========================================
-    // Initialize Kafka producer for events
+    // Initialize live streaming services
+    // ========================================
+    let rtmp_base_url = std::env::var("STREAMING_RTMP_BASE_URL")
+        .unwrap_or_else(|_| "rtmp://localhost/live".to_string());
+    let hls_cdn_url = std::env::var("STREAMING_HLS_BASE_URL")
+        .unwrap_or_else(|_| "https://cdn.nova.local".to_string());
+
+    let stream_repo = StreamRepository::new(db_pool.clone());
+    let stream_viewer_counter = ViewerCounter::new(redis_manager.clone());
+    let stream_chat_store = StreamChatStore::new(redis_manager.clone(), 200);
+
+    // Kafka producer must be initialized before stream service
+    // Note: event_producer is initialized later at line 261, so we need to reorganize
+
+    // ========================================
+    // Initialize Kafka producer for events (moved earlier)
     // ========================================
     let event_producer = Arc::new(
         EventProducer::new(&config.kafka.brokers, config.kafka.events_topic.clone())
             .expect("Failed to create Kafka producer"),
     );
 
+    let stream_service = Arc::new(Mutex::new(StreamService::new(
+        stream_repo.clone(),
+        stream_viewer_counter.clone(),
+        stream_chat_store,
+        event_producer.clone(),
+        rtmp_base_url.clone(),
+        hls_cdn_url.clone(),
+    )));
+
+    let discovery_service = Arc::new(Mutex::new(StreamDiscoveryService::new(
+        stream_repo.clone(),
+        stream_viewer_counter.clone(),
+    )));
+
+    let analytics_service = Arc::new(StreamAnalyticsService::new(stream_repo.clone()));
+    let rtmp_handler = Arc::new(Mutex::new(RtmpWebhookHandler::new(
+        stream_repo,
+        ViewerCounter::new(redis_manager.clone()),
+        hls_cdn_url.clone(),
+    )));
+
+    let stream_state = web::Data::new(StreamHandlerState {
+        stream_service: stream_service.clone(),
+        discovery_service: discovery_service.clone(),
+        analytics_service: analytics_service.clone(),
+        rtmp_handler: rtmp_handler.clone(),
+    });
+
+    // ========================================
+    // Initialize WebSocket chat for streams
+    // ========================================
+    let stream_chat_ws_state = web::Data::new(StreamChatHandlerState::new(
+        StreamChatStore::new(redis_manager.clone(), 200),
+        event_producer.clone(),
+        db_pool.clone(),
+    ));
+    tracing::info!("Stream WebSocket chat handler initialized");
+
+    // ========================================
+    // Initialize events state (producer already created above)
+    // ========================================
     let events_state = web::Data::new(EventHandlerState {
         producer: event_producer.clone(),
     });
@@ -146,7 +292,6 @@ async fn main() -> io::Result<()> {
     let enable_cdc = std::env::var("ENABLE_CDC").unwrap_or_else(|_| "false".into()) == "true";
     let mut cdc_handle_opt: Option<tokio::task::JoinHandle<()>> = None;
     if enable_cdc {
-
         let cdc_config = CdcConsumerConfig {
             brokers: config.kafka.brokers.clone(),
             group_id: "nova-cdc-consumer-v1".to_string(),
@@ -159,13 +304,10 @@ async fn main() -> io::Result<()> {
             max_concurrent_inserts: 10,
         };
 
-        let cdc_consumer = CdcConsumer::new(
-            cdc_config,
-            ch_writable.as_ref().clone(),
-            db_pool.clone(),
-        )
-        .await
-        .expect("Failed to create CDC consumer");
+        let cdc_consumer =
+            CdcConsumer::new(cdc_config, ch_writable.as_ref().clone(), db_pool.clone())
+                .await
+                .expect("Failed to create CDC consumer");
 
         let cdc_handle = tokio::spawn(async move {
             if let Err(e) = cdc_consumer.run().await {
@@ -195,6 +337,7 @@ async fn main() -> io::Result<()> {
         events_config,
         ch_writable.as_ref().clone(),
         event_deduplicator,
+        redis_client.clone(),
     )
     .expect("Failed to create Events consumer");
 
@@ -220,11 +363,27 @@ async fn main() -> io::Result<()> {
     // Spawn image processor worker task
     let worker_handle = job_queue::spawn_image_processor_worker(
         db_pool.clone(),
-        s3_client,
+        s3_client.clone(),
         Arc::new(config.s3.clone()),
         job_receiver,
     );
     tracing::info!("Image processor worker spawned");
+
+    // ========================================
+    // Initialize video processing job queue
+    // ========================================
+    let (video_job_sender, video_job_receiver) =
+        user_service::services::video_job_queue::create_video_job_queue(100);
+    tracing::info!("Video processing job queue created (capacity: 100)");
+
+    // Spawn video processor worker task
+    let _video_worker_handle = user_service::services::video_job_queue::spawn_video_processor_worker(
+        db_pool.clone(),
+        s3_client,
+        Arc::new(config.s3.clone()),
+        video_job_receiver,
+    );
+    tracing::info!("Video processor worker spawned");
 
     // Clone config for server closure
     let server_config = config.clone();
@@ -235,10 +394,96 @@ async fn main() -> io::Result<()> {
     // Clone job_sender for graceful shutdown (will be dropped after server stops)
     let job_sender_shutdown = job_sender.clone();
 
+    // Background: spawn stories cleanup worker (every 5 minutes)
+    {
+        let pool = db_pool.clone();
+        tokio::spawn(async move {
+            let svc = StoriesService::new(pool);
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(300));
+            loop {
+                interval.tick().await;
+                if let Ok(affected) = svc.cleanup_expired().await {
+                    if affected > 0 {
+                        tracing::info!("stories cleanup marked deleted: {}", affected);
+                    }
+                }
+            }
+        });
+    }
+
+    // Background: ensure Milvus collection (when enabled)
+    {
+        let milvus_enabled =
+            std::env::var("MILVUS_ENABLED").unwrap_or_else(|_| "false".into()) == "true";
+        if milvus_enabled {
+            tokio::spawn(async move {
+                let cfg = video_config::VideoConfig::from_env().inference;
+                let dl = DeepLearningInferenceService::new(cfg);
+                if let Err(e) = dl.check_milvus_health().await {
+                    tracing::warn!("Milvus health check error: {}", e);
+                }
+                if let Ok(true) = dl.check_milvus_health().await {
+                    if let Ok(true) = dl.ensure_milvus_collection().await {
+                        tracing::info!("Milvus collection ensured at startup");
+                    } else {
+                        tracing::warn!("Milvus collection ensure failed");
+                    }
+                } else {
+                    tracing::warn!("Milvus not healthy at startup; using PG fallback");
+                }
+            });
+        }
+    }
+
+    // ========================================
+    // Background jobs: Suggested Users (fallback cache)
+    // ========================================
+    let jobs_handle = {
+        let (shutdown_tx, _) = tokio::sync::broadcast::channel::<()>(1);
+
+        // Build JobContext
+        let ch_client_for_jobs = clickhouse::Client::default()
+            .with_url(&config.clickhouse.url)
+            .with_user(&config.clickhouse.username)
+            .with_password(&config.clickhouse.password)
+            .with_database(&config.clickhouse.database);
+
+        let job_ctx = jobs::JobContext::new(redis_manager.clone(), ch_client_for_jobs.clone());
+        let job_ctx2 = jobs::JobContext::new(redis_manager.clone(), ch_client_for_jobs.clone());
+        let job_ctx3 = jobs::JobContext::new(redis_manager.clone(), ch_client_for_jobs);
+
+        let suggested_job = SuggestedUsersJob::new(SuggestionConfig::default());
+        let trending_hourly = jobs::trending_generator::TrendingGeneratorJob::new(
+            jobs::trending_generator::TrendingConfig::hourly(),
+        );
+        let cache_warmer = jobs::cache_warmer::CacheWarmerJob::new(
+            jobs::cache_warmer::CacheWarmerConfig::default(),
+        );
+
+        // Run jobs in background (suggested + trending + cache warmup)
+        let handle = tokio::spawn(async move {
+            run_jobs(
+                vec![
+                    (Arc::new(suggested_job) as Arc<dyn jobs::CacheRefreshJob>, job_ctx),
+                    (Arc::new(trending_hourly) as Arc<dyn jobs::CacheRefreshJob>, job_ctx2),
+                    (Arc::new(cache_warmer) as Arc<dyn jobs::CacheRefreshJob>, job_ctx3),
+                ],
+                2,
+                shutdown_tx,
+            )
+            .await;
+        });
+        handle
+    };
+
     // Create and run HTTP server
     let server = HttpServer::new(move || {
         let feed_state = feed_state.clone();
         let events_state = events_state.clone();
+        let stream_state = stream_state.clone();
+        let stream_chat_ws_state = stream_chat_ws_state.clone();
+        let graph_data = graph_data.clone();
+        let global_rate_limit = global_rate_limit.clone();
         // Build CORS configuration from allowed_origins
         let cors_builder = Cors::default();
 
@@ -258,16 +503,28 @@ async fn main() -> io::Result<()> {
         cors = cors.allow_any_method().allow_any_header().max_age(3600);
 
         App::new()
+            .app_data(web::Data::new(event_producer.clone()))
             .app_data(web::Data::new(db_pool.clone()))
             .app_data(web::Data::new(redis_manager.clone()))
             .app_data(web::Data::new(server_config.clone()))
             .app_data(web::Data::new(job_sender.clone()))
+            .app_data(web::Data::new(video_job_sender.clone()))
+            .app_data(web::Data::new(VideoService::new(
+                video_config::VideoConfig::from_env(),
+            )))
+            .app_data(web::Data::new(DeepLearningInferenceService::new(
+                video_config::VideoConfig::from_env().inference,
+            )))
             .app_data(feed_state.clone())
             .app_data(events_state.clone())
+            .app_data(stream_state.clone())
+            .app_data(stream_chat_ws_state.clone())
+            .app_data(graph_data.clone())
             .wrap(cors)
             .wrap(Logger::default())
             .wrap(tracing_actix_web::TracingLogger::default())
             .wrap(MetricsMiddleware) // Add metrics middleware
+            .wrap(global_rate_limit) // Add global rate limiting middleware
             // Prometheus metrics endpoint
             .route(
                 "/metrics",
@@ -297,61 +554,118 @@ async fn main() -> io::Result<()> {
                             .app_data(events_state.clone())
                             .service(handlers::ingest_events),
                     )
-                    // Conversations & Messaging endpoints
                     .service(
-                        web::scope("/conversations")
-                            .wrap(JwtAuthMiddleware)
+                        web::scope("/streams")
+                            .app_data(stream_state.clone())
+                            .route("", web::get().to(handlers::list_live_streams))
+                            .route("/search", web::get().to(handlers::search_streams))
+                            .route("/{id}", web::get().to(handlers::get_stream_details))
+                            .route(
+                                "/{id}/comments",
+                                web::get().to(handlers::get_stream_comments),
+                            )
+                            .route("/rtmp/auth", web::post().to(handlers::rtmp_authenticate))
+                            .route("/rtmp/done", web::post().to(handlers::rtmp_done))
                             .service(
-                                web::resource("")
-                                    .route(web::post().to(handlers::create_conversation))
-                                    .route(web::get().to(handlers::list_conversations)),
-                            )
-                            .route("/{id}", web::get().to(handlers::get_conversation))
-                            .route(
-                                "/{id}/messages",
-                                web::get().to(handlers::get_message_history),
-                            )
-                            .route(
-                                "/{id}/read",
-                                web::post().to(handlers::mark_as_read),
-                            )
-                            .route(
-                                "/{id}/settings",
-                                web::patch().to(handlers::update_conversation_settings),
-                            )
-                            .route(
-                                "/{id}/members",
-                                web::post().to(handlers::add_conversation_members),
-                            )
-                            .route(
-                                "/{id}/members/{user_id}",
-                                web::delete().to(handlers::remove_conversation_member),
+                                web::scope("")
+                                    .wrap(JwtAuthMiddleware)
+                                    .route("", web::post().to(handlers::create_stream))
+                                    .route("/{id}/join", web::post().to(handlers::join_stream))
+                                    .route("/{id}/leave", web::post().to(handlers::leave_stream))
+                                    .route(
+                                        "/{id}/comments",
+                                        web::post().to(handlers::post_stream_comment),
+                                    )
+                                    .route(
+                                        "/{id}/analytics",
+                                        web::get().to(handlers::get_stream_analytics),
+                                    ),
                             ),
                     )
-                    .service(
-                        web::scope("/messages")
-                            .wrap(JwtAuthMiddleware)
-                            .service(
-                                web::resource("")
-                                    .route(web::post().to(handlers::send_message)),
-                            ),
-                    )
+                    // Note: Messaging endpoints moved to messaging-service (port 8085)
+                    // Use messaging-service API for conversations and messages
                     .service(
                         web::scope("/stories")
                             .wrap(JwtAuthMiddleware)
                             .service(
                                 web::resource("")
-                                    .route(web::get().to(handlers::stories_not_implemented))
-                                    .route(web::post().to(handlers::stories_not_implemented)),
+                                    .route(web::get().to(handlers::list_stories))
+                                    .route(web::post().to(handlers::create_story)),
+                            )
+                            .route("/{id}", web::get().to(handlers::get_story))
+                            .route("/{id}", web::delete().to(handlers::delete_story))
+                            .route(
+                                "/{id}/privacy",
+                                web::patch().to(handlers::update_story_privacy),
                             )
                             .route(
-                                "/{id}",
-                                web::get().to(handlers::stories_not_implemented),
+                                "/user/{user_id}",
+                                web::get().to(handlers::list_user_stories),
+                            )
+                            .route(
+                                "/close-friends/{friend_id}",
+                                web::post().to(handlers::add_close_friend),
+                            )
+                            .route(
+                                "/close-friends/{friend_id}",
+                                web::delete().to(handlers::remove_close_friend),
+                            )
+                            .route(
+                                "/close-friends",
+                                web::get().to(handlers::list_close_friends),
                             ),
                     )
+                    .service(
+                        web::scope("/videos")
+                            .wrap(JwtAuthMiddleware)
+                            .route("/upload/init", web::post().to(handlers::video_upload_init))
+                            .route("/upload/complete", web::post().to(handlers::video_upload_complete))
+                            .route("", web::post().to(handlers::create_video))
+                            .route("/{id}", web::get().to(handlers::get_video))
+                            .route("/{id}", web::patch().to(handlers::update_video))
+                            .route("/{id}", web::delete().to(handlers::delete_video))
+                            .route("/{id}/stream", web::get().to(handlers::get_stream_manifest))
+                            .route(
+                                "/{id}/progress",
+                                web::get().to(handlers::get_processing_progress),
+                            )
+                            .route(
+                                "/{id}/processing/complete",
+                                web::post().to(handlers::processing_complete),
+                            )
+                            .route(
+                                "/{id}/embedding/rebuild",
+                                web::post().to(handlers::rebuild_embedding),
+                            )
+                            .route("/{id}/similar", web::get().to(handlers::get_similar_videos))
+                            .route("/{id}/like", web::post().to(handlers::like_video))
+                            .route("/{id}/share", web::post().to(handlers::share_video)),
+                    )
+                    // Resumable uploads endpoints (chunked upload with resume support)
+                    .service(
+                        web::scope("/uploads")
+                            .wrap(JwtAuthMiddleware)
+                            .route("/init", web::post().to(handlers::upload_init))
+                            .route(
+                                "/{upload_id}/chunks/{chunk_index}",
+                                web::put().to(handlers::upload_chunk),
+                            )
+                            .route(
+                                "/{upload_id}/complete",
+                                web::post().to(handlers::complete_upload),
+                            )
+                            .route("/{upload_id}", web::get().to(handlers::get_upload_status))
+                            .route("/{upload_id}", web::delete().to(handlers::cancel_upload)),
+                    )
+                    // Admin endpoints (protected)
+                    .service(web::scope("/admin").wrap(JwtAuthMiddleware).route(
+                        "/milvus/init-collection",
+                        web::post().to(handlers::init_milvus_collection),
+                    ))
                     // Auth endpoints
                     .service(
                         web::scope("/auth")
+                            .route("/dev-verify", web::post().to(handlers::dev_verify_email))
                             .route("/register", web::post().to(handlers::register))
                             .route("/login", web::post().to(handlers::login))
                             .route("/verify-email", web::post().to(handlers::verify_email))
@@ -382,10 +696,59 @@ async fn main() -> io::Result<()> {
                                     ),
                             ),
                     )
+                    // Users endpoints
+                    .service(
+                        web::scope("/users")
+                            .app_data(graph_data.clone())
+                            // Public endpoints
+                            .route("/{id}", web::get().to(handlers::get_user))
+                            .route(
+                                "/{id}/public-key",
+                                web::get().to(handlers::get_user_public_key),
+                            )
+                            // Relationship endpoints (JWT required)
+                            .service(
+                                web::scope("")
+                                    .wrap(JwtAuthMiddleware)
+                                    .service(
+                                        web::resource("/{id}/follow")
+                                            .route(web::post().to(handlers::follow_user))
+                                            .route(web::delete().to(handlers::unfollow_user)),
+                                    )
+                                    .service(
+                                        web::resource("/{id}/block")
+                                            .route(web::post().to(handlers::block_user))
+                                            .route(web::delete().to(handlers::unblock_user)),
+                                    ),
+                            )
+                            .route(
+                                "/{id}/followers",
+                                web::get().to(handlers::get_followers),
+                            )
+                            .route(
+                                "/{id}/following",
+                                web::get().to(handlers::get_following),
+                            ),
+                    )
+                    // Authenticated user endpoints under /users/me
+                    .service(
+                        web::scope("/users/me")
+                            .wrap(JwtAuthMiddleware)
+                            .route("", web::get().to(handlers::get_current_user))
+                            .route("", web::patch().to(handlers::update_profile))
+                            .route(
+                                "/public-key",
+                                web::put().to(handlers::upsert_my_public_key),
+                            ),
+                    )
                     // Posts endpoints (protected with JWT authentication)
                     .service(
                         web::scope("/posts")
                             .wrap(JwtAuthMiddleware)
+                            .route(
+                                "",
+                                web::post().to(handlers::create_post_with_media),
+                            )
                             .route(
                                 "/upload/init",
                                 web::post().to(handlers::upload_init_request),
@@ -394,8 +757,77 @@ async fn main() -> io::Result<()> {
                                 "/upload/complete",
                                 web::post().to(handlers::upload_complete_request),
                             )
-                            .route("/{id}", web::get().to(handlers::get_post_request)),
+                            .route("/{id}", web::get().to(handlers::get_post_request))
+                            // Comments endpoints
+                            .route(
+                                "/{post_id}/comments",
+                                web::post().to(handlers::create_comment),
+                            )
+                            .route(
+                                "/{post_id}/comments",
+                                web::get().to(handlers::get_comments),
+                            )
+                            // Likes endpoints
+                            .route(
+                                "/{post_id}/like",
+                                web::post().to(handlers::like_post),
+                            )
+                            .route(
+                                "/{post_id}/like",
+                                web::delete().to(handlers::unlike_post),
+                            )
+                            .route(
+                                "/{post_id}/like/status",
+                                web::get().to(handlers::check_like_status),
+                            )
+                            .route(
+                                "/{post_id}/likes",
+                                web::get().to(handlers::get_post_likes),
+                            ),
+                    )
+                    // Comment endpoints (direct access by comment ID)
+                    .service(
+                        web::scope("/comments")
+                            .wrap(JwtAuthMiddleware)
+                            .route(
+                                "/{comment_id}",
+                                web::patch().to(handlers::update_comment),
+                            )
+                            .route(
+                                "/{comment_id}",
+                                web::delete().to(handlers::delete_comment),
+                            ),
+                    )
+                    // Discover endpoints
+                    .service(
+                        web::scope("/discover")
+                            .wrap(JwtAuthMiddleware)
+                            .app_data(graph_data.clone())
+                            .route("/suggested-users", web::get().to(handlers::get_suggested_users)),
+                    )
+                    // Search endpoints (public, optional auth)
+                    .service(
+                        web::scope("/search")
+                            .route("/users", web::get().to(handlers::search_users)),
+                    )
+                    // Trending endpoints (public)
+                    .service(handlers::get_trending)
+                    .service(handlers::get_trending_videos)
+                    .service(handlers::get_trending_posts)
+                    .service(handlers::get_trending_streams)
+                    .service(handlers::get_trending_categories)
+                    .service(
+                        web::scope("")
+                            .wrap(JwtAuthMiddleware)
+                            .service(handlers::record_engagement),
                     ),
+            )
+            // WebSocket endpoints (outside /api/v1)
+            .service(
+                web::scope("/ws/streams")
+                    .wrap(JwtAuthMiddleware)
+                    .app_data(stream_chat_ws_state.clone())
+                    .route("/{id}/chat", web::get().to(handlers::stream_chat_ws)),
             )
     })
     .bind(&bind_address)?
@@ -457,7 +889,21 @@ async fn main() -> io::Result<()> {
         }
     }
 
-    tracing::info!("All workers and consumers stopped. Server shutdown complete.");
+    // Stop jobs
+    jobs_handle.abort();
+    match tokio::time::timeout(std::time::Duration::from_secs(5), jobs_handle).await {
+        Ok(Ok(())) => {
+            tracing::info!("Background jobs shut down gracefully");
+        }
+        Ok(Err(_)) => {
+            tracing::info!("Background jobs aborted");
+        }
+        Err(_) => {
+            tracing::warn!("Background jobs did not shut down within timeout");
+        }
+    }
+
+    tracing::info!("All workers, consumers, and jobs stopped. Server shutdown complete.");
 
     result
 }

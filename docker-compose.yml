@@ -1,5 +1,3 @@
-version: '3.9'
-
 services:
   # ============================================
   # PostgreSQL Database
@@ -138,8 +136,6 @@ services:
       KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
       KAFKA_CLUSTERS_0_KAFKACONNECT_0_NAME: debezium
       KAFKA_CLUSTERS_0_KAFKACONNECT_0_ADDRESS: http://debezium:8083
-    ports:
-      - "8080:8080"
     networks:
       - nova-network
 
@@ -161,7 +157,7 @@ services:
     volumes:
       - clickhouse_data:/var/lib/clickhouse
       - clickhouse_logs:/var/log/clickhouse-server
-      - ./backend/clickhouse/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+      - ./backend/clickhouse:/docker-entrypoint-initdb.d
     healthcheck:
       test:
         [
@@ -173,6 +169,31 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - nova-network
+
+  # ============================================
+  # Neo4j (Graph DB)
+  # ============================================
+  neo4j:
+    image: neo4j:5.23
+    container_name: nova-neo4j
+    restart: unless-stopped
+    environment:
+      - NEO4J_AUTH=${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD:-neo4j}
+      - NEO4J_server_memory_pagecache_size=256M
+      - NEO4J_server_memory_heap_max__size=512M
+    ports:
+      - "7474:7474"   # HTTP
+      - "7687:7687"   # Bolt
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+    healthcheck:
+      test: ["CMD", "bash", "-lc", "cypher-shell -u ${NEO4J_USER:-neo4j} -p ${NEO4J_PASSWORD:-neo4j} 'RETURN 1' || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
     networks:
       - nova-network
 
@@ -192,6 +213,8 @@ services:
       APP_HOST: 0.0.0.0
       APP_PORT: 8080
       RUST_LOG: debug
+      # Dev auto-verify newly registered emails (skip email link flow)
+      DEV_AUTO_VERIFY_EMAIL: "true"
 
       # Database
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-nova_auth}
@@ -210,6 +233,19 @@ services:
       CLICKHOUSE_DB: nova_feed
       CLICKHOUSE_USER: default
       CLICKHOUSE_PASSWORD: clickhouse
+      # Neo4j
+      NEO4J_ENABLED: "true"
+      NEO4J_URI: bolt://neo4j:7687
+      NEO4J_USER: ${NEO4J_USER:-neo4j}
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD:-neo4j}
+      # Milvus (Vector DB)
+      MILVUS_ENABLED: "true"
+      MILVUS_URL: http://milvus:9091
+      MILVUS_COLLECTION: video_embeddings
+
+      # Recommendation V2 (optional; safe to leave false)
+      RECOMMENDATION_V2_INIT: "false"
+      RECOMMENDATION_V2_ENABLED: "false"
 
       # JWT
       JWT_SECRET: ${JWT_SECRET:-dev_secret_change_in_production_32chars}
@@ -261,6 +297,9 @@ services:
       RUN_MIGRATIONS: ${RUN_MIGRATIONS:-true}
       ENABLE_CDC: ${ENABLE_CDC:-false}
 
+      # Messaging service URL (for cross-service communication)
+      MESSAGING_SERVICE_URL: http://messaging-service:3000
+
       # Notifications (stubbed for local dev)
       FCM_PROJECT_ID: ${FCM_PROJECT_ID:-nova-dev}
       FCM_SERVICE_ACCOUNT_JSON_BASE64: ${FCM_SERVICE_ACCOUNT_JSON_BASE64:-eyJwcm9qZWN0X2lkIjogIm5vdmEtZGV2IiwgInByaXZhdGVfa2V5X2lkIjogImRldi1rZXktaWQiLCAicHJpdmF0ZV9rZXkiOiAiLS0tLS1CRUdJTiBQUklWQVRFIEtFWS0tLS0tXG5NSUlFdmdJQkFEQU5CZ2txaGtpRzl3MEJBUUVGQUFTQ0JLZ3dnZ1NrQWdFQUFvSUJBUUN2V0RtTUFhaElRazN1XG5wU25nNkNnRzE4TzExbkJqN1huV00rUGUrN3hEdXlSMEh0VmZ1Qk1tL1lKQ1N0aTJDQ1lQNTFTWHJDellEbUt4XG5lYXV2bllOVXBYVHRxelpMdTllVFBBL3N5KzdCWjJrMHRrZ2dIUVpjUFVocHpMQzdaZVhGY0dqZ2lEYmlyRU1oXG45S1dSYnR1L1NFejNKZjQyZGJjeHhldHdCakdVaXgySUxQMkFNcWl4VlIxQ21YK0x6dGp6ZHk2bUNEYmQrcWRjXG5ac2h2eE1pUGFhZFA4WXY1dzJKbklQNmM5MW50Wk5FUkVWbXN0V2dFTFFWMmdqQ3dOMDVMQ2E0M2syTWdOTTVMXG5zclN0WlMyTUpNaUF3bXRrU0FoQlNqYVFQdDNrcGx1blE3cjRMb0Z5bE15M24xcWdZRnowQWYySDVvN0RBNFZCXG4yMStVeHovNUFnTUJBQUVDZ2dFQUFpOXFpaTdrR3NCdXliUlh2UVNQcVNRcnZYcW1iR3hqZWhLcitwV3ZEellJXG5Hb1ZlMmVKSXBOSUFlMVNFOW1ITUhhTWZxQU0rak5QREVaeW5VZGszNzRoZldHM3JqNDZQL1hjQWFNNVMwNmkzXG5CQy9vWHJRVjVmVGlqK1Q3NTkzNWV0Z3ZpbXJRS2t1RXk2bkpuWElnL1hXSWRnVU1jYi9PVUdtN3lTbmVtTkFNXG5zT0p6OVkxWWpQMnlwTDhRVzI3VkswSFRETHhEZjRBQVVjS25pSjJRSmc2U2FTTzhtamFqaEpVNDREQndtZ3NRXG40VUs2ak4vSEpkT1pQdytKUkVTb1RZT3RXZFp1aDlIS0R1Rmc3UHN2aFVScmdIUE4wNk9vT3Y3YW5oYjIwMFV5XG5NYzJ5aWtwTFNENEUvNlNTVG8zN3BFdzZ6OG1ZTEJxM0FaRm53dm5lTFFLQmdRRDBLMWJmelNEWjRCa1VVZStWXG5JZUJpN2w2NjhaZENLRUpKKzUwbjlUMTNDcWVpZ0hrVVljanZ2WC9CZFFyR1JXR0R6ckxzQ3Bab0VmL0ppdzJqXG5BN3psSEFvTXBDUFQvcjhoY1hkTUFjZ2xxVGVDdlZsekRXRDlUYjdFcDBXVTNHRkhmNjFGVzBuNXJSVUF2S2FoXG5la3R1YUV3bHEyTlFnWlR6emlqQjVoSHdaUUtCZ1FDMzF6QkhPblVPa3hpVEJ0cFBMMVpwZEVvZExXaC9qdTY1XG5jbGtxMnVGWlVTRFlBRDREZXJFRmNFWWVzN0pYeTRrVjFjNmVwMnpOdzJXMVU2bThNOEFNMG9weW9sQlZ4WEdqXG5qWW5BS2RDL1Z5Y0VjNTlyczhOdUd6OFdaMnVQVTFUWENOT000N1FBMDBZMG5oZ0JIeGhsZkZCVll6M29ZOG5tXG5pamJ3bjdOMkJRS0JnRkY1RktmZzNwRlV3WW1TUFl0Wm5uSGtjQitZOVl2UnV5ek1sSWY4d09HejRIUE13cG9XXG5sdXBJSlJUOFpQZjd0cW93a210SXJSOVV3akVTQVI3ZjVHdmVpMHZraVQvM3hQYjMwWUsvSlhYTG5RWTNBRjN2XG5uT2xvdzdzQ3hha0NVRU4zU3UzVnBEMTNqNGFMYkY1OVhDWWZEeW1Tb3JUK1NDR0NMUDltTVo0eEFvR0JBSmQvXG5UcnF6OHJqekFTSlFXR0UrMmxBRzAvaWRiZXNJWjdRTkJtd3BlZUUzMlFBSG14TVU3WUpVMW9RQWc2eVQvMEV1XG5NNXBNMEgzMFV3R05rMmVUb2VVdkw0WnVPaE9rcFJRcDFHVzJUOThPUEFvUUdrVVFHN0hGNUVSYkw2a3ArOVZFXG40Y2pOOEkxcGpnWlliZUdtdFYwVWg4TUdDSU5Va0pKYVBoSW5HU1hkQW9HQkFKQWRoMUhkMVJTTHNHZmZZOXkwXG5zSm14OERQRmZmUUdyVDFzTG4xUHV2ZkFkNVc1L0EzR2FJMzhaMUtrUTFMZ1FlLzlyRTA3M2kyNmxVVmNrT25SXG4xRStXSW1lQ0hsMHYzUnVlTjd1bGE5VzN6YjZtd0dqczhOUWpNNG16aENqUSs5T2twT3I1N1FBQVRBTEFlUlQrXG5qVFlrS0kxQUNhWldoMmRwdmNXMWZ6QjJcbi0tLS0tRU5EIFBSSVZBVEUgS0VZLS0tLS1cbi}
@@ -304,13 +343,75 @@ services:
         condition: service_started
       clickhouse:
         condition: service_healthy
+      neo4j:
+        condition: service_started
     networks:
       - nova-network
     healthcheck:
-      test: ["CMD", "/app/user-service", "healthcheck"]
+      test: ["CMD-SHELL", "/bin/bash -lc 'exec 3<>/dev/tcp/127.0.0.1/8080 && echo -e \"GET /api/v1/health HTTP/1.0\\r\\n\\r\\n\" >&3 && head -n 1 <&3 | grep 200'" ]
       interval: 30s
       timeout: 5s
       retries: 3
+
+  # ============================================
+  # Messaging Service (WS Gateway for DMs)
+  # ============================================
+  messaging-service:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.messaging
+    container_name: nova-messaging-service
+    restart: unless-stopped
+    environment:
+      # Application
+      APP_ENV: development
+      PORT: 3000
+      RUST_LOG: messaging_service=debug,axum=debug,tower_http=debug
+
+      # Database (shared with user-service)
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-nova_auth}
+
+      # Redis (shared pubsub channel)
+      REDIS_URL: redis://:${REDIS_PASSWORD:-redis123}@redis:6379/0
+
+      # Kafka
+      KAFKA_BROKERS: kafka:9092
+
+      # Dev: allow WS without membership check to simplify local testing
+      WS_DEV_ALLOW_ALL: "true"
+
+      # JWT verification (use same public key as user-service for RS256 verification)
+      JWT_PUBLIC_KEY_PEM: |
+        -----BEGIN PUBLIC KEY-----
+        MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAr1g5jAGoSEJN7qUp4Ogo
+        BtfDtdZwY+151jPj3vu8Q7skdB7VX7gTJv2CQkrYtggmD+dUl6ws2A5isXmrr52D
+        VKV07as2S7vXkzwP7MvuwWdpNLZIIB0GXD1Iacywu2XlxXBo4Ig24qxDIfSlkW7b
+        v0hM9yX+NnW3McXrcAYxlIsdiCz9gDKosVUdQpl/i87Y83cupgg23fqnXGbIb8TI
+        j2mnT/GL+cNiZyD+nPdZ7WTRERFZrLVoBC0FdoIwsDdOSwmuN5NjIDTOS7K0rWUt
+        jCTIgMJrZEgIQUo2kD7d5KZbp0O6+C6BcpTMt59aoGBc9AH9h+aOwwOFQdtflMc/
+        +QIDAQAB
+        -----END PUBLIC KEY-----
+
+      # 32-byte key (base64) for server-side encryption used by messaging-service endpoints
+      # Random dev key; replace in production
+      SECRETBOX_KEY_B64: dGVzdGluZy10ZXN0aW5nLXRlc3RpbmctdGVzdGluZy10ZXN0aW5nMDA=
+    ports:
+      - "8085:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+    networks:
+      - nova-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3000/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
   # ============================================
   # Streaming Services
@@ -415,6 +516,53 @@ services:
       - nova-network
 
   # ============================================
+  # Milvus (Vector DB) - Standalone
+  # ============================================
+  milvus:
+    image: milvusdb/milvus:v2.4.3
+    container_name: nova-milvus
+    restart: unless-stopped
+    entrypoint: ["/tini", "--"]
+    command: ["milvus", "run", "standalone"]
+    ports:
+      - "19530:19530"   # gRPC
+      - "9091:9091"     # HTTP
+    environment:
+      ETCD_USE_EMBED: "true"
+      MINIO_USE_EMBED: "true"
+      LOG_LEVEL: info
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9091/api/v1/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - nova-network
+
+  # ============================================
+  # Search Service (Axum)
+  # ============================================
+  search-service:
+    build:
+      context: ./backend/search-service
+    container_name: nova-search-service
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-nova_auth}
+      REDIS_URL: redis://:${REDIS_PASSWORD:-redis123}@redis:6379/0
+      PORT: 8086
+      RUST_LOG: search_service=debug,tower_http=debug
+    ports:
+      - "8086:8086"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - nova-network
+
+  # ============================================
   # MailHog (Email testing - development only)
   # ============================================
   mailhog:
@@ -444,6 +592,10 @@ volumes:
   clickhouse_logs:
     driver: local
   streaming_segments:
+    driver: local
+  neo4j_data:
+    driver: local
+  neo4j_logs:
     driver: local
 
 # ============================================

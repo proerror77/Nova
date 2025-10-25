@@ -1,0 +1,75 @@
+# ============================================
+# Builder Stage - Compile messaging-service
+# ============================================
+FROM rust:1.88-slim-bookworm AS builder
+
+RUN apt-get update && apt-get install -y \
+    pkg-config \
+    libssl-dev \
+    ca-certificates \
+    cmake \
+    build-essential \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create app user for non-root execution
+RUN useradd -m -u 1001 -s /bin/bash appuser
+
+WORKDIR /app
+
+# Copy workspace configuration
+COPY Cargo.toml ./
+
+# Copy all services and libs (workspace build)
+COPY messaging-service ./messaging-service
+COPY user-service ./user-service
+COPY search-service ./search-service
+COPY libs ./libs
+
+# Build messaging-service
+RUN cargo build --release --manifest-path messaging-service/Cargo.toml
+
+# ============================================
+# Runtime Stage
+# ============================================
+FROM debian:bookworm-slim AS runtime
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    libssl3 \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create app user (same UID as builder)
+RUN useradd -m -u 1001 -s /bin/bash appuser
+
+WORKDIR /app
+
+# Copy compiled binary from builder
+COPY --from=builder /app/target/release/messaging-service /app/messaging-service
+
+# Copy messaging-service-specific migrations from its directory
+# These are embedded in the binary but keep for reference
+COPY messaging-service/migrations /app/migrations
+
+# Change ownership to app user
+RUN chown -R appuser:appuser /app
+
+# Switch to non-root user
+USER appuser
+
+# Expose application port
+EXPOSE 3000
+
+# Health check (using curl to check /health endpoint)
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost:3000/health || exit 1
+
+# Set environment variables
+ENV RUST_LOG=info
+ENV APP_ENV=production
+ENV PORT=3000
+
+# Run application
+CMD ["/app/messaging-service"]

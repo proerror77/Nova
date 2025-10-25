@@ -7,9 +7,12 @@ const url = require('url');
 // API 目標配置 - 通過環境變數 PROXY_TARGET 控制
 // 可用選項: api.nova.app (生產/遠程), localhost:8001 (本地 Staging Docker)
 const PROXY_TARGET = process.env.PROXY_TARGET || 'api.nova.app';
+// Optional dedicated target for search-service (e.g., 'localhost:8081' for local dev)
+const SEARCH_TARGET = process.env.SEARCH_TARGET || '';
 
 // 解析目標
 let TARGET_HOST, TARGET_PROTOCOL, TARGET_PORT;
+let SEARCH_HOST, SEARCH_PROTOCOL, SEARCH_PORT;
 
 if (PROXY_TARGET === 'localhost' || PROXY_TARGET.startsWith('localhost:')) {
     // 本地 Staging Docker 環境 (HTTP)
@@ -27,6 +30,31 @@ if (PROXY_TARGET === 'localhost' || PROXY_TARGET.startsWith('localhost:')) {
     TARGET_HOST = PROXY_TARGET;
     TARGET_PORT = 443;
     TARGET_PROTOCOL = 'https:';
+}
+
+// Parse search target (if provided), otherwise default to local search-service when PROXY_TARGET is localhost
+if (SEARCH_TARGET) {
+    if (SEARCH_TARGET === 'localhost' || SEARCH_TARGET.startsWith('localhost:')) {
+        SEARCH_HOST = 'localhost';
+        SEARCH_PORT = SEARCH_TARGET.split(':')[1] ? parseInt(SEARCH_TARGET.split(':')[1], 10) : 8081;
+        SEARCH_PROTOCOL = 'http:';
+    } else if (SEARCH_TARGET.includes(':')) {
+        const parts = SEARCH_TARGET.split(':');
+        SEARCH_HOST = parts[0];
+        SEARCH_PORT = parseInt(parts[1], 10);
+        SEARCH_PROTOCOL = 'https:';
+    } else {
+        SEARCH_HOST = SEARCH_TARGET;
+        SEARCH_PORT = 443;
+        SEARCH_PROTOCOL = 'https:';
+    }
+} else {
+    // Default: when proxying to localhost user-service, route /api/v1/search/* to local search-service on 8081
+    if (TARGET_HOST === 'localhost') {
+        SEARCH_HOST = 'localhost';
+        SEARCH_PORT = 8081;
+        SEARCH_PROTOCOL = 'http:';
+    }
 }
 
 const PROXY_PORT = 8080;
@@ -73,12 +101,20 @@ const server = http.createServer((req, res) => {
         return;
     }
 
-    // 构建目标 URL
-    const parsedUrl = url.parse(TARGET_PROTOCOL + '//' + TARGET_HOST + req.url);
+    // 路由規則：/api/v1/search/* → search-service（若已配置）
+    const isSearchRoute = req.url.startsWith('/api/v1/search/');
+    const useSearch = isSearchRoute && SEARCH_HOST;
+
+    // 構建目標連線
+    const targetHost = useSearch ? SEARCH_HOST : TARGET_HOST;
+    const targetPort = useSearch ? SEARCH_PORT : TARGET_PORT;
+    const targetProtocol = useSearch ? SEARCH_PROTOCOL : TARGET_PROTOCOL;
+
+    const parsedUrl = url.parse(targetProtocol + '//' + targetHost + req.url);
 
     const options = {
-        hostname: TARGET_HOST,
-        port: TARGET_PORT,
+        hostname: targetHost,
+        port: targetPort,
         path: req.url,
         method: req.method,
         headers: req.headers,
@@ -89,11 +125,11 @@ const server = http.createServer((req, res) => {
     delete options.headers['host'];
 
     // 根據協議選擇 HTTP 或 HTTPS
-    const protocol = TARGET_PROTOCOL === 'http:' ? require('http') : require('https');
+    const protocol = targetProtocol === 'http:' ? require('http') : require('https');
 
     // 發送代理請求
     const proxyReq = protocol.request(options, (proxyRes) => {
-        log('info', `${requestId} Response: ${proxyRes.statusCode}`);
+        log('info', `${requestId} Response: ${proxyRes.statusCode} (${useSearch ? 'search' : 'api'})`);
 
         // 轉發狀態碼和響應頭
         res.writeHead(proxyRes.statusCode, proxyRes.headers);
@@ -109,7 +145,7 @@ const server = http.createServer((req, res) => {
         res.end(JSON.stringify({
             error: 'Bad Gateway',
             message: err.message,
-            targetHost: TARGET_HOST
+            targetHost: targetHost
         }));
     });
 

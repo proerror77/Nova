@@ -39,6 +39,18 @@ struct AppConfig {
     static var timeout: TimeInterval {
         Environment.current.timeout
     }
+
+    // Messaging WebSocket base URL (without path)
+    // Development uses local messaging-service exposed at 8085 (see docker-compose)
+    static var messagingWebSocketBaseURL: URL {
+        switch Environment.current {
+        case .development:
+            return URL(string: "ws://localhost:8085")!
+        case .staging, .production:
+            // If you have a gateway, set to wss://api.nova.social or dedicated WS endpoint
+            return URL(string: "wss://api.nova.social")!
+        }
+    }
 }
 
 // MARK: - Feature Flags
@@ -67,4 +79,13 @@ struct FeatureFlags {
 
     /// 日志级别
     static let logLevel: LogLevel = .debug
+
+    /// 是否允許將非 UUID 的使用者 ID 做本地映射（開發/測試用）
+    /// true: 允許將任意字串穩定映射為 UUID（透過哈希）
+    /// false: 僅接受合法 UUID（預設上線請關閉）
+    static let enableNonUUIDUserIdMapping: Bool = true
+
+    /// 嚴格 E2E 模式（客戶端加密）。開啟後，發送時會使用 CryptoCore 加密，payload 以 "ENC:v1:<nonce_b64>:<ciphertext_b64>" 形式傳遞
+    /// 後端可當作不透明字串存儲。接收端可在客戶端解密（需要對方公鑰）。
+    static let enableStrictE2E: Bool = true
 }

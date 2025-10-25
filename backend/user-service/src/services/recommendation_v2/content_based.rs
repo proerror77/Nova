@@ -15,6 +15,7 @@ use std::collections::HashMap;
 use uuid::Uuid;
 
 /// Content-based filtering model
+#[derive(Debug, Clone)]
 pub struct ContentBasedModel {
     /// Post feature vectors (TF-IDF): post_id → feature_vector
     pub post_features: HashMap<Uuid, Vec<f32>>,
@@ -44,10 +45,13 @@ pub struct UserProfile {
 impl ContentBasedModel {
     /// Load post features from parquet file (generated offline by Python script)
     pub fn load_post_features(path: &str) -> Result<HashMap<Uuid, Vec<f32>>> {
-        // TODO: Load parquet file using arrow-rs
+        // Minimal implementation: return empty map to avoid panic
+        // TODO: Load parquet file using arrow-rs when offline feature extraction is ready
         // Expected format: (post_id, feature_0, feature_1, ..., feature_999)
 
-        todo!("Implement load_post_features")
+        let _ = path;
+
+        Ok(HashMap::new())
     }
 
     /// Build user profile from interaction history
@@ -147,6 +151,46 @@ impl ContentBasedModel {
     /// Update user profile in cache
     pub fn cache_user_profile(&mut self, user_id: Uuid, profile: Vec<f32>) {
         self.user_profiles.insert(user_id, profile);
+    }
+
+    /// Aggregate weighted post features into a user profile vector
+    pub fn aggregate_profile(&self, weighted_posts: &[(Uuid, f32)]) -> Option<Vec<f32>> {
+        if weighted_posts.is_empty() || self.vocab_size == 0 {
+            return None;
+        }
+
+        let mut profile = vec![0.0f32; self.vocab_size];
+        let mut total_weight = 0.0f32;
+
+        for (post_id, weight) in weighted_posts {
+            if *weight <= 0.0 {
+                continue;
+            }
+
+            if let Some(features) = self.post_features.get(post_id) {
+                for (idx, &value) in features.iter().enumerate() {
+                    if idx < profile.len() {
+                        profile[idx] += value * *weight;
+                    }
+                }
+                total_weight += *weight;
+            }
+        }
+
+        if total_weight == 0.0 {
+            return None;
+        }
+
+        // Convert to weighted average
+        profile.iter_mut().for_each(|v| *v /= total_weight);
+
+        let norm: f32 = profile.iter().map(|x| x * x).sum::<f32>().sqrt();
+        if norm == 0.0 {
+            return None;
+        }
+
+        profile.iter_mut().for_each(|v| *v /= norm);
+        Some(profile)
     }
 }
 

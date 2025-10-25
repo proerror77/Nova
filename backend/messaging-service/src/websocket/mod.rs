@@ -9,6 +9,7 @@ pub mod subscription;
 pub mod broadcast;
 pub mod pubsub;
 pub mod message_types;
+pub mod streams;
 
 #[derive(Default, Clone)]
 pub struct ConnectionRegistry {
