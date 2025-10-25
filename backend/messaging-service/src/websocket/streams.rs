@@ -5,6 +5,7 @@
 use redis::{Client, AsyncCommands, aio::MultiplexedConnection};
 use uuid::Uuid;
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicU64, Ordering};
 use tokio::time::{self, Duration};
 
 /// Represents a stream message entry
@@ -49,6 +50,11 @@ fn group_stream_key() -> String {
     "stream:fanout:all-conversations".to_string()
 }
 
+/// Global message counter for probabilistic stream trimming
+/// Only trim every 100 messages to avoid performance overhead
+static TRIM_COUNTER: AtomicU64 = AtomicU64::new(0);
+const TRIM_INTERVAL: u64 = 100;  // Trim every 100 messages
+
 /// Publish message to stream for a specific conversation
 pub async fn publish_to_stream(
     client: &Client,
@@ -80,16 +86,38 @@ pub async fn publish_to_stream(
         ]
     ).await?;
 
-    // === CRITICAL FIX: Trim stream to prevent unbounded growth ===
-    // Every 100 messages, trim to max 1000 entries using XTRIM
-    // This prevents Redis from running out of memory
-    let _: Result<(), _> = redis::cmd("XTRIM")
-        .arg(&key)
-        .arg("MAXLEN")
-        .arg("~")  // Approximate trimming for performance
-        .arg(1000)  // Keep last 1000 messages
-        .query_async(&mut conn)
-        .await;
+    // === CRITICAL FIX: Probabilistic stream trimming ===
+    // Only trim every 100 messages (not every message) to prevent performance degradation
+    // Previous implementation trimmed on every message, causing Redis bottlenecks
+    let counter = TRIM_COUNTER.fetch_add(1, Ordering::Relaxed);
+    if counter % TRIM_INTERVAL == 0 {
+        // Non-blocking trim: spawn background task to avoid blocking main message path
+        let key_clone = key.clone();
+        let redis_client = client.clone();
+
+        tokio::spawn(async move {
+            let mut trim_conn = match redis_client.get_multiplexed_async_connection().await {
+                Ok(c) => c,
+                Err(e) => {
+                    tracing::warn!("Failed to connect for stream trim: {:?}", e);
+                    return;
+                }
+            };
+
+            // Trim to keep 50,000 most recent messages (more reasonable than 1,000)
+            // Approximate trimming allows ±10% variance but is much faster
+            if let Err(e) = redis::cmd("XTRIM")
+                .arg(&key_clone)
+                .arg("MAXLEN")
+                .arg("~")  // Approximate trimming for performance
+                .arg(50000)  // Keep last 50k messages (~1-2MB per stream)
+                .query_async::<_, ()>(&mut trim_conn)
+                .await
+            {
+                tracing::warn!("Failed to trim stream {}: {:?}", key_clone, e);
+            }
+        });
+    }
 
     Ok(entry_id)
 }

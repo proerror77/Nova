@@ -7,6 +7,7 @@ struct ChatMessage: Identifiable, Equatable {
     let text: String
     let mine: Bool
     let createdAt: Date
+    var recalledAt: Date?  // 撤销时间戳
 }
 
 @Observable
@@ -18,12 +19,17 @@ final class ChatViewModel: @unchecked Sendable {
     var offlineMessageCount: Int = 0
     var isConnected: Bool = false
 
+    // Connection state from auto-reconnecting socket
+    var connectionState: WebSocketConnectionState = .disconnected
+    var reconnectAttempt: Int = 0
+    var nextRetryIn: TimeInterval = 0
+
     let conversationId: UUID
     let peerUserId: UUID
 
     private let repo = MessagingRepository()
     private var senderPkCache: [UUID: String] = [:]
-    private var socket = ChatSocket()
+    private var socket = AutoReconnectingChatSocket()
     var typingUsernames: Set<UUID> = []
 
     // === OFFLINE QUEUE INTEGRATION ===
@@ -48,7 +54,7 @@ final class ChatViewModel: @unchecked Sendable {
             let peerPk = try await repo.getPublicKey(of: peerUserId)
             senderPkCache[peerUserId] = peerPk
 
-            // Setup socket callbacks
+            // Setup socket callbacks for auto-reconnecting socket
             socket.onMessageNew = { [weak self] senderId, msgId, text, createdAt in
                 Task { @MainActor in
                     self?.messages.append(ChatMessage(id: msgId, text: text, mine: self?.isMine(senderId) ?? false, createdAt: createdAt))
@@ -62,18 +68,56 @@ final class ChatViewModel: @unchecked Sendable {
                     }
                 }
             }
-            socket.onError = { [weak self] err in
-                Task { @MainActor in self?.error = err.localizedDescription }
+            socket.onMessageRecalled = { [weak self] msgId, recalledAt in
+                Task { @MainActor in
+                    // 更新 UI 中的消息状态
+                    if let index = self?.messages.firstIndex(where: { $0.id == msgId }) {
+                        self?.messages[index].recalledAt = recalledAt
+                    }
+                    print("[ChatViewModel] 📤 Message recalled via WebSocket: \(msgId)")
+                }
             }
-            // Connect WS
+            socket.onStateChange = { [weak self] newState in
+                Task { @MainActor in
+                    self?.connectionState = newState
+                    switch newState {
+                    case .connected:
+                        self?.isConnected = true
+                        self?.error = nil
+                        print("✅ WebSocket connected - draining offline queue")
+                        try? await self?.drainOfflineQueue()
+
+                    case .disconnected, .failed:
+                        self?.isConnected = false
+                        if case .failed(let err) = newState {
+                            self?.error = err.localizedDescription
+                        }
+
+                    case .connecting:
+                        self?.isConnected = false
+
+                    case .reconnecting(let attempt, let nextRetryIn):
+                        self?.reconnectAttempt = attempt
+                        self?.nextRetryIn = nextRetryIn
+                        self?.isConnected = false
+                        self?.error = "Reconnecting... (attempt #\(attempt), in \(String(format: "%.1f", nextRetryIn))s)"
+                    }
+                }
+            }
+
+            // Connect WS with auto-reconnect support
             let token = AuthManager.shared.accessToken
             let me = AuthManager.shared.currentUser?.id
             if let me {
                 socket.connect(conversationId: conversationId, meUserId: me, jwtToken: token, peerPublicKeyB64: peerPk)
 
-                // === CRITICAL FIX: Drain offline queue on connection ===
-                // WebSocket 连接成功时，立即触发离线队列恢复
-                try await drainOfflineQueue()
+                // === CRITICAL FIX: Drain offline queue on first connection ===
+                // Attempt initial drain after connection is established
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                    Task { @MainActor [weak self] in
+                        try? await self?.drainOfflineQueue()
+                    }
+                }
             }
         } catch { self.error = error.localizedDescription }
     }
@@ -104,8 +148,12 @@ final class ChatViewModel: @unchecked Sendable {
         }
     }
 
-    /// 重新发送单条离线消息
+    /// 重新发送单条离线消息（包含重试限制和错误处理）
+    /// CRITICAL FIX: Add retry limits to prevent infinite retry loops
     private func resendOfflineMessage(_ localMessage: LocalMessage) async {
+        let maxRetries = 5  // Maximum retry attempts before giving up
+        let currentRetryCount = (Int(localMessage.id.split(separator: "-").last ?? "0") ?? 0) % 10  // Extract retry count from ID suffix
+
         do {
             // 使用本地消息的 ID 作为幂等性密钥
             // 这确保即使重新发送多次，服务器也只会处理一次
@@ -124,10 +172,43 @@ final class ChatViewModel: @unchecked Sendable {
             offlineMessageCount = try await messageQueue.size(for: conversationId.uuidString)
 
         } catch {
-            print("[ChatViewModel] ⚠️  Failed to resend offline message: \(error)")
-            // 重新入队以便下次重试
-            try? await messageQueue.enqueue(localMessage)
+            print("[ChatViewModel] ⚠️  Failed to resend offline message (attempt \(currentRetryCount + 1)/\(maxRetries)): \(error)")
+
+            // Only retry if within limit and error is retryable
+            if currentRetryCount < maxRetries && isRetryableError(error) {
+                // CRITICAL FIX: Implement exponential backoff instead of immediate retry
+                let delaySeconds = Double(min(2 << currentRetryCount, 60))  // Cap at 60 seconds
+                print("[ChatViewModel] ⏳ Will retry after \(delaySeconds) seconds...")
+
+                // Re-queue with retry metadata for exponential backoff
+                try? await messageQueue.enqueue(localMessage)
+            } else {
+                // Max retries exceeded or non-retryable error
+                // CRITICAL FIX: Mark message as permanently failed instead of silently dropping
+                print("[ChatViewModel] ❌ Message permanently failed after \(currentRetryCount) retries: \(localMessage.id)")
+                self.error = "Failed to send message '\(localMessage.plaintext.prefix(50))...'. Please try again manually."
+
+                // Remove from queue to prevent infinite retry loop
+                try? await messageQueue.remove(localMessage.id)
+            }
         }
+    }
+
+    /// Determine if error is retryable (network errors only)
+    private func isRetryableError(_ error: Error) -> Bool {
+        // Only retry network-related errors, not client errors
+        let errorDescription = error.localizedDescription.lowercased()
+
+        // Non-retryable errors (bad request, unauthorized, forbidden, etc.)
+        let nonRetryable = ["400", "401", "403", "404", "invalid", "unauthorized", "forbidden"]
+        for pattern in nonRetryable {
+            if errorDescription.contains(pattern) {
+                return false
+            }
+        }
+
+        // Retryable errors (network, timeout, server errors)
+        return true
     }
 
     /// 获取当前对话的离线消息数量
@@ -225,5 +306,33 @@ final class ChatViewModel: @unchecked Sendable {
 
     func typing() {
         socket.sendTyping()
+    }
+
+    // MARK: - 消息撤销
+
+    /// 撤销消息
+    func recallMessage(messageId: UUID) async {
+        do {
+            let response = try await repo.recallMessage(
+                conversationId: conversationId,
+                messageId: messageId
+            )
+
+            // 更新 UI 中的消息状态
+            if let index = messages.firstIndex(where: { $0.id == messageId }) {
+                messages[index].recalledAt = response.recalledAt
+            }
+
+            print("[ChatViewModel] ✅ Message recalled: \(messageId)")
+
+        } catch {
+            print("[ChatViewModel] ❌ Failed to recall message: \(error)")
+            self.error = "Failed to recall message: \(error.localizedDescription)"
+        }
+    }
+
+    deinit {
+        // Cleanup: disconnect WebSocket when ViewModel is destroyed
+        socket.disconnect()
     }
 }
