@@ -1,5 +1,6 @@
 import Foundation
 import SwiftData
+import Observation
 
 struct ChatMessage: Identifiable, Equatable {
     let id: UUID
@@ -8,13 +9,14 @@ struct ChatMessage: Identifiable, Equatable {
     let createdAt: Date
 }
 
+@Observable
 @MainActor
-final class ChatViewModel: ObservableObject {
-    @Published var messages: [ChatMessage] = []
-    @Published var input: String = ""
-    @Published var error: String?
-    @Published var offlineMessageCount: Int = 0
-    @Published var isConnected: Bool = false
+final class ChatViewModel: @unchecked Sendable {
+    var messages: [ChatMessage] = []
+    var input: String = ""
+    var error: String?
+    var offlineMessageCount: Int = 0
+    var isConnected: Bool = false
 
     let conversationId: UUID
     let peerUserId: UUID
@@ -22,7 +24,7 @@ final class ChatViewModel: ObservableObject {
     private let repo = MessagingRepository()
     private var senderPkCache: [UUID: String] = [:]
     private var socket = ChatSocket()
-    @Published var typingUsernames: Set<UUID> = []
+    var typingUsernames: Set<UUID> = []
 
     // === OFFLINE QUEUE INTEGRATION ===
     private let messageQueue: LocalMessageQueue
