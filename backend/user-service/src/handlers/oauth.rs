@@ -1,11 +1,14 @@
 use actix_web::{web, HttpMessage, HttpRequest, HttpResponse, Responder};
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
+use std::sync::Arc;
+use std::time::Instant;
 
 use crate::db::{oauth_repo, user_repo};
 use crate::middleware::jwt_auth::UserId;
 use crate::security::jwt;
-use crate::services::oauth::{OAuthProvider, OAuthProviderFactory};
+use crate::services::oauth::{OAuthProvider, OAuthProviderFactory, JWKSCache};
+use crate::metrics::oauth_metrics;
 
 // ============================================
 // Request/Response Types
@@ -72,10 +75,14 @@ pub struct ErrorResponse {
 /// Creates new user if first OAuth login, or returns existing user
 pub async fn authorize(
     pool: web::Data<PgPool>,
+    jwks_cache: web::Data<Arc<JWKSCache>>,
     req: web::Json<OAuthAuthorizeRequest>,
 ) -> impl Responder {
-    // 1. Create OAuth provider instance
-    let provider: Box<dyn OAuthProvider> = match OAuthProviderFactory::create(&req.provider) {
+    // 1. Create OAuth provider instance with JWKS cache
+    let provider: Box<dyn OAuthProvider> = match OAuthProviderFactory::create_with_jwks_cache(
+        &req.provider,
+        Some(jwks_cache.as_ref().clone()),
+    ) {
         Ok(p) => p,
         Err(e) => {
             return HttpResponse::BadRequest().json(ErrorResponse {
@@ -87,6 +94,7 @@ pub async fn authorize(
 
     // 2. Verify state parameter (CSRF protection)
     if let Err(e) = provider.verify_state(&req.state) {
+        oauth_metrics::helpers::record_token_exchange_error(&req.provider, "invalid_state");
         return HttpResponse::BadRequest().json(ErrorResponse {
             error: "Invalid state parameter".to_string(),
             details: Some(e.to_string()),
@@ -94,15 +102,20 @@ pub async fn authorize(
     }
 
     // 3. Exchange authorization code for tokens and user info
+    let exchange_start = Instant::now();
     let oauth_user_info = match provider.exchange_code(&req.code, &req.redirect_uri).await {
         Ok(info) => info,
         Err(e) => {
+            oauth_metrics::helpers::record_token_exchange_error(&req.provider, "token_exchange_failed");
             return HttpResponse::BadRequest().json(ErrorResponse {
                 error: "Failed to exchange authorization code".to_string(),
                 details: Some(e.to_string()),
             });
         }
     };
+
+    let exchange_duration = exchange_start.elapsed().as_secs_f64();
+    oauth_metrics::helpers::record_token_exchange_success(&req.provider, exchange_duration);
 
     // 4. Check if OAuth connection already exists
     let existing_connection = match oauth_repo::find_by_provider(
@@ -156,7 +169,10 @@ pub async fn authorize(
                 )
                 .await
                 {
-                    Ok(u) => u,
+                    Ok(u) => {
+                        oauth_metrics::helpers::record_new_user_created(&oauth_user_info.provider);
+                        u
+                    }
                     Err(e) => {
                         return HttpResponse::InternalServerError().json(ErrorResponse {
                             error: "Failed to create user".to_string(),
@@ -247,6 +263,7 @@ pub async fn authorize(
 /// Link a new OAuth provider to an existing authenticated user
 pub async fn link_provider(
     pool: web::Data<PgPool>,
+    jwks_cache: web::Data<Arc<JWKSCache>>,
     http_req: HttpRequest,
     req: web::Json<OAuthLinkRequest>,
 ) -> impl Responder {
@@ -261,8 +278,11 @@ pub async fn link_provider(
         }
     };
 
-    // 1. Create OAuth provider instance
-    let provider: Box<dyn OAuthProvider> = match OAuthProviderFactory::create(&req.provider) {
+    // 1. Create OAuth provider instance with JWKS cache
+    let provider: Box<dyn OAuthProvider> = match OAuthProviderFactory::create_with_jwks_cache(
+        &req.provider,
+        Some(jwks_cache.as_ref().clone()),
+    ) {
         Ok(p) => p,
         Err(e) => {
             return HttpResponse::BadRequest().json(ErrorResponse {
@@ -274,6 +294,7 @@ pub async fn link_provider(
 
     // 2. Verify state parameter
     if let Err(e) = provider.verify_state(&req.state) {
+        oauth_metrics::helpers::record_link_operation(&req.provider, "invalid_state");
         return HttpResponse::BadRequest().json(ErrorResponse {
             error: "Invalid state parameter".to_string(),
             details: Some(e.to_string()),
@@ -281,15 +302,18 @@ pub async fn link_provider(
     }
 
     // 3. Exchange authorization code for tokens
+    let exchange_start = Instant::now();
     let oauth_user_info = match provider.exchange_code(&req.code, &req.redirect_uri).await {
         Ok(info) => info,
         Err(e) => {
+            oauth_metrics::helpers::record_link_operation(&req.provider, "token_exchange_failed");
             return HttpResponse::BadRequest().json(ErrorResponse {
                 error: "Failed to exchange authorization code".to_string(),
                 details: Some(e.to_string()),
             });
         }
     };
+    let _ = exchange_start.elapsed(); // consumed for duration tracking
 
     // 4. Check if this provider is already linked to current user
     if let Ok(true) = oauth_repo::provider_exists_for_user(
@@ -299,6 +323,7 @@ pub async fn link_provider(
     )
     .await
     {
+        oauth_metrics::helpers::record_link_operation(&oauth_user_info.provider, "already_linked");
         return HttpResponse::Conflict().json(ErrorResponse {
             error: "Provider already linked".to_string(),
             details: Some(format!(
@@ -317,6 +342,7 @@ pub async fn link_provider(
     .await
     {
         if existing_connection.user_id != current_user_id {
+            oauth_metrics::helpers::record_link_operation(&oauth_user_info.provider, "account_conflict");
             return HttpResponse::Conflict().json(ErrorResponse {
                 error: "Provider account already in use".to_string(),
                 details: Some("This OAuth account is already linked to another user".to_string()),
@@ -338,12 +364,14 @@ pub async fn link_provider(
     )
     .await
     {
+        oauth_metrics::helpers::record_link_operation(&oauth_user_info.provider, "creation_failed");
         return HttpResponse::InternalServerError().json(ErrorResponse {
             error: "Failed to link provider".to_string(),
             details: Some(e.to_string()),
         });
     }
 
+    oauth_metrics::helpers::record_link_operation(&oauth_user_info.provider, "success");
     HttpResponse::Ok().json(OAuthLinkResponse {
         message: format!("{} account linked successfully", oauth_user_info.provider),
         provider: oauth_user_info.provider,
@@ -406,6 +434,7 @@ pub async fn unlink_provider(
 
     // 3. Prevent unlinking if it's the only authentication method
     if !has_password && connections.len() == 1 {
+        oauth_metrics::helpers::record_unlink_operation(&provider_name, "last_auth_method");
         return HttpResponse::BadRequest().json(ErrorResponse {
             error: "Cannot unlink last authentication method".to_string(),
             details: Some(
@@ -420,6 +449,7 @@ pub async fn unlink_provider(
     let connection_id = match connection_to_delete {
         Some(conn) => conn.id,
         None => {
+            oauth_metrics::helpers::record_unlink_operation(&provider_name, "not_linked");
             return HttpResponse::NotFound().json(ErrorResponse {
                 error: "Provider not linked".to_string(),
                 details: Some(format!("{} is not linked to your account", provider_name)),
@@ -429,12 +459,14 @@ pub async fn unlink_provider(
 
     // 5. Delete the connection
     if let Err(e) = oauth_repo::delete_connection(pool.get_ref(), connection_id).await {
+        oauth_metrics::helpers::record_unlink_operation(&provider_name, "deletion_failed");
         return HttpResponse::InternalServerError().json(ErrorResponse {
             error: "Failed to unlink provider".to_string(),
             details: Some(e.to_string()),
         });
     }
 
+    oauth_metrics::helpers::record_unlink_operation(&provider_name, "success");
     HttpResponse::Ok().json(OAuthUnlinkResponse {
         message: format!("{} unlinked successfully", provider_name),
         provider: provider_name,

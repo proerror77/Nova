@@ -5,6 +5,18 @@ use thiserror::Error;
 pub mod apple;
 pub mod facebook;
 pub mod google;
+pub mod jwks_cache;
+pub mod pkce;
+pub mod state_manager;
+pub mod token_encryption;
+pub mod token_refresh_job;
+
+// Re-export commonly used types
+pub use jwks_cache::{JWKS, JWKSCache, JWKSCacheStats, JWKSKey};
+pub use pkce::{generate_code_challenge, verify_code_challenge};
+pub use state_manager::{OAuthState, OAuthStateManager};
+pub use token_encryption::{generate_encryption_key, TokenEncryptionService};
+pub use token_refresh_job::{OAuthTokenRefreshConfig, OAuthTokenRefreshJob, OAuthTokenRefreshStats};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OAuthUserInfo {
@@ -73,9 +85,29 @@ pub struct OAuthProviderFactory;
 impl OAuthProviderFactory {
     /// Create OAuth provider by name
     pub fn create(provider: &str) -> Result<Box<dyn OAuthProvider>, OAuthError> {
+        Self::create_with_jwks_cache(provider, None)
+    }
+
+    /// Create OAuth provider by name with optional JWKS cache for optimized token verification
+    pub fn create_with_jwks_cache(
+        provider: &str,
+        jwks_cache: Option<std::sync::Arc<JWKSCache>>,
+    ) -> Result<Box<dyn OAuthProvider>, OAuthError> {
         match provider.to_lowercase().as_str() {
-            "apple" => Ok(Box::new(apple::AppleOAuthProvider::new()?)),
-            "google" => Ok(Box::new(google::GoogleOAuthProvider::new()?)),
+            "apple" => {
+                let mut apple_provider = apple::AppleOAuthProvider::new()?;
+                if let Some(cache) = jwks_cache {
+                    apple_provider = apple_provider.with_jwks_cache(cache);
+                }
+                Ok(Box::new(apple_provider))
+            }
+            "google" => {
+                let mut google_provider = google::GoogleOAuthProvider::new()?;
+                if let Some(cache) = jwks_cache {
+                    google_provider = google_provider.with_jwks_cache(cache);
+                }
+                Ok(Box::new(google_provider))
+            }
             "facebook" => Ok(Box::new(facebook::FacebookOAuthProvider::new()?)),
             _ => Err(OAuthError::ConfigError(format!(
                 "Unknown OAuth provider: {}",

@@ -12,6 +12,7 @@ pub mod events_metrics;
 pub mod feed_metrics;
 pub mod job_metrics;
 pub mod messaging_metrics;
+pub mod oauth_metrics;
 
 lazy_static! {
     /// Global registry for all metrics

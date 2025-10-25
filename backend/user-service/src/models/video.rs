@@ -215,6 +215,108 @@ pub struct VideoUploadSession {
 }
 
 // ========================================
+// Resumable Upload Models
+// ========================================
+
+/// Upload status enum for resumable uploads
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
+#[sqlx(rename_all = "lowercase")]
+#[serde(rename_all = "lowercase")]
+pub enum UploadStatus {
+    /// Upload in progress
+    Uploading,
+    /// All chunks uploaded successfully
+    Completed,
+    /// Upload failed or expired
+    Failed,
+    /// User cancelled the upload
+    Cancelled,
+}
+
+impl UploadStatus {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Uploading => "uploading",
+            Self::Completed => "completed",
+            Self::Failed => "failed",
+            Self::Cancelled => "cancelled",
+        }
+    }
+
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s {
+            "uploading" => Some(Self::Uploading),
+            "completed" => Some(Self::Completed),
+            "failed" => Some(Self::Failed),
+            "cancelled" => Some(Self::Cancelled),
+            _ => None,
+        }
+    }
+}
+
+/// Resumable upload session
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+pub struct ResumableUpload {
+    pub id: Uuid,
+    pub user_id: Uuid,
+    pub video_id: Option<Uuid>,
+    pub file_name: String,
+    pub file_size: i64,
+    pub uploaded_size: i64,
+    pub chunk_size: i32,
+    pub chunks_total: i32,
+    pub chunks_completed: i32,
+    pub status: String, // Stored as string, use UploadStatus for conversion
+    pub s3_upload_id: Option<String>,
+    pub s3_bucket: Option<String>,
+    pub s3_key: Option<String>,
+    pub content_hash: Option<String>,
+    pub expires_at: DateTime<Utc>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    #[sqlx(default)]
+    pub completed_at: Option<DateTime<Utc>>,
+}
+
+impl ResumableUpload {
+    /// Get parsed status
+    pub fn get_status(&self) -> UploadStatus {
+        UploadStatus::from_str(&self.status).unwrap_or(UploadStatus::Uploading)
+    }
+
+    /// Check if all chunks have been uploaded
+    pub fn is_complete(&self) -> bool {
+        self.chunks_completed >= self.chunks_total
+    }
+
+    /// Calculate progress percentage
+    pub fn progress_percent(&self) -> f64 {
+        if self.chunks_total == 0 {
+            0.0
+        } else {
+            (self.chunks_completed as f64 / self.chunks_total as f64) * 100.0
+        }
+    }
+}
+
+/// Individual upload chunk
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+pub struct UploadChunk {
+    pub id: Uuid,
+    pub upload_id: Uuid,
+    pub chunk_number: i32,
+    pub chunk_size: i64,
+    pub etag: String,
+    pub chunk_hash: String,
+    pub status: String,
+    pub upload_attempts: i32,
+    pub last_error: Option<String>,
+    pub created_at: DateTime<Utc>,
+    #[sqlx(default)]
+    pub completed_at: Option<DateTime<Utc>>,
+}
+
+// ========================================
 // API DTOs
 // ========================================
 

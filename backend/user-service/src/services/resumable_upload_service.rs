@@ -143,7 +143,7 @@ impl ResumableUploadService {
             .map(|chunk| {
                 CompletedPart::builder()
                     .part_number(chunk.chunk_number + 1) // 1-indexed
-                    .e_tag(chunk.etag.as_ref().unwrap_or(&"".to_string()))
+                    .e_tag(&chunk.etag)
                     .build()
             })
             .collect();

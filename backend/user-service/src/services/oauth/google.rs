@@ -1,4 +1,5 @@
 use super::{OAuthError, OAuthProvider, OAuthUserInfo};
+use crate::services::oauth::jwks_cache::JWKSCache;
 use async_trait::async_trait;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -10,6 +11,7 @@ pub struct GoogleOAuthProvider {
     client_secret: String,
     redirect_uri: String,
     http_client: Arc<Client>,
+    jwks_cache: Option<Arc<JWKSCache>>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -52,7 +54,14 @@ impl GoogleOAuthProvider {
             client_secret,
             redirect_uri,
             http_client: Arc::new(Client::new()),
+            jwks_cache: None,
         })
+    }
+
+    /// Set the JWKS cache for optimized token verification
+    pub fn with_jwks_cache(mut self, cache: Arc<JWKSCache>) -> Self {
+        self.jwks_cache = Some(cache);
+        self
     }
 
     /// Verify Google ID token using tokeninfo endpoint

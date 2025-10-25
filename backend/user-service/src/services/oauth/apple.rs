@@ -1,4 +1,5 @@
 use super::{OAuthError, OAuthProvider, OAuthUserInfo};
+use crate::services::oauth::jwks_cache::JWKSCache;
 use async_trait::async_trait;
 use jsonwebtoken::{decode, decode_header, jwk::JwkSet, Algorithm, DecodingKey, Validation};
 use reqwest::Client;
@@ -13,6 +14,7 @@ pub struct AppleOAuthProvider {
     private_key: String,
     redirect_uri: String,
     http_client: Arc<Client>,
+    jwks_cache: Option<Arc<JWKSCache>>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -64,7 +66,14 @@ impl AppleOAuthProvider {
             private_key,
             redirect_uri,
             http_client: Arc::new(Client::new()),
+            jwks_cache: None,
         })
+    }
+
+    /// Set the JWKS cache for optimized token verification
+    pub fn with_jwks_cache(mut self, cache: Arc<JWKSCache>) -> Self {
+        self.jwks_cache = Some(cache);
+        self
     }
 
     /// Generate Apple client secret (JWT signed with private key)
@@ -91,20 +100,98 @@ impl AppleOAuthProvider {
             .map_err(|e| OAuthError::ConfigError(format!("Failed to encode JWT: {}", e)))
     }
 
-    /// Verify Apple ID token and extract user information
-    /// Fetches Apple's public keys from https://appleid.apple.com/auth/keys
-    /// and validates the JWT signature
-    pub async fn verify_apple_token(&self, id_token: &str) -> Result<AppleUserInfo, OAuthError> {
-        // Fetch Apple's public keys
-        let jwks = self
-            .http_client
+    /// Fetch Apple's public JWKS (with optional caching)
+    async fn fetch_apple_jwks(&self) -> Result<JwkSet, OAuthError> {
+        if let Some(cache) = &self.jwks_cache {
+            // Create a closure that fetches raw JWKS JSON for caching
+            let fetch_fn = async {
+                self.http_client
+                    .get("https://appleid.apple.com/auth/keys")
+                    .send()
+                    .await
+                    .map_err(|e| format!("Failed to fetch Apple keys: {}", e))?
+                    .json::<serde_json::Value>()
+                    .await
+                    .map_err(|e| format!("Failed to parse Apple keys: {}", e))
+                    .and_then(|json| {
+                        // Convert raw JSON to our JWKS format for caching
+                        let keys = json
+                            .get("keys")
+                            .and_then(|k| k.as_array())
+                            .map(|arr| {
+                                arr.iter()
+                                    .filter_map(|key_obj| {
+                                        use crate::services::oauth::jwks_cache::JWKSKey;
+                                        Some(JWKSKey {
+                                            kty: key_obj.get("kty")?.as_str()?.to_string(),
+                                            use_: key_obj.get("use").and_then(|v| v.as_str()).map(String::from),
+                                            alg: key_obj.get("alg").and_then(|v| v.as_str()).map(String::from),
+                                            kid: key_obj.get("kid")?.as_str()?.to_string(),
+                                            n: key_obj.get("n").and_then(|v| v.as_str()).map(String::from),
+                                            e: key_obj.get("e").and_then(|v| v.as_str()).map(String::from),
+                                            x5c: None,
+                                            x5t: None,
+                                            x5t_s256: None,
+                                        })
+                                    })
+                                    .collect()
+                            })
+                            .unwrap_or_default();
+                        Ok(crate::services::oauth::jwks_cache::JWKS { keys })
+                    })
+            };
+
+            // Fetch from cache (or source if not cached)
+            let cached_jwks = cache
+                .get_jwks("apple", fetch_fn)
+                .await
+                .map_err(|e| OAuthError::NetworkError(format!("JWKS cache error: {}", e)))?;
+
+            // Convert cached JWKS back to JwkSet format for JWT validation
+            let jwk_vec: Vec<serde_json::Value> = cached_jwks
+                .keys
+                .into_iter()
+                .map(|key| {
+                    serde_json::json!({
+                        "kty": key.kty,
+                        "use": key.use_,
+                        "alg": key.alg,
+                        "kid": key.kid,
+                        "n": key.n,
+                        "e": key.e,
+                        "x5c": key.x5c,
+                        "x5t": key.x5t,
+                        "x5t#S256": key.x5t_s256,
+                    })
+                })
+                .collect();
+
+            serde_json::from_value::<JwkSet>(serde_json::json!({ "keys": jwk_vec }))
+                .map_err(|e| OAuthError::NetworkError(format!("Failed to convert cached JWKS: {}", e)))
+        } else {
+            // Fetch directly without caching
+            self.fetch_apple_jwks_direct().await
+        }
+    }
+
+    /// Fetch Apple's JWKS directly from the endpoint (no caching)
+    async fn fetch_apple_jwks_direct(&self) -> Result<JwkSet, OAuthError> {
+        self.http_client
             .get("https://appleid.apple.com/auth/keys")
             .send()
             .await
             .map_err(|e| OAuthError::NetworkError(format!("Failed to fetch Apple keys: {}", e)))?
             .json::<JwkSet>()
             .await
-            .map_err(|e| OAuthError::NetworkError(format!("Failed to parse Apple keys: {}", e)))?;
+            .map_err(|e| OAuthError::NetworkError(format!("Failed to parse Apple keys: {}", e)))
+    }
+
+    /// Verify Apple ID token and extract user information
+    /// Fetches Apple's public keys from https://appleid.apple.com/auth/keys
+    /// and validates the JWT signature (uses cache if available)
+    pub async fn verify_apple_token(&self, id_token: &str) -> Result<AppleUserInfo, OAuthError> {
+        // Fetch Apple's public keys (with optional caching)
+        let jwks = self.fetch_apple_jwks().await?;
 
         // Decode JWT header to get key ID
         let header = decode_header(id_token)

@@ -22,6 +22,7 @@ use user_service::{
         feed_ranking::FeedRankingService,
         job_queue,
         kafka_producer::EventProducer,
+        oauth::jwks_cache::JWKSCache,
         recommendation_v2::{HybridWeights, RecommendationConfig, RecommendationServiceV2},
         s3_service,
         graph::GraphService,
@@ -127,6 +128,12 @@ async fn main() -> io::Result<()> {
         .expect("Failed to create Redis connection manager");
 
     tracing::info!("Redis connection established");
+
+    // ========================================
+    // Initialize JWKS cache for OAuth providers
+    // ========================================
+    let jwks_cache = Arc::new(JWKSCache::new(redis_client.clone()));
+    tracing::info!("JWKS cache initialized for OAuth providers (24-hour TTL)");
 
     // Initialize global rate limiter (100 requests per 15 minutes per IP/user)
     use user_service::middleware::rate_limit::RateLimitConfig;
@@ -520,6 +527,7 @@ async fn main() -> io::Result<()> {
             .app_data(stream_state.clone())
             .app_data(stream_chat_ws_state.clone())
             .app_data(graph_data.clone())
+            .app_data(web::Data::new(jwks_cache.clone()))
             .wrap(cors)
             .wrap(Logger::default())
             .wrap(tracing_actix_web::TracingLogger::default())
