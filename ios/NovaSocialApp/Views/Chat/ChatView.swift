@@ -1,7 +1,11 @@
 import SwiftUI
 
 struct ChatView: View {
-    @StateObject var vm: ChatViewModel
+    @State private var vm: ChatViewModel
+
+    init(conversationId: UUID, peerUserId: UUID) {
+        _vm = State(initialValue: ChatViewModel(conversationId: conversationId, peerUserId: peerUserId))
+    }
 
     var body: some View {
         VStack {
