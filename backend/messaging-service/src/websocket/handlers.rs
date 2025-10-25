@@ -8,7 +8,7 @@ use tokio::sync::Mutex;
 use crate::state::AppState;
 use crate::websocket::message_types::{WsInboundEvent, WsOutboundEvent};
 use crate::services::conversation_service::ConversationService;
-use crate::services::offline_queue::{self, ClientSyncState};
+use crate::services::offline_queue;
 use crate::middleware::auth::verify_jwt;
 use tracing::{warn, error};
 
@@ -91,17 +91,30 @@ async fn handle_ws_event(evt: &WsInboundEvent, params: &WsParams, state: &AppSta
                 error!("Failed to serialize typing event for conversation {}, user {}", conversation_id, user_id);
             }
         }
+
+        WsInboundEvent::Ack { msg_id, conversation_id } => {
+            // Client acknowledges receipt of a message
+            if conversation_id != &params.conversation_id {
+                return;
+            }
+
+            let manager = state.ack_pool.get_or_create(params.user_id).await;
+            manager.handle_ack(msg_id).await;
+            tracing::debug!("Message {} acknowledged by user {}", msg_id, params.user_id);
+        }
+
+        WsInboundEvent::GetUnacked => {
+            // Client requests unacknowledged messages
+            // This is handled in the main event loop after socket split
+            tracing::debug!("Client {} requested unacked messages", params.user_id);
+        }
     }
 }
 
-// === Extracted: Token validation (消除嵌套) ===
+// === Extracted: Token validation - MANDATORY, no bypasses ===
 async fn validate_ws_token(params: &WsParams, headers: &HeaderMap) -> Result<(), axum::http::StatusCode> {
-    let dev_allow = std::env::var("WS_DEV_ALLOW_ALL").unwrap_or_else(|_| "false".into()) == "true";
-
-    if dev_allow {
-        warn!("⚠️  JWT validation BYPASSED (WS_DEV_ALLOW_ALL=true) - DO NOT USE IN PRODUCTION ⚠️");
-        return Ok(());
-    }
+    // SECURITY: JWT validation is MANDATORY. No exceptions, no dev flags.
+    // Fail-closed: if JWT is missing or invalid, reject the connection immediately.
 
     let token = params.token.clone()
         .or_else(|| {
@@ -113,14 +126,17 @@ async fn validate_ws_token(params: &WsParams, headers: &HeaderMap) -> Result<(),
 
     match token {
         None => {
-            error!("WebSocket connection rejected: No JWT token provided");
+            error!("🚫 WebSocket connection REJECTED: No JWT token provided in query params or Authorization header");
             Err(axum::http::StatusCode::UNAUTHORIZED)
         }
         Some(t) => {
             verify_jwt(&t).await
-                .map(|_| ()) // Extract the Claims, return ()
+                .map(|claims| {
+                    // Log successful authentication
+                    tracing::debug!("✅ WebSocket authentication successful for user: {}", claims.sub);
+                })
                 .map_err(|e| {
-                    error!("WebSocket connection rejected: Invalid JWT token: {:?}", e);
+                    error!("🚫 WebSocket connection REJECTED: Invalid JWT token - {:?}", e);
                     axum::http::StatusCode::UNAUTHORIZED
                 })
         }
@@ -141,22 +157,24 @@ pub async fn ws_handler(
     ws.on_upgrade(move |socket| handle_socket(state, params, socket))
 }
 
-// === Extracted: Membership verification (消除嵌套) ===
+// === Extracted: Membership verification - MANDATORY authorization check ===
 async fn verify_conversation_membership(state: &AppState, params: &WsParams) -> Result<(), ()> {
-    let dev_allow = std::env::var("WS_DEV_ALLOW_ALL").unwrap_or_else(|_| "false".into()) == "true";
-    if dev_allow {
-        return Ok(());
-    }
+    // SECURITY: Authorization is MANDATORY. User must be a member of the conversation.
+    // Fail-closed: if check fails or user is not a member, reject immediately.
 
     match ConversationService::is_member(&state.db, params.conversation_id, params.user_id).await {
-        Ok(true) => Ok(()),
+        Ok(true) => {
+            tracing::debug!("✅ WebSocket authorization: user {} is member of conversation {}",
+                params.user_id, params.conversation_id);
+            Ok(())
+        }
         Ok(false) => {
-            warn!("WebSocket rejected: user {} is not a member of conversation {}",
+            error!("🚫 WebSocket connection REJECTED: user {} is NOT a member of conversation {}",
                 params.user_id, params.conversation_id);
             Err(())
         }
         Err(e) => {
-            error!("WebSocket rejected: membership check failed for user {} in conversation {}: {:?}",
+            error!("🚫 WebSocket connection REJECTED: membership check failed for user {} in conversation {}: {:?}",
                 params.user_id, params.conversation_id, e);
             Err(())
         }
@@ -170,76 +188,95 @@ async fn handle_socket(state: AppState, params: WsParams, mut socket: WebSocket)
         return;
     }
 
-    // === OFFLINE MESSAGE QUEUE RECOVERY - STEP 1 ===
-    // Generate unique client ID for this connection
+    // === STEP 0: Initialize ACK Manager for this user ===
+    let ack_manager = state.ack_pool.get_or_create(params.user_id).await;
+
+    // === STEP 1: Generate unique client ID and initialize consumer group ===
     let client_id = Uuid::new_v4();
 
-    // Retrieve previous client sync state (if exists)
-    let last_message_id = if let Ok(Some(sync_state)) = offline_queue::get_client_sync_state(
-        &state.redis,
-        params.user_id,
-        client_id,
-    ).await {
-        sync_state.last_message_id.clone()
-    } else {
-        // No previous state, start from beginning (last 24 hours)
-        "0".to_string()
-    };
+    // Initialize Redis Streams consumer group for this conversation
+    // (Idempotent: safe to call repeatedly)
+    if let Err(e) = offline_queue::init_consumer_group(&state.redis, params.conversation_id).await {
+        error!("Failed to initialize consumer group: {:?}", e);
+        let _ = socket.send(Message::Close(None)).await;
+        return;
+    }
 
     let (mut sender, mut receiver) = socket.split();
 
-    // === OFFLINE MESSAGE QUEUE RECOVERY - STEP 2 (REORDERED) ===
-    // CRITICAL FIX: Register broadcast subscription BEFORE fetching offline messages
-    // This eliminates the race condition where messages arriving between
-    // get_messages_since() and add_subscriber() would be lost.
+    // === STEP 2: Deliver offline messages (atomic operation) ===
+    // CRITICAL FIX: Use atomic delivery to prevent message loss
     //
-    // Sequence:
-    // 1. Register to receive real-time messages (rx)
-    // 2. Fetch offline messages from Redis
-    // 3. Send offline messages via sender
-    // 4. Any new messages arriving after step 2 will be caught by rx
-    let mut rx = state.registry.add_subscriber(params.conversation_id).await;
+    // Previous approach had race condition:
+    //   add_subscriber() → [WINDOW] → read_pending_messages()
+    // Messages arriving in [WINDOW] between these calls would be lost.
+    //
+    // Fix: Combine three operations atomically:
+    // 1. Read pending messages from previous session
+    // 2. Register for real-time broadcasts
+    // 3. Read new messages since step 2
+    //
+    // This ensures all messages are captured without gaps.
 
-    // === OFFLINE MESSAGE QUEUE RECOVERY - STEP 3 (REORDERED) ===
-    // Now fetch and deliver offline messages since last known ID
-    // Safe to do this AFTER registration because rx will catch any new messages
-    if let Ok(offline_messages) = offline_queue::get_messages_since(
+    // Step 2a: Read pending messages (from previous disconnection)
+    let pending_messages = offline_queue::read_pending_messages(
         &state.redis,
         params.conversation_id,
-        &last_message_id,
-    ).await {
-        for (_stream_id, fields) in offline_messages {
-            if let Some(payload) = fields.get("payload") {
-                let msg = Message::Text(payload.clone());
-                if sender.send(msg).await.is_err() {
-                    return; // Connection closed
-                }
+        params.user_id,
+        client_id,
+    )
+    .await
+    .unwrap_or_default();
+
+    // Step 2b: Register broadcast subscription
+    // Now any messages from this point forward will be caught by rx
+    let (subscriber_id, mut rx) = state.registry.add_subscriber(params.conversation_id).await;
+
+    // Step 2c: Immediately read new messages (those that arrived after init_consumer_group)
+    // This captures messages between init_consumer_group and add_subscriber
+    let new_messages = offline_queue::read_new_messages(
+        &state.redis,
+        params.conversation_id,
+        params.user_id,
+        client_id,
+    )
+    .await
+    .unwrap_or_default();
+
+    // Step 2d: Combine and deliver all messages (pending + new)
+    let all_messages = [pending_messages, new_messages].concat();
+    for (stream_id, fields) in all_messages {
+        if let Some(payload) = fields.get("payload") {
+            let msg = Message::Text(payload.clone());
+            if sender.send(msg).await.is_err() {
+                return;  // Connection closed
             }
+            // Acknowledge after successful send (idempotent)
+            let _ = offline_queue::acknowledge_message(
+                &state.redis,
+                params.conversation_id,
+                &stream_id,
+            ).await;
         }
     }
 
-    // === OFFLINE MESSAGE QUEUE RECOVERY - STEP 4 ===
-    // Track last received message ID for this connection
-    let last_received_id = Arc::new(Mutex::new(last_message_id.clone()));
-
-    // === OFFLINE MESSAGE QUEUE RECOVERY - STEP 5 ===
-    // Spawn periodic sync task to update client state (every 5 seconds)
-    let sync_task = {
+    // === STEP 4: Periodic consumer group monitoring ===
+    // Spawn background task to periodically update monitoring state
+    // (Not critical for functionality, but helps with debugging and metrics)
+    let monitoring_task = {
         let redis = state.redis.clone();
         let user_id = params.user_id;
         let conversation_id = params.conversation_id;
-        let last_id = Arc::clone(&last_received_id);
 
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(std::time::Duration::from_secs(5));
             loop {
                 interval.tick().await;
-                let current_id = last_id.lock().await.clone();
-                let sync_state = ClientSyncState {
+                let sync_state = offline_queue::ClientSyncState {
                     client_id,
                     user_id,
                     conversation_id,
-                    last_message_id: current_id,
+                    last_message_id: "consumer-active".to_string(),  // Monitoring flag
                     last_sync_at: chrono::Utc::now().timestamp(),
                 };
                 let _ = offline_queue::update_client_sync_state(&redis, &sync_state).await;
@@ -247,17 +284,63 @@ async fn handle_socket(state: AppState, params: WsParams, mut socket: WebSocket)
         })
     };
 
-    // === MAIN MESSAGE LOOP - STEP 6 ===
-    // Multiplex incoming and outgoing messages
+    // === STEP 5: Periodic stream trimming ===
+    // Spawn background task to periodically trim old messages
+    // Prevents unbounded stream growth
+    let trimming_task = {
+        let redis = state.redis.clone();
+        let conversation_id = params.conversation_id;
+
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(3600));  // Every hour
+            loop {
+                interval.tick().await;
+                // Trim stream to keep only 10,000 most recent messages
+                // Approximate trimming (~10% variance) is much faster than exact
+                if let Err(e) = offline_queue::trim_stream(&redis, conversation_id, 10000).await {
+                    error!("Failed to trim stream: {:?}", e);
+                }
+            }
+        })
+    };
+
+    // === STEP 5.5: ACK timeout checking ===
+    // Spawn background task to periodically check for timed-out messages
+    // and automatically retry with exponential backoff
+    let ack_timeout_task = {
+        let ack_manager = ack_manager.clone();
+
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(10));  // Check every 10 seconds
+            loop {
+                interval.tick().await;
+                ack_manager.check_timeouts().await;
+            }
+        })
+    };
+
+    // === STEP 6: MAIN MESSAGE LOOP ===
+    // Multiplex incoming client messages and outgoing broadcast messages
     loop {
         tokio::select! {
-            // Handle outgoing broadcast messages
+            // Handle outgoing broadcast messages from other clients
             maybe = rx.recv() => {
                 if let Some(msg) = maybe {
-                    handle_broadcast_message(&msg, &last_received_id).await;
-                    if sender.send(msg).await.is_err() { break; }
+                    // Try to extract stream_id from message (for logging)
+                    if let Message::Text(ref txt) = msg {
+                        if let Ok(json) = serde_json::from_str::<serde_json::Value>(txt) {
+                            if let Some(_stream_id) = json.get("stream_id").and_then(|v| v.as_str()) {
+                                // Message came from stream - could be tracked
+                            }
+                        }
+                    }
+
+                    // Send to client
+                    if sender.send(msg).await.is_err() {
+                        break;  // Connection closed
+                    }
                 } else {
-                    break;
+                    break;  // Broadcast receiver closed
                 }
             }
 
@@ -270,18 +353,37 @@ async fn handle_socket(state: AppState, params: WsParams, mut socket: WebSocket)
         }
     }
 
-    // === CLEANUP - STEP 7 ===
-    // Save final sync state on disconnection
-    let final_id = last_received_id.lock().await.clone();
-    let final_state = ClientSyncState {
+    // === STEP 7: CLEANUP ===
+    // CRITICAL: Remove subscriber from registry FIRST to prevent memory leak
+    // This is the primary defense against accumulating dead senders
+    state.registry.remove_subscriber(params.conversation_id, subscriber_id).await;
+    tracing::debug!(
+        "Removed subscriber {} from conversation {} registry",
+        format!("{:?}", subscriber_id),
+        params.conversation_id
+    );
+
+    // Save final monitoring state on disconnection
+    let final_state = offline_queue::ClientSyncState {
         client_id,
         user_id: params.user_id,
         conversation_id: params.conversation_id,
-        last_message_id: final_id,
+        last_message_id: "disconnected".to_string(),
         last_sync_at: chrono::Utc::now().timestamp(),
     };
     let _ = offline_queue::update_client_sync_state(&state.redis, &final_state).await;
 
-    // Cancel the sync task
-    sync_task.abort();
+    // Cancel background tasks
+    monitoring_task.abort();
+    trimming_task.abort();
+    ack_timeout_task.abort();
+
+    // Cleanup ACK manager on disconnect
+    state.ack_pool.cleanup(params.user_id).await;
+
+    tracing::debug!(
+        "WebSocket connection closed for user {} in conversation {}",
+        params.user_id,
+        params.conversation_id
+    );
 }
