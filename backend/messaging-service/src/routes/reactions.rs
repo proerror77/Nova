@@ -1,4 +1,4 @@
-use axum::{extract::{Path, State, Query}, Json, http::StatusCode};
+use axum::{extract::{Path, State, Query, Extension}, Json, http::StatusCode};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use std::collections::HashMap;
@@ -27,6 +27,7 @@ pub struct ReactionsResponse {
 pub async fn add_reaction(
     State(state): State<AppState>,
     Path(message_id): Path<Uuid>,
+    Extension(user_id): Extension<Uuid>,
     Json(body): Json<AddReactionRequest>,
 ) -> Result<StatusCode, AppError> {
     // Validate emoji length (basic check)
@@ -43,7 +44,7 @@ pub async fn add_reaction(
         "#
     )
     .bind(message_id)
-    .bind(Uuid::nil())  // Will be set by middleware with actual user_id
+    .bind(user_id)
     .bind(&body.emoji)
     .execute(&state.db)
     .await
@@ -64,11 +65,13 @@ pub async fn add_reaction(
 }
 
 /// GET /messages/{id}/reactions
-/// Get all reactions for a message with counts
+/// Get all reactions for a message with counts and whether current user has reacted
 pub async fn get_reactions(
     State(state): State<AppState>,
     Path(message_id): Path<Uuid>,
+    Extension(user_id): Extension<Uuid>,
 ) -> Result<Json<ReactionsResponse>, AppError> {
+    // Fetch all reactions with counts for this message
     let reactions = sqlx::query_as::<_, (String, i64)>(
         r#"
         SELECT emoji, COUNT(*) as count
@@ -83,12 +86,31 @@ pub async fn get_reactions(
     .await
     .map_err(|e| AppError::StartServer(format!("Failed to fetch reactions: {e}")))?;
 
+    // Fetch reactions by current user for this message
+    let user_reactions = sqlx::query_as::<_, (String,)>(
+        r#"
+        SELECT DISTINCT emoji
+        FROM message_reactions
+        WHERE message_id = $1 AND user_id = $2
+        "#
+    )
+    .bind(message_id)
+    .bind(user_id)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|e| AppError::StartServer(format!("Failed to fetch user reactions: {e}")))?;
+
+    // Convert to HashSet for O(1) lookup
+    let user_reactions_set: std::collections::HashSet<String> =
+        user_reactions.into_iter().map(|(emoji,)| emoji).collect();
+
+    // Build response with user_reacted flag
     let reaction_counts: Vec<ReactionCount> = reactions
         .into_iter()
         .map(|(emoji, count)| ReactionCount {
-            emoji,
+            emoji: emoji.clone(),
             count,
-            user_reacted: false,  // TODO: Check if current user has this reaction
+            user_reacted: user_reactions_set.contains(&emoji),
         })
         .collect();
 
