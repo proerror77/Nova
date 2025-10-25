@@ -157,7 +157,7 @@ services:
     volumes:
       - clickhouse_data:/var/lib/clickhouse
       - clickhouse_logs:/var/log/clickhouse-server
-      - ./backend/clickhouse/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+      - ./backend/clickhouse:/docker-entrypoint-initdb.d
     healthcheck:
       test:
         [
