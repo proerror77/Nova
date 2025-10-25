@@ -2,7 +2,6 @@
 ///
 /// Production-ready manifest generation with proper specification compliance,
 /// caching, and support for adaptive bitrate streaming.
-
 use crate::config::video_config::StreamingConfig;
 use std::collections::HashMap;
 use tracing::debug;
@@ -278,9 +277,7 @@ impl StreamingManifestGenerator {
     ///
     /// # Returns
     /// Vector of quality tiers sorted by bitrate (ascending)
-    pub fn get_quality_tiers(
-        bitrates: &HashMap<String, u32>,
-    ) -> Vec<QualityTier> {
+    pub fn get_quality_tiers(bitrates: &HashMap<String, u32>) -> Vec<QualityTier> {
         let mut tiers: Vec<QualityTier> = bitrates
             .iter()
             .map(|(label, bitrate)| QualityTier::new(label.clone(), *bitrate))
@@ -400,12 +397,8 @@ mod tests {
         let generator = create_test_generator();
 
         // 30 seconds with 10-second segments = 3 segments
-        let manifest = generator.generate_hls_media_playlist(
-            "test",
-            "720p",
-            30,
-            "https://example.com",
-        );
+        let manifest =
+            generator.generate_hls_media_playlist("test", "720p", 30, "https://example.com");
 
         let segment_count = manifest.matches("segment").count();
         assert_eq!(segment_count, 3);
@@ -417,12 +410,8 @@ mod tests {
 
         // 25 seconds with 10-second segments = 3 segments
         // Last segment should be 5 seconds
-        let manifest = generator.generate_hls_media_playlist(
-            "test",
-            "720p",
-            25,
-            "https://example.com",
-        );
+        let manifest =
+            generator.generate_hls_media_playlist("test", "720p", 25, "https://example.com");
 
         // Should contain the actual duration of 5.0
         assert!(manifest.contains("5."));

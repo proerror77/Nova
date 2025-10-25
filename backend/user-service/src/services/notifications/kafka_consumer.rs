@@ -8,7 +8,6 @@
 /// 2. NotificationBatch: Batching logic
 /// 3. RetryPolicy: Error handling and retry logic
 /// 4. Error handling with circuit breaker
-
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -275,8 +274,14 @@ mod tests {
         assert_eq!(NotificationEventType::Follow.to_string(), "follow");
         assert_eq!(NotificationEventType::LiveStart.to_string(), "live_start");
         assert_eq!(NotificationEventType::Message.to_string(), "message");
-        assert_eq!(NotificationEventType::MentionPost.to_string(), "mention_post");
-        assert_eq!(NotificationEventType::MentionComment.to_string(), "mention_comment");
+        assert_eq!(
+            NotificationEventType::MentionPost.to_string(),
+            "mention_post"
+        );
+        assert_eq!(
+            NotificationEventType::MentionComment.to_string(),
+            "mention_comment"
+        );
     }
 
     #[tokio::test]

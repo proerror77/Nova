@@ -1,0 +1,215 @@
+# AlertManager Configuration for Nova Platform
+# Handles alert routing, grouping, and notifications
+
+global:
+  # Global SMTP configuration (optional)
+  # smtp_smarthost: 'smtp.example.com:587'
+  # smtp_auth_username: 'alerts@example.com'
+  # smtp_auth_password: '${SMTP_PASSWORD}'
+  # smtp_require_tls: true
+
+  # Resolve timeout (duration between retries for unresolved alerts)
+  resolve_timeout: 5m
+
+  # Slack configuration (global)
+  slack_api_url: '${SLACK_WEBHOOK_URL}'
+
+# =====================================================
+# Alert routing tree
+# =====================================================
+
+route:
+  # Default receiver if no match
+  receiver: 'default'
+
+  # How to group alerts
+  group_by: ['alertname', 'cluster', 'service', 'instance']
+
+  # How long to wait for more alerts before grouping
+  group_wait: 10s
+
+  # How long to wait before sending repeated notification
+  group_interval: 10s
+
+  # Timeout for resolve notifications
+  repeat_interval: 12h
+
+  # Nested routes for different severity levels
+  routes:
+    # =====================
+    # Critical Alerts
+    # =====================
+    - match:
+        severity: critical
+      receiver: 'critical-pagerduty'
+      continue: true
+      group_wait: 0s        # Send immediately for critical
+      repeat_interval: 4h   # Re-notify every 4 hours
+      routes:
+        # Additional routing for specific critical alerts
+        - match:
+            alertname: 'ServiceDown'
+          receiver: 'critical-pagerduty'
+          continue: true
+        - match:
+            alertname: 'CriticalMessageDeliveryFailure'
+          receiver: 'critical-pagerduty'
+          continue: true
+
+    # =====================
+    # Warning Alerts
+    # =====================
+    - match:
+        severity: warning
+      receiver: 'warning-slack'
+      continue: true
+      group_wait: 30s
+      repeat_interval: 4h
+      routes:
+        # WebSocket specific warnings
+        - match:
+            component: websocket
+          receiver: 'websocket-team'
+        # Messaging specific warnings
+        - match:
+            component: messaging
+          receiver: 'messaging-team'
+
+    # =====================
+    # Info Alerts
+    # =====================
+    - match:
+        severity: info
+      receiver: 'info-logs'
+      group_wait: 5m
+      repeat_interval: 24h
+
+# =====================================================
+# Receivers (notification targets)
+# =====================================================
+
+receivers:
+  # Default receiver (fallback)
+  - name: 'default'
+    slack_configs:
+      - channel: '#general'
+        title: '{{ .GroupLabels.alertname }}'
+        text: '{{ range .Alerts }}{{ .Annotations.description }}{{ end }}'
+        send_resolved: true
+
+  # Critical alerts → PagerDuty + Slack
+  - name: 'critical-pagerduty'
+    # PagerDuty integration
+    pagerduty_configs:
+      - service_key: '${PAGERDUTY_SERVICE_KEY}'
+        description: '[{{ .GroupLabels.severity | upper }}] {{ .GroupLabels.alertname }}'
+        details:
+          alerts: '{{ range .Alerts }}{{ .Labels.alertname }}{{ end }}'
+          service: '{{ .GroupLabels.service }}'
+          cluster: '{{ .GroupLabels.cluster }}'
+    # Also send to critical Slack channel
+    slack_configs:
+      - api_url: '${SLACK_WEBHOOK_CRITICAL}'
+        channel: '#critical-alerts'
+        title: ':rotating_light: [CRITICAL] {{ .GroupLabels.alertname }}'
+        text: |
+          *Severity:* CRITICAL
+          *Service:* {{ .GroupLabels.service }}
+          *Cluster:* {{ .GroupLabels.cluster }}
+          {{ range .Alerts }}
+          • {{ .Annotations.summary }}
+          {{ .Annotations.description }}
+          {{ end }}
+        send_resolved: true
+        color: 'danger'
+
+  # Warning alerts → Slack
+  - name: 'warning-slack'
+    slack_configs:
+      - api_url: '${SLACK_WEBHOOK_WARNING}'
+        channel: '#alerts'
+        title: ':warning: {{ .GroupLabels.alertname }}'
+        text: |
+          *Service:* {{ .GroupLabels.service }}
+          {{ range .Alerts }}
+          {{ .Annotations.summary }}
+          {{ .Annotations.description }}
+          {{ end }}
+        send_resolved: true
+        color: 'warning'
+
+  # WebSocket team notifications
+  - name: 'websocket-team'
+    slack_configs:
+      - api_url: '${SLACK_WEBHOOK_WEBSOCKET}'
+        channel: '#websocket-alerts'
+        title: '{{ .GroupLabels.alertname }}'
+        text: |
+          {{ range .Alerts }}
+          *Alert:* {{ .Labels.alertname }}
+          *Instance:* {{ .Labels.instance }}
+          *Description:* {{ .Annotations.description }}
+          {{ end }}
+        send_resolved: true
+
+  # Messaging team notifications
+  - name: 'messaging-team'
+    slack_configs:
+      - api_url: '${SLACK_WEBHOOK_MESSAGING}'
+        channel: '#messaging-alerts'
+        title: '{{ .GroupLabels.alertname }}'
+        text: |
+          {{ range .Alerts }}
+          *Alert:* {{ .Labels.alertname }}
+          *Instance:* {{ .Labels.instance }}
+          *Description:* {{ .Annotations.description }}
+          {{ end }}
+        send_resolved: true
+
+  # Info level → Logs only
+  - name: 'info-logs'
+    # No external notification, just internal logging
+
+# =====================================================
+# Inhibition rules (suppress alerts based on conditions)
+# =====================================================
+
+inhibit_rules:
+  # Suppress warning alerts when critical alert is firing for same service
+  - source_match:
+      severity: 'critical'
+    target_match:
+      severity: 'warning'
+    equal: ['service', 'cluster']
+
+  # Suppress info alerts when warning is firing for same service
+  - source_match:
+      severity: 'warning'
+    target_match:
+      severity: 'info'
+    equal: ['service', 'cluster']
+
+  # Suppress warnings if service is already down
+  - source_match:
+      alertname: 'ServiceDown'
+    target_match_re:
+      alertname: '.*'
+    equal: ['service', 'instance']
+
+# =====================================================
+# Environment variables required:
+# =====================================================
+# SLACK_WEBHOOK_URL              - General notifications
+# SLACK_WEBHOOK_CRITICAL         - Critical alerts channel
+# SLACK_WEBHOOK_WARNING          - Warning alerts channel
+# SLACK_WEBHOOK_WEBSOCKET        - WebSocket team channel
+# SLACK_WEBHOOK_MESSAGING        - Messaging team channel
+# PAGERDUTY_SERVICE_KEY          - PagerDuty integration key
+# SMTP_PASSWORD                  - SMTP auth (if using email)
+
+# =====================================================
+# Example Slack webhook environment setup:
+# =====================================================
+# export SLACK_WEBHOOK_URL="https://hooks.slack.com/services/YOUR/WEBHOOK/URL"
+# export SLACK_WEBHOOK_CRITICAL="https://hooks.slack.com/services/YOUR/CRITICAL/URL"
+# export PAGERDUTY_SERVICE_KEY="your-pagerduty-service-key"

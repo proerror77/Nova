@@ -1,5 +1,5 @@
-use crate::models::video::{VideoEntity, VideoEngagementEntity};
-use chrono::Utc;
+use crate::models::video::{VideoEngagementEntity, VideoEntity, VideoUploadSession};
+use chrono::{Duration, Utc};
 use sqlx::{PgPool, Row};
 use uuid::Uuid;
 
@@ -120,7 +120,10 @@ pub async fn upsert_engagement(
     .await
 }
 
-pub async fn increment_share(pool: &PgPool, id: Uuid) -> Result<VideoEngagementEntity, sqlx::Error> {
+pub async fn increment_share(
+    pool: &PgPool,
+    id: Uuid,
+) -> Result<VideoEngagementEntity, sqlx::Error> {
     sqlx::query(
         r#"INSERT INTO video_engagement (video_id) VALUES ($1) ON CONFLICT (video_id) DO NOTHING"#,
     )
@@ -179,5 +182,145 @@ pub async fn get_pipeline_status(
     .bind(video_id)
     .fetch_optional(pool)
     .await?;
-    Ok(row_opt.map(|r| (r.get("stage"), r.get("progress_percent"), r.get("current_step"), r.get("error"))))
+    Ok(row_opt.map(|r| {
+        (
+            r.get("stage"),
+            r.get("progress_percent"),
+            r.get("current_step"),
+            r.get("error"),
+        )
+    }))
+}
+
+// ============================================
+// Video Upload Session Operations
+// ============================================
+
+/// Create a new upload session for video with 1-hour expiry
+pub async fn create_video_upload_session(
+    pool: &PgPool,
+    video_id: Uuid,
+    upload_token: &str,
+) -> Result<VideoUploadSession, sqlx::Error> {
+    let expires_at = Utc::now() + Duration::hours(1);
+
+    let session = sqlx::query_as::<_, VideoUploadSession>(
+        r#"
+        INSERT INTO video_upload_sessions (video_id, upload_token, expires_at)
+        VALUES ($1, $2, $3)
+        RETURNING id, video_id, upload_token, file_hash, file_size, expires_at, is_completed, created_at
+        "#,
+    )
+    .bind(video_id)
+    .bind(upload_token)
+    .bind(expires_at)
+    .fetch_one(pool)
+    .await?;
+
+    Ok(session)
+}
+
+/// Find video upload session by token
+pub async fn find_video_upload_session_by_token(
+    pool: &PgPool,
+    token: &str,
+) -> Result<Option<VideoUploadSession>, sqlx::Error> {
+    let session = sqlx::query_as::<_, VideoUploadSession>(
+        r#"
+        SELECT id, video_id, upload_token, file_hash, file_size, expires_at, is_completed, created_at
+        FROM video_upload_sessions
+        WHERE upload_token = $1 AND expires_at > NOW()
+        "#,
+    )
+    .bind(token)
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(session)
+}
+
+/// Mark video upload session as completed
+pub async fn mark_video_upload_completed(
+    pool: &PgPool,
+    session_id: i32,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        r#"
+        UPDATE video_upload_sessions
+        SET is_completed = TRUE
+        WHERE id = $1
+        "#,
+    )
+    .bind(session_id)
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
+/// Update video upload session with file hash and size
+pub async fn update_video_session_file_hash(
+    pool: &PgPool,
+    session_id: i32,
+    file_hash: &str,
+    file_size: i64,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        r#"
+        UPDATE video_upload_sessions
+        SET file_hash = $2, file_size = $3
+        WHERE id = $1
+        "#,
+    )
+    .bind(session_id)
+    .bind(file_hash)
+    .bind(file_size)
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
+/// Update video status
+pub async fn update_video_status(
+    pool: &PgPool,
+    video_id: Uuid,
+    status: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        r#"
+        UPDATE videos
+        SET status = $1, updated_at = NOW()
+        WHERE id = $2
+        "#,
+    )
+    .bind(status)
+    .bind(video_id)
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
+/// Update video upload_url and cdn_url
+pub async fn update_video_urls(
+    pool: &PgPool,
+    video_id: Uuid,
+    upload_url: Option<&str>,
+    cdn_url: Option<&str>,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        r#"
+        UPDATE videos
+        SET upload_url = $2, cdn_url = $3, updated_at = NOW()
+        WHERE id = $1
+        "#,
+    )
+    .bind(video_id)
+    .bind(upload_url)
+    .bind(cdn_url)
+    .execute(pool)
+    .await?;
+
+    Ok(())
 }

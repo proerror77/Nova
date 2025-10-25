@@ -48,12 +48,19 @@ struct MainTabView: View {
                 }
                 .tag(3)
 
+            ConversationListView()
+                .tabItem {
+                    Image(systemName: "bubble.left.and.bubble.right.fill")
+                    Text("Messages")
+                }
+                .tag(4)
+
             ProfileView()
                 .tabItem {
                     Image(systemName: "person.fill")
                     Text("Profile")
                 }
-                .tag(4)
+                .tag(5)
         }
     }
 }

@@ -34,19 +34,26 @@
 //! - `analytics.rs` - Analytics aggregation (ClickHouse queries)
 
 pub mod analytics;
+pub mod chat_store;
 pub mod discovery;
 pub mod models;
 pub mod redis_counter;
 pub mod repository;
 pub mod rtmp_webhook;
 pub mod stream_service;
+pub mod ws;
 
+pub use analytics::StreamAnalyticsService;
+pub use discovery::StreamDiscoveryService;
 pub use models::{
-    CreateStreamRequest, CreateStreamResponse, JoinStreamResponse, StreamAnalytics, StreamDetails,
-    StreamStatus, StreamSummary,
+    CreateStreamRequest, CreateStreamResponse, JoinStreamResponse, StreamAnalytics, StreamCategory,
+    StreamDetails, StreamStatus, StreamSummary,
 };
+pub use rtmp_webhook::RtmpWebhookHandler;
 pub use stream_service::StreamService;
 
 // Re-export for convenience
+pub use chat_store::{StreamChatStore, StreamComment};
 pub use redis_counter::ViewerCounter;
 pub use repository::StreamRepository;
+pub use ws::{StreamChatActor, StreamChatHandlerState, StreamConnectionRegistry};

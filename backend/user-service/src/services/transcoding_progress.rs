@@ -2,7 +2,6 @@
 ///
 /// Provides real-time progress updates for transcoding jobs with ETA calculation,
 /// WebSocket support, and Redis-based persistence for scalability.
-
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -128,21 +127,14 @@ impl TranscodingProgressTracker {
             }
         }
 
-        debug!(
-            "Updated progress: {}",
-            update.format_progress()
-        );
+        debug!("Updated progress: {}", update.format_progress());
 
         update
     }
 
     /// Get current progress for a job
     pub async fn get_progress(&self, job_id: &str) -> Option<ProgressUpdate> {
-        self.progress_updates
-            .read()
-            .await
-            .get(job_id)
-            .cloned()
+        self.progress_updates.read().await.get(job_id).cloned()
     }
 
     /// Get all active progress updates

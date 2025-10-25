@@ -9,7 +9,7 @@ use crate::services::graph::GraphService;
 use crate::services::kafka_producer::EventProducer;
 use std::sync::Arc;
 use crate::metrics::helpers::record_social_follow_event;
-use crate::cache::{FeedCache, invalidate_search_cache, invalidate_user_cache};
+use crate::cache::{FeedCache, invalidate_search_cache, invalidate_user_cache, invalidate_user_cache_with_retry, invalidate_search_cache_with_retry};
 
 #[derive(Serialize)]
 struct FollowResponse { status: String }
@@ -99,12 +99,19 @@ pub async fn follow_user(
                     .invalidate_by_event("new_follow", user.0, Some(target_id))
                     .await;
 
-                // Invalidate user caches since profile visibility may have changed
-                let _ = invalidate_user_cache(redis_manager.get_ref(), user.0).await;
-                let _ = invalidate_user_cache(redis_manager.get_ref(), target_id).await;
+                // CRITICAL FIX: Use retry mechanism for cache invalidation
+                // to ensure cache is properly invalidated even with transient Redis errors
+                if let Err(e) = invalidate_user_cache_with_retry(redis_manager.get_ref(), user.0).await {
+                    tracing::warn!("Failed to invalidate user cache after retries: {}", e);
+                }
+                if let Err(e) = invalidate_user_cache_with_retry(redis_manager.get_ref(), target_id).await {
+                    tracing::warn!("Failed to invalidate target user cache after retries: {}", e);
+                }
 
                 // Invalidate search caches - follow relationship affects search visibility
-                let _ = invalidate_search_cache(redis_manager.get_ref(), "").await;
+                if let Err(e) = invalidate_search_cache_with_retry(redis_manager.get_ref(), "").await {
+                    tracing::warn!("Failed to invalidate search cache after retries: {}", e);
+                }
             }
 
             HttpResponse::Ok().json(FollowResponse { status: "ok".into() })
@@ -174,12 +181,19 @@ pub async fn unfollow_user(
                     .invalidate_by_event("new_follow", user.0, Some(target_id))
                     .await;
 
-                // Invalidate user caches since profile visibility may have changed
-                let _ = invalidate_user_cache(redis_manager.get_ref(), user.0).await;
-                let _ = invalidate_user_cache(redis_manager.get_ref(), target_id).await;
+                // CRITICAL FIX: Use retry mechanism for cache invalidation
+                // to ensure cache is properly invalidated even with transient Redis errors
+                if let Err(e) = invalidate_user_cache_with_retry(redis_manager.get_ref(), user.0).await {
+                    tracing::warn!("Failed to invalidate user cache after retries: {}", e);
+                }
+                if let Err(e) = invalidate_user_cache_with_retry(redis_manager.get_ref(), target_id).await {
+                    tracing::warn!("Failed to invalidate target user cache after retries: {}", e);
+                }
 
                 // Invalidate search caches - follow relationship affects search visibility
-                let _ = invalidate_search_cache(redis_manager.get_ref(), "").await;
+                if let Err(e) = invalidate_search_cache_with_retry(redis_manager.get_ref(), "").await {
+                    tracing::warn!("Failed to invalidate search cache after retries: {}", e);
+                }
             }
 
             HttpResponse::Ok().json(FollowResponse { status: "ok".into() })
@@ -302,11 +316,17 @@ pub async fn block_user(
         Ok(_) => {
             // Invalidate caches after blocking user
             if let Some(redis_manager) = redis_manager {
-                // User caches affected by block
-                let _ = invalidate_user_cache(redis_manager.get_ref(), user.0).await;
-                let _ = invalidate_user_cache(redis_manager.get_ref(), target_id).await;
+                // CRITICAL FIX: Use retry mechanism for cache invalidation
+                if let Err(e) = invalidate_user_cache_with_retry(redis_manager.get_ref(), user.0).await {
+                    tracing::warn!("Failed to invalidate user cache after retries: {}", e);
+                }
+                if let Err(e) = invalidate_user_cache_with_retry(redis_manager.get_ref(), target_id).await {
+                    tracing::warn!("Failed to invalidate target user cache after retries: {}", e);
+                }
                 // Search caches affected by block status change
-                let _ = invalidate_search_cache(redis_manager.get_ref(), "").await;
+                if let Err(e) = invalidate_search_cache_with_retry(redis_manager.get_ref(), "").await {
+                    tracing::warn!("Failed to invalidate search cache after retries: {}", e);
+                }
             }
             HttpResponse::Ok().json(FollowResponse { status: "ok".into() })
         }
@@ -333,11 +353,17 @@ pub async fn unblock_user(
         Ok(_) => {
             // Invalidate caches after unblocking user
             if let Some(redis_manager) = redis_manager {
-                // User caches affected by unblock
-                let _ = invalidate_user_cache(redis_manager.get_ref(), user.0).await;
-                let _ = invalidate_user_cache(redis_manager.get_ref(), target_id).await;
+                // CRITICAL FIX: Use retry mechanism for cache invalidation
+                if let Err(e) = invalidate_user_cache_with_retry(redis_manager.get_ref(), user.0).await {
+                    tracing::warn!("Failed to invalidate user cache after retries: {}", e);
+                }
+                if let Err(e) = invalidate_user_cache_with_retry(redis_manager.get_ref(), target_id).await {
+                    tracing::warn!("Failed to invalidate target user cache after retries: {}", e);
+                }
                 // Search caches affected by block status change
-                let _ = invalidate_search_cache(redis_manager.get_ref(), "").await;
+                if let Err(e) = invalidate_search_cache_with_retry(redis_manager.get_ref(), "").await {
+                    tracing::warn!("Failed to invalidate search cache after retries: {}", e);
+                }
             }
             HttpResponse::Ok().json(FollowResponse { status: "ok".into() })
         }

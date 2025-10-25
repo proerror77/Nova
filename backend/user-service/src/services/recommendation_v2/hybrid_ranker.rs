@@ -8,9 +8,9 @@
 use crate::error::{AppError, Result};
 use crate::services::feed_ranking::RankedPost;
 use crate::services::recommendation_v2::{
-    CollaborativeFilteringModel, ContentBasedModel,
+    CollaborativeFilteringModel, ContentBasedModel, UserContext,
 };
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
 
 /// Hybrid ranker weights
@@ -65,9 +65,9 @@ impl HybridWeights {
 /// Ranking strategy
 #[derive(Debug, Clone, Copy)]
 pub enum RankingStrategy {
-    Balanced,      // Equal weights
-    ColdStart,     // Rely on v1.0 trending
-    PowerUser,     // High personalization
+    Balanced,  // Equal weights
+    ColdStart, // Rely on v1.0 trending
+    PowerUser, // High personalization
     Custom(HybridWeights),
 }
 
@@ -99,27 +99,27 @@ impl HybridRanker {
         user_id: Uuid,
         candidates: Vec<Uuid>,
         k: usize,
+        context: Option<&UserContext>,
     ) -> Result<Vec<RankedPost>> {
         if candidates.is_empty() {
             return Ok(Vec::new());
         }
 
         // Step 1: Score with collaborative filtering
-        let cf_scores = self.score_collaborative(user_id, &candidates).await?;
+        let cf_scores = self
+            .score_collaborative(user_id, &candidates, context)
+            .await?;
 
         // Step 2: Score with content-based filtering
-        let cb_scores = self.score_content_based(user_id, &candidates).await?;
+        let cb_scores = self
+            .score_content_based(user_id, &candidates, context)
+            .await?;
 
         // Step 3: Score with v1.0 fallback (mock for now)
         let v1_scores = self.score_v1_fallback(&candidates).await?;
 
         // Step 4: Combine with learned weights
-        let hybrid_scores = self.combine_scores(
-            &candidates,
-            &cf_scores,
-            &cb_scores,
-            &v1_scores,
-        )?;
+        let hybrid_scores = self.combine_scores(&candidates, &cf_scores, &cb_scores, &v1_scores)?;
 
         // Step 5: Apply diversity optimization (MMR)
         let diversified = self.apply_diversity(hybrid_scores, k)?;
@@ -132,16 +132,24 @@ impl HybridRanker {
         &self,
         user_id: Uuid,
         candidates: &[Uuid],
+        context: Option<&UserContext>,
     ) -> Result<HashMap<Uuid, f64>> {
-        // TODO: Get recent user interactions
-        let recent_posts: Vec<Uuid> = vec![];
-        let seen_posts: Vec<Uuid> = vec![];
+        let recent_posts: Vec<Uuid> = context
+            .map(|ctx| ctx.recent_posts.clone())
+            .unwrap_or_default();
+        let seen_posts: Vec<Uuid> = context
+            .map(|ctx| ctx.seen_posts.clone())
+            .unwrap_or_default();
 
-        // Use item-based CF
-        let recommendations = self.cf_model
-            .recommend_item_based(&recent_posts, &seen_posts, candidates.len())?;
+        if recent_posts.is_empty() {
+            return Ok(HashMap::new());
+        }
 
-        Ok(recommendations.into_iter().collect())
+        let recommendations =
+            self.cf_model
+                .recommend_item_based(&recent_posts, &seen_posts, candidates.len())?;
+
+        Ok(filter_scores(recommendations, candidates))
     }
 
     /// Score candidates using content-based filtering
@@ -149,8 +157,23 @@ impl HybridRanker {
         &self,
         user_id: Uuid,
         candidates: &[Uuid],
+        context: Option<&UserContext>,
     ) -> Result<HashMap<Uuid, f64>> {
-        let recommendations = self.cb_model
+        if let Some(ctx) = context {
+            if let Some(profile) = ctx.user_profile.as_ref() {
+                let mut scores = HashMap::new();
+                for &post_id in candidates {
+                    let similarity = self.cb_model.compute_similarity(profile, post_id);
+                    if similarity > 0.0 {
+                        scores.insert(post_id, similarity);
+                    }
+                }
+                return Ok(scores);
+            }
+        }
+
+        let recommendations = self
+            .cb_model
             .recommend(user_id, candidates.to_vec(), candidates.len())
             .await?;
 
@@ -186,8 +209,7 @@ impl HybridRanker {
             hybrid_scores.push((post_id, final_score));
         }
 
-        // Sort by final_score (descending)
-        hybrid_scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        hybrid_scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
         Ok(hybrid_scores)
     }
@@ -200,11 +222,7 @@ impl HybridRanker {
     ///    MMR = λ × relevance - (1-λ) × max_similarity_to_selected
     /// 3. Select post with highest MMR
     /// 4. Repeat until k posts selected
-    fn apply_diversity(
-        &self,
-        mut scored: Vec<(Uuid, f64)>,
-        k: usize,
-    ) -> Result<Vec<RankedPost>> {
+    fn apply_diversity(&self, mut scored: Vec<(Uuid, f64)>, k: usize) -> Result<Vec<RankedPost>> {
         if scored.is_empty() {
             return Ok(Vec::new());
         }
@@ -255,6 +273,14 @@ impl HybridRanker {
         // For now, return low similarity (no diversity penalty)
         0.1
     }
+}
+
+fn filter_scores(recommendations: Vec<(Uuid, f64)>, candidates: &[Uuid]) -> HashMap<Uuid, f64> {
+    let candidate_set: std::collections::HashSet<Uuid> = candidates.iter().copied().collect();
+    recommendations
+        .into_iter()
+        .filter(|(post_id, _)| candidate_set.contains(post_id))
+        .collect()
 }
 
 #[cfg(test)]
@@ -309,7 +335,9 @@ mod tests {
         cb_scores.insert(candidates[1], 0.4);
         v1_scores.insert(candidates[1], 0.6);
 
-        let hybrid = ranker.combine_scores(&candidates, &cf_scores, &cb_scores, &v1_scores).unwrap();
+        let hybrid = ranker
+            .combine_scores(&candidates, &cf_scores, &cb_scores, &v1_scores)
+            .unwrap();
 
         assert_eq!(hybrid.len(), 2);
         // First post should have higher score (0.4*0.8 + 0.3*0.6 + 0.3*0.4 = 0.62)

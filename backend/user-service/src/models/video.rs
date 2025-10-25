@@ -134,6 +134,11 @@ pub struct VideoEntity {
     pub archived_at: Option<DateTime<Utc>>,
     pub deleted_at: Option<DateTime<Utc>>,
     pub updated_at: DateTime<Utc>,
+    // Transcoding fields (Task 2.4)
+    #[sqlx(default)]
+    pub transcoding_status: Option<String>,
+    #[sqlx(default)]
+    pub transcoding_retry_count: Option<i32>,
 }
 
 impl VideoEntity {
@@ -190,6 +195,23 @@ pub struct VideoEngagementEntity {
     pub completion_rate: Option<f64>, // NUMERIC(3,2)
     pub avg_watch_seconds: Option<i32>,
     pub last_updated: DateTime<Utc>,
+}
+
+// ========================================
+// Video Upload Session Entity (Database)
+// ========================================
+
+/// Video upload session for tracking two-phase uploads
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+pub struct VideoUploadSession {
+    pub id: i32,
+    pub video_id: Uuid,
+    pub upload_token: String,
+    pub file_hash: Option<String>,
+    pub file_size: Option<i64>,
+    pub expires_at: DateTime<Utc>,
+    pub is_completed: bool,
+    pub created_at: DateTime<Utc>,
 }
 
 // ========================================
@@ -257,6 +279,46 @@ pub struct PresignedUploadResponse {
     pub video_id: String,
     pub upload_url: String,
     pub expiry_seconds: u32,
+}
+
+/// Video upload init request
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VideoUploadInitRequest {
+    pub filename: String,
+    pub content_type: String,
+    pub file_size: i64,
+    pub title: String,
+    pub description: Option<String>,
+    pub hashtags: Option<Vec<String>>,
+    pub visibility: Option<String>,
+}
+
+/// Video upload init response
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VideoUploadInitResponse {
+    pub presigned_url: String,
+    pub video_id: String,
+    pub upload_token: String,
+    pub expires_in: i64,
+    pub instructions: String,
+}
+
+/// Video upload complete request
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VideoUploadCompleteRequest {
+    pub video_id: String,
+    pub upload_token: String,
+    pub file_hash: String,
+    pub file_size: i64,
+}
+
+/// Video upload complete response
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VideoUploadCompleteResponse {
+    pub video_id: String,
+    pub status: String,
+    pub message: String,
+    pub video_key: String,
 }
 
 /// Video processing progress DTO (for Kafka events)
@@ -354,6 +416,143 @@ pub struct TranscodingJob {
     pub completed_at: Option<DateTime<Utc>>,
     pub status: String, // "pending", "processing", "completed", "failed"
     pub error: Option<String>,
+}
+
+// ========================================
+// Transcoding Progress Events
+// ========================================
+
+/// Transcoding status for real-time progress tracking
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum TranscodingStatus {
+    /// Job is queued and waiting for worker
+    Pending,
+    /// Currently transcoding
+    Processing,
+    /// Successfully completed and published
+    Published,
+    /// Transcoding failed (retryable or fatal)
+    Failed,
+}
+
+impl TranscodingStatus {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Pending => "pending",
+            Self::Processing => "processing",
+            Self::Published => "published",
+            Self::Failed => "failed",
+        }
+    }
+
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s {
+            "pending" => Some(Self::Pending),
+            "processing" => Some(Self::Processing),
+            "published" => Some(Self::Published),
+            "failed" => Some(Self::Failed),
+            _ => None,
+        }
+    }
+}
+
+/// Real-time progress event for transcoding jobs
+/// Sent to WebSocket subscribers and webhook endpoints
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProgressEvent {
+    pub video_id: Uuid,
+    pub status: TranscodingStatus,
+    pub progress_percent: u8,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub current_stage: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub estimated_remaining_seconds: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub manifest_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error_message: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error_code: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub retrying: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub retry_at: Option<DateTime<Utc>>,
+    pub timestamp: DateTime<Utc>,
+}
+
+impl ProgressEvent {
+    /// Create a progress event
+    pub fn new_progress(
+        video_id: Uuid,
+        progress_percent: u8,
+        current_stage: Option<String>,
+        estimated_remaining_seconds: Option<i32>,
+    ) -> Self {
+        Self {
+            video_id,
+            status: TranscodingStatus::Processing,
+            progress_percent,
+            current_stage,
+            estimated_remaining_seconds,
+            manifest_url: None,
+            error_message: None,
+            error_code: None,
+            retrying: None,
+            retry_at: None,
+            timestamp: Utc::now(),
+        }
+    }
+
+    /// Create a completion event
+    pub fn new_completed(video_id: Uuid, manifest_url: String) -> Self {
+        Self {
+            video_id,
+            status: TranscodingStatus::Published,
+            progress_percent: 100,
+            current_stage: Some("completed".to_string()),
+            estimated_remaining_seconds: Some(0),
+            manifest_url: Some(manifest_url),
+            error_message: None,
+            error_code: None,
+            retrying: None,
+            retry_at: None,
+            timestamp: Utc::now(),
+        }
+    }
+
+    /// Create an error event
+    pub fn new_error(
+        video_id: Uuid,
+        error_message: String,
+        error_code: String,
+        retrying: bool,
+        retry_at: Option<DateTime<Utc>>,
+    ) -> Self {
+        Self {
+            video_id,
+            status: TranscodingStatus::Failed,
+            progress_percent: 0,
+            current_stage: None,
+            estimated_remaining_seconds: None,
+            manifest_url: None,
+            error_message: Some(error_message),
+            error_code: Some(error_code),
+            retrying: Some(retrying),
+            retry_at,
+            timestamp: Utc::now(),
+        }
+    }
+
+    /// Get webhook event type
+    pub fn event_type(&self) -> &'static str {
+        match self.status {
+            TranscodingStatus::Processing => "transcoding.progress",
+            TranscodingStatus::Published => "transcoding.completed",
+            TranscodingStatus::Failed => "transcoding.failed",
+            TranscodingStatus::Pending => "transcoding.queued",
+        }
+    }
 }
 
 #[cfg(test)]

@@ -2,21 +2,21 @@ use sqlx::postgres::{PgPool, PgPoolOptions};
 use std::time::Duration;
 
 pub mod ch_client;
-pub mod messaging_repo;
+pub mod comment_repo;
+pub mod experiment_repo;
+// pub mod messaging_repo; // REMOVED - moved to messaging-service
+pub mod like_repo;
 pub mod oauth_repo;
 pub mod password_reset_repo;
 pub mod post_repo;
+pub mod trending_repo;
+pub mod upload_repo;
 pub mod user_repo;
 pub mod video_repo;
+pub mod webhook_repo;
 
-// Compatibility shim for messaging module path expected by services
-// Re-exports types and repository from `messaging_repo` under `db::messaging`
-pub mod messaging {
-    pub use super::messaging_repo::{
-        Conversation, ConversationMember, ConversationType, MemberRole, Message, MessageType,
-        MessagingRepository,
-    };
-}
+// NOTE: Messaging repository removed - use messaging-service API (port 8085)
+// All messaging operations moved to messaging-service crate
 
 pub async fn create_pool(database_url: &str, max_connections: u32) -> Result<PgPool, sqlx::Error> {
     PgPoolOptions::new()

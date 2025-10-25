@@ -11,6 +11,9 @@ on:
     paths:
       - 'frontend/ios/**'
 
+permissions:
+  contents: read
+
 env:
   DEVELOPER_DIR: /Applications/Xcode_15.0.app/Contents/Developer
   IOS_SIMULATOR_DEVICE: "iPhone 15"
@@ -19,6 +22,9 @@ env:
 jobs:
   unit-tests:
     name: Unit Tests
+    concurrency:
+      group: ios-unit-${{ github.ref }}
+      cancel-in-progress: true
     runs-on: macos-14
     timeout-minutes: 30
 
@@ -104,6 +110,9 @@ jobs:
 
   integration-tests:
     name: Integration Tests
+    concurrency:
+      group: ios-integration-${{ github.ref }}
+      cancel-in-progress: true
     runs-on: macos-14
     timeout-minutes: 45
 
@@ -147,6 +156,9 @@ jobs:
 
   ui-tests:
     name: UI Tests
+    concurrency:
+      group: ios-ui-${{ github.ref }}
+      cancel-in-progress: true
     runs-on: macos-14
     timeout-minutes: 60
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
@@ -206,6 +218,9 @@ jobs:
 
   build-validation:
     name: Build Validation
+    concurrency:
+      group: ios-build-${{ github.ref }}
+      cancel-in-progress: true
     runs-on: macos-14
     timeout-minutes: 20
 
@@ -253,6 +268,9 @@ jobs:
 
   test-summary:
     name: Test Summary
+    concurrency:
+      group: ios-summary-${{ github.ref }}
+      cancel-in-progress: true
     runs-on: ubuntu-latest
     needs: [unit-tests, integration-tests]
     if: always()
@@ -289,6 +307,9 @@ jobs:
 
   performance-tests:
     name: Performance Tests
+    concurrency:
+      group: ios-perf-${{ github.ref }}
+      cancel-in-progress: true
     runs-on: macos-14
     timeout-minutes: 30
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'

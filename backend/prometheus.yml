@@ -1,0 +1,161 @@
+# Prometheus Configuration for Nova Platform
+# This file defines metrics scraping, alert rules, and recording rules
+
+global:
+  # How often to scrape targets by default
+  scrape_interval: 15s
+
+  # How long until a scrape request times out
+  scrape_timeout: 10s
+
+  # How often to evaluate rules
+  evaluation_interval: 15s
+
+  # Attach labels to any time series or alerts
+  external_labels:
+    monitor: 'nova-platform'
+    environment: '{{ ENVIRONMENT | "production" }}'
+    cluster: '{{ CLUSTER_NAME | "main" }}'
+
+# Alert manager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - 'alertmanager:9093'
+
+# Load rules once and periodically evaluate them
+rule_files:
+  - '/etc/prometheus/rules/prometheus.rules.yml'
+
+# Scrape configurations
+scrape_configs:
+  # =====================
+  # Backend Services
+  # =====================
+
+  - job_name: 'user-service'
+    static_configs:
+      - targets: ['localhost:8080']
+        labels:
+          service: 'user-service'
+          instance: 'primary'
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+    scrape_timeout: 10s
+    relabel_configs:
+      # Add environment label
+      - source_labels: [__address__]
+        target_label: instance_address
+
+  - job_name: 'messaging-service'
+    static_configs:
+      - targets: ['localhost:8081']
+        labels:
+          service: 'messaging-service'
+          instance: 'primary'
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+    scrape_timeout: 10s
+
+  - job_name: 'search-service'
+    static_configs:
+      - targets: ['localhost:8082']
+        labels:
+          service: 'search-service'
+          instance: 'primary'
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+    scrape_timeout: 10s
+
+  # =====================
+  # Infrastructure
+  # =====================
+
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['localhost:5432']
+        labels:
+          service: 'postgres'
+    metric_relabel_configs:
+      # Keep only PostgreSQL metrics
+      - source_labels: [__name__]
+        regex: 'pg_.*'
+        action: keep
+
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['localhost:6379']
+        labels:
+          service: 'redis'
+    scrape_interval: 10s
+
+  - job_name: 'kafka'
+    static_configs:
+      - targets: ['localhost:9308']
+        labels:
+          service: 'kafka'
+
+  # =====================
+  # Load Balancers / Proxies
+  # =====================
+
+  - job_name: 'nginx'
+    static_configs:
+      - targets: ['localhost:8888']
+        labels:
+          service: 'nginx'
+    metrics_path: '/metrics'
+
+  # =====================
+  # Container Orchestration
+  # =====================
+
+  - job_name: 'docker'
+    static_configs:
+      - targets: ['localhost:9323']
+        labels:
+          service: 'docker'
+    scrape_interval: 30s
+
+  - job_name: 'kubernetes'
+    static_configs:
+      - targets: ['localhost:10250']
+        labels:
+          service: 'kubernetes'
+    scrape_interval: 30s
+
+  # =====================
+  # Prometheus Self-Monitoring
+  # =====================
+
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+        labels:
+          service: 'prometheus'
+    metrics_path: '/metrics'
+
+# Advanced Prometheus settings for large deployments (optional)
+# Uncomment if needed
+
+# Storage settings
+# storage:
+#   tsdb:
+#     max_block_duration: 36h
+#     min_block_duration: 2h
+#     retention:
+#       size: 50GB
+#       time: 30d
+
+# Remote storage for long-term retention
+# remote_write:
+#   - url: "http://remote-storage:9009/api/v1/push"
+#     queue_config:
+#       capacity: 10000
+#       max_shards: 200
+#       min_shards: 1
+#       max_samples_per_send: 1000
+#       batch_send_wait_time: 5s
+#       min_backoff: 30ms
+#       max_backoff: 100ms
