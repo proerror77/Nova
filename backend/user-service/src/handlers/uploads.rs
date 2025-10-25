@@ -15,10 +15,11 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::config::Config;
-use crate::db::upload_repo::{self, UploadStatus};
+use crate::db::upload_repo;
 use crate::db::video_repo;
 use crate::error::{AppError, Result};
 use crate::middleware::UserId;
+use crate::models::UploadStatus;
 use crate::services::resumable_upload_service::ResumableUploadService;
 use crate::services::s3_service;
 
@@ -211,9 +212,9 @@ pub async fn upload_chunk(
     }
 
     // Check upload is still in uploading state
-    if upload.status != UploadStatus::Uploading {
+    if upload.status != UploadStatus::Uploading.as_str() {
         return Err(AppError::BadRequest(format!(
-            "Upload status is {:?}, cannot upload chunks",
+            "Upload status is {}, cannot upload chunks",
             upload.status
         )));
     }
@@ -351,7 +352,7 @@ pub async fn complete_upload(
     if !ResumableUploadService::is_upload_complete(pool.get_ref(), upload_id).await? {
         return Err(AppError::BadRequest(format!(
             "Upload incomplete: {}/{} chunks uploaded",
-            upload.chunks_uploaded, upload.chunks_total
+            upload.chunks_completed, upload.chunks_total
         )));
     }
 
@@ -392,9 +393,8 @@ pub async fn complete_upload(
     .await
     .map_err(|e| AppError::Internal(format!("Failed to create video: {}", e)))?;
 
-    // Mark upload as completed and link to video
-    let final_hash = req.final_hash.clone().unwrap_or_else(|| "".to_string());
-    upload_repo::complete_upload(pool.get_ref(), upload_id, video.id, final_hash)
+    // Mark upload as completed
+    upload_repo::complete_upload(pool.get_ref(), upload_id)
         .await
         .map_err(|e| AppError::Internal(format!("Failed to mark upload complete: {}", e)))?;
 
@@ -431,16 +431,9 @@ pub async fn get_upload_status(
         upload.chunks_total,
     );
 
-    let status_str = match upload.status {
-        UploadStatus::Uploading => "uploading",
-        UploadStatus::Completed => "completed",
-        UploadStatus::Failed => "failed",
-        UploadStatus::Cancelled => "cancelled",
-    };
-
     Ok(HttpResponse::Ok().json(UploadStatusResponse {
         upload_id: upload.id,
-        status: status_str.to_string(),
+        status: upload.status.clone(),
         chunks_total: upload.chunks_total,
         chunks_uploaded: upload.chunks_completed,
         progress_percent: progress,
