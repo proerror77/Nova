@@ -1,378 +1,459 @@
-# 🔧 P1 任务修正计划 - 基于代码审查
+# 🔧 P1 任务修正计划 - 基于代码审查 & 架构澄清
 
 **审查完成时间**: 2025-10-25
-**计划生效**: 立即
-**更新原因**: 代码审查发现 E2E 加密仍是占位符
+**计划更新**: 2025-10-25 (改为 iOS Swift 实现)
+**项目定位**: iOS 移动优先（无 Web 前端）
+**更新原因**:
+1. 代码审查发现 E2E 加密仍是占位符
+2. 架构澄清：项目是 iOS 原生应用，不需要 Web 前端
+3. 删除无用的 Web 前端，简化架构
 
 ---
 
 ## 📊 计划变更摘要
 
-### 原计划 (6-8 工时)
+### 原计划 (误导性的)
 ```
-P1: 消息加密完成
-├── 前端: 消息加密实现 (TweetNaCl.js) - 2天
-├── iOS: 视频上传 (分块+断点续传) - 2天
-└── 集成测试 - 1天
-总计: ~6-8天
+❌ Web 前端: 消息加密 (TweetNaCl.js)
+❌ iOS 视频上传
+❌ Web + iOS 跨平台协调
 ```
 
-### 修正计划 (12-15 工时)
+### 修正计划 (正确的 iOS 优先)
 ```
-P1: 前端 E2E 加密系统
-├── CRITICAL: 实现真实 E2E 加密 - 3天 (新发现)
-├── 消息加密集成 - 1天
-├── 密钥管理 - 1.5天
-├── 测试覆盖 - 1.5天
-└── 安全审查 - 0.5天
-小计: ~7.5天
+P1: iOS 端到端加密系统 ⭐
+├── CRITICAL: 实现真实 E2E 加密 (libsodium/Swift) - 3天
+├── 密钥管理 (Option A: 密码派生) - 1.5天
+├── 消息加密/解密 API - 1.5天
+├── 离线消息加密 - 1天
+└── 测试覆盖 + 安全审查 - 1day
+小计: ~8天
 
-P2: iOS 视频上传
-├── 实现分块上传 - 1.5天
+P2: iOS 视频上传 & 流媒体
+├── 分块上传实现 - 1.5天
 ├── 断点续传 - 1天
-└── 进度跟踪 - 0.5天
-小计: ~3天
+├── 进度跟踪 - 0.5天
+├── 视频播放集成 - 1天
+└── 测试 - 0.5天
+小计: ~4.5天
 
-P2: 跨平台集成
-├── 端到端加密验证 - 1天
-├── 消息同步测试 - 1天
-└── 性能测试 - 0.5天
+P3: 功能完善
+├── 推送通知 (APNs) - 1天
+├── 离线同步 - 1天
+└── 性能优化 - 0.5天
 小计: ~2.5天
 
-总计: ~12.5天
+总计: ~15天 (8 + 4.5 + 2.5)
 ```
 
 ---
 
-## 🎯 P1A: 前端 E2E 加密系统 (7.5 天)
+## 🎯 P1A: iOS E2E 加密系统 (8 天)
 
 ### 🔴 CRITICAL: E2E 加密实现 (3 天)
 
-**问题根源**: `client.ts` 是占位符
-```typescript
+**问题根源**: iOS 消息加密是占位符
+```swift
 // ❌ 现在的代码 (不安全)
-const ciphertext = Buffer.from(plaintext, 'utf8').toString('base64');
-const nonce = Math.random().toString(36).slice(2);
+let ciphertext = plaintext.data(using: .utf8)?.base64EncodedString()
+let nonce = UUID().uuidString
 
 // ✅ 需要的代码 (真实加密)
-// 使用 TweetNaCl.js 或 libsodium.js
+// 使用 libsodium (通过 SwiftNaCl / sodium.swift)
 ```
 
 **工作项**:
 
-#### 1. 库选择与集成 (4h)
-- [ ] 评估 TweetNaCl.js vs libsodium.js
-  - TweetNaCl: 简单、13KB、推荐
-  - libsodium: 功能多、60KB
-- [ ] 安装选定的库 `npm install tweetnacl-js`
-- [ ] 验证浏览器兼容性
+#### 1. 库选择与集成 (1天)
+
+**推荐: libsodium.swift (Swift 包装)**
+- ✅ Sodium library 官方支持
+- ✅ 性能优异（C 实现）
+- ✅ 功能完整（AEAD, secretbox, box）
+- ✅ iOS 最佳实践
+
+**安装**:
+```swift
+// Package.swift
+.package(url: "https://github.com/jedisct1/swift-sodium.git", from: "0.9.1")
+```
+
+**验证**:
+- [ ] 添加到 iOS 项目 SPM
+- [ ] 编译通过
 - [ ] 性能基准测试（加密 1KB 消息的耗时）
 
-**决策**: **推荐 TweetNaCl.js**
-- 理由：简单、专注、大小合适
-- 缺点：功能不如 libsodium 多
-- 如果需要更多功能后续可升级
+#### 2. 密钥管理设计 (1.5 天)
 
-#### 2. 密钥管理设计 (8h)
-
-**关键问题**：密钥从何而来？
-
-**Option A: 密码派生密钥** (推荐用于演示)
-```typescript
+**选择 Option A: 密码派生密钥** (推荐用于 MVP)
+```swift
 // 使用用户密码派生加密密钥
 // PBKDF2: 密码 + salt → 32 字节密钥
 // 优点：无需额外基础设施
-// 缺点：每个用户加密密钥不同，设备间不能共享
+// 缺点：每个设备不同密钥（后续支持多设备）
 ```
 
-**Option B: 服务器分配密钥**
-```typescript
-// 后端生成密钥，通过安全通道发送给前端
-// 优点：多设备支持
-// 缺点：需要后端支持，增加复杂度
-```
+**实现文件**: 新文件 `KeyManagement.swift`
+```swift
+import Sodium
 
-**Option C: 混合方案** (生产建议)
-```typescript
-// 用户主密钥 (从密码派生) + 服务器短期密钥
-// 优点：兼顾安全和便利
-// 缺点：最复杂
-```
-
-**建议进度**:
-- Week 1: 实现 Option A（演示用）
-- Week 2+: 规划 Option C（生产用）
-
-**实现文件**: 新文件 `keyManagement.ts`
-```typescript
-export interface KeyMaterial {
-  key: Uint8Array;           // 32 字节 NaCl 密钥
-  salt: Uint8Array;          // PBKDF2 salt
-  iterations: number;        // PBKDF2 迭代次数
+struct KeyMaterial {
+    let key: Bytes              // 32 字节 libsodium 密钥
+    let salt: Bytes             // PBKDF2 salt
+    let iterations: UInt32      // PBKDF2 迭代次数 (100,000)
 }
 
-export async function deriveKeyFromPassword(
-  password: string,
-  salt?: Uint8Array
-): Promise<KeyMaterial> {
-  // PBKDF2 with 100,000 iterations
-  // 返回 KeyMaterial
-}
+class KeyManager {
+    let sodium = Sodium()
 
-export async function verifyPasswordWithKey(
-  password: string,
-  keyMaterial: KeyMaterial
-): Promise<boolean> {
-  // 验证密码是否匹配
-}
-```
-
-#### 3. 消息加密/解密 API (6h)
-
-**替换 `client.ts`**:
-```typescript
-import nacl from 'tweetnacl-js';
-
-export async function encryptMessage(
-  plaintext: string,
-  sharedKey: Uint8Array
-): Promise<EncryptedMessage> {
-  // plaintext → NaCl box 加密
-  // 返回 { ciphertext, nonce, ephemeralPublicKey }
-}
-
-export async function decryptMessage(
-  encrypted: EncryptedMessage,
-  sharedKey: Uint8Array
-): Promise<string> {
-  // 解密 ciphertext
-  // 返回 plaintext
-  // 失败时抛出异常 (fail hard)
-}
-```
-
-**关键决策**:
-- [ ] 使用 box 加密（共享秘密密钥）还是 secretbox（对称密钥）？
-  - 推荐：secretbox（简单，适合聊天）
-- [ ] 如何处理 nonce？
-  - 推荐：每条消息随机生成新 nonce
-- [ ] Ciphertext 格式？
-  ```json
-  {
-    "v": 1,                          // 版本
-    "ciphertext": "base64string",    // 加密数据
-    "nonce": "base64string",         // NaCl nonce
-    "algorithm": "nacl-box"          // 算法标识
-  }
-  ```
-
-**错误处理** (Linus 原则: Fail Hard)
-```typescript
-export async function decryptMessage(encrypted, key) {
-  try {
-    // ... 解密逻辑
-  } catch (error) {
-    // 不要返回空字符串或 null
-    // 直接抛出异常，让上层处理
-    throw new DecryptionError('Failed to decrypt message', { cause: error });
-  }
-}
-
-// 上层处理
-try {
-  const plaintext = await decryptMessage(encrypted, key);
-} catch (error) {
-  // 用户看到："无法解密此消息"
-  // 不隐藏错误
-}
-```
-
-### 📝 消息格式集成 (1 天)
-
-**当前**:
-```json
-{
-  "sender_id": "uuid",
-  "plaintext": "hello",
-  "idempotency_key": "uuid"
-}
-```
-
-**修改为**:
-```json
-{
-  "sender_id": "uuid",
-  "encrypted": {
-    "v": 1,
-    "ciphertext": "...",
-    "nonce": "...",
-    "algorithm": "nacl-secretbox"
-  },
-  "idempotency_key": "uuid"
-}
-```
-
-**修改的文件**:
-- [ ] `messagingStore.ts` - `sendMessage()` 调用加密
-- [ ] `messagingStore.ts` - `onMessage()` 调用解密
-- [ ] 后端 API - 同时支持旧格式和新格式（兼容性）
-
-**代码示例**:
-```typescript
-// messagingStore.ts - sendMessage
-sendMessage: async (conversationId, userId, plaintext) => {
-  const idempotencyKey = crypto.randomUUID();
-
-  try {
-    // ✅ 新增：加密消息
-    const encrypted = await encryptMessage(plaintext, encryptionKey);
-
-    const res = await fetch(`${base}/conversations/${conversationId}/messages`, {
-      method: 'POST',
-      body: JSON.stringify({
-        sender_id: userId,
-        encrypted,           // ✅ 发送加密数据而不是 plaintext
-        idempotency_key: idempotencyKey,
-      }),
-    });
-    // ... 后续逻辑
-  }
-}
-
-// messagingStore.ts - onMessage (WebSocket)
-onMessage: (payload) => {
-  try {
-    const m = payload?.message;
-    if (!m) return;
-
-    // ✅ 新增：解密消息
-    let displayText = m.plaintext || ''; // 兼容旧消息
-    if (m.encrypted) {
-      displayText = await decryptMessage(m.encrypted, encryptionKey);
+    func deriveKeyFromPassword(
+        password: String,
+        salt: Bytes? = nil
+    ) throws -> KeyMaterial {
+        // PBKDF2 with 100,000 iterations
+        // 返回 KeyMaterial
     }
 
-    // 显示消息...
-  }
+    func verifyPasswordWithKey(
+        password: String,
+        keyMaterial: KeyMaterial
+    ) -> Bool {
+        // 验证密码是否匹配
+    }
+}
+```
+
+**密钥存储**:
+- ✅ Keychain 存储密钥（安全）
+- ✅ UserDefaults 存储 salt（非敏感）
+- ✅ 内存中缓存密钥（应用生命周期）
+
+#### 3. 消息加密/解密 API (1.5 天)
+
+**新文件**: `MessageEncryption.swift`
+```swift
+import Sodium
+
+struct EncryptedMessage {
+    let v: Int                  // 版本
+    let ciphertext: String      // base64
+    let nonce: String           // base64
+    let algorithm: String       // "sodium-secretbox"
+}
+
+class MessageCrypto {
+    let sodium = Sodium()
+    let keyManager: KeyManager
+
+    func encryptMessage(
+        plaintext: String,
+        symmetricKey: Bytes
+    ) throws -> EncryptedMessage {
+        guard let data = plaintext.data(using: .utf8) else {
+            throw CryptoError.invalidUTF8
+        }
+
+        // secretbox: authenticated encryption
+        let nonce = sodium.randomBytes.buf(length: Sodium.SecretBox.NonceBytes)!
+        let ciphertext = sodium.secretBox.seal(
+            message: Bytes(data),
+            secretKey: symmetricKey,
+            nonce: nonce
+        )!
+
+        return EncryptedMessage(
+            v: 1,
+            ciphertext: ciphertext.base64EncodedString(),
+            nonce: nonce.base64EncodedString(),
+            algorithm: "sodium-secretbox"
+        )
+    }
+
+    func decryptMessage(
+        encrypted: EncryptedMessage,
+        symmetricKey: Bytes
+    ) throws -> String {
+        guard let ciphertextBytes = Data(base64Encoded: encrypted.ciphertext),
+              let nonceBytes = Data(base64Encoded: encrypted.nonce) else {
+            throw CryptoError.invalidBase64
+        }
+
+        guard let plaintext = sodium.secretBox.open(
+            sealedMessage: Bytes(ciphertextBytes),
+            secretKey: symmetricKey,
+            nonce: Bytes(nonceBytes)
+        ) else {
+            throw CryptoError.decryptionFailed
+        }
+
+        return String(bytes: plaintext, encoding: .utf8) ?? ""
+    }
+}
+
+enum CryptoError: LocalizedError {
+    case invalidUTF8
+    case invalidBase64
+    case decryptionFailed
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidUTF8:
+            return "Invalid UTF-8 encoding"
+        case .invalidBase64:
+            return "Invalid base64 encoding"
+        case .decryptionFailed:
+            return "Failed to decrypt message - corruption or wrong key"
+        }
+    }
+}
+```
+
+**关键设计决策**:
+- ✅ 使用 secretbox（对称密钥，简单）
+- ✅ 每条消息随机生成新 nonce
+- ✅ Fail-hard 错误处理（不隐藏错误）
+
+### 📱 消息模型集成 (1 天)
+
+**更新消息模型**:
+```swift
+// Message.swift
+struct Message: Codable {
+    let id: UUID
+    let senderId: UUID
+    let conversationId: UUID
+    let encrypted: EncryptedPayload?    // ✅ 新字段
+    let plaintext: String?              // 向后兼容
+    let idempotencyKey: String
+    let timestamp: Date
+}
+
+struct EncryptedPayload: Codable {
+    let v: Int
+    let ciphertext: String
+    let nonce: String
+    let algorithm: String
+}
+```
+
+**集成点**:
+- [ ] `MessagingRepository.swift` - `sendMessage()` 调用加密
+- [ ] `WebSocketMessagingClient.swift` - `onMessage()` 调用解密
+- [ ] 后端 API 已支持（向后兼容旧格式）
+
+**代码示例**:
+```swift
+// MessagingRepository.swift
+func sendMessage(
+    conversationId: UUID,
+    userId: UUID,
+    plaintext: String,
+    encryptionKey: Bytes
+) async throws -> Message {
+    let encrypted = try messageCrypto.encryptMessage(
+        plaintext: plaintext,
+        symmetricKey: encryptionKey
+    )
+
+    let payload = MessagePayload(
+        senderId: userId,
+        encrypted: encrypted,
+        idempotencyKey: UUID().uuidString
+    )
+
+    let response = try await api.post(
+        "/conversations/\(conversationId)/messages",
+        body: payload
+    )
+
+    return try JSONDecoder().decode(Message.self, from: response)
+}
+
+// WebSocketMessagingClient.swift
+func onMessage(_ payload: IncomingMessage) {
+    do {
+        var displayText: String
+
+        if let encrypted = payload.message.encrypted {
+            // 解密新消息
+            displayText = try messageCrypto.decryptMessage(
+                encrypted: encrypted,
+                symmetricKey: currentEncryptionKey
+            )
+        } else {
+            // 向后兼容旧消息
+            displayText = payload.message.plaintext ?? "[无法解密]"
+        }
+
+        // 保存到本地数据库并更新 UI
+        saveMessage(payload.message, displayText: displayText)
+    } catch {
+        logger.error("Decryption error: \(error)")
+        // 显示错误，不隐藏
+        showError("无法解密此消息")
+    }
 }
 ```
 
 ### 🧪 测试覆盖 (1.5 天)
 
-**单元测试** (0.5天):
-```typescript
-describe('加密系统', () => {
-  it('加密后解密应恢复原文', async () => {
-    const plaintext = '你好世界';
-    const key = generateTestKey();
+**单元测试** (`MessageEncryptionTests.swift`):
+```swift
+import XCTest
+@testable import NovaSocial
 
-    const encrypted = await encryptMessage(plaintext, key);
-    const decrypted = await decryptMessage(encrypted, key);
+class MessageEncryptionTests: XCTestCase {
+    var crypto: MessageCrypto!
+    var testKey: Bytes!
 
-    expect(decrypted).toBe(plaintext);
-  });
+    override func setUp() {
+        super.setUp()
+        crypto = MessageCrypto()
+        testKey = Sodium().randomBytes.buf(length: 32)!
+    }
 
-  it('错误的密钥应解密失败', async () => {
-    const encrypted = await encryptMessage('secret', key1);
+    func testEncryptDecryptRoundTrip() async throws {
+        let plaintext = "你好世界"
 
-    expect(() => decryptMessage(encrypted, key2))
-      .rejects.toThrow();
-  });
+        let encrypted = try crypto.encryptMessage(
+            plaintext: plaintext,
+            symmetricKey: testKey
+        )
 
-  it('修改 ciphertext 应解密失败', async () => {
-    const encrypted = await encryptMessage('secret', key);
-    encrypted.ciphertext = encrypted.ciphertext.slice(0, -5) + 'xxxxx';
+        let decrypted = try crypto.decryptMessage(
+            encrypted: encrypted,
+            symmetricKey: testKey
+        )
 
-    expect(() => decryptMessage(encrypted, key))
-      .rejects.toThrow();
-  });
-});
+        XCTAssertEqual(decrypted, plaintext)
+    }
+
+    func testWrongKeyDecryptionFails() async throws {
+        let wrongKey = Sodium().randomBytes.buf(length: 32)!
+        let encrypted = try crypto.encryptMessage(
+            plaintext: "secret",
+            symmetricKey: testKey
+        )
+
+        XCTAssertThrowsError(
+            try crypto.decryptMessage(
+                encrypted: encrypted,
+                symmetricKey: wrongKey
+            )
+        )
+    }
+
+    func testCorruptedCiphertextFails() async throws {
+        var encrypted = try crypto.encryptMessage(
+            plaintext: "secret",
+            symmetricKey: testKey
+        )
+
+        // 破坏 ciphertext
+        encrypted.ciphertext = "invalid"
+
+        XCTAssertThrowsError(
+            try crypto.decryptMessage(
+                encrypted: encrypted,
+                symmetricKey: testKey
+            )
+        )
+    }
+}
 ```
 
-**集成测试** (1天):
-- [ ] Web → iOS 消息加密互操作性
+**集成测试** (`MessagingEncryptionIntegrationTests.swift`):
+- [ ] 加密消息发送到后端
+- [ ] 接收加密消息并解密
 - [ ] 离线消息加密持久化
-- [ ] 旧消息（未加密）的兼容性显示
+- [ ] 密钥派生验证
 - [ ] 性能：1000 条消息加密耗时 < 1s
 
-### 🔍 安全审查 (0.5天)
+### 🔍 安全审查 (1 天)
 
 **自检清单**:
 - [ ] 没有硬编码密钥
-- [ ] 密钥仅在内存存储
-- [ ] 使用加密学安全的随机数生成
+- [ ] 密钥在 Keychain 中安全存储
+- [ ] 使用加密学安全的随机数（`Sodium.randomBytes`）
 - [ ] 错误不泄露加密细节
 - [ ] 向后兼容旧消息
 - [ ] 没有时序攻击风险
+- [ ] Nonce 绝不重复（每条消息随机）
 
-**建议**: 如果可能，请安全专家审查（非阻塞）
+**建议**: iOS 安全专家审查（非阻塞）
 
 ---
 
 ## 📅 详细时间表
 
-### Week 1 (本周) - 7 天
+### Week 1 (本周) - 8 天
 
 | 时段 | 任务 | 工时 | 状态 |
 |------|------|------|------|
-| Day 1 (今天) | ✅ 代码审查完成 | 1h | ✅ 完成 |
-| Day 2 | 库选择 + 集成 TweetNaCl | 4h | 📅 今天开始 |
-| Day 3-4 | 密钥管理实现 | 8h | 📅 周三 |
-| Day 5 | 消息加密/解密 API | 6h | 📅 周四 |
-| Day 6 | 消息格式修改 + 集成 | 4h | 📅 周五 |
-| Day 7 | 单元测试 + 基本集成测试 | 4h | 📅 周六 |
+| Day 1 (今天) | ✅ 架构澄清 + 删除 Web 前端 | 1h | ✅ 完成 |
+| Day 2 | libsodium.swift 库集成 + SPM 配置 | 4h | 📅 明天开始 |
+| Day 3-4 | KeyManagement.swift + Keychain 存储 | 8h | 📅 周三-周四 |
+| Day 5 | MessageEncryption.swift + 加密/解密 API | 6h | 📅 周五 |
+| Day 6 | 消息模型集成 + Repository 修改 | 4h | 📅 周六 |
+| Day 7 | 单元测试 + 基本集成测试 | 4h | 📅 周日 |
+| Day 8 | 性能基准 + 文档 | 2h | 📅 周一 |
 
-**预期完成**: 本周日 (10月31日)
+**预期完成**: 下周一 (11月3日)
 
-### Week 2 (下周) - 5 天
+### Week 2 (下周) - 4.5 天 (P2 视频上传)
 
 | 时段 | 任务 | 工时 | 状态 |
 |------|------|------|------|
-| Day 1 | E2E 集成测试 (Web+iOS) | 2h | 📅 |
-| Day 2 | 安全审查 | 2h | 📅 |
-| Day 3 | 缺陷修复 | 2h | 📅 |
-| Day 4 | 性能优化 | 2h | 📅 |
-| Day 5 | 文档 + 部署准备 | 2h | 📅 |
+| Day 1-2 | 分块上传实现 + 断点续传 | 6h | 📅 |
+| Day 3 | 进度跟踪 UI | 2h | 📅 |
+| Day 4 | 视频播放集成 | 4h | 📅 |
+| Day 5 | 测试 + 文档 | 2h | 📅 |
 
 **预期完成**: 第二周五 (11月7日)
 
 ---
 
-## 🔄 重新优先级排列 (P1 -> P2)
+## 🔄 优先级安排
 
-### 原 P1 项目变更
+### P1: iOS 端到端加密系统 ✅
+**状态**: 优先级最高
+**原因**: 安全基础，所有消息功能依赖
+**预期完成**: 11月3日
 
-**维持 P1**: 前端消息加密系统 (本文档) ✅
+### P2: iOS 视频上传 & 流媒体
+**状态**: 次优先
+**原因**: 消息系统不依赖视频，可并行开发
+**预期完成**: 11月7日
 
-**降级为 P2**: iOS 视频上传
-- 原因：现有消息系统不依赖视频
-- 建议：先完成消息加密，再做视频
-- 预计：下下周 (11月15日之后)
-
-**新增 P1B**: 推送通知基础
-- 原因：用户需要看到新消息
-- 优先级：在 E2E 加密之后
-- 预计：11月10日开始
+### P3: 推送通知 + 离线同步
+**状态**: 第三优先
+**原因**: 用户体验优化，可在 P1/P2 之后
+**预期完成**: 11月10日
 
 ---
 
 ## 🎯 成功指标
 
-### 功能指标
-- [ ] Web 发送加密消息到后端
-- [ ] iOS 显示加密消息
-- [ ] 消息加密密钥正确派生
-- [ ] 旧消息（未加密）仍能正常显示
-- [ ] 离线消息正确加密存储
+### P1 功能指标
+- [ ] iOS 发送加密消息到后端
+- [ ] iOS 接收并解密消息
+- [ ] 密钥正确派生（PBKDF2）
+- [ ] 旧消息（未加密）向后兼容显示
+- [ ] 离线消息加密持久化到本地数据库
+- [ ] 100% 加密覆盖（所有新消息）
 
-### 性能指标
-- [ ] 加密 1KB 消息 < 100ms
-- [ ] 加密 10,000 消息批处理 < 10s
-- [ ] 内存增长 < 20MB
+### P1 性能指标
+- [ ] 加密 1KB 消息 < 50ms
+- [ ] 加密 1000 条消息 < 5s
+- [ ] 内存增长 < 10MB
+- [ ] Keychain 访问延迟 < 10ms
 
-### 质量指标
-- [ ] 单元测试覆盖率 > 80%
+### P1 质量指标
+- [ ] 单元测试覆盖率 > 85%
+- [ ] 集成测试覆盖率 > 80%
 - [ ] 安全审查通过
-- [ ] 零加密相关的 bug 报告（一周内）
+- [ ] 零加密相关的 crash（生产环境）
+- [ ] 消息完整性：0% 损坏率
 
 ---
 
@@ -380,12 +461,12 @@ describe('加密系统', () => {
 
 ### 高风险
 1. **密钥管理错误**
-   - 后果：所有消息都不安全
-   - 缓解：提前安全审查，从简单实现开始
+   - 后果：所有消息都不安全，用户隐私泄露
+   - 缓解：Keychain 存储，提前安全审查，从简单实现开始
 
-2. **与 iOS 互操作性**
-   - 后果：跨平台消息失败
-   - 缓解：早期集成测试，iOS 同步实现加密
+2. **Keychain 访问失败**
+   - 后果：用户无法读取消息
+   - 缓解：优雅降级，清晰错误提示，日志记录
 
 ### 中风险
 3. **向后兼容性破坏**
@@ -393,67 +474,85 @@ describe('加密系统', () => {
    - 缓解：同时支持加密和未加密格式
 
 4. **性能下降**
-   - 后果：UI 卡顿
-   - 缓解：性能测试，必要时异步加密
+   - 后果：UI 卡顿（输入延迟）
+   - 缓解：异步加密，性能测试，缓存 nonce
+
+5. **libsodium 库问题**
+   - 后果：编译失败或运行时错误
+   - 缓解：选择官方 swift-sodium，早期测试
 
 ### 低风险
-5. **库依赖问题**
-   - 后果：安全更新需要时间
-   - 缓解：选择成熟的库（TweetNaCl 已被广泛使用）
+6. **测试覆盖不足**
+   - 后果：隐藏的 bug
+   - 缓解：自动化测试，手动测试清单
 
 ---
 
 ## 💡 Linus 式总结
 
-**问题**：代码给了虚假的安全感（占位符加密）
+**问题 1**: 前端代码虚假的安全感（占位符加密）
+**问题 2**: 架构错误（不需要 Web 前端）
 
-**解决**：用真实的加密替换
+**解决方案**:
+1. ✅ 删除 Web 前端（无用的代码）
+2. ✅ iOS 实现真实加密（libsodium）
+3. ✅ 后端支持加密消息（已完成）
 
-**原则**：
-- 不要假装完成功能
-- 从简单的 Option A 开始，不要过度工程
-- 测试必不可少（加密是关键）
-- 没有"密钥管理会很复杂"的借口（Option A 很简单）
+**核心原则**：
+- **不要假装完成功能** - "加密"必须是真的
+- **从简单的实现开始** - Option A 足够好，不要过度工程
+- **移动优先** - 项目是 iOS，不是 Web
+- **测试很关键** - 加密没有"基本能工作"，要么完美要么删除
 
-**进度预期**：
-- 实现 (3-4天)
-- 测试 (2-3天)
-- 审查 (0.5天)
-- 修复 (1天)
-- **总计**: 7天（虽然标题说 3 天，这是合理的预期）
-
----
-
-## 📝 检查清单
-
-### Day 1 (今天) - 计划确认
-- [ ] 用户确认这个修正计划
-- [ ] 选择密钥管理方案（推荐 Option A）
-- [ ] 选择加密库（推荐 TweetNaCl）
-
-### Day 2-3 - 实现
-- [ ] 库集成完成
-- [ ] 密钥管理 `keyManagement.ts` 完成
-- [ ] 基础加密 API 完成
-
-### Day 4-5 - 集成
-- [ ] 消息发送加密集成
-- [ ] 消息接收解密集成
-- [ ] 离线队列支持
-
-### Day 6-7 - 测试
-- [ ] 单元测试通过 > 80% 覆盖率
-- [ ] 集成测试通过
-- [ ] Web + iOS 互操作性测试
-
-### Week 2 - 最终化
-- [ ] 安全审查通过
-- [ ] 性能测试通过
-- [ ] 文档完成
+**时间预期**：
+- Day 1-2: 库集成 + 密钥管理 (3 天)
+- Day 3-5: 加密/解密 API + 集成 (3 天)
+- Day 6-8: 测试 + 文档 (2 天)
+- **总计**: 8 天（不含 P2 视频上传）
 
 ---
 
-**由 Linus 制定 - 基于代码审查**
-**关键原则**: "承认现状，然后解决它"
+## 📝 执行检查清单
+
+### ✅ Day 1 (已完成)
+- [x] 架构澄清：项目是 iOS 优先
+- [x] 删除无用的 Web 前端
+- [x] 创建修正计划
+
+### 📅 Day 2 (明天开始)
+- [ ] libsodium.swift 集成
+- [ ] SPM 配置，编译通过
+- [ ] 性能基准测试（加密 1KB）
+
+### 📅 Day 3-4 (周三-周四)
+- [ ] KeyManager 实现（PBKDF2）
+- [ ] Keychain 集成
+- [ ] 盐值存储和检索
+
+### 📅 Day 5 (周五)
+- [ ] MessageCrypto.swift 完成
+- [ ] encryptMessage() 和 decryptMessage() 完成
+- [ ] 错误处理（Fail-hard）
+
+### 📅 Day 6 (周六)
+- [ ] Message.swift 模型更新
+- [ ] MessagingRepository 修改
+- [ ] WebSocketMessagingClient 修改
+
+### 📅 Day 7 (周日)
+- [ ] 单元测试编写和运行
+- [ ] 集成测试编写和运行
+- [ ] 覆盖率检查 (> 80%)
+
+### 📅 Day 8 (下周一)
+- [ ] 性能基准验证
+- [ ] 文档编写
+- [ ] 安全审查准备
+
+---
+
+**最后确认**: 这个计划是否可以开始执行？
+
+**下一步**: 我可以立即创建 Swift 源文件框架，让你开始实现。
 
 May the Force be with you.
