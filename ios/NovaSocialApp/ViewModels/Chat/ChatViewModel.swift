@@ -18,6 +18,8 @@ final class ChatViewModel: @unchecked Sendable {
     var error: String?
     var offlineMessageCount: Int = 0
     var isConnected: Bool = false
+    var searchResults: [ChatMessage] = []
+    var isSearchInFlight: Bool = false
 
     // Connection state from auto-reconnecting socket
     var connectionState: WebSocketConnectionState = .disconnected
@@ -62,9 +64,13 @@ final class ChatViewModel: @unchecked Sendable {
             }
             socket.onTyping = { [weak self] uid in
                 Task { @MainActor in
-                    self?.typingUsernames.insert(uid)
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-                        self?.typingUsernames.remove(uid)
+                    guard let self else { return }
+                    self.typingUsernames.insert(uid)
+
+                    try? await Task.sleep(nanoseconds: 3_000_000_000)
+
+                    if !Task.isCancelled {
+                        self.typingUsernames.remove(uid)
                     }
                 }
             }
@@ -79,28 +85,39 @@ final class ChatViewModel: @unchecked Sendable {
             }
             socket.onStateChange = { [weak self] newState in
                 Task { @MainActor in
-                    self?.connectionState = newState
+                    guard let self else { return }
+                    self.connectionState = newState
                     switch newState {
                     case .connected:
-                        self?.isConnected = true
-                        self?.error = nil
+                        self.isConnected = true
+                        self.reconnectAttempt = 0
+                        self.nextRetryIn = 0
+                        self.error = nil
                         print("✅ WebSocket connected - draining offline queue")
-                        try? await self?.drainOfflineQueue()
-
-                    case .disconnected, .failed:
-                        self?.isConnected = false
-                        if case .failed(let err) = newState {
-                            self?.error = err.localizedDescription
+                        do {
+                            try await self.drainOfflineQueue()
+                            await self.updateOfflineMessageCount()
+                        } catch {
+                            self.error = error.localizedDescription
                         }
 
                     case .connecting:
-                        self?.isConnected = false
+                        self.isConnected = false
+                        self.error = nil
+
+                    case .disconnected:
+                        self.isConnected = false
+
+                    case .failed(let err):
+                        self.isConnected = false
+                        self.error = err.localizedDescription
 
                     case .reconnecting(let attempt, let nextRetryIn):
-                        self?.reconnectAttempt = attempt
-                        self?.nextRetryIn = nextRetryIn
-                        self?.isConnected = false
-                        self?.error = "Reconnecting... (attempt #\(attempt), in \(String(format: "%.1f", nextRetryIn))s)"
+                        self.reconnectAttempt = attempt
+                        self.nextRetryIn = nextRetryIn
+                        self.isConnected = false
+                        let formattedDelay = String(format: "%.1f", nextRetryIn)
+                        self.error = "Reconnecting... (attempt #\(attempt), in \(formattedDelay)s)"
                     }
                 }
             }
@@ -110,14 +127,6 @@ final class ChatViewModel: @unchecked Sendable {
             let me = AuthManager.shared.currentUser?.id
             if let me {
                 socket.connect(conversationId: conversationId, meUserId: me, jwtToken: token, peerPublicKeyB64: peerPk)
-
-                // === CRITICAL FIX: Drain offline queue on first connection ===
-                // Attempt initial drain after connection is established
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-                    Task { @MainActor [weak self] in
-                        try? await self?.drainOfflineQueue()
-                    }
-                }
             }
         } catch { self.error = error.localizedDescription }
     }
@@ -152,7 +161,7 @@ final class ChatViewModel: @unchecked Sendable {
     /// CRITICAL FIX: Add retry limits to prevent infinite retry loops
     private func resendOfflineMessage(_ localMessage: LocalMessage) async {
         let maxRetries = 5  // Maximum retry attempts before giving up
-        let currentRetryCount = (Int(localMessage.id.split(separator: "-").last ?? "0") ?? 0) % 10  // Extract retry count from ID suffix
+        let currentRetryCount = localMessage.retryCount
 
         do {
             // 使用本地消息的 ID 作为幂等性密钥
@@ -177,11 +186,18 @@ final class ChatViewModel: @unchecked Sendable {
             // Only retry if within limit and error is retryable
             if currentRetryCount < maxRetries && isRetryableError(error) {
                 // CRITICAL FIX: Implement exponential backoff instead of immediate retry
-                let delaySeconds = Double(min(2 << currentRetryCount, 60))  // Cap at 60 seconds
+                // 标准指数退避：1s, 2s, 4s, 8s, 16s, 32s, 60s (capped)
+                let delays = [1, 2, 4, 8, 16, 32, 60]
+                let delaySeconds = Double(delays[min(currentRetryCount, delays.count - 1)])
                 print("[ChatViewModel] ⏳ Will retry after \(delaySeconds) seconds...")
 
-                // Re-queue with retry metadata for exponential backoff
-                try? await messageQueue.enqueue(localMessage)
+                // 更新消息的重试状态，等待下一次 drain
+                let nextRetryAt = Date().addingTimeInterval(delaySeconds)
+                try? await messageQueue.updateRetryState(
+                    messageId: localMessage.id,
+                    retryCount: currentRetryCount + 1,
+                    nextRetryAt: nextRetryAt
+                )
             } else {
                 // Max retries exceeded or non-retryable error
                 // CRITICAL FIX: Mark message as permanently failed instead of silently dropping
@@ -192,23 +208,6 @@ final class ChatViewModel: @unchecked Sendable {
                 try? await messageQueue.remove(localMessage.id)
             }
         }
-    }
-
-    /// Determine if error is retryable (network errors only)
-    private func isRetryableError(_ error: Error) -> Bool {
-        // Only retry network-related errors, not client errors
-        let errorDescription = error.localizedDescription.lowercased()
-
-        // Non-retryable errors (bad request, unauthorized, forbidden, etc.)
-        let nonRetryable = ["400", "401", "403", "404", "invalid", "unauthorized", "forbidden"]
-        for pattern in nonRetryable {
-            if errorDescription.contains(pattern) {
-                return false
-            }
-        }
-
-        // Retryable errors (network, timeout, server errors)
-        return true
     }
 
     /// 获取当前对话的离线消息数量
@@ -223,17 +222,8 @@ final class ChatViewModel: @unchecked Sendable {
     private func loadHistory() async throws {
         let resp = try await repo.getHistory(conversationId: conversationId)
         var out: [ChatMessage] = []
-        for m in resp.messages.reversed() { // server returns newest first
-            let senderKey: String
-            if let ck = senderPkCache[m.senderId] {
-                senderKey = ck
-            } else {
-                let k = try await repo.getPublicKey(of: m.senderId)
-                senderPkCache[m.senderId] = k
-                senderKey = k
-            }
-            let text = try? repo.decryptMessage(m, senderPublicKey: senderKey)
-            out.append(ChatMessage(id: m.id, text: text ?? "(unable to decrypt)", mine: isMine(m.senderId), createdAt: m.createdAt))
+        for dto in resp.messages.reversed() { // server returns newest first
+            out.append(await makeChatMessage(from: dto))
         }
         self.messages = out
     }
@@ -299,13 +289,141 @@ final class ChatViewModel: @unchecked Sendable {
 
     /// 判断错误是否可重试
     private func isRetryableError(_ error: Error) -> Bool {
-        // 网络错误通常是可重试的
         let nsError = error as NSError
-        return nsError.domain == NSURLErrorDomain || nsError.domain == "NetworkError"
+
+        // 网络层错误默认可重试
+        if nsError.domain == NSURLErrorDomain || nsError.domain == "NetworkError" {
+            return true
+        }
+
+        // 常见不可重试状态码或描述
+        let description = nsError.localizedDescription.lowercased()
+        let nonRetryableKeywords = ["400", "401", "403", "404", "invalid", "unauthorized", "forbidden"]
+        if nonRetryableKeywords.contains(where: { description.contains($0) }) {
+            return false
+        }
+
+        return true
     }
 
     func typing() {
         socket.sendTyping()
+    }
+
+    func searchMessages(query: String) async {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            clearSearchResults()
+            return
+        }
+
+        isSearchInFlight = true
+        do {
+            let results = try await repo.searchMessages(conversationId: conversationId, query: trimmed, limit: 50)
+            var mapped: [ChatMessage] = []
+            for dto in results {
+                mapped.append(await makeChatMessage(from: dto))
+            }
+            searchResults = mapped
+        } catch {
+            searchResults = []
+            self.error = error.localizedDescription
+        }
+        isSearchInFlight = false
+    }
+
+    func clearSearchResults() {
+        searchResults = []
+        isSearchInFlight = false
+    }
+
+    // MARK: - 消息编辑
+
+    /// 编辑消息（客户端更新本地消息，服务器会通过 WebSocket 广播更新）
+    func editMessage(messageId: UUID, newText: String) async {
+        do {
+            // 先乐观更新 UI
+            if let index = messages.firstIndex(where: { $0.id == messageId }) {
+                messages[index].text = newText
+            }
+
+            // 调用 API 更新消息
+            let response = try await repo.updateMessage(
+                messageId: messageId,
+                text: newText,
+                peerUserId: peerUserId
+            )
+
+            print("[ChatViewModel] ✅ Message edited: \(messageId)")
+
+        } catch {
+            print("[ChatViewModel] ❌ Failed to edit message: \(error)")
+            self.error = "Failed to edit message: \(error.localizedDescription)"
+        }
+    }
+
+    // MARK: - 消息反应
+
+    /// 添加 Emoji 反应
+    func addReaction(messageId: UUID, emoji: String) async {
+        do {
+            _ = try await repo.addReaction(messageId: messageId, emoji: emoji)
+            print("[ChatViewModel] ✅ Reaction added: \(emoji) to \(messageId)")
+        } catch {
+            print("[ChatViewModel] ❌ Failed to add reaction: \(error)")
+            self.error = "Failed to add reaction: \(error.localizedDescription)"
+        }
+    }
+
+    /// 移除 Emoji 反应
+    func removeReaction(messageId: UUID, emoji: String) async {
+        do {
+            try await repo.removeReaction(messageId: messageId, emoji: emoji)
+            print("[ChatViewModel] ✅ Reaction removed: \(emoji) from \(messageId)")
+        } catch {
+            print("[ChatViewModel] ❌ Failed to remove reaction: \(error)")
+            self.error = "Failed to remove reaction: \(error.localizedDescription)"
+        }
+    }
+
+    // MARK: - 文件/图片分享
+
+    /// 上传附件（图片、文件等）
+    func uploadAttachment(
+        fileName: String,
+        contentType: String,
+        fileData: Data
+    ) async {
+        let messageId = UUID()
+        let attachmentMessage = ChatMessage(
+            id: messageId,
+            text: "📎 \(fileName)",
+            mine: true,
+            createdAt: Date()
+        )
+
+        // 乐观更新 UI
+        messages.append(attachmentMessage)
+
+        do {
+            let attachment = try await repo.uploadAttachment(
+                conversationId: conversationId,
+                messageId: messageId,
+                fileName: fileName,
+                contentType: contentType,
+                fileData: fileData
+            )
+
+            print("[ChatViewModel] ✅ File uploaded: \(fileName)")
+        } catch {
+            print("[ChatViewModel] ❌ Failed to upload file: \(error)")
+            self.error = "Failed to upload file: \(error.localizedDescription)"
+
+            // 从消息列表中移除失败的消息
+            if let index = messages.firstIndex(where: { $0.id == messageId }) {
+                messages.remove(at: index)
+            }
+        }
     }
 
     // MARK: - 消息撤销
@@ -334,5 +452,34 @@ final class ChatViewModel: @unchecked Sendable {
     deinit {
         // Cleanup: disconnect WebSocket when ViewModel is destroyed
         socket.disconnect()
+    }
+
+    // MARK: - Private Helpers
+
+    private func resolveSenderPublicKey(_ senderId: UUID) async throws -> String {
+        if let cached = senderPkCache[senderId] {
+            return cached
+        }
+        let key = try await repo.getPublicKey(of: senderId)
+        senderPkCache[senderId] = key
+        return key
+    }
+
+    private func makeChatMessage(from dto: MessageDTO) async -> ChatMessage {
+        let text: String
+        do {
+            let senderKey = try await resolveSenderPublicKey(dto.senderId)
+            text = try repo.decryptMessage(dto, senderPublicKey: senderKey)
+        } catch {
+            text = "(unable to decrypt)"
+        }
+
+        return ChatMessage(
+            id: dto.id,
+            text: text,
+            mine: isMine(dto.senderId),
+            createdAt: dto.createdAt,
+            recalledAt: dto.deletedAt
+        )
     }
 }
