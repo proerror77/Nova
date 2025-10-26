@@ -1,10 +1,9 @@
+use crate::error::Result;
 /// Video Reels API Handlers
 ///
 /// Implements all endpoints for personalized video feeds, engagement tracking,
 /// trending discovery, and video search functionality.
-
 use actix_web::{get, post, web, HttpResponse};
-use crate::error::Result;
 use serde::{Deserialize, Serialize};
 use tracing::info;
 use uuid::Uuid;
@@ -221,7 +220,10 @@ pub async fn watch_video(
     payload: web::Json<EngagementRequest>,
 ) -> Result<HttpResponse> {
     let _video_id = path.into_inner();
-    info!("Handler: POST /api/v1/reels/:id/watch - completion: {:?}", payload.completion_percent);
+    info!(
+        "Handler: POST /api/v1/reels/:id/watch - completion: {:?}",
+        payload.completion_percent
+    );
     Ok(HttpResponse::Ok().json(serde_json::json!({
         "success": true,
         "data": {
@@ -250,7 +252,10 @@ pub async fn share_video(path: web::Path<Uuid>) -> Result<HttpResponse> {
 /// GET /reels/trending-sounds
 #[get("/trending-sounds")]
 pub async fn get_trending_sounds(query: web::Query<TrendingQueryParams>) -> Result<HttpResponse> {
-    info!("Handler: GET /api/v1/reels/trending-sounds - limit: {}", query.limit);
+    info!(
+        "Handler: GET /api/v1/reels/trending-sounds - limit: {}",
+        query.limit
+    );
     Ok(HttpResponse::Ok().json(serde_json::json!({
         "success": true,
         "data": {
@@ -264,7 +269,10 @@ pub async fn get_trending_sounds(query: web::Query<TrendingQueryParams>) -> Resu
 /// GET /reels/trending-hashtags
 #[get("/trending-hashtags")]
 pub async fn get_trending_hashtags(query: web::Query<TrendingQueryParams>) -> Result<HttpResponse> {
-    info!("Handler: GET /api/v1/reels/trending-hashtags - limit: {}", query.limit);
+    info!(
+        "Handler: GET /api/v1/reels/trending-hashtags - limit: {}",
+        query.limit
+    );
     Ok(HttpResponse::Ok().json(serde_json::json!({
         "success": true,
         "data": {
@@ -338,8 +346,7 @@ mod tests {
 
     #[test]
     fn test_search_query_params() {
-        let params: SearchQueryParams =
-            serde_json::from_str(r#"{"q":"test"}"#).unwrap();
+        let params: SearchQueryParams = serde_json::from_str(r#"{"q":"test"}"#).unwrap();
         assert_eq!(params.q, "test");
         assert_eq!(params.limit, 50);
     }

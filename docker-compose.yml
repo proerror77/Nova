@@ -4,7 +4,6 @@ services:
   # ============================================
   postgres:
     image: debezium/postgres:15-alpine
-    container_name: nova-postgres
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-nova_auth}
@@ -24,12 +23,33 @@ services:
     networks:
       - nova-network
 
+  # Dedicated PostgreSQL for messaging-service to isolate schemas/migrations
+  postgres-messaging:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${MSG_POSTGRES_DB:-nova_messaging}
+      POSTGRES_USER: ${MSG_POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${MSG_POSTGRES_PASSWORD:-postgres}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    # No host port exposure by default; uncomment to debug
+    # ports:
+    #   - "${POSTGRES_MSG_PORT:-55433}:5432"
+    volumes:
+      - postgres_data_messaging:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${MSG_POSTGRES_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - nova-network
+
   # ============================================
   # Redis Cache
   # ============================================
   redis:
     image: redis:7-alpine
-    container_name: nova-redis
     restart: unless-stopped
     command: >
       redis-server
@@ -54,7 +74,6 @@ services:
   # ============================================
   zookeeper:
     image: confluentinc/cp-zookeeper:7.6.1
-    container_name: nova-zookeeper
     restart: unless-stopped
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
@@ -71,7 +90,6 @@ services:
   # ============================================
   kafka:
     image: confluentinc/cp-kafka:7.6.1
-    container_name: nova-kafka
     restart: unless-stopped
     depends_on:
       - zookeeper
@@ -97,7 +115,6 @@ services:
   # ============================================
   debezium:
     image: debezium/connect:2.5
-    container_name: nova-debezium
     restart: unless-stopped
     depends_on:
       postgres:
@@ -125,7 +142,6 @@ services:
   # ============================================
   kafka-ui:
     image: provectuslabs/kafka-ui:latest
-    container_name: nova-kafka-ui
     restart: unless-stopped
     depends_on:
       kafka:
@@ -144,7 +160,6 @@ services:
   # ============================================
   clickhouse:
     image: clickhouse/clickhouse-server:23.8
-    container_name: nova-clickhouse
     restart: unless-stopped
     environment:
       CLICKHOUSE_DB: nova_feed
@@ -177,10 +192,10 @@ services:
   # ============================================
   neo4j:
     image: neo4j:5.23
-    container_name: nova-neo4j
     restart: unless-stopped
     environment:
-      - NEO4J_AUTH=${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD:-neo4j}
+      # Use supported env for official image; default password must not be 'neo4j'
+      - NEO4J_AUTH=neo4j/${NEO4J_PASSWORD:-novaPass_ChangeMe}
       - NEO4J_server_memory_pagecache_size=256M
       - NEO4J_server_memory_heap_max__size=512M
     ports:
@@ -190,12 +205,35 @@ services:
       - neo4j_data:/data
       - neo4j_logs:/logs
     healthcheck:
-      test: ["CMD", "bash", "-lc", "cypher-shell -u ${NEO4J_USER:-neo4j} -p ${NEO4J_PASSWORD:-neo4j} 'RETURN 1' || exit 1"]
+      test: ["CMD", "bash", "-lc", "cypher-shell -u ${NEO4J_USER:-neo4j} -p ${NEO4J_PASSWORD:-novaPass_ChangeMe} 'RETURN 1' || exit 1"]
       interval: 15s
       timeout: 10s
       retries: 10
     networks:
       - nova-network
+
+  # ============================================
+  # API Gateway (Nginx Reverse Proxy)
+  # ============================================
+  api-gateway:
+    image: nginx:1.25-alpine
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    volumes:
+      - ./backend/nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./backend/nginx/openapi:/etc/nginx/openapi:ro
+    depends_on:
+      - user-service
+      - messaging-service
+      - search-service
+    networks:
+      - nova-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
 
   # ============================================
   # User Service (Rust Actix-web)
@@ -205,8 +243,9 @@ services:
       context: ./backend
       dockerfile: Dockerfile
       target: runtime
-    container_name: nova-user-service
     restart: unless-stopped
+    env_file:
+      - .env
     environment:
       # Application
       APP_ENV: development
@@ -251,47 +290,12 @@ services:
       JWT_SECRET: ${JWT_SECRET:-dev_secret_change_in_production_32chars}
       JWT_ACCESS_TOKEN_TTL: 900
       JWT_REFRESH_TOKEN_TTL: 604800
+      JWT_PRIVATE_KEY_FILE: /app/certs/private_key.pem
+      JWT_PUBLIC_KEY_FILE: /app/certs/public_key.pem
 
-      # JWT PEMs (raw PEM for dev)
-      JWT_PRIVATE_KEY_PEM: |
-        -----BEGIN PRIVATE KEY-----
-        MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQCvWDmMAahIQk3u
-        pSng6CgG18O11nBj7XnWM+Pe+7xDuyR0HtVfuBMm/YJCSti2CCYP51SXrCzYDmKx
-        eauvnYNUpXTtqzZLu9eTPA/sy+7BZ2k0tkggHQZcPUhpzLC7ZeXFcGjgiDbirEMh
-        9KWRbtu/SEz3Jf42dbcxxetwBjGUix2ILP2AMqixVR1CmX+Lztjzdy6mCDbd+qdc
-        ZshvxMiPaadP8Yv5w2JnIP6c91ntZNEREVmstWgELQV2gjCwN05LCa43k2MgNM5L
-        srStZS2MJMiAwmtkSAhBSjaQPt3kplunQ7r4LoFylMy3n1qgYFz0Af2H5o7DA4VB
-        21+Uxz/5AgMBAAECggEAAi9qii7kGsBuybRXvQSPqSQrvXqmbGxjehKr+pWvDzYI
-        GoVe2eJIpNIAe1SE9mHMHaMfqAM+jNPDEZynUdk374hfWG3rj46P/XcAaM5S06i3
-        BC/oXrQV5fTij+T75935etgvimrQKkuEy6nJnXIg/XWIdgUMcb/OUGm7ySnemNAM
-        sOJz9Y1YjP2ypL8QW27VK0HTDLxDf4AAUcKniJ2QJg6SaSO8mjajhJU44DBwmgsQ
-        4UK6jN/HJdOZPw+JRESoTYOtWdZuh9HKDuFg7PsvhURrgHPN06OoOv7anhb200Uy
-        Mc2yikpLSD4E/6SSTo37pEw6z8mYLBq3AZFnwvneLQKBgQD0K1bfzSDZ4BkUUe+V
-        IeBi7l668ZdCKEJJ+50n9T13CqeigHkUYijvvX/BdQrGRWGDzrLsCpZoEf/Jiw2j
-        A7zlHAoMpCPT/r8hcXdMAcglqTeCvVlzDWD9Tb7Ep0WU3GFHf61FW0n5rRUAvKah
-        ektuaEwlq2NQgZTzzijB5hHwZQKBgQC31zBHOnUOkxiTBtpPL1ZpdEodLWh/ju65
-        clkq2uFZUSDYAD4DerEFcEYes7JXy4kV1c6ep2zNw2W1U6m8M8AM0opyolBVxXGj
-        jYnAKdC/VycEc59rs8NuGz8WZ2uPU1TXCNOM47QA00Y0nhgBHxhlfFBVYz3oY8nm
-        ijbwn7N2BQKBgFF5FKfg3pFUwYmSPYtZnnHkcB+Y9YvRuyzMlIf8wOGz4HPMwpoW
-        lupIJRT8ZPf7tqowkmtIrR9UwjESAR7f5Gvei0vkiT/3xPb30YK/JXXLnQY3AF3v
-        nOlow7sCxakCUEN3Su3VpD13j4aLbF59XCYfDymSorT+SCGCLP9mMZ4xAoGBAJd/
-        Trqz8rjzASJQWGE+2lAG0/idbesIZ7QNBmwpeeE32QAHmxMU7YJU1oQAg6yT/0Eu
-        M5pM0H30UwGNk2eToeUvL4ZuOhOkpRQp1GW2T98OPAoQGkUQG7HF5ERbL6kp+9VE
-        4cjN8I1pjgZYbeGmtV0Uh8MGCINUkJJaPhInGSXdAoGBAJAdh1Hd1RSLsGffY9y0
-        sJmx8DPFffQGrT1sLn1PuvfAd5W5/A3GaI38Z1KkQ1LgQe/9rE073i26lUVckOnR
-        1E+WImeCHl0v3RueN7ula9W3zb6mwGjs8NQjM4mzhCjQ+9OkpOr57QAATALAeRT+
-        jTYkKI1ACaZWh2dpvcW1fzB2
-        -----END PRIVATE KEY-----
-      JWT_PUBLIC_KEY_PEM: |
-        -----BEGIN PUBLIC KEY-----
-        MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAr1g5jAGoSEJN7qUp4Ogo
-        BtfDtdZwY+151jPj3vu8Q7skdB7VX7gTJv2CQkrYtggmD+dUl6ws2A5isXmrr52D
-        VKV07as2S7vXkzwP7MvuwWdpNLZIIB0GXD1Iacywu2XlxXBo4Ig24qxDIfSlkW7b
-        v0hM9yX+NnW3McXrcAYxlIsdiCz9gDKosVUdQpl/i87Y83cupgg23fqnXGbIb8TI
-        j2mnT/GL+cNiZyD+nPdZ7WTRERFZrLVoBC0FdoIwsDdOSwmuN5NjIDTOS7K0rWUt
-        jCTIgMJrZEgIQUo2kD7d5KZbp0O6+C6BcpTMt59aoGBc9AH9h+aOwwOFQdtflMc/
-        +QIDAQAB
-        -----END PUBLIC KEY-----
+      # JWT keys are sourced from mounted files (.env no longer carries PEM)
+
+      
 
       # Feature flags (top)
       RUN_MIGRATIONS: ${RUN_MIGRATIONS:-true}
@@ -307,6 +311,7 @@ services:
       # APNs stubs
       APNS_CERTIFICATE_PATH: ${APNS_CERTIFICATE_PATH:-/app/certs/apns_cert.p8}
       APNS_KEY_PATH: ${APNS_KEY_PATH:-/app/certs/apns_key.p8}
+      APNS_CERTIFICATE_PASSPHRASE: ${APNS_CERTIFICATE_PASSPHRASE:-}
       APNS_TEAM_ID: ${APNS_TEAM_ID:-DEVTEAMID}
       APNS_KEY_ID: ${APNS_KEY_ID:-DEVKEYID}
       APNS_BUNDLE_ID: ${APNS_BUNDLE_ID:-com.example.nova}
@@ -332,8 +337,16 @@ services:
       # Rate limiting
       RATE_LIMIT_MAX_REQUESTS: 100
       RATE_LIMIT_WINDOW_SECS: 60
-    ports:
-      - "${USER_SERVICE_PORT:-8080}:8080"
+
+    volumes:
+      - ./backend/keys:/app/certs:ro
+    # 利用啟動前腳本把檔案內容注入舊版所需的 ENV（避免重建二進位）
+    command: ["/bin/sh", "-lc", "export JWT_PRIVATE_KEY_PEM=\"$(cat /app/certs/private_key.pem)\" JWT_PUBLIC_KEY_PEM=\"$(cat /app/certs/public_key.pem)\"; exec /app/user-service"]
+    # NOTE: Internal port 8080 is NOT exposed to host
+    # Access via API Gateway (api-gateway:3000) instead
+    # Uncomment below for direct debugging access:
+    # ports:
+    #   - "${USER_SERVICE_PORT:-8080}:8080"
     depends_on:
       postgres:
         condition: service_healthy
@@ -354,25 +367,92 @@ services:
       retries: 3
 
   # ============================================
+  # Auth Service (Axum - gRPC & HTTP)
+  # ============================================
+  auth-service:
+    build:
+      context: ./backend/auth-service
+      dockerfile: ../Dockerfile
+      target: runtime
+    restart: unless-stopped
+    environment:
+      # Application
+      APP_ENV: development
+      APP_HOST: 0.0.0.0
+      APP_PORT: 8084
+      RUST_LOG: debug
+
+      # Database
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-nova_auth}
+      DATABASE_MAX_CONNECTIONS: 10
+
+      # JWT
+      JWT_SECRET: ${JWT_SECRET:-dev_secret_change_in_production_32chars}
+
+      # Jaeger tracing
+      OTEL_EXPORTER_JAEGER_AGENT_HOST: jaeger
+      OTEL_EXPORTER_JAEGER_AGENT_PORT: 6831
+
+    # NOTE: Internal port 8084 is NOT exposed to host
+    # Access via API Gateway (api-gateway:3000) instead
+    # Uncomment below for direct debugging access:
+    # ports:
+    #   - "${AUTH_SERVICE_PORT:-8084}:8084"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      jaeger:
+        condition: service_healthy
+    networks:
+      - nova-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8084/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # ============================================
+  # Messaging Service (WS Gateway for DMs)
+  # ============================================
+  turn-server:
+    image: coturn/coturn:4.6
+    restart: unless-stopped
+    command:
+      - turnserver
+      - --config
+      - /etc/coturn/turnserver.conf
+    volumes:
+      - ./infra/turn/turnserver.conf:/etc/coturn/turnserver.conf:ro
+    ports:
+      - "3478:3478"
+      - "3478:3478/udp"
+      - "5349:5349"
+      - "5349:5349/udp"
+    networks:
+      - nova-network
+
+  # ============================================
   # Messaging Service (WS Gateway for DMs)
   # ============================================
   messaging-service:
     build:
       context: ./backend
       dockerfile: Dockerfile.messaging
-    container_name: nova-messaging-service
     restart: unless-stopped
+    env_file:
+      - .env
     environment:
       # Application
       APP_ENV: development
       PORT: 3000
       RUST_LOG: messaging_service=debug,axum=debug,tower_http=debug
 
-      # Database (shared with user-service)
+      # Database (shared with user-service to match schema for conversations/messages)
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-nova_auth}
 
-      # Redis (shared pubsub channel)
-      REDIS_URL: redis://:${REDIS_PASSWORD:-redis123}@redis:6379/0
+      # Redis (separate DB index for messaging)
+      REDIS_URL: redis://:${REDIS_PASSWORD:-redis123}@redis:6379/1
 
       # Kafka
       KAFKA_BROKERS: kafka:9092
@@ -380,23 +460,32 @@ services:
       # Dev: allow WS without membership check to simplify local testing
       WS_DEV_ALLOW_ALL: "true"
 
-      # JWT verification (use same public key as user-service for RS256 verification)
-      JWT_PUBLIC_KEY_PEM: |
-        -----BEGIN PUBLIC KEY-----
-        MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAr1g5jAGoSEJN7qUp4Ogo
-        BtfDtdZwY+151jPj3vu8Q7skdB7VX7gTJv2CQkrYtggmD+dUl6ws2A5isXmrr52D
-        VKV07as2S7vXkzwP7MvuwWdpNLZIIB0GXD1Iacywu2XlxXBo4Ig24qxDIfSlkW7b
-        v0hM9yX+NnW3McXrcAYxlIsdiCz9gDKosVUdQpl/i87Y83cupgg23fqnXGbIb8TI
-        j2mnT/GL+cNiZyD+nPdZ7WTRERFZrLVoBC0FdoIwsDdOSwmuN5NjIDTOS7K0rWUt
-        jCTIgMJrZEgIQUo2kD7d5KZbp0O6+C6BcpTMt59aoGBc9AH9h+aOwwOFQdtflMc/
-        +QIDAQAB
-        -----END PUBLIC KEY-----
+      # WebRTC ICE/TURN configuration exposed via API
+      RTC_STUN_URLS: stun:stun.l.google.com:19302,stun:stun1.l.google.com:19302
+      RTC_TURN_URLS: turn:turn-server:3478?transport=udp,turn:turn-server:3478?transport=tcp
+      RTC_TURN_USERNAME: novauser
+      RTC_TURN_PASSWORD: nova-pass
+      RTC_ICE_TTL_SECONDS: 3600
+
+      # APNs push notifications
+      APNS_CERTIFICATE_PATH: ${APNS_CERTIFICATE_PATH:-/app/certs/apns_cert.p12}
+      APNS_CERTIFICATE_PASSPHRASE: ${APNS_CERTIFICATE_PASSPHRASE:-}
+      APNS_BUNDLE_ID: ${APNS_BUNDLE_ID:-com.example.nova}
+      APNS_IS_PRODUCTION: ${APNS_IS_PRODUCTION:-false}
+      JWT_PUBLIC_KEY_FILE: /app/certs/public_key.pem
+
+      # JWT public key sourced from env_file (.env) or secrets
 
       # 32-byte key (base64) for server-side encryption used by messaging-service endpoints
       # Random dev key; replace in production
       SECRETBOX_KEY_B64: dGVzdGluZy10ZXN0aW5nLXRlc3RpbmctdGVzdGluZy10ZXN0aW5nMDA=
-    ports:
-      - "8085:3000"
+    volumes:
+      - ./backend/keys:/app/certs:ro
+    # NOTE: Internal port 3000 is NOT exposed to host
+    # Access via API Gateway (api-gateway:3000) instead
+    # Uncomment below for direct debugging access:
+    # ports:
+    #   - "8085:3000"
     depends_on:
       postgres:
         condition: service_healthy
@@ -421,7 +510,6 @@ services:
       context: ./backend
       dockerfile: Dockerfile
       target: runtime
-    container_name: nova-streaming-ingest
     restart: unless-stopped
     environment:
       RUST_LOG: info
@@ -447,7 +535,6 @@ services:
       context: ./backend
       dockerfile: Dockerfile
       target: runtime
-    container_name: nova-streaming-transcode
     restart: unless-stopped
     environment:
       RUST_LOG: info
@@ -472,7 +559,6 @@ services:
       context: ./backend
       dockerfile: Dockerfile
       target: runtime
-    container_name: nova-streaming-delivery
     restart: unless-stopped
     environment:
       RUST_LOG: info
@@ -493,7 +579,6 @@ services:
       context: ./backend
       dockerfile: Dockerfile
       target: runtime
-    container_name: nova-streaming-api
     restart: unless-stopped
     environment:
       RUST_LOG: info
@@ -520,7 +605,6 @@ services:
   # ============================================
   milvus:
     image: milvusdb/milvus:v2.4.3
-    container_name: nova-milvus
     restart: unless-stopped
     entrypoint: ["/tini", "--"]
     command: ["milvus", "run", "standalone"]
@@ -545,15 +629,17 @@ services:
   search-service:
     build:
       context: ./backend/search-service
-    container_name: nova-search-service
     restart: unless-stopped
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-nova_auth}
       REDIS_URL: redis://:${REDIS_PASSWORD:-redis123}@redis:6379/0
       PORT: 8086
       RUST_LOG: search_service=debug,tower_http=debug
-    ports:
-      - "8086:8086"
+    # NOTE: Internal port 8086 is NOT exposed to host
+    # Access via API Gateway (api-gateway:3000) instead
+    # Uncomment below for direct debugging access:
+    # ports:
+    #   - "8086:8086"
     depends_on:
       postgres:
         condition: service_healthy
@@ -567,7 +653,6 @@ services:
   # ============================================
   mailhog:
     image: mailhog/mailhog:latest
-    container_name: nova-mailhog
     restart: unless-stopped
     ports:
       - "1025:1025"  # SMTP
@@ -575,11 +660,38 @@ services:
     networks:
       - nova-network
 
+  # ============================================
+  # Jaeger (Distributed Tracing)
+  # ============================================
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    restart: unless-stopped
+    ports:
+      - "6831:6831/udp"  # Jaeger agent (UDP)
+      - "6832:6832/udp"  # Jaeger agent (UDP compact)
+      - "5778:5778"      # Jaeger agent (HTTP)
+      - "16686:16686"    # Jaeger UI
+      - "14268:14268"    # Jaeger collector (HTTP)
+      - "14250:14250"    # Jaeger collector (gRPC)
+      - "9411:9411"      # Zipkin compatible endpoint
+    environment:
+      COLLECTOR_ZIPKIN_HOST_PORT: ":9411"
+      COLLECTOR_OTLP_ENABLED: "true"
+    networks:
+      - nova-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:16686/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
 # ============================================
 # Volumes
 # ============================================
 volumes:
   postgres_data:
+    driver: local
+  postgres_data_messaging:
     driver: local
   redis_data:
     driver: local

@@ -16,6 +16,8 @@ final class LocalMessage {
     // 同步相關
     var syncState: SyncState
     var localModifiedAt: Date?
+    var retryCount: Int
+    var nextRetryAt: Date?
 
     init(
         id: String,
@@ -26,7 +28,9 @@ final class LocalMessage {
         createdAt: Date = Date(),
         updatedAt: Date = Date(),
         syncState: SyncState = .localOnly,
-        localModifiedAt: Date? = Date()
+        localModifiedAt: Date? = Date(),
+        retryCount: Int = 0,
+        nextRetryAt: Date? = nil
     ) {
         self.id = id
         self.conversationId = conversationId
@@ -37,10 +41,11 @@ final class LocalMessage {
         self.updatedAt = updatedAt
         self.syncState = syncState
         self.localModifiedAt = localModifiedAt
+        self.retryCount = retryCount
+        self.nextRetryAt = nextRetryAt
     }
 }
 
 // MARK: - Syncable Conformance
 
 extension LocalMessage: Syncable {}
-

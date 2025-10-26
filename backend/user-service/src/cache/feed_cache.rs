@@ -343,7 +343,10 @@ impl FeedCache {
                     for k in keys {
                         pipe.del(k);
                     }
-                    let _: () = pipe.query_async(&mut self.redis).await.map_err(AppError::Redis)?;
+                    let _: () = pipe
+                        .query_async(&mut self.redis)
+                        .await
+                        .map_err(AppError::Redis)?;
                 }
 
                 if next_cursor == 0 {

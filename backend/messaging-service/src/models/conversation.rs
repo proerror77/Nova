@@ -1,9 +1,12 @@
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use chrono::{DateTime, Utc};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum ConversationType { Direct, Group }
+pub enum ConversationType {
+    Direct,
+    Group,
+}
 
 /// Marker trait for privacy modes - ensures type safety
 /// This prevents mixing E2E and Searchable logic at compile time
@@ -157,4 +160,3 @@ impl ConversationData {
         }
     }
 }
-

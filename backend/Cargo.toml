@@ -105,6 +105,11 @@ urlencoding = "2.1"
 clickhouse = { version = "0.12" }
 rdkafka = { version = "0.36", features = ["tokio", "cmake-build"] }
 
+# Swagger/OpenAPI
+# utoipa 用於生成 OpenAPI 3.0 規範
+# Swagger UI 通過 Nginx 靜態服務，不依賴框架
+utoipa = { version = "4.0", features = ["uuid", "chrono"] }
+
 [profile.release]
 opt-level = 3
 lto = true

@@ -1,6 +1,6 @@
-use thiserror::Error;
-use axum::response::{IntoResponse, Response};
 use crate::middleware::error_handling;
+use axum::response::{IntoResponse, Response};
+use thiserror::Error;
 
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
@@ -45,6 +45,25 @@ pub enum AppError {
 
     #[error("internal server error")]
     Internal,
+
+    #[error("message already recalled")]
+    AlreadyRecalled,
+
+    #[error("recall window expired (created_at: {created_at}, max_recall_minutes: {max_recall_minutes})")]
+    RecallWindowExpired {
+        created_at: chrono::DateTime<chrono::Utc>,
+        max_recall_minutes: i64,
+    },
+
+    #[error("edit window expired (max_edit_minutes: {max_edit_minutes})")]
+    EditWindowExpired { max_edit_minutes: i64 },
+
+    #[error("version conflict: client version {client_version} != server version {current_version}, server content: {server_content}")]
+    VersionConflict {
+        current_version: i32,
+        client_version: i32,
+        server_content: String,
+    },
 }
 
 impl AppError {
@@ -52,12 +71,11 @@ impl AppError {
     pub fn is_retryable(&self) -> bool {
         match self {
             AppError::Database(e) => {
-                matches!(e,
-                    sqlx::Error::PoolTimedOut |
-                    sqlx::Error::PoolClosed |
-                    sqlx::Error::Io(_)
+                matches!(
+                    e,
+                    sqlx::Error::PoolTimedOut | sqlx::Error::PoolClosed | sqlx::Error::Io(_)
                 )
-            },
+            }
             AppError::Internal => true,
             _ => false,
         }
@@ -70,6 +88,9 @@ impl AppError {
             AppError::Unauthorized => 401,
             AppError::Forbidden => 403,
             AppError::NotFound => 404,
+            AppError::AlreadyRecalled => 410,        // 410 Gone
+            AppError::VersionConflict { .. } => 409, // 409 Conflict
+            AppError::RecallWindowExpired { .. } | AppError::EditWindowExpired { .. } => 403,
             AppError::Database(_) | AppError::Internal => 500,
             _ => 500,
         }

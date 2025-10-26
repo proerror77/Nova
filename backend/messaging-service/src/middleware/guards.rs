@@ -1,15 +1,12 @@
 //! Authorization guards that enforce permission checks at the type level
 //! This prevents developers from accidentally bypassing authorization
 
-use axum::{
-    async_trait,
-    extract::FromRequestParts,
-    http::request::Parts,
-};
-use uuid::Uuid;
+use axum::{async_trait, extract::FromRequestParts, http::request::Parts};
 use sqlx::PgPool;
+use uuid::Uuid;
 
 use crate::error::AppError;
+use crate::models::MemberRole;
 
 /// Represents an authenticated user extracted from JWT claims
 #[derive(Debug, Clone)]
@@ -41,15 +38,16 @@ where
 pub struct ConversationMember {
     pub user_id: Uuid,
     pub conversation_id: Uuid,
-    pub role: String,  // "member" or "admin"
+    pub role: MemberRole,
+    pub conversation_type: String, // "direct" or "group"
     pub is_muted: bool,
     pub can_send_messages: bool,
-    pub can_delete_others_messages: bool,  // Only admins
+    pub can_delete_others_messages: bool, // Only admins
 }
 
 impl ConversationMember {
     /// Factory method to create and verify a conversation member
-    /// This performs ONE database query to check all permissions
+    /// This performs ONE database query to check all permissions AND conversation type
     pub async fn verify(
         db: &PgPool,
         user_id: Uuid,
@@ -58,18 +56,16 @@ impl ConversationMember {
         let member = sqlx::query_as::<_, ConversationMemberRecord>(
             r#"
             SELECT
-                user_id,
-                conversation_id,
-                role,
-                is_muted,
-                EXISTS(
-                    SELECT 1 FROM conversations
-                    WHERE id = conversation_members.conversation_id
-                    AND deleted_at IS NULL
-                ) AS conversation_exists,
-                (role = 'admin') AS is_admin
-            FROM conversation_members
-            WHERE user_id = $1 AND conversation_id = $2
+                cm.user_id,
+                cm.conversation_id,
+                cm.role,
+                cm.is_muted,
+                c.conversation_type,
+                (c.id IS NOT NULL) AS conversation_exists,
+                (cm.role IN ('admin', 'owner')) AS is_admin
+            FROM conversation_members cm
+            LEFT JOIN conversations c ON c.id = cm.conversation_id
+            WHERE cm.user_id = $1 AND cm.conversation_id = $2
             "#,
         )
         .bind(user_id)
@@ -79,10 +75,14 @@ impl ConversationMember {
         .map_err(|_| AppError::Database(sqlx::Error::RowNotFound))?
         .ok_or(AppError::Unauthorized)?;
 
+        let role = MemberRole::from_db(&member.role)
+            .ok_or_else(|| AppError::StartServer("Invalid role in database".into()))?;
+
         Ok(ConversationMember {
             user_id: member.user_id,
             conversation_id: member.conversation_id,
-            role: member.role,
+            role,
+            conversation_type: member.conversation_type,
             is_muted: member.is_muted,
             can_send_messages: member.conversation_exists && !member.is_muted,
             can_delete_others_messages: member.is_admin,
@@ -90,7 +90,18 @@ impl ConversationMember {
     }
 
     pub fn is_admin(&self) -> bool {
-        self.role == "admin"
+        self.role.is_privileged()
+    }
+
+    pub fn is_group(&self) -> bool {
+        self.conversation_type == "group"
+    }
+
+    pub fn require_group(&self) -> Result<(), AppError> {
+        if !self.is_group() {
+            return Err(AppError::Forbidden);
+        }
+        Ok(())
     }
 
     pub fn can_send(&self) -> Result<(), AppError> {
@@ -113,6 +124,11 @@ impl ConversationMember {
         }
         Ok(())
     }
+
+    /// Check if this member can manage another member's role
+    pub fn can_manage_role(&self, target_role: MemberRole) -> bool {
+        self.role.can_manage(target_role)
+    }
 }
 
 // Helper struct for querying (similar to ConversationMember but with DB fields)
@@ -122,6 +138,7 @@ struct ConversationMemberRecord {
     conversation_id: Uuid,
     role: String,
     is_muted: bool,
+    conversation_type: String,
     conversation_exists: bool,
     is_admin: bool,
 }
@@ -159,7 +176,8 @@ mod tests {
         let member = ConversationMember {
             user_id: Uuid::new_v4(),
             conversation_id: Uuid::new_v4(),
-            role: "member".to_string(),
+            role: MemberRole::Member,
+            conversation_type: "group".to_string(),
             is_muted: false,
             can_send_messages: true,
             can_delete_others_messages: false,
@@ -173,7 +191,8 @@ mod tests {
         let member = ConversationMember {
             user_id: Uuid::new_v4(),
             conversation_id: Uuid::new_v4(),
-            role: "member".to_string(),
+            role: MemberRole::Member,
+            conversation_type: "group".to_string(),
             is_muted: true,
             can_send_messages: false,
             can_delete_others_messages: false,
@@ -187,13 +206,13 @@ mod tests {
         let member = ConversationMember {
             user_id: Uuid::new_v4(),
             conversation_id: Uuid::new_v4(),
-            role: "member".to_string(),
+            role: MemberRole::Member,
+            conversation_type: "group".to_string(),
             is_muted: false,
             can_send_messages: true,
             can_delete_others_messages: false,
         };
 
-        let other_user_id = Uuid::new_v4();
         assert!(member.can_delete_message(false).is_err());
         assert!(member.can_delete_message(true).is_ok()); // Own message is ok
     }
@@ -203,7 +222,8 @@ mod tests {
         let admin = ConversationMember {
             user_id: Uuid::new_v4(),
             conversation_id: Uuid::new_v4(),
-            role: "admin".to_string(),
+            role: MemberRole::Admin,
+            conversation_type: "group".to_string(),
             is_muted: false,
             can_send_messages: true,
             can_delete_others_messages: true,
@@ -211,5 +231,65 @@ mod tests {
 
         assert!(admin.can_delete_message(false).is_ok());
         assert!(admin.can_delete_message(true).is_ok());
+    }
+
+    #[test]
+    fn test_can_manage_role() {
+        let owner = ConversationMember {
+            user_id: Uuid::new_v4(),
+            conversation_id: Uuid::new_v4(),
+            role: MemberRole::Owner,
+            conversation_type: "group".to_string(),
+            is_muted: false,
+            can_send_messages: true,
+            can_delete_others_messages: true,
+        };
+
+        assert!(owner.can_manage_role(MemberRole::Admin));
+        assert!(owner.can_manage_role(MemberRole::Member));
+
+        let admin = ConversationMember {
+            user_id: Uuid::new_v4(),
+            conversation_id: Uuid::new_v4(),
+            role: MemberRole::Admin,
+            conversation_type: "group".to_string(),
+            is_muted: false,
+            can_send_messages: true,
+            can_delete_others_messages: true,
+        };
+
+        assert!(admin.can_manage_role(MemberRole::Moderator));
+        assert!(admin.can_manage_role(MemberRole::Member));
+        assert!(!admin.can_manage_role(MemberRole::Admin)); // Cannot manage same level
+        assert!(!admin.can_manage_role(MemberRole::Owner)); // Cannot manage higher
+    }
+
+    #[test]
+    fn test_is_group() {
+        let group_member = ConversationMember {
+            user_id: Uuid::new_v4(),
+            conversation_id: Uuid::new_v4(),
+            role: MemberRole::Member,
+            conversation_type: "group".to_string(),
+            is_muted: false,
+            can_send_messages: true,
+            can_delete_others_messages: false,
+        };
+
+        assert!(group_member.is_group());
+        assert!(group_member.require_group().is_ok());
+
+        let direct_member = ConversationMember {
+            user_id: Uuid::new_v4(),
+            conversation_id: Uuid::new_v4(),
+            role: MemberRole::Member,
+            conversation_type: "direct".to_string(),
+            is_muted: false,
+            can_send_messages: true,
+            can_delete_others_messages: false,
+        };
+
+        assert!(!direct_member.is_group());
+        assert!(direct_member.require_group().is_err());
     }
 }

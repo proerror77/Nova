@@ -1,9 +1,11 @@
+use super::versioning::{
+    get_invalidation_timestamp, get_or_compute, is_version_valid, VersionedCacheEntry,
+};
+use crate::models::User;
 /// User profile caching utilities
 use redis::aio::ConnectionManager;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use crate::models::User;
-use super::versioning::{VersionedCacheEntry, get_or_compute, is_version_valid, get_invalidation_timestamp};
 
 const USER_CACHE_TTL: usize = 3600; // 1 hour
 
@@ -39,10 +41,7 @@ pub async fn get_cached_user(
 ) -> Result<Option<CachedUser>, redis::RedisError> {
     let key = format!("nova:cache:user:{}", user_id);
     let mut redis = redis.clone();
-    let cached: Option<String> = redis::cmd("GET")
-        .arg(&key)
-        .query_async(&mut redis)
-        .await?;
+    let cached: Option<String> = redis::cmd("GET").arg(&key).query_async(&mut redis).await?;
 
     if let Some(json_str) = cached {
         if let Ok(user) = serde_json::from_str::<CachedUser>(&json_str) {
@@ -60,14 +59,10 @@ pub async fn set_cached_user(
 ) -> Result<(), redis::RedisError> {
     let key = format!("nova:cache:user:{}", user.id);
     // CRITICAL FIX: Properly handle serialization errors instead of silently failing
-    let json = serde_json::to_string(user)
-        .map_err(|e| {
-            tracing::error!("Failed to serialize user {} for cache: {}", user.id, e);
-            redis::RedisError::from((
-                redis::ErrorKind::TypeError,
-                "user serialization failed"
-            ))
-        })?;
+    let json = serde_json::to_string(user).map_err(|e| {
+        tracing::error!("Failed to serialize user {} for cache: {}", user.id, e);
+        redis::RedisError::from((redis::ErrorKind::TypeError, "user serialization failed"))
+    })?;
 
     let mut redis = redis.clone();
     redis::cmd("SET")
@@ -88,10 +83,7 @@ pub async fn invalidate_user_cache(
 ) -> Result<(), redis::RedisError> {
     let key = format!("nova:cache:user:{}", user_id);
     let mut redis = redis.clone();
-    redis::cmd("DEL")
-        .arg(&key)
-        .query_async(&mut redis)
-        .await?;
+    redis::cmd("DEL").arg(&key).query_async(&mut redis).await?;
 
     Ok(())
 }
@@ -127,10 +119,7 @@ pub async fn get_cached_search_results(
 ) -> Result<Option<String>, redis::RedisError> {
     let key = format!("nova:cache:search:users:{}:{}:{}", query, limit, offset);
     let mut redis = redis.clone();
-    let cached: Option<String> = redis::cmd("GET")
-        .arg(&key)
-        .query_async(&mut redis)
-        .await?;
+    let cached: Option<String> = redis::cmd("GET").arg(&key).query_async(&mut redis).await?;
 
     Ok(cached)
 }
@@ -177,10 +166,7 @@ pub async fn invalidate_search_cache(
 
         // Delete in batches of 1000 to avoid protocol limits
         for chunk in all_keys.chunks(1000) {
-            redis::cmd("DEL")
-                .arg(chunk)
-                .query_async(&mut redis)
-                .await?;
+            redis::cmd("DEL").arg(chunk).query_async(&mut redis).await?;
         }
 
         tracing::info!(
@@ -204,21 +190,25 @@ pub async fn invalidate_search_cache(
 pub async fn get_cached_user_versioned(
     redis: &ConnectionManager,
     user_id: Uuid,
-    compute_fn: impl Fn() -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<CachedUser, Box<dyn std::error::Error>>> + Send>>,
+    compute_fn: impl Fn() -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<Output = Result<CachedUser, Box<dyn std::error::Error>>> + Send,
+        >,
+    >,
 ) -> Result<CachedUser, Box<dyn std::error::Error>> {
     let key = format!("nova:cache:user:{}:v2", user_id); // v2 indicates version-controlled cache
 
     // Get or compute with atomic operation
-    let result = get_or_compute(
-        redis,
-        &key,
-        &compute_fn,
-        USER_CACHE_TTL,
-    ).await?;
+    let result = get_or_compute(redis, &key, &compute_fn, USER_CACHE_TTL).await?;
 
     // Verify version hasn't been invalidated
-    let invalidated_at = get_invalidation_timestamp(redis, &key).await.unwrap_or(None);
-    if !is_version_valid::<CachedUser>(&VersionedCacheEntry::new(result.data.clone()), invalidated_at) {
+    let invalidated_at = get_invalidation_timestamp(redis, &key)
+        .await
+        .unwrap_or(None);
+    if !is_version_valid::<CachedUser>(
+        &VersionedCacheEntry::new(result.data.clone()),
+        invalidated_at,
+    ) {
         // Cache was invalidated, compute fresh value
         let fresh_data = compute_fn().await?;
         return Ok(fresh_data);

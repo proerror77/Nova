@@ -31,7 +31,9 @@
 /// ```
 use anyhow::{anyhow, Result};
 use chrono::{Duration, Utc};
-use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, TokenData, Validation, Algorithm};
+use jsonwebtoken::{
+    decode, encode, Algorithm, DecodingKey, EncodingKey, Header, TokenData, Validation,
+};
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -168,9 +170,9 @@ pub fn initialize_jwt_validation_only(public_key_pem: &str) -> Result<()> {
 ///
 /// Returns error if keys haven't been initialized via initialize_jwt_keys()
 fn get_encoding_key() -> Result<&'static EncodingKey> {
-    JWT_ENCODING_KEY
-        .get()
-        .ok_or_else(|| anyhow!("JWT keys not initialized. Call initialize_jwt_keys() during startup."))
+    JWT_ENCODING_KEY.get().ok_or_else(|| {
+        anyhow!("JWT keys not initialized. Call initialize_jwt_keys() during startup.")
+    })
 }
 
 /// Get decoding key for token validation

@@ -6,6 +6,7 @@ use axum::{
     Router,
 };
 use redis::aio::ConnectionManager;
+use search_service::search_suggestions::SearchSuggestionsService;
 use serde::{Deserialize, Serialize};
 use sqlx::{postgres::PgPoolOptions, PgPool};
 use std::net::SocketAddr;
@@ -54,6 +55,25 @@ struct SearchParams {
 
 fn default_limit() -> i64 {
     20
+}
+
+#[derive(Debug, Deserialize)]
+struct SuggestionsParams {
+    query_type: String, // 'user', 'post', 'hashtag', 'video', 'stream'
+    prefix: String,
+    #[serde(default = "default_suggestion_limit")]
+    limit: i64,
+}
+
+fn default_suggestion_limit() -> i64 {
+    10
+}
+
+#[derive(Debug, Deserialize)]
+struct RecordClickParams {
+    query_type: String,
+    query_text: String,
+    result_id: Uuid,
 }
 
 #[derive(Debug, Serialize, sqlx::FromRow)]
@@ -207,7 +227,9 @@ async fn search_posts(
     }))
 }
 
-async fn clear_search_cache(State(state): State<AppState>) -> Result<Json<serde_json::Value>, AppError> {
+async fn clear_search_cache(
+    State(state): State<AppState>,
+) -> Result<Json<serde_json::Value>, AppError> {
     let mut redis_conn = state.redis.clone();
 
     // Use SCAN to find all search:posts:* keys
@@ -242,6 +264,68 @@ async fn clear_search_cache(State(state): State<AppState>) -> Result<Json<serde_
     Ok(Json(serde_json::json!({
         "message": "Search cache cleared",
         "deleted_count": deleted_count
+    })))
+}
+
+async fn get_search_suggestions(
+    State(state): State<AppState>,
+    Query(params): Query<SuggestionsParams>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    // For authenticated users, we'd get user_id from JWT
+    // For now, we return global suggestions
+    let result = SearchSuggestionsService::get_suggestions(
+        &state.db,
+        None, // user_id - would come from JWT in production
+        &params.query_type,
+        &params.prefix,
+        params.limit,
+    )
+    .await
+    .map_err(|e| AppError::Config(e))?;
+
+    Ok(Json(serde_json::json!({
+        "query_type": params.query_type,
+        "prefix": params.prefix,
+        "suggestions": result.suggestions,
+        "total": result.total
+    })))
+}
+
+async fn get_trending_searches(
+    State(state): State<AppState>,
+    Query(params): Query<SearchParams>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let query_type = params.q.clone();
+    let trending = SearchSuggestionsService::get_trending_searches(&state.db, &query_type, 20)
+        .await
+        .map_err(|e| AppError::Config(e))?;
+
+    Ok(Json(serde_json::json!({
+        "query_type": query_type,
+        "trending": trending,
+        "count": trending.len()
+    })))
+}
+
+async fn record_search_click(
+    State(state): State<AppState>,
+    Json(params): Json<RecordClickParams>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    // In production, user_id would come from JWT
+    let user_id = Uuid::nil(); // Placeholder
+
+    SearchSuggestionsService::record_click(
+        &state.db,
+        user_id,
+        &params.query_type,
+        &params.query_text,
+        params.result_id,
+    )
+    .await
+    .map_err(|e| AppError::Config(e))?;
+
+    Ok(Json(serde_json::json!({
+        "message": "Click recorded successfully"
     })))
 }
 
@@ -304,17 +388,229 @@ async fn search_hashtags(
     }))
 }
 
+#[derive(Debug, Deserialize)]
+struct UnifiedSearchParams {
+    q: String,
+    #[serde(default = "default_search_types")]
+    types: String, // Comma-separated: 'user', 'post', 'hashtag'
+    #[serde(default = "default_limit")]
+    limit: i64,
+}
+
+fn default_search_types() -> String {
+    "user,post,hashtag".to_string()
+}
+
+#[derive(Debug, Serialize)]
+struct UnifiedSearchResult {
+    query: String,
+    users: Vec<UserResult>,
+    posts: Vec<PostResult>,
+    hashtags: Vec<HashtagResult>,
+    total_results: usize,
+}
+
+/// Unified search endpoint supporting multiple types
+async fn unified_search(
+    State(state): State<AppState>,
+    Query(params): Query<UnifiedSearchParams>,
+) -> Result<Json<UnifiedSearchResult>, AppError> {
+    let mut users = vec![];
+    let mut posts = vec![];
+    let mut hashtags = vec![];
+
+    let search_types: Vec<&str> = params.types.split(',').map(|s| s.trim()).collect();
+
+    // Search users if requested
+    if search_types.contains(&"user") {
+        let search_pattern = format!("%{}%", params.q);
+        users = sqlx::query_as::<_, UserResult>(
+            r#"
+            SELECT id, username, email, created_at
+            FROM users
+            WHERE (username ILIKE $1 OR email ILIKE $1)
+              AND deleted_at IS NULL
+              AND is_active = true
+            ORDER BY created_at DESC
+            LIMIT $2
+            "#,
+        )
+        .bind(&search_pattern)
+        .bind(params.limit)
+        .fetch_all(&state.db)
+        .await?;
+    }
+
+    // Search posts if requested
+    if search_types.contains(&"post") {
+        if !params.q.trim().is_empty() {
+            posts = sqlx::query_as::<_, PostResult>(
+                r#"
+                SELECT id, user_id, caption, created_at
+                FROM posts
+                WHERE to_tsvector('english', COALESCE(caption, '')) @@
+                      plainto_tsquery('english', $1)
+                  AND soft_delete IS NULL
+                  AND status = 'published'
+                ORDER BY ts_rank(to_tsvector('english', COALESCE(caption, '')),
+                                 plainto_tsquery('english', $1)) DESC,
+                         created_at DESC
+                LIMIT $2
+                "#,
+            )
+            .bind(&params.q)
+            .bind(params.limit)
+            .fetch_all(&state.db)
+            .await?;
+        }
+    }
+
+    // Search hashtags if requested
+    if search_types.contains(&"hashtag") {
+        let search_pattern = format!("%#{}%", params.q);
+        let results = sqlx::query_as::<_, (Option<String>,)>(
+            r#"
+            SELECT DISTINCT caption
+            FROM posts
+            WHERE caption ILIKE $1
+              AND soft_delete IS NULL
+              AND status = 'published'
+            LIMIT $2
+            "#,
+        )
+        .bind(&search_pattern)
+        .bind(params.limit)
+        .fetch_all(&state.db)
+        .await?;
+
+        let mut hashtag_map: std::collections::HashMap<String, i64> =
+            std::collections::HashMap::new();
+        for (caption,) in results {
+            if let Some(text) = caption {
+                for word in text.split_whitespace() {
+                    if let Some(tag) = word.strip_prefix('#') {
+                        let clean_tag = tag.trim_end_matches(|c: char| !c.is_alphanumeric());
+                        if !clean_tag.is_empty()
+                            && clean_tag.to_lowercase().contains(&params.q.to_lowercase())
+                        {
+                            *hashtag_map.entry(clean_tag.to_string()).or_insert(0) += 1;
+                        }
+                    }
+                }
+            }
+        }
+
+        hashtags = hashtag_map
+            .into_iter()
+            .map(|(tag, count)| HashtagResult { tag, count })
+            .collect();
+        hashtags.sort_by(|a, b| b.count.cmp(&a.count));
+        hashtags.truncate(params.limit as usize);
+    }
+
+    let total_results = users.len() + posts.len() + hashtags.len();
+
+    Ok(Json(UnifiedSearchResult {
+        query: params.q,
+        users,
+        posts,
+        hashtags,
+        total_results,
+    }))
+}
+
 // ============================================
 // Application Setup
 // ============================================
 
+// OpenAPI endpoint handler
+async fn openapi_json() -> axum::Json<serde_json::Value> {
+    use utoipa::OpenApi;
+    axum::Json(serde_json::to_value(&search_service::openapi::ApiDoc::openapi()).unwrap())
+}
+
+// Swagger UI handler
+async fn swagger_ui() -> axum::response::Html<&'static str> {
+    axum::response::Html(
+        r#"<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Nova Search Service API</title>
+    <link rel="stylesheet" type="text/css" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css" />
+</head>
+<body>
+    <div id="swagger-ui"></div>
+    <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+    <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-standalone-preset.js"></script>
+    <script>
+        window.onload = function() {
+            SwaggerUIBundle({
+                url: "/openapi.json",
+                dom_id: '#swagger-ui',
+                deepLinking: true,
+                presets: [
+                    SwaggerUIBundle.presets.apis,
+                    SwaggerUIStandalonePreset
+                ],
+                plugins: [
+                    SwaggerUIBundle.plugins.DownloadUrl
+                ],
+                layout: "StandaloneLayout"
+            });
+        };
+    </script>
+</body>
+</html>"#,
+    )
+}
+
+// Documentation entry point
+async fn docs() -> axum::response::Html<&'static str> {
+    axum::response::Html(
+        r#"<!DOCTYPE html>
+<html>
+<head>
+    <title>Nova Search Service API</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; background: #f5f5f5; }
+        .container { max-width: 600px; margin: 0 auto; background: white; padding: 40px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        h1 { color: #333; }
+        a { display: block; margin: 15px 0; padding: 15px; background: #dc3545; color: white; text-decoration: none; border-radius: 4px; }
+        a:hover { background: #c82333; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Nova Search Service API</h1>
+        <p>Choose your preferred documentation viewer:</p>
+        <a href="/swagger-ui">📘 Swagger UI (Interactive)</a>
+        <a href="/openapi.json">📄 OpenAPI JSON (Raw)</a>
+    </div>
+</body>
+</html>"#,
+    )
+}
+
 fn build_router() -> Router<AppState> {
     Router::new()
         .route("/health", get(health_handler))
+        .route("/openapi.json", get(openapi_json))
+        .route("/swagger-ui", get(swagger_ui))
+        .route("/docs", get(docs))
+        // Unified search endpoint
+        .route("/api/v1/search", get(unified_search))
+        // Type-specific search endpoints
         .route("/api/v1/search/users", get(search_users))
         .route("/api/v1/search/posts", get(search_posts))
         .route("/api/v1/search/hashtags", get(search_hashtags))
+        // Cache management
         .route("/api/v1/search/clear-cache", post(clear_search_cache))
+        // Search suggestions and trends
+        .route("/api/v1/search/suggestions", get(get_search_suggestions))
+        .route("/api/v1/search/trending", get(get_trending_searches))
+        // Search analytics
+        .route("/api/v1/search/clicks", post(record_search_click))
 }
 
 async fn init_db_pool(database_url: &str) -> Result<PgPool, sqlx::Error> {
@@ -350,8 +646,8 @@ async fn main() -> Result<(), AppError> {
     let database_url = std::env::var("DATABASE_URL")
         .map_err(|_| AppError::Config("DATABASE_URL must be set".to_string()))?;
 
-    let redis_url = std::env::var("REDIS_URL")
-        .unwrap_or_else(|_| "redis://127.0.0.1:6379".to_string());
+    let redis_url =
+        std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379".to_string());
 
     let port: u16 = std::env::var("PORT")
         .ok()

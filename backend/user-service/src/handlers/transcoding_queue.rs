@@ -78,16 +78,19 @@ pub async fn get_queue_status(
 
     // Get jobs with optional status filter
     let jobs_query = if let Some(status) = status_filter {
-        sqlx::query_as::<_, (
-            Uuid,
-            String,
-            i32,
-            Option<i32>,
-            Option<String>,
-            i32,
-            Option<String>,
-            chrono::DateTime<chrono::Utc>,
-        )>(
+        sqlx::query_as::<
+            _,
+            (
+                Uuid,
+                String,
+                i32,
+                Option<i32>,
+                Option<String>,
+                i32,
+                Option<String>,
+                chrono::DateTime<chrono::Utc>,
+            ),
+        >(
             r#"
             SELECT
                 id,
@@ -110,16 +113,19 @@ pub async fn get_queue_status(
         .fetch_all(pool.as_ref())
         .await
     } else {
-        sqlx::query_as::<_, (
-            Uuid,
-            String,
-            i32,
-            Option<i32>,
-            Option<String>,
-            i32,
-            Option<String>,
-            chrono::DateTime<chrono::Utc>,
-        )>(
+        sqlx::query_as::<
+            _,
+            (
+                Uuid,
+                String,
+                i32,
+                Option<i32>,
+                Option<String>,
+                i32,
+                Option<String>,
+                chrono::DateTime<chrono::Utc>,
+            ),
+        >(
             r#"
             SELECT
                 id,
@@ -218,9 +224,7 @@ pub async fn retry_job(
 
     let transcoding_status = video.transcoding_status.as_deref().unwrap_or("unknown");
     if transcoding_status != "failed" {
-        return Err(AppError::BadRequest(
-            "Video is not in failed state".into(),
-        ));
+        return Err(AppError::BadRequest("Video is not in failed state".into()));
     }
 
     // Reset transcoding state for retry

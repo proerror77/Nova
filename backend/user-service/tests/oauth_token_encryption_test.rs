@@ -45,7 +45,7 @@ mod oauth_token_encryption_tests {
             refresh_token_hash: Option<String>, // SHA256 hash (legacy, non-refreshable)
             access_token_encrypted: Option<Vec<u8>>, // AES-256-GCM encrypted (new, refreshable)
             refresh_token_encrypted: Option<Vec<u8>>, // AES-256-GCM encrypted (new, refreshable)
-            tokens_encrypted: bool, // Flag: true = encrypted storage enabled
+            tokens_encrypted: bool,            // Flag: true = encrypted storage enabled
         }
 
         // Legacy: only hashes
@@ -80,7 +80,7 @@ mod oauth_token_encryption_tests {
         // Verify system can handle both old hashed and new encrypted tokens
 
         enum TokenStorage {
-            Hashed(String), // Legacy: non-refreshable, only for validation
+            Hashed(String),     // Legacy: non-refreshable, only for validation
             Encrypted(Vec<u8>), // New: refreshable, requires decryption
         }
 
@@ -201,10 +201,7 @@ mod oauth_token_encryption_tests {
         assert_ne!(google_state.provider, apple_state.provider);
 
         // Validation should check provider matches
-        fn validate_state(
-            provided_provider: &str,
-            expected_provider: &str,
-        ) -> bool {
+        fn validate_state(provided_provider: &str, expected_provider: &str) -> bool {
             provided_provider == expected_provider
         }
 
@@ -239,10 +236,7 @@ mod oauth_token_encryption_tests {
         };
 
         assert!(with_pkce.code_challenge.is_some());
-        assert_eq!(
-            with_pkce.code_challenge_method,
-            Some("S256".to_string())
-        );
+        assert_eq!(with_pkce.code_challenge_method, Some("S256".to_string()));
     }
 
     #[test]
@@ -482,10 +476,7 @@ mod oauth_token_encryption_tests {
         // Verify lifecycle
         assert!(created_at < updated_at);
         assert!(last_token_refresh_attempt.is_some());
-        assert_eq!(
-            last_token_refresh_status,
-            Some("success".to_string())
-        );
+        assert_eq!(last_token_refresh_status, Some("success".to_string()));
         // new_expires_at should be less than updated_at since it's only 1 hour from now, but 2 hours later
         assert!(new_expires_at >= created_at);
     }

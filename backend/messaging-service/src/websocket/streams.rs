@@ -2,16 +2,16 @@
 //! Provides ordered, durable, and idempotent message delivery across instances
 //! with support for consumer groups and offline message replay
 
-use redis::{Client, AsyncCommands, aio::MultiplexedConnection};
-use uuid::Uuid;
+use redis::{aio::MultiplexedConnection, AsyncCommands, Client};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use tokio::time::{self, Duration};
+use uuid::Uuid;
 
 /// Represents a stream message entry
 #[derive(Debug, Clone)]
 pub struct StreamMessage {
-    pub id: String,  // Redis stream entry ID (timestamp-sequence)
+    pub id: String, // Redis stream entry ID (timestamp-sequence)
     pub conversation_id: Uuid,
     pub payload: String,
     pub timestamp: u64,
@@ -32,7 +32,7 @@ pub struct StreamsConfig {
 impl Default for StreamsConfig {
     fn default() -> Self {
         Self {
-            max_age_ms: 24 * 60 * 60 * 1000,  // 24 hours
+            max_age_ms: 24 * 60 * 60 * 1000, // 24 hours
             group_name: "messaging-service".to_string(),
             consumer_name: format!("instance-{}", uuid::Uuid::new_v4()),
             batch_size: 100,
@@ -53,7 +53,7 @@ fn group_stream_key() -> String {
 /// Global message counter for probabilistic stream trimming
 /// Only trim every 100 messages to avoid performance overhead
 static TRIM_COUNTER: AtomicU64 = AtomicU64::new(0);
-const TRIM_INTERVAL: u64 = 100;  // Trim every 100 messages
+const TRIM_INTERVAL: u64 = 100; // Trim every 100 messages
 
 /// Publish message to stream for a specific conversation
 pub async fn publish_to_stream(
@@ -65,15 +65,20 @@ pub async fn publish_to_stream(
     let key = stream_key(conversation_id);
 
     // Add to conversation-specific stream
-    let entry_id: String = conn.xadd::<_, _, _, _, String>(
-        &key,
-        "*",  // Auto-generate ID with current timestamp
-        &[
-            ("conversation_id", conversation_id.to_string().as_str()),
-            ("payload", payload),
-            ("timestamp", &chrono::Utc::now().timestamp_millis().to_string()),
-        ]
-    ).await?;
+    let entry_id: String = conn
+        .xadd::<_, _, _, _, String>(
+            &key,
+            "*", // Auto-generate ID with current timestamp
+            &[
+                ("conversation_id", conversation_id.to_string().as_str()),
+                ("payload", payload),
+                (
+                    "timestamp",
+                    &chrono::Utc::now().timestamp_millis().to_string(),
+                ),
+            ],
+        )
+        .await?;
 
     // Also add to fanout stream for consumer group processing
     conn.xadd::<_, _, _, _, String>(
@@ -83,8 +88,9 @@ pub async fn publish_to_stream(
             ("conversation_id", conversation_id.to_string().as_str()),
             ("stream_key", key.as_str()),
             ("entry_id", entry_id.as_str()),
-        ]
-    ).await?;
+        ],
+    )
+    .await?;
 
     // === CRITICAL FIX: Probabilistic stream trimming ===
     // Only trim every 100 messages (not every message) to prevent performance degradation
@@ -109,8 +115,8 @@ pub async fn publish_to_stream(
             if let Err(e) = redis::cmd("XTRIM")
                 .arg(&key_clone)
                 .arg("MAXLEN")
-                .arg("~")  // Approximate trimming for performance
-                .arg(50000)  // Keep last 50k messages (~1-2MB per stream)
+                .arg("~") // Approximate trimming for performance
+                .arg(50000) // Keep last 50k messages (~1-2MB per stream)
                 .query_async::<_, ()>(&mut trim_conn)
                 .await
             {
@@ -135,8 +141,8 @@ pub async fn ensure_consumer_group(
         .arg("CREATE")
         .arg(&key)
         .arg(&config.group_name)
-        .arg("0")  // Start from beginning
-        .arg("MKSTREAM")  // Create stream if doesn't exist
+        .arg("0") // Start from beginning
+        .arg("MKSTREAM") // Create stream if doesn't exist
         .query_async(&mut conn)
         .await;
 
@@ -165,15 +171,19 @@ pub async fn read_pending_messages(
     let mut results = Vec::new();
 
     for (stream_id, fields) in messages {
-        let conversation_id_str = fields.get("conversation_id")
-            .ok_or_else(|| redis::RedisError::from((redis::ErrorKind::TypeError, "missing conversation_id")))?;
-        let payload = fields.get("payload")
+        let conversation_id_str = fields.get("conversation_id").ok_or_else(|| {
+            redis::RedisError::from((redis::ErrorKind::TypeError, "missing conversation_id"))
+        })?;
+        let payload = fields
+            .get("payload")
             .cloned()
             .or_else(|| {
                 // For fanout stream, fetch from conversation stream
                 fields.get("entry_id").cloned()
             })
-            .ok_or_else(|| redis::RedisError::from((redis::ErrorKind::TypeError, "missing payload")))?;
+            .ok_or_else(|| {
+                redis::RedisError::from((redis::ErrorKind::TypeError, "missing payload"))
+            })?;
 
         if let Ok(conversation_id) = Uuid::parse_str(conversation_id_str) {
             results.push(StreamMessage {
@@ -220,10 +230,7 @@ pub async fn get_group_info(
 
 /// Trim old messages from stream (maintenance)
 /// Called periodically to clean up the fanout stream
-pub async fn trim_old_messages(
-    client: &Client,
-    _config: &StreamsConfig,
-) -> redis::RedisResult<()> {
+pub async fn trim_old_messages(client: &Client, _config: &StreamsConfig) -> redis::RedisResult<()> {
     let mut conn = client.get_multiplexed_async_connection().await?;
     let key = group_stream_key();
 
@@ -239,8 +246,8 @@ pub async fn trim_old_messages(
     let _: Result<(), _> = redis::cmd("XTRIM")
         .arg(&key)
         .arg("MINID")
-        .arg("~")  // Approximate trimming for performance
-        .arg(format!("{}-0", cutoff_ms))  // Format: timestamp-sequence
+        .arg("~") // Approximate trimming for performance
+        .arg(format!("{}-0", cutoff_ms)) // Format: timestamp-sequence
         .query_async(&mut conn)
         .await;
 
@@ -265,7 +272,7 @@ pub async fn start_streams_listener(
         let read_result: redis::RedisResult<Vec<(String, HashMap<String, String>)>> =
             redis::cmd("XREAD")
                 .arg("BLOCK")
-                .arg("5000")  // Block for 5 seconds
+                .arg("5000") // Block for 5 seconds
                 .arg("COUNT")
                 .arg(config.batch_size)
                 .arg("STREAMS")
@@ -286,11 +293,15 @@ pub async fn start_streams_listener(
                                     &mut conn,
                                     stream_key_name,
                                     &fields.get("entry_id").cloned().unwrap_or_default(),
-                                ).await {
-                                    registry.broadcast(
-                                        conversation_id,
-                                        axum::extract::ws::Message::Text(msg_data)
-                                    ).await;
+                                )
+                                .await
+                                {
+                                    registry
+                                        .broadcast(
+                                            conversation_id,
+                                            axum::extract::ws::Message::Text(msg_data),
+                                        )
+                                        .await;
                                 }
                             }
                         }
@@ -329,7 +340,8 @@ async fn fetch_stream_entry(
         .await?;
 
     if let Some((_, fields)) = entries.first() {
-        Ok(fields.iter()
+        Ok(fields
+            .iter()
             .find(|(k, _)| k == "payload")
             .map(|(_, v)| v.clone())
             .unwrap_or_default())

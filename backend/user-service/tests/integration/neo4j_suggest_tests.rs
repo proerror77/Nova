@@ -1,5 +1,5 @@
-use user_service::services::graph::GraphService;
 use user_service::config::GraphConfig;
+use user_service::services::graph::GraphService;
 use uuid::Uuid;
 
 // This test requires a running Neo4j. It is ignored by default.
@@ -33,4 +33,3 @@ async fn test_neo4j_friends_of_friends() {
     let ids: Vec<Uuid> = suggestions.into_iter().map(|(id, _)| id).collect();
     assert!(ids.contains(&c));
 }
-

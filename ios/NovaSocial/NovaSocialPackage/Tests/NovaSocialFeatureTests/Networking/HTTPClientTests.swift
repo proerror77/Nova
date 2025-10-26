@@ -22,12 +22,18 @@ actor MockHTTPClient: HTTPClientProtocol {
 
     var shouldFail: Bool {
         get async { _shouldFail }
-        set async { _shouldFail = newValue }
     }
 
     var failureError: Error? {
         get async { _failureError }
-        set async { _failureError = newValue }
+    }
+
+    func setShouldFail(_ value: Bool) async {
+        _shouldFail = value
+    }
+
+    func setFailureError(_ error: Error?) async {
+        _failureError = error
     }
 
     var requestCount: Int {
@@ -42,7 +48,7 @@ actor MockHTTPClient: HTTPClientProtocol {
         _responses[endpoint] = value
     }
 
-    func request<T: Decodable>(endpoint: APIEndpoint) async throws -> T {
+    func request<T: Decodable & Sendable>(endpoint: APIEndpoint) async throws -> T {
         _requestCount += 1
         _requestHistory.append(endpoint)
 
@@ -98,29 +104,29 @@ struct HTTPClientTests {
     }
 
     @Test("HTTPClient tracks request count")
-    async func testRequestTracking() async throws {
+    func testRequestTracking() async throws {
         let initialCount = await mockClient.requestCount
         #expect(initialCount == 0)
     }
 
     @Test("HTTPClient handles network errors")
-    async func testNetworkError() async throws {
-        await mockClient.shouldFail = true
-        await mockClient.failureError = MockHTTPClient.MockError.networkError
+    func testNetworkError() async throws {
+        await mockClient.setShouldFail(true)
+        await mockClient.setFailureError(MockHTTPClient.MockError.networkError)
 
         let count = await mockClient.requestCount
         #expect(count == 0)
     }
 
     @Test("HTTPClient maintains request history")
-    async func testRequestHistory() async throws {
+    func testRequestHistory() async throws {
         let history = await mockClient.requestHistory
         #expect(history.isEmpty)
     }
 
     @Test("HTTPClient can be reset")
-    async func testReset() async throws {
-        await mockClient.shouldFail = true
+    func testReset() async throws {
+        await mockClient.setShouldFail(true)
         await mockClient.reset()
 
         let shouldFail = await mockClient.shouldFail
@@ -132,11 +138,11 @@ struct HTTPClientTests {
 
     @Test("APIError provides localized descriptions")
     func testAPIErrorLocalization() {
-        let error1 = APIError.networkError("Connection failed")
-        #expect(error1.localizedDescription.contains("Connection failed"))
+        let error1 = APIError.networkError(URLError(.timedOut))
+        #expect(!error1.localizedDescription.isEmpty)
 
-        let error2 = APIError.decodingError("Invalid JSON")
-        #expect(error2.localizedDescription.contains("Invalid JSON"))
+        let error2 = APIError.decodingError(DecodingError.dataCorrupted(.init(codingPath: [], debugDescription: "Invalid JSON")))
+        #expect(!error2.localizedDescription.isEmpty)
 
         let error3 = APIError.unauthorized
         #expect(!error3.localizedDescription.isEmpty)
@@ -145,14 +151,14 @@ struct HTTPClientTests {
     @Test("APIError categorization")
     func testAPIErrorCategorization() {
         let errors: [APIError] = [
-            .networkError("test"),
-            .decodingError("test"),
-            .serverError(500),
-            .rateLimited,
+            .networkError(URLError(.timedOut)),
+            .decodingError(DecodingError.dataCorrupted(.init(codingPath: [], debugDescription: "test"))),
+            .serverError(statusCode: 500, message: "Server Error"),
+            .rateLimited(retryAfter: 60),
             .unauthorized,
             .notFound,
             .invalidRequest("test"),
-            .unknown("test")
+            .unknown(NSError(domain: "test", code: 1))
         ]
 
         #expect(errors.count == 8)
@@ -175,8 +181,15 @@ private struct FeedResponseMock: Codable {
     }
 }
 
+private struct NotificationMock: Codable, Sendable {
+    let id: String
+    let userId: String
+    let actionType: String
+    let timestamp: String
+}
+
 private struct NotificationResponseMock: Codable {
-    let notifications: [Notification]
+    let notifications: [NotificationMock]
     let hasMore: Bool
 
     enum CodingKeys: String, CodingKey {

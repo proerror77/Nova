@@ -1,9 +1,9 @@
 pub mod circuit_breaker;
+pub mod global_rate_limit;
 pub mod jwt_auth;
 pub mod metrics;
 /// Middleware implementations
 pub mod rate_limit;
-pub mod global_rate_limit;
 pub mod token_revocation;
 
 // Middleware modules:
@@ -16,8 +16,8 @@ pub mod token_revocation;
 // - CORS: handled by actix_cors::Cors
 
 pub use circuit_breaker::{CircuitBreaker, CircuitBreakerConfig, CircuitState};
+pub use global_rate_limit::GlobalRateLimitMiddleware;
 pub use jwt_auth::{JwtAuthMiddleware, UserId};
 pub use metrics::MetricsMiddleware;
-pub use global_rate_limit::GlobalRateLimitMiddleware;
 pub use rate_limit::RateLimiter;
 pub use token_revocation::{TokenRevocationMiddleware, TokenRevocationMiddlewareService};

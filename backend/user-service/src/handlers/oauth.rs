@@ -5,10 +5,10 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use crate::db::{oauth_repo, user_repo};
+use crate::metrics::oauth_metrics;
 use crate::middleware::jwt_auth::UserId;
 use crate::security::jwt;
-use crate::services::oauth::{OAuthProvider, OAuthProviderFactory, JWKSCache};
-use crate::metrics::oauth_metrics;
+use crate::services::oauth::{JWKSCache, OAuthProvider, OAuthProviderFactory};
 
 // ============================================
 // Request/Response Types
@@ -106,7 +106,10 @@ pub async fn authorize(
     let oauth_user_info = match provider.exchange_code(&req.code, &req.redirect_uri).await {
         Ok(info) => info,
         Err(e) => {
-            oauth_metrics::helpers::record_token_exchange_error(&req.provider, "token_exchange_failed");
+            oauth_metrics::helpers::record_token_exchange_error(
+                &req.provider,
+                "token_exchange_failed",
+            );
             return HttpResponse::BadRequest().json(ErrorResponse {
                 error: "Failed to exchange authorization code".to_string(),
                 details: Some(e.to_string()),
@@ -342,7 +345,10 @@ pub async fn link_provider(
     .await
     {
         if existing_connection.user_id != current_user_id {
-            oauth_metrics::helpers::record_link_operation(&oauth_user_info.provider, "account_conflict");
+            oauth_metrics::helpers::record_link_operation(
+                &oauth_user_info.provider,
+                "account_conflict",
+            );
             return HttpResponse::Conflict().json(ErrorResponse {
                 error: "Provider account already in use".to_string(),
                 details: Some("This OAuth account is already linked to another user".to_string()),

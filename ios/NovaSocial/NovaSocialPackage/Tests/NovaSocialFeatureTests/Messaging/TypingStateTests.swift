@@ -3,11 +3,12 @@ import Foundation
 
 @Suite("Typing auto-clear behavior (spec)")
 struct TypingStateTests {
+    @MainActor
     final class TypingState {
         private(set) var users = Set<UUID>()
         func add(_ u: UUID) { users.insert(u); scheduleClear(u) }
         private func scheduleClear(_ u: UUID) {
-            Task { @MainActor in
+            Task {
                 try? await Task.sleep(for: .milliseconds(100))
                 self.users.remove(u)
             }
@@ -15,6 +16,7 @@ struct TypingStateTests {
     }
 
     @Test("user removed after timeout")
+    @MainActor
     func testAutoClear() async throws {
         let s = TypingState()
         let u = UUID()
