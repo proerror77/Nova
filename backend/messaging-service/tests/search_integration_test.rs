@@ -2,6 +2,8 @@
 // Tests search with pagination, sorting, and full-text search capabilities
 
 use uuid::Uuid;
+use sqlx::{Pool, Postgres, postgres::PgPoolOptions, Row};
+use chrono::Utc;
 
 #[tokio::test]
 #[ignore] // Run manually: cargo test --test search_integration_test -- --nocapture
@@ -116,7 +118,7 @@ async fn test_search_messages_full_text() {
 struct SearchTestScenario {
     conversation_id: Uuid,
     user_id: Uuid,
-    db_url: String,
+    db: Pool<Postgres>,
 }
 
 impl SearchTestScenario {
@@ -124,20 +126,42 @@ impl SearchTestScenario {
         let db_url = std::env::var("DATABASE_URL")
             .unwrap_or_else(|_| "postgres://postgres:postgres@localhost/nova_test".to_string());
 
+        let db = PgPoolOptions::new()
+            .max_connections(5)
+            .connect(&db_url)
+            .await
+            .expect("Failed to create pool");
+
         let conversation_id = Uuid::new_v4();
         let user_id = Uuid::new_v4();
 
         SearchTestScenario {
             conversation_id,
             user_id,
-            db_url,
+            db,
         }
     }
 
-    async fn insert_message(&self, content: String, sequence: i64) {
-        // Placeholder for actual implementation
-        // In reality, this would use sqlx to insert into the database
-        println!("Inserted message: {} (seq: {})", content, sequence);
+    async fn insert_message(&self, content: String, _sequence: i64) {
+        let message_id = Uuid::new_v4();
+
+        // Insert message into database
+        sqlx::query(
+            "INSERT INTO messages (id, conversation_id, sender_id, content, encrypted_content, nonce, created_at) \
+             VALUES ($1, $2, $3, $4, $5, $6, $7)"
+        )
+        .bind(message_id)
+        .bind(self.conversation_id)
+        .bind(self.user_id)
+        .bind(&content)
+        .bind("") // encrypted_content (placeholder)
+        .bind("") // nonce (placeholder)
+        .bind(Utc::now())
+        .execute(&self.db)
+        .await
+        .expect("Failed to insert message");
+
+        println!("Inserted message: {} (id: {})", content, message_id);
     }
 
     async fn search(
@@ -147,18 +171,67 @@ impl SearchTestScenario {
         offset: i64,
         sort_by: &str,
     ) -> (Vec<SearchResult>, i64) {
-        // Placeholder for actual implementation
-        // In reality, this would call the MessageService::search_messages function
-        println!(
-            "Searching for '{}' with limit={}, offset={}, sort_by={}",
-            query, limit, offset, sort_by
+        // Get total count
+        let count_result = sqlx::query(
+            "SELECT COUNT(*) as total FROM messages m \
+             WHERE m.conversation_id = $1 \
+               AND m.deleted_at IS NULL \
+               AND m.content IS NOT NULL \
+               AND m.content_tsv @@ plainto_tsquery('english', $2)"
+        )
+        .bind(self.conversation_id)
+        .bind(query)
+        .fetch_one(&self.db)
+        .await
+        .expect("Failed to count results");
+
+        let total: i64 = count_result.get("total");
+
+        // Build sort clause
+        let sort_clause = match sort_by {
+            "oldest" => "m.created_at ASC",
+            "relevance" => "ts_rank(m.content_tsv, plainto_tsquery('english', $2)) DESC, m.created_at DESC",
+            "recent" | _ => "m.created_at DESC",
+        };
+
+        // Execute search with proper sorting
+        let query_sql = format!(
+            "SELECT m.id, \
+                    ROW_NUMBER() OVER (ORDER BY m.created_at ASC) AS sequence_number \
+             FROM messages m \
+             WHERE m.conversation_id = $1 \
+               AND m.deleted_at IS NULL \
+               AND m.content IS NOT NULL \
+               AND m.content_tsv @@ plainto_tsquery('english', $2) \
+             ORDER BY {} \
+             LIMIT $3 OFFSET $4",
+            sort_clause
         );
-        (vec![], 0)
+
+        let rows = sqlx::query(&query_sql)
+            .bind(self.conversation_id)
+            .bind(query)
+            .bind(limit)
+            .bind(offset)
+            .fetch_all(&self.db)
+            .await
+            .expect("Failed to search");
+
+        let results = rows
+            .into_iter()
+            .map(|r| SearchResult {
+                id: r.get("id"),
+                sequence_number: r.get("sequence_number"),
+            })
+            .collect();
+
+        (results, total)
     }
 }
 
 #[derive(Debug)]
 struct SearchResult {
+    #[allow(dead_code)]
     id: Uuid,
     sequence_number: i64,
 }
