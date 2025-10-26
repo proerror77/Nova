@@ -16,12 +16,7 @@ impl AuthService {
         Self { db, jwt_secret }
     }
 
-    pub async fn register(
-        &self,
-        email: &str,
-        username: &str,
-        password: &str,
-    ) -> Result<()> {
+    pub async fn register(&self, email: &str, username: &str, password: &str) -> Result<()> {
         // Hash password
         let password_hash = bcrypt::hash(password, 12)
             .map_err(|_| AuthError::Internal("Failed to hash password".to_string()))?;
@@ -91,8 +86,8 @@ impl AuthService {
         let token_hash = sha256(token);
 
         // Verify token
-        let verification = db::email_verification_repo::get_email_verification(&self.db, &token_hash)
-            .await?;
+        let verification =
+            db::email_verification_repo::get_email_verification(&self.db, &token_hash).await?;
 
         if verification.user_id != user_id {
             return Err(AuthError::VerificationFailed);

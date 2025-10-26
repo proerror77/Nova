@@ -46,18 +46,19 @@ impl IntoResponse for AuthError {
                 "Invalid email or password".to_string(),
             ),
             AuthError::UserNotFound => (StatusCode::NOT_FOUND, "User not found".to_string()),
-            AuthError::EmailAlreadyExists => (
-                StatusCode::CONFLICT,
-                "Email already registered".to_string(),
-            ),
+            AuthError::EmailAlreadyExists => {
+                (StatusCode::CONFLICT, "Email already registered".to_string())
+            }
             AuthError::InvalidToken => (StatusCode::UNAUTHORIZED, "Invalid token".to_string()),
             AuthError::TokenExpired => (StatusCode::UNAUTHORIZED, "Token expired".to_string()),
-            AuthError::VerificationFailed => (
-                StatusCode::BAD_REQUEST,
-                "Verification failed".to_string(),
-            ),
+            AuthError::VerificationFailed => {
+                (StatusCode::BAD_REQUEST, "Verification failed".to_string())
+            }
             AuthError::Internal(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg),
-            AuthError::Database(msg) => (StatusCode::INTERNAL_SERVER_ERROR, format!("DB error: {}", msg)),
+            AuthError::Database(msg) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("DB error: {}", msg),
+            ),
             AuthError::Validation(msg) => (StatusCode::BAD_REQUEST, msg),
         };
 

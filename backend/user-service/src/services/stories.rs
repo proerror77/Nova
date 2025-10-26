@@ -167,12 +167,29 @@ impl StoriesService {
 
     /// Mark expired stories as deleted. Returns affected rows.
     pub async fn cleanup_expired(&self) -> Result<u64> {
-        let res = sqlx::query(
+        match sqlx::query(
             r#"UPDATE stories SET deleted_at = NOW() WHERE expires_at <= NOW() AND deleted_at IS NULL"#,
         )
         .execute(&self.pool)
-        .await?;
-        Ok(res.rows_affected())
+        .await
+        {
+            Ok(res) => Ok(res.rows_affected()),
+            Err(err) => {
+                let table_missing = err
+                    .as_database_error()
+                    .and_then(|db_err| db_err.code())
+                    .map(|code| code == "42P01")
+                    .unwrap_or(false);
+                if table_missing {
+                    tracing::debug!(
+                        "stories cleanup skipped because table does not exist (migration pending)"
+                    );
+                    Ok(0)
+                } else {
+                    Err(err.into())
+                }
+            }
+        }
     }
 
     pub async fn add_close_friend(&self, owner_id: Uuid, friend_id: Uuid) -> Result<()> {

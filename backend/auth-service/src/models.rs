@@ -152,9 +152,9 @@ pub struct LogoutRequest {
 // JWT Claims
 #[derive(Debug, Serialize, Deserialize)]
 pub struct JwtClaims {
-    pub sub: String,    // user_id
+    pub sub: String, // user_id
     pub email: String,
     pub iat: i64,
     pub exp: i64,
-    pub jti: String,    // JWT ID (session ID)
+    pub jti: String, // JWT ID (session ID)
 }

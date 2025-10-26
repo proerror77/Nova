@@ -1,4 +1,5 @@
 import SwiftUI
+import PhotosUI
 
 public struct ContentView: View {
     @State private var selectedTab = 0
@@ -20,26 +21,33 @@ public struct ContentView: View {
                 }
                 .tag(1)
 
+            MessagingTabView()
+                .tabItem {
+                    Image(systemName: "bubble.left.and.bubble.right.fill")
+                    Text("Messages")
+                }
+                .tag(2)
+
             CreateTabView()
                 .tabItem {
                     Image(systemName: "plus.square.fill")
                     Text("Create")
                 }
-                .tag(2)
+                .tag(3)
 
             NotificationsTabView()
                 .tabItem {
                     Image(systemName: "bell.fill")
                     Text("Notifications")
                 }
-                .tag(3)
+                .tag(4)
 
             ProfileTabView()
                 .tabItem {
                     Image(systemName: "person.fill")
                     Text("Profile")
                 }
-                .tag(4)
+                .tag(5)
         }
     }
 
@@ -202,6 +210,277 @@ private struct ExploreTabView: View {
     }
 }
 
+// MARK: - Messaging Tab
+
+private struct MessagingTabView: View {
+    @State private var conversationsState: AsyncState<[Conversation]> = .loading
+    @State private var selectedConversationId: String? = nil
+    private let messagingService = MessagingService()
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 16) {
+                Text("💬 Messages")
+                    .font(.title)
+                    .fontWeight(.bold)
+                    .padding()
+
+                AsyncContentView(state: conversationsState) { conversations in
+                    if conversations.isEmpty {
+                        VStack(spacing: 12) {
+                            Image(systemName: "bubble.left")
+                                .font(.system(size: 40))
+                                .foregroundColor(.gray)
+                            Text("No Conversations")
+                                .font(.headline)
+                            Text("Start a conversation with someone")
+                                .font(.caption)
+                                .foregroundColor(.gray)
+                        }
+                        .frame(maxHeight: .infinity)
+                    } else {
+                        ScrollView {
+                            VStack(spacing: 0) {
+                                ForEach(conversations) { conversation in
+                                    NavigationLink(value: conversation) {
+                                        ConversationCell(conversation: conversation)
+                                    }
+                                    Divider()
+                                }
+                            }
+                        }
+                    }
+                } onRetry: {
+                    Task {
+                        await loadConversations()
+                    }
+                }
+            }
+            .navigationDestination(for: Conversation.self) { conversation in
+                MessageDetailView(conversation: conversation)
+            }
+        }
+        .task {
+            await loadConversations()
+        }
+    }
+
+    private func loadConversations() async {
+        conversationsState = .loading
+        do {
+            let conversations = try await messagingService.getConversations()
+            conversationsState = .success(conversations)
+        } catch let error as APIError {
+            conversationsState = .error(error.localizedDescription)
+        } catch let error as MessagingError {
+            conversationsState = .error(error.localizedDescription)
+        } catch {
+            conversationsState = .error("Failed to load conversations")
+        }
+    }
+}
+
+// MARK: - Messaging Components
+
+private struct ConversationCell: View {
+    let conversation: Conversation
+
+    var body: some View {
+        HStack(spacing: 12) {
+            // Avatar placeholder
+            Circle()
+                .fill(Color.gray.opacity(0.3))
+                .frame(width: 56, height: 56)
+                .overlay(
+                    Image(systemName: "person.fill")
+                        .foregroundColor(.gray)
+                )
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text(conversation.displayName)
+                        .font(.headline)
+                        .lineLimit(1)
+
+                    Spacer()
+
+                    if let lastMessageAt = conversation.lastMessageAt {
+                        Text(formatTimeAgo(lastMessageAt))
+                            .font(.caption)
+                            .foregroundColor(.gray)
+                    }
+                }
+
+                if let lastMessage = conversation.lastMessage {
+                    Text(lastMessage)
+                        .font(.subheadline)
+                        .foregroundColor(.gray)
+                        .lineLimit(1)
+                } else {
+                    Text("No messages yet")
+                        .font(.subheadline)
+                        .foregroundColor(.gray.opacity(0.5))
+                }
+            }
+
+            Spacer()
+
+            if conversation.unreadCount > 0 {
+                VStack {
+                    Text("\(conversation.unreadCount)")
+                        .font(.caption2)
+                        .fontWeight(.bold)
+                        .foregroundColor(.white)
+                        .frame(minWidth: 20)
+                        .padding(.vertical, 2)
+                        .padding(.horizontal, 4)
+                        .background(Color.blue)
+                        .clipShape(Capsule())
+
+                    Spacer()
+                }
+            }
+        }
+        .padding()
+        .contentShape(Rectangle())
+    }
+
+    private func formatTimeAgo(_ dateString: String) -> String {
+        // Simplified time formatting - in production, use DateFormatter
+        return "Now"
+    }
+}
+
+private struct MessageDetailView: View {
+    let conversation: Conversation
+    @State private var messageText = ""
+    @State private var messagesState: AsyncState<[Message]> = .loading
+    @State private var isSending = false
+    private let messagingService = MessagingService()
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // Header
+            VStack(spacing: 8) {
+                Text(conversation.displayName)
+                    .font(.headline)
+                    .lineLimit(1)
+
+                if conversation.isGroup {
+                    Text("\(conversation.participantCount) participants")
+                        .font(.caption)
+                        .foregroundColor(.gray)
+                }
+            }
+            .padding()
+            .borderBottom()
+
+            // Messages
+            AsyncContentView(state: messagesState) { messages in
+                if messages.isEmpty {
+                    VStack(spacing: 12) {
+                        Image(systemName: "bubble.left")
+                            .font(.system(size: 40))
+                            .foregroundColor(.gray)
+                        Text("No messages yet")
+                            .font(.caption)
+                            .foregroundColor(.gray)
+                    }
+                    .frame(maxHeight: .infinity)
+                } else {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 12) {
+                            ForEach(messages) { message in
+                                if !message.isRecalled {
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(message.senderName)
+                                            .font(.caption)
+                                            .fontWeight(.semibold)
+
+                                        Text(message.content)
+                                            .font(.body)
+                                            .padding(8)
+                                            .background(Color.gray.opacity(0.1))
+                                            .cornerRadius(8)
+                                    }
+                                    .padding(.horizontal)
+                                } else {
+                                    Text("Message recalled")
+                                        .font(.caption)
+                                        .foregroundColor(.gray)
+                                        .padding(.horizontal)
+                                }
+                            }
+                        }
+                        .padding(.vertical)
+                    }
+                }
+            } onRetry: {
+                Task {
+                    await loadMessages()
+                }
+            }
+
+            Spacer()
+
+            // Message input
+            HStack(spacing: 8) {
+                TextField("Message", text: $messageText)
+                    .textFieldStyle(.roundedBorder)
+                    .disabled(isSending)
+
+                Button(action: sendMessage) {
+                    Image(systemName: "paperplane.fill")
+                        .foregroundColor(messageText.isEmpty ? .gray : .blue)
+                }
+                .disabled(messageText.isEmpty || isSending)
+            }
+            .padding()
+            .borderTop()
+        }
+        .navigationTitle("Chat")
+        .navigationBarTitleDisplayMode(.inline)
+        .task {
+            await loadMessages()
+        }
+    }
+
+    private func loadMessages() async {
+        messagesState = .loading
+        do {
+            let messages = try await messagingService.getMessages(conversationId: conversation.id)
+            messagesState = .success(messages)
+        } catch let error as APIError {
+            messagesState = .error(error.localizedDescription)
+        } catch let error as MessagingError {
+            messagesState = .error(error.localizedDescription)
+        } catch {
+            messagesState = .error("Failed to load messages")
+        }
+    }
+
+    private func sendMessage() {
+        let content = messageText.trimmingCharacters(in: .whitespaces)
+        guard !content.isEmpty else { return }
+
+        isSending = true
+        messageText = ""
+
+        Task {
+            do {
+                let _ = try await messagingService.sendMessage(
+                    conversationId: conversation.id,
+                    content: content
+                )
+                // Refresh messages
+                await loadMessages()
+            } catch {
+                isSending = false
+            }
+        }
+    }
+}
+
 // MARK: - Create Tab
 
 private struct CreateTabView: View {
@@ -209,6 +488,8 @@ private struct CreateTabView: View {
     @State private var isPosting = false
     @State private var showSuccess = false
     @State private var errorMessage: String? = nil
+    @State private var selectedPhotoItem: PhotosPickerItem? = nil
+    @State private var selectedImage: UIImage? = nil
     private let postService = PostService()
 
     var body: some View {
@@ -218,74 +499,121 @@ private struct CreateTabView: View {
                 .fontWeight(.bold)
                 .padding()
 
-            TextEditor(text: $postContent)
-                .frame(minHeight: 100)
-                .border(Color.gray.opacity(0.3))
-                .padding()
+            ScrollView {
+                VStack(spacing: 20) {
+                    // Photo picker button
+                    VStack(spacing: 12) {
+                        PhotosPicker(selection: $selectedPhotoItem, matching: .images, photoLibrary: .shared()) {
+                            if let selectedImage = selectedImage {
+                                Image(uiImage: selectedImage)
+                                    .resizable()
+                                    .scaledToFill()
+                                    .frame(height: 200)
+                                    .clipped()
+                                    .cornerRadius(8)
+                                    .overlay(alignment: .topTrailing) {
+                                        Button(action: { self.selectedImage = nil; selectedPhotoItem = nil }) {
+                                            Image(systemName: "xmark.circle.fill")
+                                                .font(.system(size: 24))
+                                                .foregroundColor(.red)
+                                                .padding(8)
+                                        }
+                                    }
+                            } else {
+                                VStack(spacing: 8) {
+                                    Image(systemName: "photo.on.rectangle")
+                                        .font(.system(size: 32))
+                                        .foregroundColor(.blue)
+                                    Text("Add Photo or Video")
+                                        .font(.headline)
+                                        .foregroundColor(.blue)
+                                }
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 120)
+                                .background(Color.blue.opacity(0.1))
+                                .cornerRadius(8)
+                                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.blue.opacity(0.3), lineWidth: 2))
+                            }
+                        }
+                        .onChange(of: selectedPhotoItem) { oldValue, newValue in
+                            Task {
+                                if let data = try await newValue?.loadTransferable(type: Data.self) {
+                                    selectedImage = UIImage(data: data)
+                                }
+                            }
+                        }
+                    }
+                    .padding()
 
-            // Character count
-            HStack {
-                Spacer()
-                Text("\(postContent.count)/\(PostService.maxCaptionLength)")
-                    .font(.caption)
-                    .foregroundColor(postContent.count > PostService.maxCaptionLength ? .red : .gray)
-                    .padding(.horizontal)
-            }
+                    // Text editor
+                    TextEditor(text: $postContent)
+                        .frame(minHeight: 100)
+                        .border(Color.gray.opacity(0.3))
+                        .padding()
 
-            // Error message
-            if let error = errorMessage {
-                HStack {
-                    Image(systemName: "exclamationmark.circle.fill")
-                        .foregroundColor(.red)
-                    Text(error)
-                        .foregroundColor(.red)
-                        .font(.caption)
-                    Spacer()
+                    // Character count
+                    HStack {
+                        Spacer()
+                        Text("\(postContent.count)/\(PostService.maxCaptionLength)")
+                            .font(.caption)
+                            .foregroundColor(postContent.count > PostService.maxCaptionLength ? .red : .gray)
+                            .padding(.horizontal)
+                    }
+
+                    // Error message
+                    if let error = errorMessage {
+                        HStack {
+                            Image(systemName: "exclamationmark.circle.fill")
+                                .foregroundColor(.red)
+                            Text(error)
+                                .foregroundColor(.red)
+                                .font(.caption)
+                            Spacer()
+                        }
+                        .padding()
+                        .background(Color.red.opacity(0.1))
+                        .cornerRadius(8)
+                        .padding()
+                    }
+
+                    // Success message
+                    if showSuccess {
+                        HStack {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundColor(.green)
+                            Text("Post created successfully!")
+                                .foregroundColor(.green)
+                                .font(.caption)
+                            Spacer()
+                        }
+                        .padding()
+                        .background(Color.green.opacity(0.1))
+                        .cornerRadius(8)
+                        .padding()
+                    }
+
+                    Button(action: {
+                        Task {
+                            await createPost()
+                        }
+                    }) {
+                        if isPosting {
+                            ProgressView()
+                                .tint(.white)
+                        } else {
+                            Text("Post")
+                                .font(.headline)
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(postContent.isEmpty || isPosting ? Color.blue.opacity(0.5) : Color.blue)
+                    .foregroundColor(.white)
+                    .cornerRadius(8)
+                    .disabled(postContent.isEmpty || isPosting || postContent.count > PostService.maxCaptionLength)
+                    .padding()
                 }
-                .padding()
-                .background(Color.red.opacity(0.1))
-                .cornerRadius(8)
-                .padding()
             }
-
-            // Success message
-            if showSuccess {
-                HStack {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundColor(.green)
-                    Text("Post created successfully!")
-                        .foregroundColor(.green)
-                        .font(.caption)
-                    Spacer()
-                }
-                .padding()
-                .background(Color.green.opacity(0.1))
-                .cornerRadius(8)
-                .padding()
-            }
-
-            Button(action: {
-                Task {
-                    await createPost()
-                }
-            }) {
-                if isPosting {
-                    ProgressView()
-                        .tint(.white)
-                } else {
-                    Text("Post")
-                        .font(.headline)
-                }
-            }
-            .frame(maxWidth: .infinity)
-            .padding()
-            .background(postContent.isEmpty || isPosting ? Color.blue.opacity(0.5) : Color.blue)
-            .foregroundColor(.white)
-            .cornerRadius(8)
-            .disabled(postContent.isEmpty || isPosting || postContent.count > PostService.maxCaptionLength)
-            .padding()
-
-            Spacer()
         }
     }
 
@@ -305,10 +633,15 @@ private struct CreateTabView: View {
         showSuccess = false
 
         do {
-            _ = try await postService.createPost(caption: postContent)
+            // For now, we'll pass a placeholder URL if image is selected
+            // TODO: Implement actual image upload to backend
+            let imageUrl = selectedImage != nil ? "image://\(UUID().uuidString)" : nil
+            _ = try await postService.createPost(caption: postContent, imageUrl: imageUrl)
 
             // Clear the text and show success
             postContent = ""
+            selectedImage = nil
+            selectedPhotoItem = nil
             showSuccess = true
 
             // Hide success message after 2 seconds

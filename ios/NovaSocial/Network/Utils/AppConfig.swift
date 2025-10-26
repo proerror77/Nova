@@ -18,7 +18,14 @@ enum Environment {
     var baseURL: URL {
         switch self {
         case .development:
+            // iOS Simulator: Use host's actual IP address
+            // The simulator cannot access localhost/127.0.0.1 on the host machine
+            // Mac IP: 192.168.31.127, API Gateway runs on port 3000
+            #if targetEnvironment(simulator)
+            return URL(string: "http://192.168.31.127:3000")!  // API Gateway port
+            #else
             return URL(string: "http://localhost:8080")!
+            #endif
         case .staging:
             return URL(string: "https://api-staging.nova.social")!
         case .production:
@@ -41,11 +48,18 @@ struct AppConfig {
     }
 
     // Messaging WebSocket base URL (without path)
-    // Development uses local messaging-service exposed at 8085 (see docker-compose)
+    // Development uses local messaging-service exposed via API Gateway
     static var messagingWebSocketBaseURL: URL {
         switch Environment.current {
         case .development:
+            // iOS Simulator: messaging-service is exposed via API Gateway at port 3000
+            // WebSocket path: /ws (configured in nginx)
+            // Use host's actual IP address (192.168.31.127)
+            #if targetEnvironment(simulator)
+            return URL(string: "ws://192.168.31.127:3000")!
+            #else
             return URL(string: "ws://localhost:8085")!
+            #endif
         case .staging, .production:
             // If you have a gateway, set to wss://api.nova.social or dedicated WS endpoint
             return URL(string: "wss://api.nova.social")!

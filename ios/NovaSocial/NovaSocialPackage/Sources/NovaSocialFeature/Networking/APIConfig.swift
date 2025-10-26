@@ -11,13 +11,29 @@ enum APIEnvironment: Sendable {
     var baseURL: String {
         switch self {
         case .development:
-            return "http://localhost:8001"
+            // iOS Simulator: Use host.docker.internal to access Docker on host
+            // iOS Device: Use localhost:3000 (device connects directly to host in local dev)
+            #if targetEnvironment(simulator)
+            return "http://host.docker.internal:3000"
+            #else
+            return "http://localhost:3000"
+            #endif
         case .stagingLocal:
-            return "http://localhost:8001"
+            // Docker local setup - same as development
+            #if targetEnvironment(simulator)
+            return "http://host.docker.internal:3000"
+            #else
+            return "http://localhost:3000"
+            #endif
         case .stagingGitHub:
             return "https://staging-api.nova.app"
         case .stagingProxy:
-            return "http://localhost:8080"
+            // Proxy server for GitHub staging access
+            #if targetEnvironment(simulator)
+            return "http://host.docker.internal:3000"
+            #else
+            return "http://localhost:3000"
+            #endif
         case .production:
             return "https://api.nova.app"
         }
@@ -132,10 +148,10 @@ private final class LocalDevelopmentDelegate: NSObject, URLSessionDelegate, @unc
         didReceive challenge: URLAuthenticationChallenge,
         completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void
     ) {
-        // Allow any certificate for localhost development
+        // Allow any certificate for localhost/host.docker.internal development
         let host = challenge.protectionSpace.host
 
-        if (host.contains("localhost") || host.contains("127.0.0.1")) {
+        if (host.contains("localhost") || host.contains("127.0.0.1") || host.contains("host.docker.internal")) {
             if let trust = challenge.protectionSpace.serverTrust {
                 let credential = URLCredential(trust: trust)
                 completionHandler(.useCredential, credential)

@@ -30,12 +30,12 @@ COPY libs ./libs
 # Copy migrations (sqlx::migrate!("../migrations") expects /app/migrations at compile-time)
 COPY migrations ./migrations
 
-# Build application (並行編譯，若需限制可在 CI 設定 CARGO_BUILD_JOBS)
+# Build application (開發環境使用 debug 構建以降低內存佔用)
 ARG CARGO_BUILD_JOBS
 RUN if [ -n "$CARGO_BUILD_JOBS" ]; then \
-      cargo build --release --manifest-path user-service/Cargo.toml -j $CARGO_BUILD_JOBS ; \
+      cargo build --manifest-path user-service/Cargo.toml -j $CARGO_BUILD_JOBS ; \
     else \
-      cargo build --release --manifest-path user-service/Cargo.toml ; \
+      cargo build --manifest-path user-service/Cargo.toml ; \
     fi
 
 # ============================================
@@ -55,8 +55,8 @@ RUN useradd -m -u 1001 -s /bin/bash appuser
 # Create app directory
 WORKDIR /app
 
-# Copy compiled binary from builder
-COPY --from=builder /app/target/release/user-service /app/user-service
+# Copy compiled binary from builder (debug build)
+COPY --from=builder /app/target/debug/user-service /app/user-service
 
 # Copy migrations (for runtime execution)
 COPY migrations /app/migrations

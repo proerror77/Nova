@@ -28,6 +28,12 @@ INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationLandscape
 INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = UIInterfaceOrientationLandscapeRight UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown
 
 // ==========================================
+// App Transport Security (ATS)
+// Allow HTTP for localhost and host.docker.internal in development
+// ==========================================
+INFOPLIST_KEY_NSAppTransportSecurity = {NSAllowsLocalNetworking: YES; NSExceptionDomains: {localhost: {NSIncludesSubdomains: NO; NSTemporaryThirdPartyExceptionAllowsInsecureHTTPLoads: YES;}; "host.docker.internal": {NSIncludesSubdomains: NO; NSTemporaryThirdPartyExceptionAllowsInsecureHTTPLoads: YES;};};}
+
+// ==========================================
 // Entitlements
 // ==========================================
 // AI agents can modify Config/NovaSocial.entitlements to add capabilities

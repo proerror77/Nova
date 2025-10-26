@@ -1,14 +1,11 @@
-use axum::{
-    extract::State,
-    http::StatusCode,
-    response::IntoResponse,
-    Json,
-};
+use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
 use serde_json::json;
 use std::sync::Arc;
 
 use crate::{
-    models::{EmailVerificationRequest, LoginRequest, LogoutRequest, RegisterRequest, TokenRefreshRequest},
+    models::{
+        EmailVerificationRequest, LoginRequest, LogoutRequest, RegisterRequest, TokenRefreshRequest,
+    },
     services::AuthService,
     AppState,
 };
@@ -19,7 +16,10 @@ pub async fn register(
 ) -> impl IntoResponse {
     let service = AuthService::new(state.db.clone(), "dev_secret".to_string());
 
-    match service.register(&payload.email, &payload.username, &payload.password).await {
+    match service
+        .register(&payload.email, &payload.username, &payload.password)
+        .await
+    {
         Ok(_) => (
             StatusCode::CREATED,
             Json(json!({

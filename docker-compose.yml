@@ -205,7 +205,7 @@ services:
       - neo4j_data:/data
       - neo4j_logs:/logs
     healthcheck:
-      test: ["CMD", "bash", "-lc", "cypher-shell -u ${NEO4J_USER:-neo4j} -p ${NEO4J_PASSWORD:-novaPass_ChangeMe} 'RETURN 1' || exit 1"]
+      test: ["CMD", "bash", "-lc", "/var/lib/neo4j/bin/cypher-shell -u ${NEO4J_USER:-neo4j} -p ${NEO4J_PASSWORD:-novaPass_ChangeMe} 'RETURN 1' || exit 1"]
       interval: 15s
       timeout: 10s
       retries: 10
@@ -230,7 +230,7 @@ services:
     networks:
       - nova-network
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/health"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1/health"]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -608,18 +608,48 @@ services:
     restart: unless-stopped
     entrypoint: ["/tini", "--"]
     command: ["milvus", "run", "standalone"]
+    depends_on:
+      minio:
+        condition: service_healthy
     ports:
       - "19530:19530"   # gRPC
       - "9091:9091"     # HTTP
     environment:
       ETCD_USE_EMBED: "true"
-      MINIO_USE_EMBED: "true"
+      MINIO_USE_EMBED: "false"
+      MINIO_ADDRESS: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
+      MINIO_BUCKET_NAME: ${MINIO_BUCKET_NAME:-a-bucket}
       LOG_LEVEL: info
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9091/api/v1/health"]
       interval: 10s
       timeout: 5s
       retries: 10
+    networks:
+      - nova-network
+
+  # ============================================
+  # MinIO (Object Storage for Milvus)
+  # ============================================
+  minio:
+    image: minio/minio:RELEASE.2024-09-22T00-33-43Z
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    ports:
+      - "9002:9000"
+      - "9003:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     networks:
       - nova-network
 
@@ -708,6 +738,8 @@ volumes:
   neo4j_data:
     driver: local
   neo4j_logs:
+    driver: local
+  minio_data:
     driver: local
 
 # ============================================
