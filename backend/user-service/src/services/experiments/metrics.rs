@@ -128,10 +128,7 @@ impl MetricsService {
     }
 
     /// Refresh results cache (run periodically)
-    pub async fn refresh_results_cache(
-        &self,
-        experiment_id: Uuid,
-    ) -> Result<(), MetricsError> {
+    pub async fn refresh_results_cache(&self, experiment_id: Uuid) -> Result<(), MetricsError> {
         let aggregated = get_experiment_metrics_aggregated(&self.pool, experiment_id).await?;
 
         for metric in aggregated {
@@ -212,10 +209,7 @@ impl MetricsService {
     }
 
     /// Clear real-time metrics for experiment
-    pub async fn clear_realtime_metrics(
-        &self,
-        experiment_id: Uuid,
-    ) -> Result<(), MetricsError> {
+    pub async fn clear_realtime_metrics(&self, experiment_id: Uuid) -> Result<(), MetricsError> {
         let mut conn = self.redis.get_multiplexed_async_connection().await?;
         let pattern = format!("{}:{}:*", METRIC_COUNTER_PREFIX, experiment_id);
 

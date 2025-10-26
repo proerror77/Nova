@@ -1,0 +1,244 @@
+---
+# Nginx Ingress Controller Namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ingress-nginx
+  labels:
+    app: nova
+    component: ingress
+
+---
+# Note: Install Nginx Ingress Controller first:
+# helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+# helm repo update
+# helm install ingress-nginx ingress-nginx/ingress-nginx -n ingress-nginx --create-namespace
+
+# TLS Certificate Secret (self-signed for dev, replace with real cert for prod)
+# Generate self-signed cert:
+# openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+#   -keyout /tmp/tls.key -out /tmp/tls.crt \
+#   -subj "/CN=api.nova.local"
+# kubectl create secret tls nova-tls-cert --cert=/tmp/tls.crt --key=/tmp/tls.key -n nova-messaging
+apiVersion: v1
+kind: Secret
+metadata:
+  name: nova-tls-cert
+  namespace: nova-messaging
+  labels:
+    app: nova
+    component: tls
+type: kubernetes.io/tls
+stringData:
+  # Replace with your actual certificate
+  tls.crt: |
+    -----BEGIN CERTIFICATE-----
+    MIIDazCCAlOgAwIBAgIUfaFcEXhKljc8MV1wBu2h5tDZ7hMwDQYJKoZIhvcNAQEL
+    BQAwRTELMAkGA1UEBhMCQVUxEzARBgNVBAgMClNvbWUtU3RhdGUxITAfBgNVBAoM
+    GEludGVybmV0IFdpZGdpdHMgUHR5IEx0ZDAeFw0yNDEwMDEwMDAwMDBaFw0yNTEw
+    MDEwMDAwMDBaMEUxCzAJBgNVBAYTAkFVMRMwEQYDVQQIDApTb21lLVN0YXRlMSEw
+    HwYDVQQKDBhJbnRlcm5ldCBXaWRnaXRzIFB0eSBMdGQwggEiMA0GCSqGSIb3DQEB
+    AQUAA4IBDwAwggEKAoIBAQDJ7VJ...
+    -----END CERTIFICATE-----
+  tls.key: |
+    -----BEGIN PRIVATE KEY-----
+    MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDJ7VJ...
+    -----END PRIVATE KEY-----
+
+---
+# Ingress for Messaging Service
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: messaging-service-ingress
+  namespace: nova-messaging
+  labels:
+    app: nova
+    component: messaging-service
+  annotations:
+    # Nginx annotations
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/websocket-services: messaging-service
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-connection-timeout: "3600"
+
+    # Rate limiting
+    nginx.ingress.kubernetes.io/limit-rps: "100"
+    nginx.ingress.kubernetes.io/limit-connections: "10"
+
+    # CORS
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    nginx.ingress.kubernetes.io/cors-allow-origin: "*"
+    nginx.ingress.kubernetes.io/cors-allow-credentials: "true"
+
+    # Security headers
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      more_set_headers "X-Frame-Options: DENY";
+      more_set_headers "X-Content-Type-Options: nosniff";
+      more_set_headers "X-XSS-Protection: 1; mode=block";
+      more_set_headers "Referrer-Policy: strict-origin-when-cross-origin";
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - api.nova.local
+        - api.nova.com
+      secretName: nova-tls-cert
+  rules:
+    # HTTP to HTTPS redirect is automatic with nginx ingress
+    - host: api.nova.local
+      http:
+        paths:
+          # WebSocket and HTTP API
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: messaging-service
+                port:
+                  number: 3000
+
+          # Prometheus metrics (restrict access)
+          - path: /metrics
+            pathType: Prefix
+            backend:
+              service:
+                name: messaging-service
+                port:
+                  number: 9090
+
+    # Production domain
+    - host: api.nova.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: messaging-service
+                port:
+                  number: 3000
+
+---
+# Network Policy to restrict traffic (optional but recommended)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: messaging-service-netpol
+  namespace: nova-messaging
+spec:
+  podSelector:
+    matchLabels:
+      component: messaging-service
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow from ingress controller
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 3000
+        - protocol: TCP
+          port: 9090
+
+    # Allow from other pods in namespace
+    - from:
+        - podSelector: {}
+      ports:
+        - protocol: TCP
+          port: 3000
+
+  egress:
+    # Allow to external services
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 5432  # PostgreSQL
+        - protocol: TCP
+          port: 6379  # Redis
+        - protocol: TCP
+          port: 9092  # Kafka
+
+    # Allow DNS
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+
+---
+# Optional: Cert-Manager for automatic Let's Encrypt certificates
+# Install first: helm repo add jetstack https://charts.jetstack.io
+# helm install cert-manager jetstack/cert-manager -n cert-manager --create-namespace
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+spec:
+  acme:
+    # Let's Encrypt production server
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: admin@nova.com  # TODO: Update email
+    privateKeySecretRef:
+      name: letsencrypt-prod-key
+    solvers:
+      - http01:
+          ingress:
+            class: nginx
+
+---
+# Optional: Let's Encrypt staging (for testing)
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-staging
+spec:
+  acme:
+    # Let's Encrypt staging server (for testing)
+    server: https://acme-staging-v02.api.letsencrypt.org/directory
+    email: admin@nova.com  # TODO: Update email
+    privateKeySecretRef:
+      name: letsencrypt-staging-key
+    solvers:
+      - http01:
+          ingress:
+            class: nginx
+
+---
+# Ingress with automatic Let's Encrypt (requires cert-manager)
+# Uncomment and update for production use
+# apiVersion: networking.k8s.io/v1
+# kind: Ingress
+# metadata:
+#   name: messaging-service-ingress-letsencrypt
+#   namespace: nova-messaging
+#   annotations:
+#     cert-manager.io/cluster-issuer: "letsencrypt-prod"
+#     nginx.ingress.kubernetes.io/websocket-services: messaging-service
+#     nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+#     nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+# spec:
+#   ingressClassName: nginx
+#   tls:
+#     - hosts:
+#         - api.nova.com
+#       secretName: nova-letsencrypt-tls
+#   rules:
+#     - host: api.nova.com
+#       http:
+#         paths:
+#           - path: /
+#             pathType: Prefix
+#             backend:
+#               service:
+#                 name: messaging-service
+#                 port:
+#                   number: 3000

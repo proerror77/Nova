@@ -11,34 +11,57 @@ private struct SearchResponse: Decodable {
     }
 }
 
-/// Service for searching content and users
-final class SearchService: Sendable {
+/// Service for searching content and users with debounce protection
+actor SearchService {
     private let httpClient: HTTPClientProtocol
     private let cache: CacheManager
+    private let debounceDelay: UInt64
+    private var currentRequestId: UUID?
 
-    init(httpClient: HTTPClientProtocol = HTTPClient(), cache: CacheManager = CacheManager()) {
+    init(
+        httpClient: HTTPClientProtocol = HTTPClient(),
+        cache: CacheManager = CacheManager(),
+        debounceDelay: UInt64 = 300_000_000 // 300ms
+    ) {
         self.httpClient = httpClient
         self.cache = cache
+        self.debounceDelay = debounceDelay
     }
 
-    /// Searches for users by query
+    /// Searches for users by query with caching and debounce
     func searchUsers(query: String, page: Int = 0, limit: Int = 20) async throws -> [User] {
-        guard !query.isEmpty else {
-            return []
-        }
+        let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedQuery.isEmpty else { return [] }
 
-        let cacheKey = "search_users_\(query)_page_\(page)"
+        let cacheKey = "search_users_\(trimmedQuery)_page_\(page)"
 
-        // Check cache first
         if let cached: [User] = cache.get(for: cacheKey) {
             return cached
         }
 
-        // Fetch from API
-        let response: SearchResponse = try await httpClient.request(endpoint: .searchUsers(query: query, page: page, limit: limit))
+        let requestId = UUID()
+        currentRequestId = requestId
 
-        // Cache the results
+        // Debounce to avoid hammering the API
+        try await Task.sleep(nanoseconds: debounceDelay)
+
+        guard currentRequestId == requestId else {
+            throw CancellationError()
+        }
+
+        let response: SearchResponse = try await httpClient.request(
+            endpoint: .searchUsers(query: trimmedQuery, page: page, limit: limit)
+        )
+
+        guard currentRequestId == requestId else {
+            throw CancellationError()
+        }
+
         cache.set(response.users, for: cacheKey)
+
+        if currentRequestId == requestId {
+            currentRequestId = nil
+        }
 
         return response.users
     }

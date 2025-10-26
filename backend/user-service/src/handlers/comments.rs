@@ -81,14 +81,17 @@ pub async fn create_comment(
 
     if req.content.len() > MAX_COMMENT_LENGTH {
         return HttpResponse::BadRequest().json(ErrorResponse {
-            error: format!("Comment content exceeds maximum length of {}", MAX_COMMENT_LENGTH),
+            error: format!(
+                "Comment content exceeds maximum length of {}",
+                MAX_COMMENT_LENGTH
+            ),
             details: None,
         });
     }
 
     // Check if post exists
     match post_repo::find_post_by_id(&pool, post_id).await {
-        Ok(Some(_)) => {},
+        Ok(Some(_)) => {}
         Ok(None) => {
             return HttpResponse::NotFound().json(ErrorResponse {
                 error: "Post not found".to_string(),
@@ -120,7 +123,7 @@ pub async fn create_comment(
     // Verify parent comment exists if provided
     if let Some(parent_id) = parent_comment_id {
         match comment_repo::get_comment_by_id(&pool, parent_id).await {
-            Ok(Some(_)) => {},
+            Ok(Some(_)) => {}
             Ok(None) => {
                 return HttpResponse::NotFound().json(ErrorResponse {
                     error: "Parent comment not found".to_string(),
@@ -196,7 +199,7 @@ pub async fn get_comments(
 
     // Check if post exists
     match post_repo::find_post_by_id(&pool, post_id).await {
-        Ok(Some(_)) => {},
+        Ok(Some(_)) => {}
         Ok(None) => {
             return HttpResponse::NotFound().json(ErrorResponse {
                 error: "Post not found".to_string(),
@@ -291,7 +294,10 @@ pub async fn update_comment(
 
     if req.content.len() > MAX_COMMENT_LENGTH {
         return HttpResponse::BadRequest().json(ErrorResponse {
-            error: format!("Comment content exceeds maximum length of {}", MAX_COMMENT_LENGTH),
+            error: format!(
+                "Comment content exceeds maximum length of {}",
+                MAX_COMMENT_LENGTH
+            ),
             details: None,
         });
     }

@@ -1,11 +1,11 @@
-use actix_web::{web, HttpMessage, HttpRequest, HttpResponse, Responder, error::ResponseError};
+use crate::cache::{get_cached_user, invalidate_user_cache, set_cached_user, CachedUser};
+use actix_web::{error::ResponseError, web, HttpMessage, HttpRequest, HttpResponse, Responder};
+use base64::engine::general_purpose;
+use base64::Engine;
+use redis::aio::ConnectionManager;
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use uuid::Uuid;
-use base64::engine::general_purpose;
-use redis::aio::ConnectionManager;
-use crate::cache::{get_cached_user, set_cached_user, invalidate_user_cache, CachedUser};
-use base64::Engine;
 
 use crate::db::user_repo;
 use crate::middleware::UserId;
@@ -48,12 +48,12 @@ pub async fn get_user(
             return HttpResponse::Ok().json(PublicUser {
                 id: cached_user.id,
                 username: cached_user.username,
-                email: String::new(),  // Cache doesn't store email
+                email: String::new(), // Cache doesn't store email
                 display_name: cached_user.display_name,
                 bio: cached_user.bio,
                 avatar_url: cached_user.avatar_url,
                 is_verified: cached_user.email_verified,
-                created_at: chrono::Utc::now(),  // Approximate
+                created_at: chrono::Utc::now(), // Approximate
             });
         }
     }
@@ -70,7 +70,9 @@ pub async fn get_user(
                 let requester_id = requester.0;
 
                 // OPTIMIZED: Single query for bidirectional block check
-                let is_blocked = user_repo::are_blocked(pool.get_ref(), requester_id, id).await.unwrap_or(false);
+                let is_blocked = user_repo::are_blocked(pool.get_ref(), requester_id, id)
+                    .await
+                    .unwrap_or(false);
 
                 if is_blocked {
                     return HttpResponse::Forbidden().json(serde_json::json!({
@@ -84,7 +86,7 @@ pub async fn get_user(
                     return HttpResponse::Ok().json(PublicUser {
                         id: u.id,
                         username: u.username,
-                        email: String::new(),  // Don't expose email
+                        email: String::new(), // Don't expose email
                         display_name: u.display_name,
                         bio: u.bio,
                         avatar_url: u.avatar_url,
@@ -118,7 +120,9 @@ pub async fn get_user(
 // ==============================
 
 #[derive(Debug, Deserialize)]
-pub struct UpsertPublicKeyRequest { pub public_key: String }
+pub struct UpsertPublicKeyRequest {
+    pub public_key: String,
+}
 
 /// PUT /api/v1/users/me/public-key
 pub async fn upsert_my_public_key(
@@ -150,7 +154,9 @@ pub async fn upsert_my_public_key(
 }
 
 #[derive(Debug, Serialize)]
-pub struct PublicKeyResponse { pub public_key: String }
+pub struct PublicKeyResponse {
+    pub public_key: String,
+}
 
 /// GET /api/v1/users/{id}/public-key
 pub async fn get_user_public_key(
@@ -248,7 +254,7 @@ pub async fn update_profile(
                 private_account: user.private_account,
                 created_at: user.created_at.to_rfc3339(),
             })
-        },
+        }
         Err(e) => {
             tracing::error!("Failed to update user profile: {}", e);
             HttpResponse::InternalServerError().json(serde_json::json!({
@@ -260,10 +266,7 @@ pub async fn update_profile(
 }
 
 /// GET /api/v1/users/me
-pub async fn get_current_user(
-    http_req: HttpRequest,
-    pool: web::Data<PgPool>,
-) -> impl Responder {
+pub async fn get_current_user(http_req: HttpRequest, pool: web::Data<PgPool>) -> impl Responder {
     let user_id = match http_req.extensions().get::<UserId>() {
         Some(user_id_wrapper) => user_id_wrapper.0,
         None => {

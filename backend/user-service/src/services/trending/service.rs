@@ -381,7 +381,8 @@ impl TrendingService {
                 // Ignore errors during cache invalidation
                 let _ = async {
                     let _: redis::RedisResult<()> = conn.del(&key).await;
-                }.await;
+                }
+                .await;
             }
         }
 

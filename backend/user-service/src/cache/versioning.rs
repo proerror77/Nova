@@ -1,3 +1,4 @@
+use chrono::Utc;
 /// Cache Versioning and Race Condition Prevention
 ///
 /// CRITICAL FIX: Add version control to prevent race conditions
@@ -7,12 +8,10 @@
 /// 3. Stale data consistency issues
 ///
 /// Solution: Version-tagged cache entries with atomic CAS operations
-
 use redis::aio::ConnectionManager;
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 use std::time::{SystemTime, UNIX_EPOCH};
-use chrono::Utc;
+use uuid::Uuid;
 
 /// Versioned cache entry wrapper
 /// Adds version metadata to prevent stale reads and race conditions
@@ -35,10 +34,11 @@ impl<T> VersionedCacheEntry<T> {
         let now = Utc::now().timestamp();
         Self {
             data,
-            version: now * 1_000_000_000 + SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .map(|d| d.subsec_nanos() as i64)
-                .unwrap_or(0),
+            version: now * 1_000_000_000
+                + SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .map(|d| d.subsec_nanos() as i64)
+                    .unwrap_or(0),
             created_at: now,
             updated_at: now,
         }
@@ -50,10 +50,11 @@ impl<T> VersionedCacheEntry<T> {
         self.updated_at = Utc::now().timestamp();
         // Generate new version based on current time
         let now = Utc::now().timestamp();
-        self.version = now * 1_000_000_000 + SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map(|d| d.subsec_nanos() as i64)
-            .unwrap_or(0);
+        self.version = now * 1_000_000_000
+            + SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map(|d| d.subsec_nanos() as i64)
+                .unwrap_or(0);
         self
     }
 
@@ -84,7 +85,9 @@ pub async fn get_or_compute<T, F>(
 ) -> Result<CacheOpResult<T>, Box<dyn std::error::Error>>
 where
     T: Serialize + for<'de> Deserialize<'de> + Send + 'static,
-    F: Fn() -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<T, Box<dyn std::error::Error>>> + Send>>,
+    F: Fn() -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<T, Box<dyn std::error::Error>>> + Send>,
+    >,
 {
     let mut redis_conn = redis.clone();
 
@@ -142,9 +145,7 @@ where
             .await?;
 
         // EXEC will return empty list if watched key changed (another request modified it)
-        let exec_result: Vec<String> = redis::cmd("EXEC")
-            .query_async(&mut redis_conn)
-            .await?;
+        let exec_result: Vec<String> = redis::cmd("EXEC").query_async(&mut redis_conn).await?;
 
         // Unwatch for next attempt
         let _ = redis::cmd("UNWATCH")
@@ -217,10 +218,7 @@ pub async fn get_invalidation_timestamp(
 /// Validate cache entry version
 ///
 /// Checks if a cached version is still valid
-pub fn is_version_valid<T>(
-    entry: &VersionedCacheEntry<T>,
-    invalidated_at: Option<i64>,
-) -> bool {
+pub fn is_version_valid<T>(entry: &VersionedCacheEntry<T>, invalidated_at: Option<i64>) -> bool {
     // If cache was invalidated after this entry was created, it's stale
     if let Some(invalidation_ts) = invalidated_at {
         return entry.created_at > invalidation_ts;

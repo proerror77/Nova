@@ -1,6 +1,6 @@
+use axum::http;
 use axum::Router;
 use tower_http::trace::TraceLayer;
-use axum::http;
 use tracing::Level;
 
 use crate::state::AppState;

@@ -249,9 +249,8 @@ pub async fn record_engagement(
         .ok_or_else(|| AppError::Authentication("Missing user context".into()))?;
 
     // Parse content_id
-    let content_id = Uuid::parse_str(&body.content_id).map_err(|_| {
-        AppError::BadRequest("Invalid content_id format".to_string())
-    })?;
+    let content_id = Uuid::parse_str(&body.content_id)
+        .map_err(|_| AppError::BadRequest("Invalid content_id format".to_string()))?;
 
     // Parse content_type
     let content_type = parse_content_type(&body.content_type)?;

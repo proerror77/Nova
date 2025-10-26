@@ -26,31 +26,48 @@ clean: ## Stop services and remove volumes
 	docker-compose down -v
 	@echo "All services stopped and volumes removed."
 
-build: ## Build Rust project
-	cd backend && cargo build
+build: ## Build all services (workspace)
+	cd backend && cargo build --workspace --all-targets
 
-build-release: ## Build optimized release binary
-	cd backend && cargo build --release
+build-release: ## Build optimized release binary (all services)
+	cd backend && cargo build --workspace --release
 
-test: ## Run tests
-	cd backend && cargo test
+test: ## Run tests (all services)
+	cd backend && cargo test --workspace
 
-test-verbose: ## Run tests with output
-	cd backend && cargo test -- --nocapture
+test-verbose: ## Run tests with output (all services)
+	cd backend && cargo test --workspace -- --nocapture
 
-lint: ## Run linter (clippy)
-	cd backend && cargo clippy --all-targets --all-features -- -D warnings
+test-nextest: ## Run tests with nextest (faster)
+	cd backend && cargo nextest run --workspace
 
-fmt: ## Format code
+lint: ## Run linter (clippy) on all services
+	cd backend && cargo clippy --workspace --all-targets --all-features -- -D warnings
+
+fmt: ## Format code (all services)
 	cd backend && cargo fmt --all
 
-fmt-check: ## Check code formatting
+fmt-check: ## Check code formatting (all services)
 	cd backend && cargo fmt --all -- --check
 
-docker-build: ## Build Docker image
-	docker build -t nova-user-service:latest ./backend
+check: ## Quick compile check (all services)
+	cd backend && cargo check --workspace --all-targets
 
-docker-run: ## Run Docker container
+docker-build: ## Build all service Docker images
+	docker build -t nova-user-service:latest -f ./backend/Dockerfile ./backend
+	docker build -t nova-messaging-service:latest -f ./backend/Dockerfile.messaging ./backend
+	docker build -t nova-search-service:latest -f ./backend/search-service/Dockerfile ./backend/search-service
+
+docker-build-user: ## Build user-service Docker image only
+	docker build -t nova-user-service:latest -f ./backend/Dockerfile ./backend
+
+docker-build-messaging: ## Build messaging-service Docker image only
+	docker build -t nova-messaging-service:latest -f ./backend/Dockerfile.messaging ./backend
+
+docker-build-search: ## Build search-service Docker image only
+	docker build -t nova-search-service:latest -f ./backend/search-service/Dockerfile ./backend/search-service
+
+docker-run: ## Run Docker container (user-service)
 	docker run -p 8080:8080 --env-file .env nova-user-service:latest
 
 migrate: ## Run database migrations

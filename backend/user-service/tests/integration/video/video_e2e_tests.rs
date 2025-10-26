@@ -583,7 +583,6 @@ fn test_video_e2e_feed_ordering() {
 fn test_video_transcoding_progress_tracking() {
     /// Validates that progress tracking works correctly during transcoding
     /// Progress should: start at 10%, increment through stages, end at 100%
-
     let progress_stages = vec![
         (10, "processing"),
         (15, "downloading"),
@@ -624,7 +623,6 @@ fn test_video_quality_tier_selection() {
     /// - Don't upscale (360p video shouldn't be upscaled to 720p)
     /// - Include all lower quality tiers
     /// - Include original quality if available
-
     let test_cases = vec![
         // (original_resolution, expected_qualities)
         ((360, 360), vec!["360p"]),
@@ -665,7 +663,6 @@ fn test_video_quality_tier_selection() {
 #[test]
 fn test_hls_manifest_generation_structure() {
     /// Validates HLS manifest has correct structure for adaptive bitrate streaming
-
     let hls_manifest = r#"#EXTM3U
 #EXT-X-VERSION:3
 #EXT-X-TARGETDURATION:10
@@ -750,7 +747,6 @@ https://cdn.example.com/videos/test/360p/segment-0.ts
 fn test_s3_key_naming_convention() {
     /// Validates that S3 keys follow the correct naming convention
     /// Format: videos/{video_id}/{quality}.mp4 or videos/{video_id}/master.m3u8
-
     let video_id = Uuid::new_v4();
 
     let expected_keys = vec![
@@ -786,12 +782,11 @@ fn test_s3_key_naming_convention() {
 #[test]
 fn test_bitrate_configuration() {
     /// Validates that bitrate configuration is appropriate for each quality tier
-
     let bitrate_config = vec![
-        ("1080p", 5000),  // 5 Mbps
-        ("720p", 2500),   // 2.5 Mbps
-        ("480p", 1200),   // 1.2 Mbps
-        ("360p", 600),    // 600 Kbps
+        ("1080p", 5000), // 5 Mbps
+        ("720p", 2500),  // 2.5 Mbps
+        ("480p", 1200),  // 1.2 Mbps
+        ("360p", 600),   // 600 Kbps
     ];
 
     // Verify bitrates are in descending order

@@ -1,31 +1,22 @@
 use crate::error::AppError;
-use jsonwebtoken::{decode, DecodingKey, Validation, Algorithm};
-use serde::Deserialize;
-use std::env;
+use crypto_core::jwt as core_jwt;
 use uuid::Uuid;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct Claims {
-    pub sub: String,  // subject - typically the user_id
-    pub exp: usize,   // expiration time
+    pub sub: String, // subject - typically the user_id
+    pub exp: i64,    // expiration time (unix timestamp)
 }
 
-/// Validate JWT signature and extract claims
+/// Validate JWT signature and extract claims (RS256 only via crypto-core)
 pub async fn verify_jwt(token: &str) -> Result<Claims, AppError> {
-    // Prefer RSA public key (RS256) verification if provided; fallback to HS256 secret if not
-    if let Ok(pub_pem) = env::var("JWT_PUBLIC_KEY_PEM") {
-        let key = DecodingKey::from_rsa_pem(pub_pem.as_bytes())
-            .map_err(|_| AppError::Unauthorized)?;
-        let validation = Validation::new(Algorithm::RS256);
-        decode::<Claims>(token, &key, &validation)
-            .map(|data| data.claims)
-            .map_err(|_| AppError::Unauthorized)
-    } else {
-        let secret = env::var("JWT_SECRET").unwrap_or_else(|_| "dev_secret_change_in_production_32chars".into());
-        let key = DecodingKey::from_secret(secret.as_bytes());
-        decode::<Claims>(token, &key, &Validation::default())
-            .map(|data| data.claims)
-            .map_err(|_| AppError::Unauthorized)
+    // Use shared crypto-core to enforce RS256 without insecure fallbacks
+    match core_jwt::validate_token(token) {
+        Ok(token_data) => Ok(Claims {
+            sub: token_data.claims.sub,
+            exp: token_data.claims.exp,
+        }),
+        Err(_) => Err(AppError::Unauthorized),
     }
 }
 
@@ -34,6 +25,14 @@ pub async fn auth_middleware(
     mut req: axum::extract::Request,
     next: axum::middleware::Next,
 ) -> Result<axum::response::Response, AppError> {
+    // Allow unauthenticated access to introspection endpoints
+    let path = req.uri().path();
+    if matches!(
+        path,
+        "/health" | "/metrics" | "/openapi.json" | "/swagger-ui" | "/docs"
+    ) {
+        return Ok(next.run(req).await);
+    }
     // Extract Authorization header
     let auth_header = req
         .headers()

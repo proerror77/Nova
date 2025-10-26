@@ -22,9 +22,17 @@ pub async fn create_experiment(
     state: web::Data<Arc<ExperimentState>>,
     req: web::Json<CreateExperimentRequest>,
 ) -> impl Responder {
-    match state.experiment_service.create_experiment(req.into_inner()).await {
+    match state
+        .experiment_service
+        .create_experiment(req.into_inner())
+        .await
+    {
         Ok(experiment) => {
-            tracing::info!("Created experiment: {} ({})", experiment.name, experiment.id);
+            tracing::info!(
+                "Created experiment: {} ({})",
+                experiment.name,
+                experiment.id
+            );
             HttpResponse::Created().json(experiment)
         }
         Err(ExperimentError::DuplicateName(name)) => {
@@ -58,11 +66,9 @@ pub async fn get_experiment(
 
     match state.experiment_service.get_experiment(experiment_id).await {
         Ok(experiment) => HttpResponse::Ok().json(experiment),
-        Err(ExperimentError::NotFound(_)) => {
-            HttpResponse::NotFound().json(serde_json::json!({
-                "error": "Experiment not found"
-            }))
-        }
+        Err(ExperimentError::NotFound(_)) => HttpResponse::NotFound().json(serde_json::json!({
+            "error": "Experiment not found"
+        })),
         Err(e) => {
             tracing::error!("Failed to get experiment: {:?}", e);
             HttpResponse::InternalServerError().json(serde_json::json!({
@@ -122,23 +128,24 @@ pub async fn start_experiment(
 ) -> impl Responder {
     let experiment_id = path.into_inner();
 
-    match state.experiment_service.start_experiment(experiment_id).await {
+    match state
+        .experiment_service
+        .start_experiment(experiment_id)
+        .await
+    {
         Ok(_) => HttpResponse::Ok().json(serde_json::json!({
             "message": "Experiment started",
             "experiment_id": experiment_id
         })),
-        Err(ExperimentError::NotFound(_)) => {
-            HttpResponse::NotFound().json(serde_json::json!({
-                "error": "Experiment not found"
-            }))
-        }
-        Err(ExperimentError::InvalidStateTransition { from, to }) => {
-            HttpResponse::BadRequest().json(serde_json::json!({
+        Err(ExperimentError::NotFound(_)) => HttpResponse::NotFound().json(serde_json::json!({
+            "error": "Experiment not found"
+        })),
+        Err(ExperimentError::InvalidStateTransition { from, to }) => HttpResponse::BadRequest()
+            .json(serde_json::json!({
                 "error": "Invalid state transition",
                 "from": from,
                 "to": to
-            }))
-        }
+            })),
         Err(e) => {
             tracing::error!("Failed to start experiment: {:?}", e);
             HttpResponse::InternalServerError().json(serde_json::json!({
@@ -156,7 +163,11 @@ pub async fn stop_experiment(
 ) -> impl Responder {
     let experiment_id = path.into_inner();
 
-    match state.experiment_service.stop_experiment(experiment_id).await {
+    match state
+        .experiment_service
+        .stop_experiment(experiment_id)
+        .await
+    {
         Ok(_) => {
             // Invalidate assignment cache
             let _ = state
@@ -169,18 +180,15 @@ pub async fn stop_experiment(
                 "experiment_id": experiment_id
             }))
         }
-        Err(ExperimentError::NotFound(_)) => {
-            HttpResponse::NotFound().json(serde_json::json!({
-                "error": "Experiment not found"
-            }))
-        }
-        Err(ExperimentError::InvalidStateTransition { from, to }) => {
-            HttpResponse::BadRequest().json(serde_json::json!({
+        Err(ExperimentError::NotFound(_)) => HttpResponse::NotFound().json(serde_json::json!({
+            "error": "Experiment not found"
+        })),
+        Err(ExperimentError::InvalidStateTransition { from, to }) => HttpResponse::BadRequest()
+            .json(serde_json::json!({
                 "error": "Invalid state transition",
                 "from": from,
                 "to": to
-            }))
-        }
+            })),
         Err(e) => {
             tracing::error!("Failed to stop experiment: {:?}", e);
             HttpResponse::InternalServerError().json(serde_json::json!({
@@ -286,7 +294,11 @@ pub async fn get_results(
 ) -> impl Responder {
     let experiment_id = path.into_inner();
 
-    match state.metrics_service.get_experiment_results(experiment_id).await {
+    match state
+        .metrics_service
+        .get_experiment_results(experiment_id)
+        .await
+    {
         Ok(results) => HttpResponse::Ok().json(results),
         Err(MetricsError::ExperimentNotFound(_)) => {
             HttpResponse::NotFound().json(serde_json::json!({
@@ -310,7 +322,11 @@ pub async fn refresh_cache(
 ) -> impl Responder {
     let experiment_id = path.into_inner();
 
-    match state.metrics_service.refresh_results_cache(experiment_id).await {
+    match state
+        .metrics_service
+        .refresh_results_cache(experiment_id)
+        .await
+    {
         Ok(_) => HttpResponse::Ok().json(serde_json::json!({
             "message": "Results cache refreshed",
             "experiment_id": experiment_id

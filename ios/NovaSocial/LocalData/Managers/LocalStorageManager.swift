@@ -24,33 +24,54 @@ actor LocalStorageManager {
     // MARK: - Initialization
 
     private init() {
-        do {
-            // 配置 Schema
-            let schema = Schema([
-                LocalPost.self,
-                LocalUser.self,
-                LocalComment.self,
-                LocalNotification.self,
-                LocalDraft.self,
-                LocalMessage.self
-            ])
+        let schema = Schema([
+            LocalPost.self,
+            LocalUser.self,
+            LocalComment.self,
+            LocalNotification.self,
+            LocalDraft.self,
+            LocalMessage.self
+        ])
 
-            let modelConfiguration = ModelConfiguration(
+        let persistentConfig = ModelConfiguration(
+            schema: schema,
+            isStoredInMemoryOnly: false,
+            allowsSave: true
+        )
+
+        if let container = try? ModelContainer(
+            for: schema,
+            configurations: [persistentConfig]
+        ) {
+            self.modelContainer = container
+        } else {
+            Logger.log(
+                "Failed to create persistent SwiftData container. Falling back to in-memory store.",
+                level: .warning
+            )
+
+            let fallbackConfig = ModelConfiguration(
                 schema: schema,
-                isStoredInMemoryOnly: false,
+                isStoredInMemoryOnly: true,
                 allowsSave: true
             )
 
-            self.modelContainer = try ModelContainer(
+            guard let fallbackContainer = try? ModelContainer(
                 for: schema,
-                configurations: [modelConfiguration]
-            )
+                configurations: [fallbackConfig]
+            ) else {
+                Logger.log(
+                    "Unable to create fallback in-memory SwiftData container. Local storage unavailable.",
+                    level: .error
+                )
+                preconditionFailure("LocalStorageManager failed to initialize storage container.")
+            }
 
-            self.modelContext = ModelContext(modelContainer)
-            self.modelContext.autosaveEnabled = true
-        } catch {
-            fatalError("❌ Failed to initialize LocalStorageManager: \(error)")
+            self.modelContainer = fallbackContainer
         }
+
+        self.modelContext = ModelContext(modelContainer)
+        self.modelContext.autosaveEnabled = true
     }
 
     // MARK: - CRUD Operations (泛型实现)
@@ -150,7 +171,7 @@ actor LocalStorageManager {
         )
         try await delete(expiredNotifications)
 
-        print("✅ Deleted expired data (older than 30 days)")
+        Logger.log("Deleted expired data (older than 30 days)", level: .info)
     }
 
     /// 限制缓存大小（保留最新的 N 条）
@@ -164,7 +185,7 @@ actor LocalStorageManager {
         if allItems.count > maxCount {
             let itemsToDelete = Array(allItems.dropFirst(maxCount))
             try await delete(itemsToDelete)
-            print("✅ Truncated \(String(describing: type)) to \(maxCount) items (removed \(itemsToDelete.count))")
+            Logger.log("Truncated \(String(describing: type)) to \(maxCount) items (removed \(itemsToDelete.count))", level: .info)
         }
     }
 
@@ -175,7 +196,7 @@ actor LocalStorageManager {
         try await delete(LocalComment.self, predicate: #Predicate { _ in true })
         try await delete(LocalNotification.self, predicate: #Predicate { _ in true })
         try await delete(LocalDraft.self, predicate: #Predicate { _ in true })
-        print("✅ Cleared all local data")
+        Logger.log("Cleared all local data", level: .info)
     }
 
     /// 数据库真空（压缩数据库文件）
@@ -184,7 +205,7 @@ actor LocalStorageManager {
         // 但我们可以强制保存并清理上下文
         try modelContext.save()
         modelContext.reset()
-        print("✅ Database vacuum completed")
+        Logger.log("Database vacuum completed", level: .info)
     }
 
     // MARK: - Statistics (统计信息)

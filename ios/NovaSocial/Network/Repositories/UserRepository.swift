@@ -34,6 +34,16 @@ final class UserRepository {
         return try await interceptor.executeWithRetry(endpoint)
     }
 
+    /// 根据用户 ID 获取资料
+    func getUserProfile(userId: UUID) async throws -> UserProfile {
+        let endpoint = APIEndpoint(
+            path: "/users/\(userId.uuidString)",
+            method: .get
+        )
+
+        return try await interceptor.executeWithRetry(endpoint)
+    }
+
     /// 获取用户的帖子列表
     func getUserPosts(userId: UUID, cursor: String? = nil, limit: Int = 20) async throws -> [Post] {
         var queryItems = [
@@ -133,6 +143,10 @@ final class UserRepository {
         }
     }
 
+    func followUser(userId: UUID) async throws -> (following: Bool, followerCount: Int) {
+        try await followUser(id: userId)
+    }
+
     /// 取消关注
     func unfollowUser(id: UUID) async throws -> (following: Bool, followerCount: Int) {
         let key = RequestDeduplicator.unfollowKey(userId: id)
@@ -146,6 +160,10 @@ final class UserRepository {
             let response: FollowResponse = try await self.interceptor.executeWithRetry(endpoint)
             return (response.following, response.followerCount)
         }
+    }
+
+    func unfollowUser(userId: UUID) async throws -> (following: Bool, followerCount: Int) {
+        try await unfollowUser(id: userId)
     }
 
     /// 获取粉丝列表

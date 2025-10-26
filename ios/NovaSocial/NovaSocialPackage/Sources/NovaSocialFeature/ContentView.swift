@@ -191,6 +191,9 @@ private struct ExploreTabView: View {
         do {
             let results = try await searchService.searchUsers(query: query)
             searchResults = .success(results)
+        } catch is CancellationError {
+            // Ignore cancellation triggered by rapid input changes
+            return
         } catch let error as APIError {
             searchResults = .error(error.localizedDescription)
         } catch {
@@ -690,4 +693,3 @@ private struct UserSearchResultCell: View {
         .cornerRadius(8)
     }
 }
-

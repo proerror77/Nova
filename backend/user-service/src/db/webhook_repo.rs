@@ -278,9 +278,7 @@ pub async fn get_delivery_attempts(
     .bind(limit)
     .fetch_all(pool)
     .await
-    .map_err(|e| {
-        AppError::Internal(format!("Failed to fetch delivery attempts: {}", e))
-    })?;
+    .map_err(|e| AppError::Internal(format!("Failed to fetch delivery attempts: {}", e)))?;
 
     Ok(rows
         .into_iter()
@@ -312,10 +310,7 @@ pub async fn get_delivery_attempts(
 }
 
 /// Cleanup old successful deliveries (retention policy)
-pub async fn cleanup_old_deliveries(
-    pool: &PgPool,
-    retention_days: i32,
-) -> Result<u64, AppError> {
+pub async fn cleanup_old_deliveries(pool: &PgPool, retention_days: i32) -> Result<u64, AppError> {
     let result = sqlx::query("SELECT cleanup_old_webhook_deliveries($1)")
         .bind(retention_days)
         .execute(pool)

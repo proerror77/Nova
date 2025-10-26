@@ -1,10 +1,10 @@
+use serde::{Deserialize, Serialize};
 /// Trending Repository
 ///
 /// Database operations for the trending/discovery system
 use sqlx::PgPool;
-use uuid::Uuid;
-use serde::{Deserialize, Serialize};
 use tracing::error;
+use uuid::Uuid;
 
 use crate::error::{AppError, Result};
 
@@ -189,17 +189,20 @@ impl TrendingRepo {
         category: Option<&str>,
         limit: i64,
     ) -> Result<Vec<TrendingItem>> {
-        let items = sqlx::query_as::<_, (
-            i32,       // rank
-            Uuid,      // content_id
-            String,    // content_type
-            f64,       // score (NUMERIC -> f64)
-            i32,       // views_count
-            i32,       // likes_count
-            i32,       // shares_count
-            i32,       // comments_count
-            chrono::DateTime<chrono::Utc>, // computed_at
-        )>(
+        let items = sqlx::query_as::<
+            _,
+            (
+                i32,                           // rank
+                Uuid,                          // content_id
+                String,                        // content_type
+                f64,                           // score (NUMERIC -> f64)
+                i32,                           // views_count
+                i32,                           // likes_count
+                i32,                           // shares_count
+                i32,                           // comments_count
+                chrono::DateTime<chrono::Utc>, // computed_at
+            ),
+        >(
             r#"
             SELECT
                 rank,
@@ -228,19 +231,31 @@ impl TrendingRepo {
             AppError::Database(e)
         })?
         .into_iter()
-        .map(|(rank, content_id, content_type, score, views, likes, shares, comments, computed_at)| {
-            TrendingItem {
+        .map(
+            |(
                 rank,
                 content_id,
                 content_type,
                 score,
-                views_count: views,
-                likes_count: likes,
-                shares_count: shares,
-                comments_count: comments,
+                views,
+                likes,
+                shares,
+                comments,
                 computed_at,
-            }
-        })
+            )| {
+                TrendingItem {
+                    rank,
+                    content_id,
+                    content_type,
+                    score,
+                    views_count: views,
+                    likes_count: likes,
+                    shares_count: shares,
+                    comments_count: comments,
+                    computed_at,
+                }
+            },
+        )
         .collect();
 
         Ok(items)
@@ -277,14 +292,17 @@ impl TrendingRepo {
         time_window: TimeWindow,
         category: Option<&str>,
     ) -> Result<Option<TrendingMetadata>> {
-        let metadata = sqlx::query_as::<_, (
-            String,                             // content_type
-            Option<String>,                     // category
-            String,                             // time_window
-            chrono::DateTime<chrono::Utc>,      // last_computed_at
-            i32,                                // item_count
-            Option<i32>,                        // computation_duration_ms
-        )>(
+        let metadata = sqlx::query_as::<
+            _,
+            (
+                String,                        // content_type
+                Option<String>,                // category
+                String,                        // time_window
+                chrono::DateTime<chrono::Utc>, // last_computed_at
+                i32,                           // item_count
+                Option<i32>,                   // computation_duration_ms
+            ),
+        >(
             r#"
             SELECT
                 content_type,
@@ -307,16 +325,18 @@ impl TrendingRepo {
             error!("Failed to get trending metadata: {}", e);
             AppError::Database(e)
         })?
-        .map(|(content_type, category, time_window, last_computed_at, item_count, duration)| {
-            TrendingMetadata {
-                content_type,
-                category,
-                time_window,
-                last_computed_at,
-                item_count,
-                computation_duration_ms: duration,
-            }
-        });
+        .map(
+            |(content_type, category, time_window, last_computed_at, item_count, duration)| {
+                TrendingMetadata {
+                    content_type,
+                    category,
+                    time_window,
+                    last_computed_at,
+                    item_count,
+                    computation_duration_ms: duration,
+                }
+            },
+        );
 
         Ok(metadata)
     }
@@ -379,17 +399,20 @@ impl TrendingRepo {
         time_window: TimeWindow,
         limit: i64,
     ) -> Result<Vec<TrendingItem>> {
-        let items = sqlx::query_as::<_, (
-            i32,       // rank
-            Uuid,      // content_id
-            String,    // content_type
-            f64,       // score
-            i32,       // views_count
-            i32,       // likes_count
-            i32,       // shares_count
-            i32,       // comments_count
-            chrono::DateTime<chrono::Utc>, // computed_at
-        )>(
+        let items = sqlx::query_as::<
+            _,
+            (
+                i32,                           // rank
+                Uuid,                          // content_id
+                String,                        // content_type
+                f64,                           // score
+                i32,                           // views_count
+                i32,                           // likes_count
+                i32,                           // shares_count
+                i32,                           // comments_count
+                chrono::DateTime<chrono::Utc>, // computed_at
+            ),
+        >(
             r#"
             SELECT
                 rank,
@@ -418,19 +441,31 @@ impl TrendingRepo {
             AppError::Database(e)
         })?
         .into_iter()
-        .map(|(rank, content_id, content_type, score, views, likes, shares, comments, computed_at)| {
-            TrendingItem {
+        .map(
+            |(
                 rank,
                 content_id,
                 content_type,
                 score,
-                views_count: views,
-                likes_count: likes,
-                shares_count: shares,
-                comments_count: comments,
+                views,
+                likes,
+                shares,
+                comments,
                 computed_at,
-            }
-        })
+            )| {
+                TrendingItem {
+                    rank,
+                    content_id,
+                    content_type,
+                    score,
+                    views_count: views,
+                    likes_count: likes,
+                    shares_count: shares,
+                    comments_count: comments,
+                    computed_at,
+                }
+            },
+        )
         .collect();
 
         Ok(items)

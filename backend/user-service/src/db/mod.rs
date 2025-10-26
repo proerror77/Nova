@@ -1,6 +1,7 @@
 use sqlx::postgres::{PgPool, PgPoolOptions};
 use std::time::Duration;
 
+pub mod bookmark_repo;
 pub mod ch_client;
 pub mod comment_repo;
 pub mod experiment_repo;
@@ -9,6 +10,7 @@ pub mod like_repo;
 pub mod oauth_repo;
 pub mod password_reset_repo;
 pub mod post_repo;
+pub mod post_share_repo;
 pub mod trending_repo;
 pub mod upload_repo;
 pub mod user_repo;

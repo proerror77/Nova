@@ -1,4 +1,4 @@
-use crypto_core::{encrypt, decrypt, generate_nonce};
+use crypto_core::{decrypt, encrypt, generate_nonce};
 
 #[test]
 fn roundtrip_echo_stub() {
@@ -16,4 +16,3 @@ fn nonce_randomness_length() {
     assert_eq!(n1.len(), 24);
     assert_ne!(n1, n2, "nonce should be random");
 }
-

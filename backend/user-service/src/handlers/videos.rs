@@ -13,8 +13,8 @@ use crate::middleware::UserId;
 use crate::models::video::*;
 use crate::services::deep_learning_inference::DeepLearningInferenceService;
 use crate::services::streaming_manifest::StreamingManifestGenerator;
-use crate::services::{s3_service, video_service::VideoService};
 use crate::services::video_transcoding::VideoMetadata;
+use crate::services::{s3_service, video_service::VideoService};
 use tokio::io::AsyncWriteExt;
 use tracing::{debug, info};
 
@@ -244,13 +244,14 @@ pub async fn video_upload_complete(
     // ========================================
 
     // a. Find upload_session by token
-    let upload_session = video_repo::find_video_upload_session_by_token(pool.get_ref(), &req.upload_token)
-        .await
-        .map_err(|e| {
-            tracing::error!("Failed to find video upload session: {:?}", e);
-            AppError::Internal("Database error".into())
-        })?
-        .ok_or_else(|| AppError::NotFound("Invalid or expired upload token".into()))?;
+    let upload_session =
+        video_repo::find_video_upload_session_by_token(pool.get_ref(), &req.upload_token)
+            .await
+            .map_err(|e| {
+                tracing::error!("Failed to find video upload session: {:?}", e);
+                AppError::Internal("Database error".into())
+            })?
+            .ok_or_else(|| AppError::NotFound("Invalid or expired upload token".into()))?;
 
     // b. Verify token hasn't already been completed
     if upload_session.is_completed {

@@ -1,9 +1,8 @@
 /// WebSocket and messaging metrics
 use lazy_static::lazy_static;
 use prometheus::{
-    register_counter, register_counter_vec, register_gauge, register_gauge_vec,
-    register_histogram, register_histogram_vec, Counter, CounterVec, Gauge, GaugeVec,
-    Histogram, HistogramVec,
+    register_counter, register_counter_vec, register_gauge, register_gauge_vec, register_histogram,
+    register_histogram_vec, Counter, CounterVec, Gauge, GaugeVec, Histogram, HistogramVec,
 };
 
 lazy_static! {
@@ -349,52 +348,184 @@ pub fn init_messaging_metrics() {
     }
 
     // === WebSocket & Messaging Metrics ===
-    register_metric!(registry, WS_CONNECTIONS_TOTAL.clone(), "ws_connections_total");
-    register_metric!(registry, WS_MESSAGES_SENT_TOTAL.clone(), "ws_messages_sent_total");
-    register_metric!(registry, WS_MESSAGES_RECEIVED_TOTAL.clone(), "ws_messages_received_total");
+    register_metric!(
+        registry,
+        WS_CONNECTIONS_TOTAL.clone(),
+        "ws_connections_total"
+    );
+    register_metric!(
+        registry,
+        WS_MESSAGES_SENT_TOTAL.clone(),
+        "ws_messages_sent_total"
+    );
+    register_metric!(
+        registry,
+        WS_MESSAGES_RECEIVED_TOTAL.clone(),
+        "ws_messages_received_total"
+    );
     register_metric!(registry, WS_ERRORS_TOTAL.clone(), "ws_errors_total");
-    register_metric!(registry, WS_RECONNECTIONS_TOTAL.clone(), "ws_reconnections_total");
+    register_metric!(
+        registry,
+        WS_RECONNECTIONS_TOTAL.clone(),
+        "ws_reconnections_total"
+    );
 
     register_metric!(registry, MESSAGES_SENT_TOTAL.clone(), "messages_sent_total");
-    register_metric!(registry, MESSAGES_RECEIVED_TOTAL.clone(), "messages_received_total");
-    register_metric!(registry, MESSAGE_DELIVERY_FAILURES_TOTAL.clone(), "message_delivery_failures_total");
-    register_metric!(registry, CONVERSATIONS_CREATED_TOTAL.clone(), "conversations_created_total");
-    register_metric!(registry, MESSAGE_SEARCHES_TOTAL.clone(), "message_searches_total");
+    register_metric!(
+        registry,
+        MESSAGES_RECEIVED_TOTAL.clone(),
+        "messages_received_total"
+    );
+    register_metric!(
+        registry,
+        MESSAGE_DELIVERY_FAILURES_TOTAL.clone(),
+        "message_delivery_failures_total"
+    );
+    register_metric!(
+        registry,
+        CONVERSATIONS_CREATED_TOTAL.clone(),
+        "conversations_created_total"
+    );
+    register_metric!(
+        registry,
+        MESSAGE_SEARCHES_TOTAL.clone(),
+        "message_searches_total"
+    );
 
-    register_metric!(registry, WS_ACTIVE_CONNECTIONS.clone(), "ws_active_connections");
-    register_metric!(registry, ACTIVE_CONVERSATIONS.clone(), "active_conversations");
+    register_metric!(
+        registry,
+        WS_ACTIVE_CONNECTIONS.clone(),
+        "ws_active_connections"
+    );
+    register_metric!(
+        registry,
+        ACTIVE_CONVERSATIONS.clone(),
+        "active_conversations"
+    );
     register_metric!(registry, MESSAGE_QUEUE_DEPTH.clone(), "message_queue_depth");
 
-    register_metric!(registry, WS_MESSAGE_LATENCY_SECONDS.clone(), "ws_message_latency_seconds");
-    register_metric!(registry, MESSAGE_API_LATENCY_SECONDS.clone(), "message_api_latency_seconds");
-    register_metric!(registry, MESSAGE_SEARCH_LATENCY_SECONDS.clone(), "message_search_latency_seconds");
-    register_metric!(registry, MESSAGE_DELIVERY_LATENCY_SECONDS.clone(), "message_delivery_latency_seconds");
+    register_metric!(
+        registry,
+        WS_MESSAGE_LATENCY_SECONDS.clone(),
+        "ws_message_latency_seconds"
+    );
+    register_metric!(
+        registry,
+        MESSAGE_API_LATENCY_SECONDS.clone(),
+        "message_api_latency_seconds"
+    );
+    register_metric!(
+        registry,
+        MESSAGE_SEARCH_LATENCY_SECONDS.clone(),
+        "message_search_latency_seconds"
+    );
+    register_metric!(
+        registry,
+        MESSAGE_DELIVERY_LATENCY_SECONDS.clone(),
+        "message_delivery_latency_seconds"
+    );
 
     // === P0: Database Metrics ===
-    register_metric!(registry, DB_CONNECTIONS_ACTIVE.clone(), "db_connections_active");
+    register_metric!(
+        registry,
+        DB_CONNECTIONS_ACTIVE.clone(),
+        "db_connections_active"
+    );
     register_metric!(registry, DB_CONNECTIONS_IDLE.clone(), "db_connections_idle");
-    register_metric!(registry, DB_CONNECTIONS_WAITING.clone(), "db_connections_waiting");
-    register_metric!(registry, DB_CONNECTION_ACQUIRE_SECONDS.clone(), "db_connection_acquire_seconds");
-    register_metric!(registry, DB_QUERY_DURATION_SECONDS.clone(), "db_query_duration_seconds");
+    register_metric!(
+        registry,
+        DB_CONNECTIONS_WAITING.clone(),
+        "db_connections_waiting"
+    );
+    register_metric!(
+        registry,
+        DB_CONNECTION_ACQUIRE_SECONDS.clone(),
+        "db_connection_acquire_seconds"
+    );
+    register_metric!(
+        registry,
+        DB_QUERY_DURATION_SECONDS.clone(),
+        "db_query_duration_seconds"
+    );
 
     // === P0: Redis Metrics ===
-    register_metric!(registry, REDIS_CACHE_HITS_TOTAL.clone(), "redis_cache_hits_total");
-    register_metric!(registry, REDIS_CACHE_MISSES_TOTAL.clone(), "redis_cache_misses_total");
-    register_metric!(registry, REDIS_EVICTIONS_TOTAL.clone(), "redis_evictions_total");
-    register_metric!(registry, REDIS_GET_LATENCY_SECONDS.clone(), "redis_get_latency_seconds");
-    register_metric!(registry, REDIS_SET_LATENCY_SECONDS.clone(), "redis_set_latency_seconds");
-    register_metric!(registry, REDIS_MEMORY_USED_BYTES.clone(), "redis_memory_used_bytes");
+    register_metric!(
+        registry,
+        REDIS_CACHE_HITS_TOTAL.clone(),
+        "redis_cache_hits_total"
+    );
+    register_metric!(
+        registry,
+        REDIS_CACHE_MISSES_TOTAL.clone(),
+        "redis_cache_misses_total"
+    );
+    register_metric!(
+        registry,
+        REDIS_EVICTIONS_TOTAL.clone(),
+        "redis_evictions_total"
+    );
+    register_metric!(
+        registry,
+        REDIS_GET_LATENCY_SECONDS.clone(),
+        "redis_get_latency_seconds"
+    );
+    register_metric!(
+        registry,
+        REDIS_SET_LATENCY_SECONDS.clone(),
+        "redis_set_latency_seconds"
+    );
+    register_metric!(
+        registry,
+        REDIS_MEMORY_USED_BYTES.clone(),
+        "redis_memory_used_bytes"
+    );
 
     // === P0: Message Size Metrics ===
-    register_metric!(registry, MESSAGE_SIZE_BYTES_HISTOGRAM.clone(), "message_size_bytes");
-    register_metric!(registry, OVERSIZED_MESSAGE_TOTAL.clone(), "oversized_message_total");
+    register_metric!(
+        registry,
+        MESSAGE_SIZE_BYTES_HISTOGRAM.clone(),
+        "message_size_bytes"
+    );
+    register_metric!(
+        registry,
+        OVERSIZED_MESSAGE_TOTAL.clone(),
+        "oversized_message_total"
+    );
 
     // === P1: Rate & Queue Metrics ===
-    register_metric!(registry, GLOBAL_MESSAGE_RATE_GAUGE.clone(), "global_message_rate_per_second");
-    register_metric!(registry, MESSAGE_RATE_SPIKE_TOTAL.clone(), "message_rate_spike_total");
-    register_metric!(registry, HIGH_RATE_USERS_TOTAL.clone(), "high_rate_users_total");
-    register_metric!(registry, MESSAGE_AGE_IN_QUEUE_SECONDS.clone(), "message_age_in_queue_seconds");
-    register_metric!(registry, QUEUE_PROCESSING_LAG_MESSAGES.clone(), "queue_processing_lag_messages");
-    register_metric!(registry, QUEUE_CONSUMER_RATE_PER_SECOND.clone(), "queue_consumer_rate_per_second");
-    register_metric!(registry, MESSAGE_TOTAL_DELIVERY_LATENCY_SECONDS.clone(), "message_total_delivery_latency_seconds");
+    register_metric!(
+        registry,
+        GLOBAL_MESSAGE_RATE_GAUGE.clone(),
+        "global_message_rate_per_second"
+    );
+    register_metric!(
+        registry,
+        MESSAGE_RATE_SPIKE_TOTAL.clone(),
+        "message_rate_spike_total"
+    );
+    register_metric!(
+        registry,
+        HIGH_RATE_USERS_TOTAL.clone(),
+        "high_rate_users_total"
+    );
+    register_metric!(
+        registry,
+        MESSAGE_AGE_IN_QUEUE_SECONDS.clone(),
+        "message_age_in_queue_seconds"
+    );
+    register_metric!(
+        registry,
+        QUEUE_PROCESSING_LAG_MESSAGES.clone(),
+        "queue_processing_lag_messages"
+    );
+    register_metric!(
+        registry,
+        QUEUE_CONSUMER_RATE_PER_SECOND.clone(),
+        "queue_consumer_rate_per_second"
+    );
+    register_metric!(
+        registry,
+        MESSAGE_TOTAL_DELIVERY_LATENCY_SECONDS.clone(),
+        "message_total_delivery_latency_seconds"
+    );
 }

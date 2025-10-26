@@ -1,0 +1,455 @@
+---
+# Prometheus Namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: nova-monitoring
+  labels:
+    app: nova
+    component: monitoring
+
+---
+# ConfigMap for Prometheus configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: nova-monitoring
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+      external_labels:
+        cluster: 'nova'
+        environment: 'production'
+
+    # Alertmanager configuration
+    alerting:
+      alertmanagers:
+        - static_configs:
+            - targets:
+                - 'alertmanager:9093'
+
+    # Load rules once and periodically evaluate them
+    rule_files:
+      - '/etc/prometheus/rules/*.yml'
+
+    scrape_configs:
+      # Prometheus itself
+      - job_name: 'prometheus'
+        static_configs:
+          - targets: ['localhost:9090']
+
+      # Kubernetes API server
+      - job_name: 'kubernetes-apiservers'
+        kubernetes_sd_configs:
+          - role: endpoints
+        scheme: https
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_service_name, __meta_kubernetes_endpoint_port_name]
+            action: keep
+            regex: default;kubernetes;https
+
+      # Kubernetes nodes
+      - job_name: 'kubernetes-nodes'
+        kubernetes_sd_configs:
+          - role: node
+        scheme: https
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        relabel_configs:
+          - action: labelmap
+            regex: __meta_kubernetes_node_label_(.+)
+
+      # Kubernetes pods
+      - job_name: 'kubernetes-pods'
+        kubernetes_sd_configs:
+          - role: pod
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+            action: keep
+            regex: 'true'
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+            action: replace
+            target_label: __metrics_path__
+            regex: (.+)
+          - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+            action: replace
+            regex: ([^:]+)(?::\d+)?;(\d+)
+            replacement: $1:$2
+            target_label: __address__
+          - action: labelmap
+            regex: __meta_kubernetes_pod_label_(.+)
+          - source_labels: [__meta_kubernetes_namespace]
+            action: replace
+            target_label: kubernetes_namespace
+          - source_labels: [__meta_kubernetes_pod_name]
+            action: replace
+            target_label: kubernetes_pod_name
+
+      # Messaging Service specific
+      - job_name: 'messaging-service'
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names:
+                - nova-messaging
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_label_component]
+            action: keep
+            regex: 'messaging-service'
+          - source_labels: [__meta_kubernetes_pod_container_port_number]
+            action: keep
+            regex: '9090'
+          - action: labelmap
+            regex: __meta_kubernetes_pod_label_(.+)
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: kubernetes_namespace
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: pod
+
+---
+# ConfigMap for Alerting Rules
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-rules
+  namespace: nova-monitoring
+data:
+  messaging-alerts.yml: |
+    groups:
+      - name: messaging-service
+        interval: 30s
+        rules:
+          # Pod down alert
+          - alert: MessagingServicePodDown
+            expr: |
+              kube_pod_status_phase{namespace="nova-messaging", pod=~"messaging-service-.*", phase!="Running"} == 1
+            for: 2m
+            labels:
+              severity: critical
+              service: messaging-service
+            annotations:
+              summary: "Messaging Service Pod is Down"
+              description: "Pod {{ $labels.pod }} is {{ $labels.phase }}"
+
+          # High CPU usage
+          - alert: MessagingServiceHighCPU
+            expr: |
+              rate(container_cpu_usage_seconds_total{pod=~"messaging-service-.*"}[5m]) > 0.8
+            for: 5m
+            labels:
+              severity: warning
+              service: messaging-service
+            annotations:
+              summary: "High CPU usage in {{ $labels.pod }}"
+              description: "CPU usage is {{ $value }}"
+
+          # High memory usage
+          - alert: MessagingServiceHighMemory
+            expr: |
+              container_memory_usage_bytes{pod=~"messaging-service-.*"} / container_spec_memory_limit_bytes{pod=~"messaging-service-.*"} > 0.85
+            for: 5m
+            labels:
+              severity: warning
+              service: messaging-service
+            annotations:
+              summary: "High memory usage in {{ $labels.pod }}"
+              description: "Memory usage is {{ $value | humanizePercentage }}"
+
+          # Pod restart alert
+          - alert: MessagingServicePodRestarting
+            expr: |
+              rate(kube_pod_container_status_restarts_total{namespace="nova-messaging", pod=~"messaging-service-.*"}[1h]) > 0.1
+            for: 5m
+            labels:
+              severity: warning
+              service: messaging-service
+            annotations:
+              summary: "Messaging Service Pod is restarting frequently"
+              description: "Pod {{ $labels.pod }} has restarted {{ $value }} times in the last hour"
+
+          # Database connection failures
+          - alert: MessagingServiceDatabaseErrors
+            expr: |
+              rate(messaging_database_errors_total[5m]) > 0.1
+            for: 5m
+            labels:
+              severity: critical
+              service: messaging-service
+            annotations:
+              summary: "Database connection errors in Messaging Service"
+              description: "Error rate: {{ $value }} errors/sec"
+
+          # WebSocket connection issues
+          - alert: MessagingServiceWebSocketErrors
+            expr: |
+              rate(messaging_websocket_errors_total[5m]) > 0.05
+            for: 5m
+            labels:
+              severity: warning
+              service: messaging-service
+            annotations:
+              summary: "WebSocket errors in Messaging Service"
+              description: "Error rate: {{ $value }} errors/sec"
+
+          # High latency
+          - alert: MessagingServiceHighLatency
+            expr: |
+              histogram_quantile(0.99, rate(http_request_duration_seconds_bucket{job="messaging-service"}[5m])) > 1
+            for: 5m
+            labels:
+              severity: warning
+              service: messaging-service
+            annotations:
+              summary: "High latency in Messaging Service"
+              description: "P99 latency: {{ $value | humanizeDuration }}"
+
+          # No pods running
+          - alert: MessagingServiceNoPodsRunning
+            expr: |
+              count(kube_pod_status_phase{namespace="nova-messaging", pod=~"messaging-service-.*", phase="Running"}) == 0
+            for: 1m
+            labels:
+              severity: critical
+              service: messaging-service
+            annotations:
+              summary: "No Messaging Service pods running"
+              description: "All pods are down"
+
+---
+# ServiceAccount for Prometheus
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: prometheus
+  namespace: nova-monitoring
+
+---
+# ClusterRole for Prometheus
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: prometheus
+spec:
+  rules:
+    - apiGroups: [""]
+      resources:
+        - nodes
+        - nodes/proxy
+        - services
+        - endpoints
+        - pods
+      verbs: ["get", "list", "watch"]
+    - apiGroups: ["extensions"]
+      resources:
+        - ingresses
+      verbs: ["get", "list", "watch"]
+
+---
+# ClusterRoleBinding for Prometheus
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: prometheus
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: prometheus
+subjects:
+  - kind: ServiceAccount
+    name: prometheus
+    namespace: nova-monitoring
+
+---
+# Deployment for Prometheus
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus
+  namespace: nova-monitoring
+  labels:
+    app: prometheus
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus
+  template:
+    metadata:
+      labels:
+        app: prometheus
+    spec:
+      serviceAccountName: prometheus
+      containers:
+        - name: prometheus
+          image: prom/prometheus:latest
+          args:
+            - "--config.file=/etc/prometheus/prometheus.yml"
+            - "--storage.tsdb.path=/prometheus"
+            - "--web.console.libraries=/usr/share/prometheus/console_libraries"
+            - "--web.console.templates=/usr/share/prometheus/consoles"
+            - "--web.enable-lifecycle"
+          ports:
+            - name: web
+              containerPort: 9090
+          volumeMounts:
+            - name: config
+              mountPath: /etc/prometheus
+            - name: rules
+              mountPath: /etc/prometheus/rules
+            - name: data
+              mountPath: /prometheus
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: 1000m
+              memory: 2Gi
+      volumes:
+        - name: config
+          configMap:
+            name: prometheus-config
+        - name: rules
+          configMap:
+            name: prometheus-rules
+        - name: data
+          emptyDir: {}
+
+---
+# Service for Prometheus
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  namespace: nova-monitoring
+  labels:
+    app: prometheus
+spec:
+  type: NodePort
+  ports:
+    - name: web
+      port: 9090
+      targetPort: 9090
+      nodePort: 30090
+  selector:
+    app: prometheus
+
+---
+# Deployment for Alertmanager
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alertmanager
+  namespace: nova-monitoring
+  labels:
+    app: alertmanager
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: alertmanager
+  template:
+    metadata:
+      labels:
+        app: alertmanager
+    spec:
+      containers:
+        - name: alertmanager
+          image: prom/alertmanager:latest
+          args:
+            - "--config.file=/etc/alertmanager/config.yml"
+            - "--storage.path=/alertmanager"
+          ports:
+            - name: web
+              containerPort: 9093
+          volumeMounts:
+            - name: config
+              mountPath: /etc/alertmanager
+            - name: data
+              mountPath: /alertmanager
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+      volumes:
+        - name: config
+          configMap:
+            name: alertmanager-config
+        - name: data
+          emptyDir: {}
+
+---
+# Service for Alertmanager
+apiVersion: v1
+kind: Service
+metadata:
+  name: alertmanager
+  namespace: nova-monitoring
+  labels:
+    app: alertmanager
+spec:
+  type: NodePort
+  ports:
+    - name: web
+      port: 9093
+      targetPort: 9093
+      nodePort: 30093
+  selector:
+    app: alertmanager
+
+---
+# ConfigMap for Alertmanager configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alertmanager-config
+  namespace: nova-monitoring
+data:
+  config.yml: |
+    global:
+      resolve_timeout: 5m
+      slack_api_url: ''  # TODO: Add Slack webhook URL for notifications
+
+    route:
+      receiver: 'default'
+      group_by: ['alertname', 'cluster', 'service']
+      group_wait: 10s
+      group_interval: 10s
+      repeat_interval: 12h
+
+    receivers:
+      - name: 'default'
+        # Slack receiver
+        slack_configs:
+          - channel: '#alerts'
+            title: 'Nova Alert'
+            text: '{{ .GroupLabels.alertname }}: {{ .CommonAnnotations.summary }}'
+          # Add more receivers as needed:
+          # - email_configs
+          # - pagerduty_configs
+          # - webhook_configs
+
+---
+# Note: To deploy Prometheus stack:
+# 1. Apply this file:
+#    kubectl apply -f prometheus-monitoring-setup.yaml
+#
+# 2. Access Prometheus:
+#    kubectl port-forward svc/prometheus 9090:9090 -n nova-monitoring
+#    http://localhost:9090
+#
+# 3. Configure alerts in Slack/Email/etc by updating alertmanager-config
+#
+# 4. Optional: Install Grafana for dashboards
+#    helm repo add grafana https://grafana.github.io/helm-charts
+#    helm install grafana grafana/grafana -n nova-monitoring

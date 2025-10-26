@@ -62,7 +62,7 @@ pub async fn like_post(
 
     // Check if post exists
     match post_repo::find_post_by_id(&pool, post_id).await {
-        Ok(Some(_)) => {},
+        Ok(Some(_)) => {}
         Ok(None) => {
             return HttpResponse::NotFound().json(ErrorResponse {
                 error: "Post not found".to_string(),
@@ -129,7 +129,7 @@ pub async fn unlike_post(
 
     // Check if post exists
     match post_repo::find_post_by_id(&pool, post_id).await {
-        Ok(Some(_)) => {},
+        Ok(Some(_)) => {}
         Ok(None) => {
             return HttpResponse::NotFound().json(ErrorResponse {
                 error: "Post not found".to_string(),
@@ -186,7 +186,7 @@ pub async fn get_post_likes(
 
     // Check if post exists
     match post_repo::find_post_by_id(&pool, post_id).await {
-        Ok(Some(_)) => {},
+        Ok(Some(_)) => {}
         Ok(None) => {
             return HttpResponse::NotFound().json(ErrorResponse {
                 error: "Post not found".to_string(),
@@ -260,7 +260,7 @@ pub async fn check_like_status(
 
     // Check if post exists
     match post_repo::find_post_by_id(&pool, post_id).await {
-        Ok(Some(_)) => {},
+        Ok(Some(_)) => {}
         Ok(None) => {
             return HttpResponse::NotFound().json(ErrorResponse {
                 error: "Post not found".to_string(),

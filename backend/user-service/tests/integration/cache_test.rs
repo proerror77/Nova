@@ -9,7 +9,7 @@ mod cache_integration_tests {
         let user_id = uuid::Uuid::new_v4();
         let cache_key = format!("nova:cache:user:{}", user_id);
         assert!(cache_key.starts_with("nova:cache:user:"));
-        
+
         // Search cache key format with query, limit, offset
         let query = "test";
         let limit = 20i64;

@@ -9,7 +9,6 @@
 /// 1. ✅ Connection without JWT → REJECTED (401)
 /// 2. ✅ Connection with invalid JWT → REJECTED (401)
 /// 3. ✅ Development bypass mode (WS_DEV_ALLOW_ALL=true) → ALLOWED
-
 use messaging_service::middleware::auth::verify_jwt;
 
 /// Test verify_jwt behavior to ensure JWT validation is working
@@ -30,10 +29,7 @@ async fn test_verify_jwt_rejects_empty_token() {
     let empty_token = "";
     let result = verify_jwt(empty_token).await;
 
-    assert!(
-        result.is_err(),
-        "verify_jwt should reject empty JWT token"
-    );
+    assert!(result.is_err(), "verify_jwt should reject empty JWT token");
 }
 
 /// Test verify_jwt rejects malformed token
@@ -92,7 +88,10 @@ fn test_dev_allow_env_var_invalid_value() {
     std::env::set_var("WS_DEV_ALLOW_ALL", "yes");
     let dev_allow = std::env::var("WS_DEV_ALLOW_ALL").unwrap_or_else(|_| "false".into()) == "true";
 
-    assert!(!dev_allow, "WS_DEV_ALLOW_ALL should be false with invalid value 'yes'");
+    assert!(
+        !dev_allow,
+        "WS_DEV_ALLOW_ALL should be false with invalid value 'yes'"
+    );
 
     // Cleanup
     std::env::remove_var("WS_DEV_ALLOW_ALL");

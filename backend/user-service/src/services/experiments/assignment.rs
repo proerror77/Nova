@@ -43,7 +43,11 @@ impl AssignmentService {
         // 1. Check cache first
         let cache_key = format!("exp:assign:{}:{}", experiment_id, user_id);
         if let Ok(cached) = self.get_from_cache(&cache_key).await {
-            tracing::debug!("Assignment cache hit for user {} in experiment {}", user_id, experiment_id);
+            tracing::debug!(
+                "Assignment cache hit for user {} in experiment {}",
+                user_id,
+                experiment_id
+            );
             return Ok(cached);
         }
 
@@ -225,15 +229,14 @@ impl AssignmentService {
         // Scan and delete matching keys (safe for production)
         let mut cursor = 0;
         loop {
-            let (new_cursor, keys): (u64, Vec<String>) =
-                redis::cmd("SCAN")
-                    .arg(cursor)
-                    .arg("MATCH")
-                    .arg(&pattern)
-                    .arg("COUNT")
-                    .arg(100)
-                    .query_async(&mut conn)
-                    .await?;
+            let (new_cursor, keys): (u64, Vec<String>) = redis::cmd("SCAN")
+                .arg(cursor)
+                .arg("MATCH")
+                .arg(&pattern)
+                .arg("COUNT")
+                .arg(100)
+                .query_async(&mut conn)
+                .await?;
 
             if !keys.is_empty() {
                 redis::cmd("DEL")
@@ -248,7 +251,10 @@ impl AssignmentService {
             }
         }
 
-        tracing::info!("Invalidated assignment cache for experiment {}", experiment_id);
+        tracing::info!(
+            "Invalidated assignment cache for experiment {}",
+            experiment_id
+        );
         Ok(())
     }
 }
@@ -300,7 +306,10 @@ mod tests {
         assert_eq!(hash1, hash2, "Hash should be deterministic");
 
         let hash3 = service.compute_hash("test:123:789");
-        assert_ne!(hash1, hash3, "Different inputs should produce different hashes");
+        assert_ne!(
+            hash1, hash3,
+            "Different inputs should produce different hashes"
+        );
     }
 
     #[test]
@@ -360,7 +369,10 @@ mod tests {
         let user_id = Uuid::new_v4();
         let variant1 = service.select_variant(exp_id, user_id, &variants);
         let variant2 = service.select_variant(exp_id, user_id, &variants);
-        assert_eq!(variant1.id, variant2.id, "Same user should get same variant");
+        assert_eq!(
+            variant1.id, variant2.id,
+            "Same user should get same variant"
+        );
     }
 
     #[test]

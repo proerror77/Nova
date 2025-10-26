@@ -1,8 +1,8 @@
 /// OAuth and authentication provider metrics
 use lazy_static::lazy_static;
 use prometheus::{
-    register_counter_vec_with_registry, register_histogram_vec_with_registry,
-    register_gauge_with_registry, CounterVec, HistogramVec, Gauge,
+    register_counter_vec_with_registry, register_gauge_with_registry,
+    register_histogram_vec_with_registry, CounterVec, Gauge, HistogramVec,
 };
 
 use super::REGISTRY;

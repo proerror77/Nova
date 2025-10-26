@@ -5,7 +5,6 @@
 ///
 /// Keys are cached with a TTL (typically 24 hours) and automatically
 /// refreshed when expired.
-
 use redis::AsyncCommands;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -14,14 +13,14 @@ use tracing::{debug, error, warn};
 /// JWKS Key Structure (subset of RFC 7517)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JWKSKey {
-    pub kty: String, // Key type (e.g., "RSA")
-    pub use_: Option<String>, // Key usage (e.g., "sig")
-    pub alg: Option<String>, // Algorithm
-    pub kid: String, // Key ID
-    pub n: Option<String>, // RSA modulus (public component)
-    pub e: Option<String>, // RSA exponent (public component)
+    pub kty: String,              // Key type (e.g., "RSA")
+    pub use_: Option<String>,     // Key usage (e.g., "sig")
+    pub alg: Option<String>,      // Algorithm
+    pub kid: String,              // Key ID
+    pub n: Option<String>,        // RSA modulus (public component)
+    pub e: Option<String>,        // RSA exponent (public component)
     pub x5c: Option<Vec<String>>, // X.509 certificate chain
-    pub x5t: Option<String>, // X.509 certificate SHA-1 thumbprint
+    pub x5t: Option<String>,      // X.509 certificate SHA-1 thumbprint
     pub x5t_s256: Option<String>, // X.509 certificate SHA-256 thumbprint
 }
 
@@ -35,7 +34,7 @@ pub struct JWKS {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct JWKSCacheEntry {
     jwks: JWKS,
-    cached_at: i64, // Unix timestamp
+    cached_at: i64,  // Unix timestamp
     expires_at: i64, // Unix timestamp
 }
 
@@ -60,7 +59,8 @@ impl JWKSCache {
     pub async fn get_cached_jwks(&self, provider: &str) -> Result<Option<JWKS>, String> {
         let key = format!("{}{}", self.provider_cache_prefix, provider);
 
-        let mut conn = self.redis_client
+        let mut conn = self
+            .redis_client
             .get_multiplexed_async_connection()
             .await
             .map_err(|e| format!("Redis connection error: {}", e))?;
@@ -119,7 +119,8 @@ impl JWKSCache {
         let json = serde_json::to_string(&cache_entry)
             .map_err(|e| format!("Failed to serialize JWKS cache: {}", e))?;
 
-        let mut conn = self.redis_client
+        let mut conn = self
+            .redis_client
             .get_multiplexed_async_connection()
             .await
             .map_err(|e| format!("Redis connection error: {}", e))?;
@@ -128,7 +129,10 @@ impl JWKSCache {
             .await
             .map_err(|e| format!("Failed to cache JWKS: {}", e))?;
 
-        debug!("Cached JWKS for provider: {} (TTL: {}s)", provider, self.cache_ttl_seconds);
+        debug!(
+            "Cached JWKS for provider: {} (TTL: {}s)",
+            provider, self.cache_ttl_seconds
+        );
         Ok(())
     }
 
@@ -144,7 +148,10 @@ impl JWKSCache {
         }
 
         // Fetch from provider if not cached
-        debug!("Fetching JWKS for provider: {} from remote source", provider);
+        debug!(
+            "Fetching JWKS for provider: {} from remote source",
+            provider
+        );
         let jwks = fetch_fn.await?;
 
         // Cache the result
@@ -160,7 +167,8 @@ impl JWKSCache {
     pub async fn clear_cache(&self, provider: &str) -> Result<(), String> {
         let key = format!("{}{}", self.provider_cache_prefix, provider);
 
-        let mut conn = self.redis_client
+        let mut conn = self
+            .redis_client
             .get_multiplexed_async_connection()
             .await
             .map_err(|e| format!("Redis connection error: {}", e))?;
@@ -175,7 +183,8 @@ impl JWKSCache {
 
     /// Clear all JWKS caches
     pub async fn clear_all_caches(&self) -> Result<u32, String> {
-        let mut conn = self.redis_client
+        let mut conn = self
+            .redis_client
             .get_multiplexed_async_connection()
             .await
             .map_err(|e| format!("Redis connection error: {}", e))?;
@@ -202,7 +211,8 @@ impl JWKSCache {
 
     /// Get cache statistics
     pub async fn get_cache_stats(&self) -> Result<JWKSCacheStats, String> {
-        let mut conn = self.redis_client
+        let mut conn = self
+            .redis_client
             .get_multiplexed_async_connection()
             .await
             .map_err(|e| format!("Redis connection error: {}", e))?;
@@ -221,14 +231,12 @@ impl JWKSCache {
             .unwrap_or(0);
 
         for key in keys {
-            let json: Option<String> = conn
-                .get(&key)
-                .await
-                .unwrap_or(None);
+            let json: Option<String> = conn.get(&key).await.unwrap_or(None);
 
             if let Some(json_str) = json {
                 if let Ok(entry) = serde_json::from_str::<JWKSCacheEntry>(&json_str) {
-                    let provider = key.strip_prefix(&self.provider_cache_prefix)
+                    let provider = key
+                        .strip_prefix(&self.provider_cache_prefix)
                         .unwrap_or("unknown")
                         .to_string();
 
@@ -287,19 +295,17 @@ mod tests {
     #[test]
     fn test_jwks_serialization() {
         let jwks = JWKS {
-            keys: vec![
-                JWKSKey {
-                    kty: "RSA".to_string(),
-                    use_: Some("sig".to_string()),
-                    alg: Some("RS256".to_string()),
-                    kid: "key1".to_string(),
-                    n: Some("n_value".to_string()),
-                    e: Some("e_value".to_string()),
-                    x5c: None,
-                    x5t: None,
-                    x5t_s256: None,
-                },
-            ],
+            keys: vec![JWKSKey {
+                kty: "RSA".to_string(),
+                use_: Some("sig".to_string()),
+                alg: Some("RS256".to_string()),
+                kid: "key1".to_string(),
+                n: Some("n_value".to_string()),
+                e: Some("e_value".to_string()),
+                x5c: None,
+                x5t: None,
+                x5t_s256: None,
+            }],
         };
 
         let json = serde_json::to_string(&jwks).unwrap();

@@ -26,9 +26,8 @@ async fn test_follow_self_returns_400() {
     .unwrap();
 
     // Kafka producer (no actual broker contact on create)
-    let producer = Arc::new(
-        EventProducer::new("localhost:9092", "events".to_string()).expect("producer"),
-    );
+    let producer =
+        Arc::new(EventProducer::new("localhost:9092", "events".to_string()).expect("producer"));
 
     // Same user id for follower and path param
     let uid = Uuid::new_v4();

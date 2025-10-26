@@ -1,3 +1,5 @@
+use redis::Client;
+use serde_json::json;
 /// WebSocket Offline Message Recovery Integration Tests
 ///
 /// Tests the complete flow of offline message recovery:
@@ -5,16 +7,16 @@
 /// 2. Messages arrive while disconnected
 /// 3. Client reconnects and receives offline messages
 /// 4. New messages continue to arrive
-
 use uuid::Uuid;
-use redis::Client;
-use serde_json::json;
 
 #[tokio::test]
 async fn test_offline_message_recovery_basic_flow() {
     // Setup Redis connection
     let client = Client::open("redis://127.0.0.1/").expect("Failed to open Redis client");
-    let mut conn = client.get_multiplexed_async_connection().await.expect("Failed to get connection");
+    let mut conn = client
+        .get_multiplexed_async_connection()
+        .await
+        .expect("Failed to get connection");
 
     let user_id = Uuid::new_v4();
     let client_id = Uuid::new_v4();
@@ -31,41 +33,49 @@ async fn test_offline_message_recovery_basic_flow() {
     });
 
     use redis::AsyncCommands;
-    let _: () = conn.set_ex(
-        &initial_state_key,
-        initial_state.to_string(),
-        30 * 24 * 3600, // 30 days
-    ).await.expect("Failed to set initial state");
+    let _: () = conn
+        .set_ex(
+            &initial_state_key,
+            initial_state.to_string(),
+            30 * 24 * 3600, // 30 days
+        )
+        .await
+        .expect("Failed to set initial state");
 
     // === STEP 2: Publish messages to stream (simulating messages while client is offline) ===
     let stream_key = format!("stream:conversation:{}", conversation_id);
 
-    let msg1_id: String = conn.xadd(
-        &stream_key,
-        "*",
-        &[
-            ("payload", r#"{"type":"message","text":"offline msg 1"}"#),
-            ("user_id", &user_id.to_string()),
-            ("timestamp", "1000001"),
-        ],
-    ).await.expect("Failed to add first message");
+    let msg1_id: String = conn
+        .xadd(
+            &stream_key,
+            "*",
+            &[
+                ("payload", r#"{"type":"message","text":"offline msg 1"}"#),
+                ("user_id", &user_id.to_string()),
+                ("timestamp", "1000001"),
+            ],
+        )
+        .await
+        .expect("Failed to add first message");
 
-    let msg2_id: String = conn.xadd(
-        &stream_key,
-        "*",
-        &[
-            ("payload", r#"{"type":"message","text":"offline msg 2"}"#),
-            ("user_id", &user_id.to_string()),
-            ("timestamp", "1000002"),
-        ],
-    ).await.expect("Failed to add second message");
+    let msg2_id: String = conn
+        .xadd(
+            &stream_key,
+            "*",
+            &[
+                ("payload", r#"{"type":"message","text":"offline msg 2"}"#),
+                ("user_id", &user_id.to_string()),
+                ("timestamp", "1000002"),
+            ],
+        )
+        .await
+        .expect("Failed to add second message");
 
     // === STEP 3: Verify messages exist in stream ===
-    let range_result: Vec<(String, Vec<(String, String)>)> = conn.xrange(
-        &stream_key,
-        "-",
-        "+",
-    ).await.expect("Failed to get messages");
+    let range_result: Vec<(String, Vec<(String, String)>)> = conn
+        .xrange(&stream_key, "-", "+")
+        .await
+        .expect("Failed to get messages");
 
     assert!(
         range_result.len() >= 2,
@@ -75,23 +85,35 @@ async fn test_offline_message_recovery_basic_flow() {
 
     // === STEP 4: Simulate client reconnection - query offline messages ===
     // This is what the WebSocket handler would do in step 2 of offline recovery
-    let messages_since: Vec<(String, Vec<(String, String)>)> = conn.xrange(
-        &stream_key,
-        "(0",  // Exclusive of "0"
-        "+",
-    ).await.expect("Failed to get messages since");
+    let messages_since: Vec<(String, Vec<(String, String)>)> = conn
+        .xrange(
+            &stream_key,
+            "(0", // Exclusive of "0"
+            "+",
+        )
+        .await
+        .expect("Failed to get messages since");
 
     // Verify we got the offline messages
-    assert_eq!(messages_since.len(), 2, "Expected 2 offline messages for recovery");
+    assert_eq!(
+        messages_since.len(),
+        2,
+        "Expected 2 offline messages for recovery"
+    );
 
     // Extract first message payload
     let first_msg_entry = &messages_since[0];
-    let first_payload = first_msg_entry.1.iter()
+    let first_payload = first_msg_entry
+        .1
+        .iter()
         .find(|(k, _)| k == "payload")
         .map(|(_, v)| v.clone())
         .expect("Message missing payload");
 
-    assert!(first_payload.contains("offline msg 1"), "First message payload incorrect");
+    assert!(
+        first_payload.contains("offline msg 1"),
+        "First message payload incorrect"
+    );
 
     // === STEP 5: Update sync state with latest message ID ===
     let updated_state = json!({
@@ -102,20 +124,30 @@ async fn test_offline_message_recovery_basic_flow() {
         "last_sync_at": 1000002
     });
 
-    let _: () = conn.set_ex(
-        &initial_state_key,
-        updated_state.to_string(),
-        30 * 24 * 3600,
-    ).await.expect("Failed to update sync state");
+    let _: () = conn
+        .set_ex(
+            &initial_state_key,
+            updated_state.to_string(),
+            30 * 24 * 3600,
+        )
+        .await
+        .expect("Failed to update sync state");
 
     // === STEP 6: Verify subsequent messages won't be resent ===
-    let no_messages: Vec<(String, Vec<(String, String)>)> = conn.xrange(
-        &stream_key,
-        &format!("({}",msg2_id),  // Exclusive of msg2_id
-        "+",
-    ).await.expect("Failed to check for newer messages");
+    let no_messages: Vec<(String, Vec<(String, String)>)> = conn
+        .xrange(
+            &stream_key,
+            &format!("({}", msg2_id), // Exclusive of msg2_id
+            "+",
+        )
+        .await
+        .expect("Failed to check for newer messages");
 
-    assert_eq!(no_messages.len(), 0, "Should have no messages after last known ID");
+    assert_eq!(
+        no_messages.len(),
+        0,
+        "Should have no messages after last known ID"
+    );
 
     // Cleanup
     let _: redis::RedisResult<()> = conn.del(&initial_state_key).await;
@@ -125,7 +157,10 @@ async fn test_offline_message_recovery_basic_flow() {
 #[tokio::test]
 async fn test_offline_message_recovery_with_no_previous_state() {
     let client = Client::open("redis://127.0.0.1/").expect("Failed to open Redis client");
-    let mut conn = client.get_multiplexed_async_connection().await.expect("Failed to get connection");
+    let mut conn = client
+        .get_multiplexed_async_connection()
+        .await
+        .expect("Failed to get connection");
 
     let user_id = Uuid::new_v4();
     let client_id = Uuid::new_v4();
@@ -138,23 +173,29 @@ async fn test_offline_message_recovery_with_no_previous_state() {
     let stream_key = format!("stream:conversation:{}", conversation_id);
 
     use redis::AsyncCommands;
-    let _msg1: String = conn.xadd(
-        &stream_key,
-        "*",
-        &[
-            ("payload", r#"{"type":"message","text":"msg 1"}"#),
-            ("user_id", &user_id.to_string()),
-        ],
-    ).await.expect("Failed to add message");
+    let _msg1: String = conn
+        .xadd(
+            &stream_key,
+            "*",
+            &[
+                ("payload", r#"{"type":"message","text":"msg 1"}"#),
+                ("user_id", &user_id.to_string()),
+            ],
+        )
+        .await
+        .expect("Failed to add message");
 
     // === STEP 3: Verify new client gets all messages ===
-    let all_messages: Vec<(String, Vec<(String, String)>)> = conn.xrange(
-        &stream_key,
-        "(0",
-        "+",
-    ).await.expect("Failed to get messages");
+    let all_messages: Vec<(String, Vec<(String, String)>)> = conn
+        .xrange(&stream_key, "(0", "+")
+        .await
+        .expect("Failed to get messages");
 
-    assert_eq!(all_messages.len(), 1, "New client should get all messages from stream");
+    assert_eq!(
+        all_messages.len(),
+        1,
+        "New client should get all messages from stream"
+    );
 
     // Cleanup
     let _: redis::RedisResult<()> = conn.del(&stream_key).await;
@@ -163,7 +204,10 @@ async fn test_offline_message_recovery_with_no_previous_state() {
 #[tokio::test]
 async fn test_multiple_clients_same_conversation_independent_recovery() {
     let client = Client::open("redis://127.0.0.1/").expect("Failed to open Redis client");
-    let mut conn = client.get_multiplexed_async_connection().await.expect("Failed to get connection");
+    let mut conn = client
+        .get_multiplexed_async_connection()
+        .await
+        .expect("Failed to get connection");
 
     let user_id = Uuid::new_v4();
     let client_id_1 = Uuid::new_v4();
@@ -191,41 +235,58 @@ async fn test_multiple_clients_same_conversation_independent_recovery() {
         "last_sync_at": 1000000
     });
 
-    let _: redis::RedisResult<()> = conn.set_ex(&state_key_1, state_1.to_string(), 30 * 24 * 3600).await;
-    let _: redis::RedisResult<()> = conn.set_ex(&state_key_2, state_2.to_string(), 30 * 24 * 3600).await;
+    let _: redis::RedisResult<()> = conn
+        .set_ex(&state_key_1, state_1.to_string(), 30 * 24 * 3600)
+        .await;
+    let _: redis::RedisResult<()> = conn
+        .set_ex(&state_key_2, state_2.to_string(), 30 * 24 * 3600)
+        .await;
 
     // === STEP 2: Publish messages ===
     let stream_key = format!("stream:conversation:{}", conversation_id);
 
-    let _: String = conn.xadd(
-        &stream_key,
-        "1000-0",
-        &[("payload", r#"{"type":"message","text":"old msg"}"#)],
-    ).await.ok().unwrap_or_default();
+    let _: String = conn
+        .xadd(
+            &stream_key,
+            "1000-0",
+            &[("payload", r#"{"type":"message","text":"old msg"}"#)],
+        )
+        .await
+        .ok()
+        .unwrap_or_default();
 
-    let new_msg_id: String = conn.xadd(
-        &stream_key,
-        "*",
-        &[("payload", r#"{"type":"message","text":"new msg"}"#)],
-    ).await.expect("Failed to add new message");
+    let new_msg_id: String = conn
+        .xadd(
+            &stream_key,
+            "*",
+            &[("payload", r#"{"type":"message","text":"new msg"}"#)],
+        )
+        .await
+        .expect("Failed to add new message");
 
     // === STEP 3: Client 1 should only get messages after "1000-0" ===
-    let client1_messages: Vec<(String, Vec<(String, String)>)> = conn.xrange(
-        &stream_key,
-        "(1000-0",
-        "+",
-    ).await.expect("Failed to get client 1 messages");
+    let client1_messages: Vec<(String, Vec<(String, String)>)> = conn
+        .xrange(&stream_key, "(1000-0", "+")
+        .await
+        .expect("Failed to get client 1 messages");
 
-    assert_eq!(client1_messages.len(), 1, "Client 1 should get only new message");
+    assert_eq!(
+        client1_messages.len(),
+        1,
+        "Client 1 should get only new message"
+    );
 
     // === STEP 4: Client 2 should get all messages ===
-    let client2_messages: Vec<(String, Vec<(String, String)>)> = conn.xrange(
-        &stream_key,
-        "(0",
-        "+",
-    ).await.expect("Failed to get client 2 messages");
+    let client2_messages: Vec<(String, Vec<(String, String)>)> = conn
+        .xrange(&stream_key, "(0", "+")
+        .await
+        .expect("Failed to get client 2 messages");
 
-    assert_eq!(client2_messages.len(), 2, "Client 2 should get all messages");
+    assert_eq!(
+        client2_messages.len(),
+        2,
+        "Client 2 should get all messages"
+    );
 
     // Cleanup
     let _: redis::RedisResult<()> = conn.del(&state_key_1).await;
@@ -236,7 +297,10 @@ async fn test_multiple_clients_same_conversation_independent_recovery() {
 #[tokio::test]
 async fn test_client_sync_state_persistence_and_ttl() {
     let client = Client::open("redis://127.0.0.1/").expect("Failed to open Redis client");
-    let mut conn = client.get_multiplexed_async_connection().await.expect("Failed to get connection");
+    let mut conn = client
+        .get_multiplexed_async_connection()
+        .await
+        .expect("Failed to get connection");
 
     let user_id = Uuid::new_v4();
     let client_id = Uuid::new_v4();
@@ -254,20 +318,26 @@ async fn test_client_sync_state_persistence_and_ttl() {
     });
 
     // Set with 30-day TTL (same as production code)
-    let _: () = conn.set_ex(
-        &state_key,
-        state.to_string(),
-        30 * 24 * 3600,
-    ).await.expect("Failed to set state with TTL");
+    let _: () = conn
+        .set_ex(&state_key, state.to_string(), 30 * 24 * 3600)
+        .await
+        .expect("Failed to set state with TTL");
 
     // Verify it exists
-    let exists: bool = conn.exists(&state_key).await.expect("Failed to check existence");
+    let exists: bool = conn
+        .exists(&state_key)
+        .await
+        .expect("Failed to check existence");
     assert!(exists, "State should exist immediately after creation");
 
     // Verify TTL is approximately 30 days
     let ttl: i64 = conn.ttl(&state_key).await.expect("Failed to get TTL");
     let thirty_days_secs = 30 * 24 * 3600;
-    assert!(ttl > 0 && ttl <= thirty_days_secs, "TTL should be between 0 and 30 days, got {}", ttl);
+    assert!(
+        ttl > 0 && ttl <= thirty_days_secs,
+        "TTL should be between 0 and 30 days, got {}",
+        ttl
+    );
 
     // Update the state
     let updated_state = json!({
@@ -278,14 +348,16 @@ async fn test_client_sync_state_persistence_and_ttl() {
         "last_sync_at": 1000010
     });
 
-    let _: () = conn.set_ex(
-        &state_key,
-        updated_state.to_string(),
-        30 * 24 * 3600,
-    ).await.expect("Failed to update state");
+    let _: () = conn
+        .set_ex(&state_key, updated_state.to_string(), 30 * 24 * 3600)
+        .await
+        .expect("Failed to update state");
 
     // Verify update works
-    let stored: String = conn.get(&state_key).await.expect("Failed to retrieve state");
+    let stored: String = conn
+        .get(&state_key)
+        .await
+        .expect("Failed to retrieve state");
     let parsed: serde_json::Value = serde_json::from_str(&stored).expect("Failed to parse JSON");
 
     assert_eq!(

@@ -1,7 +1,7 @@
 pub mod video;
 
 // Re-export commonly used types from video module
-pub use video::{UploadStatus, ResumableUpload, UploadChunk, VideoEntity, VideoStatus};
+pub use video::{ResumableUpload, UploadChunk, UploadStatus, VideoEntity, VideoStatus};
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -330,4 +330,48 @@ pub struct LikeResponse {
     pub post_id: String,
     pub user_id: String,
     pub created_at: String,
+}
+
+// ============================================
+// Bookmark Models
+// ============================================
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct Bookmark {
+    pub id: Uuid,
+    pub user_id: Uuid,
+    pub post_id: Uuid,
+    pub bookmarked_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BookmarkResponse {
+    pub id: String,
+    pub user_id: String,
+    pub post_id: String,
+    pub bookmarked_at: String,
+}
+
+// ============================================
+// Post Share Models
+// ============================================
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct PostShare {
+    pub id: Uuid,
+    pub post_id: Uuid,
+    pub user_id: Uuid,
+    pub share_via: Option<String>,
+    pub shared_with_user_id: Option<Uuid>,
+    pub shared_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PostShareResponse {
+    pub id: String,
+    pub post_id: String,
+    pub user_id: String,
+    pub share_via: Option<String>,
+    pub shared_with_user_id: Option<String>,
+    pub shared_at: String,
 }

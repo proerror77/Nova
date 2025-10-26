@@ -13,12 +13,18 @@ pub struct GraphService {
 impl GraphService {
     pub async fn new(cfg: &GraphConfig) -> Result<Self> {
         if !cfg.enabled {
-            return Ok(Self { graph: None, enabled: false });
+            return Ok(Self {
+                graph: None,
+                enabled: false,
+            });
         }
         let graph = Graph::new(&cfg.neo4j_uri, &cfg.neo4j_user, &cfg.neo4j_password)
             .await
             .map_err(|e| anyhow!("Neo4j connection error: {}", e))?;
-        let svc = Self { graph: Some(graph), enabled: true };
+        let svc = Self {
+            graph: Some(graph),
+            enabled: true,
+        };
         // Basic health check (ignore result)
         svc.health_check().await.ok();
         Ok(svc)
@@ -51,7 +57,9 @@ impl GraphService {
 
     /// Ensure user node exists
     async fn ensure_user_node(&self, user_id: Uuid) -> Result<()> {
-        if !self.enabled { return Ok(()); }
+        if !self.enabled {
+            return Ok(());
+        }
         let cypher = r#"
             MERGE (u:User {id: $id})
             ON CREATE SET u.created_at = timestamp()
@@ -71,7 +79,9 @@ impl GraphService {
 
     /// Create FOLLOWS relationship
     pub async fn follow(&self, follower: Uuid, followee: Uuid) -> Result<()> {
-        if !self.enabled { return Ok(()); }
+        if !self.enabled {
+            return Ok(());
+        }
         if follower == followee {
             return Ok(());
         }
@@ -86,9 +96,11 @@ impl GraphService {
             .graph
             .as_ref()
             .unwrap()
-            .execute(query(cypher)
-                .param("follower", follower.to_string())
-                .param("followee", followee.to_string()))
+            .execute(
+                query(cypher)
+                    .param("follower", follower.to_string())
+                    .param("followee", followee.to_string()),
+            )
             .await?;
         while let Ok(Some(_row)) = result.next().await {
             // drain
@@ -98,7 +110,9 @@ impl GraphService {
 
     /// Delete FOLLOWS relationship
     pub async fn unfollow(&self, follower: Uuid, followee: Uuid) -> Result<()> {
-        if !self.enabled { return Ok(()); }
+        if !self.enabled {
+            return Ok(());
+        }
         let cypher = r#"
             MATCH (a:User {id: $follower})-[r:FOLLOWS]->(b:User {id: $followee})
             DELETE r
@@ -107,9 +121,11 @@ impl GraphService {
             .graph
             .as_ref()
             .unwrap()
-            .execute(query(cypher)
-                .param("follower", follower.to_string())
-                .param("followee", followee.to_string()))
+            .execute(
+                query(cypher)
+                    .param("follower", follower.to_string())
+                    .param("followee", followee.to_string()),
+            )
             .await?;
         while let Ok(Some(_row)) = result.next().await {}
         Ok(())
@@ -117,7 +133,9 @@ impl GraphService {
 
     /// Suggested friends via friends-of-friends, excluding already-followed
     pub async fn suggested_friends(&self, user_id: Uuid, limit: usize) -> Result<Vec<(Uuid, u64)>> {
-        if !self.enabled { return Ok(vec![]); }
+        if !self.enabled {
+            return Ok(vec![]);
+        }
         let cypher = r#"
             MATCH (me:User {id: $uid})-[:FOLLOWS]->(:User)-[:FOLLOWS]->(c:User)
             WHERE c.id <> $uid AND NOT (me)-[:FOLLOWS]->(c)
@@ -129,9 +147,11 @@ impl GraphService {
             .graph
             .as_ref()
             .unwrap()
-            .execute(query(cypher)
-                .param("uid", user_id.to_string())
-                .param("limit", limit as i64))
+            .execute(
+                query(cypher)
+                    .param("uid", user_id.to_string())
+                    .param("limit", limit as i64),
+            )
             .await?;
         let mut out = Vec::new();
         while let Ok(Some(row)) = res.next().await {
@@ -146,7 +166,9 @@ impl GraphService {
 
     /// Count mutual connections between two users
     pub async fn mutual_count(&self, a: Uuid, b: Uuid) -> Result<u64> {
-        if !self.enabled { return Ok(0); }
+        if !self.enabled {
+            return Ok(0);
+        }
         let cypher = r#"
             MATCH (a:User {id: $a})-[:FOLLOWS]->(x:User)<-[:FOLLOWS]-(b:User {id: $b})
             RETURN count(distinct x) AS mutuals
@@ -155,7 +177,11 @@ impl GraphService {
             .graph
             .as_ref()
             .unwrap()
-            .execute(query(cypher).param("a", a.to_string()).param("b", b.to_string()))
+            .execute(
+                query(cypher)
+                    .param("a", a.to_string())
+                    .param("b", b.to_string()),
+            )
             .await?;
         while let Ok(Some(row)) = res.next().await {
             let mutuals: i64 = row.get("mutuals").unwrap_or(0);

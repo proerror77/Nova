@@ -1,6 +1,5 @@
 use crate::db::webhook_repo::{
-    get_webhooks_for_video, record_delivery_attempt, update_delivery_status,
-    WebhookDeliveryStatus,
+    get_webhooks_for_video, record_delivery_attempt, update_delivery_status, WebhookDeliveryStatus,
 };
 use crate::error::AppError;
 use crate::models::video::ProgressEvent;
@@ -47,9 +46,9 @@ impl WebhookSender {
 
     /// Send progress event to all registered webhooks (async, non-blocking)
     pub fn send_async(&self, event: ProgressEvent) -> Result<(), AppError> {
-        self.event_tx.send(event).map_err(|e| {
-            AppError::Internal(format!("Failed to queue webhook event: {}", e))
-        })?;
+        self.event_tx
+            .send(event)
+            .map_err(|e| AppError::Internal(format!("Failed to queue webhook event: {}", e)))?;
         Ok(())
     }
 
@@ -210,8 +209,8 @@ impl WebhookSender {
     /// Generate HMAC-SHA256 signature for webhook payload
     fn generate_signature(secret: &str, payload: &serde_json::Value) -> String {
         let payload_str = serde_json::to_string(payload).unwrap_or_default();
-        let mut mac = HmacSha256::new_from_slice(secret.as_bytes())
-            .expect("HMAC can take key of any size");
+        let mut mac =
+            HmacSha256::new_from_slice(secret.as_bytes()).expect("HMAC can take key of any size");
         mac.update(payload_str.as_bytes());
         hex::encode(mac.finalize().into_bytes())
     }

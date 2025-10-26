@@ -14,8 +14,8 @@ mod tests {
     use anyhow::Result;
     use redis::{aio::ConnectionManager, AsyncCommands};
     use user_service::services::streaming::{
-        CreateStreamRequest, RtmpWebhookHandler, StreamChatStore,
-        StreamDiscoveryService, StreamRepository, StreamService, ViewerCounter,
+        CreateStreamRequest, RtmpWebhookHandler, StreamChatStore, StreamDiscoveryService,
+        StreamRepository, StreamService, ViewerCounter,
     };
 
     async fn create_redis_manager() -> Result<ConnectionManager> {
@@ -23,7 +23,9 @@ mod tests {
             std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379/".to_string());
         let client = redis::Client::open(redis_url)?;
         let mut manager = ConnectionManager::new(client).await?;
-        redis::cmd("FLUSHDB").query_async::<_, ()>(&mut manager).await?;
+        redis::cmd("FLUSHDB")
+            .query_async::<_, ()>(&mut manager)
+            .await?;
         Ok(manager)
     }
 

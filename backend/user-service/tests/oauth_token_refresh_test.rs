@@ -22,10 +22,10 @@ mod oauth_token_refresh_tests {
     #[test]
     fn test_token_refresh_stats_initialization() {
         let mut stats = (
-            0u64, // total_refreshes_attempted
-            0u64, // successful_refreshes
-            0u64, // failed_refreshes
-            0u64, // skipped_tokens
+            0u64,        // total_refreshes_attempted
+            0u64,        // successful_refreshes
+            0u64,        // failed_refreshes
+            0u64,        // skipped_tokens
             None::<i64>, // last_refresh_at
         );
 
@@ -56,10 +56,10 @@ mod oauth_token_refresh_tests {
 
         // Mock tokens with different expiry times
         let tokens = vec![
-            ("google", now + 300), // Expires in 5 minutes (should refresh)
-            ("apple", now + 700), // Expires in 11+ minutes (should skip)
+            ("google", now + 300),   // Expires in 5 minutes (should refresh)
+            ("apple", now + 700),    // Expires in 11+ minutes (should skip)
             ("facebook", now + 100), // Expires in ~2 minutes (should refresh)
-            ("google", now - 100), // Already expired (should skip)
+            ("google", now - 100),   // Already expired (should skip)
         ];
 
         let expiring: Vec<_> = tokens
@@ -211,8 +211,8 @@ mod oauth_token_refresh_tests {
     #[test]
     fn test_concurrent_refresh_safety() {
         // Verify that multiple threads can safely update stats
-        use std::sync::Arc;
         use std::sync::atomic::{AtomicU64, Ordering};
+        use std::sync::Arc;
 
         let successful_refreshes = Arc::new(AtomicU64::new(0));
         let sr_clone = Arc::clone(&successful_refreshes);
@@ -247,7 +247,10 @@ mod oauth_token_refresh_tests {
         let endpoints = vec![
             ("google", "https://oauth2.googleapis.com/token"),
             ("apple", "https://appleid.apple.com/auth/token"),
-            ("facebook", "https://graph.instagram.com/refresh_access_token"),
+            (
+                "facebook",
+                "https://graph.instagram.com/refresh_access_token",
+            ),
         ];
 
         for (provider, endpoint) in endpoints {
@@ -275,10 +278,10 @@ mod oauth_token_refresh_tests {
 
         // Tokens in various states
         let tokens = vec![
-            ("id1", now + 60, false), // Expires in 1 minute (critical)
-            ("id2", now + 300, false), // Expires in 5 minutes (warning)
+            ("id1", now + 60, false),   // Expires in 1 minute (critical)
+            ("id2", now + 300, false),  // Expires in 5 minutes (warning)
             ("id3", now + 3600, false), // Expires in 1 hour (ok)
-            ("id4", now - 100, true), // Already expired (error)
+            ("id4", now - 100, true),   // Already expired (error)
         ];
 
         let critical = tokens
@@ -331,7 +334,8 @@ mod oauth_token_refresh_tests {
         assert!(verifier_part1.len() <= 128);
 
         // Check valid characters
-        let valid_chars = |c: char| c.is_ascii_alphanumeric() || c == '-' || c == '.' || c == '_' || c == '~';
+        let valid_chars =
+            |c: char| c.is_ascii_alphanumeric() || c == '-' || c == '.' || c == '_' || c == '~';
         assert!(verifier_part1.chars().all(valid_chars));
     }
 

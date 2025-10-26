@@ -2,11 +2,11 @@
 ///
 /// Background service for computing trending scores
 use sqlx::PgPool;
-use tracing::{info, error, debug};
+use tracing::{debug, error, info};
 
-use crate::db::trending_repo::{TrendingRepo, TimeWindow};
-use crate::error::Result;
 use super::algorithm::TrendingAlgorithm;
+use crate::db::trending_repo::{TimeWindow, TrendingRepo};
+use crate::error::Result;
 
 /// Trending compute service for background jobs
 pub struct TrendingComputeService {
@@ -62,11 +62,14 @@ impl TrendingComputeService {
         );
 
         // Refresh trending scores using database function
-        let updated = self.repo.refresh_trending_scores(
-            time_window,
-            category,
-            100, // Top 100 items
-        ).await?;
+        let updated = self
+            .repo
+            .refresh_trending_scores(
+                time_window,
+                category,
+                100, // Top 100 items
+            )
+            .await?;
 
         let duration = start.elapsed();
 
@@ -84,7 +87,8 @@ impl TrendingComputeService {
         category: &str,
         time_window: TimeWindow,
     ) -> Result<i32> {
-        self.compute_trending_scores(time_window, Some(category)).await
+        self.compute_trending_scores(time_window, Some(category))
+            .await
     }
 
     /// Compute trending for all categories
@@ -100,10 +104,16 @@ impl TrendingComputeService {
         ];
 
         for category in categories {
-            for window in &[TimeWindow::OneHour, TimeWindow::TwentyFourHours, TimeWindow::SevenDays] {
+            for window in &[
+                TimeWindow::OneHour,
+                TimeWindow::TwentyFourHours,
+                TimeWindow::SevenDays,
+            ] {
                 if let Err(e) = self.compute_category_trending(category, *window).await {
-                    error!("Failed to compute trending for category={}, window={}: {}",
-                        category, window, e);
+                    error!(
+                        "Failed to compute trending for category={}, window={}: {}",
+                        category, window, e
+                    );
                 }
             }
         }

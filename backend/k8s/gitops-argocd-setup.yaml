@@ -1,0 +1,347 @@
+---
+# ArgoCD GitOps Setup for Continuous Delivery
+# GitOps enables declarative deployment automation from Git repositories
+
+# Installation steps:
+# 1. kubectl create namespace argocd
+# 2. kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+# 3. kubectl apply -f gitops-argocd-setup.yaml
+
+---
+# Namespace for ArgoCD (create if not exists)
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: argocd
+  labels:
+    app: argocd
+    component: gitops
+
+---
+# Secret for Git repository access (SSH key for private repos)
+# Generate key: ssh-keygen -t rsa -b 4096 -C "argocd@nova.local"
+# Add public key to GitHub/GitLab deploy keys
+apiVersion: v1
+kind: Secret
+metadata:
+  name: nova-repo-credentials
+  namespace: argocd
+  labels:
+    argocd.argoproj.io/secret-type: repository
+type: Opaque
+stringData:
+  type: git
+  url: "https://github.com/your-org/nova.git"  # TODO: Update with your repo
+  password: "your-github-token"  # TODO: Use GitHub Personal Access Token
+  username: "git"
+
+---
+# ArgoCD Application for Messaging Service
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: messaging-service
+  namespace: argocd
+  labels:
+    app: nova
+    component: messaging-service
+spec:
+  # Project to use (default is "default")
+  project: default
+
+  # Source repository
+  source:
+    repoURL: "https://github.com/your-org/nova.git"  # TODO: Update with your repo
+    targetRevision: main
+    path: backend/k8s  # Path to K8s manifests in repo
+
+    # For Kustomize (if using kustomization.yaml)
+    # kustomize:
+    #   images:
+    #     - name: nova/messaging-service
+    #       newTag: "v1.0.0"
+
+  # Destination cluster and namespace
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: nova-messaging
+
+  # Sync strategy
+  syncPolicy:
+    automated:
+      prune: true      # Delete resources no longer in Git
+      selfHeal: true   # Resync if cluster diverges from Git
+      allow:
+        empty: false
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+
+---
+# ArgoCD Application for TURN Server
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: turn-server
+  namespace: argocd
+  labels:
+    app: nova
+    component: turn-server
+spec:
+  project: default
+
+  source:
+    repoURL: "https://github.com/your-org/nova.git"
+    targetRevision: main
+    path: backend/k8s
+    helm:
+      releaseName: turn-server
+      values: |
+        external_ip: "your-server-ip"
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: nova-turn
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+
+---
+# ArgoCD Application for Monitoring Stack
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: monitoring-stack
+  namespace: argocd
+  labels:
+    app: nova
+    component: monitoring
+spec:
+  project: default
+
+  source:
+    repoURL: "https://github.com/your-org/nova.git"
+    targetRevision: main
+    path: backend/k8s
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: nova-monitoring
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+
+---
+# AppProject for additional RBAC control
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: nova
+  namespace: argocd
+spec:
+  description: Nova Social Platform
+  sourceRepos:
+    - "https://github.com/your-org/nova.git"  # Allowed Git repos
+    - "https://kubernetes.github.io/ingress-nginx"  # Allowed Helm repos
+    - "https://charts.jetstack.io"
+  destinations:
+    - namespace: nova-*
+      server: https://kubernetes.default.svc
+    - namespace: argocd
+      server: https://kubernetes.default.svc
+    - namespace: ingress-nginx
+      server: https://kubernetes.default.svc
+  clusterResourceWhitelist:
+    - group: "*"
+      kind: "*"
+  namespaceResourceBlacklist:
+    - group: ""
+      kind: ResourceQuota
+    - group: ""
+      kind: LimitRange
+
+---
+# ServiceAccount for ArgoCD applications
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: argocd-app-deployer
+  namespace: argocd
+
+---
+# ClusterRole for ArgoCD app deployment
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: argocd-app-deployer
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments", "statefulsets", "daemonsets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["services", "configmaps", "secrets", "pods"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["autoscaling"]
+    resources: ["horizontalpodautoscalers"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+---
+# ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: argocd-app-deployer
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: argocd-app-deployer
+subjects:
+  - kind: ServiceAccount
+    name: argocd-app-deployer
+    namespace: argocd
+
+---
+# GitHub Actions Workflow Configuration (for CI)
+# This file should be placed in: .github/workflows/argocd-deploy.yml
+#
+# name: Deploy to ArgoCD on Push
+#
+# on:
+#   push:
+#     branches:
+#       - main
+#     paths:
+#       - 'backend/k8s/**'
+#       - '.github/workflows/argocd-deploy.yml'
+#
+# jobs:
+#   deploy:
+#     runs-on: ubuntu-latest
+#     steps:
+#       - uses: actions/checkout@v3
+#       - name: Trigger ArgoCD Sync
+#         env:
+#           ARGOCD_SERVER: ${{ secrets.ARGOCD_SERVER }}
+#           ARGOCD_TOKEN: ${{ secrets.ARGOCD_TOKEN }}
+#         run: |
+#           argocd app sync messaging-service --auth-token $ARGOCD_TOKEN --server $ARGOCD_SERVER
+#           argocd app wait messaging-service --auth-token $ARGOCD_TOKEN --server $ARGOCD_SERVER
+
+---
+# Notification Configuration for Slack updates
+# Apply this AFTER setting up ArgoCD secret with Slack webhook
+# apiVersion: v1
+# kind: ConfigMap
+# metadata:
+#   name: argocd-notifications-cm
+#   namespace: argocd
+# data:
+#   service.slack: |
+#     token: $slack-token
+#   trigger.on-deployed: |
+#     - when: app.status.operationState.finishedAt != '' and app.status.operationState.phase in ['Succeeded'] and app.status.health.status == 'Healthy'
+#       oncePer: app.status.operationState.finishedAt
+#       send: [app-deployed]
+#   trigger.on-health-degraded: |
+#     - when: app.status.health.status == 'Degraded'
+#       send: [app-health-degraded]
+#   trigger.on-sync-failed: |
+#     - when: app.status.operationState.phase in ['Error', 'Failed']
+#       send: [app-sync-failed]
+#   template.app-deployed: |
+#     message: |
+#       Application {{.app.metadata.name}} deployed.
+#       {{if eq .app.status.operationState.phase 'Succeeded'}}:white_check_mark:{{end}}
+#     slack:
+#       attachments: |
+#         [{
+#           "color": "{{if eq .app.status.operationState.phase 'Succeeded'}}#18be52{{end}}",
+#           "title": "{{ .app.metadata.name}}",
+#           "title_link":"{{.context.argocdUrl}}/applications/{{.app.metadata.name}}",
+#           "text":"{{.app.metadata.name}} deployment result"
+#         }]
+
+---
+# Flux CD Alternative (Lightweight GitOps)
+# If you prefer Flux CD over ArgoCD, uncomment below
+
+# apiVersion: source.toolkit.fluxcd.io/v1beta2
+# kind: GitRepository
+# metadata:
+#   name: nova-repo
+#   namespace: flux-system
+# spec:
+#   interval: 1m
+#   url: https://github.com/your-org/nova.git
+#   ref:
+#     branch: main
+#
+# ---
+# apiVersion: kustomize.toolkit.fluxcd.io/v1
+# kind: Kustomization
+# metadata:
+#   name: messaging-service
+#   namespace: flux-system
+# spec:
+#   interval: 10m
+#   sourceRef:
+#     kind: GitRepository
+#     name: nova-repo
+#   path: ./backend/k8s
+#   targetNamespace: nova-messaging
+#   prune: true
+#   wait: true
+
+---
+# Notes for GitOps Setup:
+#
+# 1. Prerequisites:
+#    - ArgoCD installed: kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+#    - GitHub token with repo access
+#    - Deploy key added to GitHub repository
+#
+# 2. Setup Git repository secrets:
+#    kubectl create secret generic nova-repo-credentials \
+#      --from-literal=username=git \
+#      --from-literal=password=<github-token> \
+#      -n argocd \
+#      --dry-run=client -o yaml | kubectl apply -f -
+#
+# 3. ArgoCD UI:
+#    kubectl port-forward svc/argocd-server -n argocd 8080:443
+#    https://localhost:8080
+#    Default username: admin
+#    Password: kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d
+#
+# 4. GitHub Webhook (optional but recommended):
+#    - Go to repository Settings → Webhooks
+#    - Add webhook: https://argocd.your-domain/api/webhook
+#    - This triggers automatic syncs on commits
+#
+# 5. Monitoring ArgoCD syncs:
+#    argocd app list
+#    argocd app get messaging-service
+#    argocd app logs messaging-service
+#
+# 6. Manual sync if needed:
+#    argocd app sync messaging-service
+#    argocd app sync messaging-service --prune --force
+#
+# 7. Rollback to previous version:
+#    argocd app rollback messaging-service <revision-number>

@@ -18,11 +18,19 @@ RUN cargo build --release
 
 FROM debian:bookworm-slim AS runtime
 RUN apt-get update && apt-get install -y ca-certificates libssl3 && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user and group
+RUN useradd -m -u 1001 -s /bin/bash appuser
+
 WORKDIR /app
 COPY --from=builder /app/target/release/search-service /app/search-service
 COPY migrations /app/migrations
+
+# Adjust ownership and drop privileges
+RUN chown -R appuser:appuser /app
+USER appuser
+
 ENV RUST_LOG=info
 ENV PORT=8081
 EXPOSE 8081
 CMD ["/app/search-service"]
-

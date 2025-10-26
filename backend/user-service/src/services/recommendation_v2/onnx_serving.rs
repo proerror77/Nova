@@ -53,21 +53,28 @@ impl ONNXModelServer {
         let start = std::time::Instant::now();
 
         // Validate that the model file can be loaded
-        match tract_onnx::onnx()
-            .model_for_path(model_path) {
+        match tract_onnx::onnx().model_for_path(model_path) {
             Ok(graph) => {
                 // Attempt optimization to catch errors early
                 if let Err(e) = graph.into_optimized() {
                     error!("Failed to optimize ONNX model: {}", e);
-                    return Err(AppError::Internal(
-                        format!("Failed to optimize ONNX model: {}", e)
-                    ));
+                    return Err(AppError::Internal(format!(
+                        "Failed to optimize ONNX model: {}",
+                        e
+                    )));
                 }
-                info!("ONNX model loaded and optimized: {} ({:?})", model_path, start.elapsed());
+                info!(
+                    "ONNX model loaded and optimized: {} ({:?})",
+                    model_path,
+                    start.elapsed()
+                );
             }
             Err(e) => {
                 error!("Failed to load ONNX model: {}", e);
-                return Err(AppError::Internal(format!("Failed to load ONNX model: {}", e)));
+                return Err(AppError::Internal(format!(
+                    "Failed to load ONNX model: {}",
+                    e
+                )));
             }
         }
 
@@ -84,21 +91,22 @@ impl ONNXModelServer {
         let start = std::time::Instant::now();
 
         // Validate the new model can be loaded
-        match tract_onnx::onnx()
-            .model_for_path(new_model_path) {
+        match tract_onnx::onnx().model_for_path(new_model_path) {
             Ok(graph) => {
                 if let Err(e) = graph.into_optimized() {
                     error!("Failed to optimize new ONNX model: {}", e);
-                    return Err(AppError::Internal(
-                        format!("Failed to optimize new ONNX model: {}", e)
-                    ));
+                    return Err(AppError::Internal(format!(
+                        "Failed to optimize new ONNX model: {}",
+                        e
+                    )));
                 }
             }
             Err(e) => {
                 error!("Failed to load new ONNX model: {}", e);
-                return Err(AppError::Internal(
-                    format!("Failed to load new ONNX model: {}", e)
-                ));
+                return Err(AppError::Internal(format!(
+                    "Failed to load new ONNX model: {}",
+                    e
+                )));
             }
         }
 
@@ -115,7 +123,8 @@ impl ONNXModelServer {
 
         info!(
             "Model reloaded in {:?}: {}",
-            start.elapsed(), *self.model_version.read().await
+            start.elapsed(),
+            *self.model_version.read().await
         );
 
         Ok(())
@@ -166,10 +175,7 @@ impl ONNXModelServer {
 
         // Warn if inference exceeds performance target
         if elapsed_ms > 100 {
-            warn!(
-                "Slow ONNX inference: {}ms (target: < 100ms)",
-                elapsed_ms
-            );
+            warn!("Slow ONNX inference: {}ms (target: < 100ms)", elapsed_ms);
         } else {
             info!("ONNX inference completed in {}ms", elapsed_ms);
         }
@@ -303,9 +309,6 @@ mod tests {
             extract_version_from_path("collaborative_latest.onnx"),
             "latest"
         );
-        assert_eq!(
-            extract_version_from_path("model.onnx"),
-            ""
-        );
+        assert_eq!(extract_version_from_path("model.onnx"), "");
     }
 }

@@ -160,7 +160,11 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for StreamChatActor {
     fn handle(&mut self, msg: Result<ws::Message, ws::ProtocolError>, ctx: &mut Self::Context) {
         match msg {
             Ok(ws::Message::Text(text)) => {
-                tracing::debug!("Received text from user {}: {} bytes", self.user_id, text.len());
+                tracing::debug!(
+                    "Received text from user {}: {} bytes",
+                    self.user_id,
+                    text.len()
+                );
 
                 // Parse JSON message
                 if let Ok(payload) = serde_json::from_str::<StreamChatMessage>(&text) {
@@ -168,7 +172,10 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for StreamChatActor {
                         StreamChatMessage::Message { text: msg_text } => {
                             // Validate message length
                             if msg_text.trim().is_empty() {
-                                tracing::debug!("Ignoring empty message from user {}", self.user_id);
+                                tracing::debug!(
+                                    "Ignoring empty message from user {}",
+                                    self.user_id
+                                );
                                 return;
                             }
                             if msg_text.len() > 500 {
@@ -205,7 +212,8 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for StreamChatActor {
                                 registry.broadcast(stream_id, comment_to_broadcast).await;
 
                                 // Persist to Redis chat history
-                                if let Err(e) = chat_store.append_comment(&comment_to_persist).await {
+                                if let Err(e) = chat_store.append_comment(&comment_to_persist).await
+                                {
                                     tracing::warn!("Failed to persist comment to Redis: {}", e);
                                 }
 
@@ -221,10 +229,16 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for StreamChatActor {
                                 });
 
                                 if let Err(e) = kafka_producer
-                                    .send_json(&comment_to_persist.id.to_string(), &kafka_payload.to_string())
+                                    .send_json(
+                                        &comment_to_persist.id.to_string(),
+                                        &kafka_payload.to_string(),
+                                    )
                                     .await
                                 {
-                                    tracing::warn!("Failed to publish chat message to Kafka: {}", e);
+                                    tracing::warn!(
+                                        "Failed to publish chat message to Kafka: {}",
+                                        e
+                                    );
                                 }
                             });
                         }

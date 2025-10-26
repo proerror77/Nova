@@ -1,10 +1,11 @@
-use messaging_service::{routes, state::AppState, db};
+use messaging_service::{config::Config, routes, state::AppState, db};
 use axum::Router;
 use testcontainers::{clients::Cli, images::postgres::Postgres as TcPostgres, images::generic::GenericImage, RunnableImage};
 use sqlx::{Pool, Postgres};
 use uuid::Uuid;
 use redis::Client as RedisClient;
 use base64::{engine::general_purpose, Engine as _};
+use std::sync::Arc;
 
 async fn start_db() -> (Cli, Pool<Postgres>) {
     let docker = Cli::default();
@@ -24,7 +25,13 @@ async fn start_db() -> (Cli, Pool<Postgres>) {
 
 async fn start_app(db: Pool<Postgres>, redis: RedisClient) -> String {
     let registry = messaging_service::websocket::ConnectionRegistry::new();
-    let state = AppState { db, registry: registry.clone(), redis: redis.clone() };
+    let state = AppState {
+        db,
+        registry: registry.clone(),
+        redis: redis.clone(),
+        config: Arc::new(Config::test_defaults()),
+        apns: None,
+    };
     let app: Router<AppState> = routes::build_router().with_state(state);
     let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
     let addr = listener.local_addr().unwrap();

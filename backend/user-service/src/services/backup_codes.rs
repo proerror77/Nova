@@ -1,12 +1,12 @@
 /// 备用码管理服务
 /// 用于 2FA 账户恢复 (当 Authenticator 应用丢失时)
 use anyhow::{anyhow, Context, Result};
+use argon2::password_hash::SaltString;
+use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier};
 use chrono::Utc;
+use rand::rngs::OsRng;
 use sqlx::PgPool;
 use uuid::Uuid;
-use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier};
-use argon2::password_hash::SaltString;
-use rand::rngs::OsRng;
 
 /// CRITICAL FIX: Use Argon2 for secure backup code hashing
 /// SHA256 is not sufficient for security-sensitive operations like 2FA recovery codes.

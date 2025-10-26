@@ -25,6 +25,8 @@ final class LocalMessageQueue {
         var mutableMessage = message
         mutableMessage.syncState = .localOnly
         mutableMessage.localModifiedAt = Date()
+        mutableMessage.retryCount = 0
+        mutableMessage.nextRetryAt = nil
 
         modelContext.insert(mutableMessage)
         try modelContext.save()
@@ -51,7 +53,12 @@ final class LocalMessageQueue {
         }
 
         let descriptor = FetchDescriptor(predicate: predicate)
-        let messages = try modelContext.fetch(descriptor)
+        let allMessages = try modelContext.fetch(descriptor)
+        let now = Date()
+        let messages = allMessages.filter { message in
+            guard let nextRetryAt = message.nextRetryAt else { return true }
+            return nextRetryAt <= now
+        }
 
         logQueue("🚰 Draining \(messages.count) offline messages for conversation: \(conversationId ?? "all")")
 
@@ -73,6 +80,8 @@ final class LocalMessageQueue {
 
         message.syncState = .synced
         message.updatedAt = Date()
+        message.retryCount = 0
+        message.nextRetryAt = nil
 
         try modelContext.save()
 
@@ -96,6 +105,27 @@ final class LocalMessageQueue {
         try modelContext.save()
 
         logQueue("🗑️  Removed message: \(messageId)")
+    }
+
+    /// 更新消息的重试信息
+    func updateRetryState(messageId: String, retryCount: Int, nextRetryAt: Date?) async throws {
+        var descriptor = FetchDescriptor<LocalMessage>(
+            predicate: #Predicate<LocalMessage> { $0.id == messageId }
+        )
+        descriptor.fetchLimit = 1
+
+        guard let message = try modelContext.fetch(descriptor).first else {
+            logQueue("⚠️  Message not found for retry update: \(messageId)")
+            return
+        }
+
+        message.retryCount = retryCount
+        message.nextRetryAt = nextRetryAt
+        message.localModifiedAt = Date()
+
+        try modelContext.save()
+
+        logQueue("🔁 Updated retry state for \(messageId) (retryCount=\(retryCount), nextRetryAt=\(String(describing: nextRetryAt)))")
     }
 
     // MARK: - Queue Status

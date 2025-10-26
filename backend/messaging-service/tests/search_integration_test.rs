@@ -18,17 +18,22 @@ async fn test_search_messages_with_pagination() {
 
     // Insert 100 test messages
     for i in 0..100 {
-        test_scenario.insert_message(
-            format!("Message with keyword search test number {}", i),
-            i as i64
-        ).await;
+        test_scenario
+            .insert_message(
+                format!("Message with keyword search test number {}", i),
+                i as i64,
+            )
+            .await;
     }
 
     // Test: Search with limit=20, offset=0
     let (results, total) = test_scenario.search("search", 20, 0, "recent").await;
     assert_eq!(total, 100, "Should find all 100 messages");
     assert_eq!(results.len(), 20, "Should return 20 results");
-    assert!(results[0].sequence_number > results[19].sequence_number, "Recent sort should return newest first");
+    assert!(
+        results[0].sequence_number > results[19].sequence_number,
+        "Recent sort should return newest first"
+    );
 
     // Test: Search with offset=80, should get remaining 20
     let (results, _) = test_scenario.search("search", 20, 80, "recent").await;
@@ -47,19 +52,31 @@ async fn test_search_messages_sorting() {
     let test_scenario = SearchTestScenario::new().await;
 
     // Insert messages with specific timestamps
-    test_scenario.insert_message("oldest message".to_string(), 1).await;
-    test_scenario.insert_message("middle message".to_string(), 2).await;
-    test_scenario.insert_message("newest message".to_string(), 3).await;
+    test_scenario
+        .insert_message("oldest message".to_string(), 1)
+        .await;
+    test_scenario
+        .insert_message("middle message".to_string(), 2)
+        .await;
+    test_scenario
+        .insert_message("newest message".to_string(), 3)
+        .await;
 
     // Test: Sort by recent (newest first)
     let (recent_results, _) = test_scenario.search("message", 10, 0, "recent").await;
     assert_eq!(recent_results.len(), 3);
-    assert_eq!(recent_results[0].sequence_number, 3, "Recent sort should put newest first");
+    assert_eq!(
+        recent_results[0].sequence_number, 3,
+        "Recent sort should put newest first"
+    );
 
     // Test: Sort by oldest (oldest first)
     let (oldest_results, _) = test_scenario.search("message", 10, 0, "oldest").await;
     assert_eq!(oldest_results.len(), 3);
-    assert_eq!(oldest_results[0].sequence_number, 1, "Oldest sort should put oldest first");
+    assert_eq!(
+        oldest_results[0].sequence_number, 1,
+        "Oldest sort should put oldest first"
+    );
 
     println!("✓ Sorting test passed");
 }
@@ -70,9 +87,15 @@ async fn test_search_messages_full_text() {
     let test_scenario = SearchTestScenario::new().await;
 
     // Insert test messages with different content
-    test_scenario.insert_message("The quick brown fox".to_string(), 1).await;
-    test_scenario.insert_message("jumps over the lazy dog".to_string(), 2).await;
-    test_scenario.insert_message("The fox is quick and smart".to_string(), 3).await;
+    test_scenario
+        .insert_message("The quick brown fox".to_string(), 1)
+        .await;
+    test_scenario
+        .insert_message("jumps over the lazy dog".to_string(), 2)
+        .await;
+    test_scenario
+        .insert_message("The fox is quick and smart".to_string(), 3)
+        .await;
 
     // Test: Search for "quick"
     let (results, _) = test_scenario.search("quick", 10, 0, "recent").await;
@@ -117,10 +140,19 @@ impl SearchTestScenario {
         println!("Inserted message: {} (seq: {})", content, sequence);
     }
 
-    async fn search(&self, query: &str, limit: i64, offset: i64, sort_by: &str) -> (Vec<SearchResult>, i64) {
+    async fn search(
+        &self,
+        query: &str,
+        limit: i64,
+        offset: i64,
+        sort_by: &str,
+    ) -> (Vec<SearchResult>, i64) {
         // Placeholder for actual implementation
         // In reality, this would call the MessageService::search_messages function
-        println!("Searching for '{}' with limit={}, offset={}, sort_by={}", query, limit, offset, sort_by);
+        println!(
+            "Searching for '{}' with limit={}, offset={}, sort_by={}",
+            query, limit, offset, sort_by
+        );
         (vec![], 0)
     }
 }

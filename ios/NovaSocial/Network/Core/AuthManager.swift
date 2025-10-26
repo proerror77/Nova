@@ -13,9 +13,19 @@ final class AuthManager {
     private let accessTokenKey = "access_token"
     private let refreshTokenKey = "refresh_token"
     private let tokenExpiryKey = "token_expiry"
+    private let currentUserKey = "current_user"
 
-    private(set) var currentUser: User?
-    private(set) var isAuthenticated: Bool = false
+    private let stateQueue = DispatchQueue(label: "com.nova.social.authmanager.state", attributes: .concurrent)
+    private var _currentUser: User?
+    private var _isAuthenticated: Bool = false
+
+    var currentUser: User? {
+        stateQueue.sync { _currentUser }
+    }
+
+    var isAuthenticated: Bool {
+        stateQueue.sync { _isAuthenticated }
+    }
 
     // MARK: - Computed Properties
 
@@ -47,9 +57,10 @@ final class AuthManager {
 
     /// 保存认证信息
     func saveAuth(user: User, tokens: AuthTokens) {
-        // 保存用户信息到 UserDefaults
+        // 保存用户信息到 Keychain
         if let userData = try? JSONEncoder().encode(user) {
-            UserDefaults.standard.set(userData, forKey: "current_user")
+            let encoded = userData.base64EncodedString()
+            saveToKeychain(value: encoded, key: currentUserKey)
         }
 
         // 保存 Tokens 到 Keychain
@@ -62,8 +73,10 @@ final class AuthManager {
         UserDefaults.standard.set(expiryString, forKey: tokenExpiryKey)
 
         // 更新状态
-        currentUser = user
-        isAuthenticated = true
+        stateQueue.sync(flags: .barrier) {
+            self._currentUser = user
+            self._isAuthenticated = true
+        }
 
         Logger.log("✅ Auth saved for user: \(user.username)", level: .info)
     }
@@ -84,14 +97,16 @@ final class AuthManager {
         // 清空 Keychain
         deleteFromKeychain(key: accessTokenKey)
         deleteFromKeychain(key: refreshTokenKey)
+        deleteFromKeychain(key: currentUserKey)
 
         // 清空 UserDefaults
-        UserDefaults.standard.removeObject(forKey: "current_user")
         UserDefaults.standard.removeObject(forKey: tokenExpiryKey)
 
         // 更新状态
-        currentUser = nil
-        isAuthenticated = false
+        stateQueue.sync(flags: .barrier) {
+            self._currentUser = nil
+            self._isAuthenticated = false
+        }
 
         Logger.log("✅ Auth cleared", level: .info)
     }
@@ -106,16 +121,26 @@ final class AuthManager {
     // MARK: - Private Helpers
 
     private func loadCurrentUser() {
-        guard let userData = UserDefaults.standard.data(forKey: "current_user"),
-              let user = try? JSONDecoder().decode(User.self, from: userData) else {
-            currentUser = nil
-            return
+        let decodedUser: User?
+        if let encoded = loadFromKeychain(key: currentUserKey),
+           let data = Data(base64Encoded: encoded),
+           let user = try? JSONDecoder().decode(User.self, from: data) {
+            decodedUser = user
+        } else {
+            decodedUser = nil
         }
-        currentUser = user
+
+        stateQueue.sync(flags: .barrier) {
+            self._currentUser = decodedUser
+        }
     }
 
     private func checkAuthenticationStatus() {
-        isAuthenticated = (currentUser != nil && accessToken != nil && !isTokenExpired)
+        let cachedUser = stateQueue.sync { self._currentUser }
+        let isValid = (cachedUser != nil && accessToken != nil && !isTokenExpired)
+        stateQueue.sync(flags: .barrier) {
+            self._isAuthenticated = isValid
+        }
     }
 
     // MARK: - Keychain Operations
@@ -169,6 +194,9 @@ final class AuthManager {
             kSecAttrAccount as String: key
         ]
 
-        SecItemDelete(query as CFDictionary)
+        let status = SecItemDelete(query as CFDictionary)
+        if status != errSecSuccess && status != errSecItemNotFound {
+            Logger.log("Keychain delete failed for key \(key): \(status)", level: .error)
+        }
     }
 }

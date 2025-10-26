@@ -1,19 +1,28 @@
-use axum::{extract::{Path, State, Query, Extension}, Json, http::StatusCode};
+use crate::{
+    error::AppError,
+    state::AppState,
+    websocket::events::{broadcast_event, WebSocketEvent},
+};
+use axum::{
+    extract::{Extension, Path, Query, State},
+    http::StatusCode,
+    Json,
+};
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
+use sqlx::Row;
 use std::collections::HashMap;
-use crate::{state::AppState, websocket::pubsub, error::AppError};
+use uuid::Uuid;
 
 #[derive(Deserialize)]
 pub struct AddReactionRequest {
-    pub emoji: String,  // Unicode emoji or emoji code
+    pub emoji: String, // Unicode emoji or emoji code
 }
 
 #[derive(Serialize)]
 pub struct ReactionCount {
     pub emoji: String,
     pub count: i64,
-    pub user_reacted: bool,  // Whether current user has this reaction
+    pub user_reacted: bool, // Whether current user has this reaction
 }
 
 #[derive(Serialize)]
@@ -35,13 +44,23 @@ pub async fn add_reaction(
         return Err(AppError::BadRequest("Invalid emoji".into()));
     }
 
+    // Get conversation_id for the message (for broadcasting on conversation channel)
+    let message_row = sqlx::query("SELECT conversation_id FROM messages WHERE id = $1")
+        .bind(message_id)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|e| AppError::StartServer(format!("fetch message: {e}")))?
+        .ok_or(AppError::NotFound)?;
+
+    let conversation_id: Uuid = message_row.get("conversation_id");
+
     // Add or update reaction (ON CONFLICT updates the reaction)
     sqlx::query(
         r#"
         INSERT INTO message_reactions (message_id, user_id, emoji)
         VALUES ($1, $2, $3)
         ON CONFLICT (message_id, user_id, emoji) DO NOTHING
-        "#
+        "#,
     )
     .bind(message_id)
     .bind(user_id)
@@ -50,16 +69,20 @@ pub async fn add_reaction(
     .await
     .map_err(|e| AppError::StartServer(format!("Failed to add reaction: {e}")))?;
 
-    // Broadcast reaction event
-    let payload = serde_json::json!({
-        "type": "reaction_added",
-        "message_id": message_id,
-        "emoji": body.emoji,
-        "timestamp": chrono::Utc::now().to_rfc3339(),
-    }).to_string();
+    // Broadcast reaction.added event using unified event system
+    let event = WebSocketEvent::ReactionAdded {
+        message_id,
+        emoji: body.emoji,
+    };
 
-    state.registry.broadcast(message_id, axum::extract::ws::Message::Text(payload.clone())).await;
-    let _ = pubsub::publish(&state.redis, message_id, &payload).await;
+    let _ = broadcast_event(
+        &state.registry,
+        &state.redis,
+        conversation_id,
+        user_id,
+        event,
+    )
+    .await;
 
     Ok(StatusCode::CREATED)
 }
@@ -79,7 +102,7 @@ pub async fn get_reactions(
         WHERE message_id = $1
         GROUP BY emoji
         ORDER BY count DESC
-        "#
+        "#,
     )
     .bind(message_id)
     .fetch_all(&state.db)
@@ -92,7 +115,7 @@ pub async fn get_reactions(
         SELECT DISTINCT emoji
         FROM message_reactions
         WHERE message_id = $1 AND user_id = $2
-        "#
+        "#,
     )
     .bind(message_id)
     .bind(user_id)
@@ -122,55 +145,94 @@ pub async fn get_reactions(
 
 /// DELETE /messages/{id}/reactions/{user_id}
 /// Remove a user's reactions from a message
+///
+/// Authorization:
+/// - Users can only remove their own reactions
+/// - OR conversation admins can remove any reaction
 pub async fn remove_reaction(
     State(state): State<AppState>,
-    Path((message_id, user_id)): Path<(Uuid, Uuid)>,
+    Extension(requesting_user_id): Extension<Uuid>, // From auth middleware
+    Path((message_id, target_user_id)): Path<(Uuid, Uuid)>,
     Query(params): Query<HashMap<String, String>>,
 ) -> Result<StatusCode, AppError> {
-    // If emoji query param provided, delete only that reaction
+    // 1. Get message and conversation_id to check admin status
+    let message_row = sqlx::query("SELECT conversation_id FROM messages WHERE id = $1")
+        .bind(message_id)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|e| AppError::StartServer(format!("fetch message: {e}")))?
+        .ok_or(AppError::NotFound)?;
+
+    let conversation_id: Uuid = message_row.get("conversation_id");
+
+    // 2. Check authorization: either own reaction OR admin
+    let is_own_reaction = requesting_user_id == target_user_id;
+
+    if !is_own_reaction {
+        // Verify requester is admin of conversation
+        let member = crate::middleware::guards::ConversationMember::verify(
+            &state.db,
+            requesting_user_id,
+            conversation_id,
+        )
+        .await?;
+
+        if !member.is_admin() {
+            return Err(AppError::Forbidden);
+        }
+    }
+
+    // 3. Delete reaction(s)
     if let Some(emoji) = params.get("emoji") {
-        sqlx::query(
-            "DELETE FROM message_reactions WHERE message_id = $1 AND user_id = $2 AND emoji = $3"
+        // Delete specific emoji reaction
+        let result = sqlx::query(
+            "DELETE FROM message_reactions WHERE message_id = $1 AND user_id = $2 AND emoji = $3 RETURNING id"
         )
         .bind(message_id)
-        .bind(user_id)
+        .bind(target_user_id)
         .bind(emoji)
-        .execute(&state.db)
+        .fetch_optional(&state.db)
         .await
         .map_err(|e| AppError::StartServer(format!("Failed to remove reaction: {e}")))?;
 
-        // Broadcast reaction removed event
-        let payload = serde_json::json!({
-            "type": "reaction_removed",
-            "message_id": message_id,
-            "user_id": user_id,
-            "emoji": emoji,
-            "timestamp": chrono::Utc::now().to_rfc3339(),
-        }).to_string();
+        if result.is_none() {
+            return Err(AppError::NotFound);
+        }
 
-        state.registry.broadcast(message_id, axum::extract::ws::Message::Text(payload.clone())).await;
-        let _ = pubsub::publish(&state.redis, message_id, &payload).await;
+        // Broadcast reaction.removed event using unified event system
+        let event = WebSocketEvent::ReactionRemoved {
+            message_id,
+            emoji: emoji.clone(),
+        };
+
+        let _ = broadcast_event(
+            &state.registry,
+            &state.redis,
+            conversation_id,
+            requesting_user_id,
+            event,
+        )
+        .await;
     } else {
         // Delete all reactions by this user for this message
-        sqlx::query(
-            "DELETE FROM message_reactions WHERE message_id = $1 AND user_id = $2"
+        sqlx::query("DELETE FROM message_reactions WHERE message_id = $1 AND user_id = $2")
+            .bind(message_id)
+            .bind(target_user_id)
+            .execute(&state.db)
+            .await
+            .map_err(|e| AppError::StartServer(format!("Failed to remove reactions: {e}")))?;
+
+        // Broadcast reaction.removed_all event using unified event system
+        let event = WebSocketEvent::ReactionRemovedAll { message_id };
+
+        let _ = broadcast_event(
+            &state.registry,
+            &state.redis,
+            conversation_id,
+            requesting_user_id,
+            event,
         )
-        .bind(message_id)
-        .bind(user_id)
-        .execute(&state.db)
-        .await
-        .map_err(|e| AppError::StartServer(format!("Failed to remove reactions: {e}")))?;
-
-        // Broadcast reactions removed event
-        let payload = serde_json::json!({
-            "type": "reactions_removed",
-            "message_id": message_id,
-            "user_id": user_id,
-            "timestamp": chrono::Utc::now().to_rfc3339(),
-        }).to_string();
-
-        state.registry.broadcast(message_id, axum::extract::ws::Message::Text(payload.clone())).await;
-        let _ = pubsub::publish(&state.redis, message_id, &payload).await;
+        .await;
     }
 
     Ok(StatusCode::NO_CONTENT)

@@ -95,10 +95,16 @@ pub fn spawn_video_processor_worker(
 
             match process_video_job(&pool, &s3_client, &s3_config, &job).await {
                 Ok(_) => {
-                    info!("Successfully processed video job for video_id={}", job.video_id);
+                    info!(
+                        "Successfully processed video job for video_id={}",
+                        job.video_id
+                    );
                 }
                 Err(e) => {
-                    error!("Failed to process video job for video_id={}: {}", job.video_id, e);
+                    error!(
+                        "Failed to process video job for video_id={}: {}",
+                        job.video_id, e
+                    );
 
                     // Mark video as failed
                     if let Err(db_err) =
@@ -220,9 +226,12 @@ async fn process_video_job(
 
     let ffprobe_output = TokioCommand::new("ffprobe")
         .args(&[
-            "-v", "error",
-            "-show_format", "-show_streams",
-            "-of", "json",
+            "-v",
+            "error",
+            "-show_format",
+            "-show_streams",
+            "-of",
+            "json",
             original_file.to_str().unwrap(),
         ])
         .output()
@@ -301,18 +310,29 @@ async fn process_video_job(
         let output_file = temp_dir.join(format!("{}.mp4", label));
         let bitrate_str = format!("{}k", bitrate);
 
-        info!("Transcoding to {}: {}x{} @ {}kbps", label, width, height, bitrate);
+        info!(
+            "Transcoding to {}: {}x{} @ {}kbps",
+            label, width, height, bitrate
+        );
 
         let transcode_status = TokioCommand::new("ffmpeg")
             .args(&[
-                "-i", original_file.to_str().unwrap(),
-                "-vf", &format!("scale={}:{}", width, height),
-                "-c:v", "libx264",
-                "-crf", "23",
-                "-b:v", &bitrate_str,
-                "-preset", "medium",
-                "-c:a", "aac",
-                "-b:a", "128k",
+                "-i",
+                original_file.to_str().unwrap(),
+                "-vf",
+                &format!("scale={}:{}", width, height),
+                "-c:v",
+                "libx264",
+                "-crf",
+                "23",
+                "-b:v",
+                &bitrate_str,
+                "-preset",
+                "medium",
+                "-c:a",
+                "aac",
+                "-b:a",
+                "128k",
                 "-y",
                 output_file.to_str().unwrap(),
             ])
@@ -420,7 +440,9 @@ async fn process_video_job(
         .bucket(&s3_config.bucket_name)
         .key(&playlist_s3_key)
         .content_type("application/vnd.apple.mpegurl")
-        .body(aws_sdk_s3::primitives::ByteStream::from(hls_playlist.into_bytes()))
+        .body(aws_sdk_s3::primitives::ByteStream::from(
+            hls_playlist.into_bytes(),
+        ))
         .send()
         .await
         .map_err(|e| anyhow::anyhow!("Failed to upload HLS playlist: {}", e))?;
@@ -443,8 +465,13 @@ async fn process_video_job(
     .await?;
 
     // Update with HLS master URL (using s3_url field for manifest)
-    video_repo::update_video_urls(pool, job.video_id, Some(&playlist_s3_key), Some(&hls_master_url))
-        .await?;
+    video_repo::update_video_urls(
+        pool,
+        job.video_id,
+        Some(&playlist_s3_key),
+        Some(&hls_master_url),
+    )
+    .await?;
 
     // ========================================
     // Step 12: Mark as published

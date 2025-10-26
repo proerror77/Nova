@@ -593,11 +593,14 @@ pub async fn get_post_videos(
     .fetch_all(pool)
     .await?;
 
-    let videos = rows.iter().map(|r| {
-        let video_id: Uuid = r.get("video_id");
-        let position: i32 = r.get("position");
-        (video_id, position)
-    }).collect();
+    let videos = rows
+        .iter()
+        .map(|r| {
+            let video_id: Uuid = r.get("video_id");
+            let position: i32 = r.get("position");
+            (video_id, position)
+        })
+        .collect();
 
     Ok(videos)
 }
@@ -606,7 +609,17 @@ pub async fn get_post_videos(
 pub async fn get_post_videos_with_metadata(
     pool: &PgPool,
     post_id: Uuid,
-) -> Result<Vec<(Uuid, String, Option<String>, Option<String>, Option<i32>, i32)>, sqlx::Error> {
+) -> Result<
+    Vec<(
+        Uuid,
+        String,
+        Option<String>,
+        Option<String>,
+        Option<i32>,
+        i32,
+    )>,
+    sqlx::Error,
+> {
     let rows = sqlx::query(
         r#"
         SELECT
@@ -626,15 +639,25 @@ pub async fn get_post_videos_with_metadata(
     .fetch_all(pool)
     .await?;
 
-    let videos = rows.iter().map(|r| {
-        let video_id: Uuid = r.get("id");
-        let video_id_str: String = r.get("video_id_str");
-        let cdn_url: Option<String> = r.get("cdn_url");
-        let thumbnail_url: Option<String> = r.get("thumbnail_url");
-        let duration_seconds: Option<i32> = r.get("duration_seconds");
-        let position: i32 = r.get("position");
-        (video_id, video_id_str, cdn_url, thumbnail_url, duration_seconds, position)
-    }).collect();
+    let videos = rows
+        .iter()
+        .map(|r| {
+            let video_id: Uuid = r.get("id");
+            let video_id_str: String = r.get("video_id_str");
+            let cdn_url: Option<String> = r.get("cdn_url");
+            let thumbnail_url: Option<String> = r.get("thumbnail_url");
+            let duration_seconds: Option<i32> = r.get("duration_seconds");
+            let position: i32 = r.get("position");
+            (
+                video_id,
+                video_id_str,
+                cdn_url,
+                thumbnail_url,
+                duration_seconds,
+                position,
+            )
+        })
+        .collect();
 
     Ok(videos)
 }

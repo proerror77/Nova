@@ -1,12 +1,14 @@
 use rand::{rngs::OsRng, RngCore};
+use std::os::raw::{c_uchar, c_ulong};
 use std::ptr;
 use std::slice;
-use std::os::raw::{c_uchar, c_ulong};
 
 #[derive(Debug, thiserror::Error)]
 pub enum CryptoError {
-    #[error("encryption error")] Encryption,
-    #[error("decryption error")] Decryption,
+    #[error("encryption error")]
+    Encryption,
+    #[error("decryption error")]
+    Decryption,
 }
 
 pub fn generate_nonce() -> [u8; 24] {
@@ -16,7 +18,12 @@ pub fn generate_nonce() -> [u8; 24] {
 }
 
 // E2E encryption using crypto::box_ (Curve25519XSalsa20Poly1305)
-pub fn encrypt(plaintext: &[u8], recipient_public_key: &[u8], sender_secret_key: &[u8], nonce: &[u8]) -> Result<Vec<u8>, CryptoError> {
+pub fn encrypt(
+    plaintext: &[u8],
+    recipient_public_key: &[u8],
+    sender_secret_key: &[u8],
+    nonce: &[u8],
+) -> Result<Vec<u8>, CryptoError> {
     sodiumoxide::init().map_err(|_| CryptoError::Encryption)?;
     use sodiumoxide::crypto::box_;
     let pk = box_::PublicKey::from_slice(recipient_public_key).ok_or(CryptoError::Encryption)?;
@@ -25,7 +32,12 @@ pub fn encrypt(plaintext: &[u8], recipient_public_key: &[u8], sender_secret_key:
     Ok(box_::seal(plaintext, &nonce, &pk, &sk))
 }
 
-pub fn decrypt(ciphertext: &[u8], sender_public_key: &[u8], recipient_secret_key: &[u8], nonce: &[u8]) -> Result<Vec<u8>, CryptoError> {
+pub fn decrypt(
+    ciphertext: &[u8],
+    sender_public_key: &[u8],
+    recipient_secret_key: &[u8],
+    nonce: &[u8],
+) -> Result<Vec<u8>, CryptoError> {
     sodiumoxide::init().map_err(|_| CryptoError::Decryption)?;
     use sodiumoxide::crypto::box_;
     let pk = box_::PublicKey::from_slice(sender_public_key).ok_or(CryptoError::Decryption)?;
@@ -35,7 +47,11 @@ pub fn decrypt(ciphertext: &[u8], sender_public_key: &[u8], recipient_secret_key
 }
 
 // Symmetric secretbox for encryption-at-rest (server-side key)
-pub fn encrypt_at_rest(plaintext: &[u8], key32: &[u8], nonce: &[u8]) -> Result<Vec<u8>, CryptoError> {
+pub fn encrypt_at_rest(
+    plaintext: &[u8],
+    key32: &[u8],
+    nonce: &[u8],
+) -> Result<Vec<u8>, CryptoError> {
     sodiumoxide::init().map_err(|_| CryptoError::Encryption)?;
     use sodiumoxide::crypto::secretbox;
     let key = secretbox::Key::from_slice(key32).ok_or(CryptoError::Encryption)?;
@@ -43,13 +59,20 @@ pub fn encrypt_at_rest(plaintext: &[u8], key32: &[u8], nonce: &[u8]) -> Result<V
     Ok(secretbox::seal(plaintext, &nonce, &key))
 }
 
-pub fn decrypt_at_rest(ciphertext: &[u8], key32: &[u8], nonce: &[u8]) -> Result<Vec<u8>, CryptoError> {
+pub fn decrypt_at_rest(
+    ciphertext: &[u8],
+    key32: &[u8],
+    nonce: &[u8],
+) -> Result<Vec<u8>, CryptoError> {
     sodiumoxide::init().map_err(|_| CryptoError::Decryption)?;
     use sodiumoxide::crypto::secretbox;
     let key = secretbox::Key::from_slice(key32).ok_or(CryptoError::Decryption)?;
     let nonce = secretbox::Nonce::from_slice(nonce).ok_or(CryptoError::Decryption)?;
     secretbox::open(ciphertext, &nonce, &key).map_err(|_| CryptoError::Decryption)
 }
+
+// Expose JWT utilities (RS256-only) for services
+pub mod jwt;
 
 // =============================
 // C FFI (for iOS xcframework)
@@ -58,7 +81,9 @@ pub fn decrypt_at_rest(ciphertext: &[u8], key32: &[u8], nonce: &[u8]) -> Result<
 #[no_mangle]
 pub extern "C" fn cryptocore_generate_nonce(out_buf: *mut c_uchar, out_len: c_ulong) -> c_ulong {
     let len = out_len as usize;
-    if out_buf.is_null() || len < 24 { return 0; }
+    if out_buf.is_null() || len < 24 {
+        return 0;
+    }
     let mut nonce = generate_nonce();
     unsafe {
         ptr::copy_nonoverlapping(nonce.as_ptr(), out_buf, 24);
@@ -68,10 +93,14 @@ pub extern "C" fn cryptocore_generate_nonce(out_buf: *mut c_uchar, out_len: c_ul
 
 #[no_mangle]
 pub extern "C" fn cryptocore_encrypt(
-    plaintext_ptr: *const c_uchar, plaintext_len: c_ulong,
-    recipient_pk_ptr: *const c_uchar, recipient_pk_len: c_ulong,
-    sender_sk_ptr: *const c_uchar, sender_sk_len: c_ulong,
-    nonce_ptr: *const c_uchar, nonce_len: c_ulong,
+    plaintext_ptr: *const c_uchar,
+    plaintext_len: c_ulong,
+    recipient_pk_ptr: *const c_uchar,
+    recipient_pk_len: c_ulong,
+    sender_sk_ptr: *const c_uchar,
+    sender_sk_len: c_ulong,
+    nonce_ptr: *const c_uchar,
+    nonce_len: c_ulong,
     out_len_ptr: *mut c_ulong,
 ) -> *mut c_uchar {
     let pt = unsafe { slice::from_raw_parts(plaintext_ptr, plaintext_len as usize) };
@@ -82,7 +111,11 @@ pub extern "C" fn cryptocore_encrypt(
         Ok(ct) => {
             let mut v = ct;
             let len = v.len() as c_ulong;
-            unsafe { if !out_len_ptr.is_null() { *out_len_ptr = len; } }
+            unsafe {
+                if !out_len_ptr.is_null() {
+                    *out_len_ptr = len;
+                }
+            }
             let ptr = v.as_mut_ptr();
             std::mem::forget(v);
             ptr
@@ -93,10 +126,14 @@ pub extern "C" fn cryptocore_encrypt(
 
 #[no_mangle]
 pub extern "C" fn cryptocore_decrypt(
-    ciphertext_ptr: *const c_uchar, ciphertext_len: c_ulong,
-    sender_pk_ptr: *const c_uchar, sender_pk_len: c_ulong,
-    recipient_sk_ptr: *const c_uchar, recipient_sk_len: c_ulong,
-    nonce_ptr: *const c_uchar, nonce_len: c_ulong,
+    ciphertext_ptr: *const c_uchar,
+    ciphertext_len: c_ulong,
+    sender_pk_ptr: *const c_uchar,
+    sender_pk_len: c_ulong,
+    recipient_sk_ptr: *const c_uchar,
+    recipient_sk_len: c_ulong,
+    nonce_ptr: *const c_uchar,
+    nonce_len: c_ulong,
     out_len_ptr: *mut c_ulong,
 ) -> *mut c_uchar {
     let ct = unsafe { slice::from_raw_parts(ciphertext_ptr, ciphertext_len as usize) };
@@ -107,7 +144,11 @@ pub extern "C" fn cryptocore_decrypt(
         Ok(pt) => {
             let mut v = pt;
             let len = v.len() as c_ulong;
-            unsafe { if !out_len_ptr.is_null() { *out_len_ptr = len; } }
+            unsafe {
+                if !out_len_ptr.is_null() {
+                    *out_len_ptr = len;
+                }
+            }
             let ptr = v.as_mut_ptr();
             std::mem::forget(v);
             ptr
@@ -118,7 +159,9 @@ pub extern "C" fn cryptocore_decrypt(
 
 #[no_mangle]
 pub extern "C" fn cryptocore_free(buf_ptr: *mut c_uchar, buf_len: c_ulong) {
-    if buf_ptr.is_null() { return; }
+    if buf_ptr.is_null() {
+        return;
+    }
     unsafe {
         let _ = Vec::from_raw_parts(buf_ptr, buf_len as usize, buf_len as usize);
     }
