@@ -28,10 +28,7 @@ pub async fn create_email_verification(
     Ok(verification)
 }
 
-pub async fn get_email_verification(
-    pool: &PgPool,
-    token_hash: &str,
-) -> Result<EmailVerification> {
+pub async fn get_email_verification(pool: &PgPool, token_hash: &str) -> Result<EmailVerification> {
     let verification = sqlx::query_as::<_, EmailVerification>(
         r#"
         SELECT * FROM email_verifications WHERE token_hash = $1 AND is_used = false AND expires_at > CURRENT_TIMESTAMP

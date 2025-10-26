@@ -68,7 +68,7 @@ impl ConversationService {
             crate::error::AppError::StartServer(format!("insert conversation: {e}"))
         })?;
         sqlx::query(
-            "INSERT INTO conversation_members (conversation_id, user_id, role) VALUES ($1, $2, 'member'), ($1, $3, 'member')"
+            "INSERT INTO conversation_members (conversation_id, user_id, role) VALUES ($1, $2, 'member'), ($1, $3, 'member') ON CONFLICT DO NOTHING"
         )
         .bind(id)
         .bind(a)
@@ -380,7 +380,7 @@ impl ConversationService {
             };
 
             sqlx::query(
-                "INSERT INTO conversation_members (conversation_id, user_id, role) VALUES ($1, $2, $3)"
+                "INSERT INTO conversation_members (conversation_id, user_id, role) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING"
             )
             .bind(conversation_id)
             .bind(member_id)

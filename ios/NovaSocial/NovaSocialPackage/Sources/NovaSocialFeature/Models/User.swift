@@ -1,7 +1,7 @@
 import Foundation
 
 /// Represents a user in the Nova Social network
-struct User: Codable, Sendable, Identifiable, Equatable {
+struct User: Codable, Sendable, Identifiable, Equatable, Hashable {
     let id: String
     let username: String
     let displayName: String

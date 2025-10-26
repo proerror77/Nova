@@ -830,7 +830,16 @@ async fn main() -> io::Result<()> {
                                     ),
                             ),
                     )
-                    // Users endpoints
+                    // Authenticated user endpoints under /users/me (must be defined BEFORE /users/{id})
+                    .service(
+                        web::scope("/users/me")
+                            .wrap(JwtAuthMiddleware)
+                            .route("", web::get().to(handlers::get_current_user))
+                            .route("", web::patch().to(handlers::update_profile))
+                            .route("/public-key", web::put().to(handlers::upsert_my_public_key))
+                            .route("/bookmarks", web::get().to(handlers::get_user_bookmarks)),
+                    )
+                    // Users endpoints (place after /users/me to avoid route collision)
                     .service(
                         web::scope("/users")
                             .app_data(graph_data.clone())
@@ -857,15 +866,6 @@ async fn main() -> io::Result<()> {
                             )
                             .route("/{id}/followers", web::get().to(handlers::get_followers))
                             .route("/{id}/following", web::get().to(handlers::get_following)),
-                    )
-                    // Authenticated user endpoints under /users/me
-                    .service(
-                        web::scope("/users/me")
-                            .wrap(JwtAuthMiddleware)
-                            .route("", web::get().to(handlers::get_current_user))
-                            .route("", web::patch().to(handlers::update_profile))
-                            .route("/public-key", web::put().to(handlers::upsert_my_public_key))
-                            .route("/bookmarks", web::get().to(handlers::get_user_bookmarks)),
                     )
                     // Posts endpoints (protected with JWT authentication)
                     .service(
