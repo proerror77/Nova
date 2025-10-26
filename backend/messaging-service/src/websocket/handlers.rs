@@ -1,19 +1,30 @@
-use axum::{extract::{ws::{WebSocketUpgrade, WebSocket, Message}, State, Query}, response::IntoResponse};
-use axum::http::HeaderMap;
-use futures_util::{StreamExt, SinkExt};
-use serde::Deserialize;
-use uuid::Uuid;
-use std::sync::Arc;
-use tokio::sync::Mutex;
-use crate::state::AppState;
-use crate::websocket::message_types::{WsInboundEvent, WsOutboundEvent};
+use crate::middleware::auth::verify_jwt;
 use crate::services::conversation_service::ConversationService;
 use crate::services::offline_queue;
-use crate::middleware::auth::verify_jwt;
-use tracing::{warn, error};
+use crate::state::AppState;
+use crate::websocket::events::{broadcast_event, WebSocketEvent};
+use crate::websocket::message_types::WsInboundEvent;
+use axum::http::HeaderMap;
+use axum::{
+    extract::{
+        ws::{Message, WebSocket, WebSocketUpgrade},
+        Query, State,
+    },
+    response::IntoResponse,
+};
+use futures_util::{SinkExt, StreamExt};
+use serde::Deserialize;
+use std::sync::Arc;
+use tokio::sync::Mutex;
+use tracing::{error, warn};
+use uuid::Uuid;
 
 #[derive(Debug, Deserialize)]
-pub struct WsParams { pub conversation_id: Uuid, pub user_id: Uuid, pub token: Option<String> }
+pub struct WsParams {
+    pub conversation_id: Uuid,
+    pub user_id: Uuid,
+    pub token: Option<String>,
+}
 
 // === Extracted: Extract message ID from broadcast message (简化逻辑) ===
 fn extract_message_id(text: &str) -> String {
@@ -73,34 +84,47 @@ async fn handle_client_message(
 // === Extracted: Handle WebSocket event ===
 async fn handle_ws_event(evt: &WsInboundEvent, params: &WsParams, state: &AppState) {
     match evt {
-        WsInboundEvent::Typing { conversation_id, user_id } => {
+        WsInboundEvent::Typing {
+            conversation_id,
+            user_id,
+        } => {
             // Validate event belongs to this connection
             if conversation_id != &params.conversation_id || user_id != &params.user_id {
                 return;
             }
 
-            let out = WsOutboundEvent::Typing {
+            // Broadcast typing.started event using unified event system
+            let event = WebSocketEvent::TypingStarted {
                 conversation_id: *conversation_id,
-                user_id: *user_id
             };
 
-            if let Ok(out_txt) = serde_json::to_string(&out) {
-                state.registry.broadcast(*conversation_id, Message::Text(out_txt.clone())).await;
-                let _ = crate::websocket::pubsub::publish(&state.redis, *conversation_id, &out_txt).await;
-            } else {
-                error!("Failed to serialize typing event for conversation {}, user {}", conversation_id, user_id);
-            }
+            let _ = broadcast_event(
+                &state.registry,
+                &state.redis,
+                *conversation_id,
+                *user_id,
+                event,
+            )
+            .await;
         }
 
-        WsInboundEvent::Ack { msg_id, conversation_id } => {
+        WsInboundEvent::Ack {
+            msg_id,
+            conversation_id,
+        } => {
             // Client acknowledges receipt of a message
             if conversation_id != &params.conversation_id {
                 return;
             }
 
-            let manager = state.ack_pool.get_or_create(params.user_id).await;
-            manager.handle_ack(msg_id).await;
-            tracing::debug!("Message {} acknowledged by user {}", msg_id, params.user_id);
+            // TODO: Implement ACK pool system for message delivery guarantees
+            // let manager = state.ack_pool.get_or_create(params.user_id).await;
+            // manager.handle_ack(msg_id).await;
+            tracing::debug!(
+                "Message {} acknowledged by user {} (ACK system not yet implemented)",
+                msg_id,
+                params.user_id
+            );
         }
 
         WsInboundEvent::GetUnacked => {
@@ -112,17 +136,20 @@ async fn handle_ws_event(evt: &WsInboundEvent, params: &WsParams, state: &AppSta
 }
 
 // === Extracted: Token validation - MANDATORY, no bypasses ===
-async fn validate_ws_token(params: &WsParams, headers: &HeaderMap) -> Result<(), axum::http::StatusCode> {
+async fn validate_ws_token(
+    params: &WsParams,
+    headers: &HeaderMap,
+) -> Result<(), axum::http::StatusCode> {
     // SECURITY: JWT validation is MANDATORY. No exceptions, no dev flags.
     // Fail-closed: if JWT is missing or invalid, reject the connection immediately.
 
-    let token = params.token.clone()
-        .or_else(|| {
-            headers.get(axum::http::header::AUTHORIZATION)
-                .and_then(|v| v.to_str().ok())
-                .and_then(|s| s.strip_prefix("Bearer "))
-                .map(|s| s.to_string())
-        });
+    let token = params.token.clone().or_else(|| {
+        headers
+            .get(axum::http::header::AUTHORIZATION)
+            .and_then(|v| v.to_str().ok())
+            .and_then(|s| s.strip_prefix("Bearer "))
+            .map(|s| s.to_string())
+    });
 
     match token {
         None => {
@@ -130,13 +157,20 @@ async fn validate_ws_token(params: &WsParams, headers: &HeaderMap) -> Result<(),
             Err(axum::http::StatusCode::UNAUTHORIZED)
         }
         Some(t) => {
-            verify_jwt(&t).await
+            verify_jwt(&t)
+                .await
                 .map(|claims| {
                     // Log successful authentication
-                    tracing::debug!("✅ WebSocket authentication successful for user: {}", claims.sub);
+                    tracing::debug!(
+                        "✅ WebSocket authentication successful for user: {}",
+                        claims.sub
+                    );
                 })
                 .map_err(|e| {
-                    error!("🚫 WebSocket connection REJECTED: Invalid JWT token - {:?}", e);
+                    error!(
+                        "🚫 WebSocket connection REJECTED: Invalid JWT token - {:?}",
+                        e
+                    );
                     axum::http::StatusCode::UNAUTHORIZED
                 })
         }
@@ -164,13 +198,18 @@ async fn verify_conversation_membership(state: &AppState, params: &WsParams) -> 
 
     match ConversationService::is_member(&state.db, params.conversation_id, params.user_id).await {
         Ok(true) => {
-            tracing::debug!("✅ WebSocket authorization: user {} is member of conversation {}",
-                params.user_id, params.conversation_id);
+            tracing::debug!(
+                "✅ WebSocket authorization: user {} is member of conversation {}",
+                params.user_id,
+                params.conversation_id
+            );
             Ok(())
         }
         Ok(false) => {
-            error!("🚫 WebSocket connection REJECTED: user {} is NOT a member of conversation {}",
-                params.user_id, params.conversation_id);
+            error!(
+                "🚫 WebSocket connection REJECTED: user {} is NOT a member of conversation {}",
+                params.user_id, params.conversation_id
+            );
             Err(())
         }
         Err(e) => {
@@ -183,13 +222,17 @@ async fn verify_conversation_membership(state: &AppState, params: &WsParams) -> 
 
 async fn handle_socket(state: AppState, params: WsParams, mut socket: WebSocket) {
     // Early return on membership check failure
-    if verify_conversation_membership(&state, &params).await.is_err() {
+    if verify_conversation_membership(&state, &params)
+        .await
+        .is_err()
+    {
         let _ = socket.send(Message::Close(None)).await;
         return;
     }
 
     // === STEP 0: Initialize ACK Manager for this user ===
-    let ack_manager = state.ack_pool.get_or_create(params.user_id).await;
+    // TODO: Implement ACK pool system for message delivery guarantees
+    // let ack_manager = state.ack_pool.get_or_create(params.user_id).await;
 
     // === STEP 1: Generate unique client ID and initialize consumer group ===
     let client_id = Uuid::new_v4();
@@ -249,14 +292,15 @@ async fn handle_socket(state: AppState, params: WsParams, mut socket: WebSocket)
         if let Some(payload) = fields.get("payload") {
             let msg = Message::Text(payload.clone());
             if sender.send(msg).await.is_err() {
-                return;  // Connection closed
+                return; // Connection closed
             }
             // Acknowledge after successful send (idempotent)
             let _ = offline_queue::acknowledge_message(
                 &state.redis,
                 params.conversation_id,
                 &stream_id,
-            ).await;
+            )
+            .await;
         }
     }
 
@@ -276,7 +320,7 @@ async fn handle_socket(state: AppState, params: WsParams, mut socket: WebSocket)
                     client_id,
                     user_id,
                     conversation_id,
-                    last_message_id: "consumer-active".to_string(),  // Monitoring flag
+                    last_message_id: "consumer-active".to_string(), // Monitoring flag
                     last_sync_at: chrono::Utc::now().timestamp(),
                 };
                 let _ = offline_queue::update_client_sync_state(&redis, &sync_state).await;
@@ -292,7 +336,7 @@ async fn handle_socket(state: AppState, params: WsParams, mut socket: WebSocket)
         let conversation_id = params.conversation_id;
 
         tokio::spawn(async move {
-            let mut interval = tokio::time::interval(std::time::Duration::from_secs(3600));  // Every hour
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(3600)); // Every hour
             loop {
                 interval.tick().await;
                 // Trim stream to keep only 10,000 most recent messages
@@ -305,19 +349,20 @@ async fn handle_socket(state: AppState, params: WsParams, mut socket: WebSocket)
     };
 
     // === STEP 5.5: ACK timeout checking ===
+    // TODO: Implement ACK pool system for message delivery guarantees
     // Spawn background task to periodically check for timed-out messages
     // and automatically retry with exponential backoff
-    let ack_timeout_task = {
-        let ack_manager = ack_manager.clone();
-
-        tokio::spawn(async move {
-            let mut interval = tokio::time::interval(std::time::Duration::from_secs(10));  // Check every 10 seconds
-            loop {
-                interval.tick().await;
-                ack_manager.check_timeouts().await;
-            }
-        })
-    };
+    // let ack_timeout_task = {
+    //     let ack_manager = ack_manager.clone();
+    //
+    //     tokio::spawn(async move {
+    //         let mut interval = tokio::time::interval(std::time::Duration::from_secs(10));
+    //         loop {
+    //             interval.tick().await;
+    //             ack_manager.check_timeouts().await;
+    //         }
+    //     })
+    // };
 
     // === STEP 6: MAIN MESSAGE LOOP ===
     // Multiplex incoming client messages and outgoing broadcast messages
@@ -356,7 +401,10 @@ async fn handle_socket(state: AppState, params: WsParams, mut socket: WebSocket)
     // === STEP 7: CLEANUP ===
     // CRITICAL: Remove subscriber from registry FIRST to prevent memory leak
     // This is the primary defense against accumulating dead senders
-    state.registry.remove_subscriber(params.conversation_id, subscriber_id).await;
+    state
+        .registry
+        .remove_subscriber(params.conversation_id, subscriber_id)
+        .await;
     tracing::debug!(
         "Removed subscriber {} from conversation {} registry",
         format!("{:?}", subscriber_id),
@@ -376,10 +424,11 @@ async fn handle_socket(state: AppState, params: WsParams, mut socket: WebSocket)
     // Cancel background tasks
     monitoring_task.abort();
     trimming_task.abort();
-    ack_timeout_task.abort();
+    // TODO: Re-enable when ACK system is implemented
+    // ack_timeout_task.abort();
 
-    // Cleanup ACK manager on disconnect
-    state.ack_pool.cleanup(params.user_id).await;
+    // TODO: Cleanup ACK manager on disconnect
+    // state.ack_pool.cleanup(params.user_id).await;
 
     tracing::debug!(
         "WebSocket connection closed for user {} in conversation {}",

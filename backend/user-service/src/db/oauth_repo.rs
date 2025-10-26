@@ -49,12 +49,10 @@ pub async fn create_connection(
     let (access_token_encrypted, refresh_token_encrypted, tokens_encrypted) =
         match get_encryption_service() {
             Some(service) => {
-                let access_enc: Option<Vec<u8>> = service
-                    .encrypt(access_token)
-                    .ok();
+                let access_enc: Option<Vec<u8>> = service.encrypt(access_token).ok();
 
-                let refresh_enc: Option<Vec<u8>> = refresh_token
-                    .and_then(|rt| service.encrypt(rt).ok());
+                let refresh_enc: Option<Vec<u8>> =
+                    refresh_token.and_then(|rt| service.encrypt(rt).ok());
 
                 (access_enc, refresh_enc, true)
             }
@@ -79,7 +77,7 @@ pub async fn create_connection(
                   access_token_hash, refresh_token_hash, token_expires_at,
                   access_token_encrypted, refresh_token_encrypted, tokens_encrypted,
                   created_at, updated_at
-        "#
+        "#,
     )
     .bind(id)
     .bind(user_id)
@@ -154,12 +152,10 @@ pub async fn update_tokens(
     let (access_token_encrypted, refresh_token_encrypted, tokens_encrypted) =
         match get_encryption_service() {
             Some(service) => {
-                let access_enc: Option<Vec<u8>> = service
-                    .encrypt(access_token)
-                    .ok();
+                let access_enc: Option<Vec<u8>> = service.encrypt(access_token).ok();
 
-                let refresh_enc: Option<Vec<u8>> = refresh_token
-                    .and_then(|rt| service.encrypt(rt).ok());
+                let refresh_enc: Option<Vec<u8>> =
+                    refresh_token.and_then(|rt| service.encrypt(rt).ok());
 
                 (access_enc, refresh_enc, true)
             }
@@ -188,7 +184,7 @@ pub async fn update_tokens(
                   access_token_hash, refresh_token_hash, token_expires_at,
                   access_token_encrypted, refresh_token_encrypted, tokens_encrypted,
                   created_at, updated_at
-        "#
+        "#,
     )
     .bind(access_token_hash)
     .bind(refresh_token_hash)
@@ -313,13 +309,10 @@ pub async fn get_decrypted_access_token(
 
     let (encrypted_opt,) = row.ok_or_else(|| "Connection not found".to_string())?;
 
-    let encrypted_bytes = encrypted_opt.ok_or_else(|| {
-        "Access token not encrypted".to_string()
-    })?;
+    let encrypted_bytes = encrypted_opt.ok_or_else(|| "Access token not encrypted".to_string())?;
 
-    let service = get_encryption_service().ok_or_else(|| {
-        "Token encryption service not configured".to_string()
-    })?;
+    let service = get_encryption_service()
+        .ok_or_else(|| "Token encryption service not configured".to_string())?;
 
     service
         .decrypt(&encrypted_bytes)

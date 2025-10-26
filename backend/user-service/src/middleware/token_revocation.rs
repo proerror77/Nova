@@ -2,7 +2,6 @@
 ///
 /// CRITICAL FIX: Check if JWT token has been revoked before allowing access
 /// This prevents stolen tokens from being used after logout or password change
-
 use actix_web::{
     dev::{forward_ready, Service, ServiceRequest, ServiceResponse, Transform},
     Error, HttpMessage,

@@ -8,3 +8,8 @@ rand = { workspace = true }
 serde = { version = "1", features = ["derive"] }
 thiserror = { workspace = true }
 sodiumoxide = { version = "0.2" }
+anyhow = { workspace = true }
+chrono = { workspace = true }
+once_cell = { workspace = true }
+jsonwebtoken = { workspace = true }
+uuid = { workspace = true }

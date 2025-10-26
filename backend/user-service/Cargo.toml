@@ -89,6 +89,9 @@ http = "0.2"
 tract-onnx = "0.21"
 once_cell = "1.19"
 
+# Swagger/OpenAPI
+utoipa.workspace = true
+
 [dev-dependencies]
 tokio-test = "0.4"
 mockall = "0.12"

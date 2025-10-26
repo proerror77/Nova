@@ -5,7 +5,6 @@
 /// - PUT /uploads/{id}/chunks/{index}: Upload single chunk
 /// - POST /uploads/{id}/complete: Complete upload and trigger processing
 /// - GET /uploads/{id}: Get upload status and progress
-
 use actix_multipart::Multipart;
 use actix_web::{web, HttpMessage, HttpRequest, HttpResponse};
 use futures_util::StreamExt;
@@ -247,7 +246,8 @@ pub async fn upload_chunk(
     let mut chunk_hash: Option<String> = None;
 
     while let Some(field) = payload.next().await {
-        let mut field = field.map_err(|e| AppError::BadRequest(format!("Multipart error: {}", e)))?;
+        let mut field =
+            field.map_err(|e| AppError::BadRequest(format!("Multipart error: {}", e)))?;
 
         let field_name = field.name();
 
@@ -255,16 +255,16 @@ pub async fn upload_chunk(
             "chunk" => {
                 // Read chunk bytes
                 while let Some(chunk) = field.next().await {
-                    let data =
-                        chunk.map_err(|e| AppError::BadRequest(format!("Chunk read error: {}", e)))?;
+                    let data = chunk
+                        .map_err(|e| AppError::BadRequest(format!("Chunk read error: {}", e)))?;
                     chunk_data.extend_from_slice(&data);
                 }
             }
             "hash" => {
                 // Optional hash from client for verification
                 while let Some(chunk) = field.next().await {
-                    let data =
-                        chunk.map_err(|e| AppError::BadRequest(format!("Hash read error: {}", e)))?;
+                    let data = chunk
+                        .map_err(|e| AppError::BadRequest(format!("Hash read error: {}", e)))?;
                     chunk_hash = Some(String::from_utf8_lossy(&data).to_string());
                 }
             }
@@ -359,9 +359,10 @@ pub async fn complete_upload(
     // Complete S3 multipart upload
     let s3_client = s3_service::get_s3_client(&config.s3).await?;
     let s3_key = format!("uploads/{}/video", upload_id);
-    let s3_upload_id = upload.s3_upload_id.as_ref().ok_or_else(|| {
-        AppError::Internal("S3 upload ID missing".into())
-    })?;
+    let s3_upload_id = upload
+        .s3_upload_id
+        .as_ref()
+        .ok_or_else(|| AppError::Internal("S3 upload ID missing".into()))?;
 
     ResumableUploadService::complete_s3_multipart(
         &s3_client,
@@ -426,10 +427,8 @@ pub async fn get_upload_status(
         .map_err(|e| AppError::Internal(format!("Failed to fetch upload: {}", e)))?
         .ok_or_else(|| AppError::NotFound("Upload not found".into()))?;
 
-    let progress = ResumableUploadService::calculate_progress(
-        upload.chunks_completed,
-        upload.chunks_total,
-    );
+    let progress =
+        ResumableUploadService::calculate_progress(upload.chunks_completed, upload.chunks_total);
 
     Ok(HttpResponse::Ok().json(UploadStatusResponse {
         upload_id: upload.id,

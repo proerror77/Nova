@@ -9,7 +9,6 @@
 /// - Single-use (deleted after validation)
 /// - Provider-specific (validated against claimed provider)
 /// - PKCE-aware (stores code_challenge and method if provided)
-
 use redis::AsyncCommands;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -83,11 +82,12 @@ impl OAuthStateManager {
         };
 
         // Serialize and store in Redis with TTL
-        let json = serde_json::to_string(&state)
-            .map_err(|e| redis::RedisError::from(std::io::Error::new(
+        let json = serde_json::to_string(&state).map_err(|e| {
+            redis::RedisError::from(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
                 format!("Failed to serialize OAuth state: {}", e),
-            )))?;
+            ))
+        })?;
 
         let key = format!("{}{}", self.key_prefix, state_token);
 
@@ -121,11 +121,12 @@ impl OAuthStateManager {
 
         match json {
             Some(json_str) => {
-                let state: OAuthState = serde_json::from_str(&json_str)
-                    .map_err(|e| redis::RedisError::from(std::io::Error::new(
+                let state: OAuthState = serde_json::from_str(&json_str).map_err(|e| {
+                    redis::RedisError::from(std::io::Error::new(
                         std::io::ErrorKind::InvalidData,
                         format!("Failed to deserialize OAuth state: {}", e),
-                    )))?;
+                    ))
+                })?;
 
                 // Verify provider if specified
                 if let Some(provider) = expected_provider {
@@ -223,10 +224,10 @@ impl OAuthStateManager {
         let keys: Vec<String> = conn.keys(&format!("{}*", self.key_prefix)).await?;
 
         let stats = OAuthStateStats {
-            total_states_created: 0, // Would need separate tracking
+            total_states_created: 0,   // Would need separate tracking
             total_states_validated: 0, // Would need separate tracking
-            total_states_consumed: 0, // Would need separate tracking
-            total_states_expired: 0, // Would need separate tracking
+            total_states_consumed: 0,  // Would need separate tracking
+            total_states_expired: 0,   // Would need separate tracking
             current_active_states: keys.len(),
         };
 

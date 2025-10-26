@@ -1,0 +1,351 @@
+---
+# Nova API Gateway - Kubernetes Ingress Configuration
+#
+# This Ingress resource provides unified routing for all Nova backend services
+# in a Kubernetes environment. It mirrors the Nginx configuration used in
+# Docker Compose for consistency across environments.
+#
+# Prerequisites:
+# - Nginx Ingress Controller installed in cluster
+# - Services deployed: user-service, messaging-service, search-service
+# - TLS certificate (optional, for HTTPS)
+#
+# Apply with:
+#   kubectl apply -f ingress.yaml
+
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: nova-api-gateway
+  namespace: nova
+  annotations:
+    # Nginx Ingress Controller annotations
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+    nginx.ingress.kubernetes.io/use-regex: "true"
+
+    # Rate limiting
+    nginx.ingress.kubernetes.io/limit-rps: "100"
+    nginx.ingress.kubernetes.io/limit-burst-multiplier: "5"
+
+    # CORS configuration
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    nginx.ingress.kubernetes.io/cors-allow-origin: "*"
+    nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+    nginx.ingress.kubernetes.io/cors-allow-headers: "DNT,X-CustomHeader,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Authorization"
+    nginx.ingress.kubernetes.io/cors-max-age: "3600"
+
+    # Security headers
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      add_header X-Frame-Options "SAMEORIGIN" always;
+      add_header X-Content-Type-Options "nosniff" always;
+      add_header X-XSS-Protection "1; mode=block" always;
+      add_header Referrer-Policy "no-referrer-when-downgrade" always;
+
+    # Timeouts
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+
+    # Client body size (for file uploads)
+    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
+
+    # Connection settings
+    nginx.ingress.kubernetes.io/upstream-keepalive-connections: "32"
+    nginx.ingress.kubernetes.io/upstream-keepalive-timeout: "60"
+
+    # SSL/TLS (uncomment for HTTPS)
+    # cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    # nginx.ingress.kubernetes.io/ssl-redirect: "true"
+
+  labels:
+    app: nova-api-gateway
+    component: ingress
+    environment: production
+
+spec:
+  ingressClassName: nginx
+
+  # TLS configuration (uncomment for HTTPS)
+  # tls:
+  #   - hosts:
+  #       - api.nova.example.com
+  #     secretName: nova-api-tls
+
+  rules:
+    - host: api.nova.local  # Change to your domain in production
+      http:
+        paths:
+          # ============================================
+          # Health Checks
+          # ============================================
+          - path: /health
+            pathType: Exact
+            backend:
+              service:
+                name: user-service
+                port:
+                  number: 8080
+
+          # ============================================
+          # Authentication & User Management (user-service)
+          # ============================================
+          - path: /api/v1/auth
+            pathType: Prefix
+            backend:
+              service:
+                name: user-service
+                port:
+                  number: 8080
+
+          - path: /api/v1/users
+            pathType: Prefix
+            backend:
+              service:
+                name: user-service
+                port:
+                  number: 8080
+
+          - path: /api/v1/posts
+            pathType: Prefix
+            backend:
+              service:
+                name: user-service
+                port:
+                  number: 8080
+
+          - path: /api/v1/comments
+            pathType: Prefix
+            backend:
+              service:
+                name: user-service
+                port:
+                  number: 8080
+
+          - path: /api/v1/feed
+            pathType: Prefix
+            backend:
+              service:
+                name: user-service
+                port:
+                  number: 8080
+
+          - path: /api/v1/stories
+            pathType: Prefix
+            backend:
+              service:
+                name: user-service
+                port:
+                  number: 8080
+
+          - path: /api/v1/videos
+            pathType: Prefix
+            backend:
+              service:
+                name: user-service
+                port:
+                  number: 8080
+
+          - path: /api/v1/uploads
+            pathType: Prefix
+            backend:
+              service:
+                name: user-service
+                port:
+                  number: 8080
+
+          - path: /api/v1/streams
+            pathType: Prefix
+            backend:
+              service:
+                name: user-service
+                port:
+                  number: 8080
+
+          - path: /api/v1/discover
+            pathType: Prefix
+            backend:
+              service:
+                name: user-service
+                port:
+                  number: 8080
+
+          - path: /api/v1/trending
+            pathType: Prefix
+            backend:
+              service:
+                name: user-service
+                port:
+                  number: 8080
+
+          - path: /api/v1/events
+            pathType: Prefix
+            backend:
+              service:
+                name: user-service
+                port:
+                  number: 8080
+
+          - path: /api/v1/admin
+            pathType: Prefix
+            backend:
+              service:
+                name: user-service
+                port:
+                  number: 8080
+
+          # ============================================
+          # Messaging Service
+          # ============================================
+          - path: /api/v1/conversations
+            pathType: Prefix
+            backend:
+              service:
+                name: messaging-service
+                port:
+                  number: 3000
+
+          - path: /api/v1/messages
+            pathType: Prefix
+            backend:
+              service:
+                name: messaging-service
+                port:
+                  number: 3000
+
+          # ============================================
+          # Search Service
+          # ============================================
+          - path: /api/v1/search
+            pathType: Prefix
+            backend:
+              service:
+                name: search-service
+                port:
+                  number: 8086
+
+          # ============================================
+          # WebSocket Endpoints
+          # ============================================
+          - path: /ws
+            pathType: Prefix
+            backend:
+              service:
+                name: user-service
+                port:
+                  number: 8080
+
+          # ============================================
+          # Documentation & OpenAPI
+          # ============================================
+          - path: /api/v1/openapi.json
+            pathType: Exact
+            backend:
+              service:
+                name: user-service
+                port:
+                  number: 8080
+
+          - path: /swagger-ui
+            pathType: Prefix
+            backend:
+              service:
+                name: user-service
+                port:
+                  number: 8080
+
+          - path: /docs
+            pathType: Exact
+            backend:
+              service:
+                name: user-service
+                port:
+                  number: 8080
+
+          - path: /.well-known
+            pathType: Prefix
+            backend:
+              service:
+                name: user-service
+                port:
+                  number: 8080
+
+          - path: /metrics
+            pathType: Exact
+            backend:
+              service:
+                name: user-service
+                port:
+                  number: 8080
+
+---
+# Rate Limiting ConfigMap (for advanced rate limiting)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nova-ingress-rate-limit
+  namespace: nova
+data:
+  # Rate limiting zones
+  limit-rps: "100"
+  limit-burst-multiplier: "5"
+
+  # Search-specific rate limiting
+  search-limit-rps: "20"
+  search-limit-burst-multiplier: "2"
+
+---
+# Service definitions (example - adjust ports as needed)
+# These should match your actual service deployments
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: user-service
+  namespace: nova
+  labels:
+    app: user-service
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: 8080
+      protocol: TCP
+      name: http
+  selector:
+    app: user-service
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: messaging-service
+  namespace: nova
+  labels:
+    app: messaging-service
+spec:
+  type: ClusterIP
+  ports:
+    - port: 3000
+      targetPort: 3000
+      protocol: TCP
+      name: http
+  selector:
+    app: messaging-service
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: search-service
+  namespace: nova
+  labels:
+    app: search-service
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8086
+      targetPort: 8086
+      protocol: TCP
+      name: http
+  selector:
+    app: search-service

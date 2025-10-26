@@ -3,16 +3,21 @@ use serde::Serialize;
 use sqlx::{PgPool, Row};
 use uuid::Uuid;
 
+use crate::cache::{
+    invalidate_search_cache, invalidate_search_cache_with_retry, invalidate_user_cache,
+    invalidate_user_cache_with_retry, FeedCache,
+};
 use crate::db::user_repo;
+use crate::metrics::helpers::record_social_follow_event;
 use crate::middleware::jwt_auth::UserId;
 use crate::services::graph::GraphService;
 use crate::services::kafka_producer::EventProducer;
 use std::sync::Arc;
-use crate::metrics::helpers::record_social_follow_event;
-use crate::cache::{FeedCache, invalidate_search_cache, invalidate_user_cache, invalidate_user_cache_with_retry, invalidate_search_cache_with_retry};
 
 #[derive(Serialize)]
-struct FollowResponse { status: String }
+struct FollowResponse {
+    status: String,
+}
 
 /// POST /api/v1/users/{id}/follow
 pub async fn follow_user(
@@ -25,7 +30,9 @@ pub async fn follow_user(
 ) -> HttpResponse {
     let target_id = match Uuid::parse_str(&path.into_inner()) {
         Ok(id) => id,
-        Err(_) => return HttpResponse::BadRequest().json(serde_json::json!({"error": "invalid user id"})),
+        Err(_) => {
+            return HttpResponse::BadRequest().json(serde_json::json!({"error": "invalid user id"}))
+        }
     };
 
     if target_id == user.0 {
@@ -33,21 +40,20 @@ pub async fn follow_user(
     }
 
     // Ensure target user exists
-    let exists: bool = match sqlx::query_scalar::<_, bool>(
-        "SELECT EXISTS(SELECT 1 FROM users WHERE id = $1)",
-    )
-    .bind(target_id)
-    .fetch_one(pool.get_ref())
-    .await
-    {
-        Ok(v) => v,
-        Err(e) => {
-            return HttpResponse::InternalServerError().json(serde_json::json!({
-                "error": "db_error",
-                "details": e.to_string()
-            }));
-        }
-    };
+    let exists: bool =
+        match sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM users WHERE id = $1)")
+            .bind(target_id)
+            .fetch_one(pool.get_ref())
+            .await
+        {
+            Ok(v) => v,
+            Err(e) => {
+                return HttpResponse::InternalServerError().json(serde_json::json!({
+                    "error": "db_error",
+                    "details": e.to_string()
+                }));
+            }
+        };
     if !exists {
         return HttpResponse::NotFound().json(serde_json::json!({"error":"user_not_found"}));
     }
@@ -101,20 +107,31 @@ pub async fn follow_user(
 
                 // CRITICAL FIX: Use retry mechanism for cache invalidation
                 // to ensure cache is properly invalidated even with transient Redis errors
-                if let Err(e) = invalidate_user_cache_with_retry(redis_manager.get_ref(), user.0).await {
+                if let Err(e) =
+                    invalidate_user_cache_with_retry(redis_manager.get_ref(), user.0).await
+                {
                     tracing::warn!("Failed to invalidate user cache after retries: {}", e);
                 }
-                if let Err(e) = invalidate_user_cache_with_retry(redis_manager.get_ref(), target_id).await {
-                    tracing::warn!("Failed to invalidate target user cache after retries: {}", e);
+                if let Err(e) =
+                    invalidate_user_cache_with_retry(redis_manager.get_ref(), target_id).await
+                {
+                    tracing::warn!(
+                        "Failed to invalidate target user cache after retries: {}",
+                        e
+                    );
                 }
 
                 // Invalidate search caches - follow relationship affects search visibility
-                if let Err(e) = invalidate_search_cache_with_retry(redis_manager.get_ref(), "").await {
+                if let Err(e) =
+                    invalidate_search_cache_with_retry(redis_manager.get_ref(), "").await
+                {
                     tracing::warn!("Failed to invalidate search cache after retries: {}", e);
                 }
             }
 
-            HttpResponse::Ok().json(FollowResponse { status: "ok".into() })
+            HttpResponse::Ok().json(FollowResponse {
+                status: "ok".into(),
+            })
         }
         Err(e) => HttpResponse::InternalServerError().json(serde_json::json!({
             "error": "db_error",
@@ -134,7 +151,9 @@ pub async fn unfollow_user(
 ) -> HttpResponse {
     let target_id = match Uuid::parse_str(&path.into_inner()) {
         Ok(id) => id,
-        Err(_) => return HttpResponse::BadRequest().json(serde_json::json!({"error": "invalid user id"})),
+        Err(_) => {
+            return HttpResponse::BadRequest().json(serde_json::json!({"error": "invalid user id"}))
+        }
     };
 
     let query = r#"
@@ -183,20 +202,31 @@ pub async fn unfollow_user(
 
                 // CRITICAL FIX: Use retry mechanism for cache invalidation
                 // to ensure cache is properly invalidated even with transient Redis errors
-                if let Err(e) = invalidate_user_cache_with_retry(redis_manager.get_ref(), user.0).await {
+                if let Err(e) =
+                    invalidate_user_cache_with_retry(redis_manager.get_ref(), user.0).await
+                {
                     tracing::warn!("Failed to invalidate user cache after retries: {}", e);
                 }
-                if let Err(e) = invalidate_user_cache_with_retry(redis_manager.get_ref(), target_id).await {
-                    tracing::warn!("Failed to invalidate target user cache after retries: {}", e);
+                if let Err(e) =
+                    invalidate_user_cache_with_retry(redis_manager.get_ref(), target_id).await
+                {
+                    tracing::warn!(
+                        "Failed to invalidate target user cache after retries: {}",
+                        e
+                    );
                 }
 
                 // Invalidate search caches - follow relationship affects search visibility
-                if let Err(e) = invalidate_search_cache_with_retry(redis_manager.get_ref(), "").await {
+                if let Err(e) =
+                    invalidate_search_cache_with_retry(redis_manager.get_ref(), "").await
+                {
                     tracing::warn!("Failed to invalidate search cache after retries: {}", e);
                 }
             }
 
-            HttpResponse::Ok().json(FollowResponse { status: "ok".into() })
+            HttpResponse::Ok().json(FollowResponse {
+                status: "ok".into(),
+            })
         }
         Err(e) => HttpResponse::InternalServerError().json(serde_json::json!({
             "error": "db_error",
@@ -223,8 +253,16 @@ pub async fn get_followers(
         Ok(id) => id,
         Err(_) => return HttpResponse::BadRequest().finish(),
     };
-    let limit = q.get("limit").and_then(|s| s.parse::<i64>().ok()).unwrap_or(50).clamp(1, 200);
-    let offset = q.get("offset").and_then(|s| s.parse::<i64>().ok()).unwrap_or(0).max(0);
+    let limit = q
+        .get("limit")
+        .and_then(|s| s.parse::<i64>().ok())
+        .unwrap_or(50)
+        .clamp(1, 200);
+    let offset = q
+        .get("offset")
+        .and_then(|s| s.parse::<i64>().ok())
+        .unwrap_or(0)
+        .max(0);
 
     // OPTIMIZED: JOIN with users table to get username and avatar in single query
     let sql = r#"
@@ -245,12 +283,18 @@ pub async fn get_followers(
         Ok(rows) => {
             let users: Vec<RelationshipUser> = rows
                 .into_iter()
-                .map(|(user_id, username, avatar_url)| RelationshipUser { user_id, username, avatar_url })
+                .map(|(user_id, username, avatar_url)| RelationshipUser {
+                    user_id,
+                    username,
+                    avatar_url,
+                })
                 .collect();
             let count = users.len();
             HttpResponse::Ok().json(serde_json::json!({"users": users, "count": count}))
         }
-        Err(e) => HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()})),
+        Err(e) => {
+            HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()}))
+        }
     }
 }
 
@@ -265,8 +309,16 @@ pub async fn get_following(
         Ok(id) => id,
         Err(_) => return HttpResponse::BadRequest().finish(),
     };
-    let limit = q.get("limit").and_then(|s| s.parse::<i64>().ok()).unwrap_or(50).clamp(1, 200);
-    let offset = q.get("offset").and_then(|s| s.parse::<i64>().ok()).unwrap_or(0).max(0);
+    let limit = q
+        .get("limit")
+        .and_then(|s| s.parse::<i64>().ok())
+        .unwrap_or(50)
+        .clamp(1, 200);
+    let offset = q
+        .get("offset")
+        .and_then(|s| s.parse::<i64>().ok())
+        .unwrap_or(0)
+        .max(0);
 
     // OPTIMIZED: JOIN with users table to get username and avatar in single query
     let sql = r#"
@@ -287,12 +339,18 @@ pub async fn get_following(
         Ok(rows) => {
             let users: Vec<RelationshipUser> = rows
                 .into_iter()
-                .map(|(user_id, username, avatar_url)| RelationshipUser { user_id, username, avatar_url })
+                .map(|(user_id, username, avatar_url)| RelationshipUser {
+                    user_id,
+                    username,
+                    avatar_url,
+                })
                 .collect();
             let count = users.len();
             HttpResponse::Ok().json(serde_json::json!({"users": users, "count": count}))
         }
-        Err(e) => HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()})),
+        Err(e) => {
+            HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()}))
+        }
     }
 }
 
@@ -305,11 +363,14 @@ pub async fn block_user(
 ) -> HttpResponse {
     let target_id = match Uuid::parse_str(&path.into_inner()) {
         Ok(id) => id,
-        Err(_) => return HttpResponse::BadRequest().json(serde_json::json!({"error": "invalid user id"})),
+        Err(_) => {
+            return HttpResponse::BadRequest().json(serde_json::json!({"error": "invalid user id"}))
+        }
     };
 
     if target_id == user.0 {
-        return HttpResponse::BadRequest().json(serde_json::json!({"error": "cannot block yourself"}));
+        return HttpResponse::BadRequest()
+            .json(serde_json::json!({"error": "cannot block yourself"}));
     }
 
     match user_repo::block_user(pool.get_ref(), user.0, target_id).await {
@@ -317,18 +378,29 @@ pub async fn block_user(
             // Invalidate caches after blocking user
             if let Some(redis_manager) = redis_manager {
                 // CRITICAL FIX: Use retry mechanism for cache invalidation
-                if let Err(e) = invalidate_user_cache_with_retry(redis_manager.get_ref(), user.0).await {
+                if let Err(e) =
+                    invalidate_user_cache_with_retry(redis_manager.get_ref(), user.0).await
+                {
                     tracing::warn!("Failed to invalidate user cache after retries: {}", e);
                 }
-                if let Err(e) = invalidate_user_cache_with_retry(redis_manager.get_ref(), target_id).await {
-                    tracing::warn!("Failed to invalidate target user cache after retries: {}", e);
+                if let Err(e) =
+                    invalidate_user_cache_with_retry(redis_manager.get_ref(), target_id).await
+                {
+                    tracing::warn!(
+                        "Failed to invalidate target user cache after retries: {}",
+                        e
+                    );
                 }
                 // Search caches affected by block status change
-                if let Err(e) = invalidate_search_cache_with_retry(redis_manager.get_ref(), "").await {
+                if let Err(e) =
+                    invalidate_search_cache_with_retry(redis_manager.get_ref(), "").await
+                {
                     tracing::warn!("Failed to invalidate search cache after retries: {}", e);
                 }
             }
-            HttpResponse::Ok().json(FollowResponse { status: "ok".into() })
+            HttpResponse::Ok().json(FollowResponse {
+                status: "ok".into(),
+            })
         }
         Err(e) => HttpResponse::InternalServerError().json(serde_json::json!({
             "error": "db_error",
@@ -346,7 +418,9 @@ pub async fn unblock_user(
 ) -> HttpResponse {
     let target_id = match Uuid::parse_str(&path.into_inner()) {
         Ok(id) => id,
-        Err(_) => return HttpResponse::BadRequest().json(serde_json::json!({"error": "invalid user id"})),
+        Err(_) => {
+            return HttpResponse::BadRequest().json(serde_json::json!({"error": "invalid user id"}))
+        }
     };
 
     match user_repo::unblock_user(pool.get_ref(), user.0, target_id).await {
@@ -354,18 +428,29 @@ pub async fn unblock_user(
             // Invalidate caches after unblocking user
             if let Some(redis_manager) = redis_manager {
                 // CRITICAL FIX: Use retry mechanism for cache invalidation
-                if let Err(e) = invalidate_user_cache_with_retry(redis_manager.get_ref(), user.0).await {
+                if let Err(e) =
+                    invalidate_user_cache_with_retry(redis_manager.get_ref(), user.0).await
+                {
                     tracing::warn!("Failed to invalidate user cache after retries: {}", e);
                 }
-                if let Err(e) = invalidate_user_cache_with_retry(redis_manager.get_ref(), target_id).await {
-                    tracing::warn!("Failed to invalidate target user cache after retries: {}", e);
+                if let Err(e) =
+                    invalidate_user_cache_with_retry(redis_manager.get_ref(), target_id).await
+                {
+                    tracing::warn!(
+                        "Failed to invalidate target user cache after retries: {}",
+                        e
+                    );
                 }
                 // Search caches affected by block status change
-                if let Err(e) = invalidate_search_cache_with_retry(redis_manager.get_ref(), "").await {
+                if let Err(e) =
+                    invalidate_search_cache_with_retry(redis_manager.get_ref(), "").await
+                {
                     tracing::warn!("Failed to invalidate search cache after retries: {}", e);
                 }
             }
-            HttpResponse::Ok().json(FollowResponse { status: "ok".into() })
+            HttpResponse::Ok().json(FollowResponse {
+                status: "ok".into(),
+            })
         }
         Err(e) => HttpResponse::InternalServerError().json(serde_json::json!({
             "error": "db_error",

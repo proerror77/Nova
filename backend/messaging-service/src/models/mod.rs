@@ -1,9 +1,13 @@
 pub mod conversation;
+pub mod member;
 pub mod message;
 
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use chrono::{DateTime, Utc};
+
+// Re-export for convenience
+pub use member::MemberRole;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct User {

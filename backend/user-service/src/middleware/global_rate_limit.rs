@@ -1,7 +1,8 @@
 use actix_web::{
     body::{BoxBody, MessageBody},
     dev::{forward_ready, Service, ServiceRequest, ServiceResponse, Transform},
-    error::ErrorTooManyRequests, Error, HttpMessage, HttpResponse,
+    error::ErrorTooManyRequests,
+    Error, HttpMessage, HttpResponse,
 };
 use futures::future::LocalBoxFuture;
 use std::sync::Arc;

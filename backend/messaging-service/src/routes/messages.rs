@@ -1,13 +1,16 @@
-use axum::{extract::{Path, State, Query}, Json};
 use axum::http::StatusCode;
+use axum::{
+    extract::{Path, Query, State},
+    Json,
+};
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 use sqlx::Row;
+use uuid::Uuid;
 
+use crate::middleware::guards::User;
 use crate::services::message_service::MessageService;
 use crate::state::AppState;
-use crate::middleware::guards::User;
-use crate::websocket::pubsub;
+use crate::websocket::events::{broadcast_event, WebSocketEvent};
 
 #[derive(Deserialize)]
 pub struct SendMessageRequest {
@@ -23,18 +26,16 @@ pub struct SendMessageResponse {
 
 pub async fn send_message(
     State(state): State<AppState>,
-    user: User,  // Authenticated user from JWT
+    user: User, // Authenticated user from JWT
     Path(id): Path<Uuid>,
     Json(body): Json<SendMessageRequest>,
 ) -> Result<Json<SendMessageResponse>, crate::error::AppError> {
     let conversation_id = id;
 
     // Verify user is member of conversation and has permission to send
-    let member = crate::middleware::guards::ConversationMember::verify(
-        &state.db,
-        user.id,
-        conversation_id,
-    ).await?;
+    let member =
+        crate::middleware::guards::ConversationMember::verify(&state.db, user.id, conversation_id)
+            .await?;
 
     member.can_send()?;
 
@@ -46,14 +47,28 @@ pub async fn send_message(
         body.idempotency_key.as_deref(),
     )
     .await?;
-    let payload = serde_json::json!({
-        "type": "message",
-        "conversation_id": conversation_id,
-        "message": {"id": msg_id, "sender_id": user.id, "sequence_number": seq}
-    }).to_string();
-    state.registry.broadcast(conversation_id, axum::extract::ws::Message::Text(payload.clone())).await;
-    let _ = pubsub::publish(&state.redis, conversation_id, &payload).await;
-    Ok(Json(SendMessageResponse { id: msg_id, sequence_number: seq }))
+
+    // Broadcast message.new event using unified event system
+    let event = WebSocketEvent::MessageNew {
+        id: msg_id,
+        sender_id: user.id,
+        sequence_number: seq,
+        conversation_id,
+    };
+
+    let _ = broadcast_event(
+        &state.registry,
+        &state.redis,
+        conversation_id,
+        user.id,
+        event,
+    )
+    .await;
+
+    Ok(Json(SendMessageResponse {
+        id: msg_id,
+        sequence_number: seq,
+    }))
 }
 
 #[derive(Serialize)]
@@ -62,33 +77,107 @@ pub struct MessageDto {
     pub sender_id: Uuid,
     pub sequence_number: i64,
     pub created_at: String,
+    pub content: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub message_type: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub recalled_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub updated_at: Option<String>,
+    pub version_number: i32,
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub reactions: Vec<MessageReaction>,
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub attachments: Vec<MessageAttachment>,
+}
+
+#[derive(Serialize)]
+pub struct MessageReaction {
+    pub emoji: String,
+    pub count: i64,
+    pub user_reacted: bool,
+}
+
+#[derive(Serialize)]
+pub struct MessageAttachment {
+    pub id: Uuid,
+    pub file_name: String,
+    pub file_type: Option<String>,
+    pub file_size: i32,
+    pub s3_key: String,
+}
+
+#[derive(Deserialize)]
+pub struct SendAudioMessageRequest {
+    pub audio_url: String,   // S3 URL or presigned URL to audio file
+    pub duration_ms: u32,    // Duration in milliseconds
+    pub audio_codec: String, // opus, aac, mp3, wav, etc.
+    pub idempotency_key: Option<String>,
+}
+
+#[derive(Serialize)]
+pub struct AudioMessageDto {
+    pub id: Uuid,
+    pub sender_id: Uuid,
+    pub sequence_number: i64,
+    pub created_at: String,
+    pub audio_url: String,
+    pub duration_ms: u32,
+    pub audio_codec: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub transcription: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub transcription_language: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub struct PaginationQuery {
+    #[serde(default = "default_limit")]
+    pub limit: i64,
+    #[serde(default)]
+    pub offset: i64,
+    #[serde(default = "default_include_recalled")]
+    pub include_recalled: bool,
+}
+
+fn default_limit() -> i64 {
+    50
+}
+
+fn default_include_recalled() -> bool {
+    false
 }
 
 pub async fn get_message_history(
     State(state): State<AppState>,
     user: User,
     Path(id): Path<Uuid>,
+    Query(pagination): Query<PaginationQuery>,
 ) -> Result<Json<Vec<MessageDto>>, crate::error::AppError> {
     let conversation_id = id;
 
     // Verify user is member of conversation
-    let _member = crate::middleware::guards::ConversationMember::verify(
-        &state.db,
-        user.id,
-        conversation_id,
-    ).await?;
+    let _member =
+        crate::middleware::guards::ConversationMember::verify(&state.db, user.id, conversation_id)
+            .await?;
 
-    let rows = MessageService::get_message_history_db(&state.db, conversation_id).await?;
+    let rows = MessageService::get_message_history_with_details(
+        &state.db,
+        conversation_id,
+        user.id,
+        pagination.limit,
+        pagination.offset,
+        pagination.include_recalled,
+    )
+    .await?;
     Ok(Json(rows))
 }
 
 #[derive(Deserialize)]
 pub struct UpdateMessageRequest {
     pub plaintext: String,
-    pub version_number: i32,  // Required for optimistic locking
-    pub reason: Option<String>,  // Optional edit reason for audit trail
+    pub version_number: i32,    // Required for optimistic locking
+    pub reason: Option<String>, // Optional edit reason for audit trail
 }
 
 /// Update message with optimistic locking (version control)
@@ -116,7 +205,7 @@ pub async fn update_message(
         "SELECT conversation_id, sender_id, version_number, created_at, content
          FROM messages
          WHERE id = $1
-         FOR UPDATE"
+         FOR UPDATE",
     )
     .bind(message_id)
     .fetch_optional(&mut *tx)
@@ -127,7 +216,7 @@ pub async fn update_message(
     let sender_id: Uuid = msg_row.get("sender_id");
     let current_version: i32 = msg_row.get("version_number");
     let created_at: chrono::DateTime<chrono::Utc> = msg_row.get("created_at");
-    let old_content: Vec<u8> = msg_row.get("content");
+    let old_content: String = msg_row.get("content");
 
     // 2. Verify ownership (only sender can edit their own messages)
     if sender_id != user.id {
@@ -136,10 +225,11 @@ pub async fn update_message(
 
     // 3. Verify user is member of conversation
     let _member = crate::middleware::guards::ConversationMember::verify(
-        &state.db,  // Use main DB pool for member check (outside transaction)
+        &state.db, // Use main DB pool for member check (outside transaction)
         user.id,
         conversation_id,
-    ).await?;
+    )
+    .await?;
 
     // 4. Check edit time window
     let elapsed_minutes = (chrono::Utc::now() - created_at).num_minutes();
@@ -152,11 +242,10 @@ pub async fn update_message(
     // 5. Optimistic locking check: version number must match
     if body.version_number != current_version {
         // Conflict: client version is stale
-        let server_content = String::from_utf8_lossy(&old_content).to_string();
         return Err(crate::error::AppError::VersionConflict {
             current_version,
             client_version: body.version_number,
-            server_content,
+            server_content: old_content.clone(),
         });
     }
 
@@ -170,22 +259,21 @@ pub async fn update_message(
             updated_at = NOW()
         WHERE id = $2 AND version_number = $3
         RETURNING id, conversation_id, version_number
-        "#
+        "#,
     )
-    .bind(body.plaintext.as_bytes())
+    .bind(&body.plaintext)
     .bind(message_id)
-    .bind(current_version)  // CAS: only update if version matches
+    .bind(current_version) // CAS: only update if version matches
     .fetch_optional(&mut *tx)
     .await?;
 
     // 7. Verify update succeeded (if None, version changed concurrently)
     let updated = update_result.ok_or_else(|| {
         // Concurrent update detected: re-fetch current state
-        let server_content = String::from_utf8_lossy(&old_content).to_string();
         crate::error::AppError::VersionConflict {
-            current_version: current_version + 1,  // Version was incremented by concurrent update
+            current_version: current_version + 1, // Version was incremented by concurrent update
             client_version: body.version_number,
-            server_content,
+            server_content: old_content.clone(),
         }
     })?;
 
@@ -194,17 +282,21 @@ pub async fn update_message(
     // 8. Commit transaction (trigger will record version history)
     tx.commit().await?;
 
-    // 9. Broadcast message edit event to conversation members
-    let payload = serde_json::json!({
-        "type": "message_edited",
-        "conversation_id": conversation_id,
-        "message_id": message_id,
-        "version_number": new_version,
-        "timestamp": chrono::Utc::now().to_rfc3339(),
-    }).to_string();
+    // 9. Broadcast message.edited event using unified event system
+    let event = WebSocketEvent::MessageEdited {
+        conversation_id,
+        message_id,
+        version_number: new_version,
+    };
 
-    state.registry.broadcast(conversation_id, axum::extract::ws::Message::Text(payload.clone())).await;
-    let _ = pubsub::publish(&state.redis, conversation_id, &payload).await;
+    let _ = broadcast_event(
+        &state.registry,
+        &state.redis,
+        conversation_id,
+        user.id,
+        event,
+    )
+    .await;
 
     Ok(StatusCode::NO_CONTENT)
 }
@@ -230,10 +322,11 @@ pub async fn delete_message(
 
     // Verify user is member of conversation
     let member = crate::middleware::guards::ConversationMember::verify(
-        &state.db,  // Use main DB pool for member check
+        &state.db, // Use main DB pool for member check
         user.id,
         conversation_id,
-    ).await?;
+    )
+    .await?;
 
     // Verify user is the message sender or is an admin
     let is_own_message = sender_id == user.id;
@@ -243,45 +336,99 @@ pub async fn delete_message(
     let deleted = sqlx::query(
         "UPDATE messages SET deleted_at = NOW()
          WHERE id = $1 AND sender_id = $2
-         RETURNING id, conversation_id"
+         RETURNING id, conversation_id",
     )
-        .bind(message_id)
-        .bind(user.id)
-        .fetch_optional(&mut *tx)
-        .await
-        .map_err(|e| crate::error::AppError::StartServer(format!("delete message: {e}")))?
-        .ok_or(crate::error::AppError::Forbidden)?;  // Fails if user is not the sender
+    .bind(message_id)
+    .bind(user.id)
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(|e| crate::error::AppError::StartServer(format!("delete message: {e}")))?
+    .ok_or(crate::error::AppError::Forbidden)?; // Fails if user is not the sender
 
     tx.commit().await?;
 
     let deleted_conversation_id: Uuid = deleted.get("conversation_id");
 
-    // Broadcast message delete event to conversation members via WebSocket/Redis
-    let payload = serde_json::json!({
-        "type": "message_deleted",
-        "conversation_id": deleted_conversation_id,
-        "message_id": message_id,
-        "timestamp": chrono::Utc::now().to_rfc3339(),
-    }).to_string();
+    // Broadcast message.deleted event using unified event system
+    let event = WebSocketEvent::MessageDeleted {
+        conversation_id: deleted_conversation_id,
+        message_id,
+    };
 
-    state.registry.broadcast(deleted_conversation_id, axum::extract::ws::Message::Text(payload.clone())).await;
-    let _ = pubsub::publish(&state.redis, deleted_conversation_id, &payload).await;
+    let _ = broadcast_event(
+        &state.registry,
+        &state.redis,
+        deleted_conversation_id,
+        user.id,
+        event,
+    )
+    .await;
 
     Ok(StatusCode::NO_CONTENT)
 }
 
-// Search endpoint removed for security compliance
-// Message search functionality has been moved to client-side local indexing
-// to maintain true end-to-end encryption.
-//
-// Previous endpoint: GET /conversations/:id/messages/search
-// Replacement: Client apps should implement local search using decrypted message cache
+#[derive(Deserialize)]
+pub struct SearchQuery {
+    #[serde(default)]
+    pub q: String,
+    #[serde(default = "default_limit")]
+    pub limit: i64,
+    #[serde(default)]
+    pub offset: i64,
+    #[serde(default)]
+    pub sort_by: Option<String>,
+}
+
+/// GET /conversations/:id/messages/search
+/// Search messages within a conversation
+///
+/// Query parameters:
+/// - q: Search query string (required)
+/// - limit: Max results per page (default: 50, max: 500)
+/// - offset: Number of results to skip (default: 0)
+/// - sort_by: Sort order (recent|oldest|relevance, default: recent)
+///
+/// ARCHITECTURE NOTE (2025-10-26):
+/// Message search is implemented using PostgreSQL full-text search (FTS).
+/// - Messages are indexed via generated column `content_tsv`
+/// - GIN index on `content_tsv` enables efficient lookups
+/// - Database-level encryption (TDE) provides at-rest protection
+/// - See: backend/ENCRYPTION_ARCHITECTURE.md for design rationale
+pub async fn search_messages(
+    State(state): State<AppState>,
+    user: User,
+    Path(conversation_id): Path<Uuid>,
+    Query(search): Query<SearchQuery>,
+) -> Result<Json<Vec<MessageDto>>, crate::error::AppError> {
+    // Verify user is member of conversation
+    let _member =
+        crate::middleware::guards::ConversationMember::verify(&state.db, user.id, conversation_id)
+            .await?;
+
+    // Validate search query is not empty
+    if search.q.trim().is_empty() {
+        return Ok(Json(vec![]));
+    }
+
+    // Execute search
+    let (results, _total) = MessageService::search_messages(
+        &state.db,
+        conversation_id,
+        &search.q,
+        search.limit,
+        search.offset,
+        search.sort_by.as_deref(),
+    )
+    .await?;
+
+    Ok(Json(results))
+}
 
 #[derive(Serialize)]
 pub struct RecallMessageResponse {
     pub message_id: Uuid,
     pub recalled_at: String,
-    pub status: String,  // Always "recalled"
+    pub status: String, // Always "recalled"
 }
 
 /// Recall (unsend) a message within 5 minutes of sending
@@ -298,11 +445,9 @@ pub async fn recall_message(
     Path((conversation_id, message_id)): Path<(Uuid, Uuid)>,
 ) -> Result<Json<RecallMessageResponse>, crate::error::AppError> {
     // 1. Verify user is member of conversation and get permissions
-    let member = crate::middleware::guards::ConversationMember::verify(
-        &state.db,
-        user.id,
-        conversation_id,
-    ).await?;
+    let member =
+        crate::middleware::guards::ConversationMember::verify(&state.db, user.id, conversation_id)
+            .await?;
 
     // 2. Get message and verify it belongs to this conversation
     let msg_row = sqlx::query(
@@ -364,23 +509,22 @@ pub async fn recall_message(
 
     tx.commit().await?;
 
-    // 7. Broadcast recall event to all conversation members
-    let payload = serde_json::json!({
-        "type": "message_recalled",
-        "conversation_id": conversation_id,
-        "message_id": message_id,
-        "recalled_by": user.id,
-        "recalled_at": now.to_rfc3339(),
-    });
-
-    // Broadcast via WebSocket registry (in-process connections)
-    state.registry.broadcast(
+    // 7. Broadcast message.recalled event using unified event system
+    let event = WebSocketEvent::MessageRecalled {
         conversation_id,
-        axum::extract::ws::Message::Text(payload.to_string())
-    ).await;
+        message_id,
+        recalled_by: user.id,
+        recalled_at: now.to_rfc3339(),
+    };
 
-    // Broadcast via Redis pub/sub (cross-instance)
-    let _ = pubsub::publish(&state.redis, conversation_id, &payload.to_string()).await;
+    let _ = broadcast_event(
+        &state.registry,
+        &state.redis,
+        conversation_id,
+        user.id,
+        event,
+    )
+    .await;
 
     // 8. Return success response
     Ok(Json(RecallMessageResponse {
@@ -388,4 +532,177 @@ pub async fn recall_message(
         recalled_at: now.to_rfc3339(),
         status: "recalled".to_string(),
     }))
+}
+
+// MARK: - Message Forward
+
+#[derive(serde::Deserialize)]
+pub struct ForwardMessageRequest {
+    pub target_conversation_id: uuid::Uuid,
+    pub custom_note: Option<String>,
+}
+
+#[derive(serde::Serialize)]
+pub struct ForwardMessageResponse {
+    pub forwarded_message_id: uuid::Uuid,
+    pub target_conversation_id: uuid::Uuid,
+    pub forwarded_at: String,
+}
+
+pub async fn forward_message(
+    State(state): State<AppState>,
+    user: User,
+    Path((conversation_id, message_id)): Path<(Uuid, Uuid)>,
+    Json(body): Json<ForwardMessageRequest>,
+) -> Result<Json<ForwardMessageResponse>, crate::error::AppError> {
+    // 1) Verify membership in source conversation
+    let _source_member =
+        crate::middleware::guards::ConversationMember::verify(&state.db, user.id, conversation_id)
+            .await?;
+
+    // 2) Verify membership in target conversation
+    let _target_member = crate::middleware::guards::ConversationMember::verify(
+        &state.db,
+        user.id,
+        body.target_conversation_id,
+    )
+    .await?;
+
+    // 3) Fetch original message content (plaintext)
+    let original_content: String = sqlx::query_scalar(
+        "SELECT content FROM messages WHERE id = $1 AND conversation_id = $2 AND deleted_at IS NULL",
+    )
+    .bind(message_id)
+    .bind(conversation_id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|e| crate::error::AppError::StartServer(format!("fetch original message: {e}")))?
+    .ok_or(crate::error::AppError::NotFound)?;
+
+    // 4) Create new message in target conversation with same content
+    let (new_message_id, _seq) = crate::services::message_service::MessageService::send_message_db(
+        &state.db,
+        body.target_conversation_id,
+        user.id,
+        original_content.as_bytes(),
+        None,
+    )
+    .await?;
+
+    // 5) Optionally create a custom note message in target conversation
+    if let Some(note) = &body.custom_note {
+        let _ = crate::services::message_service::MessageService::send_message_db(
+            &state.db,
+            body.target_conversation_id,
+            user.id,
+            note.as_bytes(),
+            None,
+        )
+        .await?;
+    }
+
+    // 6) Broadcast message.new for forwarded message
+    let now = chrono::Utc::now();
+    let event = WebSocketEvent::MessageNew {
+        id: new_message_id,
+        sender_id: user.id,
+        sequence_number: 0, // unknown here; clients can refresh
+        conversation_id: body.target_conversation_id,
+    };
+    let _ = broadcast_event(
+        &state.registry,
+        &state.redis,
+        body.target_conversation_id,
+        user.id,
+        event,
+    )
+    .await;
+
+    Ok(Json(ForwardMessageResponse {
+        forwarded_message_id: new_message_id,
+        target_conversation_id: body.target_conversation_id,
+        forwarded_at: now.to_rfc3339(),
+    }))
+}
+
+/// Send an audio message to a conversation
+/// POST /conversations/{id}/messages/audio
+pub async fn send_audio_message(
+    State(state): State<AppState>,
+    user: User, // Authenticated user from JWT
+    Path(id): Path<Uuid>,
+    Json(body): Json<SendAudioMessageRequest>,
+) -> Result<(StatusCode, Json<AudioMessageDto>), crate::error::AppError> {
+    let conversation_id = id;
+
+    // Verify user is member of conversation and has permission to send
+    let member =
+        crate::middleware::guards::ConversationMember::verify(&state.db, user.id, conversation_id)
+            .await?;
+
+    member.can_send()?;
+
+    // Validate audio duration (0 < duration <= 10 minutes)
+    if body.duration_ms == 0 || body.duration_ms > 600_000 {
+        return Err(crate::error::AppError::Config(
+            "Audio duration must be between 1 and 600000 milliseconds (10 minutes)".into(),
+        ));
+    }
+
+    // Validate audio codec
+    let valid_codecs = vec!["opus", "aac", "mp3", "wav", "flac", "ogg"];
+    if !valid_codecs.contains(&body.audio_codec.as_str()) {
+        return Err(crate::error::AppError::Config(format!(
+            "Unsupported audio codec: {}. Supported: {:?}",
+            body.audio_codec, valid_codecs
+        )));
+    }
+
+    // Store the audio message
+    let (msg_id, seq) = MessageService::send_audio_message_db(
+        &state.db,
+        conversation_id,
+        user.id,
+        &body.audio_url,
+        body.duration_ms,
+        &body.audio_codec,
+        body.idempotency_key.as_deref(),
+    )
+    .await?;
+
+    // Broadcast message.audio_sent event
+    let event = WebSocketEvent::AudioMessageSent {
+        id: msg_id,
+        sender_id: user.id,
+        sequence_number: seq,
+        conversation_id,
+        duration_ms: body.duration_ms,
+        audio_codec: body.audio_codec.clone(),
+    };
+
+    let _ = broadcast_event(
+        &state.registry,
+        &state.redis,
+        conversation_id,
+        user.id,
+        event,
+    )
+    .await;
+
+    // Fetch the created message details
+    let created_at = chrono::Utc::now();
+
+    let response = AudioMessageDto {
+        id: msg_id,
+        sender_id: user.id,
+        sequence_number: seq,
+        created_at: created_at.to_rfc3339(),
+        audio_url: body.audio_url,
+        duration_ms: body.duration_ms,
+        audio_codec: body.audio_codec,
+        transcription: None,
+        transcription_language: None,
+    };
+
+    Ok((StatusCode::CREATED, Json(response)))
 }

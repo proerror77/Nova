@@ -3,11 +3,7 @@ use sqlx::{PgPool, Row};
 use uuid::Uuid;
 
 /// Create a new like on a post
-pub async fn create_like(
-    pool: &PgPool,
-    post_id: Uuid,
-    user_id: Uuid,
-) -> Result<Like, sqlx::Error> {
+pub async fn create_like(pool: &PgPool, post_id: Uuid, user_id: Uuid) -> Result<Like, sqlx::Error> {
     let like = sqlx::query_as::<_, Like>(
         r#"
         INSERT INTO likes (post_id, user_id)
@@ -49,11 +45,7 @@ pub async fn delete_like(pool: &PgPool, post_id: Uuid, user_id: Uuid) -> Result<
 }
 
 /// Check if a user has liked a post
-pub async fn has_liked(
-    pool: &PgPool,
-    post_id: Uuid,
-    user_id: Uuid,
-) -> Result<bool, sqlx::Error> {
+pub async fn has_liked(pool: &PgPool, post_id: Uuid, user_id: Uuid) -> Result<bool, sqlx::Error> {
     let row = sqlx::query("SELECT EXISTS(SELECT 1 FROM likes WHERE post_id = $1 AND user_id = $2)")
         .bind(post_id)
         .bind(user_id)

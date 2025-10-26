@@ -12,7 +12,6 @@
 /// 4. Authorization server stores code_challenge with the code
 /// 5. Client exchanges code + code_verifier for tokens
 /// 6. Server verifies: BASE64URL(SHA256(code_verifier)) == code_challenge
-
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::engine::Engine;
 use sha2::{Digest, Sha256};
@@ -42,9 +41,11 @@ pub enum PkceError {
 /// - Which translates to: [A-Za-z0-9._-]
 pub fn is_valid_code_verifier(verifier: &str) -> bool {
     let len = verifier.len();
-    len >= 43 && len <= 128 && verifier.chars().all(|c| {
-        c.is_ascii_alphanumeric() || c == '-' || c == '.' || c == '_' || c == '~'
-    })
+    len >= 43
+        && len <= 128
+        && verifier
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '.' || c == '_' || c == '~')
 }
 
 /// Generate code challenge from code verifier using SHA256
@@ -141,7 +142,11 @@ mod tests {
     #[test]
     fn test_invalid_code_verifier_bad_chars() {
         assert!(!is_valid_code_verifier("short")); // Too short and bad chars
-        assert!(!is_valid_code_verifier(&format!("{}{}", "a".repeat(43), "@"))); // Invalid char @
+        assert!(!is_valid_code_verifier(&format!(
+            "{}{}",
+            "a".repeat(43),
+            "@"
+        ))); // Invalid char @
     }
 
     #[test]

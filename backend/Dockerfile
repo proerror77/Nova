@@ -30,8 +30,13 @@ COPY libs ./libs
 # Copy migrations (sqlx::migrate!("../migrations") expects /app/migrations at compile-time)
 COPY migrations ./migrations
 
-# Build application
-RUN cargo build --release --manifest-path user-service/Cargo.toml
+# Build application (並行編譯，若需限制可在 CI 設定 CARGO_BUILD_JOBS)
+ARG CARGO_BUILD_JOBS
+RUN if [ -n "$CARGO_BUILD_JOBS" ]; then \
+      cargo build --release --manifest-path user-service/Cargo.toml -j $CARGO_BUILD_JOBS ; \
+    else \
+      cargo build --release --manifest-path user-service/Cargo.toml ; \
+    fi
 
 # ============================================
 # Runtime Stage - Minimal production image

@@ -2,12 +2,11 @@
 ///
 /// CRITICAL FIX: Ensures cache invalidation completes with automatic retries
 /// instead of silently failing, which would lead to stale cache data.
-
 use redis::aio::ConnectionManager;
 use std::time::Duration;
 use tokio::time::sleep;
+use tracing::{error, warn};
 use uuid::Uuid;
-use tracing::{warn, error};
 
 /// Maximum number of retry attempts
 const MAX_RETRIES: u32 = 3;

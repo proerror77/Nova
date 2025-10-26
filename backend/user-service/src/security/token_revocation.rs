@@ -2,7 +2,6 @@
 ///
 /// CRITICAL FIX: Implement token revocation to prevent stolen tokens from being used
 /// After logout or password change, tokens must be blacklisted immediately.
-
 use redis::aio::ConnectionManager;
 use std::fmt;
 use tracing::error;
@@ -75,7 +74,10 @@ pub async fn revoke_token(
         .query_async(&mut redis)
         .await?;
 
-    tracing::info!("Token revoked, blacklist entry will expire in {} seconds", remaining_ttl);
+    tracing::info!(
+        "Token revoked, blacklist entry will expire in {} seconds",
+        remaining_ttl
+    );
     Ok(())
 }
 
@@ -135,10 +137,7 @@ pub async fn check_user_token_revocation(
     let key = format!("nova:revoked:user:{}:ts", user_id);
 
     let mut redis = redis.clone();
-    let revocation_ts: Option<String> = redis::cmd("GET")
-        .arg(&key)
-        .query_async(&mut redis)
-        .await?;
+    let revocation_ts: Option<String> = redis::cmd("GET").arg(&key).query_async(&mut redis).await?;
 
     if let Some(ts_str) = revocation_ts {
         match ts_str.parse::<i64>() {
@@ -163,7 +162,7 @@ pub async fn check_user_token_revocation(
 /// Hash a token using SHA-256
 /// We don't store raw tokens in Redis for security
 fn sha256_hash(token: &str) -> String {
-    use sha2::{Sha256, Digest};
+    use sha2::{Digest, Sha256};
     let mut hasher = Sha256::new();
     hasher.update(token.as_bytes());
     format!("{:x}", hasher.finalize())

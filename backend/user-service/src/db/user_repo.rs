@@ -353,11 +353,7 @@ pub async fn update_profile(
 /// Check if a user has blocked another user
 /// Check if two users are blocked in either direction (bidirectional)
 /// OPTIMIZED: Single query instead of two separate is_blocked calls
-pub async fn are_blocked(
-    pool: &PgPool,
-    user_a: Uuid,
-    user_b: Uuid,
-) -> Result<bool, sqlx::Error> {
+pub async fn are_blocked(pool: &PgPool, user_a: Uuid, user_b: Uuid) -> Result<bool, sqlx::Error> {
     let result = sqlx::query_scalar::<_, bool>(
         r#"
         SELECT EXISTS(

@@ -270,10 +270,9 @@ impl Config {
                 .unwrap_or_else(|_| default_jwt_refresh_ttl().to_string())
                 .parse()
                 .unwrap_or(default_jwt_refresh_ttl()),
-            private_key_pem: env::var("JWT_PRIVATE_KEY_PEM")
-                .expect("JWT_PRIVATE_KEY_PEM must be set (base64-encoded PEM content)"),
-            public_key_pem: env::var("JWT_PUBLIC_KEY_PEM")
-                .expect("JWT_PUBLIC_KEY_PEM must be set (base64-encoded PEM content)"),
+            // 允許透過檔案讀取金鑰，這裡若環境變數不存在則給空字串，交由 main.rs 落地處理
+            private_key_pem: env::var("JWT_PRIVATE_KEY_PEM").unwrap_or_default(),
+            public_key_pem: env::var("JWT_PUBLIC_KEY_PEM").unwrap_or_default(),
         };
 
         let email = EmailConfig {

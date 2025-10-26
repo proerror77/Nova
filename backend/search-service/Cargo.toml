@@ -28,6 +28,12 @@ redis = { version = "0.26", features = ["tokio-comp", "connection-manager"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
 
+# Hashing
+md5 = "0.7"
+
+# OpenAPI
+utoipa = { workspace = true }
+
 [profile.release]
 codegen-units = 1
 lto = true

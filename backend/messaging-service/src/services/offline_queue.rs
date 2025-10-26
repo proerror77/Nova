@@ -2,10 +2,10 @@
 //! Implements "sync from last known ID" pattern for message recovery
 //! Allows clients to resume from where they left off when reconnecting
 
-use redis::{Client, AsyncCommands};
-use uuid::Uuid;
+use redis::{AsyncCommands, Client};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use uuid::Uuid;
 
 /// Represents a client's position in the message stream
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -44,12 +44,14 @@ pub async fn update_client_sync_state(
     conn.set_ex::<_, _, ()>(
         key,
         json,
-        30 * 24 * 60 * 60,  // 30 days TTL
-    ).await?;
+        30 * 24 * 60 * 60, // 30 days TTL
+    )
+    .await?;
 
     // Also track in per-conversation index for bulk operations
     let conv_key = conversation_clients_key(state.conversation_id);
-    conn.sadd::<_, _, ()>(conv_key, state.client_id.to_string()).await?;
+    conn.sadd::<_, _, ()>(conv_key, state.client_id.to_string())
+        .await?;
 
     Ok(())
 }
@@ -111,14 +113,14 @@ pub async fn get_messages_since(
     let range_start = if since_id.is_empty() {
         "0".to_string()
     } else {
-        format!("({}",since_id)
+        format!("({}", since_id)
     };
 
     // Get all messages after since_id
     let messages: Vec<(String, HashMap<String, String>)> = redis::cmd("XRANGE")
         .arg(&stream_key)
-        .arg(&range_start)  // Exclusive range start
-        .arg("+")  // To the latest
+        .arg(&range_start) // Exclusive range start
+        .arg("+") // To the latest
         .query_async(&mut conn)
         .await
         .unwrap_or_default();
@@ -139,8 +141,9 @@ pub async fn queue_offline_notification(
     conn.set_ex::<_, _, ()>(
         key,
         message_count.to_string(),
-        24 * 60 * 60,  // 24 hour TTL
-    ).await?;
+        24 * 60 * 60, // 24 hour TTL
+    )
+    .await?;
 
     Ok(())
 }
@@ -156,9 +159,7 @@ pub async fn get_offline_message_count(
 
     let count: Option<String> = conn.get(&key).await?;
 
-    Ok(count
-        .and_then(|c| c.parse::<usize>().ok())
-        .unwrap_or(0))
+    Ok(count.and_then(|c| c.parse::<usize>().ok()).unwrap_or(0))
 }
 
 /// Batch clear offline notifications for user
@@ -175,6 +176,82 @@ pub async fn clear_offline_notifications(
     }
 
     Ok(())
+}
+
+// ============================================
+// Wrapper functions for Redis Streams API
+// (Bridges handlers.rs to streams.rs)
+// ============================================
+
+/// Initialize consumer group for a conversation (wrapper)
+pub async fn init_consumer_group(
+    client: &Client,
+    _conversation_id: Uuid,
+) -> redis::RedisResult<()> {
+    use crate::websocket::streams::{ensure_consumer_group, StreamsConfig};
+    let config = StreamsConfig::default();
+    ensure_consumer_group(client, &config).await
+}
+
+/// Read pending messages for a consumer (wrapper)
+pub async fn read_pending_messages(
+    client: &Client,
+    _conversation_id: Uuid,
+    _user_id: Uuid,
+    _client_id: Uuid,
+) -> redis::RedisResult<Vec<(String, HashMap<String, String>)>> {
+    use crate::websocket::streams::{read_pending_messages as streams_read_pending, StreamsConfig};
+    let config = StreamsConfig::default();
+    let messages = streams_read_pending(client, &config, "0").await?;
+
+    // Convert StreamMessage to HashMap format
+    let result = messages
+        .into_iter()
+        .map(|msg| {
+            let mut fields = HashMap::new();
+            fields.insert("payload".to_string(), msg.payload);
+            fields.insert(
+                "conversation_id".to_string(),
+                msg.conversation_id.to_string(),
+            );
+            fields.insert("timestamp".to_string(), msg.timestamp.to_string());
+            (msg.id, fields)
+        })
+        .collect();
+
+    Ok(result)
+}
+
+/// Read new messages (alias to read_pending_messages for now)
+pub async fn read_new_messages(
+    client: &Client,
+    conversation_id: Uuid,
+    user_id: Uuid,
+    client_id: Uuid,
+) -> redis::RedisResult<Vec<(String, HashMap<String, String>)>> {
+    read_pending_messages(client, conversation_id, user_id, client_id).await
+}
+
+/// Acknowledge message (wrapper)
+pub async fn acknowledge_message(
+    client: &Client,
+    _conversation_id: Uuid,
+    stream_id: &str,
+) -> redis::RedisResult<()> {
+    use crate::websocket::streams::{ack_message, StreamsConfig};
+    let config = StreamsConfig::default();
+    ack_message(client, &config, stream_id).await
+}
+
+/// Trim stream to keep recent messages (wrapper)
+pub async fn trim_stream(
+    client: &Client,
+    _conversation_id: Uuid,
+    _max_len: usize,
+) -> redis::RedisResult<()> {
+    use crate::websocket::streams::{trim_old_messages, StreamsConfig};
+    let config = StreamsConfig::default();
+    trim_old_messages(client, &config).await
 }
 
 #[cfg(test)]

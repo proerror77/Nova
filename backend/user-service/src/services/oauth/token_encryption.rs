@@ -17,7 +17,6 @@
 ///
 /// The IV is randomly generated for each encryption to ensure security even when
 /// encrypting the same token multiple times.
-
 use aes_gcm::{
     aead::{Aead, KeyInit, Payload},
     Aes256Gcm, Nonce,
@@ -61,9 +60,9 @@ impl TokenEncryptionService {
     /// A new TokenEncryptionService instance
     pub fn new(key_base64: &str) -> Result<Self, TokenEncryptionError> {
         // Decode base64 key
-        let key_bytes = STANDARD
-            .decode(key_base64)
-            .map_err(|e| TokenEncryptionError::InvalidKey(format!("Failed to decode base64: {}", e)))?;
+        let key_bytes = STANDARD.decode(key_base64).map_err(|e| {
+            TokenEncryptionError::InvalidKey(format!("Failed to decode base64: {}", e))
+        })?;
 
         // Verify key length (must be 32 bytes for AES-256)
         if key_bytes.len() != 32 {
@@ -107,7 +106,9 @@ impl TokenEncryptionService {
         let ciphertext = self
             .cipher
             .encrypt(nonce, Payload::from(token.as_bytes()))
-            .map_err(|e| TokenEncryptionError::EncryptionFailed(format!("AES-GCM failed: {}", e)))?;
+            .map_err(|e| {
+                TokenEncryptionError::EncryptionFailed(format!("AES-GCM failed: {}", e))
+            })?;
 
         // Combine: IV + Ciphertext
         let mut result = Vec::with_capacity(12 + ciphertext.len());
@@ -142,7 +143,9 @@ impl TokenEncryptionService {
         let plaintext = self
             .cipher
             .decrypt(nonce, Payload::from(ciphertext))
-            .map_err(|e| TokenEncryptionError::DecryptionFailed(format!("AES-GCM failed: {}", e)))?;
+            .map_err(|e| {
+                TokenEncryptionError::DecryptionFailed(format!("AES-GCM failed: {}", e))
+            })?;
 
         // Convert to string
         String::from_utf8(plaintext)

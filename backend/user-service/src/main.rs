@@ -10,9 +10,12 @@ use user_service::{
     config::video_config,
     config::Config,
     db::{ch_client::ClickHouseClient, create_pool, run_migrations},
-    jobs::{self, suggested_users_generator::SuggestedUsersJob, suggested_users_generator::SuggestionConfig, JobContext, run_jobs},
     handlers,
     handlers::{events::EventHandlerState, feed::FeedHandlerState, streams::StreamHandlerState},
+    jobs::{
+        self, run_jobs, suggested_users_generator::SuggestedUsersJob,
+        suggested_users_generator::SuggestionConfig, JobContext,
+    },
     metrics,
     middleware::{GlobalRateLimitMiddleware, JwtAuthMiddleware, MetricsMiddleware, RateLimiter},
     services::{
@@ -20,16 +23,16 @@ use user_service::{
         deep_learning_inference::DeepLearningInferenceService,
         events::{EventDeduplicator, EventsConsumer, EventsConsumerConfig},
         feed_ranking::FeedRankingService,
+        graph::GraphService,
         job_queue,
         kafka_producer::EventProducer,
         oauth::jwks_cache::JWKSCache,
         recommendation_v2::{HybridWeights, RecommendationConfig, RecommendationServiceV2},
         s3_service,
-        graph::GraphService,
         stories::StoriesService,
         streaming::{
-            RtmpWebhookHandler, StreamAnalyticsService, StreamChatStore, StreamDiscoveryService,
-            StreamRepository, StreamService, ViewerCounter, StreamChatHandlerState,
+            RtmpWebhookHandler, StreamAnalyticsService, StreamChatHandlerState, StreamChatStore,
+            StreamDiscoveryService, StreamRepository, StreamService, ViewerCounter,
         },
         video_service::VideoService,
     },
@@ -77,11 +80,20 @@ async fn main() -> io::Result<()> {
     // ========================================
     // Initialize JWT keys from environment
     // ========================================
-    user_service::security::jwt::initialize_keys(
-        &config.jwt.private_key_pem,
-        &config.jwt.public_key_pem,
-    )
-    .expect("Failed to initialize JWT keys from environment variables");
+    // 支援從檔案讀取金鑰（JWT_PRIVATE_KEY_FILE / JWT_PUBLIC_KEY_FILE）
+    let private_key_pem = if let Ok(path) = std::env::var("JWT_PRIVATE_KEY_FILE") {
+        std::fs::read_to_string(path).expect("Failed to read JWT private key file")
+    } else {
+        config.jwt.private_key_pem.clone()
+    };
+    let public_key_pem = if let Ok(path) = std::env::var("JWT_PUBLIC_KEY_FILE") {
+        std::fs::read_to_string(path).expect("Failed to read JWT public key file")
+    } else {
+        config.jwt.public_key_pem.clone()
+    };
+
+    user_service::security::jwt::initialize_keys(&private_key_pem, &public_key_pem)
+        .expect("Failed to initialize JWT keys from environment variables or files");
     tracing::info!("JWT keys initialized from environment variables");
 
     // ========================================
@@ -212,7 +224,14 @@ async fn main() -> io::Result<()> {
         }
         Err(e) => {
             tracing::warn!("Neo4j service init failed: {} (graph disabled)", e);
-            GraphService::new(&user_service::config::GraphConfig { enabled: false, neo4j_uri: String::new(), neo4j_user: String::new(), neo4j_password: String::new() }).await.expect("GraphService disabled init should succeed")
+            GraphService::new(&user_service::config::GraphConfig {
+                enabled: false,
+                neo4j_uri: String::new(),
+                neo4j_user: String::new(),
+                neo4j_password: String::new(),
+            })
+            .await
+            .expect("GraphService disabled init should succeed")
         }
     };
     let graph_data = web::Data::new(graph_service);
@@ -384,12 +403,13 @@ async fn main() -> io::Result<()> {
     tracing::info!("Video processing job queue created (capacity: 100)");
 
     // Spawn video processor worker task
-    let _video_worker_handle = user_service::services::video_job_queue::spawn_video_processor_worker(
-        db_pool.clone(),
-        s3_client,
-        Arc::new(config.s3.clone()),
-        video_job_receiver,
-    );
+    let _video_worker_handle =
+        user_service::services::video_job_queue::spawn_video_processor_worker(
+            db_pool.clone(),
+            s3_client,
+            Arc::new(config.s3.clone()),
+            video_job_receiver,
+        );
     tracing::info!("Video processor worker spawned");
 
     // Clone config for server closure
@@ -471,9 +491,18 @@ async fn main() -> io::Result<()> {
         let handle = tokio::spawn(async move {
             run_jobs(
                 vec![
-                    (Arc::new(suggested_job) as Arc<dyn jobs::CacheRefreshJob>, job_ctx),
-                    (Arc::new(trending_hourly) as Arc<dyn jobs::CacheRefreshJob>, job_ctx2),
-                    (Arc::new(cache_warmer) as Arc<dyn jobs::CacheRefreshJob>, job_ctx3),
+                    (
+                        Arc::new(suggested_job) as Arc<dyn jobs::CacheRefreshJob>,
+                        job_ctx,
+                    ),
+                    (
+                        Arc::new(trending_hourly) as Arc<dyn jobs::CacheRefreshJob>,
+                        job_ctx2,
+                    ),
+                    (
+                        Arc::new(cache_warmer) as Arc<dyn jobs::CacheRefreshJob>,
+                        job_ctx3,
+                    ),
                 ],
                 2,
                 shutdown_tx,
@@ -544,6 +573,87 @@ async fn main() -> io::Result<()> {
             )
             // JWKS public key endpoint
             .route("/.well-known/jwks.json", web::get().to(handlers::get_jwks))
+            // OpenAPI JSON endpoint
+            .route(
+                "/api/v1/openapi.json",
+                web::get().to(|| async {
+                    use utoipa::OpenApi;
+                    HttpResponse::Ok()
+                        .content_type("application/json")
+                        .json(user_service::openapi::ApiDoc::openapi())
+                }),
+            )
+            // Swagger UI (CDN-hosted)
+            .route(
+                "/swagger-ui",
+                web::get().to(|| async {
+                    HttpResponse::Ok()
+                        .content_type("text/html; charset=utf-8")
+                        .body(
+                            r#"<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Nova User Service API</title>
+    <link rel="stylesheet" type="text/css" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css" />
+</head>
+<body>
+    <div id="swagger-ui"></div>
+    <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+    <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-standalone-preset.js"></script>
+    <script>
+        window.onload = function() {
+            SwaggerUIBundle({
+                url: "/api/v1/openapi.json",
+                dom_id: '#swagger-ui',
+                deepLinking: true,
+                presets: [
+                    SwaggerUIBundle.presets.apis,
+                    SwaggerUIStandalonePreset
+                ],
+                plugins: [
+                    SwaggerUIBundle.plugins.DownloadUrl
+                ],
+                layout: "StandaloneLayout"
+            });
+        };
+    </script>
+</body>
+</html>"#,
+                        )
+                }),
+            )
+            // Documentation entry point
+            .route(
+                "/docs",
+                web::get().to(|| async {
+                    HttpResponse::Ok()
+                        .content_type("text/html; charset=utf-8")
+                        .body(
+                            r#"<!DOCTYPE html>
+<html>
+<head>
+    <title>Nova API Documentation</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; background: #f5f5f5; }
+        .container { max-width: 600px; margin: 0 auto; background: white; padding: 40px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        h1 { color: #333; }
+        a { display: block; margin: 15px 0; padding: 15px; background: #007bff; color: white; text-decoration: none; border-radius: 4px; }
+        a:hover { background: #0056b3; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Nova User Service API</h1>
+        <p>Choose your preferred documentation viewer:</p>
+        <a href="/swagger-ui">📘 Swagger UI (Interactive)</a>
+        <a href="/api/v1/openapi.json">📄 OpenAPI JSON (Raw)</a>
+    </div>
+</body>
+</html>"#,
+                        )
+                }),
+            )
             .service(
                 web::scope("/api/v1")
                     // Health check endpoints
@@ -627,7 +737,10 @@ async fn main() -> io::Result<()> {
                         web::scope("/videos")
                             .wrap(JwtAuthMiddleware)
                             .route("/upload/init", web::post().to(handlers::video_upload_init))
-                            .route("/upload/complete", web::post().to(handlers::video_upload_complete))
+                            .route(
+                                "/upload/complete",
+                                web::post().to(handlers::video_upload_complete),
+                            )
                             .route("", web::post().to(handlers::create_video))
                             .route("/{id}", web::get().to(handlers::get_video))
                             .route("/{id}", web::patch().to(handlers::update_video))
@@ -649,6 +762,19 @@ async fn main() -> io::Result<()> {
                             .route("/{id}/like", web::post().to(handlers::like_video))
                             .route("/{id}/share", web::post().to(handlers::share_video)),
                     )
+                    // Reels endpoints (short-form video functionality)
+                    // Note: Reels handlers already have their actix-web decorators, so we register them as services
+                    .service(handlers::reels::get_feed)
+                    .service(handlers::reels::get_video_stream)
+                    .service(handlers::reels::get_processing_status)
+                    .service(handlers::reels::like_video)
+                    .service(handlers::reels::watch_video)
+                    .service(handlers::reels::share_video)
+                    .service(handlers::reels::get_trending_sounds)
+                    .service(handlers::reels::get_trending_hashtags)
+                    .service(handlers::reels::get_similar_videos)
+                    .service(handlers::reels::search_videos)
+                    .service(handlers::reels::get_recommended_creators)
                     // Resumable uploads endpoints (chunked upload with resume support)
                     .service(
                         web::scope("/uploads")
@@ -729,14 +855,8 @@ async fn main() -> io::Result<()> {
                                             .route(web::delete().to(handlers::unblock_user)),
                                     ),
                             )
-                            .route(
-                                "/{id}/followers",
-                                web::get().to(handlers::get_followers),
-                            )
-                            .route(
-                                "/{id}/following",
-                                web::get().to(handlers::get_following),
-                            ),
+                            .route("/{id}/followers", web::get().to(handlers::get_followers))
+                            .route("/{id}/following", web::get().to(handlers::get_following)),
                     )
                     // Authenticated user endpoints under /users/me
                     .service(
@@ -744,19 +864,14 @@ async fn main() -> io::Result<()> {
                             .wrap(JwtAuthMiddleware)
                             .route("", web::get().to(handlers::get_current_user))
                             .route("", web::patch().to(handlers::update_profile))
-                            .route(
-                                "/public-key",
-                                web::put().to(handlers::upsert_my_public_key),
-                            ),
+                            .route("/public-key", web::put().to(handlers::upsert_my_public_key))
+                            .route("/bookmarks", web::get().to(handlers::get_user_bookmarks)),
                     )
                     // Posts endpoints (protected with JWT authentication)
                     .service(
                         web::scope("/posts")
                             .wrap(JwtAuthMiddleware)
-                            .route(
-                                "",
-                                web::post().to(handlers::create_post_with_media),
-                            )
+                            .route("", web::post().to(handlers::create_post_with_media))
                             .route(
                                 "/upload/init",
                                 web::post().to(handlers::upload_init_request),
@@ -771,53 +886,40 @@ async fn main() -> io::Result<()> {
                                 "/{post_id}/comments",
                                 web::post().to(handlers::create_comment),
                             )
-                            .route(
-                                "/{post_id}/comments",
-                                web::get().to(handlers::get_comments),
-                            )
+                            .route("/{post_id}/comments", web::get().to(handlers::get_comments))
                             // Likes endpoints
-                            .route(
-                                "/{post_id}/like",
-                                web::post().to(handlers::like_post),
-                            )
-                            .route(
-                                "/{post_id}/like",
-                                web::delete().to(handlers::unlike_post),
-                            )
+                            .route("/{post_id}/like", web::post().to(handlers::like_post))
+                            .route("/{post_id}/like", web::delete().to(handlers::unlike_post))
                             .route(
                                 "/{post_id}/like/status",
                                 web::get().to(handlers::check_like_status),
                             )
-                            .route(
-                                "/{post_id}/likes",
-                                web::get().to(handlers::get_post_likes),
-                            ),
+                            .route("/{post_id}/likes", web::get().to(handlers::get_post_likes))
+                            // Bookmark endpoints
+                            .route("/{id}/bookmark", web::post().to(handlers::bookmark_post))
+                            .route("/{id}/bookmark", web::delete().to(handlers::unbookmark_post))
+                            // Share endpoints
+                            .route("/{id}/share", web::post().to(handlers::share_post)),
                     )
                     // Comment endpoints (direct access by comment ID)
                     .service(
                         web::scope("/comments")
                             .wrap(JwtAuthMiddleware)
-                            .route(
-                                "/{comment_id}",
-                                web::patch().to(handlers::update_comment),
-                            )
-                            .route(
-                                "/{comment_id}",
-                                web::delete().to(handlers::delete_comment),
-                            ),
+                            .route("/{comment_id}", web::patch().to(handlers::update_comment))
+                            .route("/{comment_id}", web::delete().to(handlers::delete_comment)),
                     )
                     // Discover endpoints
                     .service(
                         web::scope("/discover")
                             .wrap(JwtAuthMiddleware)
                             .app_data(graph_data.clone())
-                            .route("/suggested-users", web::get().to(handlers::get_suggested_users)),
+                            .route(
+                                "/suggested-users",
+                                web::get().to(handlers::get_suggested_users),
+                            ),
                     )
-                    // Search endpoints (public, optional auth)
-                    .service(
-                        web::scope("/search")
-                            .route("/users", web::get().to(handlers::search_users)),
-                    )
+                    // NOTE: Search endpoints moved to search-service:8086
+                    // Use /api/v1/search/* routes via API Gateway (Nginx)
                     // Trending endpoints (public)
                     .service(handlers::get_trending)
                     .service(handlers::get_trending_videos)

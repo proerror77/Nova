@@ -75,12 +75,10 @@ impl ExperimentService {
                 tracing::info!("Started experiment: {} ({})", experiment.name, id);
                 Ok(())
             }
-            ExperimentStatus::Running => {
-                Err(ExperimentError::InvalidStateTransition {
-                    from: "running".to_string(),
-                    to: "running".to_string(),
-                })
-            }
+            ExperimentStatus::Running => Err(ExperimentError::InvalidStateTransition {
+                from: "running".to_string(),
+                to: "running".to_string(),
+            }),
             ExperimentStatus::Completed | ExperimentStatus::Cancelled => {
                 Err(ExperimentError::InvalidStateTransition {
                     from: format!("{:?}", experiment.status),
@@ -134,7 +132,10 @@ impl ExperimentService {
     }
 
     /// Validate create request
-    fn validate_create_request(&self, req: &CreateExperimentRequest) -> Result<(), ExperimentError> {
+    fn validate_create_request(
+        &self,
+        req: &CreateExperimentRequest,
+    ) -> Result<(), ExperimentError> {
         // Name validation
         if req.name.trim().is_empty() {
             return Err(ExperimentError::ValidationError(

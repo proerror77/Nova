@@ -124,11 +124,23 @@ impl AppleOAuthProvider {
                                         use crate::services::oauth::jwks_cache::JWKSKey;
                                         Some(JWKSKey {
                                             kty: key_obj.get("kty")?.as_str()?.to_string(),
-                                            use_: key_obj.get("use").and_then(|v| v.as_str()).map(String::from),
-                                            alg: key_obj.get("alg").and_then(|v| v.as_str()).map(String::from),
+                                            use_: key_obj
+                                                .get("use")
+                                                .and_then(|v| v.as_str())
+                                                .map(String::from),
+                                            alg: key_obj
+                                                .get("alg")
+                                                .and_then(|v| v.as_str())
+                                                .map(String::from),
                                             kid: key_obj.get("kid")?.as_str()?.to_string(),
-                                            n: key_obj.get("n").and_then(|v| v.as_str()).map(String::from),
-                                            e: key_obj.get("e").and_then(|v| v.as_str()).map(String::from),
+                                            n: key_obj
+                                                .get("n")
+                                                .and_then(|v| v.as_str())
+                                                .map(String::from),
+                                            e: key_obj
+                                                .get("e")
+                                                .and_then(|v| v.as_str())
+                                                .map(String::from),
                                             x5c: None,
                                             x5t: None,
                                             x5t_s256: None,
@@ -166,8 +178,9 @@ impl AppleOAuthProvider {
                 })
                 .collect();
 
-            serde_json::from_value::<JwkSet>(serde_json::json!({ "keys": jwk_vec }))
-                .map_err(|e| OAuthError::NetworkError(format!("Failed to convert cached JWKS: {}", e)))
+            serde_json::from_value::<JwkSet>(serde_json::json!({ "keys": jwk_vec })).map_err(|e| {
+                OAuthError::NetworkError(format!("Failed to convert cached JWKS: {}", e))
+            })
         } else {
             // Fetch directly without caching
             self.fetch_apple_jwks_direct().await

@@ -5,9 +5,10 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::config::Config;
-use crate::db::post_repo;
+use crate::db::{bookmark_repo, post_repo, post_share_repo};
 use crate::handlers::auth::ErrorResponse;
 use crate::middleware::UserId;
+use crate::models::{BookmarkResponse, PostShareResponse};
 use crate::services::{job_queue::ImageProcessingJob, job_queue::JobSender, s3_service};
 
 // ============================================
@@ -175,13 +176,9 @@ pub async fn create_post_with_media(
                 }
             };
 
-            if let Err(e) = post_repo::create_post_video(
-                pool.get_ref(),
-                post.id,
-                video_id,
-                position as i32,
-            )
-            .await
+            if let Err(e) =
+                post_repo::create_post_video(pool.get_ref(), post.id, video_id, position as i32)
+                    .await
             {
                 tracing::error!(
                     "Failed to link video {} to post {}: {:?}",
@@ -198,13 +195,11 @@ pub async fn create_post_with_media(
     // ========================================
 
     if content_type != "image" {
-        if let Err(e) = sqlx::query(
-            "UPDATE posts SET content_type = $1 WHERE id = $2"
-        )
-        .bind(content_type)
-        .bind(post.id)
-        .execute(pool.get_ref())
-        .await
+        if let Err(e) = sqlx::query("UPDATE posts SET content_type = $1 WHERE id = $2")
+            .bind(content_type)
+            .bind(post.id)
+            .execute(pool.get_ref())
+            .await
         {
             tracing::error!("Failed to update post content_type: {:?}", e);
         }
@@ -580,16 +575,25 @@ pub async fn get_post_request(
     let videos = if post.content_type == "video" || post.content_type == "mixed" {
         match post_repo::get_post_videos_with_metadata(pool.get_ref(), post_uuid).await {
             Ok(video_rows) => {
-                let videos_vec: Vec<crate::models::VideoMetadata> = video_rows.iter().map(|(_, video_id_str, cdn_url, thumbnail_url, duration_seconds, position)| {
-                    crate::models::VideoMetadata {
-                        id: video_id_str.clone(),
-                        cdn_url: cdn_url.clone(),
-                        thumbnail_url: thumbnail_url.clone(),
-                        duration_seconds: *duration_seconds,
-                        position: *position,
-                    }
-                }).collect();
-                if videos_vec.is_empty() { None } else { Some(videos_vec) }
+                let videos_vec: Vec<crate::models::VideoMetadata> = video_rows
+                    .iter()
+                    .map(
+                        |(_, video_id_str, cdn_url, thumbnail_url, duration_seconds, position)| {
+                            crate::models::VideoMetadata {
+                                id: video_id_str.clone(),
+                                cdn_url: cdn_url.clone(),
+                                thumbnail_url: thumbnail_url.clone(),
+                                duration_seconds: *duration_seconds,
+                                position: *position,
+                            }
+                        },
+                    )
+                    .collect();
+                if videos_vec.is_empty() {
+                    None
+                } else {
+                    Some(videos_vec)
+                }
             }
             Err(e) => {
                 tracing::error!("Failed to fetch post videos: {:?}", e);
@@ -803,6 +807,309 @@ pub async fn upload_init_request(
         expires_in: 900,
         instructions: "Use PUT method to upload file to presigned_url".to_string(),
     })
+}
+
+// ============================================
+// Bookmark Handlers
+// ============================================
+
+// ============================================
+// Bookmark Handlers
+// ============================================
+
+#[derive(Debug, Serialize)]
+pub struct UserBookmarksResponse {
+    pub bookmarks: Vec<BookmarkResponse>,
+    pub total_count: i64,
+    pub limit: i64,
+    pub offset: i64,
+}
+
+/// Bookmark a post
+/// POST /api/v1/posts/{id}/bookmark
+pub async fn bookmark_post(
+    http_req: HttpRequest,
+    pool: web::Data<PgPool>,
+    path: web::Path<String>,
+) -> impl Responder {
+    let user_id = match http_req.extensions().get::<UserId>() {
+        Some(user_id_wrapper) => user_id_wrapper.0,
+        None => {
+            return HttpResponse::Unauthorized().json(ErrorResponse {
+                error: "Unauthorized".to_string(),
+                details: Some("User ID not found in request".to_string()),
+            })
+        }
+    };
+
+    let post_id_str = path.into_inner();
+    let post_id = match Uuid::parse_str(&post_id_str) {
+        Ok(id) => id,
+        Err(_) => {
+            return HttpResponse::BadRequest().json(ErrorResponse {
+                error: "Invalid post ID format".to_string(),
+                details: None,
+            })
+        }
+    };
+
+    // Check if post exists
+    match post_repo::find_post_by_id(&pool, post_id).await {
+        Ok(Some(_)) => {}
+        Ok(None) => {
+            return HttpResponse::NotFound().json(ErrorResponse {
+                error: "Post not found".to_string(),
+                details: None,
+            })
+        }
+        Err(_) => {
+            return HttpResponse::InternalServerError().json(ErrorResponse {
+                error: "Database error".to_string(),
+                details: None,
+            })
+        }
+    }
+
+    // Create bookmark using repo
+    match bookmark_repo::create_bookmark(&pool, user_id, post_id).await {
+        Ok(bookmark) => HttpResponse::Created().json(BookmarkResponse {
+            id: bookmark.id.to_string(),
+            user_id: bookmark.user_id.to_string(),
+            post_id: bookmark.post_id.to_string(),
+            bookmarked_at: bookmark.bookmarked_at.to_rfc3339(),
+        }),
+        Err(sqlx::Error::RowNotFound) => {
+            // Already bookmarked
+            HttpResponse::Conflict().json(ErrorResponse {
+                error: "Post already bookmarked".to_string(),
+                details: None,
+            })
+        }
+        Err(_) => HttpResponse::InternalServerError().json(ErrorResponse {
+            error: "Failed to bookmark post".to_string(),
+            details: None,
+        }),
+    }
+}
+
+/// Remove bookmark from a post
+/// DELETE /api/v1/posts/{id}/bookmark
+pub async fn unbookmark_post(
+    http_req: HttpRequest,
+    pool: web::Data<PgPool>,
+    path: web::Path<String>,
+) -> impl Responder {
+    let user_id = match http_req.extensions().get::<UserId>() {
+        Some(user_id_wrapper) => user_id_wrapper.0,
+        None => {
+            return HttpResponse::Unauthorized().json(ErrorResponse {
+                error: "Unauthorized".to_string(),
+                details: None,
+            })
+        }
+    };
+
+    let post_id_str = path.into_inner();
+    let post_id = match Uuid::parse_str(&post_id_str) {
+        Ok(id) => id,
+        Err(_) => {
+            return HttpResponse::BadRequest().json(ErrorResponse {
+                error: "Invalid post ID format".to_string(),
+                details: None,
+            })
+        }
+    };
+
+    // Check if post exists
+    match post_repo::find_post_by_id(&pool, post_id).await {
+        Ok(Some(_)) => {}
+        Ok(None) => {
+            return HttpResponse::NotFound().json(ErrorResponse {
+                error: "Post not found".to_string(),
+                details: None,
+            })
+        }
+        Err(_) => {
+            return HttpResponse::InternalServerError().json(ErrorResponse {
+                error: "Database error".to_string(),
+                details: None,
+            })
+        }
+    }
+
+    // Delete bookmark using repo
+    match bookmark_repo::delete_bookmark(&pool, user_id, post_id).await {
+        Ok(_) => HttpResponse::NoContent().finish(),
+        Err(_) => HttpResponse::InternalServerError().json(ErrorResponse {
+            error: "Failed to remove bookmark".to_string(),
+            details: None,
+        }),
+    }
+}
+
+/// Get user's bookmarked posts
+/// GET /api/v1/users/me/bookmarks
+pub async fn get_user_bookmarks(
+    http_req: HttpRequest,
+    pool: web::Data<PgPool>,
+    query: web::Query<std::collections::HashMap<String, String>>,
+) -> impl Responder {
+    let user_id = match http_req.extensions().get::<UserId>() {
+        Some(user_id_wrapper) => user_id_wrapper.0,
+        None => {
+            return HttpResponse::Unauthorized().json(ErrorResponse {
+                error: "Unauthorized".to_string(),
+                details: Some("User ID not found in request".to_string()),
+            })
+        }
+    };
+
+    // Parse pagination parameters
+    let limit: i64 = query
+        .get("limit")
+        .and_then(|l| l.parse().ok())
+        .unwrap_or(20);
+    let offset: i64 = query
+        .get("offset")
+        .and_then(|o| o.parse().ok())
+        .unwrap_or(0);
+
+    // Validate pagination
+    let limit = if limit > 100 { 100 } else { limit };
+    let offset = if offset < 0 { 0 } else { offset };
+
+    // Get total count
+    let total_count = match bookmark_repo::count_user_bookmarks(&pool, user_id).await {
+        Ok(count) => count,
+        Err(_) => {
+            return HttpResponse::InternalServerError().json(ErrorResponse {
+                error: "Database error".to_string(),
+                details: None,
+            })
+        }
+    };
+
+    // Fetch bookmarks
+    match bookmark_repo::get_user_bookmarks(&pool, user_id, limit, offset).await {
+        Ok(bookmarks) => {
+            let bookmark_responses: Vec<BookmarkResponse> = bookmarks
+                .into_iter()
+                .map(|b| BookmarkResponse {
+                    id: b.id.to_string(),
+                    user_id: b.user_id.to_string(),
+                    post_id: b.post_id.to_string(),
+                    bookmarked_at: b.bookmarked_at.to_rfc3339(),
+                })
+                .collect();
+
+            HttpResponse::Ok().json(UserBookmarksResponse {
+                bookmarks: bookmark_responses,
+                total_count,
+                limit,
+                offset,
+            })
+        }
+        Err(_) => HttpResponse::InternalServerError().json(ErrorResponse {
+            error: "Failed to fetch bookmarks".to_string(),
+            details: None,
+        }),
+    }
+}
+
+// ============================================
+// Share Handlers
+// ============================================
+
+#[derive(Debug, Deserialize)]
+pub struct SharePostRequest {
+    pub share_via: Option<String>, // 'direct_message', 'story', 'feed', 'external'
+    pub shared_with_user_id: Option<String>,
+}
+
+/// Share a post
+/// POST /api/v1/posts/{id}/share
+pub async fn share_post(
+    http_req: HttpRequest,
+    pool: web::Data<PgPool>,
+    path: web::Path<String>,
+    req: web::Json<SharePostRequest>,
+) -> impl Responder {
+    let user_id = match http_req.extensions().get::<UserId>() {
+        Some(user_id_wrapper) => user_id_wrapper.0,
+        None => {
+            return HttpResponse::Unauthorized().json(ErrorResponse {
+                error: "Unauthorized".to_string(),
+                details: Some("User ID not found in request".to_string()),
+            })
+        }
+    };
+
+    let post_id_str = path.into_inner();
+    let post_id = match Uuid::parse_str(&post_id_str) {
+        Ok(id) => id,
+        Err(_) => {
+            return HttpResponse::BadRequest().json(ErrorResponse {
+                error: "Invalid post ID format".to_string(),
+                details: None,
+            })
+        }
+    };
+
+    // Check if post exists
+    match post_repo::find_post_by_id(&pool, post_id).await {
+        Ok(Some(_)) => {}
+        Ok(None) => {
+            return HttpResponse::NotFound().json(ErrorResponse {
+                error: "Post not found".to_string(),
+                details: None,
+            })
+        }
+        Err(_) => {
+            return HttpResponse::InternalServerError().json(ErrorResponse {
+                error: "Database error".to_string(),
+                details: None,
+            })
+        }
+    }
+
+    // Validate shared_with_user_id if provided
+    let shared_with_uuid = if let Some(ref user_str) = req.shared_with_user_id {
+        match Uuid::parse_str(user_str) {
+            Ok(id) => Some(id),
+            Err(_) => {
+                return HttpResponse::BadRequest().json(ErrorResponse {
+                    error: "Invalid shared_with_user_id format".to_string(),
+                    details: None,
+                })
+            }
+        }
+    } else {
+        None
+    };
+
+    // Create share using repo
+    match post_share_repo::create_share(
+        &pool,
+        post_id,
+        user_id,
+        req.share_via.clone(),
+        shared_with_uuid,
+    )
+    .await
+    {
+        Ok(share) => HttpResponse::Created().json(PostShareResponse {
+            id: share.id.to_string(),
+            post_id: share.post_id.to_string(),
+            user_id: share.user_id.to_string(),
+            share_via: share.share_via,
+            shared_with_user_id: share.shared_with_user_id.map(|id| id.to_string()),
+            shared_at: share.shared_at.to_rfc3339(),
+        }),
+        Err(_) => HttpResponse::InternalServerError().json(ErrorResponse {
+            error: "Failed to share post".to_string(),
+            details: None,
+        }),
+    }
 }
 
 #[cfg(test)]

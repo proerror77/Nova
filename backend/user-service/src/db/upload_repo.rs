@@ -139,10 +139,7 @@ pub async fn update_upload_status(
 }
 
 /// Mark upload as completed
-pub async fn mark_upload_completed(
-    pool: &PgPool,
-    session_id: Uuid,
-) -> Result<(), sqlx::Error> {
+pub async fn mark_upload_completed(pool: &PgPool, session_id: Uuid) -> Result<(), sqlx::Error> {
     sqlx::query(
         r#"
         UPDATE uploads
@@ -219,10 +216,7 @@ pub async fn upsert_chunk(
 }
 
 /// Get all chunks for an upload session
-pub async fn get_chunks(
-    pool: &PgPool,
-    upload_id: Uuid,
-) -> Result<Vec<UploadChunk>, sqlx::Error> {
+pub async fn get_chunks(pool: &PgPool, upload_id: Uuid) -> Result<Vec<UploadChunk>, sqlx::Error> {
     sqlx::query_as::<_, UploadChunk>(
         r#"
         SELECT
@@ -239,10 +233,7 @@ pub async fn get_chunks(
 }
 
 /// Get failed chunks (for retry)
-pub async fn get_failed_chunks(
-    pool: &PgPool,
-    upload_id: Uuid,
-) -> Result<Vec<i32>, sqlx::Error> {
+pub async fn get_failed_chunks(pool: &PgPool, upload_id: Uuid) -> Result<Vec<i32>, sqlx::Error> {
     let rows: Vec<(i32,)> = sqlx::query_as(
         r#"
         SELECT chunk_number
@@ -259,10 +250,7 @@ pub async fn get_failed_chunks(
 }
 
 /// Get completed chunk count
-pub async fn get_completed_chunk_count(
-    pool: &PgPool,
-    upload_id: Uuid,
-) -> Result<i64, sqlx::Error> {
+pub async fn get_completed_chunk_count(pool: &PgPool, upload_id: Uuid) -> Result<i64, sqlx::Error> {
     let (count,): (i64,) = sqlx::query_as(
         r#"
         SELECT COUNT(*)
@@ -329,10 +317,7 @@ pub async fn mark_chunk_failed(
 // ========================================
 
 /// Delete upload session and all chunks (cascade)
-pub async fn delete_upload_session(
-    pool: &PgPool,
-    session_id: Uuid,
-) -> Result<(), sqlx::Error> {
+pub async fn delete_upload_session(pool: &PgPool, session_id: Uuid) -> Result<(), sqlx::Error> {
     sqlx::query(
         r#"
         DELETE FROM uploads WHERE id = $1
@@ -431,18 +416,12 @@ pub async fn get_chunk(
 }
 
 /// Alias for mark_upload_completed - marks upload session as complete
-pub async fn complete_upload(
-    pool: &PgPool,
-    upload_id: Uuid,
-) -> Result<(), sqlx::Error> {
+pub async fn complete_upload(pool: &PgPool, upload_id: Uuid) -> Result<(), sqlx::Error> {
     mark_upload_completed(pool, upload_id).await
 }
 
 /// Alias for delete_upload_session - cancels upload session
-pub async fn cancel_upload(
-    pool: &PgPool,
-    upload_id: Uuid,
-) -> Result<(), sqlx::Error> {
+pub async fn cancel_upload(pool: &PgPool, upload_id: Uuid) -> Result<(), sqlx::Error> {
     delete_upload_session(pool, upload_id).await
 }
 
@@ -488,10 +467,7 @@ pub async fn set_s3_upload_id(
 }
 
 /// Update chunk count - recalculate chunks_completed from database
-pub async fn update_chunk_count(
-    pool: &PgPool,
-    upload_id: Uuid,
-) -> Result<(), sqlx::Error> {
+pub async fn update_chunk_count(pool: &PgPool, upload_id: Uuid) -> Result<(), sqlx::Error> {
     sqlx::query(
         r#"
         UPDATE uploads u

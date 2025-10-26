@@ -12,10 +12,9 @@
 /// IMPORTANT: This implementation requires encrypted token storage
 /// Current schema stores hashed tokens which cannot be refreshed.
 /// See OAUTH_TOKEN_STORAGE_FIX.md for migration details.
-
 use crate::db::oauth_repo;
 use crate::models::OAuthConnection;
-use crate::services::oauth::{OAuthProvider, OAuthProviderFactory, OAuthError};
+use crate::services::oauth::{OAuthError, OAuthProvider, OAuthProviderFactory};
 use chrono::Utc;
 use sqlx::PgPool;
 use std::sync::Arc;
@@ -46,7 +45,7 @@ impl Default for OAuthTokenRefreshConfig {
     fn default() -> Self {
         Self {
             refresh_interval_secs: 300, // 5 minutes
-            expiry_window_secs: 600, // 10 minutes before expiry
+            expiry_window_secs: 600,    // 10 minutes before expiry
             max_tokens_per_cycle: 100,
             retry_delay_ms: 1000,
             max_retries: 3,
@@ -107,12 +106,10 @@ impl OAuthTokenRefreshJob {
         debug!("Starting OAuth token refresh cycle");
 
         // 1. Query for connections with expiring tokens
-        let connections = oauth_repo::find_expiring_tokens(
-            self.pool.as_ref(),
-            self.config.expiry_window_secs,
-        )
-        .await
-        .map_err(|e| format!("Failed to query expiring tokens: {}", e))?;
+        let connections =
+            oauth_repo::find_expiring_tokens(self.pool.as_ref(), self.config.expiry_window_secs)
+                .await
+                .map_err(|e| format!("Failed to query expiring tokens: {}", e))?;
 
         if connections.is_empty() {
             debug!("No expiring OAuth tokens found");
@@ -125,10 +122,8 @@ impl OAuthTokenRefreshJob {
         );
 
         // 2. Limit tokens to process per cycle
-        let tokens_to_process = &connections[0..std::cmp::min(
-            connections.len(),
-            self.config.max_tokens_per_cycle,
-        )];
+        let tokens_to_process =
+            &connections[0..std::cmp::min(connections.len(), self.config.max_tokens_per_cycle)];
 
         // 3. Attempt to refresh each token
         for connection in tokens_to_process {
@@ -156,10 +151,7 @@ impl OAuthTokenRefreshJob {
     }
 
     /// Refresh a single OAuth token
-    async fn refresh_single_token(
-        &self,
-        connection: &OAuthConnection,
-    ) -> Result<(), String> {
+    async fn refresh_single_token(&self, connection: &OAuthConnection) -> Result<(), String> {
         // Check if encrypted tokens are available
         // For backward compatibility, we skip tokens without encrypted storage
         let encrypted_available = match sqlx::query_scalar::<_, bool>(
@@ -187,27 +179,22 @@ impl OAuthTokenRefreshJob {
         }
 
         // Get decrypted refresh token
-        let refresh_token = crate::db::oauth_repo::get_decrypted_refresh_token(
-            self.pool.as_ref(),
-            connection.id,
-        )
-        .await
-        .map_err(|e| {
-            warn!(
-                "Failed to decrypt refresh token for user={}, provider={}: {}",
-                connection.user_id, connection.provider, e
-            );
-            e
-        })?;
+        let refresh_token =
+            crate::db::oauth_repo::get_decrypted_refresh_token(self.pool.as_ref(), connection.id)
+                .await
+                .map_err(|e| {
+                    warn!(
+                        "Failed to decrypt refresh token for user={}, provider={}: {}",
+                        connection.user_id, connection.provider, e
+                    );
+                    e
+                })?;
 
         // Attempt refresh with retries
         let mut attempt = 0;
         loop {
             attempt += 1;
-            match self
-                .refresh_with_provider(connection, &refresh_token)
-                .await
-            {
+            match self.refresh_with_provider(connection, &refresh_token).await {
                 Ok(response) => {
                     // Update tokens in database
                     let new_expires_at = std::time::SystemTime::now()
@@ -457,9 +444,7 @@ mod tests {
     #[test]
     fn test_token_refresh_job_creation() {
         // Just verify the job can be created without panicking
-        let pool = std::sync::Arc::new(sqlx::SqlitePool::connect(
-            "sqlite::memory:",
-        ).unwrap());
+        let pool = std::sync::Arc::new(sqlx::SqlitePool::connect("sqlite::memory:").unwrap());
 
         let config = OAuthTokenRefreshConfig::default();
         let _job = OAuthTokenRefreshJob::new(config, pool);

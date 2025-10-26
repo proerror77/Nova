@@ -12,11 +12,13 @@ pub mod token_encryption;
 pub mod token_refresh_job;
 
 // Re-export commonly used types
-pub use jwks_cache::{JWKS, JWKSCache, JWKSCacheStats, JWKSKey};
+pub use jwks_cache::{JWKSCache, JWKSCacheStats, JWKSKey, JWKS};
 pub use pkce::{generate_code_challenge, verify_code_challenge};
 pub use state_manager::{OAuthState, OAuthStateManager};
 pub use token_encryption::{generate_encryption_key, TokenEncryptionService};
-pub use token_refresh_job::{OAuthTokenRefreshConfig, OAuthTokenRefreshJob, OAuthTokenRefreshStats};
+pub use token_refresh_job::{
+    OAuthTokenRefreshConfig, OAuthTokenRefreshJob, OAuthTokenRefreshStats,
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OAuthUserInfo {
