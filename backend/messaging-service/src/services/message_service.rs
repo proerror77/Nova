@@ -1,5 +1,5 @@
 use chrono::Utc;
-use base64;
+use base64::{engine::general_purpose, Engine as _};
 use sqlx::{Pool, Postgres, Row};
 use uuid::Uuid;
 
@@ -28,7 +28,7 @@ impl MessageService {
             .map_err(|e| crate::error::AppError::Config(format!("invalid utf8: {e}")))?;
 
         // Insert with compatibility to user-service schema (encrypted_content, nonce required; no sequence_number column)
-        let enc_b64 = base64::encode(&content);
+        let enc_b64 = general_purpose::STANDARD.encode(&content);
         let nonce = "dev-nonce";
         if idempotency_key.is_some() {
             // Basic insert (idempotency via external caller if needed)
@@ -135,7 +135,7 @@ impl MessageService {
         .bind(audio_url)
         .bind(duration_ms as i32)
         .bind(audio_codec)
-        .bind(base64::encode(audio_url))
+        .bind(general_purpose::STANDARD.encode(audio_url))
         .bind("dev-nonce")
         .execute(db)
         .await
