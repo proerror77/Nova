@@ -20,6 +20,9 @@ final class FeedViewModel: ObservableObject {
     // 乐观更新备份 - 用于回滚
     private var optimisticUpdateBackup: [UUID: Post] = [:]
 
+    // 防止同一个post的like操作并发执行
+    private var likeOperations: [UUID: Task<Void, Never>] = [:]
+
     // 列表缓冲：提前加载阈值（距离底部多少条开始加载）
     private let prefetchThreshold = 5
 
@@ -152,13 +155,17 @@ final class FeedViewModel: ObservableObject {
             return
         }
 
+        // 防止同一个post的like操作并发执行
+        if likeOperations[post.id] != nil {
+            return
+        }
+
         let originalPost = posts[index]
         let wasLiked = originalPost.isLiked
 
-        // 1. 备份原始状态（用于回滚）
         optimisticUpdateBackup[post.id] = originalPost
 
-        // 2. 乐观更新 UI（立即反馈）
+        // 乐观更新UI
         let updatedPost = Post(
             id: originalPost.id,
             userId: originalPost.userId,
@@ -176,36 +183,67 @@ final class FeedViewModel: ObservableObject {
             posts[index] = updatedPost
         }
 
-        // 3. 调用 API 持久化（后台执行）
+        let task = Task {
+            do {
+                let postRepository = PostRepository()
+                if wasLiked {
+                    _ = try await postRepository.unlikePost(id: post.id)
+                } else {
+                    _ = try await postRepository.likePost(id: post.id)
+                }
+
+                optimisticUpdateBackup.removeValue(forKey: post.id)
+            } catch {
+                await rollbackOptimisticUpdate(for: post.id)
+                showErrorMessage("Failed to \(wasLiked ? "unlike" : "like") post")
+            }
+        }
+
+        likeOperations[post.id] = task
+
+        Task {
+            await task.value
+            likeOperations.removeValue(forKey: post.id)
+        }
+    }
+
+    func submitComment(to post: Post, text: String) async {
+        guard let userId = AuthManager.shared.currentUser?.id else {
+            showErrorMessage("User not authenticated")
+            return
+        }
+
+        // 1. 乐观更新 UI
+        let tempComment = addOptimisticComment(to: post, text: text)
+
+        // 2. 调用 API 持久化
         Task {
             do {
-                // TODO: 替换为真实的 PostRepository 调用
-                // let postRepository = PostRepository()
-                // try await postRepository.toggleLike(postId: post.id)
+                let postRepository = PostRepository()
+                let comment = try await postRepository.createComment(postId: post.id, text: text)
 
-                // 模拟网络延迟
-                try await Task.sleep(nanoseconds: 500_000_000) // 0.5s
-
+                print("[FeedViewModel] ✅ Comment posted: \(comment.id)")
                 // 成功后清除备份
                 optimisticUpdateBackup.removeValue(forKey: post.id)
 
             } catch {
-                // 4. 失败时回滚到原始状态
-                await rollbackOptimisticUpdate(for: post.id)
-                showErrorMessage("Failed to \(wasLiked ? "unlike" : "like") post")
+                // 3. 失败时回滚
+                rollbackOptimisticComment(for: post)
+                showErrorMessage("Failed to post comment: \(error.localizedDescription)")
             }
         }
     }
 
     func addOptimisticComment(to post: Post, text: String) -> Comment {
         // 创建临时评论（乐观更新）
+        let currentUser = AuthManager.shared.currentUser
         let tempComment = Comment(
             id: UUID(),
             postId: post.id,
-            userId: UUID(), // TODO: 从用户会话获取
+            userId: currentUser?.id ?? UUID(),
             text: text,
             createdAt: Date(),
-            user: nil // TODO: 从用户会话获取
+            user: currentUser
         )
 
         // 更新 post 的评论数
