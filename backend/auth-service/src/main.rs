@@ -33,8 +33,9 @@ async fn main() -> Result<()> {
     let subscriber = tracing_subscriber::registry()
         .with(tracing_subscriber::EnvFilter::from_default_env())
         .with(tracing_subscriber::fmt::layer());
-    set_global_default(subscriber)
-        .map_err(|e| auth_service::AuthError::Internal(format!("Failed to set subscriber: {}", e)))?;
+    set_global_default(subscriber).map_err(|e| {
+        auth_service::AuthError::Internal(format!("Failed to set subscriber: {}", e))
+    })?;
 
     // Database setup
     let database_url = std::env::var("DATABASE_URL")
@@ -44,7 +45,9 @@ async fn main() -> Result<()> {
         .max_connections(20)
         .connect(&database_url)
         .await
-        .map_err(|e| auth_service::AuthError::Internal(format!("Failed to connect to DB: {}", e)))?;
+        .map_err(|e| {
+            auth_service::AuthError::Internal(format!("Failed to connect to DB: {}", e))
+        })?;
 
     // Verify database connection
     sqlx::query("SELECT 1")
@@ -59,7 +62,10 @@ async fn main() -> Result<()> {
         .route("/health", get(health_check))
         .route("/api/v1/auth/register", post(handlers::auth::register))
         .route("/api/v1/auth/login", post(handlers::auth::login))
-        .route("/api/v1/auth/verify-email", post(handlers::auth::verify_email))
+        .route(
+            "/api/v1/auth/verify-email",
+            post(handlers::auth::verify_email),
+        )
         .route("/api/v1/auth/refresh", post(handlers::auth::refresh_token))
         .route("/api/v1/auth/logout", post(handlers::auth::logout))
         .with_state(Arc::new(state));
