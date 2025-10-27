@@ -83,7 +83,7 @@ hex = "0.4"
 mime = "0.3"
 
 # Encoding
-base64 = "0.21"
+base64 = "0.22"
 
 # Async traits
 async-trait = "0.1"
