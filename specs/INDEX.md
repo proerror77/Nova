@@ -1,6 +1,14 @@
 # Nova Specs Index
 
+**Status**: Phase 7B ✅ Complete in main | Phase 7C 🚀 Ready in develop/phase-7c
+
 This index anchors living specs to implementation. Updated 2025-10-25.
+
+Latest state:
+- **main**: Phase 7B Messaging + Stories + P1 Critical Fixes (complete)
+- **develop/phase-7c**: Phase 7C development baseline
+
+Branch cleanup completed: 43 → 2 branches (see BRANCH_CLEANUP_SUMMARY.md)
 
 ## Active Specs
 
