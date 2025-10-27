@@ -1,0 +1,45 @@
+[package]
+name = "nova-common"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lib]
+name = "nova_common"
+path = "src/lib.rs"
+
+[dependencies]
+# Core async and serialization
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+uuid.workspace = true
+chrono.workspace = true
+
+# Error handling
+thiserror.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+
+# HTTP and gRPC
+actix-web.workspace = true
+reqwest.workspace = true
+tonic.workspace = true
+prost.workspace = true
+http = "0.2"
+
+# Database
+sqlx.workspace = true
+redis.workspace = true
+
+# Validation
+validator.workspace = true
+
+[features]
+# Feature gates for different service needs
+default = ["http", "models"]
+http = []
+models = []
+grpc = ["tonic", "prost"]
