@@ -28,8 +28,33 @@ impl EventProducer {
         Ok(Self {
             producer,
             topic,
-            timeout: Duration::from_secs(5),
+            timeout: Duration::from_millis(100),  // ← 从 5s 改为 100ms，快速失败
         })
+    }
+
+    /// Send JSON with explicit timeout override (for advanced use cases)
+    pub async fn send_json_with_timeout(
+        &self,
+        key: &str,
+        payload: &str,
+        timeout_ms: u64,
+    ) -> Result<()> {
+        let custom_timeout = Duration::from_millis(timeout_ms);
+        let record = FutureRecord::to(&self.topic).payload(payload).key(key);
+
+        debug!(
+            "Publishing event to topic {} (key={}) with timeout {}ms",
+            self.topic, key, timeout_ms
+        );
+
+        match timeout(custom_timeout, self.producer.send(record, custom_timeout)).await {
+            Ok(Ok(_)) => Ok(()),
+            Ok(Err((e, _))) => Err(AppError::Kafka(e)),
+            Err(_) => {
+                warn!("Kafka send timed out after {}ms", timeout_ms);
+                Err(AppError::Internal("Kafka publish timeout".into()))
+            }
+        }
     }
 
     pub async fn send_json(&self, key: &str, payload: &str) -> Result<()> {

@@ -179,7 +179,7 @@ impl StreamActor {
         // Add to Redis active set
         self.viewer_counter.add_active_stream(stream.id).await?;
 
-        // Publish Kafka event: stream.started
+        // Publish Kafka event: stream.started (fire-and-forget)
         let event = json!({
             "event_type": "stream.started",
             "stream_id": stream.id,
@@ -188,14 +188,16 @@ impl StreamActor {
             "timestamp": chrono::Utc::now().to_rfc3339()
         });
 
-        if let Err(e) = self
-            .kafka_producer
-            .send_json(&stream.id.to_string(), &event.to_string())
-            .await
-        {
-            tracing::warn!("Failed to publish stream.started event: {}", e);
-            // Non-blocking: continue even if Kafka fails
-        }
+        // Use tokio::spawn to avoid blocking the actor on Kafka send
+        let producer = self.kafka_producer.clone();
+        let stream_id = stream.id;
+        let event_str = event.to_string();
+
+        tokio::spawn(async move {
+            if let Err(e) = producer.send_json(&stream_id.to_string(), &event_str).await {
+                tracing::warn!("Failed to publish stream.started event: {}", e);
+            }
+        });
 
         Ok(())
     }
@@ -228,7 +230,7 @@ impl StreamActor {
         self.viewer_counter.cleanup_stream(stream.id).await?;
         self.chat_store.clear_comments(stream.id).await?;
 
-        // Publish Kafka event: stream.ended
+        // Publish Kafka event: stream.ended (fire-and-forget)
         let event = json!({
             "event_type": "stream.ended",
             "stream_id": stream.id,
@@ -238,14 +240,16 @@ impl StreamActor {
             "timestamp": chrono::Utc::now().to_rfc3339()
         });
 
-        if let Err(e) = self
-            .kafka_producer
-            .send_json(&stream.id.to_string(), &event.to_string())
-            .await
-        {
-            tracing::warn!("Failed to publish stream.ended event: {}", e);
-            // Non-blocking: continue even if Kafka fails
-        }
+        // Use tokio::spawn to avoid blocking the actor on Kafka send
+        let producer = self.kafka_producer.clone();
+        let stream_id = stream.id;
+        let event_str = event.to_string();
+
+        tokio::spawn(async move {
+            if let Err(e) = producer.send_json(&stream_id.to_string(), &event_str).await {
+                tracing::warn!("Failed to publish stream.ended event: {}", e);
+            }
+        });
 
         Ok(())
     }
@@ -362,6 +366,8 @@ impl StreamActor {
             });
         }
 
+        // === DataLoader Pattern Optimization ===
+        // 1. Batch fetch viewer counts
         let stream_ids: Vec<Uuid> = rows.iter().map(|row| row.id).collect();
         let counts = self
             .viewer_counter
@@ -369,12 +375,23 @@ impl StreamActor {
             .await
             .unwrap_or_else(|_| vec![0; stream_ids.len()]);
 
+        // 2. Batch fetch all creators in ONE query instead of N queries
+        let creator_ids: Vec<Uuid> = rows.iter().map(|row| row.creator_id).collect();
+        let creators = self.repo.get_creators_batch(&creator_ids).await?;
+
+        // 3. Build HashMap for O(1) creator lookup
+        use std::collections::HashMap;
+        let creator_map: HashMap<Uuid, CreatorInfo> = creators
+            .into_iter()
+            .map(|c| (c.id, c))
+            .collect();
+
+        // 4. Assemble response using cached data (no more N+1 queries)
         let mut summaries = Vec::with_capacity(rows.len());
         for (idx, row) in rows.into_iter().enumerate() {
-            let creator = self
-                .repo
-                .get_creator_info(row.creator_id)
-                .await?
+            let creator = creator_map
+                .get(&row.creator_id)
+                .cloned()
                 .unwrap_or(CreatorInfo {
                     id: row.creator_id,
                     username: "unknown".to_string(),
