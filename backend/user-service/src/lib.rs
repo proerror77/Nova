@@ -1,4 +1,7 @@
+pub mod app_state;
+pub mod background;
 pub mod cache;
+pub mod cli;
 pub mod config;
 pub mod db;
 pub mod error;
@@ -8,6 +11,7 @@ pub mod metrics;
 pub mod middleware;
 pub mod models;
 pub mod openapi;
+pub mod routes;
 pub mod security;
 pub mod services;
 pub mod utils;
