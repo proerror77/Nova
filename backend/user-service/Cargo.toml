@@ -80,7 +80,7 @@ tokio-stream = "0.1"
 regex = "1"
 
 # Phase 4: Video Processing
-tonic = "0.10"
+tonic = "0.14"
 prost = "0.12"
 ndarray = "0.15"
 http = "0.2"
