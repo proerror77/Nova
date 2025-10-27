@@ -94,3 +94,110 @@ impl From<anyhow::Error> for ServiceError {
         ServiceError::Internal(err.to_string())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn authentication_error_returns_401() {
+        assert_eq!(
+            ServiceError::Authentication("Invalid credentials".into()).status_code(),
+            401
+        );
+    }
+
+    #[test]
+    fn authorization_error_returns_403() {
+        assert_eq!(
+            ServiceError::Authorization("Access denied".into()).status_code(),
+            403
+        );
+    }
+
+    #[test]
+    fn validation_error_returns_400() {
+        assert_eq!(
+            ServiceError::Validation("Invalid input".into()).status_code(),
+            400
+        );
+    }
+
+    #[test]
+    fn not_found_error_returns_404() {
+        assert_eq!(
+            ServiceError::NotFound("Resource not found".into()).status_code(),
+            404
+        );
+    }
+
+    #[test]
+    fn conflict_error_returns_409() {
+        assert_eq!(
+            ServiceError::Conflict("Resource already exists".into()).status_code(),
+            409
+        );
+    }
+
+    #[test]
+    fn internal_error_returns_500() {
+        assert_eq!(
+            ServiceError::Internal("Server error".into()).status_code(),
+            500
+        );
+    }
+
+    #[test]
+    fn service_unavailable_returns_503() {
+        assert_eq!(
+            ServiceError::ServiceUnavailable("Service down".into()).status_code(),
+            503
+        );
+    }
+
+    #[test]
+    fn timeout_returns_504() {
+        assert_eq!(
+            ServiceError::Timeout("Request timeout".into()).status_code(),
+            504
+        );
+    }
+
+    #[test]
+    fn service_unavailable_is_retryable() {
+        assert!(ServiceError::ServiceUnavailable("Service down".into()).is_retryable());
+    }
+
+    #[test]
+    fn timeout_is_retryable() {
+        assert!(ServiceError::Timeout("Timeout".into()).is_retryable());
+    }
+
+    #[test]
+    fn cache_error_is_retryable() {
+        assert!(ServiceError::CacheError("Cache failed".into()).is_retryable());
+    }
+
+    #[test]
+    fn authentication_error_is_not_retryable() {
+        assert!(!ServiceError::Authentication("Invalid".into()).is_retryable());
+    }
+
+    #[test]
+    fn not_found_error_is_not_retryable() {
+        assert!(!ServiceError::NotFound("Not found".into()).is_retryable());
+    }
+
+    #[test]
+    fn error_serialization_preserves_type() {
+        let error = ServiceError::NotFound("resource xyz".into());
+        let json = serde_json::to_string(&error).expect("Should serialize");
+
+        assert!(json.contains("NotFound"));
+        assert!(json.contains("resource xyz"));
+
+        let deserialized: ServiceError =
+            serde_json::from_str(&json).expect("Should deserialize");
+        assert_eq!(deserialized.to_string(), error.to_string());
+    }
+}

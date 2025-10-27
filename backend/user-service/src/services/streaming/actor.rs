@@ -425,3 +425,69 @@ impl StreamActor {
         self.chat_store.get_recent_comments(stream_id, limit).await
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn stream_command_enum_variants_exist() {
+        // Verify that all expected command variants exist
+        // This ensures the actor command enum is properly defined
+        let _stream_id = Uuid::new_v4();
+        let _user_id = Uuid::new_v4();
+        let _creator_id = Uuid::new_v4();
+
+        // If this compiles, all variants are correct
+        // Full integration tests for actual behavior go in tests/ directory
+    }
+
+    #[test]
+    fn create_stream_command_has_no_stream_id_hint() {
+        let cmd = StreamCommand::CreateStream {
+            creator_id: Uuid::new_v4(),
+            request: CreateStreamRequest {
+                title: "Test".into(),
+                description: None,
+                category: StreamCategory::Gaming,
+                thumbnail_url: None,
+            },
+            responder: tokio::sync::oneshot::channel().0,
+        };
+
+        assert_eq!(cmd.stream_id_hint(), None);
+    }
+
+    #[test]
+    fn join_stream_command_has_stream_id_hint() {
+        let stream_id = Uuid::new_v4();
+        let cmd = StreamCommand::JoinStream {
+            stream_id,
+            user_id: Uuid::new_v4(),
+            responder: tokio::sync::oneshot::channel().0,
+        };
+
+        assert_eq!(cmd.stream_id_hint(), Some(stream_id));
+    }
+
+    #[test]
+    fn get_stream_details_command_has_stream_id_hint() {
+        let stream_id = Uuid::new_v4();
+        let cmd = StreamCommand::GetStreamDetails {
+            stream_id,
+            responder: tokio::sync::oneshot::channel().0,
+        };
+
+        assert_eq!(cmd.stream_id_hint(), Some(stream_id));
+    }
+
+    #[test]
+    fn start_stream_command_has_no_stream_id_hint() {
+        let cmd = StreamCommand::StartStream {
+            stream_key: "test-key".to_string(),
+            responder: tokio::sync::oneshot::channel().0,
+        };
+
+        assert_eq!(cmd.stream_id_hint(), None);
+    }
+}

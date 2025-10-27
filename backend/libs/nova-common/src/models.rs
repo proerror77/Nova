@@ -212,3 +212,224 @@ pub struct HealthStatus {
     pub timestamp: DateTime<Utc>,
     pub dependencies: std::collections::HashMap<String, String>,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn command_request_has_unique_id() {
+        #[derive(serde::Serialize)]
+        struct TestCmd {
+            value: String,
+        }
+
+        let req = CommandRequest::new("svc-a", "svc-b", TestCmd {
+            value: "test".into(),
+        });
+
+        assert_eq!(req.source_service, "svc-a");
+        assert_eq!(req.target_service, "svc-b");
+        assert!(!req.request_id.is_empty());
+    }
+
+    #[test]
+    fn command_request_has_timestamp() {
+        #[derive(serde::Serialize)]
+        struct TestCmd {
+            value: String,
+        }
+
+        let before = Utc::now();
+        let req = CommandRequest::new("a", "b", TestCmd {
+            value: "test".into(),
+        });
+        let after = Utc::now();
+
+        assert!(req.timestamp >= before && req.timestamp <= after);
+    }
+
+    #[test]
+    fn command_response_success_has_data() {
+        let response = CommandResponse::ok("req-1".into(), "success data");
+
+        assert!(response.success);
+        assert_eq!(response.data, Some("success data"));
+        assert_eq!(response.error, None);
+        assert_eq!(response.request_id, "req-1");
+    }
+
+    #[test]
+    fn command_response_error_has_message() {
+        let response: CommandResponse<String> =
+            CommandResponse::error("req-2".into(), "error message".into());
+
+        assert!(!response.success);
+        assert_eq!(response.data, None);
+        assert_eq!(response.error, Some("error message".into()));
+        assert_eq!(response.request_id, "req-2");
+    }
+
+    #[test]
+    fn stream_event_creation_has_timestamp() {
+        let stream_id = Uuid::new_v4();
+        let creator_id = Uuid::new_v4();
+
+        let before = Utc::now();
+        let event = StreamEvent::new(EventType::StreamStarted, stream_id, creator_id);
+        let after = Utc::now();
+
+        assert_eq!(event.event_type, EventType::StreamStarted);
+        assert_eq!(event.stream_id, stream_id);
+        assert_eq!(event.creator_id, creator_id);
+        assert!(event.timestamp >= before && event.timestamp <= after);
+    }
+
+    #[test]
+    fn stream_event_with_data() {
+        let stream_id = Uuid::new_v4();
+        let creator_id = Uuid::new_v4();
+
+        let event = StreamEvent::new(EventType::StreamEnded, stream_id, creator_id)
+            .with_data(serde_json::json!({
+                "duration_seconds": 3600,
+                "viewer_count": 150
+            }));
+
+        assert_eq!(event.data["duration_seconds"], 3600);
+        assert_eq!(event.data["viewer_count"], 150);
+    }
+
+    #[test]
+    fn stream_info_creation() {
+        let stream_id = Uuid::new_v4();
+        let creator_id = Uuid::new_v4();
+
+        let info = StreamInfo {
+            stream_id,
+            creator_id,
+            title: "My Stream".to_string(),
+            status: StreamStatus::Live,
+            viewer_count: 100,
+            started_at: None,
+        };
+
+        assert_eq!(info.title, "My Stream");
+        assert_eq!(info.status, StreamStatus::Live);
+        assert_eq!(info.viewer_count, 100);
+    }
+
+    #[test]
+    fn stream_status_equality() {
+        assert_eq!(StreamStatus::Live, StreamStatus::Live);
+        assert_ne!(StreamStatus::Live, StreamStatus::Ended);
+        assert_eq!(StreamStatus::Pending, StreamStatus::Pending);
+    }
+
+    #[test]
+    fn pagination_request_validates_page() {
+        let valid_req = PaginationRequest { page: 1, limit: 20 };
+        assert!(valid_req.validate().is_ok());
+
+        let invalid_req = PaginationRequest { page: 0, limit: 20 };
+        assert!(invalid_req.validate().is_err());
+
+        let negative_req = PaginationRequest { page: -1, limit: 20 };
+        assert!(negative_req.validate().is_err());
+    }
+
+    #[test]
+    fn pagination_request_validates_limit() {
+        let valid_req = PaginationRequest { page: 1, limit: 50 };
+        assert!(valid_req.validate().is_ok());
+
+        let too_small = PaginationRequest { page: 1, limit: 0 };
+        assert!(too_small.validate().is_err());
+
+        let too_large = PaginationRequest { page: 1, limit: 101 };
+        assert!(too_large.validate().is_err());
+    }
+
+    #[test]
+    fn paged_response_calculates_has_more() {
+        // Page 1 of 20 pages - has more
+        let response = PagedResponse::new(vec![1, 2, 3], 100, 1, 5);
+        assert!(response.has_more);
+
+        // Page 20 (last page) - no more
+        let last_page = PagedResponse::new(vec![96, 97, 98, 99, 100], 100, 20, 5);
+        assert!(!last_page.has_more);
+
+        // Exactly one page
+        let single = PagedResponse::new(vec![1, 2, 3], 3, 1, 5);
+        assert!(!single.has_more);
+    }
+
+    #[test]
+    fn paged_response_structure() {
+        let items = vec!["a", "b", "c"];
+        let response = PagedResponse::new(items.clone(), 30, 2, 10);
+
+        assert_eq!(response.items, items);
+        assert_eq!(response.total, 30);
+        assert_eq!(response.page, 2);
+        assert_eq!(response.limit, 10);
+    }
+
+    #[test]
+    fn health_status_creation() {
+        let mut deps = std::collections::HashMap::new();
+        deps.insert("database".to_string(), "healthy".to_string());
+        deps.insert("redis".to_string(), "healthy".to_string());
+
+        let status = HealthStatus {
+            service_name: "streaming-service".to_string(),
+            status: "healthy".to_string(),
+            version: "1.0.0".to_string(),
+            timestamp: Utc::now(),
+            dependencies: deps,
+        };
+
+        assert_eq!(status.service_name, "streaming-service");
+        assert_eq!(status.status, "healthy");
+        assert_eq!(status.dependencies.len(), 2);
+    }
+
+    #[test]
+    fn stream_command_serialization() {
+        let cmd = StreamCommand::GetStreamInfo {
+            stream_id: Uuid::new_v4(),
+        };
+
+        let json = serde_json::to_string(&cmd).expect("Should serialize");
+        assert!(json.contains("GetStreamInfo"));
+
+        let deserialized: StreamCommand =
+            serde_json::from_str(&json).expect("Should deserialize");
+        match deserialized {
+            StreamCommand::GetStreamInfo { .. } => {} // Success
+            _ => panic!("Wrong command type"),
+        }
+    }
+
+    #[test]
+    fn command_request_response_roundtrip() {
+        #[derive(serde::Serialize, serde::Deserialize, PartialEq, Debug)]
+        struct MyCommand {
+            name: String,
+            count: i32,
+        }
+
+        let cmd = MyCommand {
+            name: "test".to_string(),
+            count: 42,
+        };
+
+        let request = CommandRequest::new("svc-a", "svc-b", cmd.clone());
+        let json = serde_json::to_string(&request).expect("Should serialize");
+        let deserialized: CommandRequest<MyCommand> =
+            serde_json::from_str(&json).expect("Should deserialize");
+
+        assert_eq!(deserialized.command, cmd);
+    }
+}
