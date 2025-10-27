@@ -1,5 +1,6 @@
 # Rust
 /target/
+**/target/
 debug/
 release/
 *.rs.bk
@@ -36,9 +37,12 @@ vendor/
 
 # Build
 build/
+**/build/
 dist/
 out/
 bin/
+**/.build/
+DerivedData/
 
 # Test coverage
 coverage/
@@ -65,3 +69,21 @@ tmp/
 temp/
 *.swp
 .#*
+
+# Backup directories
+*.backup/
+**/backup/
+
+# Generated documentation archives (generated reports, summaries)
+**/PHASE_*_COMPLETION_REPORT.md
+**/PHASE_*_CODE_REVIEW_*.md
+**/PHASE_*_EXECUTIVE_SUMMARY.md
+**/IMPLEMENTATION_SUMMARY.md
+**/DEPLOYMENT_TEST_REPORT.md
+**/COMPLETION_SUMMARY.md
+**/COMPLETION_STATUS_SUMMARY.md
+**/FINAL_SUMMARY.md
+**/STATUS_REPORT.md
+**/*_SUMMARY.md
+**/K8S_CONFIGURATION_VALIDATION_REPORT.md
+**/EXECUTION_SUMMARY.md
