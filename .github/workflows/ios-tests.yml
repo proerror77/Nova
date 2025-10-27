@@ -277,13 +277,13 @@ jobs:
 
     steps:
       - name: Download Unit Test Results
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v6
         with:
           name: unit-test-results
           path: unit-results
 
       - name: Download Integration Test Results
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v6
         with:
           name: integration-test-results
           path: integration-results
