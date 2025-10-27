@@ -12,13 +12,14 @@ use validator::Validate;
 use crate::error::AppError;
 use crate::middleware::jwt_auth::UserId;
 use crate::services::streaming::{
-    CreateStreamRequest, RtmpWebhookHandler, StreamAnalyticsService, StreamCategory, StreamComment,
-    StreamDiscoveryService, StreamService,
+    CreateStreamRequest, RtmpWebhookHandler, StreamAnalyticsService, StreamCategory, StreamCommand,
+    StreamComment, StreamDiscoveryService,
 };
+use tokio::sync::mpsc;
 
 /// Shared state for streaming handlers
 pub struct StreamHandlerState {
-    pub stream_service: Arc<Mutex<StreamService>>,
+    pub stream_tx: mpsc::Sender<StreamCommand>,
     pub discovery_service: Arc<Mutex<StreamDiscoveryService>>,
     pub analytics_service: Arc<StreamAnalyticsService>,
     pub rtmp_handler: Arc<Mutex<RtmpWebhookHandler>>,
@@ -85,11 +86,13 @@ pub async fn create_stream(
         .map_err(AppError::from)
         .map_err(map_app_error)?;
 
-    let mut service = state.stream_service.lock().await;
-    let response = service
-        .create_stream(user_id, payload.into_inner())
-        .await
-        .map_err(map_anyhow)?;
+    let response = crate::services::streaming::stream_handler_adapter::create_stream(
+        &state.stream_tx,
+        user_id,
+        payload.into_inner(),
+    )
+    .await
+    .map_err(map_anyhow)?;
 
     Ok(HttpResponse::Created().json(response))
 }
@@ -99,9 +102,13 @@ pub async fn list_live_streams(
     state: web::Data<StreamHandlerState>,
 ) -> ActixResult<HttpResponse> {
     let params = query.into_inner();
-    let mut service = state.stream_service.lock().await;
-    let response = service
-        .list_live_streams(params.category, params.page, params.limit)
+    let response =
+        crate::services::streaming::stream_handler_adapter::list_live_streams(
+            &state.stream_tx,
+            params.category,
+            params.page,
+            params.limit,
+        )
         .await
         .map_err(map_anyhow)?;
     Ok(HttpResponse::Ok().json(response))
@@ -125,11 +132,12 @@ pub async fn get_stream_details(
     state: web::Data<StreamHandlerState>,
 ) -> ActixResult<HttpResponse> {
     let stream_id = path.into_inner();
-    let mut service = state.stream_service.lock().await;
-    let details = service
-        .get_stream_details(stream_id)
-        .await
-        .map_err(map_anyhow)?;
+    let details = crate::services::streaming::stream_handler_adapter::get_stream_details(
+        &state.stream_tx,
+        stream_id,
+    )
+    .await
+    .map_err(map_anyhow)?;
     Ok(HttpResponse::Ok().json(details))
 }
 
@@ -140,11 +148,13 @@ pub async fn join_stream(
 ) -> ActixResult<HttpResponse> {
     let stream_id = path.into_inner();
     let user_id = extract_user_id(&req).map_err(map_app_error)?;
-    let mut service = state.stream_service.lock().await;
-    let response = service
-        .join_stream(stream_id, user_id)
-        .await
-        .map_err(map_anyhow)?;
+    let response = crate::services::streaming::stream_handler_adapter::join_stream(
+        &state.stream_tx,
+        stream_id,
+        user_id,
+    )
+    .await
+    .map_err(map_anyhow)?;
     Ok(HttpResponse::Ok().json(response))
 }
 
@@ -155,11 +165,13 @@ pub async fn leave_stream(
 ) -> ActixResult<HttpResponse> {
     let stream_id = path.into_inner();
     let user_id = extract_user_id(&req).map_err(map_app_error)?;
-    let mut service = state.stream_service.lock().await;
-    service
-        .leave_stream(stream_id, user_id)
-        .await
-        .map_err(map_anyhow)?;
+    crate::services::streaming::stream_handler_adapter::leave_stream(
+        &state.stream_tx,
+        stream_id,
+        user_id,
+    )
+    .await
+    .map_err(map_anyhow)?;
     Ok(HttpResponse::Accepted().json(json!({ "success": true })))
 }
 
@@ -181,9 +193,13 @@ pub async fn post_stream_comment(
         return Err(AppError::Validation("Comment cannot be empty".into()).into());
     }
 
-    let mut service = state.stream_service.lock().await;
     let comment = StreamComment::new(stream_id, user_id, None, message.to_string());
-    let saved = service.post_comment(comment).await.map_err(map_anyhow)?;
+    let saved = crate::services::streaming::stream_handler_adapter::post_comment(
+        &state.stream_tx,
+        comment,
+    )
+    .await
+    .map_err(map_anyhow)?;
 
     Ok(HttpResponse::Ok().json(saved))
 }
@@ -195,11 +211,13 @@ pub async fn get_stream_comments(
 ) -> ActixResult<HttpResponse> {
     let stream_id = path.into_inner();
     let params = query.into_inner();
-    let mut service = state.stream_service.lock().await;
-    let comments = service
-        .recent_comments(stream_id, params.limit.max(1) as usize)
-        .await
-        .map_err(map_anyhow)?;
+    let comments = crate::services::streaming::stream_handler_adapter::recent_comments(
+        &state.stream_tx,
+        stream_id,
+        params.limit.max(1) as usize,
+    )
+    .await
+    .map_err(map_anyhow)?;
 
     Ok(HttpResponse::Ok().json(comments))
 }
@@ -212,13 +230,12 @@ pub async fn get_stream_analytics(
     let stream_id = path.into_inner();
     let user_id = extract_user_id(&req).map_err(map_app_error)?;
 
-    let details = {
-        let mut service = state.stream_service.lock().await;
-        service
-            .get_stream_details(stream_id)
-            .await
-            .map_err(map_anyhow)?
-    };
+    let details = crate::services::streaming::stream_handler_adapter::get_stream_details(
+        &state.stream_tx,
+        stream_id,
+    )
+    .await
+    .map_err(map_anyhow)?;
 
     if details.creator.id != user_id {
         return Err(AppError::Authorization("Only the creator can access analytics".into()).into());

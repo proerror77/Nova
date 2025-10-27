@@ -31,8 +31,8 @@ use user_service::{
         s3_service,
         stories::StoriesService,
         streaming::{
-            RtmpWebhookHandler, StreamAnalyticsService, StreamChatHandlerState, StreamChatStore,
-            StreamDiscoveryService, StreamRepository, StreamService, ViewerCounter,
+            RtmpWebhookHandler, StreamActor, StreamAnalyticsService, StreamChatHandlerState,
+            StreamChatStore, StreamDiscoveryService, StreamRepository, StreamService, ViewerCounter,
         },
         video_service::VideoService,
     },
@@ -259,14 +259,24 @@ async fn main() -> io::Result<()> {
             .expect("Failed to create Kafka producer"),
     );
 
-    let stream_service = Arc::new(Mutex::new(StreamService::new(
+    // ========================================
+    // Initialize StreamActor (Phase 2: Actor pattern)
+    // Replaces Arc<Mutex<StreamService>> with message-passing
+    // ========================================
+    let (stream_actor, stream_tx) = StreamActor::new(
         stream_repo.clone(),
         stream_viewer_counter.clone(),
         stream_chat_store,
         event_producer.clone(),
         rtmp_base_url.clone(),
         hls_cdn_url.clone(),
-    )));
+    );
+
+    // Spawn the StreamActor in a background task to process commands
+    let stream_actor_handle = tokio::spawn(async move {
+        stream_actor.run().await;
+    });
+    tracing::info!("StreamActor spawned for processing commands");
 
     let discovery_service = Arc::new(Mutex::new(StreamDiscoveryService::new(
         stream_repo.clone(),
@@ -281,7 +291,7 @@ async fn main() -> io::Result<()> {
     )));
 
     let stream_state = web::Data::new(StreamHandlerState {
-        stream_service: stream_service.clone(),
+        stream_tx: stream_tx.clone(),
         discovery_service: discovery_service.clone(),
         analytics_service: analytics_service.clone(),
         rtmp_handler: rtmp_handler.clone(),
