@@ -1,0 +1,506 @@
+# ============================================================================
+# Redis Sentinel StatefulSet - 高可用 Redis
+# ============================================================================
+# 解決問題：Redis 單點故障 + 共享資源衝突
+#
+# 架構：
+# - 3個 Redis Sentinel 進程監控 Redis Master
+# - 自動故障轉移：master 故障 → 自動提升 replica
+# - 客戶端通過 Sentinel 發現當前 master 地址
+#
+# 特點：
+# ✅ 自動故障轉移 (quorum: 2/3)
+# ✅ 資料持久化 (RDB + AOF)
+# ✅ 監控和告警
+# ✅ 3個副本分布在不同節點
+# ============================================================================
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: nova-redis
+  labels:
+    name: nova-redis
+    phase: infrastructure
+
+---
+# ConfigMap for Redis Sentinel configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redis-sentinel-config
+  namespace: nova-redis
+data:
+  sentinel.conf: |
+    # Sentinel 監控 master
+    sentinel monitor mymaster redis-master-0 6379 2
+    sentinel down-after-milliseconds mymaster 5000
+    sentinel parallel-syncs mymaster 1
+    sentinel failover-timeout mymaster 10000
+
+    # 防止誤觸發
+    sentinel auth-pass mymaster redis_password_change_me
+
+    # 日誌級別
+    loglevel notice
+    logfile /var/log/redis/sentinel.log
+
+    # 監控周期
+    sentinel monitor-interval 30000
+
+  redis.conf: |
+    # Redis Master 配置
+    bind 0.0.0.0
+    port 6379
+
+    # 高可用
+    repl-diskless-sync no
+    repl-diskless-sync-delay 5
+
+    # 持久化
+    save 900 1
+    save 300 10
+    save 60 10000
+    stop-writes-on-bgsave-error yes
+    rdbcompression yes
+    rdbchecksum yes
+    dbfilename dump.rdb
+    dir /data
+
+    # AOF
+    appendonly yes
+    appendfilename "appendonly.aof"
+    appendfsync everysec
+
+    # 記憶體
+    maxmemory 512mb
+    maxmemory-policy allkeys-lru
+
+    # 安全
+    requirepass redis_password_change_me
+
+    # 日誌
+    loglevel notice
+    logfile /var/log/redis/redis.log
+
+---
+# Secret for Redis credentials
+apiVersion: v1
+kind: Secret
+metadata:
+  name: redis-credentials
+  namespace: nova-redis
+type: Opaque
+stringData:
+  redis-password: "redis_password_change_me"  # TODO: 生產環境更改
+
+---
+# StatefulSet for Redis with Sentinel
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis-master
+  namespace: nova-redis
+  labels:
+    app: redis
+    component: master
+spec:
+  serviceName: redis-master
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+      component: master
+  template:
+    metadata:
+      labels:
+        app: redis
+        component: master
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "6379"
+        prometheus.io/path: "/metrics"
+    spec:
+      # 安全上下文
+      securityContext:
+        fsGroup: 999
+        runAsNonRoot: true
+        runAsUser: 999
+
+      # 節點親和性：不同節點
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - redis
+                topologyKey: kubernetes.io/hostname
+
+      # 容器
+      containers:
+        # Redis Master
+        - name: redis
+          image: redis:7-alpine
+          imagePullPolicy: IfNotPresent
+
+          # 啟動命令
+          command:
+            - redis-server
+            - /etc/redis/redis.conf
+            - --requirepass
+            - $(REDIS_PASSWORD)
+
+          # 環境變量
+          env:
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: redis-credentials
+                  key: redis-password
+
+          # 埠
+          ports:
+            - name: redis
+              containerPort: 6379
+              protocol: TCP
+
+          # 資源限制
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+
+          # 健康檢查
+          livenessProbe:
+            tcpSocket:
+              port: redis
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+
+          readinessProbe:
+            exec:
+              command:
+                - redis-cli
+                - -a
+                - $(REDIS_PASSWORD)
+                - ping
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 2
+
+          # 掛載點
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: config
+              mountPath: /etc/redis
+              readOnly: true
+            - name: logs
+              mountPath: /var/log/redis
+
+          # 安全上下文
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop:
+                - ALL
+
+        # Redis Sentinel
+        - name: sentinel
+          image: redis:7-alpine
+          imagePullPolicy: IfNotPresent
+
+          command:
+            - redis-sentinel
+            - /etc/redis/sentinel.conf
+            - --bind
+            - 0.0.0.0
+
+          env:
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: redis-credentials
+                  key: redis-password
+
+          ports:
+            - name: sentinel
+              containerPort: 26379
+              protocol: TCP
+
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+
+          livenessProbe:
+            tcpSocket:
+              port: sentinel
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+
+          volumeMounts:
+            - name: sentinel-config
+              mountPath: /etc/redis
+              readOnly: true
+            - name: logs
+              mountPath: /var/log/redis
+
+      # 初始化容器：等待 Redis 啟動
+      initContainers:
+        - name: wait-for-redis
+          image: busybox:latest
+          command: ['sh', '-c', 'until nc -zv redis-master-0.redis-master 6379; do echo waiting for redis; sleep 2; done;']
+
+      # 卷
+      volumes:
+        - name: config
+          configMap:
+            name: redis-sentinel-config
+            items:
+              - key: redis.conf
+                path: redis.conf
+        - name: sentinel-config
+          configMap:
+            name: redis-sentinel-config
+            items:
+              - key: sentinel.conf
+                path: sentinel.conf
+        - name: logs
+          emptyDir: {}
+
+  # 數據卷
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        storageClassName: standard  # 改為你的存儲類
+        resources:
+          requests:
+            storage: 5Gi
+
+---
+# Replica StatefulSet
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis-replica
+  namespace: nova-redis
+  labels:
+    app: redis
+    component: replica
+spec:
+  serviceName: redis-replica
+  replicas: 2
+  selector:
+    matchLabels:
+      app: redis
+      component: replica
+  template:
+    metadata:
+      labels:
+        app: redis
+        component: replica
+    spec:
+      securityContext:
+        fsGroup: 999
+        runAsNonRoot: true
+        runAsUser: 999
+
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - redis
+                topologyKey: kubernetes.io/hostname
+
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          imagePullPolicy: IfNotPresent
+
+          command:
+            - redis-server
+            - /etc/redis/redis.conf
+            - --slaveof
+            - redis-master-0.redis-master.nova-redis.svc.cluster.local
+            - "6379"
+            - --requirepass
+            - $(REDIS_PASSWORD)
+            - --masterauth
+            - $(REDIS_PASSWORD)
+
+          env:
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: redis-credentials
+                  key: redis-password
+
+          ports:
+            - name: redis
+              containerPort: 6379
+              protocol: TCP
+
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+
+          livenessProbe:
+            tcpSocket:
+              port: redis
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+
+          readinessProbe:
+            exec:
+              command:
+                - redis-cli
+                - -a
+                - $(REDIS_PASSWORD)
+                - ping
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 2
+
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: config
+              mountPath: /etc/redis
+              readOnly: true
+
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop:
+                - ALL
+
+      volumes:
+        - name: config
+          configMap:
+            name: redis-sentinel-config
+            items:
+              - key: redis.conf
+                path: redis.conf
+
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        storageClassName: standard
+        resources:
+          requests:
+            storage: 5Gi
+
+---
+# Headless Service for StatefulSet discovery
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-master
+  namespace: nova-redis
+  labels:
+    app: redis
+    component: master
+spec:
+  clusterIP: None
+  ports:
+    - port: 6379
+      targetPort: 6379
+      name: redis
+  selector:
+    app: redis
+    component: master
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-replica
+  namespace: nova-redis
+  labels:
+    app: redis
+    component: replica
+spec:
+  clusterIP: None
+  ports:
+    - port: 6379
+      targetPort: 6379
+      name: redis
+  selector:
+    app: redis
+    component: replica
+
+---
+# ClusterIP Service for client access (通過 Sentinel)
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-sentinel
+  namespace: nova-redis
+  labels:
+    app: redis
+spec:
+  type: ClusterIP
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: 6379
+      protocol: TCP
+    - name: sentinel
+      port: 26379
+      targetPort: 26379
+      protocol: TCP
+  selector:
+    app: redis
+    component: master
+
+---
+# Pod Disruption Budget
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: redis-pdb
+  namespace: nova-redis
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: redis

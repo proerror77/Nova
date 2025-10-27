@@ -1,0 +1,748 @@
+# ============================================================================
+# Microservices Deployments - 所有應用微服務
+# ============================================================================
+# 解決問題：
+# ✅ 跨服務通信超時配置
+# ✅ 熔斷器配置
+# ✅ 連接池隔離
+# ✅ 資源限制隔離
+#
+# 配置的微服務：
+# 1. user-service (核心社交功能)
+# 2. auth-service (認證)
+# 3. search-service (搜索)
+# 4. messaging-service (已有，此處覆蓋以添加新配置)
+# 5. streaming-api (流媒體管理)
+# ============================================================================
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: nova-services
+  labels:
+    name: nova-services
+    phase: application
+
+---
+# ConfigMap for shared configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: services-config
+  namespace: nova-services
+data:
+  # 跨服務通信超時配置
+  http-client-timeout-ms: "3000"
+  http-client-read-timeout-ms: "3000"
+  http-client-write-timeout-ms: "3000"
+  http-client-connect-timeout-ms: "1000"
+
+  # 連接池配置
+  http-client-pool-size: "50"
+  http-client-queue-size: "1000"
+
+  # 熔斷器配置
+  circuit-breaker-failure-threshold: "50"
+  circuit-breaker-success-threshold: "5"
+  circuit-breaker-timeout-sec: "60"
+  circuit-breaker-enabled: "true"
+
+  # 重試配置
+  http-client-max-retries: "3"
+  http-client-retry-delay-ms: "100"
+
+  # 數據庫連接池
+  database-pool-size: "20"
+  database-idle-timeout-sec: "30"
+  database-max-lifetime-sec: "1800"
+
+  # Redis 連接池
+  redis-pool-size: "20"
+  redis-connection-timeout-ms: "2000"
+
+---
+# UserService Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: user-service
+  namespace: nova-services
+  labels:
+    app: user-service
+    component: social
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+
+  selector:
+    matchLabels:
+      app: user-service
+
+  template:
+    metadata:
+      labels:
+        app: user-service
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        prometheus.io/path: "/metrics"
+
+    spec:
+      securityContext:
+        fsGroup: 1001
+        runAsNonRoot: true
+        runAsUser: 1001
+
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - user-service
+                topologyKey: kubernetes.io/hostname
+
+      containers:
+        - name: user-service
+          image: nova/user-service:latest
+          imagePullPolicy: Always
+
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+            - name: metrics
+              containerPort: 9090
+              protocol: TCP
+
+          env:
+            # 應用配置
+            - name: APP_ENV
+              value: "production"
+            - name: RUST_LOG
+              value: "user_service=debug,tower_http=debug,warn"
+
+            # 數據庫配置（來自 Secret）
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: user-service-secret
+                  key: database-url
+            - name: DATABASE_MAX_CONNECTIONS
+              valueFrom:
+                configMapKeyRef:
+                  name: services-config
+                  key: database-pool-size
+
+            # Redis 配置
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: user-service-secret
+                  key: redis-url
+            - name: REDIS_POOL_SIZE
+              valueFrom:
+                configMapKeyRef:
+                  name: services-config
+                  key: redis-pool-size
+
+            # Kafka 配置
+            - name: KAFKA_BROKERS
+              valueFrom:
+                secretKeyRef:
+                  name: user-service-secret
+                  key: kafka-brokers
+
+            # 跨服務 URL
+            - name: MESSAGING_SERVICE_URL
+              value: "http://messaging-service.nova-services.svc.cluster.local:3000"
+            - name: AUTH_SERVICE_URL
+              value: "http://auth-service.nova-services.svc.cluster.local:8084"
+            - name: SEARCH_SERVICE_URL
+              value: "http://search-service.nova-services.svc.cluster.local:8086"
+
+            # 超時配置
+            - name: HTTP_CLIENT_TIMEOUT_MS
+              valueFrom:
+                configMapKeyRef:
+                  name: services-config
+                  key: http-client-timeout-ms
+            - name: HTTP_CLIENT_CONNECT_TIMEOUT_MS
+              valueFrom:
+                configMapKeyRef:
+                  name: services-config
+                  key: http-client-connect-timeout-ms
+
+            # 熔斷器配置
+            - name: CIRCUIT_BREAKER_ENABLED
+              valueFrom:
+                configMapKeyRef:
+                  name: services-config
+                  key: circuit-breaker-enabled
+            - name: CIRCUIT_BREAKER_FAILURE_THRESHOLD
+              valueFrom:
+                configMapKeyRef:
+                  name: services-config
+                  key: circuit-breaker-failure-threshold
+
+          resources:
+            requests:
+              cpu: 500m
+              memory: 512Mi
+            limits:
+              cpu: 2000m
+              memory: 2Gi
+
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 2
+
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 0
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 30
+
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/bin/sh", "-c", "sleep 15"]
+
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: cache
+              mountPath: /app/cache
+
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: cache
+          emptyDir: {}
+
+      terminationGracePeriodSeconds: 30
+
+---
+# AuthService Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth-service
+  namespace: nova-services
+  labels:
+    app: auth-service
+    component: identity
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+
+  selector:
+    matchLabels:
+      app: auth-service
+
+  template:
+    metadata:
+      labels:
+        app: auth-service
+
+    spec:
+      securityContext:
+        fsGroup: 1001
+        runAsNonRoot: true
+        runAsUser: 1001
+
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - auth-service
+                topologyKey: kubernetes.io/hostname
+
+      containers:
+        - name: auth-service
+          image: nova/auth-service:latest
+          imagePullPolicy: Always
+
+          ports:
+            - name: http
+              containerPort: 8084
+
+          env:
+            - name: APP_ENV
+              value: "production"
+            - name: RUST_LOG
+              value: "auth_service=debug"
+
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: auth-service-secret
+                  key: database-url
+            - name: DATABASE_MAX_CONNECTIONS
+              valueFrom:
+                configMapKeyRef:
+                  name: services-config
+                  key: database-pool-size
+
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: auth-service-secret
+                  key: jwt-secret
+
+            # 超時配置
+            - name: HTTP_CLIENT_TIMEOUT_MS
+              valueFrom:
+                configMapKeyRef:
+                  name: services-config
+                  key: http-client-timeout-ms
+
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              cpu: 1000m
+              memory: 512Mi
+
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 2
+
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+
+      volumes:
+        - name: tmp
+          emptyDir: {}
+
+      terminationGracePeriodSeconds: 20
+
+---
+# SearchService Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: search-service
+  namespace: nova-services
+  labels:
+    app: search-service
+    component: discovery
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+
+  selector:
+    matchLabels:
+      app: search-service
+
+  template:
+    metadata:
+      labels:
+        app: search-service
+
+    spec:
+      securityContext:
+        fsGroup: 1001
+        runAsNonRoot: true
+        runAsUser: 1001
+
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - search-service
+                topologyKey: kubernetes.io/hostname
+
+      containers:
+        - name: search-service
+          image: nova/search-service:latest
+          imagePullPolicy: Always
+
+          ports:
+            - name: http
+              containerPort: 8086
+
+          env:
+            - name: APP_ENV
+              value: "production"
+            - name: RUST_LOG
+              value: "search_service=debug"
+
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: search-service-secret
+                  key: database-url
+
+            - name: ELASTICSEARCH_URL
+              valueFrom:
+                secretKeyRef:
+                  name: search-service-secret
+                  key: elasticsearch-url
+
+            # 超時配置
+            - name: HTTP_CLIENT_TIMEOUT_MS
+              valueFrom:
+                configMapKeyRef:
+                  name: services-config
+                  key: http-client-timeout-ms
+
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              cpu: 1000m
+              memory: 512Mi
+
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 2
+
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+
+      volumes:
+        - name: tmp
+          emptyDir: {}
+
+      terminationGracePeriodSeconds: 20
+
+---
+# StreamingAPI Service Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: streaming-api
+  namespace: nova-services
+  labels:
+    app: streaming-api
+    component: streaming
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+
+  selector:
+    matchLabels:
+      app: streaming-api
+
+  template:
+    metadata:
+      labels:
+        app: streaming-api
+
+    spec:
+      securityContext:
+        fsGroup: 1001
+        runAsNonRoot: true
+        runAsUser: 1001
+
+      containers:
+        - name: streaming-api
+          image: nova/streaming-api:latest
+          imagePullPolicy: Always
+
+          ports:
+            - name: http
+              containerPort: 8081
+
+          env:
+            - name: APP_ENV
+              value: "production"
+            - name: RUST_LOG
+              value: "streaming_api=debug"
+
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: streaming-api-secret
+                  key: database-url
+
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: streaming-api-secret
+                  key: redis-url
+
+            - name: KAFKA_BROKERS
+              valueFrom:
+                secretKeyRef:
+                  name: streaming-api-secret
+                  key: kafka-brokers
+
+            # 超時配置
+            - name: HTTP_CLIENT_TIMEOUT_MS
+              valueFrom:
+                configMapKeyRef:
+                  name: services-config
+                  key: http-client-timeout-ms
+
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              cpu: 1000m
+              memory: 512Mi
+
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 2
+
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+
+      volumes:
+        - name: tmp
+          emptyDir: {}
+
+      terminationGracePeriodSeconds: 20
+
+---
+# Services (ClusterIP)
+apiVersion: v1
+kind: Service
+metadata:
+  name: user-service
+  namespace: nova-services
+  labels:
+    app: user-service
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: 8080
+      name: http
+    - port: 9090
+      targetPort: 9090
+      name: metrics
+  selector:
+    app: user-service
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: auth-service
+  namespace: nova-services
+  labels:
+    app: auth-service
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8084
+      targetPort: 8084
+      name: http
+  selector:
+    app: auth-service
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: search-service
+  namespace: nova-services
+  labels:
+    app: search-service
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8086
+      targetPort: 8086
+      name: http
+  selector:
+    app: search-service
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: streaming-api
+  namespace: nova-services
+  labels:
+    app: streaming-api
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8081
+      targetPort: 8081
+      name: http
+  selector:
+    app: streaming-api
+
+---
+# HPA for user-service
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: user-service-hpa
+  namespace: nova-services
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: user-service
+  minReplicas: 3
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+
+---
+# Pod Disruption Budgets
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: user-service-pdb
+  namespace: nova-services
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: user-service
+
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: auth-service-pdb
+  namespace: nova-services
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: auth-service
