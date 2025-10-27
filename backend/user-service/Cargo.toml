@@ -81,7 +81,7 @@ regex = "1"
 
 # Phase 4: Video Processing
 tonic = "0.14"
-prost = "0.12"
+prost = "0.14"
 ndarray = "0.15"
 http = "0.2"
 
