@@ -29,7 +29,7 @@ jobs:
       cancel-in-progress: true
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -65,7 +65,7 @@ jobs:
           - service: search-service
             path: backend/search-service
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       
       - uses: dtolnay/rust-toolchain@stable
       
@@ -99,7 +99,7 @@ jobs:
         ports:
           - 5432:5432
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       
       - uses: dtolnay/rust-toolchain@stable
       
@@ -121,7 +121,7 @@ jobs:
       cancel-in-progress: true
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       
       - uses: rustsec/audit-check-action@v1
         with:
@@ -144,7 +144,7 @@ jobs:
     if: github.ref == 'refs/heads/main'
     needs: [lint, build, test]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       
       - uses: docker/setup-buildx-action@v3
       
