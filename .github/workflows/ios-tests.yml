@@ -38,7 +38,7 @@ jobs:
           xcode-version: '15.0'
 
       - name: Cache Swift Package Manager
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             ~/Library/Caches/org.swift.swiftpm
@@ -126,7 +126,7 @@ jobs:
           xcode-version: '15.0'
 
       - name: Cache Swift Package Manager
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             ~/Library/Caches/org.swift.swiftpm
