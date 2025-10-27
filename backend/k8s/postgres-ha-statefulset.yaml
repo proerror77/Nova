@@ -10,9 +10,8 @@
 # - 每個服務有自己的 schema（邏輯隔離）
 #
 # 實例配置：
-# 1. nova_core (user-service, auth-service, streaming-api)
-# 2. nova_messaging (messaging-service)
-# 3. nova_search (search-service) - 可選
+# 1. nova_auth (user-service, auth-service, search-service, streaming-api 等)
+# 2. nova_messaging (messaging-service 單獨實例)
 # ============================================================================
 
 ---
@@ -321,30 +320,23 @@ data:
     CREATE USER app_user WITH PASSWORD 'app_password_change_me';
     CREATE USER replication_user REPLICATION ENCRYPTED PASSWORD 'replication_password_change_me';
 
-    -- 核心數據庫（用戶、認證、流）
-    CREATE DATABASE nova_core
+    -- 主要數據庫（用戶、認證、搜索、流媒體服務）
+    CREATE DATABASE nova_auth
       OWNER postgres
       ENCODING 'UTF8'
       LOCALE 'C'
       TEMPLATE template0;
 
-    -- 消息服務數據庫
+    -- 消息服務數據庫（獨立實例）
     CREATE DATABASE nova_messaging
       OWNER postgres
       ENCODING 'UTF8'
       LOCALE 'C'
       TEMPLATE template0;
 
-    -- 搜索服務數據庫（可選）
-    CREATE DATABASE nova_search
-      OWNER postgres
-      ENCODING 'UTF8'
-      LOCALE 'C'
-      TEMPLATE template0;
-
   02-init-schemas.sql: |
-    -- 在 nova_core 中創建 schema
-    \c nova_core
+    -- 在 nova_auth 中創建 schema（用於 user-service, auth-service, search-service 等）
+    \c nova_auth
 
     CREATE SCHEMA IF NOT EXISTS public AUTHORIZATION app_user;
     CREATE SCHEMA IF NOT EXISTS auth AUTHORIZATION app_user;
@@ -357,7 +349,7 @@ data:
     ALTER DEFAULT PRIVILEGES FOR USER postgres IN SCHEMA auth GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO app_user;
     ALTER DEFAULT PRIVILEGES FOR USER postgres IN SCHEMA streaming GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO app_user;
 
-    -- 在 nova_messaging 中創建 schema
+    -- 在 nova_messaging 中創建 schema（用於 messaging-service）
     \c nova_messaging
 
     CREATE SCHEMA IF NOT EXISTS public AUTHORIZATION app_user;
