@@ -1,0 +1,141 @@
+# ============================================================================
+# Redis Simple Deployment - 简化版本（用于本地测试）
+# ============================================================================
+# 不使用 Sentinel，而是简单的 master-replica 配置
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: nova-redis
+  labels:
+    name: nova-redis
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: redis-credentials
+  namespace: nova-redis
+type: Opaque
+stringData:
+  redis-password: "redis_password_change_me"
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redis-config
+  namespace: nova-redis
+data:
+  redis.conf: |
+    port 6379
+    bind 0.0.0.0
+    requirepass redis_password_change_me
+    maxmemory 256mb
+    maxmemory-policy allkeys-lru
+    save 900 1
+    save 300 10
+    save 60 10000
+    appendonly yes
+    appendfsync everysec
+
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis
+  namespace: nova-redis
+  labels:
+    app: redis
+spec:
+  serviceName: redis
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      containers:
+      - name: redis
+        image: redis:7-alpine
+        ports:
+        - containerPort: 6379
+          name: redis
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 256Mi
+        livenessProbe:
+          tcpSocket:
+            port: 6379
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          exec:
+            command:
+            - redis-cli
+            - -a
+            - redis_password_change_me
+            - ping
+          initialDelaySeconds: 10
+          periodSeconds: 5
+        volumeMounts:
+        - name: data
+          mountPath: /data
+        - name: config
+          mountPath: /usr/local/etc/redis
+          readOnly: true
+      volumes:
+      - name: config
+        configMap:
+          name: redis-config
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      storageClassName: hostpath
+      resources:
+        requests:
+          storage: 2Gi
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: nova-redis
+  labels:
+    app: redis
+spec:
+  clusterIP: None
+  ports:
+  - port: 6379
+    targetPort: 6379
+    name: redis
+  selector:
+    app: redis
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-service
+  namespace: nova-redis
+  labels:
+    app: redis
+spec:
+  type: ClusterIP
+  ports:
+  - port: 6379
+    targetPort: 6379
+    name: redis
+  selector:
+    app: redis

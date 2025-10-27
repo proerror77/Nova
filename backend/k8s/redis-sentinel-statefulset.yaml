@@ -294,10 +294,10 @@ spec:
       spec:
         accessModes:
           - ReadWriteOnce
-        storageClassName: standard  # 改為你的存儲類
+        storageClassName: hostpath  # Docker Desktop 默認存儲類
         resources:
           requests:
-            storage: 5Gi
+            storage: 2Gi
 
 ---
 # Replica StatefulSet
@@ -424,10 +424,10 @@ spec:
       spec:
         accessModes:
           - ReadWriteOnce
-        storageClassName: standard
+        storageClassName: hostpath
         resources:
           requests:
-            storage: 5Gi
+            storage: 2Gi
 
 ---
 # Headless Service for StatefulSet discovery

@@ -159,7 +159,7 @@ spec:
       spec:
         accessModes:
           - ReadWriteOnce
-        storageClassName: standard
+        storageClassName: hostpath
         resources:
           requests:
             storage: 1Gi
@@ -302,10 +302,10 @@ spec:
       spec:
         accessModes:
           - ReadWriteOnce
-        storageClassName: standard
+        storageClassName: hostpath
         resources:
           requests:
-            storage: 20Gi
+            storage: 5Gi
 
 ---
 # ConfigMap for init scripts (創建數據庫和 schema)
