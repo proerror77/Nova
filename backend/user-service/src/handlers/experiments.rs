@@ -5,7 +5,7 @@ use crate::services::experiments::{
     MetricsService,
 };
 use actix_web::{web, HttpResponse, Responder};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use std::sync::Arc;
 use uuid::Uuid;
 
