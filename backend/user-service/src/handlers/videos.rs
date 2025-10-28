@@ -4,19 +4,28 @@
 use actix_web::{web, HttpMessage, HttpRequest, HttpResponse};
 use serde_json::json;
 use sqlx::PgPool;
+use std::sync::Arc;
 use uuid::Uuid;
 
 use crate::config::{video_config::VideoConfig, Config};
 use crate::db::video_repo;
 use crate::error::{AppError, Result};
-use crate::middleware::UserId;
+use crate::middleware::{CircuitBreaker, UserId};
 use crate::models::video::*;
 use crate::services::deep_learning_inference::DeepLearningInferenceService;
 use crate::services::streaming_manifest::StreamingManifestGenerator;
 use crate::services::video_transcoding::VideoMetadata;
 use crate::services::{s3_service, video_service::VideoService};
 use tokio::io::AsyncWriteExt;
-use tracing::{debug, info};
+use tracing::{debug, error, info, warn};
+
+// ============================================
+// Videos handler state with Circuit Breaker protection
+// ============================================
+
+pub struct VideosHandlerState {
+    pub postgres_cb: Arc<CircuitBreaker>, // PostgreSQL circuit breaker for database queries
+}
 
 // ============================================
 // Video Upload Endpoints (Two-Phase Upload)
@@ -634,12 +643,40 @@ pub async fn rebuild_embedding(
 pub async fn get_video(
     path: web::Path<String>,
     pool: web::Data<sqlx::PgPool>,
+    state: web::Data<VideosHandlerState>,
     _req: HttpRequest,
 ) -> Result<HttpResponse> {
     let id = Uuid::parse_str(&path.into_inner())
         .map_err(|e| crate::error::AppError::BadRequest(e.to_string()))?;
-    info!("Fetching video: {}", id);
-    if let Some(v) = video_repo::get_video(pool.get_ref(), id).await? {
+    debug!("Fetching video: {}", id);
+
+    // Fetch video with Circuit Breaker protection
+    let video_result = state
+        .postgres_cb
+        .call(|| {
+            let pool_clone = pool.clone();
+            async move {
+                video_repo::get_video(pool_clone.get_ref(), id)
+                    .await
+                    .map_err(|e| AppError::Internal(e.to_string()))
+            }
+        })
+        .await
+        .map_err(|e| {
+            match &e {
+                AppError::Internal(msg) if msg.contains("Circuit breaker is OPEN") => {
+                    warn!("PostgreSQL circuit is OPEN for video lookup");
+                    AppError::Internal("Database service is experiencing issues - circuit breaker OPEN".to_string())
+                }
+                _ => {
+                    error!("Failed to fetch video: {}", e);
+                    AppError::Internal("Database error".to_string())
+                }
+            }
+        })?;
+
+    if let Some(v) = video_result {
+        info!("Fetched video: {}", id);
         return Ok(HttpResponse::Ok().json(json!({
             "id": v.id,
             "creator_id": v.creator_id,

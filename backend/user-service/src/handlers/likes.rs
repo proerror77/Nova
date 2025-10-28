@@ -1,12 +1,23 @@
 use actix_web::{web, HttpMessage, HttpRequest, HttpResponse, Responder};
 use serde::Serialize;
 use sqlx::PgPool;
+use std::sync::Arc;
+use tracing::{debug, error, warn};
 use uuid::Uuid;
 
 use crate::db::{like_repo, post_repo};
+use crate::error::AppError;
 use crate::handlers::auth::ErrorResponse;
-use crate::middleware::UserId;
+use crate::middleware::{CircuitBreaker, UserId};
 use crate::models::LikeResponse;
+
+// ============================================
+// Likes handler state with Circuit Breaker protection
+// ============================================
+
+pub struct LikesHandlerState {
+    pub postgres_cb: Arc<CircuitBreaker>, // PostgreSQL circuit breaker for database queries
+}
 
 // ============================================
 // Response Structs
@@ -160,6 +171,7 @@ pub async fn get_post_likes(
     pool: web::Data<PgPool>,
     path: web::Path<String>,
     query: web::Query<std::collections::HashMap<String, String>>,
+    state: web::Data<LikesHandlerState>,
 ) -> impl Responder {
     let post_id_str = path.into_inner();
     let post_id = match Uuid::parse_str(&post_id_str) {
@@ -184,8 +196,21 @@ pub async fn get_post_likes(
         .unwrap_or(0)
         .max(0);
 
-    // Check if post exists
-    match post_repo::find_post_by_id(&pool, post_id).await {
+    debug!("Getting likes for post: post_id={} limit={} offset={}", post_id, limit, offset);
+
+    // Check if post exists with CB protection
+    match state
+        .postgres_cb
+        .call(|| {
+            let pool_clone = pool.clone();
+            async move {
+                post_repo::find_post_by_id(&pool_clone, post_id)
+                    .await
+                    .map_err(|e| AppError::Internal(e.to_string()))
+            }
+        })
+        .await
+    {
         Ok(Some(_)) => {}
         Ok(None) => {
             return HttpResponse::NotFound().json(ErrorResponse {
@@ -193,20 +218,46 @@ pub async fn get_post_likes(
                 details: None,
             })
         }
-        Err(_) => {
-            return HttpResponse::InternalServerError().json(ErrorResponse {
-                error: "Database error".to_string(),
-                details: None,
-            })
+        Err(e) => {
+            match &e {
+                AppError::Internal(msg) if msg.contains("Circuit breaker is OPEN") => {
+                    warn!("PostgreSQL circuit is OPEN for post lookup, returning empty likes");
+                    // Graceful degradation: return empty likes list
+                    return HttpResponse::Ok().json(LikeListResponse {
+                        likes: Vec::new(),
+                        total_count: 0,
+                        limit,
+                        offset,
+                    });
+                }
+                _ => {
+                    error!("Failed to check if post exists: {}", e);
+                    return HttpResponse::InternalServerError().json(ErrorResponse {
+                        error: "Database error".to_string(),
+                        details: None,
+                    })
+                }
+            }
         }
     }
 
-    match tokio::try_join!(
-        like_repo::get_likes_by_post(&pool, post_id, limit, offset),
-        like_repo::count_likes_by_post(&pool, post_id)
-    ) {
+    // Fetch likes with CB protection
+    match state
+        .postgres_cb
+        .call(|| {
+            let pool_clone = pool.clone();
+            async move {
+                tokio::try_join!(
+                    like_repo::get_likes_by_post(&pool_clone, post_id, limit, offset),
+                    like_repo::count_likes_by_post(&pool_clone, post_id)
+                )
+                .map_err(|e| AppError::Internal(e.to_string()))
+            }
+        })
+        .await
+    {
         Ok((likes, count)) => {
-            let response_likes = likes
+            let response_likes: Vec<LikeResponse> = likes
                 .into_iter()
                 .map(|like| LikeResponse {
                     id: like.id.to_string(),
@@ -216,6 +267,8 @@ pub async fn get_post_likes(
                 })
                 .collect();
 
+            debug!("Fetched {} likes for post: {}", response_likes.len(), post_id);
+
             HttpResponse::Ok().json(LikeListResponse {
                 likes: response_likes,
                 total_count: count,
@@ -223,10 +276,26 @@ pub async fn get_post_likes(
                 offset,
             })
         }
-        Err(_) => HttpResponse::InternalServerError().json(ErrorResponse {
-            error: "Failed to fetch likes".to_string(),
-            details: None,
-        }),
+        Err(e) => {
+            match &e {
+                AppError::Internal(msg) if msg.contains("Circuit breaker is OPEN") => {
+                    warn!("PostgreSQL circuit is OPEN for likes query, returning empty results");
+                    HttpResponse::Ok().json(LikeListResponse {
+                        likes: Vec::new(),
+                        total_count: 0,
+                        limit,
+                        offset,
+                    })
+                }
+                _ => {
+                    error!("Failed to fetch likes: {}", e);
+                    HttpResponse::InternalServerError().json(ErrorResponse {
+                        error: "Failed to fetch likes".to_string(),
+                        details: None,
+                    })
+                }
+            }
+        }
     }
 }
 

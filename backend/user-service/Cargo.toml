@@ -220,3 +220,7 @@ path = "tests/streaming_integration_test.rs"
 [[test]]
 name = "cache_test"
 path = "tests/integration/cache_test.rs"
+
+[[test]]
+name = "circuit_breaker_test"
+path = "tests/integration/circuit_breaker_test.rs"
