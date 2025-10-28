@@ -5,7 +5,13 @@
 /// - Comment service: Comment management
 /// - Story service: Story lifecycle management
 ///
-/// TODO: Extract service implementations from user-service
+/// Extracted from user-service as part of P1.2 service splitting.
 
-// Placeholder
-pub struct PostService;
+pub mod comments;
+pub mod posts;
+pub mod stories;
+
+// Re-export commonly used services
+pub use comments::CommentService;
+pub use posts::PostService;
+pub use stories::{PrivacyLevel, StoriesService};
