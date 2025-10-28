@@ -1,0 +1,28 @@
+#!/bin/bash
+
+# Nova 项目 - 防止直接推送到 main 分支的 Hook
+
+while read local_ref local_sha remote_ref remote_sha; do
+  if [[ $remote_ref == "refs/heads/main" ]]; then
+    echo ""
+    echo "╔════════════════════════════════════════════════════════════════╗"
+    echo "║                      🚫 推送被拒绝                             ║"
+    echo "╚════════════════════════════════════════════════════════════════╝"
+    echo ""
+    echo "❌ 禁止直接推送到 main 分支！"
+    echo ""
+    echo "✅ 正确的工作流程："
+    echo "   1. 创建功能分支:     git checkout -b feature/your-feature"
+    echo "   2. 提交改动:        git add . && git commit -m '...'"
+    echo "   3. 推送分支:        git push -u origin feature/your-feature"
+    echo "   4. 创建 PR:         在 GitHub 上创建 Pull Request"
+    echo ""
+    echo "📖 分支命名规范:"
+    echo "   feature/ → 新功能    fix/ → Bug 修复"
+    echo "   docs/    → 文档      chore/ → 其他"
+    echo ""
+    exit 1
+  fi
+done
+
+exit 0
