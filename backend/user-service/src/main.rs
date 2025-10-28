@@ -17,7 +17,10 @@ use user_service::{
         suggested_users_generator::SuggestionConfig, JobContext,
     },
     metrics,
-    middleware::{GlobalRateLimitMiddleware, JwtAuthMiddleware, MetricsMiddleware, RateLimiter},
+    middleware::{
+        CircuitBreaker, CircuitBreakerConfig, GlobalRateLimitMiddleware, JwtAuthMiddleware,
+        MetricsMiddleware, RateLimiter,
+    },
     services::{
         cdc::{CdcConsumer, CdcConsumerConfig},
         deep_learning_inference::DeepLearningInferenceService,
@@ -168,11 +171,49 @@ async fn main() -> io::Result<()> {
         config.clickhouse.timeout_ms,
     ));
 
-    if let Err(e) = clickhouse_client.health_check().await {
-        tracing::warn!("ClickHouse health check failed: {}", e);
-    } else {
-        tracing::info!("ClickHouse connection validated");
+    // CRITICAL: ClickHouse health check MUST succeed before startup
+    // Feed ranking is 100% dependent on ClickHouse. No fallback available.
+    match clickhouse_client.health_check().await {
+        Ok(()) => {
+            tracing::info!("✅ ClickHouse connection validated");
+        }
+        Err(e) => {
+            tracing::error!("❌ FATAL: ClickHouse health check failed - {}", e);
+            tracing::error!("   Feed ranking cannot function without ClickHouse");
+            tracing::error!("   Fix: Ensure ClickHouse is running and accessible at {}", config.clickhouse.url);
+            return Err(io::Error::new(
+                io::ErrorKind::ConnectionRefused,
+                format!("ClickHouse initialization failed: {}", e),
+            ));
+        }
     }
+
+    // ========================================
+    // Initialize Circuit Breakers for critical services
+    // ========================================
+    // ClickHouse Circuit Breaker (3 failures → open, 30s timeout, 3 successes to close)
+    let clickhouse_circuit_breaker = Arc::new(CircuitBreaker::new(CircuitBreakerConfig {
+        failure_threshold: 3,
+        success_threshold: 3,
+        timeout_seconds: 30,
+    }));
+    tracing::info!("ClickHouse circuit breaker initialized");
+
+    // Kafka Circuit Breaker (2 failures → open, 60s timeout, 3 successes to close)
+    let kafka_circuit_breaker = Arc::new(CircuitBreaker::new(CircuitBreakerConfig {
+        failure_threshold: 2,
+        success_threshold: 3,
+        timeout_seconds: 60,
+    }));
+    tracing::info!("Kafka circuit breaker initialized");
+
+    // Redis Circuit Breaker (5 failures → open, 15s timeout, 2 successes to close)
+    let redis_circuit_breaker = Arc::new(CircuitBreaker::new(CircuitBreakerConfig {
+        failure_threshold: 5,
+        success_threshold: 2,
+        timeout_seconds: 15,
+    }));
+    tracing::info!("Redis circuit breaker initialized");
 
     let feed_cache = FeedCache::new(redis_manager.clone(), 120);
     let feed_cache = Arc::new(Mutex::new(feed_cache));
@@ -305,8 +346,10 @@ async fn main() -> io::Result<()> {
     });
 
     // ========================================
-    // Initialize CDC Consumer (PostgreSQL → Kafka → ClickHouse) if enabled
+    // Initialize CDC Consumer (PostgreSQL → Kafka → ClickHouse) - MANDATORY
     // ========================================
+    // NOTE: CDC is REQUIRED for data consistency between PostgreSQL and ClickHouse
+    // Feed ranking depends on ClickHouse sync. Disabling CDC = data inconsistency bug.
     let ch_writable = Arc::new(ClickHouseClient::new_writable(
         &config.clickhouse.url,
         &config.clickhouse.database,
@@ -315,36 +358,29 @@ async fn main() -> io::Result<()> {
         config.clickhouse.timeout_ms,
     ));
 
-    let enable_cdc = std::env::var("ENABLE_CDC").unwrap_or_else(|_| "false".into()) == "true";
-    let mut cdc_handle_opt: Option<tokio::task::JoinHandle<()>> = None;
-    if enable_cdc {
-        let cdc_config = CdcConsumerConfig {
-            brokers: config.kafka.brokers.clone(),
-            group_id: "nova-cdc-consumer-v1".to_string(),
-            topics: vec![
-                "cdc.posts".to_string(),
-                "cdc.follows".to_string(),
-                "cdc.comments".to_string(),
-                "cdc.likes".to_string(),
-            ],
-            max_concurrent_inserts: 10,
-        };
+    let cdc_config = CdcConsumerConfig {
+        brokers: config.kafka.brokers.clone(),
+        group_id: "nova-cdc-consumer-v1".to_string(),
+        topics: vec![
+            "cdc.posts".to_string(),
+            "cdc.follows".to_string(),
+            "cdc.comments".to_string(),
+            "cdc.likes".to_string(),
+        ],
+        max_concurrent_inserts: 10,
+    };
 
-        let cdc_consumer =
-            CdcConsumer::new(cdc_config, ch_writable.as_ref().clone(), db_pool.clone())
-                .await
-                .expect("Failed to create CDC consumer");
+    let cdc_consumer =
+        CdcConsumer::new(cdc_config, ch_writable.as_ref().clone(), db_pool.clone())
+            .await
+            .expect("Failed to create CDC consumer - CDC is mandatory for data consistency");
 
-        let cdc_handle = tokio::spawn(async move {
-            if let Err(e) = cdc_consumer.run().await {
-                tracing::error!("CDC consumer error: {}", e);
-            }
-        });
-        tracing::info!("CDC consumer spawned");
-        cdc_handle_opt = Some(cdc_handle);
-    } else {
-        tracing::info!("CDC consumer disabled (ENABLE_CDC=false)");
-    }
+    let cdc_handle = tokio::spawn(async move {
+        if let Err(e) = cdc_consumer.run().await {
+            tracing::error!("CDC consumer error: {}", e);
+        }
+    });
+    tracing::info!("CDC consumer spawned (MANDATORY for data consistency)");
 
     // ========================================
     // Initialize Events Consumer (Kafka → ClickHouse for analytics)
@@ -557,6 +593,10 @@ async fn main() -> io::Result<()> {
             .app_data(stream_chat_ws_state.clone())
             .app_data(graph_data.clone())
             .app_data(web::Data::new(jwks_cache.clone()))
+            // Circuit breakers for critical service protection
+            .app_data(web::Data::new(clickhouse_circuit_breaker.clone()))
+            .app_data(web::Data::new(kafka_circuit_breaker.clone()))
+            .app_data(web::Data::new(redis_circuit_breaker.clone()))
             .wrap(cors)
             .wrap(Logger::default())
             .wrap(tracing_actix_web::TracingLogger::default())
@@ -969,19 +1009,17 @@ async fn main() -> io::Result<()> {
         }
     }
 
-    // Abort CDC consumer (long-running Kafka consumer loop) if running
-    if let Some(cdc_handle) = cdc_handle_opt {
-        cdc_handle.abort();
-        match tokio::time::timeout(std::time::Duration::from_secs(5), cdc_handle).await {
-            Ok(Ok(())) => {
-                tracing::info!("CDC consumer shut down gracefully");
-            }
-            Ok(Err(_)) => {
-                tracing::info!("CDC consumer aborted");
-            }
-            Err(_) => {
-                tracing::warn!("CDC consumer did not shut down within timeout");
-            }
+    // Abort CDC consumer (always running, mandatory for consistency)
+    cdc_handle.abort();
+    match tokio::time::timeout(std::time::Duration::from_secs(5), cdc_handle).await {
+        Ok(Ok(())) => {
+            tracing::info!("CDC consumer shut down gracefully");
+        }
+        Ok(Err(_)) => {
+            tracing::info!("CDC consumer aborted");
+        }
+        Err(_) => {
+            tracing::warn!("CDC consumer did not shut down within timeout");
         }
     }
 
