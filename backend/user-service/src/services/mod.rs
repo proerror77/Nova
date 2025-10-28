@@ -15,7 +15,6 @@ pub mod deep_learning_inference;
 pub mod email_verification;
 pub mod events;
 pub mod experiments;
-pub mod feed_ranking;
 pub mod ffmpeg_optimizer;
 pub mod image_processing;
 pub mod job_queue;
@@ -70,7 +69,6 @@ pub mod webhooks;
 // - video_processing_pipeline: Orchestrates entire video processing workflow (Phase 7)
 //
 // MACHINE LEARNING & RANKING:
-// - feed_ranking: Core feed ranking algorithm with ClickHouse integration, caching, and circuit breaker
 // - recommendation_v2: Hybrid recommendation engine v2 (collaborative filtering + content-based + AB testing)
 //
 // COMMON SERVICES:

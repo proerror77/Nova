@@ -71,7 +71,7 @@ pub async fn revoke_token(
         .arg("1") // Just store a marker value
         .arg("EX")
         .arg(remaining_ttl)
-        .query_async(&mut redis)
+        .query_async::<_, ()>(&mut redis)
         .await?;
 
     tracing::info!(
@@ -99,7 +99,7 @@ pub async fn revoke_all_user_tokens(
         // Keep this for 7 days (after which old tokens will be naturally expired anyway)
         .arg("EX")
         .arg(7 * 24 * 60 * 60)
-        .query_async(&mut redis)
+        .query_async::<_, ()>(&mut redis)
         .await?;
 
     tracing::warn!("All tokens revoked for user: {}", user_id);
@@ -119,7 +119,7 @@ pub async fn is_token_revoked(
     let mut redis = redis.clone();
     let exists: bool = redis::cmd("EXISTS")
         .arg(&key)
-        .query_async(&mut redis)
+        .query_async::<_, bool>(&mut redis)
         .await?;
 
     Ok(exists)
@@ -137,7 +137,10 @@ pub async fn check_user_token_revocation(
     let key = format!("nova:revoked:user:{}:ts", user_id);
 
     let mut redis = redis.clone();
-    let revocation_ts: Option<String> = redis::cmd("GET").arg(&key).query_async(&mut redis).await?;
+    let revocation_ts: Option<String> = redis::cmd("GET")
+        .arg(&key)
+        .query_async::<_, Option<String>>(&mut redis)
+        .await?;
 
     if let Some(ts_str) = revocation_ts {
         match ts_str.parse::<i64>() {

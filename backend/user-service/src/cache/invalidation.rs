@@ -127,7 +127,7 @@ async fn invalidate_search_cache_internal(
             .arg(pattern)
             .arg("COUNT")
             .arg(100)
-            .query_async(&mut redis)
+            .query_async::<_, (u64, Vec<String>)>(&mut redis)
             .await
             .map_err(|e| e.to_string())?;
 
@@ -147,7 +147,7 @@ async fn invalidate_search_cache_internal(
         for chunk in all_keys.chunks(1000) {
             redis::cmd("DEL")
                 .arg(chunk)
-                .query_async(&mut redis)
+                .query_async::<_, ()>(&mut redis)
                 .await
                 .map_err(|e| e.to_string())?;
         }

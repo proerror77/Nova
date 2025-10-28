@@ -3,11 +3,8 @@
 //! All PostgreSQL queries for stream management.
 //! This layer is pure data access, no business logic.
 
-use super::models::{
-    CreatorInfo, StreamCategory, StreamDetails, StreamRow, StreamStatus, StreamSummary,
-};
+use super::models::{CreatorInfo, StreamCategory, StreamRow};
 use anyhow::{Context, Result};
-use chrono::{DateTime, Utc};
 use sqlx::PgPool;
 use uuid::Uuid;
 
