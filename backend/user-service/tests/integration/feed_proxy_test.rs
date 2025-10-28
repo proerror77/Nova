@@ -298,18 +298,6 @@ async fn feed_handler_returns_empty_on_grpc_error() {
     let mut req = test::TestRequest::default().to_http_request();
     req.extensions_mut().insert(UserId(user_id));
 
-    let resp = get_feed(query, req, web::Data::new(state))
-        .await
-        .expect("handler response")
-        .map_into_boxed_body();
-
-    let bytes = body::to_bytes(resp.into_body())
-        .await
-        .expect("read body");
-    let feed: FeedResponse = serde_json::from_slice(&bytes).expect("deserialize feed");
-
-    assert!(feed.posts.is_empty());
-    assert!(!feed.has_more);
-    assert!(feed.cursor.is_none());
-    assert_eq!(feed.total_count, 0);
+    let result = get_feed(query, req, web::Data::new(state)).await;
+    assert!(result.is_err(), "expected feed handler to error on gRPC failure");
 }

@@ -31,7 +31,7 @@ data:
   KAFKA_EVENTS_TOPIC: "nova-events"
 
   # gRPC endpoints
-  CONTENT_SERVICE_GRPC_URL: "http://content-service.nova:9081"
+  CONTENT_SERVICE_GRPC_URL: "http://content-service:9081"
 
   # ClickHouse
   CLICKHOUSE_URL: "http://clickhouse.nova:8123"
