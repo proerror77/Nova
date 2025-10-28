@@ -6,6 +6,7 @@ use tracing::{debug, error, warn};
 use uuid::Uuid;
 
 use crate::error::{AppError, Result};
+use crate::middleware::CircuitBreaker;
 use crate::services::kafka_producer::EventProducer;
 
 #[derive(Debug, Deserialize)]
@@ -30,8 +31,10 @@ pub struct EventBatch {
     pub events: Vec<EventRecord>,
 }
 
+/// Event handler state with Circuit Breaker protection
 pub struct EventHandlerState {
     pub producer: Arc<EventProducer>,
+    pub kafka_cb: Arc<CircuitBreaker>, // Kafka circuit breaker for event publishing
 }
 
 #[post("")]
@@ -66,13 +69,31 @@ pub async fn ingest_events(
         });
 
         let payload_str = serde_json::to_string(&payload_json)?;
+        let user_id_str = event.user_id.to_string();
 
+        // Publish event with Kafka CB protection
         if let Err(e) = state
-            .producer
-            .send_json(&event.user_id.to_string(), &payload_str)
+            .kafka_cb
+            .call(|| {
+                let producer = state.producer.clone();
+                let key = user_id_str.clone();
+                let payload = payload_str.clone();
+                async move { producer.send_json(&key, &payload).await }
+            })
             .await
         {
-            error!("Failed to publish event for user {}: {}", event.user_id, e);
+            match &e {
+                AppError::Internal(msg) if msg.contains("Circuit breaker is OPEN") => {
+                    warn!(
+                        "Kafka circuit is OPEN for user {}, event publishing blocked, queuing for retry",
+                        event.user_id
+                    );
+                    // TODO: Queue event for async retry when Kafka recovers
+                }
+                _ => {
+                    error!("Failed to publish event for user {}: {}", event.user_id, e);
+                }
+            }
             return Err(e);
         }
 

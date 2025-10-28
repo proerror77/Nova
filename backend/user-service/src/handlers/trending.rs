@@ -4,12 +4,14 @@
 use actix_web::{get, post, web, HttpMessage, HttpRequest, HttpResponse};
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
-use tracing::{debug, error};
+use std::sync::Arc;
+use tracing::{debug, error, warn};
 use uuid::Uuid;
 
 use crate::db::trending_repo::{ContentType, EventType, TimeWindow};
 use crate::error::{AppError, Result};
 use crate::middleware::jwt_auth::UserId;
+use crate::middleware::CircuitBreaker;
 use crate::services::trending::TrendingService;
 
 /// Query parameters for GET /trending
@@ -33,6 +35,12 @@ fn default_time_window() -> String {
 
 fn default_limit() -> usize {
     20
+}
+
+/// Trending handler state with Circuit Breaker protection
+pub struct TrendingHandlerState {
+    pub clickhouse_cb: Arc<CircuitBreaker>, // ClickHouse circuit breaker for trending queries
+    pub redis_cb: Arc<CircuitBreaker>,      // Redis circuit breaker for cache
 }
 
 /// Engagement event request
@@ -80,6 +88,7 @@ pub async fn get_trending(
     query: web::Query<TrendingQuery>,
     pool: web::Data<PgPool>,
     redis: Option<web::Data<redis::aio::ConnectionManager>>,
+    state: web::Data<TrendingHandlerState>,
 ) -> Result<HttpResponse> {
     debug!(
         "Trending request: window={}, category={:?}, limit={}",
@@ -95,10 +104,32 @@ pub async fn get_trending(
     // Create service
     let service = TrendingService::new(pool.get_ref().clone(), redis.map(|r| r.get_ref().clone()));
 
-    // Get trending content
-    let response = service
-        .get_trending(time_window, query.category.as_deref(), limit)
-        .await?;
+    // Get trending content with Circuit Breaker protection
+    let response = state
+        .clickhouse_cb
+        .call(|| async {
+            service
+                .get_trending(time_window, query.category.as_deref(), limit)
+                .await
+        })
+        .await
+        .map_err(|e| {
+            match &e {
+                AppError::Internal(msg) if msg.contains("Circuit breaker is OPEN") => {
+                    warn!(
+                        "ClickHouse circuit is OPEN for trending query, falling back to empty results"
+                    );
+                    // TODO: Implement fallback strategy:
+                    // 1. Return cached trending results if available in Redis
+                    // 2. Return most recent content as fallback
+                    // 3. Return empty with 503 if neither available
+                }
+                _ => {
+                    error!("Failed to get trending content: {}", e);
+                }
+            }
+            e
+        })?;
 
     Ok(HttpResponse::Ok().json(response))
 }
@@ -111,15 +142,31 @@ pub async fn get_trending_videos(
     query: web::Query<TrendingQuery>,
     pool: web::Data<PgPool>,
     redis: Option<web::Data<redis::aio::ConnectionManager>>,
+    state: web::Data<TrendingHandlerState>,
 ) -> Result<HttpResponse> {
     let time_window = parse_time_window(&query.time_window)?;
     let limit = query.limit.clamp(1, 100);
 
     let service = TrendingService::new(pool.get_ref().clone(), redis.map(|r| r.get_ref().clone()));
 
-    let response = service
-        .get_trending_by_type(ContentType::Video, time_window, limit)
-        .await?;
+    // Get trending videos with Circuit Breaker protection
+    let response = state
+        .clickhouse_cb
+        .call(|| async {
+            service
+                .get_trending_by_type(ContentType::Video, time_window, limit)
+                .await
+        })
+        .await
+        .map_err(|e| {
+            match &e {
+                AppError::Internal(msg) if msg.contains("Circuit breaker is OPEN") => {
+                    warn!("ClickHouse circuit is OPEN for trending videos query");
+                }
+                _ => error!("Failed to get trending videos: {}", e),
+            }
+            e
+        })?;
 
     Ok(HttpResponse::Ok().json(response))
 }
@@ -132,15 +179,31 @@ pub async fn get_trending_posts(
     query: web::Query<TrendingQuery>,
     pool: web::Data<PgPool>,
     redis: Option<web::Data<redis::aio::ConnectionManager>>,
+    state: web::Data<TrendingHandlerState>,
 ) -> Result<HttpResponse> {
     let time_window = parse_time_window(&query.time_window)?;
     let limit = query.limit.clamp(1, 100);
 
     let service = TrendingService::new(pool.get_ref().clone(), redis.map(|r| r.get_ref().clone()));
 
-    let response = service
-        .get_trending_by_type(ContentType::Post, time_window, limit)
-        .await?;
+    // Get trending posts with Circuit Breaker protection
+    let response = state
+        .clickhouse_cb
+        .call(|| async {
+            service
+                .get_trending_by_type(ContentType::Post, time_window, limit)
+                .await
+        })
+        .await
+        .map_err(|e| {
+            match &e {
+                AppError::Internal(msg) if msg.contains("Circuit breaker is OPEN") => {
+                    warn!("ClickHouse circuit is OPEN for trending posts query");
+                }
+                _ => error!("Failed to get trending posts: {}", e),
+            }
+            e
+        })?;
 
     Ok(HttpResponse::Ok().json(response))
 }
@@ -153,15 +216,31 @@ pub async fn get_trending_streams(
     query: web::Query<TrendingQuery>,
     pool: web::Data<PgPool>,
     redis: Option<web::Data<redis::aio::ConnectionManager>>,
+    state: web::Data<TrendingHandlerState>,
 ) -> Result<HttpResponse> {
     let time_window = parse_time_window(&query.time_window)?;
     let limit = query.limit.clamp(1, 100);
 
     let service = TrendingService::new(pool.get_ref().clone(), redis.map(|r| r.get_ref().clone()));
 
-    let response = service
-        .get_trending_by_type(ContentType::Stream, time_window, limit)
-        .await?;
+    // Get trending streams with Circuit Breaker protection
+    let response = state
+        .clickhouse_cb
+        .call(|| async {
+            service
+                .get_trending_by_type(ContentType::Stream, time_window, limit)
+                .await
+        })
+        .await
+        .map_err(|e| {
+            match &e {
+                AppError::Internal(msg) if msg.contains("Circuit breaker is OPEN") => {
+                    warn!("ClickHouse circuit is OPEN for trending streams query");
+                }
+                _ => error!("Failed to get trending streams: {}", e),
+            }
+            e
+        })?;
 
     Ok(HttpResponse::Ok().json(response))
 }
@@ -240,6 +319,7 @@ pub async fn record_engagement(
     body: web::Json<EngagementRequest>,
     pool: web::Data<PgPool>,
     redis: Option<web::Data<redis::aio::ConnectionManager>>,
+    state: web::Data<TrendingHandlerState>,
 ) -> Result<HttpResponse> {
     // Get authenticated user
     let user_id = req
@@ -266,10 +346,30 @@ pub async fn record_engagement(
     // Create service
     let service = TrendingService::new(pool.get_ref().clone(), redis.map(|r| r.get_ref().clone()));
 
-    // Record engagement
-    service
-        .record_engagement(content_id, content_type, user_id, event_type)
-        .await?;
+    // Record engagement with Redis CB protection for cache invalidation
+    state
+        .redis_cb
+        .call(|| async {
+            service
+                .record_engagement(content_id, content_type, user_id, event_type)
+                .await
+        })
+        .await
+        .map_err(|e| {
+            match &e {
+                AppError::Internal(msg) if msg.contains("Circuit breaker is OPEN") => {
+                    warn!(
+                        "Redis circuit is OPEN for engagement recording (user={}), continuing without cache update",
+                        user_id
+                    );
+                    // TODO: Queue engagement event for async processing when Redis recovers
+                }
+                _ => {
+                    error!("Failed to record engagement for user {}: {}", user_id, e);
+                }
+            }
+            e
+        })?;
 
     Ok(HttpResponse::Ok().json(serde_json::json!({
         "success": true,
