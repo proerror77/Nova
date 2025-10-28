@@ -5,7 +5,29 @@
 /// - Repository implementations for posts, comments, stories
 /// - Database migrations
 ///
-/// TODO: Extract repository implementations from user-service
+/// Extracted from user-service as part of P1.2 service splitting.
 
-// Placeholder
-pub struct PostRepository;
+use sqlx::postgres::PgPool;
+
+pub mod comment_repo;
+pub mod post_repo;
+pub mod post_share_repo;
+
+// Re-export repositories
+pub use comment_repo::*;
+pub use post_repo::*;
+pub use post_share_repo::*;
+
+/// Create database connection pool
+pub async fn create_pool(database_url: &str, max_connections: u32) -> Result<PgPool, sqlx::Error> {
+    use sqlx::postgres::PgPoolOptions;
+    use std::time::Duration;
+
+    PgPoolOptions::new()
+        .max_connections(max_connections)
+        .acquire_timeout(Duration::from_secs(10))
+        .idle_timeout(Duration::from_secs(300))
+        .max_lifetime(Duration::from_secs(1800))
+        .connect(database_url)
+        .await
+}
