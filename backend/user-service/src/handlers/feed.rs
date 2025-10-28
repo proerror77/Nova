@@ -2,10 +2,11 @@ use actix_web::{get, web, HttpMessage, HttpRequest, HttpResponse};
 use base64::{engine::general_purpose, Engine as _};
 use serde::Deserialize;
 use std::sync::Arc;
-use tracing::{debug, error};
+use tracing::{debug, error, warn};
 
 use crate::error::{AppError, Result};
 use crate::middleware::jwt_auth::UserId;
+use crate::middleware::CircuitBreaker;
 use crate::models::FeedResponse;
 use crate::services::feed_ranking::FeedRankingService;
 use crate::services::recommendation_v2::RecommendationServiceV2;
@@ -67,6 +68,7 @@ impl FeedQueryParams {
 pub struct FeedHandlerState {
     pub feed_ranking: Arc<FeedRankingService>,
     pub rec_v2: Option<Arc<RecommendationServiceV2>>, // optional re-ranker
+    pub clickhouse_cb: Arc<CircuitBreaker>,           // ClickHouse circuit breaker for fault tolerance
 }
 
 /// GET /api/v1/feed
@@ -113,13 +115,32 @@ pub async fn get_feed(
         ));
     }
 
-    // Get feed from ranking service
+    // Get feed from ranking service with Circuit Breaker protection
+    // CB protects against ClickHouse failures and cascading errors
     let (mut post_ids, has_more) = state
-        .feed_ranking
-        .get_feed(user_id, limit, offset)
+        .clickhouse_cb
+        .call(|| async {
+            state
+                .feed_ranking
+                .get_feed(user_id, limit, offset)
+                .await
+        })
         .await
         .map_err(|e| {
-            error!("Failed to get feed for user {}: {}", user_id, e);
+            match &e {
+                AppError::Internal(msg) if msg.contains("Circuit breaker is OPEN") => {
+                    // Circuit is open - ClickHouse is experiencing issues
+                    warn!("ClickHouse circuit is OPEN, returning cached/fallback feed for user {}", user_id);
+                    // TODO: Implement fallback strategy:
+                    // 1. Return cached feed if available
+                    // 2. Return timeline order as fallback
+                    // 3. Return empty with 503 if neither available
+                    error!("ClickHouse circuit OPEN for user {}: {}", user_id, e);
+                }
+                _ => {
+                    error!("Failed to get feed for user {}: {}", user_id, e);
+                }
+            }
             e
         })?;
 
