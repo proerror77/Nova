@@ -180,3 +180,167 @@ spec:
   selector:
     matchLabels:
       app: nova-api
+
+---
+# Content Service (feed, posts, stories)
+apiVersion: v1
+kind: Service
+metadata:
+  name: content-service
+  namespace: nova
+  labels:
+    app: content-service
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 8081
+      targetPort: 8081
+    - name: grpc
+      port: 9081
+      targetPort: 9081
+  selector:
+    app: content-service
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: content-service
+  namespace: nova
+  labels:
+    app: content-service
+  annotations:
+    description: "Content Service - Feed ranking, posts, stories"
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: content-service
+  template:
+    metadata:
+      labels:
+        app: content-service
+        version: v1
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8081"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: content-service
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        fsGroup: 1001
+
+      initContainers:
+      - name: wait-for-db
+        image: busybox:1.35
+        command:
+        - sh
+        - -c
+        - |
+          echo "Waiting for PostgreSQL..."
+          until nc -z nova-postgres 5432; do
+            echo "PostgreSQL is unavailable - sleeping"
+            sleep 2
+          done
+          echo "PostgreSQL is up"
+
+      - name: wait-for-redis
+        image: busybox:1.35
+        command:
+        - sh
+        - -c
+        - |
+          echo "Waiting for Redis..."
+          until nc -z nova-redis 6379; do
+            echo "Redis is unavailable - sleeping"
+            sleep 2
+          done
+          echo "Redis is up"
+
+      containers:
+      - name: content-service
+        image: content-service:latest
+        imagePullPolicy: IfNotPresent
+
+        ports:
+        - containerPort: 8081
+          name: http
+        - containerPort: 9081
+          name: grpc
+
+        envFrom:
+        - configMapRef:
+            name: nova-config
+        - secretRef:
+            name: nova-secrets
+
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
+
+        livenessProbe:
+          httpGet:
+            path: /api/v1/health/live
+            port: 8081
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+
+        readinessProbe:
+          httpGet:
+            path: /api/v1/health/ready
+            port: 8081
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 2
+
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+
+      volumes:
+      - name: tmp
+        emptyDir: {}
+
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: content-service-pdb
+  namespace: nova
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: content-service

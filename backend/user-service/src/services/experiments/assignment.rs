@@ -1,6 +1,6 @@
 /// Assignment Service - Deterministic variant assignment with Redis caching
 use crate::db::experiment_repo::{
-    create_assignment, get_assignment, get_experiment, get_experiment_variants, Experiment,
+    create_assignment, get_assignment, get_experiment, get_experiment_variants,
     ExperimentAssignment, ExperimentStatus, ExperimentVariant,
 };
 use redis::AsyncCommands;
@@ -202,7 +202,7 @@ impl AssignmentService {
     ) -> Result<(), AssignmentError> {
         let mut conn = self.redis.get_multiplexed_async_connection().await?;
         let serialized = serde_json::to_string(response)?;
-        conn.set_ex(cache_key, serialized, ASSIGNMENT_CACHE_TTL)
+        conn.set_ex::<_, _, ()>(cache_key, serialized, ASSIGNMENT_CACHE_TTL)
             .await?;
         Ok(())
     }
@@ -210,7 +210,7 @@ impl AssignmentService {
     /// Get assignment from cache
     async fn get_from_cache(&self, cache_key: &str) -> Result<AssignmentResponse, AssignmentError> {
         let mut conn = self.redis.get_multiplexed_async_connection().await?;
-        let cached: Option<String> = conn.get(cache_key).await?;
+        let cached: Option<String> = conn.get::<_, Option<String>>(cache_key).await?;
 
         match cached {
             Some(data) => Ok(serde_json::from_str(&data)?),
@@ -235,7 +235,7 @@ impl AssignmentService {
                 .arg(&pattern)
                 .arg("COUNT")
                 .arg(100)
-                .query_async(&mut conn)
+                .query_async::<_, (u64, Vec<String>)>(&mut conn)
                 .await?;
 
             if !keys.is_empty() {

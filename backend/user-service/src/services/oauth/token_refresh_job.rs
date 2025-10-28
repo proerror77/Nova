@@ -14,7 +14,7 @@
 /// See OAUTH_TOKEN_STORAGE_FIX.md for migration details.
 use crate::db::oauth_repo;
 use crate::models::OAuthConnection;
-use crate::services::oauth::{OAuthError, OAuthProvider, OAuthProviderFactory};
+use crate::services::oauth::{OAuthError, OAuthProviderFactory};
 use chrono::Utc;
 use sqlx::PgPool;
 use std::sync::Arc;
@@ -23,7 +23,6 @@ use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
 use tokio::time::interval;
 use tracing::{debug, error, info, warn};
-use uuid::Uuid;
 
 /// Configuration for OAuth token refresh job
 #[derive(Debug, Clone)]
@@ -259,7 +258,7 @@ impl OAuthTokenRefreshJob {
         refresh_token: &str,
     ) -> Result<RefreshTokenResponse, OAuthError> {
         // Create provider instance
-        let provider = OAuthProviderFactory::create(&connection.provider)?;
+        OAuthProviderFactory::create(&connection.provider)?;
 
         // Call provider-specific refresh method
         match connection.provider.as_str() {

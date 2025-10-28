@@ -200,7 +200,7 @@ impl SuggestedUsersJob {
         }
 
         let mut conn = ctx.redis_pool.clone();
-        pipe.query_async(&mut conn)
+        pipe.query_async::<_, ()>(&mut conn)
             .await
             .context("Failed to execute Redis pipeline")?;
 

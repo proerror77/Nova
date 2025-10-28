@@ -26,6 +26,19 @@ data:
   RATE_LIMIT_MAX_REQUESTS: "100"
   RATE_LIMIT_WINDOW_SECS: "60"
 
+  # Kafka (shared defaults)
+  KAFKA_BROKERS: "nova-kafka:9092"
+  KAFKA_EVENTS_TOPIC: "nova-events"
+
+  # gRPC endpoints
+  CONTENT_SERVICE_GRPC_URL: "http://content-service.nova:9081"
+
+  # ClickHouse
+  CLICKHOUSE_URL: "http://clickhouse.nova:8123"
+  CLICKHOUSE_DATABASE: "nova_feed"
+  CLICKHOUSE_USERNAME: "default"
+  CLICKHOUSE_QUERY_TIMEOUT_MS: "2000"
+
   # S3 configuration
   S3_BUCKET_NAME: "nova-staging-videos"
   AWS_REGION: "ap-northeast-1"

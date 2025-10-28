@@ -13,7 +13,6 @@ use rdkafka::producer::{FutureProducer, FutureRecord};
 use rdkafka::ClientConfig;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, error, warn};
-use uuid::Uuid;
 
 /// DLQ 消息格式
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -8,7 +8,7 @@
 use redis::AsyncCommands;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use tracing::{debug, error, warn};
+use tracing::{debug, warn};
 
 /// JWKS Key Structure (subset of RFC 7517)
 #[derive(Debug, Clone, Serialize, Deserialize)]

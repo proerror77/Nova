@@ -8,9 +8,10 @@ use std::time::Duration;
 use tokio::sync::Semaphore;
 use tracing::{debug, error, info, warn};
 
-use crate::cache::FeedCache;
 use crate::db::ch_client::ClickHouseClient;
 use crate::error::{AppError, Result};
+use crate::grpc::ContentServiceClient;
+use crate::grpc::nova::content::InvalidateFeedEventRequest;
 
 use super::dedup::EventDeduplicator;
 
@@ -130,8 +131,8 @@ pub struct EventsConsumer {
     ch_client: ClickHouseClient,
     deduplicator: EventDeduplicator,
     config: EventsConsumerConfig,
-    redis_client: redis::Client,
     semaphore: Arc<Semaphore>,
+    content_client: Arc<ContentServiceClient>,
 }
 
 impl EventsConsumer {
@@ -140,7 +141,7 @@ impl EventsConsumer {
         config: EventsConsumerConfig,
         ch_client: ClickHouseClient,
         deduplicator: EventDeduplicator,
-        redis_client: redis::Client,
+        content_client: Arc<ContentServiceClient>,
     ) -> Result<Self> {
         info!("Initializing Events consumer with config: {:?}", config);
 
@@ -175,7 +176,7 @@ impl EventsConsumer {
             deduplicator,
             semaphore: Arc::new(Semaphore::new(config.max_concurrent_inserts)),
             config,
-            redis_client,
+            content_client,
         })
     }
 
@@ -344,14 +345,6 @@ impl EventsConsumer {
 impl EventsConsumer {
     /// Apply non-critical side effects for events (cache invalidation)
     async fn apply_side_effects(&self, events: &[EventMessage]) -> Result<()> {
-        // Build a FeedCache on demand
-        let manager = self
-            .redis_client
-            .get_connection_manager()
-            .await
-            .map_err(AppError::Redis)?;
-        let mut cache = FeedCache::new(manager, 120);
-
         for ev in events {
             match ev.event_type.as_str() {
                 "new_follow" | "unfollow" => {
@@ -365,14 +358,25 @@ impl EventsConsumer {
                             .and_then(|v| v.as_str())
                             .and_then(|s| uuid::Uuid::parse_str(s).ok());
                         if let (Some(follower), Some(followee)) = (follower_id, followee_id) {
-                            // Use unified invalidation path
-                            let _ = cache
-                                .invalidate_by_event("new_follow", follower, Some(followee))
-                                .await;
-                            crate::metrics::helpers::record_social_follow_event(
-                                ev.event_type.as_str(),
-                                "processed",
-                            );
+                            let request = InvalidateFeedEventRequest {
+                                event_type: ev.event_type.clone(),
+                                user_id: follower.to_string(),
+                                target_user_id: followee.to_string(),
+                            };
+                            match self.content_client.invalidate_feed_event(request).await {
+                                Ok(_) => {
+                                    crate::metrics::helpers::record_social_follow_event(
+                                        ev.event_type.as_str(),
+                                        "processed",
+                                    );
+                                }
+                                Err(e) => {
+                                    warn!(
+                                        "Failed to invalidate feed via content-service (event={}, follower={}, followee={}): {}",
+                                        ev.event_type, follower, followee, e
+                                    );
+                                }
+                            }
                         }
                     }
                 }

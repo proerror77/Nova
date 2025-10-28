@@ -19,12 +19,6 @@ use tokio::sync::mpsc;
 use tracing::{error, info};
 use uuid::Uuid;
 
-/// Maximum retry attempts for S3 operations (download/upload)
-const MAX_S3_RETRIES: u32 = 3;
-
-/// Delay between retry attempts (milliseconds)
-const RETRY_DELAY_MS: u64 = 1000;
-
 /// Video processing job containing all metadata needed to process an uploaded video
 #[derive(Debug, Clone)]
 pub struct VideoProcessingJob {

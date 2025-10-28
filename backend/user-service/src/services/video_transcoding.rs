@@ -8,7 +8,7 @@ use serde_json::Value;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use tracing::{debug, info};
+use tracing::debug;
 
 /// Video transcoding service
 pub struct VideoTranscodingService {

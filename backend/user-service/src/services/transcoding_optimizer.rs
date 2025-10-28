@@ -5,11 +5,10 @@
 /// Targets 40% performance improvement over sequential transcoding.
 use crate::config::video_config::VideoProcessingConfig;
 use crate::error::{AppError, Result};
-use crate::models::video::TranscodingJob;
 use std::collections::VecDeque;
 use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info};
 
 /// Quality tier with priority and encoding parameters
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]

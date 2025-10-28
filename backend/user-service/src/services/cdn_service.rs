@@ -4,11 +4,10 @@
 /// and geographic routing capabilities. Supports CloudFront, Cloudflare,
 /// and fallback to S3 origin.
 use crate::config::video_config::CdnConfig;
-use crate::error::{AppError, Result};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info};
 
 /// Cache entry for manifests
 #[derive(Debug, Clone)]

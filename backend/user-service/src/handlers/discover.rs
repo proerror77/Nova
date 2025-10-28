@@ -88,7 +88,8 @@ pub async fn get_suggested_users(
             .call(|| {
                 let graph_clone = graph.clone();
                 async move {
-                    graph_clone.suggested_friends(user_id, limit)
+                    graph_clone
+                        .suggested_friends(user_id, limit)
                         .await
                         .map_err(|e| AppError::Internal(e.to_string()))
                 }
@@ -97,8 +98,7 @@ pub async fn get_suggested_users(
         {
             Ok(list) => {
                 debug!("Neo4j suggestions retrieved for user {}", user_id);
-                list
-                    .into_iter()
+                list.into_iter()
                     .map(|(uid, mutuals)| UserWithScore {
                         user_id: uid.to_string(),
                         score: mutuals as f64,
@@ -113,9 +113,12 @@ pub async fn get_suggested_users(
             Err(e) => {
                 match &e {
                     AppError::Internal(msg) if msg.contains("Circuit breaker is OPEN") => {
-                        warn!("Neo4j circuit is OPEN for user {}, falling back to Redis cache", user_id);
+                        warn!(
+                            "Neo4j circuit is OPEN for user {}, falling back to Redis cache",
+                            user_id
+                        );
                         // Strategy 2: Fall back to Redis cache when Neo4j is down
-                        let mut conn = redis_manager.get_ref().clone();
+                        let conn = redis_manager.get_ref().clone();
                         match state
                             .redis_cb
                             .call(|| {
@@ -148,7 +151,9 @@ pub async fn get_suggested_users(
                             }
                             Err(cache_err) => {
                                 match &cache_err {
-                                    AppError::Internal(msg) if msg.contains("Circuit breaker is OPEN") => {
+                                    AppError::Internal(msg)
+                                        if msg.contains("Circuit breaker is OPEN") =>
+                                    {
                                         warn!(
                                             "Redis circuit is OPEN for cached suggestions (user={}), returning empty results",
                                             user_id
@@ -168,7 +173,7 @@ pub async fn get_suggested_users(
                     _ => {
                         error!("Neo4j suggestion error for user {}: {}", user_id, e);
                         // Fallback to Redis cache on other errors too
-                        let mut conn = redis_manager.get_ref().clone();
+                        let conn = redis_manager.get_ref().clone();
                         match state
                             .redis_cb
                             .call(|| {
@@ -191,7 +196,7 @@ pub async fn get_suggested_users(
                                     .take(limit)
                                     .collect()
                             }
-                            _ => Vec::new()
+                            _ => Vec::new(),
                         }
                     }
                 }
@@ -200,7 +205,7 @@ pub async fn get_suggested_users(
     } else {
         // Neo4j disabled: Use Redis cache directly
         debug!("Neo4j disabled, using Redis cache for suggestions");
-        let mut conn = redis_manager.get_ref().clone();
+        let conn = redis_manager.get_ref().clone();
         match state
             .redis_cb
             .call(|| {

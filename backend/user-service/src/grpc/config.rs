@@ -20,14 +20,13 @@ pub struct GrpcClientConfig {
     pub enable_health_check: bool,
     /// Health check interval in seconds
     pub health_check_interval_secs: u64,
+    /// gRPC client connection pool size per service
+    pub pool_size: usize,
 }
 
 impl GrpcClientConfig {
     /// Create a new gRPC client configuration
-    pub fn new(
-        content_service_url: String,
-        media_service_url: String,
-    ) -> Self {
+    pub fn new(content_service_url: String, media_service_url: String) -> Self {
         Self {
             content_service_url,
             media_service_url,
@@ -36,6 +35,7 @@ impl GrpcClientConfig {
             max_concurrent_streams: 100,
             enable_health_check: true,
             health_check_interval_secs: 30,
+            pool_size: 4,
         }
     }
 
@@ -52,6 +52,11 @@ impl GrpcClientConfig {
     /// Get health check interval as Duration
     pub fn health_check_interval(&self) -> Duration {
         Duration::from_secs(self.health_check_interval_secs)
+    }
+
+    /// Get gRPC client pool size (minimum 1)
+    pub fn pool_size(&self) -> usize {
+        self.pool_size.max(1)
     }
 
     /// Load configuration from environment variables
@@ -87,6 +92,11 @@ impl GrpcClientConfig {
             .and_then(|s| s.parse().ok())
             .unwrap_or(30);
 
+        let pool_size = std::env::var("GRPC_CLIENT_POOL_SIZE")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(4);
+
         Ok(Self {
             content_service_url,
             media_service_url,
@@ -95,6 +105,7 @@ impl GrpcClientConfig {
             max_concurrent_streams,
             enable_health_check,
             health_check_interval_secs,
+            pool_size,
         })
     }
 }
@@ -119,6 +130,7 @@ mod tests {
         assert_eq!(config.media_service_url, "http://localhost:9082");
         assert_eq!(config.connection_timeout_secs, 10);
         assert_eq!(config.request_timeout_secs, 30);
+        assert_eq!(config.pool_size(), 4);
     }
 
     #[test]

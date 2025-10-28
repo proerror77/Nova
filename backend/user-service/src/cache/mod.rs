@@ -1,9 +1,7 @@
-pub mod feed_cache;
 pub mod invalidation;
 pub mod user_cache;
 pub mod versioning;
 
-pub use feed_cache::FeedCache;
 pub use invalidation::{
     invalidate_feed_cache_with_retry, invalidate_search_cache_with_retry,
     invalidate_user_cache_with_retry,

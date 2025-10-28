@@ -5,10 +5,9 @@ use crate::config::video_config::VideoConfig;
 use crate::config::S3Config;
 use crate::error::{AppError, Result};
 use crate::services::s3_service;
-use chrono::Utc;
 use uuid::Uuid;
 
-use tracing::{debug, info};
+use tracing::info;
 
 /// Video service for uploads and processing
 pub struct VideoService {

@@ -1,5 +1,6 @@
 use actix_web::{web, HttpResponse, Responder};
 use chrono::Utc;
+use base64::{engine::general_purpose, Engine as _};
 use redis::aio::ConnectionManager;
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
@@ -726,7 +727,7 @@ pub async fn enable_2fa(
     };
 
     // Convert QR code bytes to base64 string for JSON response
-    let qr_code = base64::encode(&qr_code_bytes);
+    let qr_code = general_purpose::STANDARD.encode(&qr_code_bytes);
 
     // Create temporary session to hold the setup information
     let temp_session_id = uuid::Uuid::new_v4().to_string();

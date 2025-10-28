@@ -10,7 +10,7 @@
 //   User Interactions → Feature Aggregation → User Profile
 //   User Profile × Post Features → Content Similarity Score
 
-use crate::error::{AppError, Result};
+use crate::error::Result;
 use std::collections::HashMap;
 use uuid::Uuid;
 
