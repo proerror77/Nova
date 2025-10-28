@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: s3-config
+  namespace: nova-backend
+  labels:
+    app: nova-api
+    component: s3
+data:
+  # S3 Bucket Configuration
+  S3_BUCKET_NAME: "nova-staging-videos"
+  AWS_REGION: "ap-northeast-1"
+
+  # Presigned URL Configuration
+  S3_PRESIGNED_URL_EXPIRY_SECS: "900"  # 15 minutes
+
+  # CloudFront Configuration (for serving videos)
+  # Update with actual CloudFront domain when available
+  CLOUDFRONT_URL: "http://api-gateway/videos"
+
+  # Feature Flag
+  S3_DISABLE: "false"

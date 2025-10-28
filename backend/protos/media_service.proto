@@ -1,0 +1,113 @@
+syntax = "proto3";
+
+package nova.media;
+
+// Media Service - gRPC interface for video/upload operations
+// Serves media-service (port 8082)
+
+message Video {
+    string id = 1;
+    string creator_id = 2;
+    string title = 3;
+    string description = 4;
+    int32 duration_seconds = 5;
+    string cdn_url = 6;
+    string thumbnail_url = 7;
+    string status = 8;
+    string visibility = 9;
+    int64 created_at = 10;
+}
+
+message Upload {
+    string id = 1;
+    string user_id = 2;
+    string video_id = 3;
+    string file_name = 4;
+    int64 file_size = 5;
+    int64 uploaded_size = 6;
+    string status = 7;
+    int64 created_at = 8;
+}
+
+message GetVideoRequest {
+    string video_id = 1;
+}
+
+message GetVideoResponse {
+    Video video = 1;
+    bool found = 2;
+    string error = 3;
+}
+
+message GetUserVideosRequest {
+    string user_id = 1;
+    int32 limit = 2;
+}
+
+message GetUserVideosResponse {
+    repeated Video videos = 1;
+    string error = 2;
+}
+
+message CreateVideoRequest {
+    string creator_id = 1;
+    string title = 2;
+    string description = 3;
+    string visibility = 4;
+}
+
+message CreateVideoResponse {
+    Video video = 1;
+    string error = 2;
+}
+
+message GetUploadRequest {
+    string upload_id = 1;
+}
+
+message GetUploadResponse {
+    Upload upload = 1;
+    bool found = 2;
+    string error = 3;
+}
+
+message UpdateUploadProgressRequest {
+    string upload_id = 1;
+    int64 uploaded_size = 2;
+}
+
+message UpdateUploadProgressResponse {
+    Upload upload = 1;
+    string error = 2;
+}
+
+message StartUploadRequest {
+    string user_id = 1;
+    string file_name = 2;
+    int64 file_size = 3;
+    string content_type = 4;
+}
+
+message StartUploadResponse {
+    Upload upload = 1;
+    string error = 2;
+}
+
+message CompleteUploadRequest {
+    string upload_id = 1;
+}
+
+message CompleteUploadResponse {
+    Upload upload = 1;
+    string error = 2;
+}
+
+service MediaService {
+    rpc GetVideo(GetVideoRequest) returns (GetVideoResponse) {}
+    rpc GetUserVideos(GetUserVideosRequest) returns (GetUserVideosResponse) {}
+    rpc CreateVideo(CreateVideoRequest) returns (CreateVideoResponse) {}
+    rpc GetUpload(GetUploadRequest) returns (GetUploadResponse) {}
+    rpc UpdateUploadProgress(UpdateUploadProgressRequest) returns (UpdateUploadProgressResponse) {}
+    rpc StartUpload(StartUploadRequest) returns (StartUploadResponse) {}
+    rpc CompleteUpload(CompleteUploadRequest) returns (CompleteUploadResponse) {}
+}
