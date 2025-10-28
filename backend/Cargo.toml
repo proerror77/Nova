@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "user-service",
+    "content-service",
     "messaging-service",
     "search-service",
     "libs/crypto-core"
