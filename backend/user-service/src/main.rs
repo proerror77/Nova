@@ -215,6 +215,14 @@ async fn main() -> io::Result<()> {
     }));
     tracing::info!("Redis circuit breaker initialized");
 
+    // PostgreSQL Circuit Breaker (4 failures → open, 45s timeout, 3 successes to close)
+    let postgres_circuit_breaker = Arc::new(CircuitBreaker::new(CircuitBreakerConfig {
+        failure_threshold: 4,
+        success_threshold: 3,
+        timeout_seconds: 45,
+    }));
+    tracing::info!("PostgreSQL circuit breaker initialized");
+
     let feed_cache = FeedCache::new(redis_manager.clone(), 120);
     let feed_cache = Arc::new(Mutex::new(feed_cache));
     let feed_ranking = Arc::new(FeedRankingService::new(
@@ -251,6 +259,8 @@ async fn main() -> io::Result<()> {
     let feed_state = web::Data::new(FeedHandlerState {
         feed_ranking: feed_ranking.clone(),
         rec_v2,
+        clickhouse_cb: clickhouse_circuit_breaker.clone(),
+        redis: Some(Arc::new(redis_manager.clone())),
     });
 
     // Initialize Neo4j Graph service (optional)
@@ -343,6 +353,30 @@ async fn main() -> io::Result<()> {
     // ========================================
     let events_state = web::Data::new(EventHandlerState {
         producer: event_producer.clone(),
+        kafka_cb: kafka_circuit_breaker.clone(),
+    });
+
+    // ========================================
+    // Initialize additional handler states with PostgreSQL circuit breaker
+    // ========================================
+    let posts_state = web::Data::new(handlers::posts::PostsHandlerState {
+        postgres_cb: postgres_circuit_breaker.clone(),
+    });
+
+    let videos_state = web::Data::new(handlers::videos::VideosHandlerState {
+        postgres_cb: postgres_circuit_breaker.clone(),
+    });
+
+    let likes_state = web::Data::new(handlers::likes::LikesHandlerState {
+        postgres_cb: postgres_circuit_breaker.clone(),
+    });
+
+    let relationships_state = web::Data::new(handlers::relationships::RelationshipsHandlerState {
+        postgres_cb: postgres_circuit_breaker.clone(),
+    });
+
+    let comments_state = web::Data::new(handlers::comments::CommentsHandlerState {
+        postgres_cb: postgres_circuit_breaker.clone(),
     });
 
     // ========================================
@@ -592,6 +626,11 @@ async fn main() -> io::Result<()> {
             .app_data(stream_state.clone())
             .app_data(stream_chat_ws_state.clone())
             .app_data(graph_data.clone())
+            .app_data(posts_state.clone())
+            .app_data(videos_state.clone())
+            .app_data(likes_state.clone())
+            .app_data(relationships_state.clone())
+            .app_data(comments_state.clone())
             .app_data(web::Data::new(jwks_cache.clone()))
             // Circuit breakers for critical service protection
             .app_data(web::Data::new(clickhouse_circuit_breaker.clone()))
@@ -950,13 +989,10 @@ async fn main() -> io::Result<()> {
                     )
                     // Discover endpoints
                     .service(
-                        web::scope("/discover")
+                        web::scope("")
                             .wrap(JwtAuthMiddleware)
                             .app_data(graph_data.clone())
-                            .route(
-                                "/suggested-users",
-                                web::get().to(handlers::get_suggested_users),
-                            ),
+                            .service(handlers::get_suggested_users),
                     )
                     // NOTE: Search endpoints moved to search-service:8086
                     // Use /api/v1/search/* routes via API Gateway (Nginx)
