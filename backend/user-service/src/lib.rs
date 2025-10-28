@@ -2,6 +2,7 @@ pub mod cache;
 pub mod config;
 pub mod db;
 pub mod error;
+pub mod grpc;
 pub mod handlers;
 pub mod jobs;
 pub mod metrics;

@@ -79,9 +79,9 @@ neo4rs = "0.8"
 tokio-stream = "0.1"
 regex = "1"
 
-# Phase 4: Video Processing
-tonic = "0.14"
-prost = "0.12"
+# Phase 4: Video Processing & gRPC
+tonic.workspace = true
+prost.workspace = true
 ndarray = "0.15"
 http = "0.2"
 
