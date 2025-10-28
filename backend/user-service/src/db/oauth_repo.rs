@@ -4,7 +4,7 @@ use crate::services::oauth::TokenEncryptionService;
 use chrono::Utc;
 use sha2::{Digest, Sha256};
 use sqlx::PgPool;
-use tracing::{debug, error, warn};
+use tracing::debug;
 use uuid::Uuid;
 
 /// Hash a token for secure storage (legacy, for backward compatibility)

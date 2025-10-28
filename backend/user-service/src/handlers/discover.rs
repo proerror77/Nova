@@ -2,7 +2,6 @@ use actix_web::{get, web, HttpMessage, HttpRequest, HttpResponse};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tracing::{debug, error, warn};
-use uuid::Uuid;
 
 use crate::error::{AppError, Result};
 use crate::middleware::jwt_auth::UserId;

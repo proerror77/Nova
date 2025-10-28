@@ -2,7 +2,7 @@
 ///
 /// Provides CRUD operations for upload sessions and chunks matching migration 034
 use crate::models::video::{ResumableUpload, UploadChunk};
-use chrono::{DateTime, Duration, Utc};
+use chrono::{Duration, Utc};
 use sqlx::PgPool;
 use uuid::Uuid;
 
