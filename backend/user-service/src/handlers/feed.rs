@@ -94,13 +94,10 @@ pub async fn get_feed(
                 "Content-service feed request failed (user={}): status={}",
                 user_id, status
             );
-
-            return Ok(HttpResponse::Ok().json(FeedResponse {
-                posts: Vec::new(),
-                cursor: None,
-                has_more: false,
-                total_count: offset,
-            }));
+            return Err(AppError::Internal(format!(
+                "Feed service unavailable: {}",
+                status
+            )));
         }
     };
 
