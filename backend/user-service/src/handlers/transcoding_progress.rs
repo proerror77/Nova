@@ -1,4 +1,3 @@
-use crate::error::AppError;
 use crate::middleware::jwt_auth::UserId;
 use crate::services::transcoding_progress_handler::{ProgressStreamActor, ProgressStreamRegistry};
 use actix_web::{web, HttpMessage, HttpRequest, HttpResponse};

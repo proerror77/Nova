@@ -1,12 +1,11 @@
-use actix_web::{delete, get, post, web, HttpResponse};
+use actix_web::{web, HttpResponse};
 use serde::Serialize;
 use sqlx::{PgPool, Row};
 use tracing::{debug, error, warn};
 use uuid::Uuid;
 
 use crate::cache::{
-    invalidate_search_cache, invalidate_search_cache_with_retry, invalidate_user_cache,
-    invalidate_user_cache_with_retry, FeedCache,
+    invalidate_search_cache_with_retry, invalidate_user_cache_with_retry, FeedCache,
 };
 use crate::db::user_repo;
 use crate::error::AppError;

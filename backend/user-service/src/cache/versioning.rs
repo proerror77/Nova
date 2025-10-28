@@ -11,7 +11,6 @@ use chrono::Utc;
 use redis::aio::ConnectionManager;
 use serde::{Deserialize, Serialize};
 use std::time::{SystemTime, UNIX_EPOCH};
-use uuid::Uuid;
 
 /// Versioned cache entry wrapper
 /// Adds version metadata to prevent stale reads and race conditions
