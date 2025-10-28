@@ -25,7 +25,7 @@ pub mod onnx_serving;
 pub use ab_testing::{ABTestingFramework, Experiment, ExperimentEvent, Variant};
 pub use collaborative_filtering::{CollaborativeFilteringModel, SimilarityMetric};
 pub use content_based::{ContentBasedModel, PostFeatures, UserProfile};
-pub use hybrid_ranker::{HybridRanker, HybridWeights, RankingStrategy};
+pub use hybrid_ranker::{HybridRanker, HybridWeights, RankingStrategy, RankedPost};
 pub use onnx_serving::{ModelMetadata, ONNXModelServer};
 
 use crate::error::Result;

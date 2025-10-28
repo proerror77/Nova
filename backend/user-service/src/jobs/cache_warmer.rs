@@ -5,16 +5,19 @@
 //! # 策略
 //! - 目标用户: 最近 7 天登录的用户(按 last_login 排序)
 //! - 预热数量: Top 1000 活跃用户
-//! - 预热内容: 调用 feed_ranking 计算首屏 feed
+//! - 预热内容: 透過 content-service gRPC 預先拉取 feed
 //! - TTL: 120 秒(2分钟)
 //! - 刷新间隔: 60 秒
 
 use super::{CacheRefreshJob, JobContext};
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use tracing::{debug, info};
 use uuid::Uuid;
+
+use crate::grpc::{ContentServiceClient, nova::content::GetFeedRequest};
 
 /// 预热用户信息
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -53,11 +56,15 @@ impl Default for CacheWarmerConfig {
 /// 缓存预热器 Job
 pub struct CacheWarmerJob {
     config: CacheWarmerConfig,
+    content_client: Arc<ContentServiceClient>,
 }
 
 impl CacheWarmerJob {
-    pub fn new(config: CacheWarmerConfig) -> Self {
-        Self { config }
+    pub fn new(config: CacheWarmerConfig, content_client: Arc<ContentServiceClient>) -> Self {
+        Self {
+            config,
+            content_client,
+        }
     }
 
     /// 从 PostgreSQL 获取最近活跃的用户
@@ -128,33 +135,27 @@ impl CacheWarmerJob {
     /// 为单个用户预热 feed 缓存
     ///
     /// 注意: 这里只是 mock 实现,实际需要调用 feed_ranking 服务
-    async fn warmup_user_feed(&self, ctx: &JobContext, user_id: Uuid) -> Result<usize> {
-        // TODO: 实际实现需要:
-        // 1. 调用 feed_ranking::get_feed(user_id, limit=20)
-        // 2. 将结果序列化并写入 Redis
-        //
-        // Mock 实现: 直接写入一个占位符
-        let key = format!("{}:{}", self.config.redis_key_prefix, user_id);
-        let mock_feed_data = serde_json::json!({
-            "user_id": user_id.to_string(),
-            "posts": [],
-            "warmed_at": chrono::Utc::now().to_rfc3339(),
-        });
+    async fn warmup_user_feed(&self, _ctx: &JobContext, user_id: Uuid) -> Result<usize> {
+        let request = GetFeedRequest {
+            user_id: user_id.to_string(),
+            algo: "ch".to_string(),
+            limit: 20,
+            cursor: String::new(),
+        };
 
-        let data = serde_json::to_vec(&mock_feed_data)?;
-        let ttl = self.config.feed_ttl_sec;
-
-        let mut conn = ctx.redis_pool.clone();
-        redis::cmd("SET")
-            .arg(&key)
-            .arg(&data)
-            .arg("EX")
-            .arg(ttl)
-            .query_async(&mut conn)
+        let response = self
+            .content_client
+            .get_feed(request)
             .await
-            .context("Failed to write warmup cache to Redis")?;
+            .map_err(|status| anyhow!("content-service get_feed failed: {}", status))?;
 
-        Ok(0) // 返回预热的 post 数量(mock 为 0)
+        debug!(
+            "Warmup feed via content-service (user={} posts={})",
+            user_id,
+            response.post_ids.len()
+        );
+
+        Ok(response.post_ids.len())
     }
 
     /// 批量预热用户 feed
@@ -169,7 +170,6 @@ impl CacheWarmerJob {
 
         let total_users = users.len();
         let mut warmed_count = 0;
-        let mut skipped_count = 0;
         let mut failed_count = 0;
 
         let results: Vec<Result<usize>> = stream::iter(users)
@@ -188,7 +188,7 @@ impl CacheWarmerJob {
             }
         }
 
-        skipped_count = total_users.saturating_sub(warmed_count + failed_count);
+        let skipped_count = total_users.saturating_sub(warmed_count + failed_count);
 
         Ok((warmed_count, skipped_count, failed_count))
     }

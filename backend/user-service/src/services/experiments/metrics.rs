@@ -1,7 +1,7 @@
 /// Metrics Service - Event recording and aggregation for experiments
 use crate::db::experiment_repo::{
     get_cached_results, get_experiment_metrics_aggregated, record_metric, upsert_results_cache,
-    AggregatedMetric, ExperimentResultsCache,
+    ExperimentResultsCache,
 };
 use redis::AsyncCommands;
 use serde::{Deserialize, Serialize};
@@ -171,12 +171,12 @@ impl MetricsService {
         );
 
         // Increment count and sum
-        conn.incr(&count_key, 1).await?;
-        conn.incr(&sum_key, value).await?;
+        conn.incr::<_, _, ()>(&count_key, 1).await?;
+        conn.incr::<_, _, ()>(&sum_key, value).await?;
 
         // Set TTL (7 days)
-        conn.expire(&count_key, 604800).await?;
-        conn.expire(&sum_key, 604800).await?;
+        conn.expire::<_, ()>(&count_key, 604800).await?;
+        conn.expire::<_, ()>(&sum_key, 604800).await?;
 
         Ok(())
     }
@@ -199,8 +199,8 @@ impl MetricsService {
             METRIC_COUNTER_PREFIX, experiment_id, variant_id, metric_name
         );
 
-        let count: Option<i64> = conn.get(&count_key).await?;
-        let sum: Option<f64> = conn.get(&sum_key).await?;
+        let count: Option<i64> = conn.get::<_, Option<i64>>(&count_key).await?;
+        let sum: Option<f64> = conn.get::<_, Option<f64>>(&sum_key).await?;
 
         match (count, sum) {
             (Some(c), Some(s)) => Ok(Some((c, s))),

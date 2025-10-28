@@ -6,7 +6,6 @@
 // learned weights and diversity optimization (MMR).
 
 use crate::error::{AppError, Result};
-use crate::services::feed_ranking::RankedPost;
 use crate::services::recommendation_v2::{
     CollaborativeFilteringModel, ContentBasedModel, UserContext,
 };
@@ -76,6 +75,14 @@ pub struct HybridRanker {
     pub cf_model: CollaborativeFilteringModel,
     pub cb_model: ContentBasedModel,
     pub weights: HybridWeights,
+}
+
+/// Ranked post produced by the hybrid ranking pipeline.
+#[derive(Debug, Clone)]
+pub struct RankedPost {
+    pub post_id: Uuid,
+    pub score: f64,
+    pub reason: String,
 }
 
 impl HybridRanker {
@@ -234,7 +241,7 @@ impl HybridRanker {
         let first = scored.remove(0);
         selected.push(RankedPost {
             post_id: first.0,
-            combined_score: first.1,
+            score: first.1,
             reason: "hybrid_v2".to_string(),
         });
 
@@ -259,7 +266,7 @@ impl HybridRanker {
             let next = scored.remove(best_idx);
             selected.push(RankedPost {
                 post_id: next.0,
-                combined_score: next.1,
+                score: next.1,
                 reason: "hybrid_v2".to_string(),
             });
         }
@@ -276,7 +283,7 @@ impl HybridRanker {
 }
 
 fn filter_scores(recommendations: Vec<(Uuid, f64)>, candidates: &[Uuid]) -> HashMap<Uuid, f64> {
-    let candidate_set: std::collections::HashSet<Uuid> = candidates.iter().copied().collect();
+    let candidate_set: HashSet<Uuid> = candidates.iter().copied().collect();
     recommendations
         .into_iter()
         .filter(|(post_id, _)| candidate_set.contains(post_id))

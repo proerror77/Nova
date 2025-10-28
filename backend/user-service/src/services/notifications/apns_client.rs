@@ -70,10 +70,10 @@ impl APNsClient {
     /// Send notification to single device
     pub async fn send(
         &self,
-        device_token: &str,
-        title: &str,
-        body: &str,
-        priority: APNsPriority,
+        _device_token: &str,
+        _title: &str,
+        _body: &str,
+        _priority: APNsPriority,
     ) -> Result<APNsSendResult, String> {
         // TODO: Implement APNs API call
         // 1. Load certificate and key
@@ -93,9 +93,9 @@ impl APNsClient {
     pub async fn send_multicast(
         &self,
         device_tokens: &[String],
-        title: &str,
-        body: &str,
-        priority: APNsPriority,
+        _title: &str,
+        _body: &str,
+        _priority: APNsPriority,
     ) -> Result<APNsMulticastResult, String> {
         // TODO: Implement parallel sends with connection pooling
         Ok(APNsMulticastResult {
@@ -108,10 +108,10 @@ impl APNsClient {
     /// Update notification with badge count
     pub async fn send_with_badge(
         &self,
-        device_token: &str,
-        title: &str,
-        body: &str,
-        badge: i32,
+        _device_token: &str,
+        _title: &str,
+        _body: &str,
+        _badge: i32,
     ) -> Result<APNsSendResult, String> {
         // TODO: Implement badge update
         Ok(APNsSendResult {

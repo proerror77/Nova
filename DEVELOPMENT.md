@@ -2,9 +2,10 @@
 
 ## Architecture Overview
 
-Nova backend consists of three microservices:
+Nova backend now consists of four primary microservices:
 
 - **user-service** (port 8080) - Authentication, user profiles, OAuth
+- **content-service** (port 8081 / gRPC 9081) - Feed ranking, posts, stories (feeds now resolved here)
 - **messaging-service** (port 3000) - WebSocket messaging, DMs
 - **search-service** (port 8086) - Full-text search for messages
 
@@ -113,10 +114,12 @@ cargo watch -x run
 - **User Service**: `http://localhost:8080` (if exposed)
 - **Messaging Service**: `http://localhost:8085` (if exposed)
 - **Search Service**: `http://localhost:8086` (if exposed)
+- **Content Service**: `http://localhost:8081`
 
 Health checks:
 ```bash
 curl http://localhost:8080/api/v1/health
+curl http://localhost:8081/api/v1/health
 ```
 
 ## Development Workflow
@@ -153,6 +156,33 @@ cargo test test_name -- --nocapture
 # Generate coverage report
 make coverage
 ```
+
+### Feed API (user-service ↔ content-service)
+
+Feed requests are now proxied from user-service to content-service via gRPC. To verify the end-to-end flow:
+
+```bash
+# Terminal 1
+cd backend/content-service
+CONTENT_SERVICE_PORT=8081 cargo run
+
+# Terminal 2
+cd backend/user-service
+CONTENT_SERVICE_GRPC_URL=http://127.0.0.1:9081 cargo run
+
+# Terminal 3 (ensure you have a valid JWT for the user ID below)
+curl -H "Authorization: Bearer <token>" \
+     "http://127.0.0.1:8080/api/v1/feed?limit=10"
+```
+
+You can also call the gRPC endpoint directly when debugging:
+
+```bash
+grpcurl -plaintext -d '{"user_id":"<uuid>","limit":10}' \
+    127.0.0.1:9081 nova.content.ContentService/GetFeed
+```
+
+In Kubernetes, the user-service deployment reads `CONTENT_SERVICE_GRPC_URL` from `nova-config`, so no additional wiring is required once both services are deployed.
 
 ### Database Management
 

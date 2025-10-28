@@ -10,7 +10,6 @@
 /// 4. Error handling with circuit breaker
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 use std::time::Duration;
 use uuid::Uuid;
 

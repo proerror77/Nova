@@ -6,7 +6,6 @@ use tokio::sync::Mutex;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use user_service::{
-    cache::FeedCache,
     config::video_config,
     config::Config,
     db::{ch_client::ClickHouseClient, create_pool, run_migrations},
@@ -14,7 +13,7 @@ use user_service::{
     handlers::{events::EventHandlerState, feed::FeedHandlerState, streams::StreamHandlerState},
     jobs::{
         self, run_jobs, suggested_users_generator::SuggestedUsersJob,
-        suggested_users_generator::SuggestionConfig, JobContext,
+        suggested_users_generator::SuggestionConfig,
     },
     metrics,
     middleware::{
@@ -25,12 +24,10 @@ use user_service::{
         cdc::{CdcConsumer, CdcConsumerConfig},
         deep_learning_inference::DeepLearningInferenceService,
         events::{EventDeduplicator, EventsConsumer, EventsConsumerConfig},
-        feed_ranking::FeedRankingService,
         graph::GraphService,
         job_queue,
         kafka_producer::EventProducer,
         oauth::jwks_cache::JWKSCache,
-        recommendation_v2::{HybridWeights, RecommendationConfig, RecommendationServiceV2},
         s3_service,
         stories::StoriesService,
         streaming::{
@@ -40,6 +37,7 @@ use user_service::{
         video_service::VideoService,
     },
 };
+use user_service::grpc::{ContentServiceClient, GrpcClientConfig, HealthChecker};
 
 #[actix_web::main]
 async fn main() -> io::Result<()> {
@@ -180,7 +178,10 @@ async fn main() -> io::Result<()> {
         Err(e) => {
             tracing::error!("❌ FATAL: ClickHouse health check failed - {}", e);
             tracing::error!("   Feed ranking cannot function without ClickHouse");
-            tracing::error!("   Fix: Ensure ClickHouse is running and accessible at {}", config.clickhouse.url);
+            tracing::error!(
+                "   Fix: Ensure ClickHouse is running and accessible at {}",
+                config.clickhouse.url
+            );
             return Err(io::Error::new(
                 io::ErrorKind::ConnectionRefused,
                 format!("ClickHouse initialization failed: {}", e),
@@ -223,45 +224,21 @@ async fn main() -> io::Result<()> {
     }));
     tracing::info!("PostgreSQL circuit breaker initialized");
 
-    let feed_cache = FeedCache::new(redis_manager.clone(), 120);
-    let feed_cache = Arc::new(Mutex::new(feed_cache));
-    let feed_ranking = Arc::new(FeedRankingService::new(
-        clickhouse_client.clone(),
-        feed_cache.clone(),
-    ));
-
-    // Optional: init Recommendation V2 re-ranker (disabled by default)
-    let rec_v2 = {
-        let enabled =
-            std::env::var("RECOMMENDATION_V2_INIT").unwrap_or_else(|_| "false".into()) == "true";
-        if enabled {
-            let onnx_path = std::env::var("REC_ONNX_MODEL_PATH")
-                .unwrap_or_else(|_| "models/collaborative_v1.0.onnx".into());
-            let cfg = RecommendationConfig {
-                collaborative_model_path: std::env::var("REC_CF_MODEL").unwrap_or_default(),
-                content_model_path: std::env::var("REC_CB_MODEL").unwrap_or_default(),
-                onnx_model_path: onnx_path,
-                hybrid_weights: HybridWeights::balanced(),
-                enable_ab_testing: false,
-            };
-            match RecommendationServiceV2::new(cfg, db_pool.clone()).await {
-                Ok(svc) => Some(Arc::new(svc)),
-                Err(e) => {
-                    tracing::warn!("Failed to initialize Recommendation V2: {}", e);
-                    None
-                }
-            }
-        } else {
-            None
-        }
-    };
+    // Initialize downstream gRPC clients
+    let grpc_config =
+        GrpcClientConfig::from_env().expect("Failed to load gRPC client configuration");
+    let health_checker = Arc::new(HealthChecker::new());
+    let content_client = Arc::new(
+        ContentServiceClient::new(&grpc_config, health_checker.clone())
+            .await
+            .expect("Failed to initialize content-service gRPC client"),
+    );
 
     let feed_state = web::Data::new(FeedHandlerState {
-        feed_ranking: feed_ranking.clone(),
-        rec_v2,
-        clickhouse_cb: clickhouse_circuit_breaker.clone(),
-        redis: Some(Arc::new(redis_manager.clone())),
+        content_client: content_client.clone(),
     });
+    let content_client_data = web::Data::new(content_client.clone());
+    let health_checker_data = web::Data::new(health_checker.clone());
 
     // Initialize Neo4j Graph service (optional)
     let graph_service = match GraphService::new(&config.graph).await {
@@ -390,10 +367,9 @@ async fn main() -> io::Result<()> {
         max_concurrent_inserts: 10,
     };
 
-    let cdc_consumer =
-        CdcConsumer::new(cdc_config, ch_writable.as_ref().clone(), db_pool.clone())
-            .await
-            .expect("Failed to create CDC consumer - CDC is mandatory for data consistency");
+    let cdc_consumer = CdcConsumer::new(cdc_config, ch_writable.as_ref().clone(), db_pool.clone())
+        .await
+        .expect("Failed to create CDC consumer - CDC is mandatory for data consistency");
 
     let cdc_handle = tokio::spawn(async move {
         if let Err(e) = cdc_consumer.run().await {
@@ -419,7 +395,7 @@ async fn main() -> io::Result<()> {
         events_config,
         ch_writable.as_ref().clone(),
         event_deduplicator,
-        redis_client.clone(),
+        content_client.clone(),
     )
     .expect("Failed to create Events consumer");
 
@@ -560,6 +536,7 @@ async fn main() -> io::Result<()> {
         );
         let cache_warmer = jobs::cache_warmer::CacheWarmerJob::new(
             jobs::cache_warmer::CacheWarmerConfig::default(),
+            content_client.clone(),
         );
 
         // Run jobs in background (suggested + trending + cache warmup)
@@ -590,6 +567,8 @@ async fn main() -> io::Result<()> {
     // Create and run HTTP server
     let server = HttpServer::new(move || {
         let feed_state = feed_state.clone();
+        let content_client_data = content_client_data.clone();
+        let health_checker_data = health_checker_data.clone();
         let events_state = events_state.clone();
         let stream_state = stream_state.clone();
         let stream_chat_ws_state = stream_chat_ws_state.clone();
@@ -627,6 +606,8 @@ async fn main() -> io::Result<()> {
                 video_config::VideoConfig::from_env().inference,
             )))
             .app_data(feed_state.clone())
+            .app_data(content_client_data.clone())
+            .app_data(health_checker_data.clone())
             .app_data(events_state.clone())
             .app_data(stream_state.clone())
             .app_data(stream_chat_ws_state.clone())
