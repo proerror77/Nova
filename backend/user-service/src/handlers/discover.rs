@@ -1,11 +1,9 @@
 use actix_web::{get, web, HttpMessage, HttpRequest, HttpResponse};
 use serde::{Deserialize, Serialize};
-use sqlx::PgPool;
 use std::sync::Arc;
 use tracing::{debug, error, warn};
 use uuid::Uuid;
 
-use crate::cache::{cache_search_results, get_cached_search_results};
 use crate::error::{AppError, Result};
 use crate::middleware::jwt_auth::UserId;
 use crate::middleware::CircuitBreaker;
@@ -83,75 +81,153 @@ pub async fn get_suggested_users(
     // Build Redis key
     let redis_key = format!("nova:cache:suggested_users:{}", user_id);
 
-    // Prefer Neo4j real-time suggestions when enabled; otherwise fallback to Redis cache
+    // Cascade fallback: Try Neo4j -> Redis cache -> empty
     let users: Vec<UserWithScore> = if graph.is_enabled() {
-        // Get Neo4j suggestions with Circuit Breaker protection
+        // Strategy 1: Get Neo4j suggestions with Circuit Breaker protection
         match state
             .neo4j_cb
             .call(|| {
                 let graph_clone = graph.clone();
-                async move { graph_clone.suggested_friends(user_id, limit).await }
+                async move {
+                    graph_clone.suggested_friends(user_id, limit)
+                        .await
+                        .map_err(|e| AppError::Internal(e.to_string()))
+                }
             })
             .await
         {
-            Ok(list) => list
-                .into_iter()
-                .map(|(uid, mutuals)| UserWithScore {
-                    user_id: uid.to_string(),
-                    score: mutuals as f64,
-                    reason: if mutuals == 1 {
-                        "1 mutual connection".to_string()
-                    } else {
-                        format!("{} mutual connections", mutuals)
-                    },
-                })
-                .collect(),
+            Ok(list) => {
+                debug!("Neo4j suggestions retrieved for user {}", user_id);
+                list
+                    .into_iter()
+                    .map(|(uid, mutuals)| UserWithScore {
+                        user_id: uid.to_string(),
+                        score: mutuals as f64,
+                        reason: if mutuals == 1 {
+                            "1 mutual connection".to_string()
+                        } else {
+                            format!("{} mutual connections", mutuals)
+                        },
+                    })
+                    .collect()
+            }
             Err(e) => {
                 match &e {
                     AppError::Internal(msg) if msg.contains("Circuit breaker is OPEN") => {
                         warn!("Neo4j circuit is OPEN for user {}, falling back to Redis cache", user_id);
-                        // TODO: Implement fallback to Redis cache when Neo4j is down
+                        // Strategy 2: Fall back to Redis cache when Neo4j is down
+                        let mut conn = redis_manager.get_ref().clone();
+                        match state
+                            .redis_cb
+                            .call(|| {
+                                let mut conn_clone = conn.clone();
+                                let key = redis_key.clone();
+                                async move {
+                                    redis::cmd("GET")
+                                        .arg(&key)
+                                        .query_async::<_, Option<String>>(&mut conn_clone)
+                                        .await
+                                        .map_err(|e| AppError::Internal(e.to_string()))
+                                }
+                            })
+                            .await
+                        {
+                            Ok(Some(json_str)) => {
+                                debug!("Cache hit for suggestions (user={})", user_id);
+                                serde_json::from_str::<Vec<UserWithScore>>(&json_str)
+                                    .unwrap_or_else(|_| {
+                                        debug!("Failed to parse cached suggestions data, returning empty list");
+                                        Vec::new()
+                                    })
+                                    .into_iter()
+                                    .take(limit)
+                                    .collect()
+                            }
+                            Ok(None) => {
+                                debug!("Cache miss for suggestions (user={})", user_id);
+                                Vec::new()
+                            }
+                            Err(cache_err) => {
+                                match &cache_err {
+                                    AppError::Internal(msg) if msg.contains("Circuit breaker is OPEN") => {
+                                        warn!(
+                                            "Redis circuit is OPEN for cached suggestions (user={}), returning empty results",
+                                            user_id
+                                        );
+                                    }
+                                    _ => {
+                                        error!(
+                                            "Failed to query Redis for suggestions (user={}): {}",
+                                            user_id, cache_err
+                                        );
+                                    }
+                                }
+                                Vec::new()
+                            }
+                        }
                     }
                     _ => {
                         error!("Neo4j suggestion error for user {}: {}", user_id, e);
+                        // Fallback to Redis cache on other errors too
+                        let mut conn = redis_manager.get_ref().clone();
+                        match state
+                            .redis_cb
+                            .call(|| {
+                                let mut conn_clone = conn.clone();
+                                let key = redis_key.clone();
+                                async move {
+                                    redis::cmd("GET")
+                                        .arg(&key)
+                                        .query_async::<_, Option<String>>(&mut conn_clone)
+                                        .await
+                                        .map_err(|e| AppError::Internal(e.to_string()))
+                                }
+                            })
+                            .await
+                        {
+                            Ok(Some(json_str)) => {
+                                serde_json::from_str::<Vec<UserWithScore>>(&json_str)
+                                    .unwrap_or_else(|_| Vec::new())
+                                    .into_iter()
+                                    .take(limit)
+                                    .collect()
+                            }
+                            _ => Vec::new()
+                        }
                     }
                 }
-                Vec::new()
             }
         }
     } else {
-        // Fallback: Get suggested users from Redis with Circuit Breaker protection
+        // Neo4j disabled: Use Redis cache directly
+        debug!("Neo4j disabled, using Redis cache for suggestions");
         let mut conn = redis_manager.get_ref().clone();
-        let redis_key_clone = redis_key.clone();
-
         match state
             .redis_cb
             .call(|| {
                 let mut conn_clone = conn.clone();
-                let key = redis_key_clone.clone();
+                let key = redis_key.clone();
                 async move {
                     redis::cmd("GET")
                         .arg(&key)
                         .query_async::<_, Option<String>>(&mut conn_clone)
                         .await
+                        .map_err(|e| AppError::Internal(e.to_string()))
                 }
             })
             .await
         {
-            Ok(cached) => {
-                if let Some(json_str) = cached {
-                    serde_json::from_str::<Vec<UserWithScore>>(&json_str)
-                        .unwrap_or_else(|_| {
-                            debug!("Failed to parse cached suggestions data, returning empty list");
-                            Vec::new()
-                        })
-                        .into_iter()
-                        .take(limit)
-                        .collect()
-                } else {
-                    debug!("No cached suggestions found for user: {}", user_id);
-                    Vec::new()
-                }
+            Ok(Some(json_str)) => {
+                debug!("Cache hit for suggestions (user={})", user_id);
+                serde_json::from_str::<Vec<UserWithScore>>(&json_str)
+                    .unwrap_or_else(|_| Vec::new())
+                    .into_iter()
+                    .take(limit)
+                    .collect()
+            }
+            Ok(None) => {
+                debug!("Cache miss for suggestions (user={})", user_id);
+                Vec::new()
             }
             Err(e) => {
                 match &e {
@@ -160,7 +236,6 @@ pub async fn get_suggested_users(
                             "Redis circuit is OPEN for cached suggestions (user={}), returning empty results",
                             user_id
                         );
-                        // TODO: Implement fallback strategy when Redis is down
                     }
                     _ => {
                         error!(

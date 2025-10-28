@@ -1,12 +1,20 @@
 use actix_web::{web, HttpMessage, HttpRequest, HttpResponse, Responder};
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
+use std::sync::Arc;
+use tracing::{debug, error, warn};
 use uuid::Uuid;
 
 use crate::db::{comment_repo, post_repo, user_repo};
+use crate::error::AppError;
 use crate::handlers::auth::ErrorResponse;
-use crate::middleware::UserId;
+use crate::middleware::{CircuitBreaker, UserId};
 use crate::models::CommentResponse;
+
+/// Comments handler state with Circuit Breaker protection
+pub struct CommentsHandlerState {
+    pub postgres_cb: Arc<CircuitBreaker>, // PostgreSQL circuit breaker for database queries
+}
 
 // ============================================
 // Request/Response Structs
@@ -173,6 +181,7 @@ pub async fn get_comments(
     pool: web::Data<PgPool>,
     path: web::Path<String>,
     query: web::Query<std::collections::HashMap<String, String>>,
+    state: web::Data<CommentsHandlerState>,
 ) -> impl Responder {
     let post_id_str = path.into_inner();
     let post_id = match Uuid::parse_str(&post_id_str) {
@@ -197,27 +206,79 @@ pub async fn get_comments(
         .unwrap_or(0)
         .max(0);
 
-    // Check if post exists
-    match post_repo::find_post_by_id(&pool, post_id).await {
-        Ok(Some(_)) => {}
+    debug!(
+        "Comments request: post_id={} limit={} offset={}",
+        post_id, limit, offset
+    );
+
+    // Check if post exists with Circuit Breaker protection
+    let post_exists = match state
+        .postgres_cb
+        .call(|| {
+            let pool_clone = pool.clone();
+            async move {
+                post_repo::find_post_by_id(&pool_clone, post_id)
+                    .await
+                    .map_err(|e| AppError::Internal(e.to_string()))
+            }
+        })
+        .await
+    {
+        Ok(Some(_)) => true,
         Ok(None) => {
             return HttpResponse::NotFound().json(ErrorResponse {
                 error: "Post not found".to_string(),
                 details: None,
             })
         }
-        Err(_) => {
-            return HttpResponse::InternalServerError().json(ErrorResponse {
-                error: "Database error".to_string(),
-                details: None,
-            })
+        Err(e) => {
+            match &e {
+                AppError::Internal(msg) if msg.contains("Circuit breaker is OPEN") => {
+                    warn!(
+                        "PostgreSQL circuit is OPEN for post lookup, attempting graceful degradation"
+                    );
+                    // When circuit is open, we could try cache or return empty results
+                    // For now, return empty comments list with 200 OK
+                    return HttpResponse::Ok().json(CommentListResponse {
+                        comments: Vec::new(),
+                        total_count: 0,
+                        limit,
+                        offset,
+                    });
+                }
+                _ => {
+                    error!("Failed to check if post exists: {}", e);
+                    return HttpResponse::InternalServerError().json(ErrorResponse {
+                        error: "Database error".to_string(),
+                        details: None,
+                    });
+                }
+            }
         }
+    };
+
+    if !post_exists {
+        return HttpResponse::NotFound().json(ErrorResponse {
+            error: "Post not found".to_string(),
+            details: None,
+        });
     }
 
-    match tokio::try_join!(
-        comment_repo::get_comments_by_post(&pool, post_id, limit, offset),
-        comment_repo::count_comments_by_post(&pool, post_id)
-    ) {
+    // Fetch comments with Circuit Breaker protection
+    match state
+        .postgres_cb
+        .call(|| {
+            let pool_clone = pool.clone();
+            async move {
+                tokio::try_join!(
+                    comment_repo::get_comments_by_post(&pool_clone, post_id, limit, offset),
+                    comment_repo::count_comments_by_post(&pool_clone, post_id)
+                )
+                .map_err(|e| AppError::Internal(e.to_string()))
+            }
+        })
+        .await
+    {
         Ok((comments, count)) => {
             let mut response_comments = Vec::new();
 
@@ -241,6 +302,12 @@ pub async fn get_comments(
                 });
             }
 
+            debug!(
+                "Comments response: post_id={} count={}",
+                post_id,
+                response_comments.len()
+            );
+
             HttpResponse::Ok().json(CommentListResponse {
                 comments: response_comments,
                 total_count: count,
@@ -248,10 +315,29 @@ pub async fn get_comments(
                 offset,
             })
         }
-        Err(_) => HttpResponse::InternalServerError().json(ErrorResponse {
-            error: "Failed to fetch comments".to_string(),
-            details: None,
-        }),
+        Err(e) => {
+            match &e {
+                AppError::Internal(msg) if msg.contains("Circuit breaker is OPEN") => {
+                    warn!(
+                        "PostgreSQL circuit is OPEN for comments query, returning empty results"
+                    );
+                    // Graceful degradation: return empty comments when circuit is open
+                    HttpResponse::Ok().json(CommentListResponse {
+                        comments: Vec::new(),
+                        total_count: 0,
+                        limit,
+                        offset,
+                    })
+                }
+                _ => {
+                    error!("Failed to fetch comments: {}", e);
+                    HttpResponse::InternalServerError().json(ErrorResponse {
+                        error: "Failed to fetch comments".to_string(),
+                        details: None,
+                    })
+                }
+            }
+        }
     }
 }
 

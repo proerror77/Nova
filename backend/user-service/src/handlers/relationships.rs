@@ -1,6 +1,7 @@
 use actix_web::{delete, get, post, web, HttpResponse};
 use serde::Serialize;
 use sqlx::{PgPool, Row};
+use tracing::{debug, error, warn};
 use uuid::Uuid;
 
 use crate::cache::{
@@ -8,11 +9,20 @@ use crate::cache::{
     invalidate_user_cache_with_retry, FeedCache,
 };
 use crate::db::user_repo;
+use crate::error::AppError;
 use crate::metrics::helpers::record_social_follow_event;
-use crate::middleware::jwt_auth::UserId;
+use crate::middleware::{CircuitBreaker, jwt_auth::UserId};
 use crate::services::graph::GraphService;
 use crate::services::kafka_producer::EventProducer;
 use std::sync::Arc;
+
+// ============================================
+// Relationships handler state with Circuit Breaker protection
+// ============================================
+
+pub struct RelationshipsHandlerState {
+    pub postgres_cb: Arc<CircuitBreaker>, // PostgreSQL circuit breaker for database queries
+}
 
 #[derive(Serialize)]
 struct FollowResponse {
@@ -248,6 +258,7 @@ pub async fn get_followers(
     path: web::Path<String>,
     q: web::Query<std::collections::HashMap<String, String>>,
     pool: web::Data<PgPool>,
+    state: web::Data<RelationshipsHandlerState>,
 ) -> HttpResponse {
     let id = match Uuid::parse_str(&path.into_inner()) {
         Ok(id) => id,
@@ -263,6 +274,8 @@ pub async fn get_followers(
         .and_then(|s| s.parse::<i64>().ok())
         .unwrap_or(0)
         .max(0);
+
+    debug!("Getting followers for user: user_id={} limit={} offset={}", id, limit, offset);
 
     // OPTIMIZED: JOIN with users table to get username and avatar in single query
     let sql = r#"
@@ -273,11 +286,20 @@ pub async fn get_followers(
         ORDER BY f.created_at DESC
         LIMIT $2 OFFSET $3
     "#;
-    match sqlx::query_as::<_, (Uuid, String, Option<String>)>(sql)
-        .bind(id)
-        .bind(limit)
-        .bind(offset)
-        .fetch_all(pool.get_ref())
+    match state
+        .postgres_cb
+        .call(|| {
+            let pool_clone = pool.clone();
+            async move {
+                sqlx::query_as::<_, (Uuid, String, Option<String>)>(sql)
+                    .bind(id)
+                    .bind(limit)
+                    .bind(offset)
+                    .fetch_all(pool_clone.get_ref())
+                    .await
+                    .map_err(|e| AppError::Internal(e.to_string()))
+            }
+        })
         .await
     {
         Ok(rows) => {
@@ -290,10 +312,22 @@ pub async fn get_followers(
                 })
                 .collect();
             let count = users.len();
+            debug!("Fetched {} followers for user: {}", count, id);
             HttpResponse::Ok().json(serde_json::json!({"users": users, "count": count}))
         }
         Err(e) => {
-            HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()}))
+            match &e {
+                AppError::Internal(msg) if msg.contains("Circuit breaker is OPEN") => {
+                    warn!("PostgreSQL circuit is OPEN for followers query");
+                    // Graceful degradation: return empty followers list
+                    return HttpResponse::Ok().json(serde_json::json!({"users": Vec::<RelationshipUser>::new(), "count": 0}));
+                }
+                _ => {
+                    error!("Failed to fetch followers: {}", e);
+                    return HttpResponse::InternalServerError()
+                        .json(serde_json::json!({"error": e.to_string()}));
+                }
+            }
         }
     }
 }
@@ -304,6 +338,7 @@ pub async fn get_following(
     path: web::Path<String>,
     q: web::Query<std::collections::HashMap<String, String>>,
     pool: web::Data<PgPool>,
+    state: web::Data<RelationshipsHandlerState>,
 ) -> HttpResponse {
     let id = match Uuid::parse_str(&path.into_inner()) {
         Ok(id) => id,
@@ -320,6 +355,8 @@ pub async fn get_following(
         .unwrap_or(0)
         .max(0);
 
+    debug!("Getting following for user: user_id={} limit={} offset={}", id, limit, offset);
+
     // OPTIMIZED: JOIN with users table to get username and avatar in single query
     let sql = r#"
         SELECT f.following_id, u.username, u.avatar_url
@@ -329,11 +366,20 @@ pub async fn get_following(
         ORDER BY f.created_at DESC
         LIMIT $2 OFFSET $3
     "#;
-    match sqlx::query_as::<_, (Uuid, String, Option<String>)>(sql)
-        .bind(id)
-        .bind(limit)
-        .bind(offset)
-        .fetch_all(pool.get_ref())
+    match state
+        .postgres_cb
+        .call(|| {
+            let pool_clone = pool.clone();
+            async move {
+                sqlx::query_as::<_, (Uuid, String, Option<String>)>(sql)
+                    .bind(id)
+                    .bind(limit)
+                    .bind(offset)
+                    .fetch_all(pool_clone.get_ref())
+                    .await
+                    .map_err(|e| AppError::Internal(e.to_string()))
+            }
+        })
         .await
     {
         Ok(rows) => {
@@ -346,10 +392,22 @@ pub async fn get_following(
                 })
                 .collect();
             let count = users.len();
+            debug!("Fetched {} following for user: {}", count, id);
             HttpResponse::Ok().json(serde_json::json!({"users": users, "count": count}))
         }
         Err(e) => {
-            HttpResponse::InternalServerError().json(serde_json::json!({"error": e.to_string()}))
+            match &e {
+                AppError::Internal(msg) if msg.contains("Circuit breaker is OPEN") => {
+                    warn!("PostgreSQL circuit is OPEN for following query");
+                    // Graceful degradation: return empty following list
+                    return HttpResponse::Ok().json(serde_json::json!({"users": Vec::<RelationshipUser>::new(), "count": 0}));
+                }
+                _ => {
+                    error!("Failed to fetch following: {}", e);
+                    return HttpResponse::InternalServerError()
+                        .json(serde_json::json!({"error": e.to_string()}));
+                }
+            }
         }
     }
 }

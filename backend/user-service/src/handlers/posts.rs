@@ -2,14 +2,25 @@ use actix_web::{web, HttpMessage, HttpRequest, HttpResponse, Responder};
 use redis::aio::ConnectionManager;
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
+use std::sync::Arc;
+use tracing::{debug, error, warn};
 use uuid::Uuid;
 
 use crate::config::Config;
 use crate::db::{bookmark_repo, post_repo, post_share_repo};
+use crate::error::AppError;
 use crate::handlers::auth::ErrorResponse;
-use crate::middleware::UserId;
+use crate::middleware::{CircuitBreaker, UserId};
 use crate::models::{BookmarkResponse, PostShareResponse};
 use crate::services::{job_queue::ImageProcessingJob, job_queue::JobSender, s3_service};
+
+// ============================================
+// Posts handler state with Circuit Breaker protection
+// ============================================
+
+pub struct PostsHandlerState {
+    pub postgres_cb: Arc<CircuitBreaker>, // PostgreSQL circuit breaker for database queries
+}
 
 // ============================================
 // Request/Response Structs
@@ -508,6 +519,7 @@ pub async fn get_post_request(
     pool: web::Data<PgPool>,
     config: web::Data<Config>,
     post_id: web::Path<String>,
+    state: web::Data<PostsHandlerState>,
 ) -> impl Responder {
     // ========================================
     // Parse and validate post_id
@@ -523,11 +535,24 @@ pub async fn get_post_request(
         }
     };
 
+    debug!("Getting post: post_id={}", post_uuid);
+
     // ========================================
-    // Fetch post with images and metadata
+    // Fetch post with images and metadata - with CB protection
     // ========================================
 
-    let post_data = match post_repo::get_post_with_images(pool.get_ref(), post_uuid).await {
+    let post_data = match state
+        .postgres_cb
+        .call(|| {
+            let pool_clone = pool.clone();
+            async move {
+                post_repo::get_post_with_images(pool_clone.get_ref(), post_uuid)
+                    .await
+                    .map_err(|e| AppError::Internal(e.to_string()))
+            }
+        })
+        .await
+    {
         Ok(Some((post, metadata, thumbnail_url, medium_url, original_url))) => {
             (post, metadata, thumbnail_url, medium_url, original_url)
         }
@@ -538,11 +563,23 @@ pub async fn get_post_request(
             });
         }
         Err(e) => {
-            tracing::error!("Failed to fetch post: {:?}", e);
-            return HttpResponse::InternalServerError().json(ErrorResponse {
-                error: "Database error".to_string(),
-                details: None,
-            });
+            match &e {
+                AppError::Internal(msg) if msg.contains("Circuit breaker is OPEN") => {
+                    warn!("PostgreSQL circuit is OPEN for post lookup");
+                    // Return 503 when circuit is open
+                    return HttpResponse::ServiceUnavailable().json(ErrorResponse {
+                        error: "Service temporarily unavailable".to_string(),
+                        details: Some("Database service is experiencing issues".to_string()),
+                    });
+                }
+                _ => {
+                    error!("Failed to fetch post: {}", e);
+                    return HttpResponse::InternalServerError().json(ErrorResponse {
+                        error: "Database error".to_string(),
+                        details: None,
+                    });
+                }
+            }
         }
     };
 
@@ -569,11 +606,22 @@ pub async fn get_post_request(
         original_url.or_else(|| Some(format!("{}/posts/{}/original.jpg", cloudfront_url, post.id)));
 
     // ========================================
-    // Fetch videos if post has content_type = 'video' or 'mixed'
+    // Fetch videos if post has content_type = 'video' or 'mixed' - with CB protection
     // ========================================
 
     let videos = if post.content_type == "video" || post.content_type == "mixed" {
-        match post_repo::get_post_videos_with_metadata(pool.get_ref(), post_uuid).await {
+        match state
+            .postgres_cb
+            .call(|| {
+                let pool_clone = pool.clone();
+                async move {
+                    post_repo::get_post_videos_with_metadata(pool_clone.get_ref(), post_uuid)
+                        .await
+                        .map_err(|e| AppError::Internal(e.to_string()))
+                }
+            })
+            .await
+        {
             Ok(video_rows) => {
                 let videos_vec: Vec<crate::models::VideoMetadata> = video_rows
                     .iter()
@@ -596,8 +644,16 @@ pub async fn get_post_request(
                 }
             }
             Err(e) => {
-                tracing::error!("Failed to fetch post videos: {:?}", e);
-                None
+                match &e {
+                    AppError::Internal(msg) if msg.contains("Circuit breaker is OPEN") => {
+                        warn!("PostgreSQL circuit is OPEN for videos query, returning post without videos");
+                        None
+                    }
+                    _ => {
+                        error!("Failed to fetch post videos: {}", e);
+                        None
+                    }
+                }
             }
         }
     } else {

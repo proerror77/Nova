@@ -80,11 +80,10 @@ async fn get_cached_feed(
     algo: &str,
 ) -> Result<Option<Vec<Uuid>>> {
     let cache_key = format!("nova:feed:{}:{}", user_id, algo);
-    let mut conn = redis.get_ref().clone();
 
     match redis::cmd("GET")
         .arg(&cache_key)
-        .query_async::<_, Option<String>>(&mut conn)
+        .query_async::<_, Option<String>>(&mut redis.as_ref().clone())
         .await
     {
         Ok(Some(json_str)) => {
