@@ -2,6 +2,7 @@
 members = [
     "user-service",
     "content-service",
+    "media-service",
     "messaging-service",
     "search-service",
     "libs/crypto-core"
@@ -105,6 +106,10 @@ urlencoding = "2.1"
 # ClickHouse client
 clickhouse = { version = "0.12" }
 rdkafka = { version = "0.36", features = ["tokio", "cmake-build"] }
+
+# gRPC
+tonic = { version = "0.11", features = ["transport"] }
+prost = "0.12"
 
 # Swagger/OpenAPI
 # utoipa 用於生成 OpenAPI 3.0 規範
