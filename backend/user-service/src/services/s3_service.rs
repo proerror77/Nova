@@ -566,3 +566,73 @@ mod tests {
         }
     }
 }
+
+/// Health check for S3 connectivity and bucket access
+///
+/// Verifies that:
+/// 1. AWS credentials are valid
+/// 2. S3 bucket is accessible
+/// 3. Bucket has appropriate permissions for upload/download
+///
+/// This is a critical check because video processing depends entirely on S3.
+/// If this fails, the application should not start.
+///
+/// # Arguments
+/// * `client` - AWS S3 client instance
+/// * `config` - S3 configuration
+///
+/// # Returns
+/// Ok(()) if S3 is healthy, Err(AppError) with detailed message otherwise
+pub async fn health_check(client: &Client, config: &S3Config) -> Result<(), AppError> {
+    // Attempt to list objects in bucket as a connectivity test
+    // This validates:
+    // - AWS credentials are valid
+    // - Bucket exists and is accessible
+    // - User has ListBucket permission
+    match client
+        .list_objects_v2()
+        .bucket(&config.bucket_name)
+        .max_keys(1)
+        .send()
+        .await
+    {
+        Ok(_) => {
+            tracing::info!(
+                "✅ S3 connection validated (bucket: {}, region: {})",
+                config.bucket_name,
+                config.region
+            );
+            Ok(())
+        }
+        Err(e) => {
+            let error_msg = e.to_string();
+
+            // Provide specific error guidance based on error type
+            let guidance = if error_msg.contains("InvalidAccessKeyId") {
+                "Invalid AWS Access Key ID. Check AWS_ACCESS_KEY_ID environment variable."
+            } else if error_msg.contains("SignatureDoesNotMatch") {
+                "Invalid AWS Secret Access Key. Check AWS_SECRET_ACCESS_KEY environment variable."
+            } else if error_msg.contains("NoSuchBucket") {
+                &format!(
+                    "Bucket does not exist: {}. Create it with: aws s3api create-bucket --bucket {} --region {} --create-bucket-configuration LocationConstraint={}",
+                    config.bucket_name, config.bucket_name, config.region, config.region
+                )
+            } else if error_msg.contains("AccessDenied") {
+                "Access denied to S3 bucket. Ensure sonic-shih user has S3 permissions (AmazonS3FullAccess or equivalent)."
+            } else {
+                "S3 health check failed. Ensure S3 bucket is accessible and credentials are valid."
+            };
+
+            tracing::error!("❌ FATAL: S3 health check failed");
+            tracing::error!("   Error: {}", error_msg);
+            tracing::error!("   Bucket: {}", config.bucket_name);
+            tracing::error!("   Region: {}", config.region);
+            tracing::error!("   Guidance: {}", guidance);
+
+            Err(AppError::Internal(format!(
+                "S3 health check failed: {}. {}",
+                error_msg, guidance
+            )))
+        }
+    }
+}

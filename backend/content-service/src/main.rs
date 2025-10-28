@@ -1,6 +1,8 @@
 use actix_cors::Cors;
 use actix_web::{middleware::Logger, web, App, HttpResponse, HttpServer};
 use std::io;
+use std::net::SocketAddr;
+use tokio::task::JoinSet;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 /// Content Service
@@ -74,10 +76,17 @@ async fn main() -> io::Result<()> {
     tracing::info!("Starting content-service v{}", env!("CARGO_PKG_VERSION"));
     tracing::info!("Environment: {}", config.app.env);
 
-    let bind_address = format!("{}:{}", config.app.host, 8081);
-    tracing::info!("Starting HTTP server at {}", bind_address);
+    let http_bind_address = format!("{}:{}", config.app.host, 8081);
+    let grpc_bind_address = format!("{}:9081", config.app.host);
 
-    // Create and run HTTP server
+    tracing::info!("Starting HTTP server at {}", http_bind_address);
+    tracing::info!("Starting gRPC server at {}", grpc_bind_address);
+
+    // Parse gRPC bind address
+    let grpc_addr: SocketAddr = grpc_bind_address.parse()
+        .expect("Failed to parse gRPC bind address");
+
+    // Create HTTP server
     let server = HttpServer::new(move || {
         // Build CORS configuration
         let cors_builder = Cors::default();
@@ -169,13 +178,56 @@ async fn main() -> io::Result<()> {
                     ),
             )
     })
-    .bind(&bind_address)?
+    .bind(&http_bind_address)?
     .workers(4)
     .run();
 
-    let result = server.await;
+    // Spawn both HTTP and gRPC servers concurrently
+    let mut tasks = JoinSet::new();
+
+    // HTTP server task
+    tasks.spawn(async move {
+        tracing::info!("HTTP server is running");
+        server.await
+    });
+
+    // gRPC server task
+    tasks.spawn(async move {
+        tracing::info!("gRPC server is running");
+        content_service::grpc::start_grpc_server(grpc_addr)
+            .await
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("{}", e)))
+    });
+
+    // Wait for any server to fail
+    let mut first_error = None;
+    while let Some(result) = tasks.join_next().await {
+        match result {
+            Ok(Ok(_)) => {
+                // Server completed normally (shouldn't happen unless shut down)
+                tracing::warn!("Server completed");
+            }
+            Ok(Err(e)) => {
+                // Server error
+                tracing::error!("Server error: {}", e);
+                if first_error.is_none() {
+                    first_error = Some(e);
+                }
+            }
+            Err(e) => {
+                // Task join error
+                tracing::error!("Task error: {}", e);
+                if first_error.is_none() {
+                    first_error = Some(io::Error::new(io::ErrorKind::Other, format!("{}", e)));
+                }
+            }
+        }
+    }
 
     tracing::info!("Content-service shutting down");
 
-    result
+    match first_error {
+        Some(e) => Err(e),
+        None => Ok(()),
+    }
 }

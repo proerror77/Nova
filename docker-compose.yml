@@ -317,15 +317,16 @@ services:
       APNS_BUNDLE_ID: ${APNS_BUNDLE_ID:-com.example.nova}
       APNS_IS_PRODUCTION: ${APNS_IS_PRODUCTION:-false}
 
-      # Local stubs and feature flags
-      S3_DISABLE: "true"
-      # S3 dummy values for dev
-      S3_BUCKET_NAME: ${S3_BUCKET_NAME:-dev-bucket}
-      S3_REGION: ${S3_REGION:-us-east-1}
-      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-dev}
-      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-dev}
-      CLOUDFRONT_URL: ${CLOUDFRONT_URL:-http://localhost:8080}
-      # Feature flags (bottom overrides removed to avoid duplicates)
+      # S3 Configuration for Video Upload
+      S3_BUCKET_NAME: ${S3_BUCKET_NAME:-nova-staging-videos}
+      S3_REGION: ${S3_REGION:-ap-northeast-1}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      S3_PRESIGNED_URL_EXPIRY_SECS: ${S3_PRESIGNED_URL_EXPIRY_SECS:-900}
+      CLOUDFRONT_URL: ${CLOUDFRONT_URL:-http://localhost:3000}
+
+      # Feature flags
+      S3_DISABLE: "false"
 
       # Email (mock for development)
       SMTP_HOST: ${SMTP_HOST:-mailhog}

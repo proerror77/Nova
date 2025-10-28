@@ -359,23 +359,9 @@ async fn main() -> io::Result<()> {
     // ========================================
     // Initialize additional handler states with PostgreSQL circuit breaker
     // ========================================
-    let posts_state = web::Data::new(handlers::posts::PostsHandlerState {
-        postgres_cb: postgres_circuit_breaker.clone(),
-    });
-
-    let videos_state = web::Data::new(handlers::videos::VideosHandlerState {
-        postgres_cb: postgres_circuit_breaker.clone(),
-    });
-
-    let likes_state = web::Data::new(handlers::likes::LikesHandlerState {
-        postgres_cb: postgres_circuit_breaker.clone(),
-    });
+    // posts, videos, likes, comments states REMOVED - moved to content-service and media-service
 
     let relationships_state = web::Data::new(handlers::relationships::RelationshipsHandlerState {
-        postgres_cb: postgres_circuit_breaker.clone(),
-    });
-
-    let comments_state = web::Data::new(handlers::comments::CommentsHandlerState {
         postgres_cb: postgres_circuit_breaker.clone(),
     });
 
@@ -450,11 +436,30 @@ async fn main() -> io::Result<()> {
     let (job_sender, job_receiver) = job_queue::create_job_queue(100);
     tracing::info!("Image processing job queue created (capacity: 100)");
 
-    // Create S3 client for worker
+    // ========================================
+    // Initialize S3 client with health check
+    // ========================================
+    // CRITICAL: S3 health check MUST succeed before startup
+    // Video upload/processing is 100% dependent on S3. No fallback available.
     let s3_client = s3_service::get_s3_client(&config.s3)
         .await
-        .expect("Failed to create S3 client for worker");
-    tracing::info!("S3 client initialized for image processor");
+        .expect("Failed to create S3 client");
+
+    // Perform S3 health check (bucket access, credentials validation)
+    match s3_service::health_check(&s3_client, &config.s3).await {
+        Ok(()) => {
+            tracing::info!("✅ S3 health check passed");
+        }
+        Err(e) => {
+            tracing::error!("❌ FATAL: S3 health check failed - {}", e);
+            tracing::error!("   Video upload functionality cannot work without S3");
+            tracing::error!("   Application will not start");
+            return Err(io::Error::new(
+                io::ErrorKind::ConnectionRefused,
+                format!("S3 initialization failed: {}", e),
+            ));
+        }
+    }
 
     // Spawn image processor worker task
     let worker_handle = job_queue::spawn_image_processor_worker(
@@ -626,11 +631,8 @@ async fn main() -> io::Result<()> {
             .app_data(stream_state.clone())
             .app_data(stream_chat_ws_state.clone())
             .app_data(graph_data.clone())
-            .app_data(posts_state.clone())
-            .app_data(videos_state.clone())
-            .app_data(likes_state.clone())
+            // posts_state, videos_state, likes_state, comments_state REMOVED - moved to content/media services
             .app_data(relationships_state.clone())
-            .app_data(comments_state.clone())
             .app_data(web::Data::new(jwks_cache.clone()))
             // Circuit breakers for critical service protection
             .app_data(web::Data::new(clickhouse_circuit_breaker.clone()))
@@ -781,100 +783,10 @@ async fn main() -> io::Result<()> {
                     )
                     // Note: Messaging endpoints moved to messaging-service (port 8085)
                     // Use messaging-service API for conversations and messages
-                    .service(
-                        web::scope("/stories")
-                            .wrap(JwtAuthMiddleware)
-                            .service(
-                                web::resource("")
-                                    .route(web::get().to(handlers::list_stories))
-                                    .route(web::post().to(handlers::create_story)),
-                            )
-                            .route("/{id}", web::get().to(handlers::get_story))
-                            .route("/{id}", web::delete().to(handlers::delete_story))
-                            .route(
-                                "/{id}/privacy",
-                                web::patch().to(handlers::update_story_privacy),
-                            )
-                            .route(
-                                "/user/{user_id}",
-                                web::get().to(handlers::list_user_stories),
-                            )
-                            .route(
-                                "/close-friends/{friend_id}",
-                                web::post().to(handlers::add_close_friend),
-                            )
-                            .route(
-                                "/close-friends/{friend_id}",
-                                web::delete().to(handlers::remove_close_friend),
-                            )
-                            .route(
-                                "/close-friends",
-                                web::get().to(handlers::list_close_friends),
-                            ),
-                    )
-                    .service(
-                        web::scope("/videos")
-                            .wrap(JwtAuthMiddleware)
-                            .route("/upload/init", web::post().to(handlers::video_upload_init))
-                            .route(
-                                "/upload/complete",
-                                web::post().to(handlers::video_upload_complete),
-                            )
-                            .route("", web::post().to(handlers::create_video))
-                            .route("/{id}", web::get().to(handlers::get_video))
-                            .route("/{id}", web::patch().to(handlers::update_video))
-                            .route("/{id}", web::delete().to(handlers::delete_video))
-                            .route("/{id}/stream", web::get().to(handlers::get_stream_manifest))
-                            .route(
-                                "/{id}/progress",
-                                web::get().to(handlers::get_processing_progress),
-                            )
-                            .route(
-                                "/{id}/processing/complete",
-                                web::post().to(handlers::processing_complete),
-                            )
-                            .route(
-                                "/{id}/embedding/rebuild",
-                                web::post().to(handlers::rebuild_embedding),
-                            )
-                            .route("/{id}/similar", web::get().to(handlers::get_similar_videos))
-                            .route("/{id}/like", web::post().to(handlers::like_video))
-                            .route("/{id}/share", web::post().to(handlers::share_video)),
-                    )
-                    // Reels endpoints (short-form video functionality)
-                    // Note: Reels handlers already have their actix-web decorators, so we register them as services
-                    .service(handlers::reels::get_feed)
-                    .service(handlers::reels::get_video_stream)
-                    .service(handlers::reels::get_processing_status)
-                    .service(handlers::reels::like_video)
-                    .service(handlers::reels::watch_video)
-                    .service(handlers::reels::share_video)
-                    .service(handlers::reels::get_trending_sounds)
-                    .service(handlers::reels::get_trending_hashtags)
-                    .service(handlers::reels::get_similar_videos)
-                    .service(handlers::reels::search_videos)
-                    .service(handlers::reels::get_recommended_creators)
-                    // Resumable uploads endpoints (chunked upload with resume support)
-                    .service(
-                        web::scope("/uploads")
-                            .wrap(JwtAuthMiddleware)
-                            .route("/init", web::post().to(handlers::upload_init))
-                            .route(
-                                "/{upload_id}/chunks/{chunk_index}",
-                                web::put().to(handlers::upload_chunk),
-                            )
-                            .route(
-                                "/{upload_id}/complete",
-                                web::post().to(handlers::complete_upload),
-                            )
-                            .route("/{upload_id}", web::get().to(handlers::get_upload_status))
-                            .route("/{upload_id}", web::delete().to(handlers::cancel_upload)),
-                    )
+                    // Stories and close-friends endpoints REMOVED - moved to content-service (port 8081)
+                    // Videos, reels, uploads endpoints REMOVED - moved to media-service (port 8082)
                     // Admin endpoints (protected)
-                    .service(web::scope("/admin").wrap(JwtAuthMiddleware).route(
-                        "/milvus/init-collection",
-                        web::post().to(handlers::init_milvus_collection),
-                    ))
+                    // Admin endpoints - milvus init moved to media-service
                     // Auth endpoints
                     .service(
                         web::scope("/auth")
@@ -916,7 +828,7 @@ async fn main() -> io::Result<()> {
                             .route("", web::get().to(handlers::get_current_user))
                             .route("", web::patch().to(handlers::update_profile))
                             .route("/public-key", web::put().to(handlers::upsert_my_public_key))
-                            .route("/bookmarks", web::get().to(handlers::get_user_bookmarks)),
+                            // /bookmarks moved to content-service (port 8081)
                     )
                     // Users endpoints (place after /users/me to avoid route collision)
                     .service(
@@ -946,47 +858,7 @@ async fn main() -> io::Result<()> {
                             .route("/{id}/followers", web::get().to(handlers::get_followers))
                             .route("/{id}/following", web::get().to(handlers::get_following)),
                     )
-                    // Posts endpoints (protected with JWT authentication)
-                    .service(
-                        web::scope("/posts")
-                            .wrap(JwtAuthMiddleware)
-                            .route("", web::post().to(handlers::create_post_with_media))
-                            .route(
-                                "/upload/init",
-                                web::post().to(handlers::upload_init_request),
-                            )
-                            .route(
-                                "/upload/complete",
-                                web::post().to(handlers::upload_complete_request),
-                            )
-                            .route("/{id}", web::get().to(handlers::get_post_request))
-                            // Comments endpoints
-                            .route(
-                                "/{post_id}/comments",
-                                web::post().to(handlers::create_comment),
-                            )
-                            .route("/{post_id}/comments", web::get().to(handlers::get_comments))
-                            // Likes endpoints
-                            .route("/{post_id}/like", web::post().to(handlers::like_post))
-                            .route("/{post_id}/like", web::delete().to(handlers::unlike_post))
-                            .route(
-                                "/{post_id}/like/status",
-                                web::get().to(handlers::check_like_status),
-                            )
-                            .route("/{post_id}/likes", web::get().to(handlers::get_post_likes))
-                            // Bookmark endpoints
-                            .route("/{id}/bookmark", web::post().to(handlers::bookmark_post))
-                            .route("/{id}/bookmark", web::delete().to(handlers::unbookmark_post))
-                            // Share endpoints
-                            .route("/{id}/share", web::post().to(handlers::share_post)),
-                    )
-                    // Comment endpoints (direct access by comment ID)
-                    .service(
-                        web::scope("/comments")
-                            .wrap(JwtAuthMiddleware)
-                            .route("/{comment_id}", web::patch().to(handlers::update_comment))
-                            .route("/{comment_id}", web::delete().to(handlers::delete_comment)),
-                    )
+                    // Posts and comments endpoints REMOVED - moved to content-service (port 8081)
                     // Discover endpoints
                     .service(
                         web::scope("")

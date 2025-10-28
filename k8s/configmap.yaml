@@ -27,7 +27,10 @@ data:
   RATE_LIMIT_WINDOW_SECS: "60"
 
   # S3 configuration
+  S3_BUCKET_NAME: "nova-staging-videos"
+  AWS_REGION: "ap-northeast-1"
   S3_PRESIGNED_URL_EXPIRY_SECS: "900"  # 15 minutes
+  CLOUDFRONT_URL: "http://api-gateway:80"  # Change to CloudFront domain in production
 
   # CORS configuration (comma-separated)
   CORS_ALLOWED_ORIGINS: "https://nova.app,https://www.nova.app,https://app.nova.app"
