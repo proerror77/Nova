@@ -1,22 +1,33 @@
 /// Upload handlers - HTTP endpoints for upload operations
 use actix_web::web;
+use actix_web::HttpResponse;
+use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use std::sync::Arc;
 use uuid::Uuid;
 
 use crate::cache::MediaCache;
+use crate::config::Config;
 use crate::db::upload_repo;
 use crate::error::{AppError, Result};
+use crate::middleware::UserId;
 use crate::models::{StartUploadRequest, UploadResponse};
 use crate::services::UploadService;
+
+#[derive(Debug, Serialize)]
+pub struct PresignedUrlResponse {
+    pub upload_id: Uuid,
+    pub presigned_url: String,
+    pub expiration: i64,
+}
 
 /// Start a new upload session
 pub async fn start_upload(
     pool: web::Data<PgPool>,
     cache: web::Data<Arc<MediaCache>>,
-    user_id: Uuid,
+    user_id: UserId,
     req: web::Json<StartUploadRequest>,
-) -> Result<actix_web::HttpResponse> {
+) -> Result<HttpResponse> {
     if req.file_name.is_empty() || req.file_size <= 0 {
         return Err(AppError::BadRequest(
             "Invalid file name or size".to_string(),
@@ -27,7 +38,7 @@ pub async fn start_upload(
     let upload = upload_repo::create_upload(
         pool.get_ref(),
         upload_id,
-        user_id,
+        user_id.0,
         &req.file_name,
         req.file_size,
     )
@@ -37,7 +48,7 @@ pub async fn start_upload(
         tracing::debug!(upload_id = %upload.id, "upload cache set failed: {}", err);
     }
 
-    Ok(actix_web::HttpResponse::Created().json(UploadResponse::from(upload)))
+    Ok(HttpResponse::Created().json(UploadResponse::from(upload)))
 }
 
 /// Get upload progress
@@ -45,7 +56,7 @@ pub async fn get_upload(
     pool: web::Data<PgPool>,
     cache: web::Data<Arc<MediaCache>>,
     upload_id: web::Path<String>,
-) -> Result<actix_web::HttpResponse> {
+) -> Result<HttpResponse> {
     let upload_uuid = Uuid::parse_str(&upload_id)
         .map_err(|_| AppError::BadRequest("Invalid upload ID".to_string()))?;
 
@@ -55,7 +66,7 @@ pub async fn get_upload(
         .await?
         .ok_or(AppError::NotFound("Upload not found".to_string()))?;
 
-    Ok(actix_web::HttpResponse::Ok().json(UploadResponse::from(upload)))
+    Ok(HttpResponse::Ok().json(UploadResponse::from(upload)))
 }
 
 /// Update upload progress
@@ -64,7 +75,7 @@ pub async fn update_upload_progress(
     cache: web::Data<Arc<MediaCache>>,
     upload_id: web::Path<String>,
     progress: web::Json<serde_json::Value>,
-) -> Result<actix_web::HttpResponse> {
+) -> Result<HttpResponse> {
     let upload_uuid = Uuid::parse_str(&upload_id)
         .map_err(|_| AppError::BadRequest("Invalid upload ID".to_string()))?;
 
@@ -81,7 +92,7 @@ pub async fn update_upload_progress(
         tracing::debug!(%upload_uuid, "upload cache set failed: {}", err);
     }
 
-    Ok(actix_web::HttpResponse::Ok().json(UploadResponse::from(upload)))
+    Ok(HttpResponse::Ok().json(UploadResponse::from(upload)))
 }
 
 /// Complete an upload
@@ -89,7 +100,7 @@ pub async fn complete_upload(
     pool: web::Data<PgPool>,
     cache: web::Data<Arc<MediaCache>>,
     upload_id: web::Path<String>,
-) -> Result<actix_web::HttpResponse> {
+) -> Result<HttpResponse> {
     let upload_uuid = Uuid::parse_str(&upload_id)
         .map_err(|_| AppError::BadRequest("Invalid upload ID".to_string()))?;
 
@@ -101,7 +112,7 @@ pub async fn complete_upload(
         tracing::debug!(%upload_uuid, "upload cache set failed: {}", err);
     }
 
-    Ok(actix_web::HttpResponse::Ok().json(UploadResponse::from(upload)))
+    Ok(HttpResponse::Ok().json(UploadResponse::from(upload)))
 }
 
 /// Cancel an upload
@@ -109,7 +120,7 @@ pub async fn cancel_upload(
     pool: web::Data<PgPool>,
     cache: web::Data<Arc<MediaCache>>,
     upload_id: web::Path<String>,
-) -> Result<actix_web::HttpResponse> {
+) -> Result<HttpResponse> {
     let upload_uuid = Uuid::parse_str(&upload_id)
         .map_err(|_| AppError::BadRequest("Invalid upload ID".to_string()))?;
 
@@ -121,5 +132,40 @@ pub async fn cancel_upload(
         tracing::debug!(%upload_uuid, "upload cache invalidation failed: {}", err);
     }
 
-    Ok(actix_web::HttpResponse::NoContent().finish())
+    Ok(HttpResponse::NoContent().finish())
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PresignedUrlRequest {
+    pub file_name: String,
+    pub content_type: String,
+}
+
+/// Generate a presigned URL for S3 upload
+pub async fn generate_presigned_url(
+    config: web::Data<Config>,
+    upload_id: web::Path<String>,
+    req: web::Json<PresignedUrlRequest>,
+) -> Result<HttpResponse> {
+    let upload_uuid = Uuid::parse_str(&upload_id)
+        .map_err(|_| AppError::BadRequest("Invalid upload ID".to_string()))?;
+
+    // Generate S3 object key
+    let s3_key = format!("uploads/{}/{}", upload_uuid, req.file_name);
+
+    // Expiration time: 1 hour from now (in seconds)
+    let expiration = 3600i64;
+
+    // For now, return a mock presigned URL structure
+    // In production, this would use aws-sdk-s3 to generate a real presigned URL
+    let presigned_url = format!(
+        "https://{}.s3.{}.amazonaws.com/{}?X-Amz-Signature=MOCK",
+        config.s3.bucket, config.s3.region, s3_key
+    );
+
+    Ok(HttpResponse::Ok().json(PresignedUrlResponse {
+        upload_id: upload_uuid,
+        presigned_url,
+        expiration,
+    }))
 }
