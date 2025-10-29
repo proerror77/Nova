@@ -5,6 +5,7 @@ use axum::{
     routing::{get, post},
     Router,
 };
+use error_types::ErrorResponse;
 use redis::aio::ConnectionManager;
 use search_service::elasticsearch::{ElasticsearchClient, ElasticsearchError, PostDocument};
 use search_service::events::consumers::EventContext;
@@ -36,14 +37,29 @@ enum AppError {
 
 impl IntoResponse for AppError {
     fn into_response(self) -> axum::response::Response {
-        let (status, message) = match self {
-            AppError::Database(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
-            AppError::Config(e) => (StatusCode::INTERNAL_SERVER_ERROR, e),
-            AppError::Redis(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
-            AppError::Serialization(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
-            AppError::SearchBackend(e) => (StatusCode::BAD_GATEWAY, e),
+        let (status, error_type, code) = match &self {
+            AppError::Database(_) => (StatusCode::INTERNAL_SERVER_ERROR, "server_error", error_types::error_codes::DATABASE_ERROR),
+            AppError::Config(_) => (StatusCode::INTERNAL_SERVER_ERROR, "server_error", error_types::error_codes::INTERNAL_SERVER_ERROR),
+            AppError::Redis(_) => (StatusCode::INTERNAL_SERVER_ERROR, "server_error", error_types::error_codes::CACHE_ERROR),
+            AppError::Serialization(_) => (StatusCode::INTERNAL_SERVER_ERROR, "server_error", error_types::error_codes::INTERNAL_SERVER_ERROR),
+            AppError::SearchBackend(_) => (StatusCode::BAD_GATEWAY, "server_error", error_types::error_codes::SERVICE_UNAVAILABLE),
         };
-        (status, Json(serde_json::json!({ "error": message }))).into_response()
+
+        let message = self.to_string();
+        let response = ErrorResponse::new(
+            &match status {
+                StatusCode::BAD_REQUEST => "Bad Request",
+                StatusCode::INTERNAL_SERVER_ERROR => "Internal Server Error",
+                StatusCode::BAD_GATEWAY => "Bad Gateway",
+                _ => "Error",
+            },
+            &message,
+            status.as_u16(),
+            error_type,
+            code,
+        );
+
+        (status, Json(response)).into_response()
     }
 }
 

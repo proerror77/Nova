@@ -1,66 +1,48 @@
 use crate::error::AppError;
-use axum::{http::StatusCode, response::IntoResponse};
+use axum::{http::StatusCode, response::IntoResponse, Json};
+use error_types::ErrorResponse;
 
 // TDD: map domain errors to HTTP responses
-pub fn map_error(err: &AppError) -> (StatusCode, String) {
-    match err {
-        AppError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg.clone()),
-        AppError::Unauthorized => (StatusCode::UNAUTHORIZED, "unauthorized".into()),
-        AppError::Forbidden => (StatusCode::FORBIDDEN, "forbidden".into()),
-        AppError::NotFound => (StatusCode::NOT_FOUND, "not found".into()),
-        AppError::Config(msg) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("config error: {}", msg),
-        ),
-        AppError::StartServer(msg) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("server error: {}", msg),
-        ),
-        AppError::Database(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("database error: {}", e),
-        ),
-        AppError::Encryption(msg) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("encryption error: {}", msg),
-        ),
-        AppError::Internal => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "internal server error".into(),
-        ),
-        AppError::AlreadyRecalled => (
-            StatusCode::CONFLICT,
-            "message has already been recalled".into(),
-        ),
-        AppError::RecallWindowExpired {
-            created_at,
-            max_recall_minutes,
-        } => (
-            StatusCode::FORBIDDEN,
-            format!(
-                "recall window expired (message created at {}, max recall time: {} minutes)",
-                created_at, max_recall_minutes
-            ),
-        ),
-        AppError::EditWindowExpired { max_edit_minutes } => (
-            StatusCode::FORBIDDEN,
-            format!("edit window expired (max edit time: {} minutes)", max_edit_minutes),
-        ),
-        AppError::VersionConflict {
-            current_version,
-            client_version,
-            server_content,
-        } => (
-            StatusCode::CONFLICT,
-            format!(
-                "version conflict: client version {} does not match server version {} (server content: {})",
-                client_version, current_version, server_content
-            ),
-        ),
-    }
+pub fn map_error(err: &AppError) -> (StatusCode, ErrorResponse) {
+    let status = StatusCode::from_u16(err.status_code()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+    let (error_type, code) = match err {
+        AppError::BadRequest(_) => ("validation_error", "INVALID_REQUEST"),
+        AppError::Unauthorized => ("authentication_error", error_types::error_codes::INVALID_CREDENTIALS),
+        AppError::Forbidden => ("authorization_error", "AUTHORIZATION_ERROR"),
+        AppError::NotFound => ("not_found_error", error_types::error_codes::MESSAGE_NOT_FOUND),
+        AppError::Config(_) => ("server_error", error_types::error_codes::INTERNAL_SERVER_ERROR),
+        AppError::StartServer(_) => ("server_error", error_types::error_codes::INTERNAL_SERVER_ERROR),
+        AppError::Database(_) => ("server_error", error_types::error_codes::DATABASE_ERROR),
+        AppError::Encryption(_) => ("server_error", "ENCRYPTION_ERROR"),
+        AppError::Internal => ("server_error", error_types::error_codes::INTERNAL_SERVER_ERROR),
+        AppError::AlreadyRecalled => ("conflict_error", error_types::error_codes::MESSAGE_ALREADY_RECALLED),
+        AppError::RecallWindowExpired { .. } => ("authorization_error", error_types::error_codes::RECALL_WINDOW_EXPIRED),
+        AppError::EditWindowExpired { .. } => ("authorization_error", error_types::error_codes::EDIT_WINDOW_EXPIRED),
+        AppError::VersionConflict { .. } => ("conflict_error", error_types::error_codes::VERSION_CONFLICT),
+    };
+
+    let message = err.to_string();
+    let response = ErrorResponse::new(
+        &match status {
+            StatusCode::BAD_REQUEST => "Bad Request",
+            StatusCode::UNAUTHORIZED => "Unauthorized",
+            StatusCode::FORBIDDEN => "Forbidden",
+            StatusCode::NOT_FOUND => "Not Found",
+            StatusCode::CONFLICT => "Conflict",
+            StatusCode::GONE => "Gone",
+            StatusCode::INTERNAL_SERVER_ERROR => "Internal Server Error",
+            _ => "Error",
+        },
+        &message,
+        status.as_u16(),
+        error_type,
+        code,
+    );
+
+    (status, response)
 }
 
 pub fn into_response(err: AppError) -> impl IntoResponse {
-    let (status, msg) = map_error(&err);
-    (status, msg)
+    let (status, response) = map_error(&err);
+    (status, Json(response))
 }

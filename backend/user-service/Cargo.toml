@@ -92,6 +92,9 @@ once_cell = "1.19"
 # Swagger/OpenAPI
 utoipa.workspace = true
 
+# Shared libraries
+error-types = { path = "../libs/error-types" }
+
 [build-dependencies]
 tonic-build = "0.11"
 
