@@ -18,8 +18,6 @@ pub struct FeedCache {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CachedFeed {
     pub post_ids: Vec<Uuid>,
-    pub total_count: usize,
-    pub cached_at: i64,
 }
 
 impl FeedCache {
@@ -38,10 +36,11 @@ impl FeedCache {
         format!("feed:seen:{}", user_id)
     }
 
-    pub async fn read_feed_cache(&mut self, user_id: Uuid) -> Result<Option<CachedFeed>> {
+    pub async fn read_feed_cache(&self, user_id: Uuid) -> Result<Option<CachedFeed>> {
         let key = Self::feed_key(user_id);
+        let mut conn = self.redis.clone();
 
-        match self.redis.get::<_, Option<String>>(&key).await {
+        match conn.get::<_, Option<String>>(&key).await {
             Ok(Some(data)) => {
                 debug!("Feed cache HIT for user {}", user_id);
                 serde_json::from_str::<CachedFeed>(&data)
@@ -69,7 +68,7 @@ impl FeedCache {
     }
 
     pub async fn write_feed_cache(
-        &mut self,
+        &self,
         user_id: Uuid,
         post_ids: Vec<Uuid>,
         ttl_secs: Option<u64>,
@@ -79,23 +78,20 @@ impl FeedCache {
             .map(Duration::from_secs)
             .unwrap_or(self.default_ttl);
 
-        let total_count = post_ids.len();
-        let cached_feed = CachedFeed {
-            post_ids,
-            total_count,
-            cached_at: chrono::Utc::now().timestamp(),
-        };
+        let total_posts = post_ids.len();
+        let cached_feed = CachedFeed { post_ids };
 
         let data = serde_json::to_string(&cached_feed).map_err(|e| {
             error!("Failed to serialize feed for cache: {}", e);
             AppError::Internal(format!("Cache serialization error: {}", e))
         })?;
 
-        let jitter_secs = (rand::random::<u64>() % 30) as i64;
-        let final_ttl = Duration::from_secs((ttl.as_secs() as i64 + jitter_secs) as u64);
+        let jitter = (rand::random::<u32>() % 10) as f64 / 100.0;
+        let jitter_secs = (ttl.as_secs_f64() * jitter).round() as u64;
+        let final_ttl = ttl + Duration::from_secs(jitter_secs);
 
-        self.redis
-            .set_ex::<_, _, ()>(&key, data, final_ttl.as_secs())
+        let mut conn = self.redis.clone();
+        conn.set_ex::<_, _, ()>(&key, data, final_ttl.as_secs())
             .await
             .map_err(|e| {
                 warn!("Failed to write feed cache: {}", e);
@@ -107,7 +103,7 @@ impl FeedCache {
 
         debug!(
             "Feed cache WRITE for user {} ({} posts) with TTL {:?}",
-            user_id, total_count, final_ttl
+            user_id, total_posts, final_ttl
         );
 
         FEED_CACHE_WRITE_TOTAL
@@ -117,10 +113,10 @@ impl FeedCache {
         Ok(())
     }
 
-    pub async fn invalidate_feed(&mut self, user_id: Uuid) -> Result<()> {
+    pub async fn invalidate_feed(&self, user_id: Uuid) -> Result<()> {
         let key = Self::feed_key(user_id);
-        self.redis
-            .del::<_, ()>(&key)
+        let mut conn = self.redis.clone();
+        conn.del::<_, ()>(&key)
             .await
             .map_err(|e| AppError::CacheError(e.to_string()))?;
 
@@ -129,7 +125,7 @@ impl FeedCache {
         Ok(())
     }
 
-    pub async fn mark_posts_seen(&mut self, user_id: Uuid, post_ids: &[Uuid]) -> Result<()> {
+    pub async fn mark_posts_seen(&self, user_id: Uuid, post_ids: &[Uuid]) -> Result<()> {
         let key = Self::seen_key(user_id);
         let post_id_strings: Vec<String> = post_ids.iter().map(|id| id.to_string()).collect();
 
@@ -137,13 +133,12 @@ impl FeedCache {
             return Ok(());
         }
 
-        self.redis
-            .sadd::<_, _, ()>(&key, post_id_strings)
+        let mut conn = self.redis.clone();
+        conn.sadd::<_, _, ()>(&key, post_id_strings)
             .await
             .map_err(|e| AppError::CacheError(e.to_string()))?;
 
-        self.redis
-            .expire::<_, ()>(&key, 7 * 24 * 60 * 60)
+        conn.expire::<_, ()>(&key, 7 * 24 * 60 * 60)
             .await
             .map_err(|e| AppError::CacheError(e.to_string()))?;
 
@@ -157,7 +152,7 @@ impl FeedCache {
     }
 
     pub async fn filter_unseen_posts(
-        &mut self,
+        &self,
         user_id: Uuid,
         post_ids: &[Uuid],
     ) -> Result<Vec<Uuid>> {
@@ -168,8 +163,8 @@ impl FeedCache {
         }
 
         let post_id_strings: Vec<String> = post_ids.iter().map(|id| id.to_string()).collect();
-        let seen_flags: Vec<bool> = self
-            .redis
+        let mut conn = self.redis.clone();
+        let seen_flags: Vec<bool> = conn
             .smismember::<_, _, Vec<bool>>(&key, &post_id_strings)
             .await
             .map_err(|e| AppError::CacheError(e.to_string()))?;
@@ -191,11 +186,11 @@ impl FeedCache {
         Ok(unseen)
     }
 
-    pub async fn clear_seen_posts(&mut self, user_id: Uuid) -> Result<()> {
+    pub async fn clear_seen_posts(&self, user_id: Uuid) -> Result<()> {
         let key = Self::seen_key(user_id);
 
-        self.redis
-            .del::<_, ()>(&key)
+        let mut conn = self.redis.clone();
+        conn.del::<_, ()>(&key)
             .await
             .map_err(|e| AppError::CacheError(e.to_string()))?;
 
@@ -204,7 +199,7 @@ impl FeedCache {
     }
 
     pub async fn invalidate_by_event(
-        &mut self,
+        &self,
         event_type: &str,
         user_id: Uuid,
         target_id: Option<Uuid>,
@@ -241,7 +236,7 @@ impl FeedCache {
         Ok(())
     }
 
-    pub async fn batch_invalidate(&mut self, user_ids: Vec<Uuid>) -> Result<()> {
+    pub async fn batch_invalidate(&self, user_ids: Vec<Uuid>) -> Result<()> {
         if user_ids.is_empty() {
             return Ok(());
         }
@@ -250,8 +245,10 @@ impl FeedCache {
 
         for user_id in user_ids {
             let key = Self::feed_key(user_id);
-            self.redis
-                .del::<_, ()>(&key)
+            let mut conn = self.redis.clone();
+            redis::cmd("DEL")
+                .arg(&key)
+                .query_async::<_, ()>(&mut conn)
                 .await
                 .map_err(|e| AppError::CacheError(e.to_string()))?;
         }
@@ -260,7 +257,7 @@ impl FeedCache {
         Ok(())
     }
 
-    pub async fn warm_cache(&mut self, user_id: Uuid, post_ids: Vec<Uuid>) -> Result<()> {
+    pub async fn warm_cache(&self, user_id: Uuid, post_ids: Vec<Uuid>) -> Result<()> {
         if post_ids.is_empty() {
             debug!("Skipping cache warm for user {} (no posts)", user_id);
             return Ok(());
