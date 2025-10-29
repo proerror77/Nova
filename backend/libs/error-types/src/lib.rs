@@ -113,6 +113,7 @@ pub mod error_codes {
     pub const CACHE_ERROR: &str = "CACHE_ERROR";
     pub const INTERNAL_SERVER_ERROR: &str = "INTERNAL_SERVER_ERROR";
     pub const SERVICE_UNAVAILABLE: &str = "SERVICE_UNAVAILABLE";
+    pub const RATE_LIMIT_ERROR: &str = "RATE_LIMIT_EXCEEDED";
 }
 
 /// 标准错误类型

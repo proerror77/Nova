@@ -1,13 +1,13 @@
-/// OpenAPI documentation for Nova Messaging Service
+/// OpenAPI documentation for Nova Media Service
 use utoipa::OpenApi;
 use utoipa::openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme};
 
 #[derive(OpenApi)]
 #[openapi(
     info(
-        title = "Nova Messaging Service API",
+        title = "Nova Media Service API",
         version = "1.0.0",
-        description = "Real-time messaging service with WebSocket support. Provides end-to-end encrypted messaging, group conversations, file attachments, typing indicators, read receipts, and WebRTC signaling for voice/video calls. Supports ECDH key exchange for E2E encryption.",
+        description = "Media processing service for videos, reels, and uploads. Handles video upload, transcoding, HLS streaming, thumbnail generation, and media delivery. Supports resumable uploads, adaptive bitrate streaming, and real-time transcoding progress tracking.",
         contact(
             name = "Nova Team",
             email = "support@nova.app"
@@ -17,18 +17,15 @@ use utoipa::openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme};
         )
     ),
     servers(
-        (url = "http://localhost:8083", description = "Development server"),
-        (url = "https://messaging-api.nova.app", description = "Production server"),
+        (url = "http://localhost:8082", description = "Development server"),
+        (url = "https://media-api.nova.app", description = "Production server"),
     ),
     tags(
         (name = "health", description = "Service health checks"),
-        (name = "messages", description = "Message CRUD operations"),
-        (name = "conversations", description = "Conversation management and history"),
-        (name = "websocket", description = "WebSocket real-time messaging"),
-        (name = "key-exchange", description = "ECDH key exchange for E2E encryption"),
-        (name = "calls", description = "WebRTC voice/video call signaling"),
-        (name = "attachments", description = "File attachment upload and download"),
-        (name = "reactions", description = "Message reactions and emojis"),
+        (name = "videos", description = "Video upload, processing, and streaming"),
+        (name = "reels", description = "Short-form video content (reels)"),
+        (name = "uploads", description = "Resumable multipart file uploads"),
+        (name = "transcoding", description = "Video transcoding progress tracking"),
     ),
     modifiers(&SecurityAddon),
 )]
@@ -55,7 +52,7 @@ impl utoipa::Modify for SecurityAddon {
 
 impl ApiDoc {
     pub fn title() -> &'static str {
-        "Nova Messaging Service"
+        "Nova Media Service"
     }
 
     pub fn version() -> &'static str {
