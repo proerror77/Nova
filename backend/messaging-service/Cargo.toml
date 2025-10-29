@@ -23,6 +23,7 @@ dotenvy = "0.15"
 thiserror = "1"
 crypto-core = { path = "../libs/crypto-core" }
 redis-utils = { path = "../libs/redis-utils" }
+nova-apns-shared = { path = "../libs/nova-apns-shared" }
 chrono = { workspace = true }
 once_cell = "1.19"
 base64 = { workspace = true }
