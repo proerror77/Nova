@@ -28,7 +28,6 @@ pub mod origin_shield;
 pub mod password_reset_service;
 pub mod query_profiler;
 pub mod ranking_engine;
-pub mod recommendation_v2;
 pub mod redis_job;
 pub mod social_graph_sync;
 pub mod resumable_upload_service;
@@ -40,7 +39,6 @@ pub mod token_revocation;
 pub mod transcoding_optimizer;
 pub mod transcoding_progress;
 pub mod transcoding_progress_handler;
-pub mod trending;
 pub mod two_fa;
 pub mod video_job_queue;
 pub mod video_service;
@@ -68,7 +66,7 @@ pub mod webhooks;
 // - video_processing_pipeline: Orchestrates entire video processing workflow (Phase 7)
 //
 // MACHINE LEARNING & RANKING:
-// - recommendation_v2: Hybrid recommendation engine v2 (collaborative filtering + content-based + AB testing)
+// - Recommendation engine moved to feed-service
 //
 // GRAPH & SOCIAL:
 // - graph: Neo4j integration for social graph (follows, suggestions, mutual connections)

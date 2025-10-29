@@ -20,7 +20,7 @@ pub mod streams;
 pub mod streams_ws;
 pub mod transcoding_progress;
 pub mod transcoding_queue;
-pub mod trending;
+// pub mod trending; // REMOVED - moved to feed-service (port 8089)
 // pub mod uploads; // REMOVED - moved to media-service (port 8082)
 pub mod users; // Public user profile endpoints (minimal)
                // pub mod videos; // REMOVED - moved to media-service (port 8082)
@@ -47,5 +47,5 @@ pub use streams::*;
 pub use streams_ws::*;
 pub use transcoding_progress::*;
 pub use transcoding_queue::*;
-pub use trending::*;
+// pub use trending::*; // REMOVED - moved to feed-service (port 8089)
 pub use users::*;

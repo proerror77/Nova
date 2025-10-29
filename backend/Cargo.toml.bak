@@ -6,7 +6,7 @@ members = [
     "media-service",
     "messaging-service",
     "search-service",
-    "feed-service",
+    "recommendation-service",
     "video-service",
     "streaming-service",
     "notification-service",

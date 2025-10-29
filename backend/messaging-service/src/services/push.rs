@@ -1,7 +1,22 @@
-// Re-export APNs types from shared library
-pub use nova_apns_shared::{ApnsPush as NovaApnsPush, PushProvider, ApnsError};
+// Re-export APNs types from shared library (internal use only)
+pub use nova_apns_shared::{ApnsPush as NovaApnsPush, PushProvider as NovaPushProvider, client::ApnsError};
 
 use crate::{config::ApnsConfig, error::AppError};
+use async_trait::async_trait;
+
+/// Local PushProvider trait that uses AppError for consistency across the service
+/// This trait abstracts both APNs and FCM providers with a unified error type
+#[async_trait]
+pub trait PushProvider: Send + Sync {
+    /// Send a push notification
+    async fn send(
+        &self,
+        device_token: String,
+        title: String,
+        body: String,
+        badge: Option<u32>,
+    ) -> Result<(), AppError>;
+}
 
 /// Wrapper around nova-apns-shared ApnsPush that converts ApnsError to AppError
 #[derive(Clone)]
@@ -32,6 +47,24 @@ impl ApnsPush {
 
     /// Send notification using underlying provider
     pub async fn send(
+        &self,
+        device_token: String,
+        title: String,
+        body: String,
+        badge: Option<u32>,
+    ) -> Result<(), AppError> {
+        self.0
+            .send(device_token, title, body, badge)
+            .await
+            .map_err(|e| AppError::Config(e.to_string()))
+    }
+}
+
+/// Implement local PushProvider trait for ApnsPush
+/// This provides a unified interface with AppError for both APNs and FCM
+#[async_trait]
+impl PushProvider for ApnsPush {
+    async fn send(
         &self,
         device_token: String,
         title: String,

@@ -16,3 +16,6 @@ apns2 = "0.1"
 
 # Error handling
 thiserror = { workspace = true }
+
+# Async traits
+async-trait = "0.1"

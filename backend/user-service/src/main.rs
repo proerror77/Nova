@@ -939,17 +939,8 @@ async fn main() -> io::Result<()> {
                     )
                     // NOTE: Search endpoints moved to search-service:8086
                     // Use /api/v1/search/* routes via API Gateway (Nginx)
-                    // Trending endpoints (public)
-                    .service(handlers::get_trending)
-                    .service(handlers::get_trending_videos)
-                    .service(handlers::get_trending_posts)
-                    .service(handlers::get_trending_streams)
-                    .service(handlers::get_trending_categories)
-                    .service(
-                        web::scope("")
-                            .wrap(JwtAuthMiddleware)
-                            .service(handlers::record_engagement),
-                    ),
+                    // NOTE: Trending endpoints moved to feed-service:8089
+                    // Use /api/v1/trending/* routes via API Gateway (Nginx)
             )
             // WebSocket endpoints (outside /api/v1)
             .service(
