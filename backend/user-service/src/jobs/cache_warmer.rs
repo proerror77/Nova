@@ -17,7 +17,7 @@ use std::sync::Arc;
 use tracing::{debug, info};
 use uuid::Uuid;
 
-use crate::grpc::{ContentServiceClient, nova::content::GetFeedRequest};
+use crate::grpc::{nova::content::GetFeedRequest, ContentServiceClient};
 
 /// 预热用户信息
 #[derive(Debug, Clone, Serialize, Deserialize)]

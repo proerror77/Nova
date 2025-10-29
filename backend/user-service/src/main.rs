@@ -1,16 +1,23 @@
 use actix_cors::Cors;
 use actix_web::{middleware::Logger, web, App, HttpResponse, HttpServer};
 use std::io;
-use std::sync::Arc;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
 use tokio::sync::Mutex;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
+use user_service::grpc::{ContentServiceClient, GrpcClientConfig, HealthChecker};
 use user_service::{
     config::video_config,
     config::Config,
     db::{ch_client::ClickHouseClient, create_pool, run_migrations},
     handlers,
-    handlers::{events::EventHandlerState, feed::FeedHandlerState, streams::StreamHandlerState},
+    handlers::{
+        events::EventHandlerState, feed::FeedHandlerState, health::HealthCheckState,
+        streams::StreamHandlerState,
+    },
     jobs::{
         self, run_jobs, suggested_users_generator::SuggestedUsersJob,
         suggested_users_generator::SuggestionConfig,
@@ -37,7 +44,6 @@ use user_service::{
         video_service::VideoService,
     },
 };
-use user_service::grpc::{ContentServiceClient, GrpcClientConfig, HealthChecker};
 
 #[actix_web::main]
 async fn main() -> io::Result<()> {
@@ -333,6 +339,17 @@ async fn main() -> io::Result<()> {
         kafka_cb: kafka_circuit_breaker.clone(),
     });
 
+    let cdc_health_flag = Arc::new(AtomicBool::new(true));
+
+    let health_state = web::Data::new(HealthCheckState::new(
+        db_pool.clone(),
+        redis_client.clone(),
+        Some(clickhouse_client.clone()),
+        Some(event_producer.clone()),
+        health_checker.clone(),
+        cdc_health_flag.clone(),
+    ));
+
     // ========================================
     // Initialize additional handler states with PostgreSQL circuit breaker
     // ========================================
@@ -371,9 +388,11 @@ async fn main() -> io::Result<()> {
         .await
         .expect("Failed to create CDC consumer - CDC is mandatory for data consistency");
 
+    let cdc_health_for_task = cdc_health_flag.clone();
     let cdc_handle = tokio::spawn(async move {
         if let Err(e) = cdc_consumer.run().await {
             tracing::error!("CDC consumer error: {}", e);
+            cdc_health_for_task.store(false, Ordering::SeqCst);
         }
     });
     tracing::info!("CDC consumer spawned (MANDATORY for data consistency)");
@@ -569,6 +588,7 @@ async fn main() -> io::Result<()> {
         let feed_state = feed_state.clone();
         let content_client_data = content_client_data.clone();
         let health_checker_data = health_checker_data.clone();
+        let health_state = health_state.clone();
         let events_state = events_state.clone();
         let stream_state = stream_state.clone();
         let stream_chat_ws_state = stream_chat_ws_state.clone();
@@ -607,6 +627,7 @@ async fn main() -> io::Result<()> {
             )))
             .app_data(feed_state.clone())
             .app_data(content_client_data.clone())
+            .app_data(health_state.clone())
             .app_data(health_checker_data.clone())
             .app_data(events_state.clone())
             .app_data(stream_state.clone())
