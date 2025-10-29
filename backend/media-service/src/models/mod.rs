@@ -258,41 +258,198 @@ pub struct StartUploadRequest {
 pub struct Reel {
     pub id: Uuid,
     pub creator_id: Uuid,
-    pub video_id: Uuid,
-    pub title: String,
-    pub music: Option<String>,
+    pub upload_id: Option<Uuid>,
+    pub caption: Option<String>,
+    pub music_title: Option<String>,
+    pub music_artist: Option<String>,
+    pub music_id: Option<Uuid>,
+    pub duration_seconds: Option<i32>,
+    pub visibility: String,
+    pub status: String,
+    pub processing_stage: String,
+    pub processing_progress: i16,
+    pub view_count: i64,
+    pub like_count: i64,
+    pub share_count: i64,
+    pub comment_count: i64,
+    pub allow_comments: bool,
+    pub allow_shares: bool,
+    pub audio_track: Option<serde_json::Value>,
+    pub cover_image_url: Option<String>,
+    pub source_video_url: Option<String>,
+    pub published_at: Option<DateTime<Utc>>,
+    pub failed_at: Option<DateTime<Utc>>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub deleted_at: Option<DateTime<Utc>>,
+}
+
+/// Reel variant produced by the transcoding pipeline
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+pub struct ReelVariant {
+    pub id: Uuid,
+    pub reel_id: Uuid,
+    pub quality: String,
+    pub codec: String,
+    pub bitrate_kbps: i32,
+    pub width: i32,
+    pub height: i32,
+    pub frame_rate: f32,
+    pub cdn_url: Option<String>,
+    pub file_size_bytes: Option<i64>,
+    pub is_default: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
 
-/// Reel response DTO
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ReelResponse {
-    pub id: String,
-    pub creator_id: String,
-    pub video_id: String,
-    pub title: String,
-    pub music: Option<String>,
-    pub created_at: i64,
+/// Reel transcoding job metadata
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+pub struct ReelTranscodeJob {
+    pub id: Uuid,
+    pub reel_id: Uuid,
+    pub upload_id: Option<Uuid>,
+    pub target_quality: String,
+    pub status: String,
+    pub stage: String,
+    pub progress: i16,
+    pub retry_count: i32,
+    pub error_message: Option<String>,
+    pub worker_id: Option<String>,
+    pub started_at: Option<DateTime<Utc>>,
+    pub finished_at: Option<DateTime<Utc>>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
 }
 
-impl From<Reel> for ReelResponse {
-    fn from(reel: Reel) -> Self {
+/// Reel variant response DTO
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReelVariantResponse {
+    pub quality: String,
+    pub codec: String,
+    pub bitrate_kbps: i32,
+    pub width: i32,
+    pub height: i32,
+    pub frame_rate: f32,
+    pub cdn_url: Option<String>,
+    pub file_size_bytes: Option<i64>,
+    pub is_default: bool,
+}
+
+impl From<ReelVariant> for ReelVariantResponse {
+    fn from(variant: ReelVariant) -> Self {
         Self {
-            id: reel.id.to_string(),
-            creator_id: reel.creator_id.to_string(),
-            video_id: reel.video_id.to_string(),
-            title: reel.title,
-            music: reel.music,
-            created_at: reel.created_at.timestamp(),
+            quality: variant.quality,
+            codec: variant.codec,
+            bitrate_kbps: variant.bitrate_kbps,
+            width: variant.width,
+            height: variant.height,
+            frame_rate: variant.frame_rate,
+            cdn_url: variant.cdn_url,
+            file_size_bytes: variant.file_size_bytes,
+            is_default: variant.is_default,
         }
     }
 }
 
-/// Create reel request
+/// Transcoding job status response
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReelTranscodeJobResponse {
+    pub target_quality: String,
+    pub status: String,
+    pub stage: String,
+    pub progress: i16,
+    pub updated_at: i64,
+    pub error_message: Option<String>,
+}
+
+impl From<ReelTranscodeJob> for ReelTranscodeJobResponse {
+    fn from(job: ReelTranscodeJob) -> Self {
+        Self {
+            target_quality: job.target_quality,
+            status: job.status,
+            stage: job.stage,
+            progress: job.progress,
+            updated_at: job.updated_at.timestamp(),
+            error_message: job.error_message,
+        }
+    }
+}
+
+/// Reel response DTO including current variants + job statuses
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReelResponse {
+    pub id: String,
+    pub creator_id: String,
+    pub upload_id: Option<String>,
+    pub caption: Option<String>,
+    pub music_title: Option<String>,
+    pub music_artist: Option<String>,
+    pub duration_seconds: Option<i32>,
+    pub visibility: String,
+    pub status: String,
+    pub processing_stage: String,
+    pub processing_progress: i16,
+    pub allow_comments: bool,
+    pub allow_shares: bool,
+    pub cover_image_url: Option<String>,
+    pub source_video_url: Option<String>,
+    pub variants: Vec<ReelVariantResponse>,
+    pub transcode_jobs: Vec<ReelTranscodeJobResponse>,
+    pub published_at: Option<i64>,
+    pub failed_at: Option<i64>,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+impl ReelResponse {
+    /// Create a response DTO from database entities
+    pub fn from_entities(
+        reel: Reel,
+        variants: Vec<ReelVariant>,
+        jobs: Vec<ReelTranscodeJob>,
+    ) -> Self {
+        Self {
+            id: reel.id.to_string(),
+            creator_id: reel.creator_id.to_string(),
+            upload_id: reel.upload_id.map(|id| id.to_string()),
+            caption: reel.caption,
+            music_title: reel.music_title,
+            music_artist: reel.music_artist,
+            duration_seconds: reel.duration_seconds,
+            visibility: reel.visibility,
+            status: reel.status,
+            processing_stage: reel.processing_stage,
+            processing_progress: reel.processing_progress,
+            allow_comments: reel.allow_comments,
+            allow_shares: reel.allow_shares,
+            cover_image_url: reel.cover_image_url,
+            source_video_url: reel.source_video_url,
+            variants: variants.into_iter().map(Into::into).collect(),
+            transcode_jobs: jobs.into_iter().map(Into::into).collect(),
+            published_at: reel.published_at.map(|dt| dt.timestamp()),
+            failed_at: reel.failed_at.map(|dt| dt.timestamp()),
+            created_at: reel.created_at.timestamp(),
+            updated_at: reel.updated_at.timestamp(),
+        }
+    }
+}
+
+impl From<Reel> for ReelResponse {
+    fn from(reel: Reel) -> Self {
+        ReelResponse::from_entities(reel, Vec::new(), Vec::new())
+    }
+}
+
+/// Create reel request payload
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateReelRequest {
-    pub video_id: String,
-    pub title: String,
-    pub music: Option<String>,
+    pub upload_id: String,
+    pub caption: Option<String>,
+    pub music_title: Option<String>,
+    pub music_artist: Option<String>,
+    pub duration_seconds: Option<i32>,
+    pub visibility: Option<String>,
+    pub allow_comments: Option<bool>,
+    pub allow_shares: Option<bool>,
+    pub cover_image_url: Option<String>,
 }
