@@ -12,9 +12,9 @@ pub mod password_reset_repo;
 pub mod post_repo;
 pub mod post_share_repo;
 pub mod trending_repo;
-pub mod upload_repo;
+// pub mod upload_repo; // REMOVED - moved to media-service (port 8082)
 pub mod user_repo;
-pub mod video_repo;
+// pub mod video_repo; // REMOVED - moved to media-service (port 8082)
 pub mod webhook_repo;
 
 // NOTE: Messaging repository removed - use messaging-service API (port 8085)

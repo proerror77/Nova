@@ -11,7 +11,6 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use user_service::grpc::{ContentServiceClient, GrpcClientConfig, HealthChecker};
 use user_service::services::email_service::{EmailConfig, EmailService};
 use user_service::{
-    config::video_config,
     config::Config,
     db::{ch_client::ClickHouseClient, create_pool, run_migrations},
     handlers,
@@ -20,7 +19,6 @@ use user_service::{
     },
     handlers::{
         events::EventHandlerState, feed::FeedHandlerState, health::HealthCheckState,
-        streams::StreamHandlerState,
     },
     jobs::{
         self, run_jobs, suggested_users_generator::SuggestedUsersJob,
@@ -33,7 +31,6 @@ use user_service::{
     },
     services::{
         cdc::{CdcConsumer, CdcConsumerConfig},
-        deep_learning_inference::DeepLearningInferenceService,
         events::{EventDeduplicator, EventsConsumer, EventsConsumerConfig},
         graph::GraphService,
         job_queue,
@@ -42,11 +39,6 @@ use user_service::{
         s3_service,
         social_graph_sync::SocialGraphSyncConsumer,
         stories::StoriesService,
-        streaming::{
-            RtmpWebhookHandler, StreamAnalyticsService, StreamChatHandlerState, StreamChatStore,
-            StreamDiscoveryService, StreamRepository, StreamService, ViewerCounter,
-        },
-        video_service::VideoService,
     },
 };
 
@@ -277,63 +269,10 @@ async fn main() -> io::Result<()> {
     let graph_data = web::Data::new(graph_service);
 
     // ========================================
-    // Initialize live streaming services
-    // ========================================
-    let rtmp_base_url = std::env::var("STREAMING_RTMP_BASE_URL")
-        .unwrap_or_else(|_| "rtmp://localhost/live".to_string());
-    let hls_cdn_url = std::env::var("STREAMING_HLS_BASE_URL")
-        .unwrap_or_else(|_| "https://cdn.nova.local".to_string());
-
-    let stream_repo = StreamRepository::new(db_pool.clone());
-    let stream_viewer_counter = ViewerCounter::new(redis_manager.clone());
-    let stream_chat_store = StreamChatStore::new(redis_manager.clone(), 200);
-
-    // Kafka producer must be initialized before stream service
-    // Note: event_producer is initialized later at line 261, so we need to reorganize
-
-    // ========================================
-    // Initialize Kafka producer for events (moved earlier)
+    // Initialize Kafka producer for events (needed by multiple services)
     // ========================================
     let event_producer =
         Arc::new(EventProducer::new(&config.kafka).expect("Failed to create Kafka producer"));
-
-    let stream_service = Arc::new(Mutex::new(StreamService::new(
-        stream_repo.clone(),
-        stream_viewer_counter.clone(),
-        stream_chat_store,
-        event_producer.clone(),
-        rtmp_base_url.clone(),
-        hls_cdn_url.clone(),
-    )));
-
-    let discovery_service = Arc::new(Mutex::new(StreamDiscoveryService::new(
-        stream_repo.clone(),
-        stream_viewer_counter.clone(),
-    )));
-
-    let analytics_service = Arc::new(StreamAnalyticsService::new(stream_repo.clone()));
-    let rtmp_handler = Arc::new(Mutex::new(RtmpWebhookHandler::new(
-        stream_repo,
-        ViewerCounter::new(redis_manager.clone()),
-        hls_cdn_url.clone(),
-    )));
-
-    let stream_state = web::Data::new(StreamHandlerState {
-        stream_service: stream_service.clone(),
-        discovery_service: discovery_service.clone(),
-        analytics_service: analytics_service.clone(),
-        rtmp_handler: rtmp_handler.clone(),
-    });
-
-    // ========================================
-    // Initialize WebSocket chat for streams
-    // ========================================
-    let stream_chat_ws_state = web::Data::new(StreamChatHandlerState::new(
-        StreamChatStore::new(redis_manager.clone(), 200),
-        event_producer.clone(),
-        db_pool.clone(),
-    ));
-    tracing::info!("Stream WebSocket chat handler initialized");
 
     // ========================================
     // Initialize events state (producer already created above)
@@ -491,23 +430,6 @@ async fn main() -> io::Result<()> {
     tracing::info!("Image processor worker spawned");
 
     // ========================================
-    // Initialize video processing job queue
-    // ========================================
-    let (video_job_sender, video_job_receiver) =
-        user_service::services::video_job_queue::create_video_job_queue(100);
-    tracing::info!("Video processing job queue created (capacity: 100)");
-
-    // Spawn video processor worker task
-    let _video_worker_handle =
-        user_service::services::video_job_queue::spawn_video_processor_worker(
-            db_pool.clone(),
-            s3_client,
-            Arc::new(config.s3.clone()),
-            video_job_receiver,
-        );
-    tracing::info!("Video processor worker spawned");
-
-    // ========================================
     // Initialize Email Service
     // ========================================
     let email_config = EmailConfig::from_env();
@@ -570,30 +492,6 @@ async fn main() -> io::Result<()> {
         });
     }
 
-    // Background: ensure Milvus collection (when enabled)
-    {
-        let milvus_enabled =
-            std::env::var("MILVUS_ENABLED").unwrap_or_else(|_| "false".into()) == "true";
-        if milvus_enabled {
-            tokio::spawn(async move {
-                let cfg = video_config::VideoConfig::from_env().inference;
-                let dl = DeepLearningInferenceService::new(cfg);
-                if let Err(e) = dl.check_milvus_health().await {
-                    tracing::warn!("Milvus health check error: {}", e);
-                }
-                if let Ok(true) = dl.check_milvus_health().await {
-                    if let Ok(true) = dl.ensure_milvus_collection().await {
-                        tracing::info!("Milvus collection ensured at startup");
-                    } else {
-                        tracing::warn!("Milvus collection ensure failed");
-                    }
-                } else {
-                    tracing::warn!("Milvus not healthy at startup; using PG fallback");
-                }
-            });
-        }
-    }
-
     // ========================================
     // Background jobs: Suggested Users (fallback cache)
     // ========================================
@@ -653,8 +551,6 @@ async fn main() -> io::Result<()> {
         let health_checker_data = health_checker_data.clone();
         let health_state = health_state.clone();
         let events_state = events_state.clone();
-        let stream_state = stream_state.clone();
-        let stream_chat_ws_state = stream_chat_ws_state.clone();
         let graph_data = graph_data.clone();
         let global_rate_limit = global_rate_limit.clone();
         let email_service_data = email_service_data.clone();
@@ -683,20 +579,11 @@ async fn main() -> io::Result<()> {
             .app_data(web::Data::new(server_config.clone()))
             .app_data(web::Data::new(job_sender.clone()))
             .app_data(email_service_data.clone())
-            .app_data(web::Data::new(video_job_sender.clone()))
-            .app_data(web::Data::new(VideoService::new(
-                video_config::VideoConfig::from_env(),
-            )))
-            .app_data(web::Data::new(DeepLearningInferenceService::new(
-                video_config::VideoConfig::from_env().inference,
-            )))
             .app_data(feed_state.clone())
             .app_data(content_client_data.clone())
             .app_data(health_state.clone())
             .app_data(health_checker_data.clone())
             .app_data(events_state.clone())
-            .app_data(stream_state.clone())
-            .app_data(stream_chat_ws_state.clone())
             .app_data(graph_data.clone())
             // posts_state, videos_state, likes_state, comments_state REMOVED - moved to content/media services
             .app_data(relationships_state.clone())
@@ -820,34 +707,6 @@ async fn main() -> io::Result<()> {
                             .app_data(events_state.clone())
                             .service(handlers::ingest_events),
                     )
-                    .service(
-                        web::scope("/streams")
-                            .app_data(stream_state.clone())
-                            .route("", web::get().to(handlers::list_live_streams))
-                            .route("/search", web::get().to(handlers::search_streams))
-                            .route("/{id}", web::get().to(handlers::get_stream_details))
-                            .route(
-                                "/{id}/comments",
-                                web::get().to(handlers::get_stream_comments),
-                            )
-                            .route("/rtmp/auth", web::post().to(handlers::rtmp_authenticate))
-                            .route("/rtmp/done", web::post().to(handlers::rtmp_done))
-                            .service(
-                                web::scope("")
-                                    .wrap(JwtAuthMiddleware)
-                                    .route("", web::post().to(handlers::create_stream))
-                                    .route("/{id}/join", web::post().to(handlers::join_stream))
-                                    .route("/{id}/leave", web::post().to(handlers::leave_stream))
-                                    .route(
-                                        "/{id}/comments",
-                                        web::post().to(handlers::post_stream_comment),
-                                    )
-                                    .route(
-                                        "/{id}/analytics",
-                                        web::get().to(handlers::get_stream_analytics),
-                                    ),
-                            ),
-                    )
                     // Note: Messaging endpoints moved to messaging-service (port 8085)
                     // Use messaging-service API for conversations and messages
                     // Stories and close-friends endpoints REMOVED - moved to content-service (port 8081)
@@ -941,13 +800,6 @@ async fn main() -> io::Result<()> {
                     // Use /api/v1/search/* routes via API Gateway (Nginx)
                     // NOTE: Trending endpoints moved to feed-service:8089
                     // Use /api/v1/trending/* routes via API Gateway (Nginx)
-            )
-            // WebSocket endpoints (outside /api/v1)
-            .service(
-                web::scope("/ws/streams")
-                    .wrap(JwtAuthMiddleware)
-                    .app_data(stream_chat_ws_state.clone())
-                    .route("/{id}/chat", web::get().to(handlers::stream_chat_ws)),
             )
     })
     .bind(&bind_address)?

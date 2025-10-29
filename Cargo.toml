@@ -1,13 +1,16 @@
 [workspace]
 members = [
     "backend/user-service",
+    "backend/content-service",
+    "backend/feed-service",
     "backend/media-service",
-    "backend/recommendation-service",
-    "backend/video-service",
+    "backend/messaging-service",
+    "backend/search-service",
     "backend/streaming-service",
+    "backend/libs/crypto-core",
+    "backend/libs/db-pool",
     "backend/libs/error-handling",
-    "backend/libs/video-core",
-    "backend/libs/db-pool"
+    "backend/libs/redis-utils"
 ]
 resolver = "2"
 

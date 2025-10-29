@@ -16,10 +16,10 @@ pub mod preferences;
 // pub mod posts; // REMOVED - moved to content-service (port 8081)
 // pub mod reels; // REMOVED - moved to media-service (port 8082)
 // pub mod stories; // REMOVED - moved to content-service (port 8081)
-pub mod streams;
-pub mod streams_ws;
-pub mod transcoding_progress;
-pub mod transcoding_queue;
+// pub mod streams; // REMOVED - moved to streaming-service (port 8088)
+// pub mod streams_ws; // REMOVED - moved to streaming-service (port 8088)
+// pub mod transcoding_progress; // REMOVED - moved to media-service (port 8082)
+// pub mod transcoding_queue; // REMOVED - moved to media-service (port 8082)
 // pub mod trending; // REMOVED - moved to feed-service (port 8089)
 // pub mod uploads; // REMOVED - moved to media-service (port 8082)
 pub mod users; // Public user profile endpoints (minimal)
@@ -41,11 +41,10 @@ pub use oauth::*;
 pub use password_reset::*;
 pub use preferences::*;
 // pub use posts::*; // REMOVED - moved to content-service (port 8081)
-// Comments, likes, posts, stories, reels, uploads, videos, videos_admin REMOVED (see port assignments above)
 // pub use stories::*; // REMOVED - moved to content-service (port 8081)
-pub use streams::*;
-pub use streams_ws::*;
-pub use transcoding_progress::*;
-pub use transcoding_queue::*;
+// pub use streams::*; // REMOVED - moved to streaming-service (port 8088)
+// pub use streams_ws::*; // REMOVED - moved to streaming-service (port 8088)
+// pub use transcoding_progress::*; // REMOVED - moved to media-service (port 8082)
+// pub use transcoding_queue::*; // REMOVED - moved to media-service (port 8082)
 // pub use trending::*; // REMOVED - moved to feed-service (port 8089)
 pub use users::*;
