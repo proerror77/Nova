@@ -3,6 +3,7 @@
 /// This module defines all error types that can occur in the content-service.
 /// Errors are converted to appropriate HTTP responses for API clients.
 use actix_web::{error::ResponseError, http::StatusCode, HttpResponse};
+use error_types::ErrorResponse;
 use std::fmt;
 
 /// Result type for content-service operations
@@ -71,12 +72,36 @@ impl ResponseError for AppError {
 
     fn error_response(&self) -> HttpResponse {
         let status = self.status_code();
-        let error_msg = self.to_string();
+        let (error_type, code) = match self {
+            AppError::DatabaseError(_) => ("server_error", error_types::error_codes::DATABASE_ERROR),
+            AppError::CacheError(_) => ("server_error", error_types::error_codes::CACHE_ERROR),
+            AppError::ValidationError(_) => ("validation_error", "VALIDATION_ERROR"),
+            AppError::NotFound(_) => ("not_found_error", error_types::error_codes::POST_NOT_FOUND),
+            AppError::Unauthorized(_) => ("authentication_error", error_types::error_codes::INVALID_CREDENTIALS),
+            AppError::Forbidden(_) => ("authorization_error", "AUTHORIZATION_ERROR"),
+            AppError::Internal(_) => ("server_error", error_types::error_codes::INTERNAL_SERVER_ERROR),
+            AppError::BadRequest(_) => ("validation_error", "INVALID_REQUEST"),
+            AppError::Conflict(_) => ("conflict_error", error_types::error_codes::VERSION_CONFLICT),
+        };
 
-        HttpResponse::build(status).json(serde_json::json!({
-            "error": error_msg,
-            "status": status.as_u16(),
-        }))
+        let message = self.to_string();
+        let response = ErrorResponse::new(
+            &match status {
+                StatusCode::BAD_REQUEST => "Bad Request",
+                StatusCode::UNAUTHORIZED => "Unauthorized",
+                StatusCode::FORBIDDEN => "Forbidden",
+                StatusCode::NOT_FOUND => "Not Found",
+                StatusCode::CONFLICT => "Conflict",
+                StatusCode::INTERNAL_SERVER_ERROR => "Internal Server Error",
+                _ => "Error",
+            },
+            &message,
+            status.as_u16(),
+            error_type,
+            code,
+        );
+
+        HttpResponse::build(status).json(response)
     }
 }
 
