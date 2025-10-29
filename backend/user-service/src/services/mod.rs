@@ -5,15 +5,15 @@ pub mod cdc;
 // pub mod cdn_failover; // REMOVED - moved to media-service (port 8082) [DELETED]
 // pub mod cdn_handler_integration; // REMOVED - moved to media-service (port 8082) [DELETED]
 // pub mod cdn_service; // REMOVED - moved to media-service (port 8082) [DELETED]
-// pub mod deep_learning_inference; // REMOVED - should be in ML service
+// pub mod deep_learning_inference; // REMOVED - should be in ML service [DELETED]
 pub mod email_service;
 pub mod email_verification;
 pub mod events;
 pub mod experiments;
-// pub mod ffmpeg_optimizer; // REMOVED - moved to media-service (port 8082)
+// pub mod ffmpeg_optimizer; // REMOVED - moved to media-service (port 8082) [DELETED]
 pub mod graph;
 pub mod image_processing;
-// pub mod job_queue; // REMOVED - moved to content-service (port 8081)
+// pub mod job_queue; // REMOVED - moved to content-service (port 8081) [DELETED]
 pub mod jwt_key_rotation;
 pub mod kafka_producer;
 pub mod moderation_service;
@@ -25,20 +25,20 @@ pub mod query_profiler;
 pub mod ranking_engine;
 pub mod redis_job;
 pub mod social_graph_sync;
-// pub mod resumable_upload_service; // REMOVED - moved to media-service (port 8082)
+// pub mod resumable_upload_service; // REMOVED - moved to media-service (port 8082) [DELETED]
 pub mod s3_service;
-// pub mod stories; // REMOVED - moved to content-service (port 8081)
-// pub mod streaming; // REMOVED - moved to streaming-service (port 8088)
-// pub mod streaming_manifest; // REMOVED - moved to media-service (port 8082)
+// pub mod stories; // REMOVED - moved to content-service (port 8081) [DELETED]
+// pub mod streaming; // REMOVED - moved to streaming-service (port 8088) [DELETED]
+// pub mod streaming_manifest; // REMOVED - moved to media-service (port 8082) [DELETED]
 pub mod token_revocation;
-// pub mod transcoding_optimizer; // REMOVED - moved to media-service (port 8082)
-// pub mod transcoding_progress; // REMOVED - moved to media-service (port 8082)
-// pub mod transcoding_progress_handler; // REMOVED - moved to media-service (port 8082)
+// pub mod transcoding_optimizer; // REMOVED - moved to media-service (port 8082) [DELETED]
+// pub mod transcoding_progress; // REMOVED - moved to media-service (port 8082) [DELETED]
+// pub mod transcoding_progress_handler; // REMOVED - moved to media-service (port 8082) [DELETED]
 pub mod two_fa;
-// pub mod video_job_queue; // REMOVED - moved to media-service (port 8082)
-// pub mod video_service; // REMOVED - moved to media-service (port 8082)
-// pub mod video_transcoding; // REMOVED - moved to media-service (port 8082)
-// pub mod webhooks; // REMOVED - video webhook handling moved to media-service (port 8082)
+// pub mod video_job_queue; // REMOVED - moved to media-service (port 8082) [DELETED]
+// pub mod video_service; // REMOVED - moved to media-service (port 8082) [DELETED]
+// pub mod video_transcoding; // REMOVED - moved to media-service (port 8082) [DELETED]
+// pub mod webhooks; // REMOVED - video webhook handling moved to media-service (port 8082) [DELETED]
 
 // ==================== SERVICE MODULES DOCUMENTATION ====================
 //
