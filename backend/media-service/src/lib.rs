@@ -11,6 +11,7 @@ pub mod grpc;
 pub mod handlers;
 pub mod middleware;
 pub mod models;
+pub mod openapi;
 pub mod services;
 
 // Public re-exports

@@ -1,12 +1,13 @@
 /// OpenAPI documentation for Nova User Service
 use utoipa::OpenApi;
+use utoipa::openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme};
 
 #[derive(OpenApi)]
 #[openapi(
     info(
         title = "Nova User Service API",
         version = "1.0.0",
-        description = "User authentication, profiles, relationships, posts, videos, and streaming",
+        description = "User authentication, profiles, relationships, feed, and trending content discovery. This service provides core user management functionality including registration, login, 2FA, password reset, profile management, social relationships (follow/unfollow), personalized feeds, and trending content discovery.",
         contact(
             name = "Nova Team",
             email = "support@nova.app"
@@ -20,18 +21,36 @@ use utoipa::OpenApi;
         (url = "https://api.nova.app", description = "Production server"),
     ),
     tags(
-        (name = "Health", description = "Service health checks"),
-        (name = "Auth", description = "Authentication and authorization endpoints"),
-        (name = "Users", description = "User profile and account management"),
-        (name = "Posts", description = "Post creation and management"),
-        (name = "Videos", description = "Video upload, processing and streaming"),
-        (name = "Streams", description = "Live streaming management"),
-        (name = "Relationships", description = "Follow, block, and user relationships"),
-        (name = "Feed", description = "Feed ranking and content discovery"),
-        (name = "Stories", description = "Story creation and management"),
-    )
+        (name = "health", description = "Service health and readiness checks"),
+        (name = "auth", description = "Authentication and authorization - registration, login, 2FA, JWT tokens"),
+        (name = "users", description = "User profile and account management"),
+        (name = "preferences", description = "User feed preferences and privacy settings"),
+        (name = "relationships", description = "Social graph - follow, unfollow, block users"),
+        (name = "feed", description = "Personalized content feed with ranking algorithms"),
+        (name = "trending", description = "Trending posts, videos, streams, and categories"),
+    ),
+    modifiers(&SecurityAddon),
 )]
 pub struct ApiDoc;
+
+struct SecurityAddon;
+
+impl utoipa::Modify for SecurityAddon {
+    fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
+        if let Some(components) = openapi.components.as_mut() {
+            components.add_security_scheme(
+                "bearer_auth",
+                SecurityScheme::Http(
+                    HttpBuilder::new()
+                        .scheme(HttpAuthScheme::Bearer)
+                        .bearer_format("JWT")
+                        .description(Some("JWT Bearer token. Obtain from /api/v1/auth/login or /api/v1/auth/register"))
+                        .build()
+                ),
+            )
+        }
+    }
+}
 
 impl ApiDoc {
     pub fn title() -> &'static str {

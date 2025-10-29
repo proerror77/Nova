@@ -1,12 +1,13 @@
 /// OpenAPI documentation for Nova Search Service
 use utoipa::OpenApi;
+use utoipa::openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme};
 
 #[derive(OpenApi)]
 #[openapi(
     info(
         title = "Nova Search Service API",
         version = "1.0.0",
-        description = "Unified search across users, posts, videos, and streaming content",
+        description = "Elasticsearch-powered unified search service. Provides full-text search across users, posts, videos, and streaming content. Features include autocomplete suggestions, fuzzy matching, faceted search, and real-time indexing via Kafka CDC events.",
         contact(
             name = "Nova Team",
             email = "support@nova.app"
@@ -16,19 +17,37 @@ use utoipa::OpenApi;
         )
     ),
     servers(
-        (url = "http://localhost:8086", description = "Development server"),
-        (url = "https://api.nova.app/search", description = "Production server"),
+        (url = "http://localhost:8084", description = "Development server"),
+        (url = "https://search-api.nova.app", description = "Production server"),
     ),
     tags(
-        (name = "Health", description = "Service health checks"),
-        (name = "Search", description = "Unified search endpoints"),
-        (name = "Users", description = "User search"),
-        (name = "Posts", description = "Post search"),
-        (name = "Videos", description = "Video search"),
-        (name = "Streams", description = "Stream search"),
-    )
+        (name = "health", description = "Service health checks"),
+        (name = "search", description = "Unified search endpoints with ranking"),
+        (name = "suggestions", description = "Autocomplete and search suggestions"),
+        (name = "indexing", description = "Document indexing and updates"),
+    ),
+    modifiers(&SecurityAddon),
 )]
 pub struct ApiDoc;
+
+struct SecurityAddon;
+
+impl utoipa::Modify for SecurityAddon {
+    fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
+        if let Some(components) = openapi.components.as_mut() {
+            components.add_security_scheme(
+                "bearer_auth",
+                SecurityScheme::Http(
+                    HttpBuilder::new()
+                        .scheme(HttpAuthScheme::Bearer)
+                        .bearer_format("JWT")
+                        .description(Some("JWT Bearer token from user-service"))
+                        .build()
+                ),
+            )
+        }
+    }
+}
 
 impl ApiDoc {
     pub fn title() -> &'static str {
@@ -40,6 +59,6 @@ impl ApiDoc {
     }
 
     pub fn openapi_json_path() -> &'static str {
-        "/openapi.json"
+        "/api/v1/openapi.json"
     }
 }
