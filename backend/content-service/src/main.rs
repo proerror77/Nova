@@ -1,7 +1,16 @@
 use actix_cors::Cors;
 use actix_web::{middleware::Logger, web, App, HttpResponse, HttpServer};
+use content_service::cache::{ContentCache, FeedCache};
+use content_service::db::ch_client::ClickHouseClient;
+use content_service::db::ensure_feed_tables;
+use content_service::handlers::{self, feed::FeedHandlerState};
+use content_service::jobs::feed_candidates::FeedCandidateRefreshJob;
+use content_service::services::{FeedRankingConfig, FeedRankingService};
+use crypto_core::jwt;
+use sqlx::postgres::PgPoolOptions;
 use std::io;
 use std::net::SocketAddr;
+use std::sync::Arc;
 use tokio::task::JoinSet;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -76,14 +85,100 @@ async fn main() -> io::Result<()> {
     tracing::info!("Starting content-service v{}", env!("CARGO_PKG_VERSION"));
     tracing::info!("Environment: {}", config.app.env);
 
+    if let Ok(public_key) = std::env::var("JWT_PUBLIC_KEY_PEM") {
+        if let Err(err) = jwt::initialize_jwt_validation_only(&public_key) {
+            return Err(io::Error::new(
+                io::ErrorKind::Other,
+                format!("Failed to initialize JWT keys: {err}"),
+            ));
+        }
+    } else {
+        tracing::warn!("JWT_PUBLIC_KEY_PEM not set; authentication middleware will fail requests");
+    }
+
+    // Initialize database connection pool
+    let db_url = std::env::var("DATABASE_URL").unwrap_or_else(|_| {
+        "postgres://nova:nova_password@localhost:5432/nova_content".to_string()
+    });
+
+    let db_pool = PgPoolOptions::new()
+        .max_connections(20)
+        .connect(&db_url)
+        .await
+        .expect("Failed to connect to database");
+    let db_pool_http = db_pool.clone();
+
+    tracing::info!("Connected to database");
+
     let http_bind_address = format!("{}:{}", config.app.host, 8081);
     let grpc_bind_address = format!("{}:9081", config.app.host);
 
     tracing::info!("Starting HTTP server at {}", http_bind_address);
     tracing::info!("Starting gRPC server at {}", grpc_bind_address);
 
+    // Initialize Redis cache for content entities
+    let redis_client = redis::Client::open(config.cache.url.as_str())
+        .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("Invalid REDIS_URL: {e}")))?;
+    let content_cache = Arc::new(
+        ContentCache::new(redis_client.clone(), None)
+            .await
+            .map_err(|e| {
+                io::Error::new(
+                    io::ErrorKind::Other,
+                    format!("Failed to initialize cache: {e}"),
+                )
+            })?,
+    );
+
+    let feed_cache_manager = redis_client
+        .get_tokio_connection_manager()
+        .await
+        .map_err(|e| {
+            io::Error::new(
+                io::ErrorKind::Other,
+                format!("Failed to connect Redis: {e}"),
+            )
+        })?;
+    let feed_cache = Arc::new(tokio::sync::Mutex::new(FeedCache::new(
+        feed_cache_manager,
+        120,
+    )));
+
+    let ch_cfg = &config.clickhouse;
+    let ch_client = Arc::new(ClickHouseClient::new(
+        &ch_cfg.url,
+        &ch_cfg.database,
+        &ch_cfg.username,
+        &ch_cfg.password,
+        ch_cfg.query_timeout_ms,
+    ));
+
+    ensure_feed_tables(ch_client.as_ref())
+        .await
+        .map_err(|e| {
+            io::Error::new(
+                io::ErrorKind::Other,
+                format!("Failed to ensure ClickHouse feed schema: {e}"),
+            )
+        })?;
+
+    let feed_ranking = Arc::new(FeedRankingService::new(
+        ch_client.clone(),
+        feed_cache.clone(),
+        db_pool.clone(),
+        FeedRankingConfig::from(&config.feed),
+    ));
+
+    let _feed_candidate_job = FeedCandidateRefreshJob::new(ch_client.clone()).spawn();
+
+    let feed_state = web::Data::new(FeedHandlerState {
+        feed_ranking: feed_ranking.clone(),
+    });
+    let content_cache_data = web::Data::new(content_cache.clone());
+
     // Parse gRPC bind address
-    let grpc_addr: SocketAddr = grpc_bind_address.parse()
+    let grpc_addr: SocketAddr = grpc_bind_address
+        .parse()
         .expect("Failed to parse gRPC bind address");
 
     // Create HTTP server
@@ -102,9 +197,13 @@ async fn main() -> io::Result<()> {
         cors = cors.allow_any_method().allow_any_header().max_age(3600);
 
         App::new()
+            .app_data(web::Data::new(db_pool_http.clone()))
+            .app_data(content_cache_data.clone())
+            .app_data(feed_state.clone())
             .wrap(cors)
             .wrap(Logger::default())
             .wrap(tracing_actix_web::TracingLogger::default())
+            .route("/metrics", web::get().to(content_service::metrics::serve_metrics))
             // Health check endpoints
             .route(
                 "/api/v1/health",
@@ -148,33 +247,40 @@ async fn main() -> io::Result<()> {
                         }))
                 }),
             )
-            // TODO: Register posts, comments, stories handlers
-            // These will be extracted from user-service in the implementation phase
             .service(
                 web::scope("/api/v1")
-                    .route(
-                        "/posts",
-                        web::get().to(|| async {
-                            HttpResponse::Ok().json(serde_json::json!({
-                                "message": "Posts endpoint - TODO: Implement handler extraction"
-                            }))
-                        }),
-                    )
-                    .route(
-                        "/comments",
-                        web::get().to(|| async {
-                            HttpResponse::Ok().json(serde_json::json!({
-                                "message": "Comments endpoint - TODO: Implement handler extraction"
-                            }))
-                        }),
-                    )
-                    .route(
-                        "/stories",
-                        web::get().to(|| async {
-                            HttpResponse::Ok().json(serde_json::json!({
-                                "message": "Stories endpoint - TODO: Implement handler extraction"
-                            }))
-                        }),
+                    .service(web::scope("/feed").route("", web::get().to(handlers::get_feed)))
+                    .service(
+                        web::scope("/stories")
+                            .service(
+                                web::resource("").route(web::post().to(handlers::create_story)),
+                            )
+                            .route("/feed", web::get().to(handlers::get_stories_feed))
+                            .service(
+                                web::resource("/close-friends")
+                                    .route(web::post().to(handlers::add_close_friend)),
+                            )
+                            .service(
+                                web::resource("/close-friends/{friend_id}")
+                                    .route(web::delete().to(handlers::remove_close_friend)),
+                            )
+                            .service(
+                                web::resource("/user/{owner_id}")
+                                    .route(web::get().to(handlers::get_user_stories)),
+                            )
+                            .service(
+                                web::resource("/{story_id}")
+                                    .route(web::get().to(handlers::get_story))
+                                    .route(web::delete().to(handlers::delete_story)),
+                            )
+                            .route(
+                                "/{story_id}/views",
+                                web::post().to(handlers::track_story_view),
+                            )
+                            .route(
+                                "/{story_id}/privacy",
+                                web::patch().to(handlers::update_story_privacy),
+                            ),
                     ),
             )
     })
@@ -192,9 +298,19 @@ async fn main() -> io::Result<()> {
     });
 
     // gRPC server task
+    let db_pool_grpc = db_pool.clone();
+    let cache_grpc = content_cache.clone();
+    let feed_cache_grpc = feed_cache.clone();
+    let feed_ranking_grpc = feed_ranking.clone();
     tasks.spawn(async move {
         tracing::info!("gRPC server is running");
-        content_service::grpc::start_grpc_server(grpc_addr)
+        content_service::grpc::start_grpc_server(
+            grpc_addr,
+            db_pool_grpc,
+            cache_grpc,
+            feed_cache_grpc,
+            feed_ranking_grpc,
+        )
             .await
             .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("{}", e)))
     });
