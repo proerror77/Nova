@@ -12,6 +12,7 @@ pub mod relationships;
 pub mod moderation;
 pub mod oauth;
 pub mod password_reset;
+pub mod preferences;
 // pub mod posts; // REMOVED - moved to content-service (port 8081)
 // pub mod reels; // REMOVED - moved to media-service (port 8082)
 // pub mod stories; // REMOVED - moved to content-service (port 8081)
@@ -38,6 +39,7 @@ pub use relationships::*;
 pub use moderation::*;
 pub use oauth::*;
 pub use password_reset::*;
+pub use preferences::*;
 // pub use posts::*; // REMOVED - moved to content-service (port 8081)
 // Comments, likes, posts, stories, reels, uploads, videos, videos_admin REMOVED (see port assignments above)
 // pub use stories::*; // REMOVED - moved to content-service (port 8081)

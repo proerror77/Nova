@@ -36,6 +36,7 @@ md5 = "0.7"
 utoipa = { workspace = true }
 elasticsearch = "8.19.0-alpha.1"
 url = "2"
+error-types = { path = "../libs/error-types" }
 
 [profile.release]
 codegen-units = 1

@@ -1,5 +1,5 @@
 use actix_web::{error::ResponseError, http::StatusCode, HttpResponse};
-use serde::Serialize;
+use error_types::ErrorResponse;
 use thiserror::Error;
 
 pub type Result<T> = std::result::Result<T, AppError>;
@@ -52,14 +52,6 @@ pub enum AppError {
     Configuration(String),
 }
 
-#[derive(Serialize)]
-struct ErrorResponse {
-    error: String,
-    message: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    details: Option<String>,
-}
-
 impl ResponseError for AppError {
     fn status_code(&self) -> StatusCode {
         match self {
@@ -83,22 +75,22 @@ impl ResponseError for AppError {
 
     fn error_response(&self) -> HttpResponse {
         let status_code = self.status_code();
-        let error_type = match self {
-            AppError::Database(_) => "DATABASE_ERROR",
-            AppError::Redis(_) => "CACHE_ERROR",
-            AppError::Validation(_) => "VALIDATION_ERROR",
-            AppError::Authentication(_) => "AUTHENTICATION_ERROR",
-            AppError::Authorization(_) => "AUTHORIZATION_ERROR",
-            AppError::NotFound(_) => "NOT_FOUND",
-            AppError::Conflict(_) => "CONFLICT",
-            AppError::RateLimitExceeded => "RATE_LIMIT_EXCEEDED",
-            AppError::Internal(_) => "INTERNAL_ERROR",
-            AppError::BadRequest(_) => "BAD_REQUEST",
-            AppError::Token(_) => "TOKEN_ERROR",
-            AppError::Email(_) => "EMAIL_ERROR",
-            AppError::Kafka(_) => "KAFKA_ERROR",
-            AppError::Io(_) => "IO_ERROR",
-            AppError::Configuration(_) => "CONFIGURATION_ERROR",
+        let (error_type, code) = match self {
+            AppError::Database(_) => ("server_error", error_types::error_codes::DATABASE_ERROR),
+            AppError::Redis(_) => ("server_error", error_types::error_codes::CACHE_ERROR),
+            AppError::Validation(_) => ("validation_error", "VALIDATION_ERROR"),
+            AppError::Authentication(_) => ("authentication_error", error_types::error_codes::INVALID_CREDENTIALS),
+            AppError::Authorization(_) => ("authorization_error", "AUTHORIZATION_ERROR"),
+            AppError::NotFound(_) => ("not_found_error", error_types::error_codes::USER_NOT_FOUND),
+            AppError::Conflict(_) => ("conflict_error", error_types::error_codes::VERSION_CONFLICT),
+            AppError::RateLimitExceeded => ("rate_limit_error", error_types::error_codes::RATE_LIMIT_ERROR),
+            AppError::Internal(_) => ("server_error", error_types::error_codes::INTERNAL_SERVER_ERROR),
+            AppError::BadRequest(_) => ("validation_error", "INVALID_REQUEST"),
+            AppError::Token(_) => ("authentication_error", error_types::error_codes::TOKEN_INVALID),
+            AppError::Email(_) => ("server_error", error_types::error_codes::INTERNAL_SERVER_ERROR),
+            AppError::Kafka(_) => ("server_error", error_types::error_codes::SERVICE_UNAVAILABLE),
+            AppError::Io(_) => ("server_error", error_types::error_codes::INTERNAL_SERVER_ERROR),
+            AppError::Configuration(_) => ("server_error", error_types::error_codes::INTERNAL_SERVER_ERROR),
         };
 
         let message = self.to_string();
@@ -111,13 +103,30 @@ impl ResponseError for AppError {
             _ => None,
         };
 
-        let error_response = ErrorResponse {
-            error: error_type.to_string(),
-            message,
-            details,
+        let response = ErrorResponse::new(
+            &match status_code {
+                StatusCode::BAD_REQUEST => "Bad Request",
+                StatusCode::UNAUTHORIZED => "Unauthorized",
+                StatusCode::FORBIDDEN => "Forbidden",
+                StatusCode::NOT_FOUND => "Not Found",
+                StatusCode::CONFLICT => "Conflict",
+                StatusCode::TOO_MANY_REQUESTS => "Too Many Requests",
+                StatusCode::INTERNAL_SERVER_ERROR => "Internal Server Error",
+                _ => "Error",
+            },
+            &message,
+            status_code.as_u16(),
+            error_type,
+            code,
+        );
+
+        let response = if let Some(detail) = details {
+            response.with_details(detail)
+        } else {
+            response
         };
 
-        HttpResponse::build(status_code).json(error_response)
+        HttpResponse::build(status_code).json(response)
     }
 }
 

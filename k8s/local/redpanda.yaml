@@ -1,0 +1,80 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka
+  namespace: nova-services
+  labels:
+    app: redpanda
+spec:
+  ports:
+    - name: kafka
+      port: 9092
+      targetPort: kafka
+    - name: admin
+      port: 9644
+      targetPort: admin
+  selector:
+    app: redpanda
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redpanda
+  namespace: nova-services
+  labels:
+    app: redpanda
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redpanda
+  template:
+    metadata:
+      labels:
+        app: redpanda
+    spec:
+      containers:
+        - name: redpanda
+          image: redpandadata/redpanda:v23.3.18
+          imagePullPolicy: IfNotPresent
+          command:
+            - /usr/bin/rpk
+            - redpanda
+            - start
+            - --advertise-kafka-addr=PLAINTEXT://kafka.nova-services.svc.cluster.local:9092
+            - --kafka-addr=PLAINTEXT://0.0.0.0:9092
+            - --advertise-rpc-addr=kafka.nova-services.svc.cluster.local:33145
+            - --rpc-addr=0.0.0.0:33145
+            - --smp=1
+            - --memory=512M
+            - --overprovisioned
+            - --reserve-memory=0M
+            - --check=false
+          ports:
+            - containerPort: 9092
+              name: kafka
+            - containerPort: 9644
+              name: admin
+          readinessProbe:
+            tcpSocket:
+              port: kafka
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: kafka
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: 1
+              memory: 768Mi
+          volumeMounts:
+            - name: redpanda-data
+              mountPath: /var/lib/redpanda/data
+      volumes:
+        - name: redpanda-data
+          emptyDir: {}

@@ -314,7 +314,24 @@ impl FeedRankingService {
             });
         }
 
-        ranked.sort_by(|a, b| b.combined_score.partial_cmp(&a.combined_score).unwrap());
+        // Safe sorting with NaN handling
+        ranked.sort_by(|a, b| {
+            match b.combined_score.partial_cmp(&a.combined_score) {
+                Some(ord) => ord,
+                None => {
+                    // NaN handling: treat NaN as equal/zero score
+                    // This prevents panic and gracefully handles invalid scores
+                    tracing::warn!(
+                        post_a = %a.post_id,
+                        post_b = %b.post_id,
+                        score_a = a.combined_score,
+                        score_b = b.combined_score,
+                        "Encountered NaN score in feed ranking, treating as zero"
+                    );
+                    std::cmp::Ordering::Equal
+                }
+            }
+        });
         Ok(ranked.into_iter().take(max_items).collect())
     }
 

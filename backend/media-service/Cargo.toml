@@ -37,6 +37,7 @@ actix-multipart = "0.4"
 image = "0.24"
 bytes = "1.5"
 crypto-core = { path = "../libs/crypto-core" }
+error-types = { path = "../libs/error-types" }
 
 [build-dependencies]
 tonic-build = "0.11"

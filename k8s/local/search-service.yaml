@@ -1,0 +1,137 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: search-service-config
+  namespace: nova-services
+  labels:
+    app: search-service
+data:
+  PORT: "8081"
+  RUST_LOG: "info,search_service=debug"
+  ELASTICSEARCH_POST_INDEX: "nova_posts"
+  ELASTICSEARCH_MESSAGE_INDEX: "nova_messages"
+  KAFKA_MESSAGE_PERSISTED_TOPIC: "message_persisted"
+  KAFKA_MESSAGE_DELETED_TOPIC: "message_deleted"
+  KAFKA_SEARCH_GROUP_ID: "nova-search-service"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: search-service-secrets
+  namespace: nova-services
+  labels:
+    app: search-service
+type: Opaque
+data:
+  DATABASE_URL: cG9zdGdyZXM6Ly9wb3N0Z3Jlczpwb3N0Z3Jlc19wYXNzd29yZF9jaGFuZ2VfbWVAcG9zdGdyZXMtcHJpbWFyeS5ub3ZhLWRhdGFiYXNlLnN2Yy5jbHVzdGVyLmxvY2FsOjU0MzIvcG9zdGdyZXM=
+  REDIS_URL: cmVkaXM6Ly9yZWRpcy1zZXJ2aWNlLm5vdmEtcmVkaXMuc3ZjLmNsdXN0ZXIubG9jYWw6NjM3OQ==
+  ELASTICSEARCH_URL: aHR0cDovL2VsYXN0aWNzZWFyY2gubm92YS1zZXJ2aWNlcy5zdmMuY2x1c3Rlci5sb2NhbDo5MjAw
+  KAFKA_BROKERS: a2Fma2Eubm92YS1zZXJ2aWNlcy5zdmMuY2x1c3Rlci5sb2NhbDo5MDky
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: search-service
+  namespace: nova-services
+  labels:
+    app: search-service
+spec:
+  ports:
+    - port: 8081
+      targetPort: http
+      name: http
+  selector:
+    app: search-service
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: search-service
+  namespace: nova-services
+  labels:
+    app: search-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: search-service
+  template:
+    metadata:
+      labels:
+        app: search-service
+    spec:
+      containers:
+        - name: search-service
+          image: nova-search-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8081
+              name: http
+          envFrom:
+            - configMapRef:
+                name: search-service-config
+            - secretRef:
+                name: search-service-secrets
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 20
+            failureThreshold: 6
+          resources:
+            requests:
+              cpu: 200m
+              memory: 256Mi
+            limits:
+              cpu: 1
+              memory: 512Mi
+      initContainers:
+        - name: wait-for-postgres
+          image: busybox:1.35
+          command:
+            - sh
+            - -c
+            - until nc -z postgres-primary.nova-database.svc.cluster.local 5432; do echo 'waiting for postgres'; sleep 2; done
+        - name: wait-for-redis
+          image: busybox:1.35
+          command:
+            - sh
+            - -c
+            - until nc -z redis-service.nova-redis.svc.cluster.local 6379; do echo 'waiting for redis'; sleep 2; done
+        - name: wait-for-elasticsearch
+          image: curlimages/curl:8.8.0
+          command:
+            - sh
+            - -c
+            - |
+              until curl -sf http://elasticsearch.nova-services.svc.cluster.local:9200 >/dev/null; do
+                echo "waiting for elasticsearch"
+                sleep 3
+              done
+        - name: wait-for-kafka
+          image: busybox:1.35
+          command:
+            - sh
+            - -c
+            - |
+              until nc -z kafka.nova-services.svc.cluster.local 9092; do
+                echo "waiting for kafka"
+                sleep 3
+              done
