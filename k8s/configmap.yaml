@@ -13,10 +13,13 @@ data:
   RUST_LOG: "info,actix_web=info,sqlx=warn"
 
   # Database configuration
-  DATABASE_MAX_CONNECTIONS: "20"
+  DATABASE_MAX_CONNECTIONS: "10"
 
   # Redis configuration
   REDIS_POOL_SIZE: "10"
+  REDIS_SENTINEL_ENDPOINTS: "redis-sentinel.nova:26379"
+  REDIS_SENTINEL_MASTER_NAME: "mymaster"
+  REDIS_SENTINEL_POLL_INTERVAL_MS: "5000"
 
   # JWT configuration
   JWT_ACCESS_TOKEN_TTL: "3600"       # 1 hour

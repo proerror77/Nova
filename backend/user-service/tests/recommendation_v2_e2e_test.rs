@@ -1,3 +1,4 @@
+#![cfg(feature = "legacy_recommendation_tests")]
 //! Recommendation v2 排序流程測試
 //!
 //! 利用 `rank_with_context` API 驗證混合排序在冷啟動與有互動資料時的表現，

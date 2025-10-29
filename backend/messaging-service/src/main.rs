@@ -3,12 +3,15 @@ use axum::middleware;
 use crypto_core::jwt as core_jwt;
 use messaging_service::{
     config, db, error, logging, routes,
+    redis_client::RedisClient,
     services::{encryption::EncryptionService, key_exchange::KeyExchangeService, push::ApnsPush},
     state::AppState,
     websocket::streams::{start_streams_listener, StreamsConfig},
 };
+use redis_utils::{RedisPool, SentinelConfig};
 use std::net::SocketAddr;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::net::TcpListener;
 
 #[tokio::main]
@@ -21,8 +24,18 @@ async fn main() -> Result<(), error::AppError> {
         .await
         .map_err(|e| error::AppError::StartServer(format!("db: {e}")))?;
 
-    let redis = redis::Client::open(cfg.redis_url.as_str())
+    let sentinel_cfg = cfg.redis_sentinel.as_ref().map(|cfg| {
+        SentinelConfig::new(
+            cfg.endpoints.clone(),
+            cfg.master_name.clone(),
+            Duration::from_millis(cfg.poll_interval_ms),
+        )
+    });
+
+    let redis_pool = RedisPool::connect(&cfg.redis_url, sentinel_cfg)
+        .await
         .map_err(|e| error::AppError::StartServer(format!("redis: {e}")))?;
+    let redis = RedisClient::new(redis_pool.manager());
     let registry = messaging_service::websocket::ConnectionRegistry::new();
     // Run embedded migrations (idempotent)
     if let Err(e) = messaging_service::migrations::run_all(&db).await {
@@ -72,9 +85,10 @@ async fn main() -> Result<(), error::AppError> {
         key_exchange_service: Some(key_exchange_service),
     };
     // Start Redis Streams listener for cross-instance fanout
+    let redis_stream = redis.clone();
     tokio::spawn(async move {
         let config = StreamsConfig::default();
-        if let Err(e) = start_streams_listener(redis, registry, config).await {
+        if let Err(e) = start_streams_listener(redis_stream, registry, config).await {
             tracing::warn!(error=%e, "redis streams listener exited");
         }
     });

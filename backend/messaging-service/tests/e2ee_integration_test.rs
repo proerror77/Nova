@@ -9,7 +9,6 @@
 /// 3. Full E2EE Flow Tests - Complete message lifecycle with E2EE
 /// 4. Security Tests - Forward secrecy, tamper detection, key isolation
 /// 5. Error Handling Tests - Invalid keys, missing data, malformed input
-
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use messaging_service::services::e2ee::E2eeService;
 use sqlx::postgres::PgPoolOptions;
@@ -20,8 +19,8 @@ const TEST_MASTER_KEY: [u8; 32] = [7u8; 32];
 
 /// Bootstrap database connection pool for testing
 async fn bootstrap_pool() -> Pool<Postgres> {
-    let db_url = std::env::var("DATABASE_URL")
-        .expect("DATABASE_URL env var required for E2EE tests");
+    let db_url =
+        std::env::var("DATABASE_URL").expect("DATABASE_URL env var required for E2EE tests");
     PgPoolOptions::new()
         .max_connections(10)
         .connect(&db_url)
@@ -120,7 +119,10 @@ async fn test_device_key_storage_and_retrieval() {
         .expect("should retrieve public key")
         .expect("public key should exist");
 
-    assert_eq!(public_key, retrieved_public, "retrieved public key must match");
+    assert_eq!(
+        public_key, retrieved_public,
+        "retrieved public key must match"
+    );
 
     // Retrieve private key (encrypted at rest)
     let retrieved_secret = e2ee_service
@@ -129,7 +131,10 @@ async fn test_device_key_storage_and_retrieval() {
         .expect("should retrieve secret key")
         .expect("secret key should exist");
 
-    assert_eq!(secret_key, retrieved_secret, "retrieved secret key must match");
+    assert_eq!(
+        secret_key, retrieved_secret,
+        "retrieved secret key must match"
+    );
 
     cleanup_device_keys(&pool, &[user_id]).await;
 }
@@ -175,8 +180,12 @@ async fn test_concurrent_key_exchanges_no_conflicts() {
     let (public_a, secret_a) = e2ee_service.generate_keypair();
     let (public_b, secret_b) = e2ee_service.generate_keypair();
 
-    let shared_ab = e2ee_service.derive_shared_secret(&secret_a, &public_b).unwrap();
-    let shared_ba = e2ee_service.derive_shared_secret(&secret_b, &public_a).unwrap();
+    let shared_ab = e2ee_service
+        .derive_shared_secret(&secret_a, &public_b)
+        .unwrap();
+    let shared_ba = e2ee_service
+        .derive_shared_secret(&secret_b, &public_a)
+        .unwrap();
 
     // Store both exchanges concurrently
     let handles = vec![
@@ -199,17 +208,19 @@ async fn test_concurrent_key_exchanges_no_conflicts() {
     ];
 
     for handle in handles {
-        handle.await.unwrap().expect("key exchange storage should succeed");
+        handle
+            .await
+            .unwrap()
+            .expect("key exchange storage should succeed");
     }
 
     // Verify both exchanges were recorded
-    let count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM key_exchanges WHERE conversation_id = $1"
-    )
-    .bind(conversation_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM key_exchanges WHERE conversation_id = $1")
+            .bind(conversation_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
 
     assert_eq!(count, 2, "both key exchanges should be recorded");
 
@@ -228,7 +239,9 @@ async fn test_encrypt_message_with_derived_key() {
 
     let (public_a, secret_a) = e2ee_service.generate_keypair();
     let (public_b, secret_b) = e2ee_service.generate_keypair();
-    let shared_secret = e2ee_service.derive_shared_secret(&secret_a, &public_b).unwrap();
+    let shared_secret = e2ee_service
+        .derive_shared_secret(&secret_a, &public_b)
+        .unwrap();
 
     let plaintext = b"Hello E2EE World";
     let (ciphertext, nonce) = e2ee_service
@@ -237,7 +250,10 @@ async fn test_encrypt_message_with_derived_key() {
 
     assert!(!ciphertext.is_empty(), "ciphertext should not be empty");
     assert_eq!(nonce.len(), 24, "nonce must be 24 bytes");
-    assert_ne!(ciphertext, plaintext, "ciphertext must differ from plaintext");
+    assert_ne!(
+        ciphertext, plaintext,
+        "ciphertext must differ from plaintext"
+    );
 }
 
 #[tokio::test]
@@ -249,8 +265,12 @@ async fn test_decrypt_message_by_recipient() {
     let (public_a, secret_a) = e2ee_service.generate_keypair();
     let (public_b, secret_b) = e2ee_service.generate_keypair();
 
-    let shared_secret_a = e2ee_service.derive_shared_secret(&secret_a, &public_b).unwrap();
-    let shared_secret_b = e2ee_service.derive_shared_secret(&secret_b, &public_a).unwrap();
+    let shared_secret_a = e2ee_service
+        .derive_shared_secret(&secret_a, &public_b)
+        .unwrap();
+    let shared_secret_b = e2ee_service
+        .derive_shared_secret(&secret_b, &public_a)
+        .unwrap();
 
     let plaintext = b"Encrypted message content";
     let (ciphertext, nonce) = e2ee_service
@@ -262,7 +282,10 @@ async fn test_decrypt_message_by_recipient() {
         .decrypt_message(&shared_secret_b, &ciphertext, &nonce)
         .expect("decryption should succeed");
 
-    assert_eq!(decrypted, plaintext, "decrypted plaintext must match original");
+    assert_eq!(
+        decrypted, plaintext,
+        "decrypted plaintext must match original"
+    );
 }
 
 #[tokio::test]
@@ -273,15 +296,24 @@ async fn test_ciphertext_variation_with_different_nonces() {
 
     let (public_a, secret_a) = e2ee_service.generate_keypair();
     let (public_b, _) = e2ee_service.generate_keypair();
-    let shared_secret = e2ee_service.derive_shared_secret(&secret_a, &public_b).unwrap();
+    let shared_secret = e2ee_service
+        .derive_shared_secret(&secret_a, &public_b)
+        .unwrap();
 
     let plaintext = b"Same message";
 
-    let (ciphertext1, nonce1) = e2ee_service.encrypt_message(&shared_secret, plaintext).unwrap();
-    let (ciphertext2, nonce2) = e2ee_service.encrypt_message(&shared_secret, plaintext).unwrap();
+    let (ciphertext1, nonce1) = e2ee_service
+        .encrypt_message(&shared_secret, plaintext)
+        .unwrap();
+    let (ciphertext2, nonce2) = e2ee_service
+        .encrypt_message(&shared_secret, plaintext)
+        .unwrap();
 
     assert_ne!(nonce1, nonce2, "nonces must be different");
-    assert_ne!(ciphertext1, ciphertext2, "ciphertexts must differ with different nonces");
+    assert_ne!(
+        ciphertext1, ciphertext2,
+        "ciphertexts must differ with different nonces"
+    );
 }
 
 #[tokio::test]
@@ -292,7 +324,9 @@ async fn test_hkdf_key_derivation() {
 
     let (public_a, secret_a) = e2ee_service.generate_keypair();
     let (public_b, _) = e2ee_service.generate_keypair();
-    let shared_secret = e2ee_service.derive_shared_secret(&secret_a, &public_b).unwrap();
+    let shared_secret = e2ee_service
+        .derive_shared_secret(&secret_a, &public_b)
+        .unwrap();
 
     let conversation_id = Uuid::new_v4();
 
@@ -303,12 +337,19 @@ async fn test_hkdf_key_derivation() {
 
     // Same input should produce same key
     let derived_key2 = e2ee_service.derive_encryption_key(&shared_secret, conversation_id);
-    assert_eq!(derived_key, derived_key2, "HKDF derivation must be deterministic");
+    assert_eq!(
+        derived_key, derived_key2,
+        "HKDF derivation must be deterministic"
+    );
 
     // Different conversation should produce different key
     let different_conversation_id = Uuid::new_v4();
-    let derived_key3 = e2ee_service.derive_encryption_key(&shared_secret, different_conversation_id);
-    assert_ne!(derived_key, derived_key3, "different context should produce different key");
+    let derived_key3 =
+        e2ee_service.derive_encryption_key(&shared_secret, different_conversation_id);
+    assert_ne!(
+        derived_key, derived_key3,
+        "different context should produce different key"
+    );
 }
 
 #[tokio::test]
@@ -319,21 +360,36 @@ async fn test_base64_encoding_decoding() {
 
     let (public_a, secret_a) = e2ee_service.generate_keypair();
     let (public_b, _) = e2ee_service.generate_keypair();
-    let shared_secret = e2ee_service.derive_shared_secret(&secret_a, &public_b).unwrap();
+    let shared_secret = e2ee_service
+        .derive_shared_secret(&secret_a, &public_b)
+        .unwrap();
 
     let plaintext = b"Test base64 encoding";
-    let (ciphertext, nonce) = e2ee_service.encrypt_message(&shared_secret, plaintext).unwrap();
+    let (ciphertext, nonce) = e2ee_service
+        .encrypt_message(&shared_secret, plaintext)
+        .unwrap();
 
     // Encode to base64
     let ciphertext_b64 = BASE64.encode(&ciphertext);
     let nonce_b64 = BASE64.encode(&nonce);
 
     // Decode from base64
-    let ciphertext_decoded = BASE64.decode(&ciphertext_b64).expect("base64 decode should succeed");
-    let nonce_decoded = BASE64.decode(&nonce_b64).expect("nonce decode should succeed");
+    let ciphertext_decoded = BASE64
+        .decode(&ciphertext_b64)
+        .expect("base64 decode should succeed");
+    let nonce_decoded = BASE64
+        .decode(&nonce_b64)
+        .expect("nonce decode should succeed");
 
-    assert_eq!(ciphertext, ciphertext_decoded, "base64 roundtrip should preserve ciphertext");
-    assert_eq!(nonce.to_vec(), nonce_decoded, "base64 roundtrip should preserve nonce");
+    assert_eq!(
+        ciphertext, ciphertext_decoded,
+        "base64 roundtrip should preserve ciphertext"
+    );
+    assert_eq!(
+        nonce.to_vec(),
+        nonce_decoded,
+        "base64 roundtrip should preserve nonce"
+    );
 }
 
 // ============================================================================
@@ -413,7 +469,10 @@ async fn test_full_e2ee_message_flow() {
         .expect("Bob decrypts message");
 
     // Step 10: Verify content matches
-    assert_eq!(decrypted, plaintext, "decrypted content must match original");
+    assert_eq!(
+        decrypted, plaintext,
+        "decrypted content must match original"
+    );
 
     cleanup_device_keys(&pool, &[alice_id, bob_id]).await;
     cleanup_key_exchanges(&pool, conversation_id).await;
@@ -431,11 +490,15 @@ async fn test_e2ee_message_recall() {
     let device_id = "test-device";
 
     let (public_key, secret_key) = e2ee_service.generate_keypair();
-    let shared_secret = e2ee_service.derive_shared_secret(&secret_key, &public_key).unwrap();
+    let shared_secret = e2ee_service
+        .derive_shared_secret(&secret_key, &public_key)
+        .unwrap();
     let encryption_key = e2ee_service.derive_encryption_key(&shared_secret, conversation_id);
 
     let plaintext = b"Message to be recalled";
-    let (ciphertext, nonce) = e2ee_service.encrypt_message(&encryption_key, plaintext).unwrap();
+    let (ciphertext, nonce) = e2ee_service
+        .encrypt_message(&encryption_key, plaintext)
+        .unwrap();
 
     // Store encrypted message (simulated)
     let message_id = Uuid::new_v4();
@@ -470,7 +533,10 @@ async fn test_e2ee_message_recall() {
     let recalled: bool = row.get("recalled");
 
     assert!(recalled, "message should be marked as recalled");
-    assert!(!stored_ciphertext.is_empty(), "ciphertext should remain stored");
+    assert!(
+        !stored_ciphertext.is_empty(),
+        "ciphertext should remain stored"
+    );
 
     // Cleanup
     let _ = sqlx::query("DELETE FROM messages WHERE id = $1")
@@ -490,7 +556,9 @@ async fn test_e2ee_message_edit_and_reencryption() {
     let user_id = Uuid::new_v4();
 
     let (public_key, secret_key) = e2ee_service.generate_keypair();
-    let shared_secret = e2ee_service.derive_shared_secret(&secret_key, &public_key).unwrap();
+    let shared_secret = e2ee_service
+        .derive_shared_secret(&secret_key, &public_key)
+        .unwrap();
     let encryption_key = e2ee_service.derive_encryption_key(&shared_secret, conversation_id);
 
     let original_plaintext = b"Original message";
@@ -530,25 +598,33 @@ async fn test_e2ee_message_edit_and_reencryption() {
     .expect("update message with re-encryption");
 
     // Verify version incremented and ciphertext changed
-    let row = sqlx::query("SELECT content_encrypted, content_nonce, version_number FROM messages WHERE id = $1")
-        .bind(message_id)
-        .fetch_one(&pool)
-        .await
-        .expect("fetch edited message");
+    let row = sqlx::query(
+        "SELECT content_encrypted, content_nonce, version_number FROM messages WHERE id = $1",
+    )
+    .bind(message_id)
+    .fetch_one(&pool)
+    .await
+    .expect("fetch edited message");
 
     let stored_ciphertext: Vec<u8> = row.get("content_encrypted");
     let stored_nonce: Vec<u8> = row.get("content_nonce");
     let version: i32 = row.get("version_number");
 
     assert_eq!(version, 2, "version should be incremented");
-    assert_ne!(stored_ciphertext, original_ciphertext, "ciphertext should change after edit");
+    assert_ne!(
+        stored_ciphertext, original_ciphertext,
+        "ciphertext should change after edit"
+    );
 
     // Decrypt and verify new content
     let decrypted = e2ee_service
         .decrypt_message(&encryption_key, &stored_ciphertext, &stored_nonce)
         .unwrap();
 
-    assert_eq!(decrypted, edited_plaintext, "decrypted content should match edited plaintext");
+    assert_eq!(
+        decrypted, edited_plaintext,
+        "decrypted content should match edited plaintext"
+    );
 
     // Cleanup
     let _ = sqlx::query("DELETE FROM messages WHERE id = $1")
@@ -568,7 +644,9 @@ async fn test_encryption_key_changes_per_message() {
     let e2ee_service = E2eeService::new(TEST_MASTER_KEY);
 
     let (public_key, secret_key) = e2ee_service.generate_keypair();
-    let shared_secret = e2ee_service.derive_shared_secret(&secret_key, &public_key).unwrap();
+    let shared_secret = e2ee_service
+        .derive_shared_secret(&secret_key, &public_key)
+        .unwrap();
     let conversation_id = Uuid::new_v4();
     let encryption_key = e2ee_service.derive_encryption_key(&shared_secret, conversation_id);
 
@@ -577,14 +655,19 @@ async fn test_encryption_key_changes_per_message() {
     // Encrypt same message multiple times
     let mut nonces = vec![];
     for _ in 0..10 {
-        let (_, nonce) = e2ee_service.encrypt_message(&encryption_key, plaintext).unwrap();
+        let (_, nonce) = e2ee_service
+            .encrypt_message(&encryption_key, plaintext)
+            .unwrap();
         nonces.push(nonce);
     }
 
     // Verify all nonces are unique
     for i in 0..nonces.len() {
-        for j in (i+1)..nonces.len() {
-            assert_ne!(nonces[i], nonces[j], "nonces must be unique across messages");
+        for j in (i + 1)..nonces.len() {
+            assert_ne!(
+                nonces[i], nonces[j],
+                "nonces must be unique across messages"
+            );
         }
     }
 }
@@ -596,12 +679,16 @@ async fn test_ciphertext_stealing_no_plaintext_reveal() {
     let e2ee_service = E2eeService::new(TEST_MASTER_KEY);
 
     let (public_key, secret_key) = e2ee_service.generate_keypair();
-    let shared_secret = e2ee_service.derive_shared_secret(&secret_key, &public_key).unwrap();
+    let shared_secret = e2ee_service
+        .derive_shared_secret(&secret_key, &public_key)
+        .unwrap();
     let conversation_id = Uuid::new_v4();
     let encryption_key = e2ee_service.derive_encryption_key(&shared_secret, conversation_id);
 
     let plaintext = b"Sensitive information";
-    let (ciphertext, nonce) = e2ee_service.encrypt_message(&encryption_key, plaintext).unwrap();
+    let (ciphertext, nonce) = e2ee_service
+        .encrypt_message(&encryption_key, plaintext)
+        .unwrap();
 
     // Attacker has ciphertext and nonce but not the key
     let attacker_key = [42u8; 32]; // Wrong key
@@ -621,21 +708,30 @@ async fn test_forward_secrecy_verification() {
 
     // Time period 1: Generate keypair and send message
     let (public_key1, secret_key1) = e2ee_service.generate_keypair();
-    let shared_secret1 = e2ee_service.derive_shared_secret(&secret_key1, &public_key1).unwrap();
+    let shared_secret1 = e2ee_service
+        .derive_shared_secret(&secret_key1, &public_key1)
+        .unwrap();
     let encryption_key1 = e2ee_service.derive_encryption_key(&shared_secret1, conversation_id);
 
     let plaintext1 = b"Message from time period 1";
-    let (ciphertext1, nonce1) = e2ee_service.encrypt_message(&encryption_key1, plaintext1).unwrap();
+    let (ciphertext1, nonce1) = e2ee_service
+        .encrypt_message(&encryption_key1, plaintext1)
+        .unwrap();
 
     // Time period 2: Generate new keypair (key rotation)
     let (public_key2, secret_key2) = e2ee_service.generate_keypair();
-    let shared_secret2 = e2ee_service.derive_shared_secret(&secret_key2, &public_key2).unwrap();
+    let shared_secret2 = e2ee_service
+        .derive_shared_secret(&secret_key2, &public_key2)
+        .unwrap();
     let encryption_key2 = e2ee_service.derive_encryption_key(&shared_secret2, conversation_id);
 
     // New key cannot decrypt old message
     let result = e2ee_service.decrypt_message(&encryption_key2, &ciphertext1, &nonce1);
 
-    assert!(result.is_err(), "new key cannot decrypt messages encrypted with old key");
+    assert!(
+        result.is_err(),
+        "new key cannot decrypt messages encrypted with old key"
+    );
 }
 
 #[tokio::test]
@@ -645,12 +741,16 @@ async fn test_hmac_tamper_detection() {
     let e2ee_service = E2eeService::new(TEST_MASTER_KEY);
 
     let (public_key, secret_key) = e2ee_service.generate_keypair();
-    let shared_secret = e2ee_service.derive_shared_secret(&secret_key, &public_key).unwrap();
+    let shared_secret = e2ee_service
+        .derive_shared_secret(&secret_key, &public_key)
+        .unwrap();
     let conversation_id = Uuid::new_v4();
     let encryption_key = e2ee_service.derive_encryption_key(&shared_secret, conversation_id);
 
     let plaintext = b"Original message";
-    let (mut ciphertext, nonce) = e2ee_service.encrypt_message(&encryption_key, plaintext).unwrap();
+    let (mut ciphertext, nonce) = e2ee_service
+        .encrypt_message(&encryption_key, plaintext)
+        .unwrap();
 
     // Attacker tampers with ciphertext
     if !ciphertext.is_empty() {
@@ -659,7 +759,10 @@ async fn test_hmac_tamper_detection() {
 
     let result = e2ee_service.decrypt_message(&encryption_key, &ciphertext, &nonce);
 
-    assert!(result.is_err(), "tampered ciphertext must fail authentication");
+    assert!(
+        result.is_err(),
+        "tampered ciphertext must fail authentication"
+    );
 }
 
 #[tokio::test]
@@ -674,7 +777,9 @@ async fn test_rate_limiting_key_exchange() {
     let user_b = Uuid::new_v4();
 
     let (public_key, secret_key) = e2ee_service.generate_keypair();
-    let shared_secret = e2ee_service.derive_shared_secret(&secret_key, &public_key).unwrap();
+    let shared_secret = e2ee_service
+        .derive_shared_secret(&secret_key, &public_key)
+        .unwrap();
 
     // Attempt rapid key exchanges
     let mut success_count = 0;
@@ -707,12 +812,16 @@ async fn test_decrypt_with_wrong_key_failure() {
     let e2ee_service = E2eeService::new(TEST_MASTER_KEY);
 
     let (public_key, secret_key) = e2ee_service.generate_keypair();
-    let shared_secret = e2ee_service.derive_shared_secret(&secret_key, &public_key).unwrap();
+    let shared_secret = e2ee_service
+        .derive_shared_secret(&secret_key, &public_key)
+        .unwrap();
     let conversation_id = Uuid::new_v4();
     let encryption_key = e2ee_service.derive_encryption_key(&shared_secret, conversation_id);
 
     let plaintext = b"Encrypted data";
-    let (ciphertext, nonce) = e2ee_service.encrypt_message(&encryption_key, plaintext).unwrap();
+    let (ciphertext, nonce) = e2ee_service
+        .encrypt_message(&encryption_key, plaintext)
+        .unwrap();
 
     // Attempt decryption with wrong key
     let wrong_key = [99u8; 32];
@@ -744,7 +853,10 @@ async fn test_missing_public_key_error_handling() {
         .await;
 
     assert!(result.is_ok(), "should return Ok(None) for missing key");
-    assert!(result.unwrap().is_none(), "result should be None for missing key");
+    assert!(
+        result.unwrap().is_none(),
+        "result should be None for missing key"
+    );
 }
 
 #[tokio::test]
@@ -753,14 +865,18 @@ async fn test_invalid_base64_ciphertext_error() {
     // RED: Test error handling for malformed base64 ciphertext
     let invalid_base64_strings = vec![
         "!!!invalid-base64!!!",
-        "12345", // Too short
+        "12345",    // Too short
         "ZZZZ====", // Invalid characters
-        "", // Empty string
+        "",         // Empty string
     ];
 
     for invalid_b64 in invalid_base64_strings {
         let result = BASE64.decode(invalid_b64);
-        assert!(result.is_err(), "invalid base64 '{}' should fail to decode", invalid_b64);
+        assert!(
+            result.is_err(),
+            "invalid base64 '{}' should fail to decode",
+            invalid_b64
+        );
     }
 }
 
@@ -771,7 +887,9 @@ async fn test_malformed_encrypted_message() {
     let e2ee_service = E2eeService::new(TEST_MASTER_KEY);
 
     let (public_key, secret_key) = e2ee_service.generate_keypair();
-    let shared_secret = e2ee_service.derive_shared_secret(&secret_key, &public_key).unwrap();
+    let shared_secret = e2ee_service
+        .derive_shared_secret(&secret_key, &public_key)
+        .unwrap();
     let conversation_id = Uuid::new_v4();
     let encryption_key = e2ee_service.derive_encryption_key(&shared_secret, conversation_id);
 
@@ -780,7 +898,9 @@ async fn test_malformed_encrypted_message() {
     assert!(result.is_err(), "empty ciphertext should fail");
 
     // Test with wrong nonce length
-    let (ciphertext, _) = e2ee_service.encrypt_message(&encryption_key, b"test").unwrap();
+    let (ciphertext, _) = e2ee_service
+        .encrypt_message(&encryption_key, b"test")
+        .unwrap();
     let wrong_nonce = [0u8; 12]; // Wrong size
     let result = e2ee_service.decrypt_message(&encryption_key, &ciphertext, &wrong_nonce);
     assert!(result.is_err(), "wrong nonce size should fail");
@@ -798,11 +918,15 @@ async fn test_replay_attack_prevention() {
     let recipient_id = Uuid::new_v4();
 
     let (public_key, secret_key) = e2ee_service.generate_keypair();
-    let shared_secret = e2ee_service.derive_shared_secret(&secret_key, &public_key).unwrap();
+    let shared_secret = e2ee_service
+        .derive_shared_secret(&secret_key, &public_key)
+        .unwrap();
     let encryption_key = e2ee_service.derive_encryption_key(&shared_secret, conversation_id);
 
     let plaintext = b"Replayed message";
-    let (ciphertext, nonce) = e2ee_service.encrypt_message(&encryption_key, plaintext).unwrap();
+    let (ciphertext, nonce) = e2ee_service
+        .encrypt_message(&encryption_key, plaintext)
+        .unwrap();
 
     let message_id = Uuid::new_v4();
 
@@ -833,7 +957,10 @@ async fn test_replay_attack_prevention() {
     .execute(&pool)
     .await;
 
-    assert!(replay_result.is_err(), "replay attack with duplicate ID should fail");
+    assert!(
+        replay_result.is_err(),
+        "replay attack with duplicate ID should fail"
+    );
 
     // Cleanup
     let _ = sqlx::query("DELETE FROM messages WHERE id = $1")

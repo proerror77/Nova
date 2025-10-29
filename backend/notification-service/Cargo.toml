@@ -1,0 +1,53 @@
+[package]
+name = "notification-service"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "notification-service"
+path = "src/main.rs"
+
+[lib]
+name = "notification_service"
+path = "src/lib.rs"
+
+[dependencies]
+actix-web.workspace = true
+actix-rt.workspace = true
+tokio.workspace = true
+sqlx.workspace = true
+redis.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+uuid.workspace = true
+chrono.workspace = true
+dotenv.workspace = true
+envy.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+thiserror.workspace = true
+anyhow.workspace = true
+async-trait.workspace = true
+reqwest.workspace = true
+prometheus.workspace = true
+jsonwebtoken.workspace = true
+
+# Notification-specific
+futures = "0.3"
+rdkafka.workspace = true
+
+# gRPC
+tonic.workspace = true
+prost.workspace = true
+
+# Shared libraries
+error-types = { path = "../libs/error-types" }
+
+[build-dependencies]
+tonic-build = "0.11"
+
+[dev-dependencies]
+tokio-test = "0.4"

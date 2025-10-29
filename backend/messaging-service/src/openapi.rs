@@ -1,6 +1,6 @@
+use utoipa::openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme};
 /// OpenAPI documentation for Nova Messaging Service
 use utoipa::OpenApi;
-use utoipa::openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme};
 
 #[derive(OpenApi)]
 #[openapi(
@@ -46,7 +46,7 @@ impl utoipa::Modify for SecurityAddon {
                         .scheme(HttpAuthScheme::Bearer)
                         .bearer_format("JWT")
                         .description(Some("JWT Bearer token from user-service"))
-                        .build()
+                        .build(),
                 ),
             )
         }

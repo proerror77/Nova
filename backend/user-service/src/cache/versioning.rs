@@ -12,6 +12,8 @@ use redis::aio::ConnectionManager;
 use serde::{Deserialize, Serialize};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use crate::utils::redis_timeout::run_with_timeout;
+
 /// Versioned cache entry wrapper
 /// Adds version metadata to prevent stale reads and race conditions
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -93,17 +95,16 @@ where
     // Try to read from cache
     loop {
         // Watch the key for changes
-        redis::cmd("WATCH")
-            .arg(key)
-            .query_async::<_, ()>(&mut redis_conn)
-            .await
-            .ok(); // Ignore watch errors
+        let _ = run_with_timeout(
+            redis::cmd("WATCH")
+                .arg(key)
+                .query_async::<_, ()>(&mut redis_conn),
+        )
+        .await;
 
         // Read current value
-        let cached: Option<String> = redis::cmd("GET")
-            .arg(key)
-            .query_async(&mut redis_conn)
-            .await?;
+        let cached: Option<String> =
+            run_with_timeout(redis::cmd("GET").arg(key).query_async(&mut redis_conn)).await?;
 
         if let Some(cached_json) = cached {
             match serde_json::from_str::<VersionedCacheEntry<T>>(&cached_json) {
@@ -117,10 +118,12 @@ where
                 }
                 Err(_) => {
                     // Corrupted cache entry, delete it
-                    let _ = redis::cmd("DEL")
-                        .arg(key)
-                        .query_async::<_, ()>(&mut redis_conn)
-                        .await;
+                    let _ = run_with_timeout(
+                        redis::cmd("DEL")
+                            .arg(key)
+                            .query_async::<_, ()>(&mut redis_conn),
+                    )
+                    .await;
                 }
             }
         }
@@ -131,25 +134,24 @@ where
         let entry_json = serde_json::to_string(&entry)?;
 
         // Use MULTI/EXEC to atomically set if value hasn't changed
-        redis::cmd("MULTI")
-            .query_async::<_, ()>(&mut redis_conn)
-            .await?;
+        run_with_timeout(redis::cmd("MULTI").query_async::<_, ()>(&mut redis_conn)).await?;
 
-        redis::cmd("SET")
-            .arg(key)
-            .arg(&entry_json)
-            .arg("EX")
-            .arg(ttl_secs as usize)
-            .query_async::<_, ()>(&mut redis_conn)
-            .await?;
+        run_with_timeout(
+            redis::cmd("SET")
+                .arg(key)
+                .arg(&entry_json)
+                .arg("EX")
+                .arg(ttl_secs as usize)
+                .query_async::<_, ()>(&mut redis_conn),
+        )
+        .await?;
 
         // EXEC will return empty list if watched key changed (another request modified it)
-        let exec_result: Vec<String> = redis::cmd("EXEC").query_async(&mut redis_conn).await?;
+        let exec_result: Vec<String> =
+            run_with_timeout(redis::cmd("EXEC").query_async(&mut redis_conn)).await?;
 
         // Unwatch for next attempt
-        let _ = redis::cmd("UNWATCH")
-            .query_async::<_, ()>(&mut redis_conn)
-            .await;
+        let _ = run_with_timeout(redis::cmd("UNWATCH").query_async::<_, ()>(&mut redis_conn)).await;
 
         if !exec_result.is_empty() {
             // Transaction succeeded, we wrote the value
@@ -182,11 +184,13 @@ pub async fn invalidate_with_version(
     "#;
 
     let now = Utc::now().timestamp();
-    redis::Script::new(script)
-        .key(key)
-        .arg(now)
-        .invoke_async::<_, i64>(&mut redis_conn)
-        .await?;
+    run_with_timeout(
+        redis::Script::new(script)
+            .key(key)
+            .arg(now)
+            .invoke_async::<_, i64>(&mut redis_conn),
+    )
+    .await?;
 
     Ok(())
 }
@@ -200,10 +204,12 @@ pub async fn get_invalidation_timestamp(
 ) -> Result<Option<i64>, Box<dyn std::error::Error>> {
     let mut redis_conn = redis.clone();
 
-    let invalidated_at: Option<String> = redis::cmd("GET")
-        .arg(format!("{}:invalidated_at", key))
-        .query_async(&mut redis_conn)
-        .await?;
+    let invalidated_at: Option<String> = run_with_timeout(
+        redis::cmd("GET")
+            .arg(format!("{}:invalidated_at", key))
+            .query_async(&mut redis_conn),
+    )
+    .await?;
 
     if let Some(ts_str) = invalidated_at {
         if let Ok(ts) = ts_str.parse::<i64>() {
@@ -245,6 +251,7 @@ mod tests {
     fn test_versioned_cache_entry_update() {
         let entry = VersionedCacheEntry::new("old_data".to_string());
         let old_version = entry.version;
+        let previous_updated_at = entry.updated_at;
 
         std::thread::sleep(std::time::Duration::from_millis(10));
 
@@ -252,7 +259,7 @@ mod tests {
 
         assert_eq!(updated.data, "new_data".to_string());
         assert!(updated.version > old_version); // Version should increment
-        assert!(updated.updated_at >= entry.updated_at);
+        assert!(updated.updated_at >= previous_updated_at);
     }
 
     #[test]

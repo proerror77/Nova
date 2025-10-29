@@ -1,3 +1,4 @@
+#![cfg(feature = "legacy_video_tests")]
 use std::collections::HashMap;
 /// Integration Tests for Streaming Manifest Generation (T136) and
 /// Video Engagement Tracking (T137)

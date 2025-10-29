@@ -7,6 +7,7 @@ use crate::error::{AppError, Result};
 use crate::middleware::jwt_auth::UserId;
 use crate::middleware::CircuitBreaker;
 use crate::services::graph::GraphService;
+use crate::utils::redis_timeout::run_with_timeout;
 
 /// Discover handler state with Circuit Breaker protection
 pub struct DiscoverHandlerState {
@@ -125,11 +126,13 @@ pub async fn get_suggested_users(
                                 let mut conn_clone = conn.clone();
                                 let key = redis_key.clone();
                                 async move {
-                                    redis::cmd("GET")
-                                        .arg(&key)
-                                        .query_async::<_, Option<String>>(&mut conn_clone)
-                                        .await
-                                        .map_err(|e| AppError::Internal(e.to_string()))
+                                    run_with_timeout(
+                                        redis::cmd("GET")
+                                            .arg(&key)
+                                            .query_async::<_, Option<String>>(&mut conn_clone),
+                                    )
+                                    .await
+                                    .map_err(|e| AppError::Internal(e.to_string()))
                                 }
                             })
                             .await
@@ -180,11 +183,13 @@ pub async fn get_suggested_users(
                                 let mut conn_clone = conn.clone();
                                 let key = redis_key.clone();
                                 async move {
-                                    redis::cmd("GET")
-                                        .arg(&key)
-                                        .query_async::<_, Option<String>>(&mut conn_clone)
-                                        .await
-                                        .map_err(|e| AppError::Internal(e.to_string()))
+                                    run_with_timeout(
+                                        redis::cmd("GET")
+                                            .arg(&key)
+                                            .query_async::<_, Option<String>>(&mut conn_clone),
+                                    )
+                                    .await
+                                    .map_err(|e| AppError::Internal(e.to_string()))
                                 }
                             })
                             .await
@@ -212,11 +217,13 @@ pub async fn get_suggested_users(
                 let mut conn_clone = conn.clone();
                 let key = redis_key.clone();
                 async move {
-                    redis::cmd("GET")
-                        .arg(&key)
-                        .query_async::<_, Option<String>>(&mut conn_clone)
-                        .await
-                        .map_err(|e| AppError::Internal(e.to_string()))
+                    run_with_timeout(
+                        redis::cmd("GET")
+                            .arg(&key)
+                            .query_async::<_, Option<String>>(&mut conn_clone),
+                    )
+                    .await
+                    .map_err(|e| AppError::Internal(e.to_string()))
                 }
             })
             .await

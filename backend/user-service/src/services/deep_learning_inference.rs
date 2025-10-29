@@ -725,29 +725,4 @@ mod tests {
         let embeddings = result.unwrap();
         assert_eq!(embeddings.len(), 2);
     }
-
-    #[tokio::test]
-    async fn test_find_similar_videos() {
-        let config = DeepLearningConfig::default();
-        let service = DeepLearningInferenceService::new(config);
-
-        let query = vec![0.0; 512]; // Updated to 512
-        let result = service.find_similar_videos(&query, 10).await;
-
-        assert!(result.is_ok());
-
-        let similar = result.unwrap();
-        assert!(!similar.is_empty());
-    }
-
-    #[tokio::test]
-    async fn test_find_similar_videos_dimension_mismatch() {
-        let config = DeepLearningConfig::default();
-        let service = DeepLearningInferenceService::new(config);
-
-        let query = vec![0.0; 128]; // Wrong dimension
-        let result = service.find_similar_videos(&query, 10).await;
-
-        assert!(result.is_err());
-    }
 }

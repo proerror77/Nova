@@ -73,13 +73,21 @@ impl ResponseError for AppError {
     fn error_response(&self) -> HttpResponse {
         let status = self.status_code();
         let (error_type, code) = match self {
-            AppError::DatabaseError(_) => ("server_error", error_types::error_codes::DATABASE_ERROR),
+            AppError::DatabaseError(_) => {
+                ("server_error", error_types::error_codes::DATABASE_ERROR)
+            }
             AppError::CacheError(_) => ("server_error", error_types::error_codes::CACHE_ERROR),
             AppError::ValidationError(_) => ("validation_error", "VALIDATION_ERROR"),
             AppError::NotFound(_) => ("not_found_error", error_types::error_codes::MEDIA_NOT_FOUND),
-            AppError::Unauthorized(_) => ("authentication_error", error_types::error_codes::INVALID_CREDENTIALS),
+            AppError::Unauthorized(_) => (
+                "authentication_error",
+                error_types::error_codes::INVALID_CREDENTIALS,
+            ),
             AppError::Forbidden(_) => ("authorization_error", "AUTHORIZATION_ERROR"),
-            AppError::Internal(_) => ("server_error", error_types::error_codes::INTERNAL_SERVER_ERROR),
+            AppError::Internal(_) => (
+                "server_error",
+                error_types::error_codes::INTERNAL_SERVER_ERROR,
+            ),
             AppError::BadRequest(_) => ("validation_error", "INVALID_REQUEST"),
             AppError::Conflict(_) => ("conflict_error", error_types::error_codes::VERSION_CONFLICT),
         };

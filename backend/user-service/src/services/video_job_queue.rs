@@ -43,7 +43,7 @@ pub type VideoJobReceiver = mpsc::Receiver<VideoProcessingJob>;
 /// * `capacity` - Maximum number of jobs that can be queued (buffered channel)
 ///
 /// # Example
-/// ```
+/// ```ignore
 /// let (sender, receiver) = create_video_job_queue(100);
 /// ```
 pub fn create_video_job_queue(capacity: usize) -> (VideoJobSender, VideoJobReceiver) {

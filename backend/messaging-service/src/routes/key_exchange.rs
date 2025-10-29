@@ -59,9 +59,10 @@ pub async fn store_device_public_key(
     // For now, we'll store a placeholder that represents encrypted data
     let private_key_encrypted = format!("encrypted_{}", Uuid::new_v4());
 
-    let key_exchange = state.key_exchange_service.as_ref().ok_or_else(|| {
-        AppError::Internal
-    })?;
+    let key_exchange = state
+        .key_exchange_service
+        .as_ref()
+        .ok_or_else(|| AppError::Internal)?;
 
     key_exchange
         .store_device_key(
@@ -81,9 +82,10 @@ pub async fn get_peer_public_key(
     User { id: _user_id, .. }: User,
     Path((_conversation_id, peer_user_id, peer_device_id)): Path<(Uuid, Uuid, String)>,
 ) -> Result<Json<KeyExchangeResponse>, AppError> {
-    let key_exchange = state.key_exchange_service.as_ref().ok_or_else(|| {
-        AppError::Internal
-    })?;
+    let key_exchange = state
+        .key_exchange_service
+        .as_ref()
+        .ok_or_else(|| AppError::Internal)?;
 
     // Verify that user is part of the conversation
     // This would normally be done by checking the conversation membership
@@ -112,9 +114,10 @@ pub async fn complete_key_exchange(
     Path(conversation_id): Path<Uuid>,
     Json(payload): Json<CompleteKeyExchangeRequest>,
 ) -> Result<Json<KeyExchangeMetadataResponse>, AppError> {
-    let key_exchange = state.key_exchange_service.as_ref().ok_or_else(|| {
-        AppError::Internal
-    })?;
+    let key_exchange = state
+        .key_exchange_service
+        .as_ref()
+        .ok_or_else(|| AppError::Internal)?;
 
     // Decode the shared secret hash
     let shared_secret_hash = general_purpose::STANDARD
@@ -132,9 +135,7 @@ pub async fn complete_key_exchange(
         .await?;
 
     // Get metadata about key exchanges for this conversation
-    let exchanges = key_exchange
-        .list_key_exchanges(conversation_id)
-        .await?;
+    let exchanges = key_exchange.list_key_exchanges(conversation_id).await?;
 
     let last_exchange_at = exchanges.first().map(|e| e.created_at);
 
@@ -160,13 +161,12 @@ pub async fn list_conversation_key_exchanges(
     User { id: _user_id, .. }: User,
     Path(conversation_id): Path<Uuid>,
 ) -> Result<Json<Vec<KeyExchangeMetadata>>, AppError> {
-    let key_exchange = state.key_exchange_service.as_ref().ok_or_else(|| {
-        AppError::Internal
-    })?;
+    let key_exchange = state
+        .key_exchange_service
+        .as_ref()
+        .ok_or_else(|| AppError::Internal)?;
 
-    let exchanges = key_exchange
-        .list_key_exchanges(conversation_id)
-        .await?;
+    let exchanges = key_exchange.list_key_exchanges(conversation_id).await?;
 
     let metadata = exchanges
         .into_iter()

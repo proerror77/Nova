@@ -38,11 +38,31 @@ enum AppError {
 impl IntoResponse for AppError {
     fn into_response(self) -> axum::response::Response {
         let (status, error_type, code) = match &self {
-            AppError::Database(_) => (StatusCode::INTERNAL_SERVER_ERROR, "server_error", error_types::error_codes::DATABASE_ERROR),
-            AppError::Config(_) => (StatusCode::INTERNAL_SERVER_ERROR, "server_error", error_types::error_codes::INTERNAL_SERVER_ERROR),
-            AppError::Redis(_) => (StatusCode::INTERNAL_SERVER_ERROR, "server_error", error_types::error_codes::CACHE_ERROR),
-            AppError::Serialization(_) => (StatusCode::INTERNAL_SERVER_ERROR, "server_error", error_types::error_codes::INTERNAL_SERVER_ERROR),
-            AppError::SearchBackend(_) => (StatusCode::BAD_GATEWAY, "server_error", error_types::error_codes::SERVICE_UNAVAILABLE),
+            AppError::Database(_) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "server_error",
+                error_types::error_codes::DATABASE_ERROR,
+            ),
+            AppError::Config(_) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "server_error",
+                error_types::error_codes::INTERNAL_SERVER_ERROR,
+            ),
+            AppError::Redis(_) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "server_error",
+                error_types::error_codes::CACHE_ERROR,
+            ),
+            AppError::Serialization(_) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "server_error",
+                error_types::error_codes::INTERNAL_SERVER_ERROR,
+            ),
+            AppError::SearchBackend(_) => (
+                StatusCode::BAD_GATEWAY,
+                "server_error",
+                error_types::error_codes::SERVICE_UNAVAILABLE,
+            ),
         };
 
         let message = self.to_string();

@@ -34,8 +34,8 @@ impl EncryptionService {
     ) -> Result<(Vec<u8>, [u8; 24]), AppError> {
         let key = self.derive_conversation_key(conversation_id);
         let nonce = generate_nonce();
-        let ciphertext =
-            encrypt_at_rest(plaintext, &key, &nonce).map_err(|e| AppError::Encryption(e.to_string()))?;
+        let ciphertext = encrypt_at_rest(plaintext, &key, &nonce)
+            .map_err(|e| AppError::Encryption(e.to_string()))?;
         Ok((ciphertext, nonce))
     }
 

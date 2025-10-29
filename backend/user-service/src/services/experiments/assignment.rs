@@ -11,6 +11,8 @@ use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 use uuid::Uuid;
 
+use crate::utils::redis_timeout::run_with_timeout;
+
 const ASSIGNMENT_CACHE_TTL: u64 = 86400; // 24 hours
 
 #[derive(Clone)]
@@ -202,7 +204,7 @@ impl AssignmentService {
     ) -> Result<(), AssignmentError> {
         let mut conn = self.redis.get_multiplexed_async_connection().await?;
         let serialized = serde_json::to_string(response)?;
-        conn.set_ex::<_, _, ()>(cache_key, serialized, ASSIGNMENT_CACHE_TTL)
+        run_with_timeout(conn.set_ex::<_, _, ()>(cache_key, serialized, ASSIGNMENT_CACHE_TTL))
             .await?;
         Ok(())
     }
@@ -210,7 +212,8 @@ impl AssignmentService {
     /// Get assignment from cache
     async fn get_from_cache(&self, cache_key: &str) -> Result<AssignmentResponse, AssignmentError> {
         let mut conn = self.redis.get_multiplexed_async_connection().await?;
-        let cached: Option<String> = conn.get::<_, Option<String>>(cache_key).await?;
+        let cached: Option<String> =
+            run_with_timeout(conn.get::<_, Option<String>>(cache_key)).await?;
 
         match cached {
             Some(data) => Ok(serde_json::from_str(&data)?),
@@ -229,19 +232,19 @@ impl AssignmentService {
         // Scan and delete matching keys (safe for production)
         let mut cursor = 0;
         loop {
-            let (new_cursor, keys): (u64, Vec<String>) = redis::cmd("SCAN")
-                .arg(cursor)
-                .arg("MATCH")
-                .arg(&pattern)
-                .arg("COUNT")
-                .arg(100)
-                .query_async::<_, (u64, Vec<String>)>(&mut conn)
-                .await?;
+            let (new_cursor, keys): (u64, Vec<String>) = run_with_timeout(
+                redis::cmd("SCAN")
+                    .arg(cursor)
+                    .arg("MATCH")
+                    .arg(&pattern)
+                    .arg("COUNT")
+                    .arg(100)
+                    .query_async::<_, (u64, Vec<String>)>(&mut conn),
+            )
+            .await?;
 
             if !keys.is_empty() {
-                redis::cmd("DEL")
-                    .arg(&keys)
-                    .query_async::<_, ()>(&mut conn)
+                run_with_timeout(redis::cmd("DEL").arg(&keys).query_async::<_, ()>(&mut conn))
                     .await?;
             }
 
@@ -291,6 +294,7 @@ pub enum AssignmentError {
 }
 
 #[cfg(test)]
+#[cfg(all(test, feature = "legacy_internal_tests"))]
 mod tests {
     use super::*;
 

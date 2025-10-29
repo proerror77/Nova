@@ -39,6 +39,7 @@ image = "0.24"
 bytes = "1.5"
 crypto-core = { path = "../libs/crypto-core" }
 error-types = { path = "../libs/error-types" }
+redis-utils = { path = "../libs/redis-utils" }
 aws-sdk-s3 = "1.9"
 aws-config = "1.1"
 

@@ -6,11 +6,14 @@ use crate::grpc::nova::content::content_service_client::ContentServiceClient as 
 use crate::grpc::nova::content::*;
 use crate::grpc::nova::media::media_service_client::MediaServiceClient as TonicMediaServiceClient;
 use crate::grpc::nova::media::*;
+use std::future::Future;
 use std::ops::{Deref, DerefMut};
+use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
-use tonic::transport::Channel;
+use tokio::time::sleep;
+use tonic::transport::{Channel, Endpoint};
 
 /// Lightweight async pool for tonic gRPC clients.
 struct GrpcClientPool<T> {
@@ -56,6 +59,36 @@ impl<T> GrpcClientPool<T> {
     }
 }
 
+async fn connect_with_retry(
+    endpoint: Endpoint,
+    attempts: u32,
+    backoff: Duration,
+) -> Result<Channel, tonic::transport::Error> {
+    let max_attempts = attempts.max(1);
+    let mut last_err = None;
+
+    for attempt in 0..max_attempts {
+        match endpoint.clone().connect().await {
+            Ok(channel) => return Ok(channel),
+            Err(err) => {
+                last_err = Some(err);
+                if attempt + 1 < max_attempts {
+                    let sleep_duration =
+                        backoff.checked_mul((attempt + 1) as u32).unwrap_or(backoff);
+                    tracing::warn!(
+                        attempt = attempt + 1,
+                        max_attempts,
+                        "gRPC connection attempt failed; retrying"
+                    );
+                    sleep(sleep_duration).await;
+                }
+            }
+        }
+    }
+
+    Err(last_err.expect("connect_with_retry should return error when attempts > 0"))
+}
+
 struct GrpcClientGuard<T> {
     pool: Arc<GrpcClientPool<T>>,
     client: Option<T>,
@@ -99,6 +132,8 @@ pub struct ContentServiceClient {
     client_pool: Arc<GrpcClientPool<TonicContentServiceClient<Channel>>>,
     health_checker: Arc<HealthChecker>,
     request_timeout: Duration,
+    retry_attempts: u32,
+    retry_backoff: Duration,
 }
 
 impl ContentServiceClient {
@@ -113,13 +148,24 @@ impl ContentServiceClient {
         );
 
         let pool_size = config.pool_size();
-        let endpoint = Channel::from_shared(config.content_service_url.clone())?
+        let endpoint = Endpoint::from_shared(config.content_service_url.clone())?
             .connect_timeout(config.connection_timeout())
-            .tcp_nodelay(true);
+            .timeout(config.connection_timeout())
+            .http2_keep_alive_interval(config.http2_keep_alive_interval())
+            .keep_alive_while_idle(true)
+            .tcp_keepalive(Some(config.http2_keep_alive_interval()))
+            .keep_alive_timeout(config.connection_timeout())
+            .tcp_nodelay(true)
+            .concurrency_limit(config.max_concurrent_streams as usize);
 
         let mut clients = Vec::with_capacity(pool_size);
         for _ in 0..pool_size {
-            let channel = endpoint.clone().connect().await?;
+            let channel = connect_with_retry(
+                endpoint.clone(),
+                config.connect_retry_attempts(),
+                config.connect_retry_backoff(),
+            )
+            .await?;
             clients.push(TonicContentServiceClient::new(channel));
         }
         let client_pool = GrpcClientPool::new(clients);
@@ -133,6 +179,8 @@ impl ContentServiceClient {
             client_pool,
             health_checker,
             request_timeout: config.request_timeout(),
+            retry_attempts: config.connect_retry_attempts(),
+            retry_backoff: config.connect_retry_backoff(),
         })
     }
 
@@ -141,25 +189,41 @@ impl ContentServiceClient {
         &self,
         request: GetFeedRequest,
     ) -> Result<GetFeedResponse, tonic::Status> {
-        let mut client = self.client_pool.acquire().await;
-        let mut req = tonic::Request::new(request);
-        req.set_timeout(self.request_timeout);
+        let attempts = self.retry_attempts.max(1);
+        let mut last_err: Option<tonic::Status> = None;
 
-        match client.get_feed(req).await {
-            Ok(response) => {
-                self.health_checker
-                    .set_content_service_health(HealthStatus::Healthy)
-                    .await;
-                Ok(response.into_inner())
+        for attempt in 0..attempts {
+            let mut client = self.client_pool.acquire().await;
+            let mut req = tonic::Request::new(request.clone());
+            req.set_timeout(self.request_timeout);
+
+            match client.get_feed(req).await {
+                Ok(response) => {
+                    self.health_checker
+                        .set_content_service_health(HealthStatus::Healthy)
+                        .await;
+                    return Ok(response.into_inner());
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        attempt = attempt + 1,
+                        max_attempts = attempts,
+                        "Content-service get_feed failed: {}",
+                        e
+                    );
+                    self.health_checker
+                        .set_content_service_health(HealthStatus::Unavailable)
+                        .await;
+                    last_err = Some(e);
+                }
             }
-            Err(e) => {
-                tracing::error!("Error fetching feed from content-service: {}", e);
-                self.health_checker
-                    .set_content_service_health(HealthStatus::Unavailable)
-                    .await;
-                Err(e)
+
+            if attempt + 1 < attempts {
+                sleep(self.retry_backoff).await;
             }
         }
+
+        Err(last_err.unwrap_or_else(|| tonic::Status::unavailable("content-service unavailable")))
     }
 
     /// Invalidate feed cache/event via content-service
@@ -167,25 +231,41 @@ impl ContentServiceClient {
         &self,
         request: InvalidateFeedEventRequest,
     ) -> Result<InvalidateFeedResponse, tonic::Status> {
-        let mut client = self.client_pool.acquire().await;
-        let mut req = tonic::Request::new(request);
-        req.set_timeout(self.request_timeout);
+        let attempts = self.retry_attempts.max(1);
+        let mut last_err: Option<tonic::Status> = None;
 
-        match client.invalidate_feed_event(req).await {
-            Ok(response) => {
-                self.health_checker
-                    .set_content_service_health(HealthStatus::Healthy)
-                    .await;
-                Ok(response.into_inner())
+        for attempt in 0..attempts {
+            let mut client = self.client_pool.acquire().await;
+            let mut req = tonic::Request::new(request.clone());
+            req.set_timeout(self.request_timeout);
+
+            match client.invalidate_feed_event(req).await {
+                Ok(response) => {
+                    self.health_checker
+                        .set_content_service_health(HealthStatus::Healthy)
+                        .await;
+                    return Ok(response.into_inner());
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        attempt = attempt + 1,
+                        max_attempts = attempts,
+                        "Content-service invalidate_feed_event failed: {}",
+                        e
+                    );
+                    self.health_checker
+                        .set_content_service_health(HealthStatus::Unavailable)
+                        .await;
+                    last_err = Some(e);
+                }
             }
-            Err(e) => {
-                tracing::error!("Error invalidating feed via content-service: {}", e);
-                self.health_checker
-                    .set_content_service_health(HealthStatus::Unavailable)
-                    .await;
-                Err(e)
+
+            if attempt + 1 < attempts {
+                sleep(self.retry_backoff).await;
             }
         }
+
+        Err(last_err.unwrap_or_else(|| tonic::Status::unavailable("content-service unavailable")))
     }
 
     /// Batch invalidate feed caches via content-service
@@ -193,25 +273,41 @@ impl ContentServiceClient {
         &self,
         request: BatchInvalidateFeedRequest,
     ) -> Result<InvalidateFeedResponse, tonic::Status> {
-        let mut client = self.client_pool.acquire().await;
-        let mut req = tonic::Request::new(request);
-        req.set_timeout(self.request_timeout);
+        let attempts = self.retry_attempts.max(1);
+        let mut last_err: Option<tonic::Status> = None;
 
-        match client.batch_invalidate_feed(req).await {
-            Ok(response) => {
-                self.health_checker
-                    .set_content_service_health(HealthStatus::Healthy)
-                    .await;
-                Ok(response.into_inner())
+        for attempt in 0..attempts {
+            let mut client = self.client_pool.acquire().await;
+            let mut req = tonic::Request::new(request.clone());
+            req.set_timeout(self.request_timeout);
+
+            match client.batch_invalidate_feed(req).await {
+                Ok(response) => {
+                    self.health_checker
+                        .set_content_service_health(HealthStatus::Healthy)
+                        .await;
+                    return Ok(response.into_inner());
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        attempt = attempt + 1,
+                        max_attempts = attempts,
+                        "Content-service batch_invalidate_feed failed: {}",
+                        e
+                    );
+                    self.health_checker
+                        .set_content_service_health(HealthStatus::Unavailable)
+                        .await;
+                    last_err = Some(e);
+                }
             }
-            Err(e) => {
-                tracing::error!("Error batch invalidating feed via content-service: {}", e);
-                self.health_checker
-                    .set_content_service_health(HealthStatus::Unavailable)
-                    .await;
-                Err(e)
+
+            if attempt + 1 < attempts {
+                sleep(self.retry_backoff).await;
             }
         }
+
+        Err(last_err.unwrap_or_else(|| tonic::Status::unavailable("content-service unavailable")))
     }
 
     /// Warm feed cache via content-service
@@ -219,25 +315,41 @@ impl ContentServiceClient {
         &self,
         request: WarmFeedRequest,
     ) -> Result<InvalidateFeedResponse, tonic::Status> {
-        let mut client = self.client_pool.acquire().await;
-        let mut req = tonic::Request::new(request);
-        req.set_timeout(self.request_timeout);
+        let attempts = self.retry_attempts.max(1);
+        let mut last_err: Option<tonic::Status> = None;
 
-        match client.warm_feed(req).await {
-            Ok(response) => {
-                self.health_checker
-                    .set_content_service_health(HealthStatus::Healthy)
-                    .await;
-                Ok(response.into_inner())
+        for attempt in 0..attempts {
+            let mut client = self.client_pool.acquire().await;
+            let mut req = tonic::Request::new(request.clone());
+            req.set_timeout(self.request_timeout);
+
+            match client.warm_feed(req).await {
+                Ok(response) => {
+                    self.health_checker
+                        .set_content_service_health(HealthStatus::Healthy)
+                        .await;
+                    return Ok(response.into_inner());
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        attempt = attempt + 1,
+                        max_attempts = attempts,
+                        "Content-service warm_feed failed: {}",
+                        e
+                    );
+                    self.health_checker
+                        .set_content_service_health(HealthStatus::Unavailable)
+                        .await;
+                    last_err = Some(e);
+                }
             }
-            Err(e) => {
-                tracing::error!("Error warming feed via content-service: {}", e);
-                self.health_checker
-                    .set_content_service_health(HealthStatus::Unavailable)
-                    .await;
-                Err(e)
+
+            if attempt + 1 < attempts {
+                sleep(self.retry_backoff).await;
             }
         }
+
+        Err(last_err.unwrap_or_else(|| tonic::Status::unavailable("content-service unavailable")))
     }
 
     /// Get a post by ID
@@ -396,6 +508,8 @@ pub struct MediaServiceClient {
     client_pool: Arc<GrpcClientPool<TonicMediaServiceClient<Channel>>>,
     health_checker: Arc<HealthChecker>,
     request_timeout: Duration,
+    retry_attempts: u32,
+    retry_backoff: Duration,
 }
 
 impl MediaServiceClient {
@@ -410,13 +524,24 @@ impl MediaServiceClient {
         );
 
         let pool_size = config.pool_size();
-        let endpoint = Channel::from_shared(config.media_service_url.clone())?
+        let endpoint = Endpoint::from_shared(config.media_service_url.clone())?
             .connect_timeout(config.connection_timeout())
-            .tcp_nodelay(true);
+            .timeout(config.connection_timeout())
+            .http2_keep_alive_interval(config.http2_keep_alive_interval())
+            .keep_alive_while_idle(true)
+            .tcp_keepalive(Some(config.http2_keep_alive_interval()))
+            .keep_alive_timeout(config.connection_timeout())
+            .tcp_nodelay(true)
+            .concurrency_limit(config.max_concurrent_streams as usize);
 
         let mut clients = Vec::with_capacity(pool_size);
         for _ in 0..pool_size {
-            let channel = endpoint.clone().connect().await?;
+            let channel = connect_with_retry(
+                endpoint.clone(),
+                config.connect_retry_attempts(),
+                config.connect_retry_backoff(),
+            )
+            .await?;
             clients.push(TonicMediaServiceClient::new(channel));
         }
         let client_pool = GrpcClientPool::new(clients);
@@ -430,31 +555,72 @@ impl MediaServiceClient {
             client_pool,
             health_checker,
             request_timeout: config.request_timeout(),
+            retry_attempts: config.connect_retry_attempts(),
+            retry_backoff: config.connect_retry_backoff(),
         })
+    }
+
+    async fn call_with_retry<Req, Resp, F>(
+        &self,
+        request: Req,
+        call: F,
+        op_name: &str,
+    ) -> Result<Resp, tonic::Status>
+    where
+        Req: Clone,
+        F: for<'a> Fn(
+            &'a mut TonicMediaServiceClient<Channel>,
+            tonic::Request<Req>,
+        ) -> Pin<
+            Box<dyn Future<Output = Result<tonic::Response<Resp>, tonic::Status>> + Send + 'a>,
+        >,
+    {
+        let attempts = self.retry_attempts.max(1);
+        let mut last_err: Option<tonic::Status> = None;
+
+        for attempt in 0..attempts {
+            let mut client = self.client_pool.acquire().await;
+            let mut req = tonic::Request::new(request.clone());
+            req.set_timeout(self.request_timeout);
+
+            match call(&mut client, req).await {
+                Ok(response) => {
+                    self.health_checker
+                        .set_media_service_health(HealthStatus::Healthy)
+                        .await;
+                    return Ok(response.into_inner());
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        attempt = attempt + 1,
+                        max_attempts = attempts,
+                        "Media-service {} failed: {}",
+                        op_name,
+                        e
+                    );
+                    self.health_checker
+                        .set_media_service_health(HealthStatus::Unavailable)
+                        .await;
+                    last_err = Some(e);
+                }
+            }
+
+            if attempt + 1 < attempts {
+                sleep(self.retry_backoff * (attempt + 1)).await;
+            }
+        }
+
+        Err(last_err.unwrap_or_else(|| tonic::Status::unavailable("media-service unavailable")))
     }
 
     /// Get a video by ID
     pub async fn get_video(&self, video_id: String) -> Result<GetVideoResponse, tonic::Status> {
-        let mut client = self.client_pool.acquire().await;
-        let mut request = tonic::Request::new(GetVideoRequest { video_id });
-        request.set_timeout(self.request_timeout);
-
-        match client.get_video(request).await {
-            Ok(response) => {
-                tracing::debug!("Got video response from media-service");
-                self.health_checker
-                    .set_media_service_health(HealthStatus::Healthy)
-                    .await;
-                Ok(response.into_inner())
-            }
-            Err(e) => {
-                tracing::error!("Error getting video from media-service: {}", e);
-                self.health_checker
-                    .set_media_service_health(HealthStatus::Unavailable)
-                    .await;
-                Err(e)
-            }
-        }
+        self.call_with_retry(
+            GetVideoRequest { video_id },
+            |client, req| Box::pin(async move { client.get_video(req).await }),
+            "get_video",
+        )
+        .await
     }
 
     /// Get videos for a user
@@ -463,26 +629,12 @@ impl MediaServiceClient {
         user_id: String,
         limit: i32,
     ) -> Result<GetUserVideosResponse, tonic::Status> {
-        let mut client = self.client_pool.acquire().await;
-        let mut request = tonic::Request::new(GetUserVideosRequest { user_id, limit });
-        request.set_timeout(self.request_timeout);
-
-        match client.get_user_videos(request).await {
-            Ok(response) => {
-                tracing::debug!("Got user videos response from media-service");
-                self.health_checker
-                    .set_media_service_health(HealthStatus::Healthy)
-                    .await;
-                Ok(response.into_inner())
-            }
-            Err(e) => {
-                tracing::error!("Error getting user videos from media-service: {}", e);
-                self.health_checker
-                    .set_media_service_health(HealthStatus::Unavailable)
-                    .await;
-                Err(e)
-            }
-        }
+        self.call_with_retry(
+            GetUserVideosRequest { user_id, limit },
+            |client, req| Box::pin(async move { client.get_user_videos(req).await }),
+            "get_user_videos",
+        )
+        .await
     }
 
     /// Create a new video
@@ -493,55 +645,27 @@ impl MediaServiceClient {
         description: String,
         visibility: String,
     ) -> Result<CreateVideoResponse, tonic::Status> {
-        let mut client = self.client_pool.acquire().await;
-        let mut request = tonic::Request::new(CreateVideoRequest {
-            creator_id,
-            title,
-            description,
-            visibility,
-        });
-        request.set_timeout(self.request_timeout);
-
-        match client.create_video(request).await {
-            Ok(response) => {
-                tracing::debug!("Video created via media-service gRPC");
-                self.health_checker
-                    .set_media_service_health(HealthStatus::Healthy)
-                    .await;
-                Ok(response.into_inner())
-            }
-            Err(e) => {
-                tracing::error!("Error creating video via media-service: {}", e);
-                self.health_checker
-                    .set_media_service_health(HealthStatus::Unavailable)
-                    .await;
-                Err(e)
-            }
-        }
+        self.call_with_retry(
+            CreateVideoRequest {
+                creator_id,
+                title,
+                description,
+                visibility,
+            },
+            |client, req| Box::pin(async move { client.create_video(req).await }),
+            "create_video",
+        )
+        .await
     }
 
     /// Get upload details
     pub async fn get_upload(&self, upload_id: String) -> Result<GetUploadResponse, tonic::Status> {
-        let mut client = self.client_pool.acquire().await;
-        let mut request = tonic::Request::new(GetUploadRequest { upload_id });
-        request.set_timeout(self.request_timeout);
-
-        match client.get_upload(request).await {
-            Ok(response) => {
-                tracing::debug!("Got upload response from media-service");
-                self.health_checker
-                    .set_media_service_health(HealthStatus::Healthy)
-                    .await;
-                Ok(response.into_inner())
-            }
-            Err(e) => {
-                tracing::error!("Error getting upload from media-service: {}", e);
-                self.health_checker
-                    .set_media_service_health(HealthStatus::Unavailable)
-                    .await;
-                Err(e)
-            }
-        }
+        self.call_with_retry(
+            GetUploadRequest { upload_id },
+            |client, req| Box::pin(async move { client.get_upload(req).await }),
+            "get_upload",
+        )
+        .await
     }
 
     /// Update upload progress
@@ -550,29 +674,15 @@ impl MediaServiceClient {
         upload_id: String,
         uploaded_size: i64,
     ) -> Result<UpdateUploadProgressResponse, tonic::Status> {
-        let mut client = self.client_pool.acquire().await;
-        let mut request = tonic::Request::new(UpdateUploadProgressRequest {
-            upload_id,
-            uploaded_size,
-        });
-        request.set_timeout(self.request_timeout);
-
-        match client.update_upload_progress(request).await {
-            Ok(response) => {
-                tracing::debug!("Upload progress updated via media-service gRPC");
-                self.health_checker
-                    .set_media_service_health(HealthStatus::Healthy)
-                    .await;
-                Ok(response.into_inner())
-            }
-            Err(e) => {
-                tracing::error!("Error updating upload progress via media-service: {}", e);
-                self.health_checker
-                    .set_media_service_health(HealthStatus::Unavailable)
-                    .await;
-                Err(e)
-            }
-        }
+        self.call_with_retry(
+            UpdateUploadProgressRequest {
+                upload_id,
+                uploaded_size,
+            },
+            |client, req| Box::pin(async move { client.update_upload_progress(req).await }),
+            "update_upload_progress",
+        )
+        .await
     }
 
     /// Start a new upload
@@ -583,31 +693,17 @@ impl MediaServiceClient {
         file_size: i64,
         content_type: String,
     ) -> Result<StartUploadResponse, tonic::Status> {
-        let mut client = self.client_pool.acquire().await;
-        let mut request = tonic::Request::new(StartUploadRequest {
-            user_id,
-            file_name,
-            file_size,
-            content_type,
-        });
-        request.set_timeout(self.request_timeout);
-
-        match client.start_upload(request).await {
-            Ok(response) => {
-                tracing::debug!("Upload started via media-service gRPC");
-                self.health_checker
-                    .set_media_service_health(HealthStatus::Healthy)
-                    .await;
-                Ok(response.into_inner())
-            }
-            Err(e) => {
-                tracing::error!("Error starting upload via media-service: {}", e);
-                self.health_checker
-                    .set_media_service_health(HealthStatus::Unavailable)
-                    .await;
-                Err(e)
-            }
-        }
+        self.call_with_retry(
+            StartUploadRequest {
+                user_id,
+                file_name,
+                file_size,
+                content_type,
+            },
+            |client, req| Box::pin(async move { client.start_upload(req).await }),
+            "start_upload",
+        )
+        .await
     }
 
     /// Complete an upload
@@ -615,25 +711,11 @@ impl MediaServiceClient {
         &self,
         upload_id: String,
     ) -> Result<CompleteUploadResponse, tonic::Status> {
-        let mut client = self.client_pool.acquire().await;
-        let mut request = tonic::Request::new(CompleteUploadRequest { upload_id });
-        request.set_timeout(self.request_timeout);
-
-        match client.complete_upload(request).await {
-            Ok(response) => {
-                tracing::debug!("Upload completed via media-service gRPC");
-                self.health_checker
-                    .set_media_service_health(HealthStatus::Healthy)
-                    .await;
-                Ok(response.into_inner())
-            }
-            Err(e) => {
-                tracing::error!("Error completing upload via media-service: {}", e);
-                self.health_checker
-                    .set_media_service_health(HealthStatus::Unavailable)
-                    .await;
-                Err(e)
-            }
-        }
+        self.call_with_retry(
+            CompleteUploadRequest { upload_id },
+            |client, req| Box::pin(async move { client.complete_upload(req).await }),
+            "complete_upload",
+        )
+        .await
     }
 }

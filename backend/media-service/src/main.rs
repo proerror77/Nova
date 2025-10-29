@@ -13,8 +13,34 @@ use sqlx::postgres::PgPoolOptions;
 use std::io;
 use std::net::SocketAddr;
 use std::sync::Arc;
+use std::time::Duration;
+use tokio::sync::broadcast;
 use tokio::task::JoinSet;
+use tracing::info;
 use tracing_subscriber;
+use redis_utils::{RedisPool, SentinelConfig};
+
+async fn shutdown_signal() {
+    #[cfg(unix)]
+    {
+        use tokio::signal::unix::{signal, SignalKind};
+
+        let mut terminate =
+            signal(SignalKind::terminate()).expect("Failed to install SIGTERM handler");
+
+        tokio::select! {
+            _ = tokio::signal::ctrl_c() => {},
+            _ = terminate.recv() => {},
+        }
+    }
+
+    #[cfg(not(unix))]
+    {
+        tokio::signal::ctrl_c()
+            .await
+            .expect("Failed to install Ctrl+C handler");
+    }
+}
 
 #[actix_web::main]
 async fn main() -> io::Result<()> {
@@ -36,15 +62,20 @@ async fn main() -> io::Result<()> {
         grpc_bind_address
     );
 
-    if let Ok(public_key) = std::env::var("JWT_PUBLIC_KEY_PEM") {
-        if let Err(err) = jwt::initialize_jwt_validation_only(&public_key) {
-            return Err(io::Error::new(
-                io::ErrorKind::Other,
-                format!("Failed to initialize JWT keys: {err}"),
-            ));
+    match jwt::load_validation_key() {
+        Ok(public_key) => {
+            if let Err(err) = jwt::initialize_jwt_validation_only(&public_key) {
+                return Err(io::Error::new(
+                    io::ErrorKind::Other,
+                    format!("Failed to initialize JWT keys: {err}"),
+                ));
+            }
         }
-    } else {
-        tracing::warn!("JWT_PUBLIC_KEY_PEM not set; authentication middleware will fail requests");
+        Err(err) => {
+            tracing::warn!(
+                "JWT public key not configured ({err}); authentication middleware will fail requests"
+            );
+        }
     }
 
     // Initialize database connection pool
@@ -57,14 +88,30 @@ async fn main() -> io::Result<()> {
     let db_pool_http = db_pool.clone();
     let reel_pipeline = ReelTranscodePipeline::new(db_pool.clone());
 
-    let redis_client = redis::Client::open(config.cache.redis_url.as_str())
-        .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("Invalid REDIS_URL: {e}")))?;
-    let media_cache = Arc::new(MediaCache::new(redis_client, None).await.map_err(|e| {
-        io::Error::new(
-            io::ErrorKind::Other,
-            format!("Failed to initialize cache: {e}"),
+    info!(
+        "Connected to database (max_connections={})",
+        config.database.max_connections
+    );
+
+    let sentinel_cfg = config.cache.sentinel.as_ref().map(|cfg| {
+        SentinelConfig::new(
+            cfg.endpoints.clone(),
+            cfg.master_name.clone(),
+            Duration::from_millis(cfg.poll_interval_ms),
         )
-    })?);
+    });
+
+    let redis_pool = RedisPool::connect(&config.cache.redis_url, sentinel_cfg)
+        .await
+        .map_err(|e| {
+            io::Error::new(
+                io::ErrorKind::Other,
+                format!("Failed to initialize Redis connection: {e}"),
+            )
+        })?;
+
+    let media_cache = Arc::new(MediaCache::with_manager(redis_pool.manager(), None));
+    let media_cache_http = media_cache.clone();
 
     // Parse gRPC bind address
     let grpc_addr: SocketAddr = grpc_bind_address
@@ -77,7 +124,7 @@ async fn main() -> io::Result<()> {
             .app_data(web::Data::new(config.clone()))
             .app_data(web::Data::new(db_pool_http.clone()))
             .app_data(web::Data::new(reel_pipeline.clone()))
-            .app_data(web::Data::new(media_cache.clone()))
+            .app_data(web::Data::new(media_cache_http.clone()))
             .wrap(actix_middleware::Logger::default())
             .route(
                 "/api/v1/health",
@@ -109,9 +156,18 @@ async fn main() -> io::Result<()> {
                         web::scope("/uploads")
                             .route("", web::post().to(handlers::start_upload))
                             .route("/{upload_id}", web::get().to(handlers::get_upload))
-                            .route("/{upload_id}/progress", web::patch().to(handlers::update_upload_progress))
-                            .route("/{upload_id}/complete", web::post().to(handlers::complete_upload))
-                            .route("/{upload_id}/presigned-url", web::post().to(handlers::generate_presigned_url))
+                            .route(
+                                "/{upload_id}/progress",
+                                web::patch().to(handlers::update_upload_progress),
+                            )
+                            .route(
+                                "/{upload_id}/complete",
+                                web::post().to(handlers::complete_upload),
+                            )
+                            .route(
+                                "/{upload_id}/presigned-url",
+                                web::post().to(handlers::generate_presigned_url),
+                            )
                             .route("/{upload_id}", web::delete().to(handlers::cancel_upload)),
                     )
                     .service(
@@ -134,8 +190,13 @@ async fn main() -> io::Result<()> {
     .bind(&http_bind_address)?
     .run();
 
+    let server_handle = server.handle();
+
+    let (shutdown_tx, _) = broadcast::channel(1);
+    let grpc_shutdown = shutdown_tx.subscribe();
+
     // Spawn both HTTP and gRPC servers concurrently
-    let mut tasks = JoinSet::new();
+    let mut tasks: JoinSet<io::Result<()>> = JoinSet::new();
 
     // HTTP server task
     tasks.spawn(async move {
@@ -148,40 +209,61 @@ async fn main() -> io::Result<()> {
     let cache_grpc = media_cache.clone();
     tasks.spawn(async move {
         tracing::info!("gRPC server is running");
-        media_service::grpc::start_grpc_server(grpc_addr, db_pool_grpc, cache_grpc)
+        media_service::grpc::start_grpc_server(grpc_addr, db_pool_grpc, cache_grpc, grpc_shutdown)
             .await
             .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("{}", e)))
     });
 
-    // Wait for any server to fail
-    let mut first_error = None;
-    while let Some(result) = tasks.join_next().await {
-        match result {
-            Ok(Ok(_)) => {
-                // Server completed normally (shouldn't happen unless shut down)
-                tracing::warn!("Server completed");
-            }
-            Ok(Err(e)) => {
-                // Server error
-                tracing::error!("Server error: {}", e);
-                if first_error.is_none() {
-                    first_error = Some(e);
+    let mut first_error: Option<io::Error> = None;
+
+    let shutdown = shutdown_signal();
+    tokio::pin!(shutdown);
+
+    loop {
+        tokio::select! {
+            result = tasks.join_next() => {
+                match result {
+                    Some(Ok(Ok(_))) => {
+                        tracing::info!("Background task completed");
+                    }
+                    Some(Ok(Err(e))) => {
+                        tracing::error!("Task returned error: {}", e);
+                        if first_error.is_none() {
+                            first_error = Some(e);
+                        }
+                        let _ = shutdown_tx.send(());
+                        server_handle.stop(true).await;
+                        tasks.shutdown().await;
+                        break;
+                    }
+                    Some(Err(e)) => {
+                        tracing::error!("Task join error: {}", e);
+                        if first_error.is_none() {
+                            first_error = Some(io::Error::new(io::ErrorKind::Other, e.to_string()));
+                        }
+                        let _ = shutdown_tx.send(());
+                        server_handle.stop(true).await;
+                        tasks.shutdown().await;
+                        break;
+                    }
+                    None => break,
                 }
             }
-            Err(e) => {
-                // Task join error
-                tracing::error!("Task error: {}", e);
-                if first_error.is_none() {
-                    first_error = Some(io::Error::new(io::ErrorKind::Other, format!("{}", e)));
-                }
+            _ = &mut shutdown => {
+                tracing::info!("Shutdown signal received");
+                let _ = shutdown_tx.send(());
+                server_handle.stop(true).await;
+                tasks.shutdown().await;
+                break;
             }
         }
     }
 
     tracing::info!("Media-service shutting down");
 
-    match first_error {
-        Some(e) => Err(e),
-        None => Ok(()),
+    if let Some(err) = first_error {
+        Err(err)
+    } else {
+        Ok(())
     }
 }

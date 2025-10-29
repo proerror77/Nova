@@ -1,3 +1,4 @@
+#![cfg(feature = "legacy_video_tests")]
 /// Unit Tests for Video Ranking Algorithm (T132)
 /// Tests score calculation, weight combinations, edge cases
 

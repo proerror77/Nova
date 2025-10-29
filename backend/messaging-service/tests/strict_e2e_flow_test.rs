@@ -4,8 +4,8 @@ use messaging_service::services::{
     message_service::MessageService,
 };
 use sqlx::postgres::PgPoolOptions;
-use sqlx::{Pool, Postgres};
 use sqlx::Row;
+use sqlx::{Pool, Postgres};
 use uuid::Uuid;
 
 const TEST_MASTER_KEY: [u8; 32] = [7u8; 32];
@@ -19,10 +19,7 @@ async fn bootstrap_pool() -> Pool<Postgres> {
         .expect("failed to connect to DATABASE_URL")
 }
 
-async fn seed_strict_conversation(
-    pool: &Pool<Postgres>,
-    creator_id: Uuid,
-) -> Uuid {
+async fn seed_strict_conversation(pool: &Pool<Postgres>, creator_id: Uuid) -> Uuid {
     ConversationService::create_group_conversation(
         pool,
         creator_id,
@@ -75,16 +72,18 @@ async fn strict_e2e_message_roundtrip() {
     .await
     .expect("send_message_db failed");
 
-    let row = sqlx::query(
-        "SELECT content, content_encrypted, content_nonce FROM messages WHERE id = $1",
-    )
-    .bind(message_id)
-    .fetch_one(&pool)
-    .await
-    .expect("message fetch failed");
+    let row =
+        sqlx::query("SELECT content, content_encrypted, content_nonce FROM messages WHERE id = $1")
+            .bind(message_id)
+            .fetch_one(&pool)
+            .await
+            .expect("message fetch failed");
 
     let stored_content: String = row.get("content");
-    assert!(stored_content.is_empty(), "plaintext content should be blank");
+    assert!(
+        stored_content.is_empty(),
+        "plaintext content should be blank"
+    );
 
     let ciphertext: Vec<u8> = row.get("content_encrypted");
     let nonce: Vec<u8> = row.get("content_nonce");
@@ -136,16 +135,19 @@ async fn strict_e2e_version_and_audio_flow() {
     let version_after_update: i32 = version_row.get("version_number");
     assert!(version_after_update > 1);
 
-    let conflict = sqlx::query(
-        "UPDATE messages SET content = $1 WHERE id = $2 AND version_number = $3",
-    )
-    .bind("should_not_apply")
-    .bind(message_id)
-    .bind(version_after_update - 1)
-    .execute(&pool)
-    .await
-    .expect("conflict update execution");
-    assert_eq!(conflict.rows_affected(), 0, "stale version should not update");
+    let conflict =
+        sqlx::query("UPDATE messages SET content = $1 WHERE id = $2 AND version_number = $3")
+            .bind("should_not_apply")
+            .bind(message_id)
+            .bind(version_after_update - 1)
+            .execute(&pool)
+            .await
+            .expect("conflict update execution");
+    assert_eq!(
+        conflict.rows_affected(),
+        0,
+        "stale version should not update"
+    );
 
     let (_audio_id, _) = MessageService::send_audio_message_db(
         &pool,

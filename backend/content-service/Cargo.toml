@@ -54,6 +54,7 @@ clickhouse.workspace = true
 utoipa.workspace = true
 crypto-core = { path = "../libs/crypto-core" }
 error-types = { path = "../libs/error-types" }
+redis-utils = { path = "../libs/redis-utils" }
 
 # Service-specific dependencies
 futures = "0.3"

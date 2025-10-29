@@ -1,6 +1,8 @@
 use redis::{aio::ConnectionManager, AsyncCommands};
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use std::time::Duration;
+use tokio::sync::Mutex;
 use tracing::{debug, error, warn};
 use uuid::Uuid;
 
@@ -10,7 +12,7 @@ use crate::metrics::feed::{FEED_CACHE_EVENTS, FEED_CACHE_WRITE_TOTAL};
 /// Feed cache manager using Redis
 #[derive(Clone)]
 pub struct FeedCache {
-    redis: ConnectionManager,
+    redis: Arc<Mutex<ConnectionManager>>,
     default_ttl: Duration,
 }
 
@@ -21,7 +23,7 @@ pub struct CachedFeed {
 }
 
 impl FeedCache {
-    pub fn new(redis: ConnectionManager, default_ttl_secs: u64) -> Self {
+    pub fn new(redis: Arc<Mutex<ConnectionManager>>, default_ttl_secs: u64) -> Self {
         Self {
             redis,
             default_ttl: Duration::from_secs(default_ttl_secs),
@@ -38,7 +40,7 @@ impl FeedCache {
 
     pub async fn read_feed_cache(&self, user_id: Uuid) -> Result<Option<CachedFeed>> {
         let key = Self::feed_key(user_id);
-        let mut conn = self.redis.clone();
+        let mut conn = self.redis.lock().await;
 
         match conn.get::<_, Option<String>>(&key).await {
             Ok(Some(data)) => {
@@ -47,9 +49,7 @@ impl FeedCache {
                     .map(Some)
                     .map_err(|e| {
                         error!("Failed to deserialize cached feed: {}", e);
-                        FEED_CACHE_EVENTS
-                            .with_label_values(&["error"])
-                            .inc();
+                        FEED_CACHE_EVENTS.with_label_values(&["error"]).inc();
                         AppError::Internal(format!("Cache deserialization error: {}", e))
                     })
             }
@@ -59,9 +59,7 @@ impl FeedCache {
             }
             Err(e) => {
                 warn!("Redis read error for feed cache: {}", e);
-                FEED_CACHE_EVENTS
-                    .with_label_values(&["error"])
-                    .inc();
+                FEED_CACHE_EVENTS.with_label_values(&["error"]).inc();
                 Err(AppError::CacheError(e.to_string()))
             }
         }
@@ -90,14 +88,12 @@ impl FeedCache {
         let jitter_secs = (ttl.as_secs_f64() * jitter).round() as u64;
         let final_ttl = ttl + Duration::from_secs(jitter_secs);
 
-        let mut conn = self.redis.clone();
+        let mut conn = self.redis.lock().await;
         conn.set_ex::<_, _, ()>(&key, data, final_ttl.as_secs())
             .await
             .map_err(|e| {
                 warn!("Failed to write feed cache: {}", e);
-                FEED_CACHE_WRITE_TOTAL
-                    .with_label_values(&["error"])
-                    .inc();
+                FEED_CACHE_WRITE_TOTAL.with_label_values(&["error"]).inc();
                 AppError::CacheError(e.to_string())
             })?;
 
@@ -106,16 +102,14 @@ impl FeedCache {
             user_id, total_posts, final_ttl
         );
 
-        FEED_CACHE_WRITE_TOTAL
-            .with_label_values(&["success"])
-            .inc();
+        FEED_CACHE_WRITE_TOTAL.with_label_values(&["success"]).inc();
 
         Ok(())
     }
 
     pub async fn invalidate_feed(&self, user_id: Uuid) -> Result<()> {
         let key = Self::feed_key(user_id);
-        let mut conn = self.redis.clone();
+        let mut conn = self.redis.lock().await;
         conn.del::<_, ()>(&key)
             .await
             .map_err(|e| AppError::CacheError(e.to_string()))?;
@@ -133,7 +127,7 @@ impl FeedCache {
             return Ok(());
         }
 
-        let mut conn = self.redis.clone();
+        let mut conn = self.redis.lock().await;
         conn.sadd::<_, _, ()>(&key, post_id_strings)
             .await
             .map_err(|e| AppError::CacheError(e.to_string()))?;
@@ -151,11 +145,7 @@ impl FeedCache {
         Ok(())
     }
 
-    pub async fn filter_unseen_posts(
-        &self,
-        user_id: Uuid,
-        post_ids: &[Uuid],
-    ) -> Result<Vec<Uuid>> {
+    pub async fn filter_unseen_posts(&self, user_id: Uuid, post_ids: &[Uuid]) -> Result<Vec<Uuid>> {
         let key = Self::seen_key(user_id);
 
         if post_ids.is_empty() {
@@ -163,7 +153,7 @@ impl FeedCache {
         }
 
         let post_id_strings: Vec<String> = post_ids.iter().map(|id| id.to_string()).collect();
-        let mut conn = self.redis.clone();
+        let mut conn = self.redis.lock().await;
         let seen_flags: Vec<bool> = conn
             .smismember::<_, _, Vec<bool>>(&key, &post_id_strings)
             .await
@@ -189,7 +179,7 @@ impl FeedCache {
     pub async fn clear_seen_posts(&self, user_id: Uuid) -> Result<()> {
         let key = Self::seen_key(user_id);
 
-        let mut conn = self.redis.clone();
+        let mut conn = self.redis.lock().await;
         conn.del::<_, ()>(&key)
             .await
             .map_err(|e| AppError::CacheError(e.to_string()))?;
@@ -215,8 +205,7 @@ impl FeedCache {
             "new_follow" | "unfollow" => {
                 debug!(
                     "Event '{}': invalidating feeds for {} and {:?}",
-                    event_type,
-                    user_id, target_id
+                    event_type, user_id, target_id
                 );
                 self.invalidate_feed(user_id).await?;
                 if let Some(target) = target_id {
@@ -245,10 +234,10 @@ impl FeedCache {
 
         for user_id in user_ids {
             let key = Self::feed_key(user_id);
-            let mut conn = self.redis.clone();
+            let mut conn = self.redis.lock().await;
             redis::cmd("DEL")
                 .arg(&key)
-                .query_async::<_, ()>(&mut conn)
+                .query_async::<_, ()>(&mut *conn)
                 .await
                 .map_err(|e| AppError::CacheError(e.to_string()))?;
         }

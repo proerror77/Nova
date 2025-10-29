@@ -29,13 +29,14 @@
 ///     // Now you can generate and validate tokens
 /// }
 /// ```
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use chrono::{Duration, Utc};
 use jsonwebtoken::{
     decode, encode, Algorithm, DecodingKey, EncodingKey, Header, TokenData, Validation,
 };
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
+use std::fs;
 use uuid::Uuid;
 
 // ============================================================================
@@ -92,6 +93,63 @@ static JWT_DECODING_KEY: OnceCell<DecodingKey> = OnceCell::new();
 // ============================================================================
 // Initialization
 // ============================================================================
+
+fn load_key_from_sources(file_env: &str, pem_env: &str) -> Result<Option<String>> {
+    if let Ok(path) = std::env::var(file_env) {
+        let trimmed = path.trim();
+        if trimmed.is_empty() {
+            return Err(anyhow!("{file_env} is set but empty"));
+        }
+
+        let contents = fs::read_to_string(trimmed)
+            .with_context(|| format!("Failed to read key file from {}", trimmed))?;
+
+        if contents.trim().is_empty() {
+            return Err(anyhow!(
+                "{file_env} points to '{}', but the file is empty",
+                trimmed
+            ));
+        }
+
+        return Ok(Some(contents));
+    }
+
+    if let Ok(pem) = std::env::var(pem_env) {
+        if pem.trim().is_empty() {
+            return Err(anyhow!("{pem_env} is set but empty"));
+        }
+
+        return Ok(Some(pem));
+    }
+
+    Ok(None)
+}
+
+/// Load the public key used for JWT validation.
+///
+/// Priority order:
+/// 1. `JWT_PUBLIC_KEY_FILE` - absolute path to PEM file
+/// 2. `JWT_PUBLIC_KEY_PEM`  - PEM contents in environment variable
+pub fn load_validation_key() -> Result<String> {
+    load_key_from_sources("JWT_PUBLIC_KEY_FILE", "JWT_PUBLIC_KEY_PEM")?.ok_or_else(|| {
+        anyhow!("Missing JWT public key. Set JWT_PUBLIC_KEY_FILE or JWT_PUBLIC_KEY_PEM.")
+    })
+}
+
+/// Load both private and public keys for services that sign tokens.
+///
+/// Private key precedence:
+/// 1. `JWT_PRIVATE_KEY_FILE`
+/// 2. `JWT_PRIVATE_KEY_PEM`
+pub fn load_signing_keys() -> Result<(String, String)> {
+    let private_key = load_key_from_sources("JWT_PRIVATE_KEY_FILE", "JWT_PRIVATE_KEY_PEM")?
+        .ok_or_else(|| {
+            anyhow!("Missing JWT private key. Set JWT_PRIVATE_KEY_FILE or JWT_PRIVATE_KEY_PEM.")
+        })?;
+    let public_key = load_validation_key()?;
+
+    Ok((private_key, public_key))
+}
 
 /// Initialize JWT keys from PEM-formatted strings
 ///
