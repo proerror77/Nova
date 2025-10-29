@@ -3,7 +3,7 @@ use axum::middleware;
 use crypto_core::jwt as core_jwt;
 use messaging_service::{
     config, db, error, logging, routes,
-    services::{encryption::EncryptionService, push::ApnsPush},
+    services::{encryption::EncryptionService, key_exchange::KeyExchangeService, push::ApnsPush},
     state::AppState,
     websocket::streams::{start_streams_listener, StreamsConfig},
 };
@@ -60,6 +60,7 @@ async fn main() -> Result<(), error::AppError> {
     };
 
     let encryption = Arc::new(EncryptionService::new(cfg.encryption_master_key));
+    let key_exchange_service = Arc::new(KeyExchangeService::new(Arc::new(db.clone())));
 
     let state = AppState {
         db: db.clone(),
@@ -68,6 +69,7 @@ async fn main() -> Result<(), error::AppError> {
         config: cfg.clone(),
         apns: apns_client.clone(),
         encryption: encryption.clone(),
+        key_exchange_service: Some(key_exchange_service),
     };
     // Start Redis Streams listener for cross-instance fanout
     tokio::spawn(async move {
