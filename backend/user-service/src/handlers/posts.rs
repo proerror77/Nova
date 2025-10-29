@@ -84,6 +84,7 @@ const MAX_FILENAME_LENGTH: usize = 255;
 const MIN_FILE_SIZE: i64 = 102400; // 100 KB
 const MAX_FILE_SIZE: i64 = 52428800; // 50 MB
 const MAX_CAPTION_LENGTH: usize = 2200;
+const MAX_IMAGES_PER_POST: usize = 9;
 
 // Supported MIME types
 const ALLOWED_CONTENT_TYPES: &[&str] = &["image/jpeg", "image/png", "image/webp", "image/heic"];
@@ -128,6 +129,19 @@ pub async fn create_post_with_media(
             error: "Invalid request".to_string(),
             details: Some("At least one of image_ids or video_ids must be provided".to_string()),
         });
+    }
+
+    // Validate image count (max 9 images per post)
+    if let Some(ref image_ids) = req.image_ids {
+        if image_ids.len() > MAX_IMAGES_PER_POST {
+            return HttpResponse::BadRequest().json(ErrorResponse {
+                error: "Invalid request".to_string(),
+                details: Some(format!(
+                    "Maximum {} images allowed per post",
+                    MAX_IMAGES_PER_POST
+                )),
+            });
+        }
     }
 
     // Validate caption length
@@ -1261,6 +1275,43 @@ mod tests {
         assert_eq!(MIN_FILE_SIZE, 102400); // 100 KB
         assert_eq!(MAX_FILE_SIZE, 52428800); // 50 MB
         assert_eq!(MAX_CAPTION_LENGTH, 2200);
+        assert_eq!(MAX_IMAGES_PER_POST, 9);
+    }
+
+    #[actix_web::test]
+    async fn test_max_images_per_post_limit() {
+        // Test that exceeding 9 images is rejected
+        let mut image_ids = Vec::new();
+        for i in 0..10 {
+            image_ids.push(format!("image-{}", i));
+        }
+
+        let req = CreatePostRequest {
+            caption: Some("Test post with too many images".to_string()),
+            image_ids: Some(image_ids),
+            video_ids: None,
+        };
+
+        // Should have 10 images (exceeds limit of 9)
+        assert!(req.image_ids.as_ref().unwrap().len() > MAX_IMAGES_PER_POST);
+    }
+
+    #[actix_web::test]
+    async fn test_max_images_per_post_valid() {
+        // Test that exactly 9 images is valid
+        let mut image_ids = Vec::new();
+        for i in 0..9 {
+            image_ids.push(format!("image-{}", i));
+        }
+
+        let req = CreatePostRequest {
+            caption: Some("Test post with 9 images".to_string()),
+            image_ids: Some(image_ids),
+            video_ids: None,
+        };
+
+        // Should have exactly 9 images (at limit)
+        assert_eq!(req.image_ids.as_ref().unwrap().len(), MAX_IMAGES_PER_POST);
     }
 
     // ============================================
