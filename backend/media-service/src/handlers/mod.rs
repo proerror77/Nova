@@ -14,7 +14,8 @@ pub mod videos;
 pub use videos::{create_video, delete_video, get_video, list_videos, update_video};
 
 pub use uploads::{
-    cancel_upload, complete_upload, get_upload, start_upload, update_upload_progress,
+    cancel_upload, complete_upload, generate_presigned_url, get_upload, start_upload,
+    update_upload_progress,
 };
 
 pub use reels::{create_reel, delete_reel, get_reel, list_reels};

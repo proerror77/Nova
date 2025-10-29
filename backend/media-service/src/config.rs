@@ -10,6 +10,7 @@ pub struct Config {
     pub database: DatabaseConfig,
     pub cache: CacheConfig,
     pub kafka: KafkaConfig,
+    pub s3: S3Config,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -39,6 +40,15 @@ pub struct CacheConfig {
 pub struct KafkaConfig {
     pub brokers: String,
     pub events_topic: String,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct S3Config {
+    pub bucket: String,
+    pub region: String,
+    pub access_key_id: Option<String>,
+    pub secret_access_key: Option<String>,
+    pub endpoint: Option<String>,
 }
 
 impl Config {
@@ -73,6 +83,15 @@ impl Config {
                     .unwrap_or_else(|_| "localhost:9092".to_string()),
                 events_topic: std::env::var("KAFKA_EVENTS_TOPIC")
                     .unwrap_or_else(|_| "media_events".to_string()),
+            },
+            s3: S3Config {
+                bucket: std::env::var("S3_BUCKET")
+                    .unwrap_or_else(|_| "nova-uploads".to_string()),
+                region: std::env::var("AWS_REGION")
+                    .unwrap_or_else(|_| "us-east-1".to_string()),
+                access_key_id: std::env::var("AWS_ACCESS_KEY_ID").ok(),
+                secret_access_key: std::env::var("AWS_SECRET_ACCESS_KEY").ok(),
+                endpoint: std::env::var("S3_ENDPOINT").ok(),
             },
         })
     }

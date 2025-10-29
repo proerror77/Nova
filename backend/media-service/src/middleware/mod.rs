@@ -1,18 +1,31 @@
 /// HTTP middleware utilities for media-service
+///
+/// Provides JWT authentication, Redis-backed rate limiting, and simple
+/// request metrics logging. The implementations are intentionally lightweight
+/// wrappers so that handlers can reuse the same patterns as the original
+/// monolith without pulling in the entire user-service stack.
+
 use actix_web::dev::{forward_ready, Service, ServiceRequest, ServiceResponse, Transform};
 use actix_web::{error::ErrorUnauthorized, Error, FromRequest, HttpMessage, HttpRequest};
 use crypto_core::jwt;
-use futures::future::{ready, LocalBoxFuture, Ready};
+use futures::future::LocalBoxFuture;
 use redis::aio::ConnectionManager;
 use redis::AsyncCommands;
+use std::future::{ready, Ready};
 use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Instant;
 use uuid::Uuid;
 
+// =====================================================================
+// JWT Authentication
+// =====================================================================
+
+/// Extracted user identifier stored in request extensions after auth.
 #[derive(Debug, Clone)]
 pub struct UserId(pub Uuid);
 
+/// Actix middleware that validates a Bearer token using shared JWT helpers.
 pub struct JwtAuthMiddleware;
 
 impl<S, B> Transform<S, ServiceRequest> for JwtAuthMiddleware
@@ -50,7 +63,7 @@ where
 
     forward_ready!(service);
 
-    fn call(&self, mut req: ServiceRequest) -> Self::Future {
+    fn call(&self, req: ServiceRequest) -> Self::Future {
         let service = self.service.clone();
 
         Box::pin(async move {
@@ -91,6 +104,10 @@ impl FromRequest for UserId {
     }
 }
 
+// =====================================================================
+// Rate limiting
+// =====================================================================
+
 #[derive(Clone, Debug)]
 pub struct RateLimitConfig {
     pub max_requests: u32,
@@ -119,8 +136,8 @@ impl RateLimiter {
     pub async fn is_rate_limited(&self, client_id: &str) -> Result<bool, redis::RedisError> {
         let mut conn = self.redis.clone();
         let key = format!("rate_limit:{}", client_id);
-        let current: u32 = conn.get(&key).await.unwrap_or(0);
 
+        let current: u32 = conn.get(&key).await.unwrap_or(0);
         if current >= self.config.max_requests {
             return Ok(true);
         }
@@ -209,6 +226,10 @@ where
         })
     }
 }
+
+// =====================================================================
+// Metrics middleware
+// =====================================================================
 
 pub struct MetricsMiddleware;
 

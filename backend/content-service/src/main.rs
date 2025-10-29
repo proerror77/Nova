@@ -240,7 +240,25 @@ async fn main() -> io::Result<()> {
             )
             .service(
                 web::scope("/api/v1")
+                    .wrap(middleware::JwtAuthMiddleware)
+                    .wrap(middleware::MetricsMiddleware)
                     .service(web::scope("/feed").route("", web::get().to(handlers::get_feed)))
+                    .service(
+                        web::scope("/posts")
+                            .service(
+                                web::resource("").route(web::post().to(handlers::create_post)),
+                            )
+                            .service(
+                                web::resource("/{post_id}")
+                                    .route(web::get().to(handlers::get_post))
+                                    .route(web::patch().to(handlers::update_post_status))
+                                    .route(web::delete().to(handlers::delete_post)),
+                            )
+                            .service(
+                                web::resource("/user/{user_id}")
+                                    .route(web::get().to(handlers::get_user_posts)),
+                            ),
+                    )
                     .service(
                         web::scope("/stories")
                             .service(

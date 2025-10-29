@@ -6,6 +6,7 @@ use actix_web::{middleware as actix_middleware, web, App, HttpResponse, HttpServ
 use crypto_core::jwt;
 use media_service::cache::MediaCache;
 use media_service::handlers;
+use media_service::middleware;
 use media_service::services::ReelTranscodePipeline;
 use media_service::Config;
 use sqlx::postgres::PgPoolOptions;
@@ -73,6 +74,7 @@ async fn main() -> io::Result<()> {
     // Create HTTP server
     let server = HttpServer::new(move || {
         App::new()
+            .app_data(web::Data::new(config.clone()))
             .app_data(web::Data::new(db_pool_http.clone()))
             .app_data(web::Data::new(reel_pipeline.clone()))
             .app_data(web::Data::new(media_cache.clone()))
@@ -90,12 +92,43 @@ async fn main() -> io::Result<()> {
                 "/api/v1/health/live",
                 web::get().to(|| async { HttpResponse::Ok().finish() }),
             )
+            .route(
+                "/api/v1/openapi.json",
+                web::get().to(|| async {
+                    use utoipa::OpenApi;
+                    HttpResponse::Ok()
+                        .content_type("application/json")
+                        .json(media_service::openapi::ApiDoc::openapi())
+                }),
+            )
             .service(
-                web::scope("/api/v1/reels")
-                    .route("", web::get().to(handlers::list_reels))
-                    .route("", web::post().to(handlers::create_reel))
-                    .route("/{id}", web::get().to(handlers::get_reel))
-                    .route("/{id}", web::delete().to(handlers::delete_reel)),
+                web::scope("/api/v1")
+                    .wrap(middleware::JwtAuthMiddleware)
+                    .wrap(middleware::MetricsMiddleware)
+                    .service(
+                        web::scope("/uploads")
+                            .route("", web::post().to(handlers::start_upload))
+                            .route("/{upload_id}", web::get().to(handlers::get_upload))
+                            .route("/{upload_id}/progress", web::patch().to(handlers::update_upload_progress))
+                            .route("/{upload_id}/complete", web::post().to(handlers::complete_upload))
+                            .route("/{upload_id}/presigned-url", web::post().to(handlers::generate_presigned_url))
+                            .route("/{upload_id}", web::delete().to(handlers::cancel_upload)),
+                    )
+                    .service(
+                        web::scope("/videos")
+                            .route("", web::get().to(handlers::list_videos))
+                            .route("", web::post().to(handlers::create_video))
+                            .route("/{id}", web::get().to(handlers::get_video))
+                            .route("/{id}", web::patch().to(handlers::update_video))
+                            .route("/{id}", web::delete().to(handlers::delete_video)),
+                    )
+                    .service(
+                        web::scope("/reels")
+                            .route("", web::get().to(handlers::list_reels))
+                            .route("", web::post().to(handlers::create_reel))
+                            .route("/{id}", web::get().to(handlers::get_reel))
+                            .route("/{id}", web::delete().to(handlers::delete_reel)),
+                    ),
             )
     })
     .bind(&http_bind_address)?
