@@ -1,5 +1,5 @@
 pub mod job_config;
-pub mod video_config;
+// pub mod video_config; // REMOVED - moved to media-service (port 8082)
 
 use serde::Deserialize;
 use std::env;

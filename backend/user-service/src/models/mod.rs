@@ -1,7 +1,7 @@
-pub mod video;
+// pub mod video; // REMOVED - moved to media-service (port 8082)
 
 // Re-export commonly used types from video module
-pub use video::{ResumableUpload, UploadChunk, UploadStatus, VideoEntity, VideoStatus};
+// pub use video::{ResumableUpload, UploadChunk, UploadStatus, VideoEntity, VideoStatus};
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
