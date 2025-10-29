@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "auth-service",
     "user-service",
     "content-service",
     "media-service",
@@ -14,8 +15,12 @@ members = [
     "libs/crypto-core",
     "libs/error-types",
     "libs/redis-utils",
+    "libs/db-pool",
+    "libs/error-handling",
+    "libs/video-core",
     "libs/nova-fcm-shared",
-    "libs/nova-apns-shared"
+    "libs/nova-apns-shared",
+    "libs/event-schema"
 ]
 resolver = "2"
 

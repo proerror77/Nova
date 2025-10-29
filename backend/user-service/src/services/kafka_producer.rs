@@ -46,11 +46,15 @@ impl EventProducer {
     }
 
     pub async fn send_json(&self, key: &str, payload: &str) -> Result<()> {
+        self.send_json_to_topic(key, payload, &self.topic).await
+    }
+
+    pub async fn send_json_to_topic(&self, key: &str, payload: &str, topic: &str) -> Result<()> {
         let mut last_err: Option<AppError> = None;
 
         for attempt in 0..self.retry_attempts {
-            let record = FutureRecord::to(&self.topic).payload(payload).key(key);
-            debug!("Publishing event to topic {} (key={})", self.topic, key);
+            let record = FutureRecord::to(topic).payload(payload).key(key);
+            debug!("Publishing event to topic {} (key={})", topic, key);
 
             match timeout(self.timeout, self.producer.send(record, self.timeout)).await {
                 Ok(Ok(_)) => return Ok(()),

@@ -15,6 +15,6 @@ pub use error::{AppError, Result};
 // Re-export recommendation service components
 pub use services::{
     ABTestingFramework, CollaborativeFilteringModel, ContentBasedModel, HybridRanker,
-    HybridWeights, ModelMetadata, ONNXModelServer, RankedPost, RankingStrategy,
+    HybridWeights, ModelInfo, ONNXModelServer, RankedPost, RankingStrategy,
     RecommendationConfig, RecommendationServiceV2, UserContext, Variant,
 };

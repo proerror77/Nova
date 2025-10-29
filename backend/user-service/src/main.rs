@@ -40,6 +40,7 @@ use user_service::{
         kafka_producer::EventProducer,
         oauth::jwks_cache::JWKSCache,
         s3_service,
+        social_graph_sync::SocialGraphSyncConsumer,
         stories::StoriesService,
         streaming::{
             RtmpWebhookHandler, StreamAnalyticsService, StreamChatHandlerState, StreamChatStore,
@@ -272,6 +273,7 @@ async fn main() -> io::Result<()> {
             .expect("GraphService disabled init should succeed")
         }
     };
+    let graph_service_clone = graph_service.clone();
     let graph_data = web::Data::new(graph_service);
 
     // ========================================
@@ -426,6 +428,27 @@ async fn main() -> io::Result<()> {
         }
     });
     tracing::info!("Events consumer spawned");
+
+    // ========================================
+    // Initialize social graph sync consumer (Neo4j)
+    // ========================================
+    let _social_graph_sync_handle = match SocialGraphSyncConsumer::new(
+        &config.kafka,
+        Arc::new(graph_service_clone),
+        Arc::new(event_producer.as_ref().clone()),
+    )
+    .await
+    {
+        Err(e) => {
+            tracing::warn!("Failed to create social graph sync consumer: {}", e);
+            None
+        }
+        Ok(consumer) => {
+            let handle = Arc::new(consumer).start();
+            tracing::info!("Social graph sync consumer spawned");
+            Some(handle)
+        }
+    };
 
     // ========================================
     // Initialize image processing job queue

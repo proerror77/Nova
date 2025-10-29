@@ -30,6 +30,7 @@ pub mod query_profiler;
 pub mod ranking_engine;
 pub mod recommendation_v2;
 pub mod redis_job;
+pub mod social_graph_sync;
 pub mod resumable_upload_service;
 pub mod s3_service;
 pub mod stories;
@@ -69,6 +70,10 @@ pub mod webhooks;
 // MACHINE LEARNING & RANKING:
 // - recommendation_v2: Hybrid recommendation engine v2 (collaborative filtering + content-based + AB testing)
 //
+// GRAPH & SOCIAL:
+// - graph: Neo4j integration for social graph (follows, suggestions, mutual connections)
+// - social_graph_sync: Kafka consumer for syncing social events (follow/unfollow) to Neo4j
+//
 // COMMON SERVICES:
 // - backup_codes: Two-factor authentication backup codes management
 // - cdc: Change Data Capture consumer (PostgreSQL → Kafka → ClickHouse sync)
@@ -77,7 +82,7 @@ pub mod webhooks;
 // - image_processing: Image resizing and variant generation (thumbnail, medium, original)
 // - job_queue: Background job queue for async image processing (MPSC channel-based)
 // - jwt_key_rotation: JWT signing key rotation for enhanced security
-// - kafka_producer: Kafka message producer for events and CDC
+// - kafka_producer: Kafka message producer for events and CDC (now supports multiple topics)
 // - oauth: OAuth2 authentication (Google, GitHub providers)
 // - password_reset_service: Password reset token management
 // - query_profiler: PostgreSQL query performance profiling
