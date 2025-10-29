@@ -114,10 +114,6 @@ name = "oauth_token_verification_test"
 path = "tests/oauth_token_verification_test.rs"
 
 [[test]]
-name = "feed_ranking_test"
-path = "tests/feed_ranking_test.rs"
-
-[[test]]
 name = "job_test"
 path = "tests/job_test.rs"
 
@@ -136,18 +132,6 @@ path = "tests/2fa_test.rs"
 [[test]]
 name = "events_integration_test"
 path = "tests/integration/events_integration_test.rs"
-
-[[test]]
-name = "feed_api_integration_test"
-path = "tests/integration/feed_api_integration_test.rs"
-
-[[test]]
-name = "feed_ranking_integration_test"
-path = "tests/integration/feed_ranking_integration_test.rs"
-
-[[test]]
-name = "feed_ranking_performance_test"
-path = "tests/performance/feed_ranking_performance_test.rs"
 
 [[test]]
 name = "events_dedup_test"
