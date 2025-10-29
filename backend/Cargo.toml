@@ -13,7 +13,8 @@ members = [
     "events-service",
     "libs/crypto-core",
     "libs/error-types",
-    "libs/redis-utils"
+    "libs/redis-utils",
+    "libs/nova-fcm-shared"
 ]
 resolver = "2"
 

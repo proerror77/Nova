@@ -1,0 +1,23 @@
+[package]
+name = "nova-fcm-shared"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+# From workspace
+chrono = { workspace = true }
+jsonwebtoken = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+reqwest = { workspace = true }
+thiserror = { workspace = true }
+
+# Async runtime
+tokio = { version = "1.36", features = ["rt", "sync"] }
+
+# Other
+tracing = { workspace = true }
+async-trait = { workspace = true }
