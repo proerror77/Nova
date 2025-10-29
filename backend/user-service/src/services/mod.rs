@@ -13,7 +13,7 @@ pub mod experiments;
 // pub mod ffmpeg_optimizer; // REMOVED - moved to media-service (port 8082)
 pub mod graph;
 pub mod image_processing;
-pub mod job_queue;
+// pub mod job_queue; // REMOVED - moved to content-service (port 8081)
 pub mod jwt_key_rotation;
 pub mod kafka_producer;
 pub mod moderation_service;
@@ -27,7 +27,7 @@ pub mod redis_job;
 pub mod social_graph_sync;
 // pub mod resumable_upload_service; // REMOVED - moved to media-service (port 8082)
 pub mod s3_service;
-pub mod stories;
+// pub mod stories; // REMOVED - moved to content-service (port 8081)
 // pub mod streaming; // REMOVED - moved to streaming-service (port 8088)
 // pub mod streaming_manifest; // REMOVED - moved to media-service (port 8082)
 pub mod token_revocation;
