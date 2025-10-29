@@ -11,7 +11,6 @@ pub mod broadcast;
 pub mod events;
 pub mod handlers;
 pub mod message_types;
-pub mod pubsub;
 pub mod streams;
 pub mod subscription;
 
