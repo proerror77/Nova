@@ -27,12 +27,15 @@ redis = { version = "0.26", features = ["tokio-comp", "connection-manager"] }
 # Logging
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
+rdkafka = { workspace = true }
 
 # Hashing
 md5 = "0.7"
 
 # OpenAPI
 utoipa = { workspace = true }
+elasticsearch = "8.19.0-alpha.1"
+url = "2"
 
 [profile.release]
 codegen-units = 1
