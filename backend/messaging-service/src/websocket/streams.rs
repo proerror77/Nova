@@ -2,12 +2,12 @@
 //! Provides ordered, durable, and idempotent message delivery across instances
 //! with support for consumer groups and offline message replay
 
-use redis::{aio::MultiplexedConnection, AsyncCommands, Client};
+use crate::{models::message::MessageEnvelope, redis_client::RedisClient as Client};
+use redis::{aio::ConnectionManager, AsyncCommands};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use tokio::time::{self, Duration};
 use uuid::Uuid;
-use crate::models::message::MessageEnvelope;
 
 /// Represents a stream message entry
 #[derive(Debug, Clone)]
@@ -77,7 +77,10 @@ pub async fn publish_envelope(
             &key,
             "*", // Auto-generate ID with current timestamp
             &[
-                ("conversation_id", envelope.conversation_id.to_string().as_str()),
+                (
+                    "conversation_id",
+                    envelope.conversation_id.to_string().as_str(),
+                ),
                 ("payload", envelope_json.as_str()),
                 (
                     "timestamp",
@@ -92,7 +95,10 @@ pub async fn publish_envelope(
         group_stream_key(),
         "*",
         &[
-            ("conversation_id", envelope.conversation_id.to_string().as_str()),
+            (
+                "conversation_id",
+                envelope.conversation_id.to_string().as_str(),
+            ),
             ("stream_key", key.as_str()),
             ("entry_id", entry_id.as_str()),
         ],
@@ -225,7 +231,7 @@ pub async fn read_pending_messages(
 }
 
 async fn fetch_conversation_payload(
-    conn: &mut MultiplexedConnection,
+    conn: &mut ConnectionManager,
     conversation_id: Uuid,
     entry_id: &str,
 ) -> redis::RedisResult<Option<String>> {
@@ -336,19 +342,13 @@ pub async fn start_streams_listener(
                             // Fetch actual message from conversation stream
                             if let Some(stream_key_name) = fields.get("stream_key") {
                                 let entry_id = fields.get("entry_id").cloned().unwrap_or_default();
-                                if let Ok(msg_data) = fetch_stream_entry(
-                                    &mut conn,
-                                    stream_key_name,
-                                    &entry_id,
-                                )
-                                .await
+                                if let Ok(msg_data) =
+                                    fetch_stream_entry(&mut conn, stream_key_name, &entry_id).await
                                 {
                                     let payload = match MessageEnvelope::from_json(&msg_data) {
                                         Ok(mut envelope) => {
                                             envelope.set_stream_id(entry_id.clone());
-                                            envelope
-                                                .to_json()
-                                                .unwrap_or(msg_data.clone())
+                                            envelope.to_json().unwrap_or(msg_data.clone())
                                         }
                                         Err(_) => msg_data.clone(),
                                     };
@@ -381,7 +381,7 @@ pub async fn start_streams_listener(
 
 /// Fetch a single entry from stream
 async fn fetch_stream_entry(
-    conn: &mut MultiplexedConnection,
+    conn: &mut ConnectionManager,
     stream_key: &str,
     entry_id: &str,
 ) -> redis::RedisResult<String> {

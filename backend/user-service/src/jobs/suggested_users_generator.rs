@@ -18,6 +18,8 @@ use serde::{Deserialize, Serialize};
 use tracing::debug;
 use uuid::Uuid;
 
+use crate::utils::redis_timeout::run_with_timeout;
+
 /// 建议用户(带评分和推荐理由)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserWithScore {
@@ -200,7 +202,7 @@ impl SuggestedUsersJob {
         }
 
         let mut conn = ctx.redis_pool.clone();
-        pipe.query_async::<_, ()>(&mut conn)
+        run_with_timeout(pipe.query_async::<_, ()>(&mut conn))
             .await
             .context("Failed to execute Redis pipeline")?;
 

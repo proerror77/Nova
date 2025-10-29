@@ -7,7 +7,8 @@ use uuid::Uuid;
 use crate::cache::MediaCache;
 use crate::error::AppError;
 use crate::models::{CreateReelRequest as CreateReelPayload, Upload, Video};
-use crate::services::{ReelService, ReelTranscodePipeline, UploadService, VideoService};
+use crate::services::{ReelService, ReelTranscodePipeline, VideoService};
+use tokio::sync::broadcast;
 
 // Import generated proto code
 pub mod nova {
@@ -576,6 +577,7 @@ pub async fn start_grpc_server(
     addr: std::net::SocketAddr,
     db_pool: PgPool,
     cache: Arc<MediaCache>,
+    mut shutdown: broadcast::Receiver<()>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     use nova::media::media_service_server::MediaServiceServer;
     use tonic::transport::Server;
@@ -586,7 +588,9 @@ pub async fn start_grpc_server(
     let service = MediaServiceImpl::new(db_pool, reel_pipeline, cache);
     Server::builder()
         .add_service(MediaServiceServer::new(service))
-        .serve(addr)
+        .serve_with_shutdown(addr, async move {
+            let _ = shutdown.recv().await;
+        })
         .await?;
 
     Ok(())

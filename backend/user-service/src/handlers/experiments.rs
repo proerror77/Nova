@@ -376,8 +376,8 @@ mod tests {
 
     #[test]
     fn test_assign_query_deserialize() {
-        let query = "user_id=123e4567-e89b-12d3-a456-426614174000";
-        let parsed: AssignQuery = serde_qs::from_str(query).unwrap();
+        let query = r#"{"user_id":"123e4567-e89b-12d3-a456-426614174000"}"#;
+        let parsed: AssignQuery = serde_json::from_str(query).unwrap();
         assert_eq!(
             parsed.user_id.to_string(),
             "123e4567-e89b-12d3-a456-426614174000"

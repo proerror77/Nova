@@ -29,10 +29,17 @@ impl MediaCache {
             .await
             .map_err(|e| AppError::CacheError(format!("Failed to connect to Redis: {e}")))?;
 
-        Ok(Self {
-            conn: Arc::new(Mutex::new(manager)),
+        Ok(Self::with_manager(Arc::new(Mutex::new(manager)), ttl_seconds))
+    }
+
+    pub fn with_manager(
+        manager: Arc<Mutex<ConnectionManager>>,
+        ttl_seconds: Option<u64>,
+    ) -> Self {
+        Self {
+            conn: manager,
             ttl_seconds: ttl_seconds.unwrap_or(DEFAULT_TTL_SECONDS),
-        })
+        }
     }
 
     /// Cache a video record

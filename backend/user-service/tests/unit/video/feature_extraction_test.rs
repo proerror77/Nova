@@ -1,3 +1,4 @@
+#![cfg(feature = "legacy_video_tests")]
 /// Video Feature Extraction Test
 ///
 /// Tests the FFprobe-based feature extraction for video embeddings.

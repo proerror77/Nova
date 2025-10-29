@@ -419,7 +419,7 @@ pub struct TranscodingStatistics {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::video_config::{StreamingConfig, VideoProcessingConfig};
+    use crate::config::video_config::VideoProcessingConfig;
     use std::collections::HashMap;
 
     fn create_test_config() -> VideoProcessingConfig {
@@ -437,6 +437,7 @@ mod tests {
             s3_processed_prefix: "processed/".to_string(),
             extract_thumbnails: true,
             thumbnail_dimensions: (320, 180),
+            enable_mock: false,
         }
     }
 

@@ -79,18 +79,42 @@ impl ResponseError for AppError {
             AppError::Database(_) => ("server_error", error_types::error_codes::DATABASE_ERROR),
             AppError::Redis(_) => ("server_error", error_types::error_codes::CACHE_ERROR),
             AppError::Validation(_) => ("validation_error", "VALIDATION_ERROR"),
-            AppError::Authentication(_) => ("authentication_error", error_types::error_codes::INVALID_CREDENTIALS),
+            AppError::Authentication(_) => (
+                "authentication_error",
+                error_types::error_codes::INVALID_CREDENTIALS,
+            ),
             AppError::Authorization(_) => ("authorization_error", "AUTHORIZATION_ERROR"),
             AppError::NotFound(_) => ("not_found_error", error_types::error_codes::USER_NOT_FOUND),
             AppError::Conflict(_) => ("conflict_error", error_types::error_codes::VERSION_CONFLICT),
-            AppError::RateLimitExceeded => ("rate_limit_error", error_types::error_codes::RATE_LIMIT_ERROR),
-            AppError::Internal(_) => ("server_error", error_types::error_codes::INTERNAL_SERVER_ERROR),
+            AppError::RateLimitExceeded => (
+                "rate_limit_error",
+                error_types::error_codes::RATE_LIMIT_ERROR,
+            ),
+            AppError::Internal(_) => (
+                "server_error",
+                error_types::error_codes::INTERNAL_SERVER_ERROR,
+            ),
             AppError::BadRequest(_) => ("validation_error", "INVALID_REQUEST"),
-            AppError::Token(_) => ("authentication_error", error_types::error_codes::TOKEN_INVALID),
-            AppError::Email(_) => ("server_error", error_types::error_codes::INTERNAL_SERVER_ERROR),
-            AppError::Kafka(_) => ("server_error", error_types::error_codes::SERVICE_UNAVAILABLE),
-            AppError::Io(_) => ("server_error", error_types::error_codes::INTERNAL_SERVER_ERROR),
-            AppError::Configuration(_) => ("server_error", error_types::error_codes::INTERNAL_SERVER_ERROR),
+            AppError::Token(_) => (
+                "authentication_error",
+                error_types::error_codes::TOKEN_INVALID,
+            ),
+            AppError::Email(_) => (
+                "server_error",
+                error_types::error_codes::INTERNAL_SERVER_ERROR,
+            ),
+            AppError::Kafka(_) => (
+                "server_error",
+                error_types::error_codes::SERVICE_UNAVAILABLE,
+            ),
+            AppError::Io(_) => (
+                "server_error",
+                error_types::error_codes::INTERNAL_SERVER_ERROR,
+            ),
+            AppError::Configuration(_) => (
+                "server_error",
+                error_types::error_codes::INTERNAL_SERVER_ERROR,
+            ),
         };
 
         let message = self.to_string();

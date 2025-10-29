@@ -1,12 +1,14 @@
 /// 双因素认证 (2FA) 服务
 /// 处理 TOTP 和备用码的验证逻辑
 use anyhow::{anyhow, Result};
+use redis::aio::ConnectionManager;
 use sqlx::PgPool;
 use std::convert::TryFrom;
 use uuid::Uuid;
 
 use crate::security::TOTPGenerator;
 use crate::services::backup_codes;
+use crate::utils::redis_timeout::run_with_timeout;
 
 /// 统一验证用户代码 (TOTP 或备用码)
 ///
@@ -71,7 +73,7 @@ pub async fn generate_2fa_setup(email: &str) -> Result<(String, String, Vec<Stri
 /// # 返回
 /// Ok(user_id) 如果 session 有效, Err 如果无效或过期
 pub async fn verify_temp_session(
-    redis: &redis::aio::ConnectionManager,
+    redis: &ConnectionManager,
     session_id: &str,
     session_type: &str,
 ) -> Result<Uuid> {
@@ -79,7 +81,7 @@ pub async fn verify_temp_session(
 
     let key = format!("{}:{}", session_type, session_id);
     let mut redis_conn = redis.clone();
-    let user_id_str: Option<String> = redis_conn.get(&key).await?;
+    let user_id_str: Option<String> = run_with_timeout(redis_conn.get(&key)).await?;
 
     match user_id_str {
         Some(uid) => Ok(Uuid::parse_str(&uid)?),
@@ -96,7 +98,7 @@ pub async fn verify_temp_session(
 /// - `session_type`: Session 类型
 /// - `ttl_secs`: TTL (秒)
 pub async fn store_temp_session(
-    redis: &redis::aio::ConnectionManager,
+    redis: &ConnectionManager,
     session_id: &str,
     user_id: Uuid,
     session_type: &str,
@@ -108,16 +110,14 @@ pub async fn store_temp_session(
     let mut redis_conn = redis.clone();
     let ttl_u64 = u64::try_from(ttl_secs)
         .map_err(|_| anyhow!("TTL value {} does not fit into u64", ttl_secs))?;
-    let _: () = redis_conn
-        .set_ex(&key, user_id.to_string(), ttl_u64)
-        .await?;
+    let _: () = run_with_timeout(redis_conn.set_ex(&key, user_id.to_string(), ttl_u64)).await?;
 
     Ok(())
 }
 
 /// 删除临时 2FA session
 pub async fn delete_temp_session(
-    redis: &redis::aio::ConnectionManager,
+    redis: &ConnectionManager,
     session_id: &str,
     session_type: &str,
 ) -> Result<()> {
@@ -125,7 +125,7 @@ pub async fn delete_temp_session(
 
     let key = format!("{}:{}", session_type, session_id);
     let mut redis_conn = redis.clone();
-    let _: () = redis_conn.del(&key).await?;
+    let _: usize = run_with_timeout(redis_conn.del::<_, usize>(&key)).await?;
 
     Ok(())
 }

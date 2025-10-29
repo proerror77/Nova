@@ -6,6 +6,8 @@ use redis::aio::ConnectionManager;
 use std::fmt::Write as FmtWrite;
 use uuid::Uuid;
 
+use crate::utils::redis_timeout::run_with_timeout;
+
 const VERIFICATION_TOKEN_EXPIRY_SECS: u64 = 3600; // 1 hour
 const TOKEN_LENGTH: usize = 32;
 
@@ -37,16 +39,18 @@ pub async fn store_verification_token(
     let mut redis_conn = redis.clone();
 
     // Store forward mapping: user_id:email -> token
-    let _: () = redis_conn
-        .set_ex(&key, &token, VERIFICATION_TOKEN_EXPIRY_SECS)
+    let _: () = run_with_timeout(redis_conn.set_ex(&key, &token, VERIFICATION_TOKEN_EXPIRY_SECS))
         .await
         .map_err(|e| anyhow!("Failed to store verification token: {}", e))?;
 
     // Store reverse mapping: token -> user_id:email
-    let _: () = redis_conn
-        .set_ex(&reverse_key, &token_value, VERIFICATION_TOKEN_EXPIRY_SECS)
-        .await
-        .map_err(|e| anyhow!("Failed to store reverse verification token: {}", e))?;
+    let _: () = run_with_timeout(redis_conn.set_ex(
+        &reverse_key,
+        &token_value,
+        VERIFICATION_TOKEN_EXPIRY_SECS,
+    ))
+    .await
+    .map_err(|e| anyhow!("Failed to store reverse verification token: {}", e))?;
 
     Ok(token)
 }
@@ -62,8 +66,7 @@ pub async fn get_user_from_token(
     let reverse_key = format!("verify_email_token:{}", token);
 
     let mut redis_conn = redis.clone();
-    let token_value: Option<String> = redis_conn
-        .get(&reverse_key)
+    let token_value: Option<String> = run_with_timeout(redis_conn.get(&reverse_key))
         .await
         .map_err(|e| anyhow!("Failed to retrieve token mapping: {}", e))?;
 
@@ -93,16 +96,15 @@ pub async fn verify_token(
     let reverse_key = format!("verify_email_token:{}", token);
 
     let mut redis_conn = redis.clone();
-    let stored_token: Option<String> = redis_conn
-        .get(&key)
+    let stored_token: Option<String> = run_with_timeout(redis_conn.get(&key))
         .await
         .map_err(|e| anyhow!("Failed to retrieve verification token: {}", e))?;
 
     if let Some(stored_token) = stored_token {
         if stored_token == token {
             // Delete both token mappings after verification (one-time use)
-            let _: () = redis_conn.del(&key).await.unwrap_or(());
-            let _: () = redis_conn.del(&reverse_key).await.unwrap_or(());
+            let _ = run_with_timeout(redis_conn.del::<_, usize>(&key)).await;
+            let _ = run_with_timeout(redis_conn.del::<_, usize>(&reverse_key)).await;
             return Ok(true);
         }
     }
@@ -117,8 +119,7 @@ pub async fn token_exists(redis: &ConnectionManager, user_id: Uuid, email: &str)
     let key = format!("verify_email:{}:{}", user_id, email);
 
     let mut redis_conn = redis.clone();
-    let exists: bool = redis_conn
-        .exists(&key)
+    let exists: bool = run_with_timeout(redis_conn.exists(&key))
         .await
         .map_err(|e| anyhow!("Failed to check token existence: {}", e))?;
 
@@ -134,18 +135,17 @@ pub async fn revoke_token(redis: &ConnectionManager, user_id: Uuid, email: &str)
     let mut redis_conn = redis.clone();
 
     // Get the token first to delete its reverse mapping
-    let token: Option<String> = redis_conn.get(&key).await.ok().flatten();
+    let token: Option<String> = run_with_timeout(redis_conn.get(&key)).await.ok().flatten();
 
     // Delete forward mapping
-    let _: () = redis_conn
-        .del(&key)
+    let _: usize = run_with_timeout(redis_conn.del::<_, usize>(&key))
         .await
         .map_err(|e| anyhow!("Failed to revoke verification token: {}", e))?;
 
     // Delete reverse mapping if token was found
     if let Some(token) = token {
         let reverse_key = format!("verify_email_token:{}", token);
-        let _: () = redis_conn.del(&reverse_key).await.unwrap_or(());
+        let _ = run_with_timeout(redis_conn.del::<_, usize>(&reverse_key)).await;
     }
 
     Ok(())

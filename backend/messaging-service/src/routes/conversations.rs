@@ -161,15 +161,10 @@ pub async fn get_conversation_key(
 ) -> Result<Json<ConversationKeyResponse>, crate::error::AppError> {
     let conversation_id = id;
 
-    crate::middleware::guards::ConversationMember::verify(
-        &state.db,
-        user.id,
-        conversation_id,
-    )
-    .await?;
+    crate::middleware::guards::ConversationMember::verify(&state.db, user.id, conversation_id)
+        .await?;
 
-    let privacy_mode =
-        ConversationService::get_privacy_mode(&state.db, conversation_id).await?;
+    let privacy_mode = ConversationService::get_privacy_mode(&state.db, conversation_id).await?;
 
     if !matches!(privacy_mode, PrivacyMode::StrictE2e) {
         return Err(crate::error::AppError::BadRequest(

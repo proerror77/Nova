@@ -34,6 +34,15 @@ pub struct DatabaseConfig {
 #[derive(Clone, Debug, Deserialize)]
 pub struct CacheConfig {
     pub redis_url: String,
+    #[serde(default)]
+    pub sentinel: Option<CacheSentinelConfig>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct CacheSentinelConfig {
+    pub endpoints: Vec<String>,
+    pub master_name: String,
+    pub poll_interval_ms: u64,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -70,13 +79,14 @@ impl Config {
                 url: std::env::var("DATABASE_URL")
                     .unwrap_or_else(|_| "postgresql://localhost/nova".to_string()),
                 max_connections: std::env::var("DATABASE_MAX_CONNECTIONS")
-                    .unwrap_or_else(|_| "20".to_string())
+                    .unwrap_or_else(|_| "10".to_string())
                     .parse()
-                    .unwrap_or(20),
+                    .unwrap_or(10),
             },
             cache: CacheConfig {
                 redis_url: std::env::var("REDIS_URL")
                     .unwrap_or_else(|_| "redis://localhost".to_string()),
+                sentinel: parse_sentinel_config(),
             },
             kafka: KafkaConfig {
                 brokers: std::env::var("KAFKA_BROKERS")
@@ -85,14 +95,45 @@ impl Config {
                     .unwrap_or_else(|_| "media_events".to_string()),
             },
             s3: S3Config {
-                bucket: std::env::var("S3_BUCKET")
-                    .unwrap_or_else(|_| "nova-uploads".to_string()),
-                region: std::env::var("AWS_REGION")
-                    .unwrap_or_else(|_| "us-east-1".to_string()),
+                bucket: std::env::var("S3_BUCKET").unwrap_or_else(|_| "nova-uploads".to_string()),
+                region: std::env::var("AWS_REGION").unwrap_or_else(|_| "us-east-1".to_string()),
                 access_key_id: std::env::var("AWS_ACCESS_KEY_ID").ok(),
                 secret_access_key: std::env::var("AWS_SECRET_ACCESS_KEY").ok(),
                 endpoint: std::env::var("S3_ENDPOINT").ok(),
             },
         })
     }
+}
+
+fn parse_sentinel_config() -> Option<CacheSentinelConfig> {
+    let raw = std::env::var("REDIS_SENTINEL_ENDPOINTS").ok()?;
+    let endpoints: Vec<String> = raw
+        .split(',')
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .map(|endpoint| {
+            if endpoint.starts_with("redis://") || endpoint.starts_with("rediss://") {
+                endpoint.to_string()
+            } else {
+                format!("redis://{}", endpoint)
+            }
+        })
+        .collect();
+
+    if endpoints.is_empty() {
+        return None;
+    }
+
+    let master_name = std::env::var("REDIS_SENTINEL_MASTER_NAME")
+        .unwrap_or_else(|_| "mymaster".to_string());
+    let poll_interval_ms = std::env::var("REDIS_SENTINEL_POLL_INTERVAL_MS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(5000);
+
+    Some(CacheSentinelConfig {
+        endpoints,
+        master_name,
+        poll_interval_ms,
+    })
 }

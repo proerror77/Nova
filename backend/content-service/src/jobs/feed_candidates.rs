@@ -70,8 +70,11 @@ impl FeedCandidateRefreshJob {
 
     async fn refresh_followees(&self) -> Result<()> {
         info!("Refreshing feed_candidates_followees");
-        self.rebuild_table("feed_candidates_followees", INSERT_FEED_CANDIDATES_FOLLOWEES)
-            .await
+        self.rebuild_table(
+            "feed_candidates_followees",
+            INSERT_FEED_CANDIDATES_FOLLOWEES,
+        )
+        .await
     }
 
     async fn refresh_trending(&self) -> Result<()> {

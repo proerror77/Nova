@@ -6,7 +6,6 @@
 /// - Server cannot decrypt message content
 /// - Forward secrecy is maintained through key rotation
 /// - Shared secrets are derived via ECDH (Elliptic Curve Diffie-Hellman)
-
 use crate::error::AppError;
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use hkdf::Hkdf;
@@ -73,7 +72,9 @@ impl E2eeService {
             .map_err(|_| AppError::Encryption("invalid public key length".to_string()))?;
 
         let shared_secret = crypto_core::x25519_derive_shared_secret(&secret_bytes, &public_bytes)
-            .map_err(|e| AppError::Encryption(format!("ECDH shared secret derivation failed: {}", e)))?;
+            .map_err(|e| {
+                AppError::Encryption(format!("ECDH shared secret derivation failed: {}", e))
+            })?;
 
         Ok(shared_secret.to_vec())
     }
@@ -86,11 +87,7 @@ impl E2eeService {
     ///
     /// Uses conversation_id as context to ensure different conversations
     /// have different encryption keys even with the same shared secret
-    pub fn derive_encryption_key(
-        &self,
-        shared_secret: &[u8],
-        conversation_id: Uuid,
-    ) -> [u8; 32] {
+    pub fn derive_encryption_key(&self, shared_secret: &[u8], conversation_id: Uuid) -> [u8; 32] {
         let hk = Hkdf::<Sha256>::new(None, shared_secret);
         let mut key = [0u8; 32];
         let context = conversation_id.as_bytes();
@@ -147,9 +144,7 @@ impl E2eeService {
             ));
         }
         if nonce.len() != 24 {
-            return Err(AppError::Encryption(
-                "nonce must be 24 bytes".to_string(),
-            ));
+            return Err(AppError::Encryption("nonce must be 24 bytes".to_string()));
         }
         if ciphertext.is_empty() {
             return Err(AppError::Encryption(
@@ -183,7 +178,9 @@ impl E2eeService {
         // Encrypt secret key at rest with master key
         let nonce = crypto_core::generate_nonce();
         let encrypted_secret = crypto_core::encrypt_at_rest(secret_key, &self.master_key, &nonce)
-            .map_err(|e| AppError::Encryption(format!("failed to encrypt secret key: {}", e)))?;
+            .map_err(|e| {
+            AppError::Encryption(format!("failed to encrypt secret key: {}", e))
+        })?;
 
         // Combine nonce + encrypted_secret for storage
         let mut stored_secret = nonce.to_vec();
@@ -220,21 +217,20 @@ impl E2eeService {
         user_id: Uuid,
         device_id: &str,
     ) -> Result<Option<Vec<u8>>, AppError> {
-        let row = sqlx::query(
-            "SELECT public_key FROM device_keys WHERE user_id = $1 AND device_id = $2"
-        )
-        .bind(user_id)
-        .bind(device_id)
-        .fetch_optional(pool)
-        .await
-        .map_err(|e| AppError::Database(e))?;
+        let row =
+            sqlx::query("SELECT public_key FROM device_keys WHERE user_id = $1 AND device_id = $2")
+                .bind(user_id)
+                .bind(device_id)
+                .fetch_optional(pool)
+                .await
+                .map_err(|e| AppError::Database(e))?;
 
         match row {
             Some(row) => {
                 let public_key_b64: String = row.get("public_key");
-                let public_key = BASE64
-                    .decode(&public_key_b64)
-                    .map_err(|e| AppError::Encryption(format!("invalid base64 public key: {}", e)))?;
+                let public_key = BASE64.decode(&public_key_b64).map_err(|e| {
+                    AppError::Encryption(format!("invalid base64 public key: {}", e))
+                })?;
                 Ok(Some(public_key))
             }
             None => Ok(None),
@@ -249,7 +245,7 @@ impl E2eeService {
         device_id: &str,
     ) -> Result<Option<Vec<u8>>, AppError> {
         let row = sqlx::query(
-            "SELECT private_key_encrypted FROM device_keys WHERE user_id = $1 AND device_id = $2"
+            "SELECT private_key_encrypted FROM device_keys WHERE user_id = $1 AND device_id = $2",
         )
         .bind(user_id)
         .bind(device_id)
@@ -260,9 +256,9 @@ impl E2eeService {
         match row {
             Some(row) => {
                 let encrypted_b64: String = row.get("private_key_encrypted");
-                let stored_secret = BASE64
-                    .decode(&encrypted_b64)
-                    .map_err(|e| AppError::Encryption(format!("invalid base64 secret key: {}", e)))?;
+                let stored_secret = BASE64.decode(&encrypted_b64).map_err(|e| {
+                    AppError::Encryption(format!("invalid base64 secret key: {}", e))
+                })?;
 
                 // Extract nonce (first 24 bytes) and ciphertext
                 if stored_secret.len() < 24 {
@@ -273,8 +269,11 @@ impl E2eeService {
 
                 let (nonce_bytes, ciphertext) = stored_secret.split_at(24);
 
-                let secret_key = crypto_core::decrypt_at_rest(ciphertext, &self.master_key, nonce_bytes)
-                    .map_err(|e| AppError::Encryption(format!("failed to decrypt secret key: {}", e)))?;
+                let secret_key =
+                    crypto_core::decrypt_at_rest(ciphertext, &self.master_key, nonce_bytes)
+                        .map_err(|e| {
+                            AppError::Encryption(format!("failed to decrypt secret key: {}", e))
+                        })?;
 
                 Ok(Some(secret_key))
             }
@@ -355,7 +354,9 @@ mod tests {
 
         let plaintext = b"Hello E2EE";
         let (ciphertext, nonce) = service.encrypt_message(&encryption_key, plaintext).unwrap();
-        let decrypted = service.decrypt_message(&encryption_key, &ciphertext, &nonce).unwrap();
+        let decrypted = service
+            .decrypt_message(&encryption_key, &ciphertext, &nonce)
+            .unwrap();
 
         assert_eq!(decrypted, plaintext);
     }

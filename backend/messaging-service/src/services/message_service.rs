@@ -12,13 +12,14 @@ impl MessageService {
         db: &Pool<Postgres>,
         conversation_id: Uuid,
     ) -> Result<PrivacyMode, crate::error::AppError> {
-        let mode: Option<String> = sqlx::query_scalar(
-            "SELECT privacy_mode::text FROM conversations WHERE id = $1",
-        )
-        .bind(conversation_id)
-        .fetch_optional(db)
-        .await
-        .map_err(|e| crate::error::AppError::StartServer(format!("fetch privacy mode: {e}")))?;
+        let mode: Option<String> =
+            sqlx::query_scalar("SELECT privacy_mode::text FROM conversations WHERE id = $1")
+                .bind(conversation_id)
+                .fetch_optional(db)
+                .await
+                .map_err(|e| {
+                    crate::error::AppError::StartServer(format!("fetch privacy mode: {e}"))
+                })?;
 
         let mode = mode.ok_or(crate::error::AppError::NotFound)?;
         let privacy = match mode.as_str() {
@@ -52,12 +53,7 @@ impl MessageService {
         let (content, content_encrypted, content_nonce, encryption_version) =
             if matches!(privacy_mode, PrivacyMode::StrictE2e) {
                 let (ciphertext, nonce) = encryption.encrypt(conversation_id, plaintext)?;
-                (
-                    String::new(),
-                    Some(ciphertext),
-                    Some(nonce.to_vec()),
-                    1,
-                )
+                (String::new(), Some(ciphertext), Some(nonce.to_vec()), 1)
             } else {
                 (content_string.clone(), None, None, 0)
             };
@@ -145,15 +141,9 @@ impl MessageService {
         }
 
         // Send message without idempotency key (for simple use cases)
-        let (message_id, _sequence_number) = Self::send_message_db(
-            db,
-            encryption,
-            conversation_id,
-            sender_id,
-            plaintext,
-            None,
-        )
-        .await?;
+        let (message_id, _sequence_number) =
+            Self::send_message_db(db, encryption, conversation_id, sender_id, plaintext, None)
+                .await?;
 
         Ok(message_id)
     }
@@ -179,13 +169,9 @@ impl MessageService {
 
         let (content, content_encrypted, content_nonce, encryption_version) =
             if matches!(privacy_mode, PrivacyMode::StrictE2e) {
-                let (ciphertext, nonce) = encryption.encrypt(conversation_id, audio_url.as_bytes())?;
-                (
-                    String::new(),
-                    Some(ciphertext),
-                    Some(nonce.to_vec()),
-                    1,
-                )
+                let (ciphertext, nonce) =
+                    encryption.encrypt(conversation_id, audio_url.as_bytes())?;
+                (String::new(), Some(ciphertext), Some(nonce.to_vec()), 1)
             } else {
                 (audio_url.to_string(), None, None, 0)
             };
@@ -287,10 +273,12 @@ impl MessageService {
             let message_type: Option<String> = r.get("message_type");
 
             if use_encryption {
-                let ciphertext: Option<Vec<u8>> =
-                    r.try_get::<Option<Vec<u8>>, _>("content_encrypted").unwrap_or(None);
-                let nonce: Option<Vec<u8>> =
-                    r.try_get::<Option<Vec<u8>>, _>("content_nonce").unwrap_or(None);
+                let ciphertext: Option<Vec<u8>> = r
+                    .try_get::<Option<Vec<u8>>, _>("content_encrypted")
+                    .unwrap_or(None);
+                let nonce: Option<Vec<u8>> = r
+                    .try_get::<Option<Vec<u8>>, _>("content_nonce")
+                    .unwrap_or(None);
                 out.push(super::super::routes::messages::MessageDto {
                     id,
                     sender_id,
@@ -301,9 +289,7 @@ impl MessageService {
                     encrypted_payload: ciphertext
                         .as_ref()
                         .map(|c| general_purpose::STANDARD.encode(c)),
-                    nonce: nonce
-                        .as_ref()
-                        .map(|n| general_purpose::STANDARD.encode(n)),
+                    nonce: nonce.as_ref().map(|n| general_purpose::STANDARD.encode(n)),
                     recalled_at: recalled_at.map(|t| t.to_rfc3339()),
                     updated_at: updated_at.map(|t| t.to_rfc3339()),
                     version_number,
@@ -476,10 +462,12 @@ impl MessageService {
                 let message_type: Option<String> = r.get("message_type");
 
                 if use_encryption {
-                    let ciphertext: Option<Vec<u8>> =
-                        r.try_get::<Option<Vec<u8>>, _>("content_encrypted").unwrap_or(None);
-                    let nonce: Option<Vec<u8>> =
-                        r.try_get::<Option<Vec<u8>>, _>("content_nonce").unwrap_or(None);
+                    let ciphertext: Option<Vec<u8>> = r
+                        .try_get::<Option<Vec<u8>>, _>("content_encrypted")
+                        .unwrap_or(None);
+                    let nonce: Option<Vec<u8>> = r
+                        .try_get::<Option<Vec<u8>>, _>("content_nonce")
+                        .unwrap_or(None);
                     MessageDto {
                         id,
                         sender_id,
@@ -490,9 +478,7 @@ impl MessageService {
                         encrypted_payload: ciphertext
                             .as_ref()
                             .map(|c| general_purpose::STANDARD.encode(c)),
-                        nonce: nonce
-                            .as_ref()
-                            .map(|n| general_purpose::STANDARD.encode(n)),
+                        nonce: nonce.as_ref().map(|n| general_purpose::STANDARD.encode(n)),
                         recalled_at: recalled_at.map(|t| t.to_rfc3339()),
                         updated_at: updated_at.map(|t| t.to_rfc3339()),
                         version_number,
@@ -535,13 +521,11 @@ impl MessageService {
             .map_err(|e| crate::error::AppError::Config(format!("invalid utf8: {e}")))?;
 
         // Get conversation_id and sender_id before updating
-        let msg_info = sqlx::query(
-            "SELECT conversation_id FROM messages WHERE id = $1",
-        )
-        .bind(message_id)
-        .fetch_one(db)
-        .await
-        .map_err(|e| crate::error::AppError::StartServer(format!("get message info: {e}")))?;
+        let msg_info = sqlx::query("SELECT conversation_id FROM messages WHERE id = $1")
+            .bind(message_id)
+            .fetch_one(db)
+            .await
+            .map_err(|e| crate::error::AppError::StartServer(format!("get message info: {e}")))?;
         let conversation_id: Uuid = msg_info.get("conversation_id");
 
         let privacy_mode = Self::fetch_conversation_privacy(db, conversation_id).await?;

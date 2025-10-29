@@ -155,19 +155,31 @@ impl FeedRankingService {
         limit: usize,
         offset: usize,
     ) -> Result<(Vec<Uuid>, bool, usize)> {
+        // Check if circuit breaker is already open (ClickHouse known to be down)
         if matches!(self.circuit_breaker.get_state().await, CircuitState::Open) {
             return self.fallback_feed(user_id, limit, offset).await;
         }
 
         let start = Instant::now();
-        let candidate_limit = ((offset + limit)
-            .max(limit * self.candidate_prefetch_multiplier))
-        .min(self.max_feed_candidates);
+        let candidate_limit = ((offset + limit).max(limit * self.candidate_prefetch_multiplier))
+            .min(self.max_feed_candidates);
 
-        let candidates = self
+        // Try to get candidates from ClickHouse with circuit breaker protection
+        // If it fails for any reason, fall back to PostgreSQL
+        let candidates = match self
             .circuit_breaker
             .call(|| async { self.get_feed_candidates(user_id, candidate_limit).await })
-            .await?;
+            .await
+        {
+            Ok(candidates) => candidates,
+            Err(e) => {
+                warn!(
+                    "Failed to get feed candidates from ClickHouse for user {} (will use fallback): {}",
+                    user_id, e
+                );
+                return self.fallback_feed(user_id, limit, offset).await;
+            }
+        };
 
         let ranked = self
             .rank_candidates(candidates, self.max_feed_candidates)
@@ -193,9 +205,7 @@ impl FeedRankingService {
         FEED_REQUEST_DURATION_SECONDS
             .with_label_values(&["clickhouse"])
             .observe(elapsed);
-        FEED_REQUEST_TOTAL
-            .with_label_values(&["clickhouse"])
-            .inc();
+        FEED_REQUEST_TOTAL.with_label_values(&["clickhouse"]).inc();
         FEED_CANDIDATE_COUNT
             .with_label_values(&["clickhouse"])
             .observe(total_count as f64);
@@ -217,43 +227,35 @@ impl FeedRankingService {
         let start = Instant::now();
 
         match self.cache.read_feed_cache(user_id).await? {
-                Some(cached) => {
-                    let total_count = cached.post_ids.len();
-                    if offset < total_count {
-                        let end = (offset + limit).min(total_count);
-                        let page = cached.post_ids[offset..end].to_vec();
-                        let has_more = end < total_count;
+            Some(cached) => {
+                let total_count = cached.post_ids.len();
+                if offset < total_count {
+                    let end = (offset + limit).min(total_count);
+                    let page = cached.post_ids[offset..end].to_vec();
+                    let has_more = end < total_count;
 
-                        FEED_CACHE_EVENTS
-                            .with_label_values(&["hit"])
-                            .inc();
+                    FEED_CACHE_EVENTS.with_label_values(&["hit"]).inc();
 
-                        let elapsed = start.elapsed().as_secs_f64();
-                        FEED_REQUEST_DURATION_SECONDS
-                            .with_label_values(&["cache"])
-                            .observe(elapsed);
-                        FEED_REQUEST_TOTAL
-                            .with_label_values(&["cache"])
-                            .inc();
-                        FEED_CANDIDATE_COUNT
-                            .with_label_values(&["cache"])
-                            .observe(total_count as f64);
-                        return Ok((page, has_more, total_count));
-                    }
-
-                    debug!(
-                        "Fallback cache present but offset out of range (user={} offset={} total={})",
-                        user_id, offset, total_count
-                    );
-                    FEED_CACHE_EVENTS
-                        .with_label_values(&["miss"])
-                        .inc();
+                    let elapsed = start.elapsed().as_secs_f64();
+                    FEED_REQUEST_DURATION_SECONDS
+                        .with_label_values(&["cache"])
+                        .observe(elapsed);
+                    FEED_REQUEST_TOTAL.with_label_values(&["cache"]).inc();
+                    FEED_CANDIDATE_COUNT
+                        .with_label_values(&["cache"])
+                        .observe(total_count as f64);
+                    return Ok((page, has_more, total_count));
                 }
-                None => {
-                    FEED_CACHE_EVENTS
-                        .with_label_values(&["miss"])
-                        .inc();
-                }
+
+                debug!(
+                    "Fallback cache present but offset out of range (user={} offset={} total={})",
+                    user_id, offset, total_count
+                );
+                FEED_CACHE_EVENTS.with_label_values(&["miss"]).inc();
+            }
+            None => {
+                FEED_CACHE_EVENTS.with_label_values(&["miss"]).inc();
+            }
         }
 
         let fetch_limit = offset.saturating_add(limit).saturating_add(1) as i64;
@@ -278,8 +280,7 @@ impl FeedRankingService {
         let has_more = end < total_count;
 
         if total_count > 0 {
-            self
-                .cache
+            self.cache
                 .write_feed_cache(user_id, posts.clone(), Some(self.fallback_cache_ttl_secs))
                 .await?;
         }

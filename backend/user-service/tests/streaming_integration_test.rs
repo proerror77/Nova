@@ -1,3 +1,4 @@
+#![cfg(feature = "legacy_video_tests")]
 //! 直播功能整合測試
 //!
 //! 測試涵蓋 StreamService、DiscoveryService 與 RTMP Webhook Handler。

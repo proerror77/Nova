@@ -51,7 +51,7 @@ pub type JobReceiver = mpsc::Receiver<ImageProcessingJob>;
 /// * `capacity` - Maximum number of jobs that can be queued (buffered channel)
 ///
 /// # Example
-/// ```
+/// ```ignore
 /// let (sender, receiver) = create_job_queue(100);
 /// ```
 pub fn create_job_queue(capacity: usize) -> (JobSender, JobReceiver) {

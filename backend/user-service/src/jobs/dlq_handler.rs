@@ -184,6 +184,7 @@ pub fn create_dlq_message_from_error(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use uuid::Uuid;
 
     #[test]
     fn test_dlq_message_creation() {

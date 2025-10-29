@@ -1,0 +1,107 @@
+syntax = "proto3";
+
+package nova.recommendation.v1;
+
+option go_package = "github.com/novacorp/nova/backend/proto/recommendation/v1";
+option java_multiple_files = true;
+option java_outer_classname = "RecommendationProto";
+
+// RecommendationService provides recommendation and feed ranking capabilities
+service RecommendationService {
+  // GetFeed returns a personalized feed for a user
+  rpc GetFeed(GetFeedRequest) returns (GetFeedResponse);
+
+  // RankPosts ranks a list of posts based on user context
+  rpc RankPosts(RankPostsRequest) returns (RankPostsResponse);
+
+  // GetRecommendedCreators returns recommended creators for a user
+  rpc GetRecommendedCreators(GetRecommendedCreatorsRequest)
+    returns (GetRecommendedCreatorsResponse);
+}
+
+// GetFeedRequest represents a request for user's personalized feed
+message GetFeedRequest {
+  string user_id = 1;
+  uint32 limit = 2;
+  string cursor = 3;  // Base64 encoded pagination cursor
+  string algorithm = 4;  // Algorithm variant: "ch", "v2", "hybrid", etc.
+}
+
+// FeedPost represents a single post in the feed
+message FeedPost {
+  string id = 1;
+  string user_id = 2;
+  string content = 3;
+  int64 created_at = 4;  // Unix timestamp
+  double ranking_score = 5;
+  uint32 like_count = 6;
+  uint32 comment_count = 7;
+  uint32 share_count = 8;
+}
+
+// GetFeedResponse contains the personalized feed
+message GetFeedResponse {
+  repeated FeedPost posts = 1;
+  string next_cursor = 2;  // Base64 encoded cursor for next page
+  bool has_more = 3;
+}
+
+// RankPostsRequest ranks posts for a user
+message RankPostsRequest {
+  string user_id = 1;
+  repeated RankablePost posts = 2;
+  RankingContext context = 3;
+}
+
+// RankablePost represents a post to be ranked
+message RankablePost {
+  string id = 1;
+  string author_id = 2;
+  string content = 3;
+  int64 created_at = 4;
+  uint32 like_count = 5;
+  uint32 comment_count = 6;
+  uint32 share_count = 7;
+}
+
+// RankingContext provides context for ranking
+message RankingContext {
+  int64 timestamp = 1;
+  string user_location = 2;
+  repeated string user_interests = 3;
+  repeated string followed_users = 4;
+  repeated string blocked_users = 5;
+}
+
+// RankedPost represents a ranked post
+message RankedPost {
+  string id = 1;
+  double score = 2;
+  string reason = 3;
+}
+
+// RankPostsResponse contains ranked posts
+message RankPostsResponse {
+  repeated RankedPost ranked_posts = 1;
+}
+
+// GetRecommendedCreatorsRequest requests recommended creators
+message GetRecommendedCreatorsRequest {
+  string user_id = 1;
+  uint32 limit = 2;
+}
+
+// RecommendedCreator represents a creator recommendation
+message RecommendedCreator {
+  string id = 1;
+  string name = 2;
+  string avatar = 3;
+  double relevance_score = 4;
+  uint32 follower_count = 5;
+  string reason = 6;
+}
+
+// GetRecommendedCreatorsResponse contains recommended creators
+message GetRecommendedCreatorsResponse {
+  repeated RecommendedCreator creators = 1;
+}

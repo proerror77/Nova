@@ -10,6 +10,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use uuid::Uuid;
 
+use crate::utils::redis_timeout::run_with_timeout;
+
 const METRIC_COUNTER_PREFIX: &str = "exp:metric:counter";
 const BATCH_SIZE: usize = 100;
 
@@ -199,8 +201,8 @@ impl MetricsService {
             METRIC_COUNTER_PREFIX, experiment_id, variant_id, metric_name
         );
 
-        let count: Option<i64> = conn.get::<_, Option<i64>>(&count_key).await?;
-        let sum: Option<f64> = conn.get::<_, Option<f64>>(&sum_key).await?;
+        let count: Option<i64> = run_with_timeout(conn.get::<_, Option<i64>>(&count_key)).await?;
+        let sum: Option<f64> = run_with_timeout(conn.get::<_, Option<f64>>(&sum_key)).await?;
 
         match (count, sum) {
             (Some(c), Some(s)) => Ok(Some((c, s))),
@@ -216,19 +218,19 @@ impl MetricsService {
         // Scan and delete
         let mut cursor = 0;
         loop {
-            let (new_cursor, keys): (u64, Vec<String>) = redis::cmd("SCAN")
-                .arg(cursor)
-                .arg("MATCH")
-                .arg(&pattern)
-                .arg("COUNT")
-                .arg(100)
-                .query_async(&mut conn)
-                .await?;
+            let (new_cursor, keys): (u64, Vec<String>) = run_with_timeout(
+                redis::cmd("SCAN")
+                    .arg(cursor)
+                    .arg("MATCH")
+                    .arg(&pattern)
+                    .arg("COUNT")
+                    .arg(100)
+                    .query_async(&mut conn),
+            )
+            .await?;
 
             if !keys.is_empty() {
-                redis::cmd("DEL")
-                    .arg(&keys)
-                    .query_async::<_, ()>(&mut conn)
+                run_with_timeout(redis::cmd("DEL").arg(&keys).query_async::<_, ()>(&mut conn))
                     .await?;
             }
 
@@ -301,6 +303,7 @@ pub enum MetricsError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::db::experiment_repo::AggregatedMetric;
 
     #[tokio::test]
     async fn test_metric_stats_calculation() {

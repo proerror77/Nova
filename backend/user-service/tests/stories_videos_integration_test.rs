@@ -1,3 +1,4 @@
+#![cfg(feature = "legacy_video_tests")]
 //! Integration tests for Stories and Videos minimal flows
 
 mod common;

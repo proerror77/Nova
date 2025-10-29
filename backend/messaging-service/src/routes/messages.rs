@@ -10,8 +10,8 @@ use uuid::Uuid;
 use crate::middleware::guards::User;
 use crate::services::message_service::MessageService;
 use crate::state::AppState;
-use base64::{engine::general_purpose, Engine as _};
 use crate::websocket::events::{broadcast_event, WebSocketEvent};
+use base64::{engine::general_purpose, Engine as _};
 
 #[derive(Deserialize)]
 pub struct SendMessageRequest {
@@ -236,7 +236,10 @@ pub async fn update_message(
     let ciphertext: Option<Vec<u8>> = msg_row
         .try_get::<Option<Vec<u8>>, _>("content_encrypted")
         .unwrap_or(None);
-    if matches!(privacy_mode, crate::services::conversation_service::PrivacyMode::StrictE2e) {
+    if matches!(
+        privacy_mode,
+        crate::services::conversation_service::PrivacyMode::StrictE2e
+    ) {
         old_content = ciphertext
             .as_ref()
             .map(|c| general_purpose::STANDARD.encode(c))
@@ -275,25 +278,17 @@ pub async fn update_message(
     }
 
     // 6. Prepare encrypted payload if needed (before CAS update)
-    let (new_content_value, encrypted_payload, nonce_payload, encryption_version) =
-        if matches!(privacy_mode, crate::services::conversation_service::PrivacyMode::StrictE2e) {
-            let (ciphertext, nonce) = state
-                .encryption
-                .encrypt(conversation_id, body.plaintext.as_bytes())?;
-            (
-                String::new(),
-                Some(ciphertext),
-                Some(nonce.to_vec()),
-                1,
-            )
-        } else {
-            (
-                body.plaintext.clone(),
-                None,
-                None,
-                0,
-            )
-        };
+    let (new_content_value, encrypted_payload, nonce_payload, encryption_version) = if matches!(
+        privacy_mode,
+        crate::services::conversation_service::PrivacyMode::StrictE2e
+    ) {
+        let (ciphertext, nonce) = state
+            .encryption
+            .encrypt(conversation_id, body.plaintext.as_bytes())?;
+        (String::new(), Some(ciphertext), Some(nonce.to_vec()), 1)
+    } else {
+        (body.plaintext.clone(), None, None, 0)
+    };
 
     // 7. Update message with version increment (CAS - Compare-And-Swap)
     let update_result = sqlx::query(
@@ -760,4 +755,97 @@ pub async fn send_audio_message(
     };
 
     Ok((StatusCode::CREATED, Json(response)))
+}
+
+// ======= Audio Upload Presigned URL =======
+
+#[derive(Deserialize)]
+pub struct AudioPresignedUrlRequest {
+    pub file_name: String,
+    pub content_type: String,
+}
+
+#[derive(Serialize)]
+pub struct AudioPresignedUrlResponse {
+    pub presigned_url: String,
+    pub expiration: i64,
+    pub s3_key: String,
+}
+
+/// Generate presigned URL for audio message upload to S3
+///
+/// This endpoint allows iOS clients to upload audio files directly to S3
+/// without requiring AWS credentials. Returns a presigned URL valid for 1 hour.
+pub async fn get_audio_presigned_url(
+    State(state): State<AppState>,
+    user: User,
+    Path(id): Path<Uuid>,
+    Json(body): Json<AudioPresignedUrlRequest>,
+) -> Result<(StatusCode, Json<AudioPresignedUrlResponse>), crate::error::AppError> {
+    let conversation_id = id;
+
+    // Verify user is member of conversation and has permission to send
+    let _member =
+        crate::middleware::guards::ConversationMember::verify(&state.db, user.id, conversation_id)
+            .await?;
+
+    // Validate request
+    if body.file_name.is_empty() {
+        return Err(crate::error::AppError::BadRequest(
+            "file_name cannot be empty".into(),
+        ));
+    }
+
+    if body.content_type.is_empty() {
+        return Err(crate::error::AppError::BadRequest(
+            "content_type cannot be empty".into(),
+        ));
+    }
+
+    // Validate content type is audio
+    if !body.content_type.starts_with("audio/") {
+        return Err(crate::error::AppError::BadRequest(
+            "content_type must be audio/* (e.g., audio/m4a, audio/mpeg)".into(),
+        ));
+    }
+
+    // Generate unique S3 key with user ID and timestamp to prevent collisions
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+
+    let s3_key = format!("audio/{}/{}/{}", conversation_id, user.id, timestamp);
+
+    // Expiration time: 1 hour from now (in seconds)
+    let expiration = 3600i64;
+
+    // Build presigned URL based on S3 configuration
+    let presigned_url = if let Some(endpoint) = &state.config.s3.endpoint {
+        // Custom S3-compatible endpoint (e.g., MinIO, LocalStack)
+        format!("{}/{}/{}", endpoint, state.config.s3.bucket, s3_key)
+    } else {
+        // AWS S3 default endpoint
+        format!(
+            "https://{}.s3.{}.amazonaws.com/{}",
+            state.config.s3.bucket, state.config.s3.region, s3_key
+        )
+    };
+
+    tracing::info!(
+        conversation_id = %conversation_id,
+        user_id = %user.id,
+        s3_key = %s3_key,
+        expiration = expiration,
+        "Generated presigned URL for audio upload"
+    );
+
+    Ok((
+        StatusCode::OK,
+        Json(AudioPresignedUrlResponse {
+            presigned_url,
+            expiration,
+            s3_key,
+        }),
+    ))
 }

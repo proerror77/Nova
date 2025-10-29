@@ -1,0 +1,10 @@
+[package]
+name = "redis-utils"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0"
+redis = { workspace = true }
+tokio = { version = "1.36", features = ["rt", "rt-multi-thread", "time", "sync"] }
+tracing = { workspace = true }

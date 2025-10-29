@@ -1,0 +1,9 @@
+---
+# Nova Kubernetes 命名空间
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: nova
+  labels:
+    app: nova
+    environment: production

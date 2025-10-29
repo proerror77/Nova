@@ -257,7 +257,7 @@ services:
 
       # Database
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-nova_auth}
-      DATABASE_MAX_CONNECTIONS: 20
+      DATABASE_MAX_CONNECTIONS: 10
 
       # Redis
       REDIS_URL: redis://:${REDIS_PASSWORD:-redis123}@redis:6379/0

@@ -86,7 +86,8 @@ impl PushProvider for FcmPush {
         let api_key = std::env::var("FCM_API_KEY")
             .map_err(|_| AppError::Config("FCM_API_KEY not set".to_string()))?;
 
-        self.send_internal(&api_key, device_token, title, body, badge).await
+        self.send_internal(&api_key, device_token, title, body, badge)
+            .await
     }
 }
 

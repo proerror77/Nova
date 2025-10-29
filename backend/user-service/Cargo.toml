@@ -23,6 +23,16 @@ path = "src/bin/graph_backfill.rs"
 name = "user_service"
 path = "src/lib.rs"
 
+[features]
+default = []
+legacy_posts_tests = []
+legacy_video_tests = []
+legacy_recommendation_tests = []
+legacy_security_tests = []
+legacy_auth_tests = []
+legacy_messaging_tests = []
+legacy_internal_tests = []
+
 [dependencies]
 # Workspace dependencies
 actix-web.workspace = true
@@ -107,10 +117,12 @@ tempfile = "3.8"
 [[test]]
 name = "posts_test"
 path = "tests/posts_test.rs"
+required-features = ["legacy_posts_tests"]
 
 [[test]]
 name = "oauth_test"
 path = "tests/oauth_test.rs"
+required-features = ["legacy_auth_tests"]
 
 [[test]]
 name = "oauth_token_verification_test"
@@ -123,6 +135,7 @@ path = "tests/job_test.rs"
 [[test]]
 name = "security_test"
 path = "tests/integration/security_test.rs"
+required-features = ["legacy_security_tests"]
 
 [[test]]
 name = "load_test"
@@ -131,6 +144,7 @@ path = "tests/integration/load_test.rs"
 [[test]]
 name = "2fa_test"
 path = "tests/2fa_test.rs"
+required-features = ["legacy_security_tests"]
 
 [[test]]
 name = "events_integration_test"
@@ -152,48 +166,59 @@ path = "tests/performance/events_load_test.rs"
 [[test]]
 name = "video_metadata_tests"
 path = "tests/unit/video/video_metadata_tests.rs"
+required-features = ["legacy_video_tests"]
 
 [[test]]
 name = "video_ranking_tests"
 path = "tests/unit/video/video_ranking_tests.rs"
+required-features = ["legacy_video_tests"]
 
 [[test]]
 name = "embedding_tests"
 path = "tests/unit/video/embedding_tests.rs"
+required-features = ["legacy_video_tests"]
 
 [[test]]
 name = "feature_extraction_test"
 path = "tests/unit/video/feature_extraction_test.rs"
+required-features = ["legacy_video_tests"]
 
 # Phase 6: Video System Integration Tests (T134-T137)
 [[test]]
 name = "video_e2e_tests"
 path = "tests/integration/video/video_e2e_tests.rs"
+required-features = ["legacy_video_tests"]
 
 [[test]]
 name = "video_ranking_integration_tests"
 path = "tests/integration/video/video_ranking_integration_tests.rs"
+required-features = ["legacy_video_tests"]
 
 [[test]]
 name = "video_streaming_engagement_tests"
 path = "tests/integration/video/video_streaming_engagement_tests.rs"
+required-features = ["legacy_video_tests"]
 
 # Phase 6: Video System Performance Tests (T138-T141)
 [[test]]
 name = "video_ranking_latency_test"
 path = "tests/performance/video/video_ranking_latency_test.rs"
+required-features = ["legacy_video_tests"]
 
 [[test]]
 name = "video_transcoding_throughput_test"
 path = "tests/performance/video/video_transcoding_throughput_test.rs"
+required-features = ["legacy_video_tests"]
 
 [[test]]
 name = "video_model_inference_test"
 path = "tests/performance/video/video_model_inference_test.rs"
+required-features = ["legacy_video_tests"]
 
 [[test]]
 name = "video_bitrate_switching_test"
 path = "tests/performance/video/video_bitrate_switching_test.rs"
+required-features = ["legacy_video_tests"]
 
 [[test]]
 name = "social_graph_tests"

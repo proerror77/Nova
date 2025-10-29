@@ -171,10 +171,7 @@ pub async fn generate_presigned_url(
 
     let presigned_url = if let Some(endpoint) = &config.s3.endpoint {
         // Custom S3-compatible endpoint (e.g., MinIO, LocalStack)
-        format!(
-            "{}/{}/{}",
-            endpoint, config.s3.bucket, s3_key
-        )
+        format!("{}/{}/{}", endpoint, config.s3.bucket, s3_key)
     } else {
         // AWS S3 default endpoint
         format!(

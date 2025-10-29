@@ -4,8 +4,8 @@ use sqlx::PgPool;
 
 use crate::db::{password_reset_repo, user_repo};
 use crate::security::{hash_password, verify_password};
-use crate::services::password_reset_service;
 use crate::services::email_service::EmailService;
+use crate::services::password_reset_service;
 use crate::validators;
 use chrono::Duration;
 

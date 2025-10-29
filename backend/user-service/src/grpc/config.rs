@@ -22,6 +22,12 @@ pub struct GrpcClientConfig {
     pub health_check_interval_secs: u64,
     /// gRPC client connection pool size per service
     pub pool_size: usize,
+    /// Number of connection retry attempts
+    pub connect_retry_attempts: u32,
+    /// Backoff between connection retries in milliseconds
+    pub connect_retry_backoff_ms: u64,
+    /// HTTP/2 keep-alive interval in seconds
+    pub http2_keep_alive_interval_secs: u64,
 }
 
 impl GrpcClientConfig {
@@ -36,6 +42,9 @@ impl GrpcClientConfig {
             enable_health_check: true,
             health_check_interval_secs: 30,
             pool_size: 4,
+            connect_retry_attempts: 3,
+            connect_retry_backoff_ms: 200,
+            http2_keep_alive_interval_secs: 30,
         }
     }
 
@@ -57,6 +66,23 @@ impl GrpcClientConfig {
     /// Get gRPC client pool size (minimum 1)
     pub fn pool_size(&self) -> usize {
         self.pool_size.max(1)
+    }
+
+    /// Number of connection retry attempts
+    pub fn connect_retry_attempts(&self) -> u32 {
+        self.connect_retry_attempts.max(1)
+    }
+
+    /// Backoff duration between connection retries
+    pub fn connect_retry_backoff(&self) -> Duration {
+        let millis = self.connect_retry_backoff_ms.max(50);
+        Duration::from_millis(millis)
+    }
+
+    /// HTTP/2 keep-alive interval
+    pub fn http2_keep_alive_interval(&self) -> Duration {
+        let secs = self.http2_keep_alive_interval_secs.max(5);
+        Duration::from_secs(secs)
     }
 
     /// Load configuration from environment variables
@@ -97,6 +123,21 @@ impl GrpcClientConfig {
             .and_then(|s| s.parse().ok())
             .unwrap_or(4);
 
+        let connect_retry_attempts = std::env::var("GRPC_CONNECT_RETRY_ATTEMPTS")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(3);
+
+        let connect_retry_backoff_ms = std::env::var("GRPC_CONNECT_RETRY_BACKOFF_MS")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(200);
+
+        let http2_keep_alive_interval_secs = std::env::var("GRPC_HTTP2_KEEP_ALIVE_SECS")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(30);
+
         Ok(Self {
             content_service_url,
             media_service_url,
@@ -106,6 +147,9 @@ impl GrpcClientConfig {
             enable_health_check,
             health_check_interval_secs,
             pool_size,
+            connect_retry_attempts,
+            connect_retry_backoff_ms,
+            http2_keep_alive_interval_secs,
         })
     }
 }

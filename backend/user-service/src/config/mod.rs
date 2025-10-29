@@ -130,6 +130,12 @@ pub struct KafkaConfig {
     pub brokers: String,
     #[serde(default = "default_events_topic")]
     pub events_topic: String,
+    #[serde(default = "default_kafka_request_timeout_ms")]
+    pub request_timeout_ms: u64,
+    #[serde(default = "default_kafka_retry_backoff_ms")]
+    pub retry_backoff_ms: u64,
+    #[serde(default = "default_kafka_retry_attempts")]
+    pub retry_attempts: u32,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -160,7 +166,7 @@ fn default_app_port() -> u16 {
 }
 
 fn default_db_max_connections() -> u32 {
-    20
+    10
 }
 
 fn default_redis_pool_size() -> u32 {
@@ -215,6 +221,18 @@ fn default_events_topic() -> String {
     "events".to_string()
 }
 
+fn default_kafka_request_timeout_ms() -> u64 {
+    5_000
+}
+
+fn default_kafka_retry_backoff_ms() -> u64 {
+    200
+}
+
+fn default_kafka_retry_attempts() -> u32 {
+    3
+}
+
 fn default_graph_enabled() -> bool {
     false
 }
@@ -235,8 +253,10 @@ impl Config {
     pub fn from_env() -> Result<Self, envy::Error> {
         dotenv::dotenv().ok();
 
+        let app_env = env::var("APP_ENV").unwrap_or_else(|_| default_app_env());
+
         let app = AppConfig {
-            env: env::var("APP_ENV").unwrap_or_else(|_| default_app_env()),
+            env: app_env.clone(),
             host: env::var("APP_HOST").unwrap_or_else(|_| default_app_host()),
             port: env::var("APP_PORT")
                 .unwrap_or_else(|_| default_app_port().to_string())
@@ -260,8 +280,22 @@ impl Config {
                 .unwrap_or(default_redis_pool_size()),
         };
 
+        let jwt_secret = env::var("JWT_SECRET").expect("JWT_SECRET must be set");
+
+        if app_env.eq_ignore_ascii_case("production") {
+            if jwt_secret.trim().is_empty() {
+                panic!("JWT_SECRET must not be empty in production");
+            }
+            if jwt_secret.trim() == "dev_secret_change_in_production_32chars" {
+                panic!("JWT_SECRET must be overridden in production");
+            }
+            if jwt_secret.len() < 32 {
+                panic!("JWT_SECRET must be at least 32 characters in production");
+            }
+        }
+
         let jwt = JwtConfig {
-            secret: env::var("JWT_SECRET").expect("JWT_SECRET must be set"),
+            secret: jwt_secret,
             access_token_ttl: env::var("JWT_ACCESS_TOKEN_TTL")
                 .unwrap_or_else(|_| default_jwt_access_ttl().to_string())
                 .parse()
@@ -311,9 +345,20 @@ impl Config {
                 .unwrap_or(default_s3_presigned_url_expiry_secs()),
         };
 
+        let cors_allowed_origins = match env::var("CORS_ALLOWED_ORIGINS") {
+            Ok(value) => value,
+            Err(_) if app_env.eq_ignore_ascii_case("production") => {
+                panic!("CORS_ALLOWED_ORIGINS must be set in production")
+            }
+            Err(_) => "http://localhost:3000".to_string(),
+        };
+
+        if app_env.eq_ignore_ascii_case("production") && cors_allowed_origins.trim() == "*" {
+            panic!("CORS_ALLOWED_ORIGINS cannot be '*' in production");
+        }
+
         let cors = CorsConfig {
-            allowed_origins: env::var("CORS_ALLOWED_ORIGINS")
-                .unwrap_or_else(|_| "http://localhost:3000".to_string()),
+            allowed_origins: cors_allowed_origins,
             max_age: env::var("CORS_MAX_AGE")
                 .unwrap_or_else(|_| default_cors_max_age().to_string())
                 .parse()
@@ -335,6 +380,18 @@ impl Config {
         let kafka = KafkaConfig {
             brokers: env::var("KAFKA_BROKERS").expect("KAFKA_BROKERS must be set"),
             events_topic: env::var("KAFKA_EVENTS_TOPIC").unwrap_or_else(|_| default_events_topic()),
+            request_timeout_ms: env::var("KAFKA_REQUEST_TIMEOUT_MS")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or_else(default_kafka_request_timeout_ms),
+            retry_backoff_ms: env::var("KAFKA_RETRY_BACKOFF_MS")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or_else(default_kafka_retry_backoff_ms),
+            retry_attempts: env::var("KAFKA_RETRY_ATTEMPTS")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or_else(default_kafka_retry_attempts),
         };
 
         let graph = GraphConfig {
@@ -383,7 +440,7 @@ mod tests {
         assert_eq!(default_app_env(), "development");
         assert_eq!(default_app_host(), "0.0.0.0");
         assert_eq!(default_app_port(), 8080);
-        assert_eq!(default_db_max_connections(), 20);
+        assert_eq!(default_db_max_connections(), 10);
         assert_eq!(default_redis_pool_size(), 10);
         assert_eq!(default_jwt_access_ttl(), 900);
         assert_eq!(default_jwt_refresh_ttl(), 604800);

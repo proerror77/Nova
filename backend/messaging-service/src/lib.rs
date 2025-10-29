@@ -6,6 +6,7 @@ pub mod middleware;
 pub mod migrations;
 pub mod models;
 pub mod openapi;
+pub mod redis_client;
 pub mod routes;
 pub mod security;
 pub mod services;

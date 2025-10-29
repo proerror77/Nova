@@ -8,9 +8,10 @@ use axum::{
 use uuid::Uuid;
 use futures_util::{SinkExt, StreamExt};
 use crate::{
-    state::AppState,
     middleware::guards::User,
+    redis_client::RedisClient,
     services::offline_queue::{self, ClientSyncState},
+    state::AppState,
 };
 
 /// WebSocket upgrade handler with offline message recovery
@@ -39,7 +40,7 @@ async fn handle_socket(
     socket: WebSocket,
     user_id: Uuid,
     conversation_id: Uuid,
-    redis: redis::Client,
+    redis: RedisClient,
     db: sqlx::PgPool,
     registry: crate::websocket::ConnectionRegistry,
 ) {

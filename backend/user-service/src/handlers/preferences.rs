@@ -59,16 +59,14 @@ pub async fn get_feed_preferences(
 
     // Try to get existing preferences
     let prefs = sqlx::query_as::<_, UserFeedPreferences>(
-        "SELECT * FROM user_feed_preferences WHERE user_id = $1"
+        "SELECT * FROM user_feed_preferences WHERE user_id = $1",
     )
     .bind(user_id)
     .fetch_optional(pool.get_ref())
     .await?;
 
     match prefs {
-        Some(prefs) => Ok(HttpResponse::Ok().json(PreferencesResponse {
-            preferences: prefs,
-        })),
+        Some(prefs) => Ok(HttpResponse::Ok().json(PreferencesResponse { preferences: prefs })),
         None => {
             // Return default preferences if none exist
             let default_prefs = UserFeedPreferences {
@@ -113,19 +111,21 @@ pub async fn update_feed_preferences(
 
     // Get current preferences or create default
     let current = sqlx::query_as::<_, UserFeedPreferences>(
-        "SELECT * FROM user_feed_preferences WHERE user_id = $1"
+        "SELECT * FROM user_feed_preferences WHERE user_id = $1",
     )
     .bind(user_id)
     .fetch_optional(pool.get_ref())
     .await?;
 
     let now = chrono::Utc::now();
-    let prioritized_topics = payload.prioritized_topics.as_ref().map(|t| {
-        serde_json::to_string(t).unwrap_or_default()
-    });
-    let muted_topics = payload.muted_topics.as_ref().map(|t| {
-        serde_json::to_string(t).unwrap_or_default()
-    });
+    let prioritized_topics = payload
+        .prioritized_topics
+        .as_ref()
+        .map(|t| serde_json::to_string(t).unwrap_or_default());
+    let muted_topics = payload
+        .muted_topics
+        .as_ref()
+        .map(|t| serde_json::to_string(t).unwrap_or_default());
 
     if let Some(mut current) = current {
         // Update existing preferences
@@ -169,7 +169,7 @@ pub async fn update_feed_preferences(
                 muted_topics = $9,
                 updated_at = $10
             WHERE user_id = $1
-            "#
+            "#,
         )
         .bind(user_id)
         .bind(current.show_muted_keywords)
@@ -193,8 +193,14 @@ pub async fn update_feed_preferences(
             user_id,
             show_muted_keywords: payload.show_muted_keywords.unwrap_or(false),
             show_blocked_users: payload.show_blocked_users.unwrap_or(false),
-            preferred_language: payload.preferred_language.clone().unwrap_or_else(|| "all".to_string()),
-            age_filter: payload.age_filter.clone().unwrap_or_else(|| "all".to_string()),
+            preferred_language: payload
+                .preferred_language
+                .clone()
+                .unwrap_or_else(|| "all".to_string()),
+            age_filter: payload
+                .age_filter
+                .clone()
+                .unwrap_or_else(|| "all".to_string()),
             safety_filter_level: payload.safety_filter_level.unwrap_or(1),
             enable_ads: payload.enable_ads.unwrap_or(true),
             prioritized_topics,
@@ -227,9 +233,7 @@ pub async fn update_feed_preferences(
         .execute(pool.get_ref())
         .await?;
 
-        Ok(HttpResponse::Created().json(PreferencesResponse {
-            preferences: prefs,
-        }))
+        Ok(HttpResponse::Created().json(PreferencesResponse { preferences: prefs }))
     }
 }
 
@@ -240,16 +244,15 @@ pub async fn block_user(
     blocked_user_id: web::Path<Uuid>,
 ) -> Result<HttpResponse, AppError> {
     let user_id = extract_user_id(&req)?;
+    let blocked_user_id = blocked_user_id.into_inner();
 
-    if user_id == blocked_user_id.into_inner() {
-        return Err(AppError::BadRequest(
-            "Cannot block yourself".to_string(),
-        ));
+    if user_id == blocked_user_id {
+        return Err(AppError::BadRequest("Cannot block yourself".to_string()));
     }
 
     // Get or create preferences
     let mut prefs = sqlx::query_as::<_, UserFeedPreferences>(
-        "SELECT * FROM user_feed_preferences WHERE user_id = $1"
+        "SELECT * FROM user_feed_preferences WHERE user_id = $1",
     )
     .bind(user_id)
     .fetch_optional(pool.get_ref())
@@ -277,7 +280,7 @@ pub async fn block_user(
         .and_then(|b| serde_json::from_str(b).ok())
         .unwrap_or_default();
 
-    let blocked_id_str = blocked_user_id.into_inner().to_string();
+    let blocked_id_str = blocked_user_id.to_string();
     if !blocked.contains(&blocked_id_str) {
         blocked.push(blocked_id_str);
     }
@@ -291,7 +294,7 @@ pub async fn block_user(
         INSERT INTO user_feed_preferences (user_id, blocked_user_ids, created_at, updated_at)
         VALUES ($1, $2, $3, $4)
         ON CONFLICT (user_id) DO UPDATE SET blocked_user_ids = $2, updated_at = $4
-        "#
+        "#,
     )
     .bind(prefs.user_id)
     .bind(&prefs.blocked_user_ids)
@@ -313,12 +316,12 @@ pub async fn unblock_user(
     let blocked_id_str = blocked_user_id.into_inner().to_string();
 
     let mut prefs = sqlx::query_as::<_, UserFeedPreferences>(
-        "SELECT * FROM user_feed_preferences WHERE user_id = $1"
+        "SELECT * FROM user_feed_preferences WHERE user_id = $1",
     )
     .bind(user_id)
     .fetch_optional(pool.get_ref())
     .await?
-    .ok_or(AppError::NotFound)?;
+    .ok_or_else(|| AppError::NotFound("Preferences not found".to_string()))?;
 
     // Remove from blocked users list
     let mut blocked: Vec<String> = prefs
@@ -355,7 +358,7 @@ fn extract_user_id(req: &HttpRequest) -> Result<Uuid, AppError> {
         .get("X-User-ID")
         .and_then(|h| h.to_str().ok())
         .and_then(|s| Uuid::parse_str(s).ok())
-        .ok_or(AppError::Unauthorized)
+        .ok_or_else(|| AppError::Authentication("Missing or invalid X-User-ID header".to_string()))
 }
 
 #[cfg(test)]

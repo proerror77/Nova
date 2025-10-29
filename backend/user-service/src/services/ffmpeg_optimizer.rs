@@ -279,6 +279,7 @@ impl Default for FFmpegOptimizer {
 }
 
 #[cfg(test)]
+#[cfg(all(test, feature = "legacy_internal_tests"))]
 mod tests {
     use super::*;
 

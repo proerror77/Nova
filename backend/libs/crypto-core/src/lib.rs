@@ -34,7 +34,7 @@ pub fn x25519_derive_shared_secret(
     their_public_key: &[u8; 32],
 ) -> Result<[u8; 32], CryptoError> {
     sodiumoxide::init().map_err(|_| CryptoError::Encryption)?;
-    use sodiumoxide::crypto::box_::curve25519xsalsa20poly1305::{PublicKey, SecretKey, precompute};
+    use sodiumoxide::crypto::box_::curve25519xsalsa20poly1305::{precompute, PublicKey, SecretKey};
 
     let pk = PublicKey(*their_public_key);
     let sk = SecretKey(*our_secret_key);

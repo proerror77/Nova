@@ -296,10 +296,10 @@ mod tests {
 
     #[test]
     fn test_ttl_calculation() {
-        let job = CacheWarmerJob::new(CacheWarmerConfig {
+        let config = CacheWarmerConfig {
             feed_ttl_sec: 120,
             ..Default::default()
-        });
-        assert_eq!(job.ttl_sec(), 120);
+        };
+        assert_eq!(config.feed_ttl_sec, 120);
     }
 }

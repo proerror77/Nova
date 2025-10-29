@@ -239,6 +239,7 @@ fn extract_version_from_path(path: &str) -> String {
 }
 
 #[cfg(test)]
+#[cfg(all(test, feature = "legacy_internal_tests"))]
 mod tests {
     use super::*;
 

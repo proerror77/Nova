@@ -1,18 +1,223 @@
 use actix_cors::Cors;
 use actix_web::{middleware::Logger, web, App, HttpResponse, HttpServer};
+use chrono::Utc;
 use content_service::cache::{ContentCache, FeedCache};
 use content_service::db::ch_client::ClickHouseClient;
 use content_service::db::ensure_feed_tables;
 use content_service::handlers::{self, feed::FeedHandlerState};
 use content_service::jobs::feed_candidates::FeedCandidateRefreshJob;
+use content_service::middleware;
 use content_service::services::{FeedRankingConfig, FeedRankingService};
 use crypto_core::jwt;
+use redis::aio::ConnectionManager;
+use redis::RedisError;
+use serde::Serialize;
 use sqlx::postgres::PgPoolOptions;
+use std::collections::HashMap;
 use std::io;
 use std::net::SocketAddr;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
+use tokio::sync::{broadcast, Mutex};
 use tokio::task::JoinSet;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+use redis_utils::{RedisPool, SentinelConfig};
+
+struct HealthState {
+    db_pool: sqlx::Pool<sqlx::Postgres>,
+    redis_manager: Arc<Mutex<ConnectionManager>>,
+    clickhouse_client: Arc<ClickHouseClient>,
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "lowercase")]
+enum ComponentStatus {
+    Healthy,
+    Degraded,
+    Unhealthy,
+}
+
+#[derive(Serialize)]
+struct ComponentCheck {
+    status: ComponentStatus,
+    message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    latency_ms: Option<u64>,
+}
+
+#[derive(Serialize)]
+struct ReadinessResponse {
+    ready: bool,
+    status: ComponentStatus,
+    checks: HashMap<String, ComponentCheck>,
+    timestamp: String,
+}
+
+impl HealthState {
+    fn new(
+        db_pool: sqlx::Pool<sqlx::Postgres>,
+        redis_manager: Arc<Mutex<ConnectionManager>>,
+        clickhouse_client: Arc<ClickHouseClient>,
+    ) -> Self {
+        Self {
+            db_pool,
+            redis_manager,
+            clickhouse_client,
+        }
+    }
+
+    async fn check_postgres(&self) -> Result<(), sqlx::Error> {
+        sqlx::query("SELECT 1")
+            .fetch_one(&self.db_pool)
+            .await
+            .map(|_| ())
+    }
+
+    async fn check_redis(&self) -> Result<(), RedisError> {
+        let mut conn = self.redis_manager.lock().await;
+        let pong: String = redis::cmd("PING").query_async(&mut *conn).await?;
+        if pong == "PONG" {
+            Ok(())
+        } else {
+            Err(RedisError::from((
+                redis::ErrorKind::ResponseError,
+                "unexpected PING response",
+            )))
+        }
+    }
+
+    async fn check_clickhouse(&self) -> Result<(), String> {
+        self.clickhouse_client
+            .health_check()
+            .await
+            .map_err(|e| e.to_string())
+    }
+}
+
+async fn health_summary(state: web::Data<HealthState>) -> HttpResponse {
+    match state.check_postgres().await {
+        Ok(_) => HttpResponse::Ok().json(serde_json::json!({
+            "status": "ok",
+            "service": "content-service",
+            "version": env!("CARGO_PKG_VERSION")
+        })),
+        Err(e) => HttpResponse::ServiceUnavailable().json(serde_json::json!({
+            "status": "unhealthy",
+            "error": format!("PostgreSQL connection failed: {}", e),
+            "service": "content-service"
+        })),
+    }
+}
+
+async fn readiness_summary(state: web::Data<HealthState>) -> HttpResponse {
+    let mut checks = HashMap::new();
+    let mut ready = true;
+
+    let start = Instant::now();
+    let pg_result = state.check_postgres().await;
+    let pg_latency = Some(start.elapsed().as_millis() as u64);
+    let postgres_check = match pg_result {
+        Ok(_) => ComponentCheck {
+            status: ComponentStatus::Healthy,
+            message: "PostgreSQL connection successful".to_string(),
+            latency_ms: pg_latency,
+        },
+        Err(e) => {
+            ready = false;
+            ComponentCheck {
+                status: ComponentStatus::Unhealthy,
+                message: format!("PostgreSQL connection failed: {}", e),
+                latency_ms: pg_latency,
+            }
+        }
+    };
+    checks.insert("postgresql".to_string(), postgres_check);
+
+    let start = Instant::now();
+    let redis_result = state.check_redis().await;
+    let redis_latency = Some(start.elapsed().as_millis() as u64);
+    let redis_check = match redis_result {
+        Ok(_) => ComponentCheck {
+            status: ComponentStatus::Healthy,
+            message: "Redis ping successful".to_string(),
+            latency_ms: redis_latency,
+        },
+        Err(e) => {
+            ready = false;
+            ComponentCheck {
+                status: ComponentStatus::Unhealthy,
+                message: format!("Redis ping failed: {}", e),
+                latency_ms: redis_latency,
+            }
+        }
+    };
+    checks.insert("redis".to_string(), redis_check);
+
+    let start = Instant::now();
+    let clickhouse_result = state.check_clickhouse().await;
+    let clickhouse_latency = Some(start.elapsed().as_millis() as u64);
+    let clickhouse_check = match clickhouse_result {
+        Ok(_) => ComponentCheck {
+            status: ComponentStatus::Healthy,
+            message: "ClickHouse query successful".to_string(),
+            latency_ms: clickhouse_latency,
+        },
+        Err(e) => {
+            ready = false;
+            ComponentCheck {
+                status: ComponentStatus::Degraded,
+                message: format!("ClickHouse health check failed: {}", e),
+                latency_ms: clickhouse_latency,
+            }
+        }
+    };
+    checks.insert("clickhouse".to_string(), clickhouse_check);
+
+    let status = if ready {
+        ComponentStatus::Healthy
+    } else {
+        ComponentStatus::Unhealthy
+    };
+
+    let response = ReadinessResponse {
+        ready,
+        status,
+        checks,
+        timestamp: Utc::now().to_rfc3339(),
+    };
+
+    if ready {
+        HttpResponse::Ok().json(response)
+    } else {
+        HttpResponse::ServiceUnavailable().json(response)
+    }
+}
+
+async fn liveness_check() -> HttpResponse {
+    HttpResponse::Ok().json(serde_json::json!({"alive": true}))
+}
+
+async fn shutdown_signal() {
+    #[cfg(unix)]
+    {
+        use tokio::signal::unix::{signal, SignalKind};
+
+        let mut terminate =
+            signal(SignalKind::terminate()).expect("Failed to install SIGTERM handler");
+
+        tokio::select! {
+            _ = tokio::signal::ctrl_c() => {},
+            _ = terminate.recv() => {},
+        }
+    }
+
+    #[cfg(not(unix))]
+    {
+        tokio::signal::ctrl_c()
+            .await
+            .expect("Failed to install Ctrl+C handler");
+    }
+}
 
 /// Content Service
 ///
@@ -85,30 +290,36 @@ async fn main() -> io::Result<()> {
     tracing::info!("Starting content-service v{}", env!("CARGO_PKG_VERSION"));
     tracing::info!("Environment: {}", config.app.env);
 
-    if let Ok(public_key) = std::env::var("JWT_PUBLIC_KEY_PEM") {
-        if let Err(err) = jwt::initialize_jwt_validation_only(&public_key) {
-            return Err(io::Error::new(
-                io::ErrorKind::Other,
-                format!("Failed to initialize JWT keys: {err}"),
-            ));
+    match jwt::load_validation_key() {
+        Ok(public_key) => {
+            if let Err(err) = jwt::initialize_jwt_validation_only(&public_key) {
+                return Err(io::Error::new(
+                    io::ErrorKind::Other,
+                    format!("Failed to initialize JWT keys: {err}"),
+                ));
+            }
         }
-    } else {
-        tracing::warn!("JWT_PUBLIC_KEY_PEM not set; authentication middleware will fail requests");
+        Err(err) => {
+            tracing::warn!(
+                "JWT public key not configured ({err}); authentication middleware will fail requests"
+            );
+        }
     }
 
     // Initialize database connection pool
-    let db_url = std::env::var("DATABASE_URL").unwrap_or_else(|_| {
-        "postgres://nova:nova_password@localhost:5432/nova_content".to_string()
-    });
+    let db_url = config.database.url.clone();
 
     let db_pool = PgPoolOptions::new()
-        .max_connections(20)
+        .max_connections(config.database.max_connections)
         .connect(&db_url)
         .await
         .expect("Failed to connect to database");
     let db_pool_http = db_pool.clone();
 
-    tracing::info!("Connected to database");
+    tracing::info!(
+        "Connected to database (max_connections={})",
+        config.database.max_connections
+    );
 
     let http_bind_address = format!("{}:{}", config.app.host, 8081);
     let grpc_bind_address = format!("{}:9081", config.app.host);
@@ -117,29 +328,25 @@ async fn main() -> io::Result<()> {
     tracing::info!("Starting gRPC server at {}", grpc_bind_address);
 
     // Initialize Redis cache for content entities
-    let redis_client = redis::Client::open(config.cache.url.as_str())
-        .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("Invalid REDIS_URL: {e}")))?;
-    let content_cache = Arc::new(
-        ContentCache::new(redis_client.clone(), None)
-            .await
-            .map_err(|e| {
-                io::Error::new(
-                    io::ErrorKind::Other,
-                    format!("Failed to initialize cache: {e}"),
-                )
-            })?,
-    );
+    let sentinel_cfg = config.cache.sentinel.as_ref().map(|cfg| {
+        SentinelConfig::new(
+            cfg.endpoints.clone(),
+            cfg.master_name.clone(),
+            Duration::from_millis(cfg.poll_interval_ms),
+        )
+    });
 
-    let feed_cache_manager = redis_client
-        .get_connection_manager()
+    let redis_pool = RedisPool::connect(&config.cache.url, sentinel_cfg)
         .await
         .map_err(|e| {
             io::Error::new(
                 io::ErrorKind::Other,
-                format!("Failed to connect Redis: {e}"),
+                format!("Failed to initialize Redis connection: {e}"),
             )
         })?;
-    let feed_cache = Arc::new(FeedCache::new(feed_cache_manager, 120));
+
+    let content_cache = Arc::new(ContentCache::with_manager(redis_pool.manager(), None));
+    let feed_cache = Arc::new(FeedCache::new(redis_pool.manager(), 120));
 
     let ch_cfg = &config.clickhouse;
     let ch_client = Arc::new(ClickHouseClient::new(
@@ -150,14 +357,29 @@ async fn main() -> io::Result<()> {
         ch_cfg.query_timeout_ms,
     ));
 
-    ensure_feed_tables(ch_client.as_ref())
-        .await
-        .map_err(|e| {
-            io::Error::new(
-                io::ErrorKind::Other,
-                format!("Failed to ensure ClickHouse feed schema: {e}"),
-            )
-        })?;
+    ensure_feed_tables(ch_client.as_ref()).await.map_err(|e| {
+        io::Error::new(
+            io::ErrorKind::Other,
+            format!("Failed to ensure ClickHouse feed schema: {e}"),
+        )
+    })?;
+
+    match ch_client.health_check().await {
+        Ok(()) => {
+            tracing::info!("✅ ClickHouse connection validated");
+        }
+        Err(e) => {
+            tracing::error!("❌ FATAL: ClickHouse health check failed - {}", e);
+            tracing::error!(
+                "   Fix: Ensure ClickHouse is running and accessible at {}",
+                ch_cfg.url
+            );
+            return Err(io::Error::new(
+                io::ErrorKind::ConnectionRefused,
+                format!("ClickHouse initialization failed: {}", e),
+            ));
+        }
+    }
 
     let feed_ranking = Arc::new(FeedRankingService::new(
         ch_client.clone(),
@@ -166,12 +388,18 @@ async fn main() -> io::Result<()> {
         FeedRankingConfig::from(&config.feed),
     ));
 
-    let _feed_candidate_job = FeedCandidateRefreshJob::new(ch_client.clone()).spawn();
+    let feed_candidate_job = FeedCandidateRefreshJob::new(ch_client.clone());
 
     let feed_state = web::Data::new(FeedHandlerState {
         feed_ranking: feed_ranking.clone(),
     });
     let content_cache_data = web::Data::new(content_cache.clone());
+
+    let health_state = web::Data::new(HealthState::new(
+        db_pool.clone(),
+        redis_pool.manager(),
+        ch_client.clone(),
+    ));
 
     // Parse gRPC bind address
     let grpc_addr: SocketAddr = grpc_bind_address
@@ -197,37 +425,18 @@ async fn main() -> io::Result<()> {
             .app_data(web::Data::new(db_pool_http.clone()))
             .app_data(content_cache_data.clone())
             .app_data(feed_state.clone())
+            .app_data(health_state.clone())
             .wrap(cors)
             .wrap(Logger::default())
             .wrap(tracing_actix_web::TracingLogger::default())
-            .route("/metrics", web::get().to(content_service::metrics::serve_metrics))
+            .route(
+                "/metrics",
+                web::get().to(content_service::metrics::serve_metrics),
+            )
             // Health check endpoints
-            .route(
-                "/api/v1/health",
-                web::get().to(|| async {
-                    HttpResponse::Ok().json(serde_json::json!({
-                        "status": "ok",
-                        "service": "content-service",
-                        "version": env!("CARGO_PKG_VERSION")
-                    }))
-                }),
-            )
-            .route(
-                "/api/v1/health/ready",
-                web::get().to(|| async {
-                    HttpResponse::Ok().json(serde_json::json!({
-                        "status": "ready"
-                    }))
-                }),
-            )
-            .route(
-                "/api/v1/health/live",
-                web::get().to(|| async {
-                    HttpResponse::Ok().json(serde_json::json!({
-                        "status": "alive"
-                    }))
-                }),
-            )
+            .route("/api/v1/health", web::get().to(health_summary))
+            .route("/api/v1/health/ready", web::get().to(readiness_summary))
+            .route("/api/v1/health/live", web::get().to(liveness_check))
             // OpenAPI JSON endpoint
             .route(
                 "/api/v1/openapi.json",
@@ -245,9 +454,7 @@ async fn main() -> io::Result<()> {
                     .service(web::scope("/feed").route("", web::get().to(handlers::get_feed)))
                     .service(
                         web::scope("/posts")
-                            .service(
-                                web::resource("").route(web::post().to(handlers::create_post)),
-                            )
+                            .service(web::resource("").route(web::post().to(handlers::create_post)))
                             .service(
                                 web::resource("/{post_id}")
                                     .route(web::get().to(handlers::get_post))
@@ -297,8 +504,13 @@ async fn main() -> io::Result<()> {
     .workers(4)
     .run();
 
+    let server_handle = server.handle();
+
+    let (shutdown_tx, _) = broadcast::channel(1);
+    let grpc_shutdown = shutdown_tx.subscribe();
+
     // Spawn both HTTP and gRPC servers concurrently
-    let mut tasks = JoinSet::new();
+    let mut tasks: JoinSet<io::Result<()>> = JoinSet::new();
 
     // HTTP server task
     tasks.spawn(async move {
@@ -319,32 +531,60 @@ async fn main() -> io::Result<()> {
             cache_grpc,
             feed_cache_grpc,
             feed_ranking_grpc,
+            grpc_shutdown,
         )
-            .await
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("{}", e)))
+        .await
+        .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("{}", e)))
     });
 
-    // Wait for any server to fail
-    let mut first_error = None;
-    while let Some(result) = tasks.join_next().await {
-        match result {
-            Ok(Ok(_)) => {
-                // Server completed normally (shouldn't happen unless shut down)
-                tracing::warn!("Server completed");
-            }
-            Ok(Err(e)) => {
-                // Server error
-                tracing::error!("Server error: {}", e);
-                if first_error.is_none() {
-                    first_error = Some(e);
+    // Feed refresh background job
+    let feed_refresh_job = feed_candidate_job;
+    tasks.spawn(async move {
+        feed_refresh_job.run().await;
+        Ok(())
+    });
+
+    let mut first_error: Option<io::Error> = None;
+
+    let shutdown = shutdown_signal();
+    tokio::pin!(shutdown);
+
+    loop {
+        tokio::select! {
+            result = tasks.join_next() => {
+                match result {
+                    Some(Ok(Ok(_))) => {
+                        tracing::info!("Background task completed");
+                    }
+                    Some(Ok(Err(e))) => {
+                        tracing::error!("Task returned error: {}", e);
+                        if first_error.is_none() {
+                            first_error = Some(e);
+                        }
+                        let _ = shutdown_tx.send(());
+                        server_handle.stop(true).await;
+                        tasks.shutdown().await;
+                        break;
+                    }
+                    Some(Err(e)) => {
+                        tracing::error!("Task join error: {}", e);
+                        if first_error.is_none() {
+                            first_error = Some(io::Error::new(io::ErrorKind::Other, e.to_string()));
+                        }
+                        let _ = shutdown_tx.send(());
+                        server_handle.stop(true).await;
+                        tasks.shutdown().await;
+                        break;
+                    }
+                    None => break,
                 }
             }
-            Err(e) => {
-                // Task join error
-                tracing::error!("Task error: {}", e);
-                if first_error.is_none() {
-                    first_error = Some(io::Error::new(io::ErrorKind::Other, format!("{}", e)));
-                }
+            _ = &mut shutdown => {
+                tracing::info!("Shutdown signal received");
+                let _ = shutdown_tx.send(());
+                server_handle.stop(true).await;
+                tasks.shutdown().await;
+                break;
             }
         }
     }

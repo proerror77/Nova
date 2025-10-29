@@ -33,10 +33,7 @@ pub struct MessageEnvelope {
 impl MessageEnvelope {
     /// Build an envelope from a JSON object representing the event payload.
     /// Automatically stamps `conversation_id` and ensures `timestamp` field exists.
-    pub fn from_payload(
-        conversation_id: Uuid,
-        payload: JsonValue,
-    ) -> Result<Self, String> {
+    pub fn from_payload(conversation_id: Uuid, payload: JsonValue) -> Result<Self, String> {
         let mut data = payload
             .as_object()
             .cloned()
@@ -80,14 +77,14 @@ impl MessageEnvelope {
 
     /// Ensure a field exists with the provided value if missing.
     pub fn ensure_field<V: Into<JsonValue>>(&mut self, key: &str, value: V) {
-        self.data.entry(key.to_string()).or_insert_with(|| value.into());
+        self.data
+            .entry(key.to_string())
+            .or_insert_with(|| value.into());
     }
 
     /// Retrieve the event type (if present).
     pub fn event_type(&self) -> Option<&str> {
-        self.data
-            .get("type")
-            .and_then(|v| v.as_str())
+        self.data.get("type").and_then(|v| v.as_str())
     }
 
     /// Retrieve the sender id if encoded in payload.

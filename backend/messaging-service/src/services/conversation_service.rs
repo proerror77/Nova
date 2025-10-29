@@ -582,13 +582,12 @@ impl ConversationService {
         db: &Pool<Postgres>,
         conversation_id: Uuid,
     ) -> Result<PrivacyMode, crate::error::AppError> {
-        let value: Option<String> = sqlx::query_scalar(
-            "SELECT privacy_mode::text FROM conversations WHERE id = $1",
-        )
-        .bind(conversation_id)
-        .fetch_optional(db)
-        .await
-        .map_err(|e| crate::error::AppError::StartServer(format!("get privacy: {e}")))?;
+        let value: Option<String> =
+            sqlx::query_scalar("SELECT privacy_mode::text FROM conversations WHERE id = $1")
+                .bind(conversation_id)
+                .fetch_optional(db)
+                .await
+                .map_err(|e| crate::error::AppError::StartServer(format!("get privacy: {e}")))?;
 
         value
             .map(|v| PrivacyMode::from_str(&v))

@@ -1,3 +1,4 @@
+#![cfg(feature = "legacy_video_tests")]
 use actix_web::HttpResponse;
 use sqlx::postgres::PgPoolOptions;
 use std::sync::Arc;

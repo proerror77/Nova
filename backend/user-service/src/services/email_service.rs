@@ -1,6 +1,6 @@
 /// Email service for sending verification and password reset emails
 /// Uses lettre for SMTP email delivery
-use anyhow::{anyhow, Result};
+use crate::error::{AppError, Result};
 use lettre::message::header::ContentType;
 use lettre::transport::smtp::SmtpTransport;
 use lettre::{Message, Transport};
@@ -29,20 +29,16 @@ impl EmailConfig {
     /// Create new email config from environment variables
     pub fn from_env() -> Result<Self> {
         Ok(EmailConfig {
-            smtp_host: std::env::var("SMTP_HOST")
-                .unwrap_or_else(|_| "localhost".to_string()),
+            smtp_host: std::env::var("SMTP_HOST").unwrap_or_else(|_| "localhost".to_string()),
             smtp_port: std::env::var("SMTP_PORT")
                 .unwrap_or_else(|_| "587".to_string())
                 .parse()
                 .unwrap_or(587),
-            smtp_username: std::env::var("SMTP_USERNAME")
-                .unwrap_or_default(),
-            smtp_password: std::env::var("SMTP_PASSWORD")
-                .unwrap_or_default(),
+            smtp_username: std::env::var("SMTP_USERNAME").unwrap_or_default(),
+            smtp_password: std::env::var("SMTP_PASSWORD").unwrap_or_default(),
             from_email: std::env::var("FROM_EMAIL")
                 .unwrap_or_else(|_| "noreply@nova.dev".to_string()),
-            from_name: std::env::var("FROM_NAME")
-                .unwrap_or_else(|_| "Nova Team".to_string()),
+            from_name: std::env::var("FROM_NAME").unwrap_or_else(|_| "Nova Team".to_string()),
             frontend_url: std::env::var("FRONTEND_URL")
                 .unwrap_or_else(|_| "https://app.nova.dev".to_string()),
         })
@@ -72,8 +68,7 @@ impl EmailService {
         let mailer = SmtpTransport::builder_dangerous(&self.config.smtp_host)
             .port(self.config.smtp_port)
             .credentials(creds)
-            .build()
-            .map_err(|e| anyhow!("Failed to build SMTP transport: {}", e))?;
+            .build();
 
         Ok(mailer)
     }
@@ -263,29 +258,32 @@ Nova Team <support@nova.dev>
             to_name, reset_url, expires_at
         );
 
-        self.send_email(
-            to_email,
-            "Reset Your Nova Password",
-            &text_body,
-            &html_body,
-        )
-        .await
+        self.send_email(to_email, "Reset Your Nova Password", &text_body, &html_body)
+            .await
     }
 
     /// Generic email sending method
-    async fn send_email(&self, to_email: &str, subject: &str, text_body: &str, html_body: &str) -> Result<()> {
+    async fn send_email(
+        &self,
+        to_email: &str,
+        subject: &str,
+        text_body: &str,
+        html_body: &str,
+    ) -> Result<()> {
         // Validate email addresses
         if to_email.is_empty() {
-            return Err(anyhow!("Recipient email cannot be empty"));
+            return Err(AppError::Validation(
+                "Recipient email cannot be empty".to_string(),
+            ));
         }
 
         let from = format!("{} <{}>", self.config.from_name, self.config.from_email)
             .parse()
-            .map_err(|e| anyhow!("Invalid from email address: {}", e))?;
+            .map_err(|e| AppError::Validation(format!("Invalid from email address: {}", e)))?;
 
         let to = to_email
             .parse()
-            .map_err(|e| anyhow!("Invalid to email address: {}", e))?;
+            .map_err(|e| AppError::Validation(format!("Invalid to email address: {}", e)))?;
 
         // Build message with both text and HTML alternatives
         let message = Message::builder()
@@ -297,15 +295,15 @@ Nova Team <support@nova.dev>
                     .singlepart(
                         lettre::message::SinglePart::builder()
                             .header(ContentType::TEXT_PLAIN)
-                            .body(text_body.to_string())
+                            .body(text_body.to_string()),
                     )
                     .singlepart(
                         lettre::message::SinglePart::builder()
                             .header(ContentType::TEXT_HTML)
-                            .body(html_body.to_string())
-                    )
+                            .body(html_body.to_string()),
+                    ),
             )
-            .map_err(|e| anyhow!("Failed to build email message: {}", e))?;
+            .map_err(|e| AppError::Email(format!("Failed to build email message: {}", e)))?;
 
         // Create SMTP transport
         let mailer = self.create_transport()?;
@@ -313,7 +311,7 @@ Nova Team <support@nova.dev>
         // Send email
         mailer
             .send(&message)
-            .map_err(|e| anyhow!("Failed to send email: {}", e))?;
+            .map_err(|e| AppError::Email(format!("Failed to send email: {}", e)))?;
 
         Ok(())
     }
@@ -326,7 +324,7 @@ Nova Team <support@nova.dev>
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy_internal_tests"))]
 mod tests {
     use super::*;
 

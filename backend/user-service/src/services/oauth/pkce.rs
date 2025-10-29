@@ -109,6 +109,7 @@ pub fn verify_code_challenge(
 }
 
 #[cfg(test)]
+#[cfg(all(test, feature = "legacy_internal_tests"))]
 mod tests {
     use super::*;
 

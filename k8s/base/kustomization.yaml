@@ -1,0 +1,71 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+metadata:
+  name: nova-base
+  namespace: nova
+
+# 资源清单
+resources:
+- namespace.yaml
+- configmap.yaml
+- secrets.yaml
+- content-service.yaml
+- media-service.yaml
+- user-service.yaml
+- messaging-service.yaml
+- ingress.yaml
+
+# 命名空间配置
+namespace: nova
+
+# 通用标签
+commonLabels:
+  app: nova
+  managed-by: kustomize
+
+# 通用注解
+commonAnnotations:
+  deployment.kubernetes.io/revision: "1"
+
+# 镜像替换 (用于 CI/CD 流程)
+images:
+- name: nova/content-service
+  newTag: latest
+- name: nova/media-service
+  newTag: latest
+- name: nova/user-service
+  newTag: latest
+- name: nova/messaging-service
+  newTag: latest
+
+# ConfigMap 生成器
+configMapGenerator:
+- name: nova-config
+  literals:
+  - APP_ENV=production
+  - LOG_LEVEL=info
+
+# Secret 生成器 (最好用于开发环境)
+# secretGenerator:
+# - name: nova-db-credentials
+#   literals:
+#   - DATABASE_URL=postgres://nova:password@postgres:5432/nova_content
+
+# 替换配置
+replicas:
+- name: content-service
+  count: 2
+- name: media-service
+  count: 2
+- name: user-service
+  count: 2
+- name: messaging-service
+  count: 2
+
+# 处理器 (patchesStrategicMerge 用于部分覆盖)
+# patchesStrategicMerge:
+# - deployment-patch.yaml
+
+# 输出配置
+# sortOrder: legacy  # 保持 YAML 顺序

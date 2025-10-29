@@ -1,5 +1,14 @@
 [workspace]
-members = ["backend/user-service", "backend/auth-service", "backend/media-service"]
+members = [
+    "backend/user-service",
+    "backend/media-service",
+    "backend/recommendation-service",
+    "backend/video-service",
+    "backend/streaming-service",
+    "backend/libs/error-handling",
+    "backend/libs/video-core",
+    "backend/libs/db-pool"
+]
 resolver = "2"
 
 [workspace.package]

@@ -9,8 +9,9 @@ use crate::db::user_repo;
 use crate::middleware::UserId;
 use crate::security::jwt;
 use crate::security::{hash_password, verify_password};
-use crate::services::email_verification;
 use crate::services::email_service::EmailService;
+use crate::services::email_verification;
+use crate::utils::redis_timeout::run_with_timeout;
 use crate::validators;
 use crate::Config;
 
@@ -287,11 +288,7 @@ pub async fn register(
                     .await
                 {
                     // Log email sending error but don't fail registration
-                    tracing::warn!(
-                        "Failed to send verification email to {}: {}",
-                        user.email,
-                        e
-                    );
+                    tracing::warn!("Failed to send verification email to {}: {}", user.email, e);
                     // In development, this is non-critical
                     // In production, you might want to queue this for retry
                 }
@@ -764,9 +761,9 @@ pub async fn enable_2fa(
     .to_string();
 
     let mut redis_conn = redis.get_ref().clone();
-    if let Err(_) = redis_conn
-        .set_ex::<_, _, ()>(&session_key, setup_data, 600_u64)
+    if run_with_timeout(redis_conn.set_ex::<_, _, ()>(&session_key, setup_data, 600_u64))
         .await
+        .is_err()
     {
         return HttpResponse::InternalServerError().json(ErrorResponse {
             error: "Failed to store temporary session".to_string(),
@@ -798,7 +795,7 @@ pub async fn confirm_2fa(
 
     let session_key = format!("2fa_setup:{}", req.temp_session_id);
     let mut redis_conn = redis.get_ref().clone();
-    let setup_data: Option<String> = match redis_conn.get(&session_key).await {
+    let setup_data: Option<String> = match run_with_timeout(redis_conn.get(&session_key)).await {
         Ok(data) => data,
         Err(_) => {
             return HttpResponse::InternalServerError().json(ErrorResponse {
@@ -892,7 +889,7 @@ pub async fn confirm_2fa(
     }
 
     // Delete temporary session
-    let _ = redis_conn.del::<_, usize>(&session_key).await;
+    let _ = run_with_timeout(redis_conn.del::<_, usize>(&session_key)).await;
 
     HttpResponse::Ok().json(Confirm2FAResponse {
         message: "2FA has been successfully enabled".to_string(),
@@ -979,8 +976,7 @@ pub async fn verify_2fa(
     // Delete temporary session
     use redis::AsyncCommands;
     let mut redis_conn = redis.get_ref().clone();
-    let _ = redis_conn
-        .del::<_, usize>(format!("2fa_pending:{}", req.session_id))
+    let _ = run_with_timeout(redis_conn.del::<_, usize>(format!("2fa_pending:{}", req.session_id)))
         .await;
 
     HttpResponse::Ok().json(Verify2FAResponse {

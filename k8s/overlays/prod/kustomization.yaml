@@ -1,0 +1,57 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+bases:
+- ../../base
+
+namespace: nova
+
+# 生产环境特定配置
+patchesStrategicMerge:
+- deployment-patch.yaml
+- replicas-patch.yaml
+- hpa-patch.yaml
+
+# 环境变量覆盖
+configMapGenerator:
+- name: nova-config
+  behavior: merge
+  literals:
+  - APP_ENV=production
+  - LOG_LEVEL=info
+  - RUST_LOG=info,actix_web=warn
+
+# 镜像配置（使用具体版本而非 latest）
+images:
+- name: nova/content-service
+  newTag: v1.0.0
+  newName: nova/content-service
+- name: nova/media-service
+  newTag: v1.0.0
+  newName: nova/media-service
+- name: nova/user-service
+  newTag: v1.0.0
+  newName: nova/user-service
+- name: nova/messaging-service
+  newTag: v1.0.0
+  newName: nova/messaging-service
+
+# 副本数（生产环境至少3个）
+replicas:
+- name: content-service
+  count: 3
+- name: media-service
+  count: 3
+- name: user-service
+  count: 3
+- name: messaging-service
+  count: 3
+
+commonAnnotations:
+  environment: production
+  deployment.kubernetes.io/revision: "1"
+  managed-by: flux  # GitOps 管理
+
+# 策略配置
+commonLabels:
+  environment: production
