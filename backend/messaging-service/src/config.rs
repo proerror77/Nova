@@ -12,6 +12,11 @@ pub struct ApnsConfig {
 }
 
 #[derive(Debug, Clone)]
+pub struct FcmConfig {
+    pub api_key: String,
+}
+
+#[derive(Debug, Clone)]
 pub struct IceServerConfig {
     pub urls: Vec<String>,
     pub username: Option<String>,
@@ -28,6 +33,7 @@ pub struct Config {
     pub ice_servers: Vec<IceServerConfig>,
     pub ice_ttl_seconds: u32,
     pub apns: Option<ApnsConfig>,
+    pub fcm: Option<FcmConfig>,
     pub encryption_master_key: [u8; 32],
 }
 
@@ -130,6 +136,13 @@ impl Config {
             _ => None,
         };
 
+        let fcm = match env::var("FCM_API_KEY") {
+            Ok(api_key) if !api_key.trim().is_empty() => {
+                Some(FcmConfig { api_key })
+            }
+            _ => None,
+        };
+
         Ok(Self {
             database_url,
             redis_url,
@@ -138,6 +151,7 @@ impl Config {
             ice_servers,
             ice_ttl_seconds,
             apns,
+            fcm,
             encryption_master_key,
         })
     }
@@ -152,6 +166,7 @@ impl Config {
             ice_servers: Vec::new(),
             ice_ttl_seconds: 3600,
             apns: None,
+            fcm: None,
             encryption_master_key: [0u8; 32],
         }
     }
