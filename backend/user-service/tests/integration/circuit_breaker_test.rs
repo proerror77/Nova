@@ -6,15 +6,17 @@
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::sleep;
-use user_service::middleware::circuit_breaker::{CircuitBreaker, CircuitBreakerConfig, CircuitState};
 use user_service::error::AppError;
+use user_service::middleware::circuit_breaker::{
+    CircuitBreaker, CircuitBreakerConfig, CircuitState,
+};
 
 /// Test configuration for faster test execution (shorter timeouts)
 fn test_config() -> CircuitBreakerConfig {
     CircuitBreakerConfig {
-        failure_threshold: 2,      // Open after 2 failures
-        success_threshold: 2,      // Close after 2 successes in half-open
-        timeout_seconds: 1,        // 1 second timeout for quick testing
+        failure_threshold: 2, // Open after 2 failures
+        success_threshold: 2, // Close after 2 successes in half-open
+        timeout_seconds: 1,   // 1 second timeout for quick testing
     }
 }
 
@@ -34,9 +36,9 @@ async fn test_cb_opens_after_failure_threshold() {
 
     // Record 2 failures (threshold = 2)
     for i in 1..=2 {
-        let result = cb.call(|| async {
-            Err::<(), _>(AppError::Internal("test failure".to_string()))
-        }).await;
+        let result = cb
+            .call(|| async { Err::<(), _>(AppError::Internal("test failure".to_string())) })
+            .await;
 
         assert!(result.is_err());
         if i == 2 {
@@ -51,22 +53,22 @@ async fn test_cb_fails_fast_when_open() {
 
     // Open the circuit
     for _ in 0..2 {
-        let _ = cb.call(|| async {
-            Err::<(), _>(AppError::Internal("test failure".to_string()))
-        }).await;
+        let _ = cb
+            .call(|| async { Err::<(), _>(AppError::Internal("test failure".to_string())) })
+            .await;
     }
 
     assert_eq!(cb.get_state().await, CircuitState::Open);
 
     // Next request should fail immediately without executing closure
-    let result = cb.call(|| async {
-        Ok::<_, AppError>(())
-    }).await;
+    let result = cb.call(|| async { Ok::<_, AppError>(()) }).await;
 
     assert!(result.is_err());
     match result {
         Err(AppError::Internal(msg)) => {
-            assert!(msg.contains("Circuit breaker is OPEN") || msg.contains("temporarily unavailable"));
+            assert!(
+                msg.contains("Circuit breaker is OPEN") || msg.contains("temporarily unavailable")
+            );
         }
         _ => panic!("Expected specific error message"),
     }
@@ -78,9 +80,9 @@ async fn test_cb_transitions_to_half_open_after_timeout() {
 
     // Open the circuit
     for _ in 0..2 {
-        let _ = cb.call(|| async {
-            Err::<(), _>(AppError::Internal("test failure".to_string()))
-        }).await;
+        let _ = cb
+            .call(|| async { Err::<(), _>(AppError::Internal("test failure".to_string())) })
+            .await;
     }
 
     assert_eq!(cb.get_state().await, CircuitState::Open);
@@ -89,9 +91,7 @@ async fn test_cb_transitions_to_half_open_after_timeout() {
     sleep(Duration::from_millis(1100)).await;
 
     // Next call should transition to half-open and allow the request
-    let result = cb.call(|| async {
-        Ok::<(), AppError>(())
-    }).await;
+    let result = cb.call(|| async { Ok::<(), AppError>(()) }).await;
 
     assert!(result.is_ok());
 
@@ -105,9 +105,9 @@ async fn test_cb_closes_after_success_threshold_in_half_open() {
 
     // Open the circuit
     for _ in 0..2 {
-        let _ = cb.call(|| async {
-            Err::<(), _>(AppError::Internal("test failure".to_string()))
-        }).await;
+        let _ = cb
+            .call(|| async { Err::<(), _>(AppError::Internal("test failure".to_string())) })
+            .await;
     }
 
     // Wait for timeout to transition to half-open
@@ -123,15 +123,16 @@ async fn test_cb_closes_after_success_threshold_in_half_open() {
 
     // Record successes
     for i in 0..2 {
-        let result = cb.call(|| async {
-            Ok::<(), AppError>(())
-        }).await;
+        let result = cb.call(|| async { Ok::<(), AppError>(()) }).await;
 
         assert!(result.is_ok());
         if i == 1 {
             state = cb.get_state().await;
-            assert_eq!(state, CircuitState::Closed,
-                      "CB should be CLOSED after success threshold in half-open");
+            assert_eq!(
+                state,
+                CircuitState::Closed,
+                "CB should be CLOSED after success threshold in half-open"
+            );
         }
     }
 }
@@ -142,9 +143,9 @@ async fn test_cb_reopens_on_failure_in_half_open() {
 
     // Open the circuit
     for _ in 0..2 {
-        let _ = cb.call(|| async {
-            Err::<(), _>(AppError::Internal("test failure".to_string()))
-        }).await;
+        let _ = cb
+            .call(|| async { Err::<(), _>(AppError::Internal("test failure".to_string())) })
+            .await;
     }
 
     assert_eq!(cb.get_state().await, CircuitState::Open);
@@ -156,13 +157,18 @@ async fn test_cb_reopens_on_failure_in_half_open() {
     let _ = cb.call(|| async { Ok::<(), AppError>(()) }).await;
 
     // Now fail in half-open - should immediately reopen
-    let result = cb.call(|| async {
-        Err::<(), _>(AppError::Internal("test failure in half-open".to_string()))
-    }).await;
+    let result = cb
+        .call(|| async {
+            Err::<(), _>(AppError::Internal("test failure in half-open".to_string()))
+        })
+        .await;
 
     assert!(result.is_err());
-    assert_eq!(cb.get_state().await, CircuitState::Open,
-              "CB should reopen immediately on failure in half-open");
+    assert_eq!(
+        cb.get_state().await,
+        CircuitState::Open,
+        "CB should reopen immediately on failure in half-open"
+    );
 }
 
 #[tokio::test]
@@ -171,9 +177,9 @@ async fn test_cb_reset_restores_closed_state() {
 
     // Open the circuit
     for _ in 0..2 {
-        let _ = cb.call(|| async {
-            Err::<(), _>(AppError::Internal("test failure".to_string()))
-        }).await;
+        let _ = cb
+            .call(|| async { Err::<(), _>(AppError::Internal("test failure".to_string())) })
+            .await;
     }
 
     assert_eq!(cb.get_state().await, CircuitState::Open);
@@ -193,24 +199,22 @@ async fn test_cb_resets_failure_count_on_success_in_closed() {
     let cb = CircuitBreaker::new(test_config());
 
     // Record 1 failure
-    let _ = cb.call(|| async {
-        Err::<(), _>(AppError::Internal("test failure".to_string()))
-    }).await;
+    let _ = cb
+        .call(|| async { Err::<(), _>(AppError::Internal("test failure".to_string())) })
+        .await;
 
     // Success should reset failure count
-    let _ = cb.call(|| async {
-        Ok::<(), AppError>(())
-    }).await;
+    let _ = cb.call(|| async { Ok::<(), AppError>(()) }).await;
 
     // Record 1 more failure - should only need 1 more to open (not 2)
-    let _ = cb.call(|| async {
-        Err::<(), _>(AppError::Internal("test failure".to_string()))
-    }).await;
+    let _ = cb
+        .call(|| async { Err::<(), _>(AppError::Internal("test failure".to_string())) })
+        .await;
 
     // Next failure should open (since we reset on success)
-    let _ = cb.call(|| async {
-        Err::<(), _>(AppError::Internal("test failure".to_string()))
-    }).await;
+    let _ = cb
+        .call(|| async { Err::<(), _>(AppError::Internal("test failure".to_string())) })
+        .await;
 
     assert_eq!(cb.get_state().await, CircuitState::Open);
 }
@@ -231,18 +235,16 @@ async fn test_cb_stats_tracking() {
     assert!(stats.last_failure_time.is_none());
 
     // After failure
-    let _ = cb.call(|| async {
-        Err::<(), _>(AppError::Internal("test".to_string()))
-    }).await;
+    let _ = cb
+        .call(|| async { Err::<(), _>(AppError::Internal("test".to_string())) })
+        .await;
 
     let stats = cb.get_stats().await;
     assert_eq!(stats.failure_count, 1);
     assert!(stats.last_failure_time.is_some());
 
     // After success
-    let _ = cb.call(|| async {
-        Ok::<(), AppError>(())
-    }).await;
+    let _ = cb.call(|| async { Ok::<(), AppError>(()) }).await;
 
     let stats = cb.get_stats().await;
     assert_eq!(stats.failure_count, 0); // Reset on success in closed
@@ -258,9 +260,12 @@ async fn test_cb_graceful_degradation_with_empty_results() {
 
     // Simulate handler that returns empty results when CB opens
     let handler = |cb: Arc<CircuitBreaker>| async move {
-        match cb.call(|| async {
-            Err::<Vec<String>, _>(AppError::Internal("Database error".to_string()))
-        }).await {
+        match cb
+            .call(|| async {
+                Err::<Vec<String>, _>(AppError::Internal("Database error".to_string()))
+            })
+            .await
+        {
             Ok(results) => Ok((results, 200)),
             Err(e) => {
                 match &e {
@@ -276,9 +281,9 @@ async fn test_cb_graceful_degradation_with_empty_results() {
 
     // Open the circuit
     for _ in 0..2 {
-        let _ = cb.call(|| async {
-            Err::<(), _>(AppError::Internal("Database error".to_string()))
-        }).await;
+        let _ = cb
+            .call(|| async { Err::<(), _>(AppError::Internal("Database error".to_string())) })
+            .await;
     }
 
     // Handler should return empty results with 200 OK
@@ -293,21 +298,21 @@ async fn test_cb_error_message_contains_open_indicator() {
 
     // Open the circuit
     for _ in 0..2 {
-        let _ = cb.call(|| async {
-            Err::<(), _>(AppError::Internal("test failure".to_string()))
-        }).await;
+        let _ = cb
+            .call(|| async { Err::<(), _>(AppError::Internal("test failure".to_string())) })
+            .await;
     }
 
     // Error message should indicate circuit is open
-    let result = cb.call(|| async {
-        Ok::<(), AppError>(())
-    }).await;
+    let result = cb.call(|| async { Ok::<(), AppError>(()) }).await;
 
     assert!(result.is_err());
     let err_str = format!("{:?}", result.err().unwrap());
-    assert!(err_str.to_lowercase().contains("circuit") ||
-            err_str.to_lowercase().contains("open") ||
-            err_str.to_lowercase().contains("unavailable"));
+    assert!(
+        err_str.to_lowercase().contains("circuit")
+            || err_str.to_lowercase().contains("open")
+            || err_str.to_lowercase().contains("unavailable")
+    );
 }
 
 // ============================================
@@ -325,14 +330,12 @@ async fn test_cb_handles_concurrent_requests_during_state_change() {
         let handle = tokio::spawn(async move {
             if i < 2 {
                 // First 2 will fail and open
-                let _ = cb_clone.call(|| async {
-                    Err::<(), _>(AppError::Internal("test failure".to_string()))
-                }).await;
+                let _ = cb_clone
+                    .call(|| async { Err::<(), _>(AppError::Internal("test failure".to_string())) })
+                    .await;
             } else {
                 // Last 2 should encounter open circuit
-                let _ = cb_clone.call(|| async {
-                    Ok::<(), AppError>(())
-                }).await;
+                let _ = cb_clone.call(|| async { Ok::<(), AppError>(()) }).await;
             }
         });
         handles.push(handle);
@@ -356,9 +359,7 @@ async fn test_cb_preserves_state_under_concurrent_access() {
     for _ in 0..10 {
         let cb_clone = cb.clone();
         let handle = tokio::spawn(async move {
-            let _ = cb_clone.call(|| async {
-                Ok::<i32, AppError>(42)
-            }).await;
+            let _ = cb_clone.call(|| async { Ok::<i32, AppError>(42) }).await;
         });
         handles.push(handle);
     }
@@ -386,19 +387,20 @@ async fn test_multiple_cb_instances_are_independent() {
 
     // Open CB1
     for _ in 0..2 {
-        let _ = cb1.call(|| async {
-            Err::<(), _>(AppError::Internal("test failure".to_string()))
-        }).await;
+        let _ = cb1
+            .call(|| async { Err::<(), _>(AppError::Internal("test failure".to_string())) })
+            .await;
     }
 
     assert_eq!(cb1.get_state().await, CircuitState::Open);
-    assert_eq!(cb2.get_state().await, CircuitState::Closed,
-              "CB2 should remain closed when CB1 opens");
+    assert_eq!(
+        cb2.get_state().await,
+        CircuitState::Closed,
+        "CB2 should remain closed when CB1 opens"
+    );
 
     // CB2 should still work normally
-    let result = cb2.call(|| async {
-        Ok::<(), AppError>(())
-    }).await;
+    let result = cb2.call(|| async { Ok::<(), AppError>(()) }).await;
 
     assert!(result.is_ok());
 }
@@ -417,17 +419,21 @@ async fn test_realistic_handler_cb_scenario() {
 
     impl MockHandler {
         async fn get_posts(&self) -> Result<Vec<String>, (String, u16)> {
-            match self.cb.call(|| {
-                let db_healthy = self.db_healthy.clone();
-                async move {
-                    let healthy = *db_healthy.lock().await;
-                    if healthy {
-                        Ok(vec!["post1".to_string(), "post2".to_string()])
-                    } else {
-                        Err(AppError::Internal("Database connection failed".to_string()))
+            match self
+                .cb
+                .call(|| {
+                    let db_healthy = self.db_healthy.clone();
+                    async move {
+                        let healthy = *db_healthy.lock().await;
+                        if healthy {
+                            Ok(vec!["post1".to_string(), "post2".to_string()])
+                        } else {
+                            Err(AppError::Internal("Database connection failed".to_string()))
+                        }
                     }
-                }
-            }).await {
+                })
+                .await
+            {
                 Ok(posts) => Ok(posts),
                 Err(e) => {
                     match &e {
@@ -503,16 +509,14 @@ async fn test_cb_handles_zero_timeout() {
     });
 
     // Open circuit
-    let _ = cb.call(|| async {
-        Err::<(), _>(AppError::Internal("test".to_string()))
-    }).await;
+    let _ = cb
+        .call(|| async { Err::<(), _>(AppError::Internal("test".to_string())) })
+        .await;
 
     assert_eq!(cb.get_state().await, CircuitState::Open);
 
     // Immediate recovery should work
-    let result = cb.call(|| async {
-        Ok::<(), AppError>(())
-    }).await;
+    let result = cb.call(|| async { Ok::<(), AppError>(()) }).await;
 
     assert!(result.is_ok());
 }
@@ -528,9 +532,9 @@ async fn test_cb_with_very_high_thresholds() {
 
     // Many failures should not open
     for _ in 0..10 {
-        let _ = cb.call(|| async {
-            Err::<(), _>(AppError::Internal("test".to_string()))
-        }).await;
+        let _ = cb
+            .call(|| async { Err::<(), _>(AppError::Internal("test".to_string())) })
+            .await;
     }
 
     assert_eq!(cb.get_state().await, CircuitState::Closed);

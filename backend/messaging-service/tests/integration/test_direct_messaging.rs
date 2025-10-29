@@ -43,7 +43,15 @@ async fn start_app(db: Pool<Postgres>, redis: RedisClient) -> String {
     // start redis psub listener
     tokio::spawn({
         let registry = registry.clone();
-        async move { let _ = messaging_service::websocket::pubsub::start_psub_listener(redis, registry).await; }
+        async move {
+            let config = messaging_service::websocket::streams::StreamsConfig::default();
+            let _ = messaging_service::websocket::streams::start_streams_listener(
+                redis,
+                registry,
+                config,
+            )
+            .await;
+        }
     });
     tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
     format!("http://{}:{}", addr.ip(), addr.port())
