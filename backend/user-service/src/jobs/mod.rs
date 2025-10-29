@@ -24,7 +24,7 @@ pub mod cache_warmer;
 pub mod dlq_handler;
 pub mod metrics_export;
 pub mod suggested_users_generator;
-pub mod trending_generator;
+// pub mod trending_generator; // REMOVED - moved to feed-service (port 8089) [DELETED]
 
 /// Job 执行上下文,持有共享的数据库连接
 #[derive(Clone)]
