@@ -1,21 +1,16 @@
-/// Service layer for authentication, email operations, S3 storage, and social features
-/// UNIFIED MODULE: Integrates streaming infrastructure with ML-based feed ranking
-///
-/// This module now combines three major feature sets:
-/// 1. Streaming Infrastructure: RTMP/HLS/DASH live streaming with transcoding
-/// 2. CDN & Video Processing: Edge caching, optimization, and video processing
-/// 3. ML Ranking System: Deep learning-based feed personalization and recommendations
+/// Service layer for authentication, email operations, and social features
+/// Microservices have been extracted to independent services
 pub mod backup_codes;
 pub mod cdc;
-pub mod cdn_failover;
-pub mod cdn_handler_integration;
-pub mod cdn_service;
-pub mod deep_learning_inference;
+// pub mod cdn_failover; // REMOVED - moved to media-service (port 8082)
+// pub mod cdn_handler_integration; // REMOVED - moved to media-service (port 8082)
+// pub mod cdn_service; // REMOVED - moved to media-service (port 8082)
+// pub mod deep_learning_inference; // REMOVED - should be in ML service
 pub mod email_service;
 pub mod email_verification;
 pub mod events;
 pub mod experiments;
-pub mod ffmpeg_optimizer;
+// pub mod ffmpeg_optimizer; // REMOVED - moved to media-service (port 8082)
 pub mod graph;
 pub mod image_processing;
 pub mod job_queue;
@@ -30,20 +25,20 @@ pub mod query_profiler;
 pub mod ranking_engine;
 pub mod redis_job;
 pub mod social_graph_sync;
-pub mod resumable_upload_service;
+// pub mod resumable_upload_service; // REMOVED - moved to media-service (port 8082)
 pub mod s3_service;
 pub mod stories;
-pub mod streaming;
-pub mod streaming_manifest;
+// pub mod streaming; // REMOVED - moved to streaming-service (port 8088)
+// pub mod streaming_manifest; // REMOVED - moved to media-service (port 8082)
 pub mod token_revocation;
-pub mod transcoding_optimizer;
-pub mod transcoding_progress;
-pub mod transcoding_progress_handler;
+// pub mod transcoding_optimizer; // REMOVED - moved to media-service (port 8082)
+// pub mod transcoding_progress; // REMOVED - moved to media-service (port 8082)
+// pub mod transcoding_progress_handler; // REMOVED - moved to media-service (port 8082)
 pub mod two_fa;
-pub mod video_job_queue;
-pub mod video_service;
-pub mod video_transcoding;
-pub mod webhooks;
+// pub mod video_job_queue; // REMOVED - moved to media-service (port 8082)
+// pub mod video_service; // REMOVED - moved to media-service (port 8082)
+// pub mod video_transcoding; // REMOVED - moved to media-service (port 8082)
+// pub mod webhooks; // REMOVED - video webhook handling moved to media-service (port 8082)
 
 // ==================== SERVICE MODULES DOCUMENTATION ====================
 //
