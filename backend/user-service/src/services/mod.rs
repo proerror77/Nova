@@ -11,6 +11,7 @@ pub mod cdn_failover;
 pub mod cdn_handler_integration;
 pub mod cdn_service;
 pub mod deep_learning_inference;
+pub mod email_service;
 pub mod email_verification;
 pub mod events;
 pub mod experiments;
