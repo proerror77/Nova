@@ -17,7 +17,7 @@ pub mod image_processing;
 pub mod jwt_key_rotation;
 pub mod kafka_producer;
 pub mod moderation_service;
-pub mod notifications;
+// pub mod notifications; // REMOVED - moved to notification-service (port 8090) [DELETED]
 pub mod oauth;
 pub mod origin_shield;
 pub mod password_reset_service;
