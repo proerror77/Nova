@@ -5,6 +5,9 @@
 /// wrappers so that handlers can reuse the same patterns as the original
 /// monolith without pulling in the entire user-service stack.
 pub mod circuit_breaker;
+pub mod permissions;
+
+pub use permissions::*;
 
 use actix_web::dev::{forward_ready, Service, ServiceRequest, ServiceResponse, Transform};
 use actix_web::{error::ErrorUnauthorized, Error, FromRequest, HttpMessage, HttpRequest};

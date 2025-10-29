@@ -105,3 +105,15 @@ impl From<GrpcStatus> for AppError {
         }
     }
 }
+
+impl From<std::io::Error> for AppError {
+    fn from(err: std::io::Error) -> Self {
+        AppError::Internal(err.to_string())
+    }
+}
+
+impl From<serde_json::Error> for AppError {
+    fn from(err: serde_json::Error) -> Self {
+        AppError::Internal(err.to_string())
+    }
+}
