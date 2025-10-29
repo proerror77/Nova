@@ -7,9 +7,10 @@ pub mod trending;
 pub use discover::{get_suggested_users, DiscoverHandlerState, SuggestedUsersResponse, UserWithScore};
 pub use feed::{get_feed, invalidate_feed_cache, FeedHandlerState, FeedQueryParams};
 pub use recommendation::{
-    get_recommendations, get_model_info, rank_candidates, RecommendationHandlerState,
+    get_recommendations, get_model_info, rank_candidates, semantic_search, RecommendationHandlerState,
     RecommendationQuery, RankingRequest, RecommendationResponse, ModelInfoResponse,
-    RankingResponse, RankedPostResponse,
+    RankingResponse, RankedPostResponse, SemanticSearchRequest, SemanticSearchResponse,
+    SemanticSearchResult,
 };
 pub use trending::{
     get_trending, get_trending_categories, get_trending_posts, get_trending_streams,

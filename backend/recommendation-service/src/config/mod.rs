@@ -7,6 +7,8 @@ pub struct Config {
     pub recommendation: RecommendationConfig,
     pub grpc: GrpcConfig,
     #[serde(default)]
+    pub kafka: KafkaConfig,
+    #[serde(default)]
     pub graph: GraphConfig,
 }
 
@@ -36,6 +38,23 @@ pub struct GrpcConfig {
     pub user_service_url: String,
     #[serde(default = "default_grpc_timeout_secs")]
     pub timeout_secs: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KafkaConfig {
+    #[serde(default = "default_kafka_bootstrap_servers")]
+    pub bootstrap_servers: String,
+    #[serde(default = "default_kafka_group_id")]
+    pub group_id: String,
+}
+
+impl Default for KafkaConfig {
+    fn default() -> Self {
+        Self {
+            bootstrap_servers: default_kafka_bootstrap_servers(),
+            group_id: default_kafka_group_id(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -85,6 +104,12 @@ impl Config {
                     .and_then(|v| v.parse().ok())
                     .unwrap_or_else(default_grpc_timeout_secs),
             },
+            kafka: KafkaConfig {
+                bootstrap_servers: std::env::var("KAFKA_BOOTSTRAP_SERVERS")
+                    .unwrap_or_else(|_| default_kafka_bootstrap_servers()),
+                group_id: std::env::var("KAFKA_GROUP_ID")
+                    .unwrap_or_else(|_| default_kafka_group_id()),
+            },
             graph: GraphConfig {
                 enabled: std::env::var("NEO4J_ENABLED")
                     .unwrap_or_else(|_| "false".to_string())
@@ -103,6 +128,14 @@ impl Config {
 
 fn default_grpc_timeout_secs() -> u64 {
     30
+}
+
+fn default_kafka_bootstrap_servers() -> String {
+    "localhost:9092".to_string()
+}
+
+fn default_kafka_group_id() -> String {
+    "recommendation-service-group".to_string()
 }
 
 fn default_neo4j_uri() -> String {
