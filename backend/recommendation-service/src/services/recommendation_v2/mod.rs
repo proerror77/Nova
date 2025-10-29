@@ -49,6 +49,7 @@ pub struct RecommendationServiceV2 {
     pub hybrid_ranker: HybridRanker,
     pub ab_framework: ABTestingFramework,
     pub onnx_server: ONNXModelServer,
+    pub vector_search: Option<crate::services::VectorSearchService>,
     db_pool: PgPool,
     config: RecommendationConfig,
     model_loaded_at: DateTime<Utc>,
@@ -64,12 +65,31 @@ impl RecommendationServiceV2 {
         let ab_framework = ABTestingFramework::new().await?;
         let onnx_server = ONNXModelServer::load(&config.onnx_model_path)?;
 
+        // Initialize vector search service with Milvus
+        let vector_search = match std::env::var("MILVUS_URL") {
+            Ok(milvus_url) => {
+                let vs = crate::services::VectorSearchService::new(milvus_url, 768);
+                if let Err(e) = vs.initialize_collection().await {
+                    warn!("Failed to initialize Milvus collection: {:?}", e);
+                    None
+                } else {
+                    info!("Vector search service initialized successfully");
+                    Some(vs)
+                }
+            }
+            Err(_) => {
+                info!("MILVUS_URL not configured, vector search disabled");
+                None
+            }
+        };
+
         Ok(Self {
             cf_model,
             cb_model,
             hybrid_ranker,
             ab_framework,
             onnx_server,
+            vector_search,
             db_pool,
             config,
             model_loaded_at: Utc::now(),
@@ -210,6 +230,66 @@ impl RecommendationServiceV2 {
             content_version,
             onnx_version: self.onnx_server.version().await,
             deployed_at: self.model_loaded_at,
+        }
+    }
+
+    /// Search semantically similar posts using vector embeddings
+    pub async fn search_semantically_similar(
+        &self,
+        post_id: Uuid,
+        limit: usize,
+    ) -> Result<Vec<crate::services::VectorSearchResult>> {
+        if let Some(ref vector_search) = self.vector_search {
+            vector_search
+                .search_similar_by_post(post_id, limit, 0.5)
+                .await
+        } else {
+            warn!("Vector search service not available");
+            Ok(Vec::new())
+        }
+    }
+
+    /// Index a post embedding for semantic search
+    pub async fn index_post_embedding(
+        &self,
+        embedding: crate::services::PostEmbedding,
+    ) -> Result<()> {
+        if let Some(ref vector_search) = self.vector_search {
+            vector_search.index_embedding(embedding).await
+        } else {
+            warn!("Vector search service not available, skipping embedding index");
+            Ok(())
+        }
+    }
+
+    /// Batch index multiple post embeddings
+    pub async fn batch_index_embeddings(
+        &self,
+        embeddings: Vec<crate::services::PostEmbedding>,
+    ) -> Result<usize> {
+        if let Some(ref vector_search) = self.vector_search {
+            vector_search.batch_index_embeddings(embeddings).await
+        } else {
+            warn!(
+                "Vector search service not available, skipping batch embedding index"
+            );
+            Ok(0)
+        }
+    }
+
+    /// Get vector search cache statistics
+    pub async fn get_vector_cache_stats(&self) -> (usize, usize) {
+        if let Some(ref vector_search) = self.vector_search {
+            vector_search.cache_stats().await
+        } else {
+            (0, 0)
+        }
+    }
+
+    /// Clear vector search cache
+    pub async fn clear_vector_cache(&self) {
+        if let Some(ref vector_search) = self.vector_search {
+            vector_search.clear_cache().await;
         }
     }
 

@@ -1,6 +1,15 @@
-use actix_web::{web, App, HttpServer};
+use actix_web::{web, App, HttpServer, middleware};
 use std::io;
+use std::sync::Arc;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+use notification_service::{
+    NotificationService,
+    handlers::{
+        notifications::register_routes as register_notifications,
+        devices::register_routes as register_devices,
+        preferences::register_routes as register_preferences,
+    },
+};
 
 #[actix_web::main]
 async fn main() -> io::Result<()> {
@@ -13,18 +22,59 @@ async fn main() -> io::Result<()> {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
-    tracing::info!("Starting service");
+    tracing::info!("Starting notification service");
 
     // Initialize database
-    let db_pool = sqlx::postgres::PgPoolOptions::new()
+    let db_url = std::env::var("DATABASE_URL")
+        .unwrap_or_else(|_| "postgres://user:password@localhost/nova".to_string());
+
+    let db_pool = match sqlx::postgres::PgPoolOptions::new()
         .max_connections(10)
-        .connect(&std::env::var("DATABASE_URL").unwrap_or_default())
+        .connect(&db_url)
         .await
-        .ok();
+    {
+        Ok(pool) => {
+            tracing::info!("Successfully connected to database");
+            pool
+        }
+        Err(e) => {
+            tracing::warn!("Failed to connect to database: {}. Running in offline mode", e);
+            tracing::info!("Some features will not work without database connection");
+            // In a real scenario, we might want to exit here
+            // For now, we'll create a dummy pool or handle it gracefully
+            return Err(io::Error::new(io::ErrorKind::Other, "Database connection failed"));
+        }
+    };
+
+    // Initialize FCM and APNs clients (optional - for now, disabled)
+    // These would need proper credential configuration
+
+    let notification_service = Arc::new(NotificationService::new(
+        db_pool,
+        None, // FCM client
+        None, // APNs client
+    ));
+
+    let port = std::env::var("PORT")
+        .unwrap_or_else(|_| "8000".to_string());
+    let addr = format!("0.0.0.0:{}", port);
+
+    tracing::info!("Starting HTTP server on {}", addr);
 
     // Start HTTP server
-    HttpServer::new(move || App::new().route("/health", web::get().to(|| async { "OK" })))
-        .bind("0.0.0.0:8000")?
+    HttpServer::new(move || {
+        App::new()
+            .app_data(web::Data::new(notification_service.clone()))
+            .wrap(middleware::Logger::default())
+            .route("/health", web::get().to(|| async { "OK" }))
+            .route("/", web::get().to(|| async { "Notification Service v1.0" }))
+            .configure(|cfg| {
+                register_notifications(cfg);
+                register_devices(cfg);
+                register_preferences(cfg);
+            })
+    })
+        .bind(&addr)?
         .run()
         .await
 }
