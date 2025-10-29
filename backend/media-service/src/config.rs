@@ -1,7 +1,6 @@
 /// Configuration management for media-service
 ///
 /// Loads configuration from environment variables with sensible defaults.
-
 use serde::Deserialize;
 
 #[derive(Clone, Debug, Deserialize)]

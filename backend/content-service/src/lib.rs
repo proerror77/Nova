@@ -15,12 +15,13 @@
 /// - `error`: Error types and handling
 /// - `config`: Configuration management
 /// - `metrics`: Observability and metrics collection
-
 pub mod cache;
 pub mod config;
 pub mod db;
 pub mod error;
 pub mod grpc;
+pub mod jobs;
+pub mod metrics;
 pub mod handlers;
 pub mod middleware;
 pub mod models;

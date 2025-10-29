@@ -81,6 +81,30 @@ pub async fn count_posts_by_user(pool: &PgPool, user_id: Uuid) -> Result<i64, sq
     Ok(row.get::<i64, _>("count"))
 }
 
+/// Fetch recent published posts for fallback feeds.
+pub async fn get_recent_published_post_ids(
+    pool: &PgPool,
+    limit: i64,
+    offset: i64,
+) -> Result<Vec<Uuid>, sqlx::Error> {
+    let rows = sqlx::query_as::<_, (Uuid,)>(
+        r#"
+        SELECT id
+        FROM posts
+        WHERE soft_delete IS NULL
+          AND status = 'published'
+        ORDER BY created_at DESC
+        LIMIT $1 OFFSET $2
+        "#,
+    )
+    .bind(limit)
+    .bind(offset)
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows.into_iter().map(|(id,)| id).collect())
+}
+
 /// Update post status
 pub async fn update_post_status(
     pool: &PgPool,

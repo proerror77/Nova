@@ -1,5 +1,5 @@
 [workspace]
-members = ["backend/user-service", "backend/auth-service"]
+members = ["backend/user-service", "backend/auth-service", "backend/media-service"]
 resolver = "2"
 
 [workspace.package]
@@ -35,6 +35,7 @@ uuid = { version = "1.7", features = ["v4", "v5", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 dotenv = "0.15"
 envy = "0.4"
+hkdf = "0.12"
 
 # Logging
 tracing = "0.1"

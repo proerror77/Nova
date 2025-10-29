@@ -1,3 +1,5 @@
+use base64::engine::general_purpose::STANDARD;
+use base64::Engine as _;
 use dotenvy::dotenv;
 use std::env;
 
@@ -26,6 +28,7 @@ pub struct Config {
     pub ice_servers: Vec<IceServerConfig>,
     pub ice_ttl_seconds: u32,
     pub apns: Option<ApnsConfig>,
+    pub encryption_master_key: [u8; 32],
 }
 
 impl Config {
@@ -96,6 +99,19 @@ impl Config {
             .and_then(|v| v.parse().ok())
             .unwrap_or(3600);
 
+        let master_key_b64 = env::var("MESSAGE_ENCRYPTION_MASTER_KEY")
+            .map_err(|_| crate::error::AppError::Config("MESSAGE_ENCRYPTION_MASTER_KEY missing".into()))?;
+        let master_key_bytes = STANDARD
+            .decode(master_key_b64.trim())
+            .map_err(|_| crate::error::AppError::Config("MESSAGE_ENCRYPTION_MASTER_KEY invalid base64".into()))?;
+        if master_key_bytes.len() != 32 {
+            return Err(crate::error::AppError::Config(
+                "MESSAGE_ENCRYPTION_MASTER_KEY must decode to 32 bytes".into(),
+            ));
+        }
+        let mut encryption_master_key = [0u8; 32];
+        encryption_master_key.copy_from_slice(&master_key_bytes);
+
         let apns = match env::var("APNS_CERTIFICATE_PATH") {
             Ok(path) if !path.trim().is_empty() => {
                 let bundle_id = env::var("APNS_BUNDLE_ID")
@@ -122,6 +138,7 @@ impl Config {
             ice_servers,
             ice_ttl_seconds,
             apns,
+            encryption_master_key,
         })
     }
 
@@ -135,6 +152,7 @@ impl Config {
             ice_servers: Vec::new(),
             ice_ttl_seconds: 3600,
             apns: None,
+            encryption_master_key: [0u8; 32],
         }
     }
 }

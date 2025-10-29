@@ -1,20 +1,40 @@
 /// Post service - handles post creation, retrieval, and management
+use crate::cache::ContentCache;
 use crate::error::Result;
 use crate::models::Post;
 use sqlx::PgPool;
+use std::sync::Arc;
 use uuid::Uuid;
 
 pub struct PostService {
     pool: PgPool,
+    cache: Option<Arc<ContentCache>>,
 }
 
 impl PostService {
     pub fn new(pool: PgPool) -> Self {
-        Self { pool }
+        Self { pool, cache: None }
+    }
+
+    pub fn with_cache(pool: PgPool, cache: Arc<ContentCache>) -> Self {
+        Self {
+            pool,
+            cache: Some(cache),
+        }
+    }
+
+    fn cache(&self) -> Option<&Arc<ContentCache>> {
+        self.cache.as_ref()
     }
 
     /// Get a post by ID
     pub async fn get_post(&self, post_id: Uuid) -> Result<Option<Post>> {
+        if let Some(cache) = self.cache() {
+            if let Some(cached) = cache.get_post(post_id).await? {
+                return Ok(Some(cached));
+            }
+        }
+
         let post = sqlx::query_as::<_, Post>(
             r#"
             SELECT id, user_id, caption, image_key, image_sizes, status, content_type,
@@ -26,6 +46,12 @@ impl PostService {
         .bind(post_id)
         .fetch_optional(&self.pool)
         .await?;
+
+        if let (Some(cache), Some(post)) = (self.cache(), &post) {
+            if let Err(err) = cache.cache_post(post).await {
+                tracing::debug!(%post_id, "post cache set failed: {}", err);
+            }
+        }
 
         Ok(post)
     }
@@ -79,6 +105,12 @@ impl PostService {
         .fetch_one(&self.pool)
         .await?;
 
+        if let Some(cache) = self.cache() {
+            if let Err(err) = cache.cache_post(&post).await {
+                tracing::debug!(post_id = %post.id, "post cache set failed: {}", err);
+            }
+        }
+
         Ok(post)
     }
 
@@ -102,7 +134,17 @@ impl PostService {
         .execute(&self.pool)
         .await?;
 
-        Ok(result.rows_affected() > 0)
+        let updated = result.rows_affected() > 0;
+
+        if updated {
+            if let Some(cache) = self.cache() {
+                if let Err(err) = cache.invalidate_post(post_id).await {
+                    tracing::debug!(%post_id, "post cache invalidation failed: {}", err);
+                }
+            }
+        }
+
+        Ok(updated)
     }
 
     /// Soft delete a post
@@ -119,6 +161,16 @@ impl PostService {
         .execute(&self.pool)
         .await?;
 
-        Ok(result.rows_affected() > 0)
+        let deleted = result.rows_affected() > 0;
+
+        if deleted {
+            if let Some(cache) = self.cache() {
+                if let Err(err) = cache.invalidate_post(post_id).await {
+                    tracing::debug!(%post_id, "post cache invalidation failed: {}", err);
+                }
+            }
+        }
+
+        Ok(deleted)
     }
 }

@@ -71,11 +71,17 @@ async fn get_cached_trending(
         .await
     {
         Ok(Some(json_str)) => {
-            debug!("Cache hit for trending (window={}, category={:?})", window, category);
+            debug!(
+                "Cache hit for trending (window={}, category={:?})",
+                window, category
+            );
             Ok(Some(json_str))
         }
         Ok(None) => {
-            debug!("Cache miss for trending (window={}, category={:?})", window, category);
+            debug!(
+                "Cache miss for trending (window={}, category={:?})",
+                window, category
+            );
             Ok(None)
         }
         Err(e) => {
@@ -146,7 +152,10 @@ pub async fn get_trending(
     let limit = query.limit.clamp(1, 100);
 
     // Create service
-    let service = TrendingService::new(pool.get_ref().clone(), redis.as_ref().map(|r| r.get_ref().clone()));
+    let service = TrendingService::new(
+        pool.get_ref().clone(),
+        redis.as_ref().map(|r| r.get_ref().clone()),
+    );
 
     // Get trending content with Circuit Breaker protection
     let response = match state
@@ -168,10 +177,19 @@ pub async fn get_trending(
 
                     // Strategy 1: Try to get cached trending results from Redis
                     if let Some(redis_mgr) = &redis {
-                        match get_cached_trending(redis_mgr, &query.time_window, query.category.as_deref()).await {
+                        match get_cached_trending(
+                            redis_mgr,
+                            &query.time_window,
+                            query.category.as_deref(),
+                        )
+                        .await
+                        {
                             Ok(Some(json_str)) => {
                                 debug!("Successfully returned cached trending results");
-                                return Ok(HttpResponse::Ok().json(serde_json::from_str::<serde_json::Value>(&json_str).unwrap_or_else(|_| empty_trending_response())));
+                                return Ok(HttpResponse::Ok().json(
+                                    serde_json::from_str::<serde_json::Value>(&json_str)
+                                        .unwrap_or_else(|_| empty_trending_response()),
+                                ));
                             }
                             Ok(None) => {
                                 debug!("No cached trending available, returning empty results");
@@ -183,9 +201,7 @@ pub async fn get_trending(
                     }
 
                     // Strategy 2: Return empty results with graceful degradation
-                    debug!(
-                        "Returning empty trending results due to ClickHouse circuit open"
-                    );
+                    debug!("Returning empty trending results due to ClickHouse circuit open");
                     return Ok(HttpResponse::Ok().json(empty_trending_response()));
                 }
                 _ => {
@@ -212,7 +228,10 @@ pub async fn get_trending_videos(
     let time_window = parse_time_window(&query.time_window)?;
     let limit = query.limit.clamp(1, 100);
 
-    let service = TrendingService::new(pool.get_ref().clone(), redis.as_ref().map(|r| r.get_ref().clone()));
+    let service = TrendingService::new(
+        pool.get_ref().clone(),
+        redis.as_ref().map(|r| r.get_ref().clone()),
+    );
 
     // Get trending videos with Circuit Breaker protection
     let response = match state
@@ -256,7 +275,10 @@ pub async fn get_trending_posts(
     let time_window = parse_time_window(&query.time_window)?;
     let limit = query.limit.clamp(1, 100);
 
-    let service = TrendingService::new(pool.get_ref().clone(), redis.as_ref().map(|r| r.get_ref().clone()));
+    let service = TrendingService::new(
+        pool.get_ref().clone(),
+        redis.as_ref().map(|r| r.get_ref().clone()),
+    );
 
     // Get trending posts with Circuit Breaker protection
     let response = match state
@@ -300,7 +322,10 @@ pub async fn get_trending_streams(
     let time_window = parse_time_window(&query.time_window)?;
     let limit = query.limit.clamp(1, 100);
 
-    let service = TrendingService::new(pool.get_ref().clone(), redis.as_ref().map(|r| r.get_ref().clone()));
+    let service = TrendingService::new(
+        pool.get_ref().clone(),
+        redis.as_ref().map(|r| r.get_ref().clone()),
+    );
 
     // Get trending streams with Circuit Breaker protection
     let response = match state
@@ -430,7 +455,10 @@ pub async fn record_engagement(
     );
 
     // Create service
-    let service = TrendingService::new(pool.get_ref().clone(), redis.as_ref().map(|r| r.get_ref().clone()));
+    let service = TrendingService::new(
+        pool.get_ref().clone(),
+        redis.as_ref().map(|r| r.get_ref().clone()),
+    );
 
     // Record engagement with Redis CB protection for cache invalidation
     match state
