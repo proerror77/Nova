@@ -4,10 +4,12 @@ use std::sync::Arc;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use notification_service::{
     NotificationService,
+    ConnectionManager,
     handlers::{
         notifications::register_routes as register_notifications,
         devices::register_routes as register_devices,
         preferences::register_routes as register_preferences,
+        websocket::register_routes as register_websocket,
     },
 };
 
@@ -55,6 +57,10 @@ async fn main() -> io::Result<()> {
         None, // APNs client
     ));
 
+    // Initialize WebSocket connection manager
+    let connection_manager = Arc::new(ConnectionManager::new());
+    tracing::info!("WebSocket connection manager initialized");
+
     let port = std::env::var("PORT")
         .unwrap_or_else(|_| "8000".to_string());
     let addr = format!("0.0.0.0:{}", port);
@@ -65,6 +71,7 @@ async fn main() -> io::Result<()> {
     HttpServer::new(move || {
         App::new()
             .app_data(web::Data::new(notification_service.clone()))
+            .app_data(web::Data::new(connection_manager.clone()))
             .wrap(middleware::Logger::default())
             .route("/health", web::get().to(|| async { "OK" }))
             .route("/", web::get().to(|| async { "Notification Service v1.0" }))
@@ -72,6 +79,7 @@ async fn main() -> io::Result<()> {
                 register_notifications(cfg);
                 register_devices(cfg);
                 register_preferences(cfg);
+                register_websocket(cfg);
             })
     })
         .bind(&addr)?

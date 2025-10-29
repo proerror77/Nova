@@ -15,7 +15,9 @@ name = "notification_service"
 path = "src/lib.rs"
 
 [dependencies]
+actix = "0.13"
 actix-web.workspace = true
+actix-web-actors = "4.3"
 actix-rt.workspace = true
 tokio.workspace = true
 sqlx.workspace = true
