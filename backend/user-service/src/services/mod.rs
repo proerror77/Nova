@@ -10,18 +10,16 @@ pub mod cdc;
 pub mod cdn_failover;
 pub mod cdn_handler_integration;
 pub mod cdn_service;
-// pub mod clickhouse_feature_extractor;  // TODO: Phase 2 - needs RankingSignals with Serialize/Deserialize
 pub mod deep_learning_inference;
 pub mod email_verification;
 pub mod events;
 pub mod experiments;
 pub mod ffmpeg_optimizer;
+pub mod graph;
 pub mod image_processing;
 pub mod job_queue;
 pub mod jwt_key_rotation;
 pub mod kafka_producer;
-// pub mod messaging; // REMOVED - moved to messaging-service (port 8085)
-pub mod graph;
 pub mod moderation_service;
 pub mod notifications;
 pub mod oauth;
@@ -33,6 +31,7 @@ pub mod recommendation_v2;
 pub mod redis_job;
 pub mod resumable_upload_service;
 pub mod s3_service;
+pub mod stories;
 pub mod streaming;
 pub mod streaming_manifest;
 pub mod token_revocation;
@@ -41,8 +40,6 @@ pub mod transcoding_progress;
 pub mod transcoding_progress_handler;
 pub mod trending;
 pub mod two_fa;
-// pub mod video_processing_pipeline;     // TODO: Phase 2 - depends on VideoTranscodingService methods
-pub mod stories;
 pub mod video_job_queue;
 pub mod video_service;
 pub mod video_transcoding;
