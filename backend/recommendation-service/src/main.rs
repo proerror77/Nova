@@ -5,9 +5,88 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use recommendation_service::config::Config;
 use recommendation_service::handlers::{
-    get_recommendations, get_model_info, rank_candidates, RecommendationHandlerState,
+    get_recommendations, get_model_info, rank_candidates, semantic_search, RecommendationHandlerState,
 };
-use recommendation_service::services::RecommendationServiceV2;
+use recommendation_service::services::{RecommendationServiceV2, RecommendationEventConsumer};
+use rdkafka::consumer::{Consumer, StreamConsumer};
+use rdkafka::config::ClientConfig;
+use rdkafka::Message;
+use serde_json::from_slice;
+use tracing::{error, info, warn};
+
+/// Start Kafka consumer for recommendation events
+async fn start_kafka_consumer(
+    service: Arc<RecommendationServiceV2>,
+    config: &Config,
+) -> Result<(), Box<dyn std::error::Error>> {
+    info!("Starting Kafka consumer for recommendation events");
+
+    // Create Kafka consumer with configuration
+    let consumer: StreamConsumer = ClientConfig::new()
+        .set("bootstrap.servers", &config.kafka.bootstrap_servers)
+        .set("group.id", "recommendation-service-group")
+        .set("auto.offset.reset", "earliest")
+        .set("enable.auto.commit", "true")
+        .set("auto.commit.interval.ms", "5000")
+        .set("session.timeout.ms", "10000")
+        .create()?;
+
+    // Subscribe to recommendation event topics
+    let topics = [
+        "recommendations.model_updates",
+        "recommendations.feedback",
+        "experiments.config",
+    ];
+    consumer.subscribe(&topics)?;
+    info!("Subscribed to topics: {:?}", topics);
+
+    // Create recommendation event consumer for batch processing
+    let mut event_consumer = RecommendationEventConsumer::new(Arc::clone(&service));
+
+    // Periodic flush interval: 5 seconds
+    let mut flush_interval = tokio::time::interval(tokio::time::Duration::from_secs(5));
+
+    // Consume messages from Kafka with periodic flushing
+    loop {
+        tokio::select! {
+            // Handle incoming Kafka messages
+            msg_result = consumer.recv() => {
+                match msg_result {
+                    Ok(msg) => {
+                        // Parse message payload as RecommendationKafkaEvent
+                        if let Some(payload) = msg.payload() {
+                            match from_slice::<recommendation_service::services::RecommendationKafkaEvent>(
+                                payload,
+                            ) {
+                                Ok(event) => {
+                                    // Process event through consumer
+                                    if let Err(e) = event_consumer.handle_event(event).await {
+                                        error!("Failed to handle recommendation event: {:?}", e);
+                                        // Continue processing next event
+                                    }
+                                }
+                                Err(e) => {
+                                    warn!("Failed to deserialize Kafka message: {:?}", e);
+                                }
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        error!("Kafka consumer error: {:?}", e);
+                        // Implement exponential backoff or circuit breaker here
+                        tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+                    }
+                }
+            }
+            // Handle periodic flush
+            _ = flush_interval.tick() => {
+                if let Err(e) = event_consumer.flush().await {
+                    error!("Failed to flush event batch: {:?}", e);
+                }
+            }
+        }
+    }
+}
 
 #[actix_web::main]
 async fn main() -> io::Result<()> {
@@ -64,8 +143,18 @@ async fn main() -> io::Result<()> {
     };
 
     let rec_handler_state = web::Data::new(RecommendationHandlerState {
-        service: recommendation_svc,
+        service: Arc::clone(&recommendation_svc),
     });
+
+    // Start Kafka consumer in background task
+    let kafka_svc = Arc::clone(&recommendation_svc);
+    let kafka_config = config.clone();
+    tokio::spawn(async move {
+        if let Err(e) = start_kafka_consumer(kafka_svc, &kafka_config).await {
+            error!("Kafka consumer failed: {:?}", e);
+        }
+    });
+    info!("Kafka consumer task spawned");
 
     // TODO: Start gRPC server for RecommendationService in addition to HTTP server
 
@@ -78,6 +167,7 @@ async fn main() -> io::Result<()> {
             .service(get_recommendations)
             .service(get_model_info)
             .service(rank_candidates)
+            .service(semantic_search)
     })
     .bind(format!("0.0.0.0:{}", config.app.port))?
     .run()

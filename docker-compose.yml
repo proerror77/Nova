@@ -227,6 +227,7 @@ services:
       - user-service
       - messaging-service
       - search-service
+      - recommendation-service
     networks:
       - nova-network
     healthcheck:
@@ -682,6 +683,95 @@ services:
       - nova-network
 
   # ============================================
+  # Recommendation Service (Rust Actix-web)
+  # ============================================
+  recommendation-service:
+    build:
+      context: ./backend/recommendation-service
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      # Application
+      APP_ENV: development
+      APP_PORT: 8000
+      RUST_LOG: info,recommendation_service=debug
+      LOG_LEVEL: debug
+
+      # Database
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-nova_auth}
+      DATABASE_MAX_CONNECTIONS: 10
+
+      # Redis
+      REDIS_URL: redis://:${REDIS_PASSWORD:-redis123}@redis:6379/1
+
+      # Kafka
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_GROUP_ID: recommendation-service-group
+
+      # Recommendation Models
+      COLLAB_MODEL_PATH: ./models/collaborative.bin
+      CONTENT_MODEL_PATH: ./models/content.bin
+      ONNX_MODEL_PATH: ./models/ranker.onnx
+      ENABLE_AB_TESTING: "true"
+
+      # gRPC
+      USER_SERVICE_GRPC_URL: http://user-service:50051
+      USER_SERVICE_GRPC_TIMEOUT_SECS: 30
+
+      # Neo4j for social graph
+      NEO4J_ENABLED: "true"
+      NEO4J_URI: bolt://neo4j:7687
+      NEO4J_USER: ${NEO4J_USER:-neo4j}
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD:-neo4j}
+
+      # Milvus Vector Search
+      MILVUS_URL: http://milvus:19530
+    # NOTE: Internal port 8000 is NOT exposed to host
+    # Access via API Gateway (api-gateway:3000) instead
+    # Uncomment below for direct debugging access:
+    # ports:
+    #   - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy
+      milvus:
+        condition: service_healthy
+    networks:
+      - nova-network
+    volumes:
+      - ./backend/recommendation-service/models:/app/models
+
+  # ============================================
+  # Milvus Vector Database
+  # ============================================
+  milvus:
+    image: milvusdb/milvus:latest
+    restart: unless-stopped
+    environment:
+      COMMON_STORAGETYPE: local
+      # Use SQLite for embedded storage (suitable for development)
+      # For production, use distributed storage (S3, MinIO, etc.)
+    ports:
+      - "19530:19530"  # Milvus gRPC
+      - "9091:9091"    # Milvus HTTP REST API
+    volumes:
+      - milvus_data:/var/lib/milvus
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9091/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - nova-network
+
+  # ============================================
   # MailHog (Email testing - development only)
   # ============================================
   mailhog:
@@ -743,6 +833,8 @@ volumes:
   neo4j_logs:
     driver: local
   minio_data:
+    driver: local
+  milvus_data:
     driver: local
 
 # ============================================

@@ -181,6 +181,86 @@ pub async fn rank_candidates(
     }
 }
 
+/// Request for semantic search
+#[derive(Debug, Deserialize)]
+pub struct SemanticSearchRequest {
+    /// Post ID to find similar posts for
+    pub post_id: Uuid,
+
+    /// Number of similar posts to return (default: 10, max: 100)
+    #[serde(default = "default_semantic_limit")]
+    pub limit: usize,
+}
+
+fn default_semantic_limit() -> usize {
+    10
+}
+
+/// Semantic search result
+#[derive(Debug, Serialize)]
+pub struct SemanticSearchResult {
+    pub post_id: Uuid,
+    pub similarity_score: f32,
+    pub distance: f32,
+}
+
+/// Semantic search response
+#[derive(Debug, Serialize)]
+pub struct SemanticSearchResponse {
+    pub results: Vec<SemanticSearchResult>,
+    pub count: usize,
+}
+
+/// POST /api/v1/recommendations/semantic-search
+/// Search for semantically similar posts using vector embeddings
+/// Requires service-to-service authentication
+#[post("/api/v1/recommendations/semantic-search")]
+pub async fn semantic_search(
+    req: HttpRequest,
+    body: web::Json<SemanticSearchRequest>,
+    state: web::Data<RecommendationHandlerState>,
+) -> Result<HttpResponse> {
+    // Verify internal service authentication
+    if !req.headers().contains_key("x-service-token") {
+        return Err(AppError::Authentication(
+            "Missing service authentication token".to_string(),
+        ));
+    }
+
+    let limit = body.limit.min(100).max(1);
+
+    debug!(
+        "Semantic search for post: {}, limit: {}",
+        body.post_id, limit
+    );
+
+    match state.service
+        .search_semantically_similar(body.post_id, limit)
+        .await
+    {
+        Ok(results) => {
+            let count = results.len();
+            let semantic_results = results
+                .into_iter()
+                .map(|r| SemanticSearchResult {
+                    post_id: r.post_id,
+                    similarity_score: r.similarity_score,
+                    distance: r.distance,
+                })
+                .collect();
+
+            Ok(HttpResponse::Ok().json(SemanticSearchResponse {
+                results: semantic_results,
+                count,
+            }))
+        }
+        Err(err) => {
+            error!("Failed to perform semantic search: {:?}", err);
+            Err(err)
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
