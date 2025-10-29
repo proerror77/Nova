@@ -2,9 +2,9 @@
 /// Microservices have been extracted to independent services
 pub mod backup_codes;
 pub mod cdc;
-// pub mod cdn_failover; // REMOVED - moved to media-service (port 8082)
-// pub mod cdn_handler_integration; // REMOVED - moved to media-service (port 8082)
-// pub mod cdn_service; // REMOVED - moved to media-service (port 8082)
+// pub mod cdn_failover; // REMOVED - moved to media-service (port 8082) [DELETED]
+// pub mod cdn_handler_integration; // REMOVED - moved to media-service (port 8082) [DELETED]
+// pub mod cdn_service; // REMOVED - moved to media-service (port 8082) [DELETED]
 // pub mod deep_learning_inference; // REMOVED - should be in ML service
 pub mod email_service;
 pub mod email_verification;
