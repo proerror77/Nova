@@ -1,26 +1,22 @@
 /// Reel handlers - HTTP endpoints for reel operations
-use actix_web::web;
+use actix_web::{web, HttpRequest};
 use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::error::{AppError, Result};
-use crate::models::{CreateReelRequest, Reel, ReelResponse};
+use crate::models::CreateReelRequest;
+use crate::services::{ReelService, ReelTranscodePipeline};
 
-/// List all reels
+const USER_ID_HEADER: &str = "x-user-id";
+
+/// List all reels (default limit: 50)
 pub async fn list_reels(pool: web::Data<PgPool>) -> Result<actix_web::HttpResponse> {
-    let reels = sqlx::query_as::<_, Reel>(
-        "SELECT id, creator_id, video_id, title, music, created_at, updated_at \
-         FROM reels ORDER BY created_at DESC LIMIT 100"
-    )
-    .fetch_all(pool.get_ref())
-    .await
-    .map_err(|e| AppError::DatabaseError(e.to_string()))?;
-
-    let responses: Vec<ReelResponse> = reels.into_iter().map(|r| r.into()).collect();
-    Ok(actix_web::HttpResponse::Ok().json(responses))
+    let service = ReelService::new(pool.get_ref().clone());
+    let reels = service.list_reels(50).await?;
+    Ok(actix_web::HttpResponse::Ok().json(reels))
 }
 
-/// Get a specific reel
+/// Get a specific reel by ID
 pub async fn get_reel(
     pool: web::Data<PgPool>,
     reel_id: web::Path<String>,
@@ -28,52 +24,29 @@ pub async fn get_reel(
     let reel_uuid = Uuid::parse_str(&reel_id)
         .map_err(|_| AppError::BadRequest("Invalid reel ID".to_string()))?;
 
-    let reel = sqlx::query_as::<_, Reel>(
-        "SELECT id, creator_id, video_id, title, music, created_at, updated_at \
-         FROM reels WHERE id = $1"
-    )
-    .bind(reel_uuid)
-    .fetch_optional(pool.get_ref())
-    .await
-    .map_err(|e| AppError::DatabaseError(e.to_string()))?
-    .ok_or(AppError::NotFound("Reel not found".to_string()))?;
+    let service = ReelService::new(pool.get_ref().clone());
+    let reel = service.get_reel(reel_uuid).await?;
 
-    Ok(actix_web::HttpResponse::Ok().json(ReelResponse::from(reel)))
+    Ok(actix_web::HttpResponse::Ok().json(reel))
 }
 
-/// Create a new reel
+/// Create a new reel and kick off transcoding pipeline
 pub async fn create_reel(
+    req: HttpRequest,
     pool: web::Data<PgPool>,
-    creator_id: Uuid,
-    req: web::Json<CreateReelRequest>,
+    pipeline: web::Data<ReelTranscodePipeline>,
+    payload: web::Json<CreateReelRequest>,
 ) -> Result<actix_web::HttpResponse> {
-    if req.title.is_empty() {
-        return Err(AppError::BadRequest("Title is required".to_string()));
-    }
+    let creator_id = extract_user_id(&req)?;
+    let service = ReelService::new(pool.get_ref().clone());
+    let reel = service
+        .create_reel(creator_id, payload.into_inner(), pipeline.get_ref())
+        .await?;
 
-    let video_id = Uuid::parse_str(&req.video_id)
-        .map_err(|_| AppError::BadRequest("Invalid video ID".to_string()))?;
-
-    let reel_id = Uuid::new_v4();
-
-    let reel = sqlx::query_as::<_, Reel>(
-        "INSERT INTO reels (id, creator_id, video_id, title, music, created_at, updated_at) \
-         VALUES ($1, $2, $3, $4, $5, NOW(), NOW()) \
-         RETURNING id, creator_id, video_id, title, music, created_at, updated_at"
-    )
-    .bind(reel_id)
-    .bind(creator_id)
-    .bind(video_id)
-    .bind(&req.title)
-    .bind(&req.music)
-    .fetch_one(pool.get_ref())
-    .await
-    .map_err(|e| AppError::DatabaseError(e.to_string()))?;
-
-    Ok(actix_web::HttpResponse::Created().json(ReelResponse::from(reel)))
+    Ok(actix_web::HttpResponse::Created().json(reel))
 }
 
-/// Delete a reel
+/// Delete (soft-delete) a reel
 pub async fn delete_reel(
     pool: web::Data<PgPool>,
     reel_id: web::Path<String>,
@@ -81,15 +54,22 @@ pub async fn delete_reel(
     let reel_uuid = Uuid::parse_str(&reel_id)
         .map_err(|_| AppError::BadRequest("Invalid reel ID".to_string()))?;
 
-    let result = sqlx::query("DELETE FROM reels WHERE id = $1")
-        .bind(reel_uuid)
-        .execute(pool.get_ref())
-        .await
-        .map_err(|e| AppError::DatabaseError(e.to_string()))?;
-
-    if result.rows_affected() == 0 {
-        return Err(AppError::NotFound("Reel not found".to_string()));
-    }
+    let service = ReelService::new(pool.get_ref().clone());
+    service.delete_reel(reel_uuid).await?;
 
     Ok(actix_web::HttpResponse::NoContent().finish())
+}
+
+fn extract_user_id(req: &HttpRequest) -> Result<Uuid> {
+    let header_value = req
+        .headers()
+        .get(USER_ID_HEADER)
+        .ok_or_else(|| AppError::Unauthorized("Missing x-user-id header".into()))?;
+
+    let value = header_value
+        .to_str()
+        .map_err(|_| AppError::Unauthorized("Invalid x-user-id header".into()))?;
+
+    Uuid::parse_str(value)
+        .map_err(|_| AppError::Unauthorized("Invalid x-user-id header value".into()))
 }
