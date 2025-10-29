@@ -10,6 +10,7 @@ use crate::middleware::UserId;
 use crate::security::jwt;
 use crate::security::{hash_password, verify_password};
 use crate::services::email_verification;
+use crate::services::email_service::EmailService;
 use crate::validators;
 use crate::Config;
 
@@ -186,6 +187,7 @@ pub async fn dev_verify_email(
 pub async fn register(
     pool: web::Data<PgPool>,
     redis: web::Data<ConnectionManager>,
+    email_service: web::Data<EmailService>,
     req: web::Json<RegisterRequest>,
 ) -> impl Responder {
     // Validate email format
@@ -277,9 +279,28 @@ pub async fn register(
     // Generate verification token in Redis
     match email_verification::store_verification_token(redis.get_ref(), user.id, &user.email).await
     {
-        Ok(_token) => {
-            // TODO: Send verification email via EMAIL_SERVICE
-            // In production: email_service::send_verification_email(&user.email, &token).await
+        Ok(token) => {
+            // Send verification email
+            if email_service.is_configured() {
+                if let Err(e) = email_service
+                    .send_verification_email(&user.email, &user.username, &user.username, &token)
+                    .await
+                {
+                    // Log email sending error but don't fail registration
+                    tracing::warn!(
+                        "Failed to send verification email to {}: {}",
+                        user.email,
+                        e
+                    );
+                    // In development, this is non-critical
+                    // In production, you might want to queue this for retry
+                }
+            } else {
+                tracing::debug!(
+                    "Email service not configured, skipping verification email for {}",
+                    user.email
+                );
+            }
         }
         Err(_) => {
             return HttpResponse::InternalServerError().json(ErrorResponse {

@@ -5,7 +5,9 @@ use sqlx::PgPool;
 use crate::db::{password_reset_repo, user_repo};
 use crate::security::{hash_password, verify_password};
 use crate::services::password_reset_service;
+use crate::services::email_service::EmailService;
 use crate::validators;
+use chrono::Duration;
 
 #[derive(Debug, Deserialize)]
 pub struct ForgotPasswordRequest {
@@ -58,10 +60,11 @@ fn extract_ip_address(req: &HttpRequest) -> Option<String> {
 /// Handle forgot password request
 /// POST /auth/forgot-password
 ///
-/// Generates a password reset token and sends it via email (TODO).
+/// Generates a password reset token and sends it via email.
 /// Returns success regardless of whether email exists (security best practice).
 pub async fn forgot_password(
     pool: web::Data<PgPool>,
+    email_service: web::Data<EmailService>,
     req: web::Json<ForgotPasswordRequest>,
     http_req: HttpRequest,
 ) -> impl Responder {
@@ -112,9 +115,32 @@ pub async fn forgot_password(
     match password_reset_repo::create_token(pool.get_ref(), user.id, &token_hash, ip_address).await
     {
         Ok(_) => {
-            // TODO: Send password reset email via EMAIL_SERVICE
-            // In production: email_service::send_password_reset_email(&user.email, &token).await
-            // Reset link format: https://app.example.com/reset-password?token={token}
+            // Calculate token expiration time (24 hours from now)
+            let expires_at = (chrono::Utc::now() + Duration::hours(24))
+                .format("%Y-%m-%d %H:%M:%S UTC")
+                .to_string();
+
+            // Send password reset email
+            if email_service.is_configured() {
+                if let Err(e) = email_service
+                    .send_password_reset_email(&user.email, &user.username, &token, &expires_at)
+                    .await
+                {
+                    // Log email sending error but don't fail the request
+                    tracing::warn!(
+                        "Failed to send password reset email to {}: {}",
+                        user.email,
+                        e
+                    );
+                    // In development, this is non-critical
+                    // In production, you might want to queue this for retry
+                }
+            } else {
+                tracing::debug!(
+                    "Email service not configured, skipping password reset email for {}",
+                    user.email
+                );
+            }
 
             HttpResponse::Ok().json(ForgotPasswordResponse {
                 message: "If your email is registered, you will receive a password reset link."

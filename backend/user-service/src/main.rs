@@ -9,6 +9,7 @@ use tokio::sync::Mutex;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use user_service::grpc::{ContentServiceClient, GrpcClientConfig, HealthChecker};
+use user_service::services::email_service::{EmailConfig, EmailService};
 use user_service::{
     config::video_config,
     config::Config,
@@ -482,6 +483,39 @@ async fn main() -> io::Result<()> {
         );
     tracing::info!("Video processor worker spawned");
 
+    // ========================================
+    // Initialize Email Service
+    // ========================================
+    let email_config = EmailConfig::from_env();
+    let email_service = match &email_config {
+        Ok(cfg) => {
+            let svc = EmailService::new(cfg.clone());
+            if svc.is_configured() {
+                tracing::info!("✅ Email service initialized and configured");
+            } else {
+                tracing::warn!("⚠️ Email service initialized but not configured (SMTP credentials missing)");
+                tracing::warn!("   Email verification and password reset will be skipped");
+                tracing::warn!("   Set SMTP_HOST, SMTP_PORT, SMTP_USERNAME, SMTP_PASSWORD environment variables");
+            }
+            svc
+        }
+        Err(e) => {
+            tracing::warn!("⚠️ Failed to initialize email service: {}", e);
+            tracing::warn!("   Email verification and password reset will be skipped");
+            // Create with defaults (not configured)
+            EmailService::new(EmailConfig::from_env().unwrap_or_else(|_| EmailConfig {
+                smtp_host: "localhost".to_string(),
+                smtp_port: 587,
+                smtp_username: String::new(),
+                smtp_password: String::new(),
+                from_email: "noreply@nova.dev".to_string(),
+                from_name: "Nova Team".to_string(),
+                frontend_url: std::env::var("FRONTEND_URL")
+                    .unwrap_or_else(|_| "https://app.nova.dev".to_string()),
+            }))
+        }
+    };
+
     // Clone config for server closure
     let server_config = config.clone();
     let bind_address = format!("{}:{}", config.app.host, config.app.port);
@@ -584,6 +618,7 @@ async fn main() -> io::Result<()> {
     };
 
     // Create and run HTTP server
+    let email_service_data = web::Data::new(email_service);
     let server = HttpServer::new(move || {
         let feed_state = feed_state.clone();
         let content_client_data = content_client_data.clone();
@@ -594,6 +629,7 @@ async fn main() -> io::Result<()> {
         let stream_chat_ws_state = stream_chat_ws_state.clone();
         let graph_data = graph_data.clone();
         let global_rate_limit = global_rate_limit.clone();
+        let email_service_data = email_service_data.clone();
         // Build CORS configuration from allowed_origins
         let cors_builder = Cors::default();
 
@@ -618,6 +654,7 @@ async fn main() -> io::Result<()> {
             .app_data(web::Data::new(redis_manager.clone()))
             .app_data(web::Data::new(server_config.clone()))
             .app_data(web::Data::new(job_sender.clone()))
+            .app_data(email_service_data.clone())
             .app_data(web::Data::new(video_job_sender.clone()))
             .app_data(web::Data::new(VideoService::new(
                 video_config::VideoConfig::from_env(),
