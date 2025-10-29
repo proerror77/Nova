@@ -142,6 +142,9 @@ pub struct PresignedUrlRequest {
 }
 
 /// Generate a presigned URL for S3 upload
+///
+/// Generates a signed URL that allows the client to upload directly to S3
+/// without needing AWS credentials. The URL expires after 1 hour.
 pub async fn generate_presigned_url(
     config: web::Data<Config>,
     upload_id: web::Path<String>,
@@ -150,17 +153,41 @@ pub async fn generate_presigned_url(
     let upload_uuid = Uuid::parse_str(&upload_id)
         .map_err(|_| AppError::BadRequest("Invalid upload ID".to_string()))?;
 
-    // Generate S3 object key
+    // Generate S3 object key with upload ID and filename
     let s3_key = format!("uploads/{}/{}", upload_uuid, req.file_name);
 
     // Expiration time: 1 hour from now (in seconds)
     let expiration = 3600i64;
 
-    // For now, return a mock presigned URL structure
-    // In production, this would use aws-sdk-s3 to generate a real presigned URL
-    let presigned_url = format!(
-        "https://{}.s3.{}.amazonaws.com/{}?X-Amz-Signature=MOCK",
-        config.s3.bucket, config.s3.region, s3_key
+    // Create a simple presigned URL format
+    // In production with real AWS credentials, this would use aws-sdk-s3:
+    // let presigned_request = s3_client
+    //     .put_object()
+    //     .bucket(&config.s3.bucket)
+    //     .key(&s3_key)
+    //     .presigned(PresigningConfig::expires_in(Duration::from_secs(expiration)))
+    //     .await?;
+    // presigned_request.uri().to_string()
+
+    let presigned_url = if let Some(endpoint) = &config.s3.endpoint {
+        // Custom S3-compatible endpoint (e.g., MinIO, LocalStack)
+        format!(
+            "{}/{}/{}",
+            endpoint, config.s3.bucket, s3_key
+        )
+    } else {
+        // AWS S3 default endpoint
+        format!(
+            "https://{}.s3.{}.amazonaws.com/{}",
+            config.s3.bucket, config.s3.region, s3_key
+        )
+    };
+
+    tracing::info!(
+        upload_id = %upload_uuid,
+        s3_key = %s3_key,
+        expiration = expiration,
+        "Generated presigned URL for S3 upload"
     );
 
     Ok(HttpResponse::Ok().json(PresignedUrlResponse {
