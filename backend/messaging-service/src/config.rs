@@ -2,14 +2,7 @@ use base64::engine::general_purpose::STANDARD;
 use base64::Engine as _;
 use dotenvy::dotenv;
 use std::env;
-
-#[derive(Debug, Clone)]
-pub struct ApnsConfig {
-    pub certificate_path: String,
-    pub certificate_passphrase: Option<String>,
-    pub bundle_id: String,
-    pub is_production: bool,
-}
+pub use nova_apns_shared::ApnsConfig;
 
 #[derive(Debug, Clone)]
 pub struct FcmConfig {

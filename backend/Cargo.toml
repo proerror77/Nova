@@ -14,7 +14,8 @@ members = [
     "libs/crypto-core",
     "libs/error-types",
     "libs/redis-utils",
-    "libs/nova-fcm-shared"
+    "libs/nova-fcm-shared",
+    "libs/nova-apns-shared"
 ]
 resolver = "2"
 

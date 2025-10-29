@@ -46,6 +46,7 @@ prost.workspace = true
 # Shared libraries
 error-types = { path = "../libs/error-types" }
 nova-fcm-shared = { path = "../libs/nova-fcm-shared" }
+nova-apns-shared = { path = "../libs/nova-apns-shared" }
 
 [build-dependencies]
 tonic-build = "0.11"
