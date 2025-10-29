@@ -33,12 +33,10 @@ use user_service::{
         cdc::{CdcConsumer, CdcConsumerConfig},
         events::{EventDeduplicator, EventsConsumer, EventsConsumerConfig},
         graph::GraphService,
-        job_queue,
         kafka_producer::EventProducer,
         oauth::jwks_cache::JWKSCache,
         s3_service,
         social_graph_sync::SocialGraphSyncConsumer,
-        stories::StoriesService,
     },
 };
 
@@ -390,12 +388,6 @@ async fn main() -> io::Result<()> {
     };
 
     // ========================================
-    // Initialize image processing job queue
-    // ========================================
-    let (job_sender, job_receiver) = job_queue::create_job_queue(100);
-    tracing::info!("Image processing job queue created (capacity: 100)");
-
-    // ========================================
     // Initialize S3 client with health check
     // ========================================
     // CRITICAL: S3 health check MUST succeed before startup
@@ -419,15 +411,6 @@ async fn main() -> io::Result<()> {
             ));
         }
     }
-
-    // Spawn image processor worker task
-    let worker_handle = job_queue::spawn_image_processor_worker(
-        db_pool.clone(),
-        s3_client.clone(),
-        Arc::new(config.s3.clone()),
-        job_receiver,
-    );
-    tracing::info!("Image processor worker spawned");
 
     // ========================================
     // Initialize Email Service
@@ -471,26 +454,6 @@ async fn main() -> io::Result<()> {
     let bind_address = format!("{}:{}", config.app.host, config.app.port);
 
     tracing::info!("Starting HTTP server at {}", bind_address);
-
-    // Clone job_sender for graceful shutdown (will be dropped after server stops)
-    let job_sender_shutdown = job_sender.clone();
-
-    // Background: spawn stories cleanup worker (every 5 minutes)
-    {
-        let pool = db_pool.clone();
-        tokio::spawn(async move {
-            let svc = StoriesService::new(pool);
-            let mut interval = tokio::time::interval(std::time::Duration::from_secs(300));
-            loop {
-                interval.tick().await;
-                if let Ok(affected) = svc.cleanup_expired().await {
-                    if affected > 0 {
-                        tracing::info!("stories cleanup marked deleted: {}", affected);
-                    }
-                }
-            }
-        });
-    }
 
     // ========================================
     // Background jobs: Suggested Users (fallback cache)
@@ -577,7 +540,6 @@ async fn main() -> io::Result<()> {
             .app_data(web::Data::new(db_pool.clone()))
             .app_data(web::Data::new(redis_manager.clone()))
             .app_data(web::Data::new(server_config.clone()))
-            .app_data(web::Data::new(job_sender.clone()))
             .app_data(email_service_data.clone())
             .app_data(feed_state.clone())
             .app_data(content_client_data.clone())
@@ -814,22 +776,6 @@ async fn main() -> io::Result<()> {
     // Cleanup: Graceful worker shutdown
     // ========================================
     tracing::info!("Server shutting down. Stopping background services...");
-
-    // Close job queue channel to stop worker
-    drop(job_sender_shutdown);
-
-    // Wait for image processor worker
-    match tokio::time::timeout(std::time::Duration::from_secs(30), worker_handle).await {
-        Ok(Ok(())) => {
-            tracing::info!("Image processor worker shut down gracefully");
-        }
-        Ok(Err(e)) => {
-            tracing::error!("Image processor worker panicked: {:?}", e);
-        }
-        Err(_) => {
-            tracing::warn!("Image processor worker did not shut down within timeout");
-        }
-    }
 
     // Abort CDC consumer (always running, mandatory for consistency)
     cdc_handle.abort();

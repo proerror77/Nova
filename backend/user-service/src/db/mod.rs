@@ -3,13 +3,13 @@ use std::time::Duration;
 
 pub mod bookmark_repo;
 pub mod ch_client;
-pub mod comment_repo;
+// pub mod comment_repo; // REMOVED - moved to content-service (port 8081)
 pub mod experiment_repo;
 // pub mod messaging_repo; // REMOVED - moved to messaging-service
-pub mod like_repo;
+// pub mod like_repo; // REMOVED - moved to content-service (port 8081)
 pub mod oauth_repo;
 pub mod password_reset_repo;
-pub mod post_repo;
+// pub mod post_repo; // REMOVED - moved to content-service (port 8081)
 pub mod post_share_repo;
 pub mod trending_repo;
 // pub mod upload_repo; // REMOVED - moved to media-service (port 8082)
