@@ -11,7 +11,7 @@ pub mod oauth_repo;
 pub mod password_reset_repo;
 // pub mod post_repo; // REMOVED - moved to content-service (port 8081)
 pub mod post_share_repo;
-pub mod trending_repo;
+// pub mod trending_repo; // REMOVED - moved to feed-service (port 8089) [DELETED]
 // pub mod upload_repo; // REMOVED - moved to media-service (port 8082)
 pub mod user_repo;
 // pub mod video_repo; // REMOVED - moved to media-service (port 8082)

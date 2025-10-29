@@ -469,29 +469,21 @@ async fn main() -> io::Result<()> {
             .with_database(&config.clickhouse.database);
 
         let job_ctx = jobs::JobContext::new(redis_manager.clone(), ch_client_for_jobs.clone());
-        let job_ctx2 = jobs::JobContext::new(redis_manager.clone(), ch_client_for_jobs.clone());
         let job_ctx3 = jobs::JobContext::new(redis_manager.clone(), ch_client_for_jobs);
 
         let suggested_job = SuggestedUsersJob::new(SuggestionConfig::default());
-        let trending_hourly = jobs::trending_generator::TrendingGeneratorJob::new(
-            jobs::trending_generator::TrendingConfig::hourly(),
-        );
         let cache_warmer = jobs::cache_warmer::CacheWarmerJob::new(
             jobs::cache_warmer::CacheWarmerConfig::default(),
             content_client.clone(),
         );
 
-        // Run jobs in background (suggested + trending + cache warmup)
+        // Run jobs in background (suggested + cache warmup; trending moved to feed-service)
         let handle = tokio::spawn(async move {
             run_jobs(
                 vec![
                     (
                         Arc::new(suggested_job) as Arc<dyn jobs::CacheRefreshJob>,
                         job_ctx,
-                    ),
-                    (
-                        Arc::new(trending_hourly) as Arc<dyn jobs::CacheRefreshJob>,
-                        job_ctx2,
                     ),
                     (
                         Arc::new(cache_warmer) as Arc<dyn jobs::CacheRefreshJob>,
