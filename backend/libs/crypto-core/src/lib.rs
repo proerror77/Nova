@@ -9,12 +9,40 @@ pub enum CryptoError {
     Encryption,
     #[error("decryption error")]
     Decryption,
+    #[error("key generation error")]
+    KeyGeneration,
 }
 
 pub fn generate_nonce() -> [u8; 24] {
     let mut nonce = [0u8; 24];
     OsRng.fill_bytes(&mut nonce);
     nonce
+}
+
+// X25519 ECDH key exchange for E2EE
+pub fn generate_x25519_keypair() -> Result<([u8; 32], [u8; 32]), CryptoError> {
+    sodiumoxide::init().map_err(|_| CryptoError::KeyGeneration)?;
+    use sodiumoxide::crypto::box_::curve25519xsalsa20poly1305::gen_keypair;
+
+    let (public_key, secret_key) = gen_keypair();
+
+    Ok((public_key.0, secret_key.0))
+}
+
+pub fn x25519_derive_shared_secret(
+    our_secret_key: &[u8; 32],
+    their_public_key: &[u8; 32],
+) -> Result<[u8; 32], CryptoError> {
+    sodiumoxide::init().map_err(|_| CryptoError::Encryption)?;
+    use sodiumoxide::crypto::box_::curve25519xsalsa20poly1305::{PublicKey, SecretKey, precompute};
+
+    let pk = PublicKey(*their_public_key);
+    let sk = SecretKey(*our_secret_key);
+
+    let shared_secret = precompute(&pk, &sk);
+
+    // Extract the shared secret bytes (32 bytes)
+    Ok(shared_secret.0)
 }
 
 // E2E encryption using crypto::box_ (Curve25519XSalsa20Poly1305)

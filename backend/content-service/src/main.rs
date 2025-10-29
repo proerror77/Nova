@@ -232,16 +232,10 @@ async fn main() -> io::Result<()> {
             .route(
                 "/api/v1/openapi.json",
                 web::get().to(|| async {
+                    use utoipa::OpenApi;
                     HttpResponse::Ok()
                         .content_type("application/json")
-                        .json(serde_json::json!({
-                            "openapi": "3.0.0",
-                            "info": {
-                                "title": "Nova Content Service API",
-                                "version": env!("CARGO_PKG_VERSION")
-                            },
-                            "paths": {}
-                        }))
+                        .json(content_service::openapi::ApiDoc::openapi())
                 }),
             )
             .service(

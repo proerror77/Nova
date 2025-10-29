@@ -1,13 +1,13 @@
-/// OpenAPI documentation for Nova Messaging Service
+/// OpenAPI documentation for Nova Content Service
 use utoipa::OpenApi;
 use utoipa::openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme};
 
 #[derive(OpenApi)]
 #[openapi(
     info(
-        title = "Nova Messaging Service API",
+        title = "Nova Content Service API",
         version = "1.0.0",
-        description = "Real-time messaging service with WebSocket support. Provides end-to-end encrypted messaging, group conversations, file attachments, typing indicators, read receipts, and WebRTC signaling for voice/video calls. Supports ECDH key exchange for E2E encryption.",
+        description = "Content management service for posts, comments, and stories. Handles creation, retrieval, updates, and deletion of user-generated content including text posts, images, comments, and ephemeral stories. Provides feed generation and caching capabilities.",
         contact(
             name = "Nova Team",
             email = "support@nova.app"
@@ -17,18 +17,15 @@ use utoipa::openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme};
         )
     ),
     servers(
-        (url = "http://localhost:8083", description = "Development server"),
-        (url = "https://messaging-api.nova.app", description = "Production server"),
+        (url = "http://localhost:8081", description = "Development server"),
+        (url = "https://content-api.nova.app", description = "Production server"),
     ),
     tags(
         (name = "health", description = "Service health checks"),
-        (name = "messages", description = "Message CRUD operations"),
-        (name = "conversations", description = "Conversation management and history"),
-        (name = "websocket", description = "WebSocket real-time messaging"),
-        (name = "key-exchange", description = "ECDH key exchange for E2E encryption"),
-        (name = "calls", description = "WebRTC voice/video call signaling"),
-        (name = "attachments", description = "File attachment upload and download"),
-        (name = "reactions", description = "Message reactions and emojis"),
+        (name = "posts", description = "Post creation, retrieval, updates, and deletion"),
+        (name = "comments", description = "Comment management on posts"),
+        (name = "stories", description = "Ephemeral stories (24-hour lifespan)"),
+        (name = "feed", description = "Feed generation and ranking"),
     ),
     modifiers(&SecurityAddon),
 )]
@@ -55,7 +52,7 @@ impl utoipa::Modify for SecurityAddon {
 
 impl ApiDoc {
     pub fn title() -> &'static str {
-        "Nova Messaging Service"
+        "Nova Content Service"
     }
 
     pub fn version() -> &'static str {

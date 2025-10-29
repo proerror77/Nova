@@ -1,5 +1,6 @@
 pub mod call_service;
 pub mod conversation_service;
+pub mod e2ee;
 pub mod encryption;
 pub mod fcm;
 pub mod key_exchange;

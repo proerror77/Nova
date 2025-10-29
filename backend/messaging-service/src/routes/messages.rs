@@ -192,7 +192,7 @@ pub struct UpdateMessageRequest {
 ///
 /// Business rules:
 /// - Only message sender can edit (admins cannot edit others' messages)
-/// - Edit window: 15 minutes after creation
+/// - Edit window: 24 hours after creation
 /// - Version number must match current version (prevents lost updates)
 /// - On conflict: returns 409 with server version
 /// - Edit history is automatically recorded via database trigger
@@ -202,8 +202,8 @@ pub async fn update_message(
     Path(message_id): Path<Uuid>,
     Json(body): Json<UpdateMessageRequest>,
 ) -> Result<StatusCode, crate::error::AppError> {
-    // Edit window limit (15 minutes)
-    const MAX_EDIT_MINUTES: i64 = 15;
+    // Edit window limit (24 hours)
+    const MAX_EDIT_MINUTES: i64 = 1440;
 
     // Start transaction for atomic operation
     let mut tx = state.db.begin().await?;
@@ -483,11 +483,11 @@ pub struct RecallMessageResponse {
     pub status: String, // Always "recalled"
 }
 
-/// Recall (unsend) a message within 5 minutes of sending
+/// Recall (unsend) a message within 2 hours of sending
 ///
 /// Business rules:
 /// - Only message sender or conversation admin can recall
-/// - Message must be within 5 minutes of creation
+/// - Message must be within 2 hours of creation
 /// - Already recalled messages cannot be recalled again
 /// - Recall event is broadcast to all conversation members via WebSocket
 /// - Audit log entry is created in message_recalls table
@@ -527,8 +527,8 @@ pub async fn recall_message(
         return Err(crate::error::AppError::AlreadyRecalled);
     }
 
-    // 5. Check 5-minute recall window
-    const RECALL_WINDOW_MINUTES: i64 = 5;
+    // 5. Check 2-hour recall window
+    const RECALL_WINDOW_MINUTES: i64 = 120;
     let now = chrono::Utc::now();
     let elapsed_minutes = (now - created_at).num_minutes();
 
