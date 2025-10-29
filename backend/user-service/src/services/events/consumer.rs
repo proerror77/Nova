@@ -10,8 +10,8 @@ use tracing::{debug, error, info, warn};
 
 use crate::db::ch_client::ClickHouseClient;
 use crate::error::{AppError, Result};
-use crate::grpc::ContentServiceClient;
 use crate::grpc::nova::content::InvalidateFeedEventRequest;
+use crate::grpc::ContentServiceClient;
 
 use super::dedup::EventDeduplicator;
 

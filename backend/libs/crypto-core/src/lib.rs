@@ -84,7 +84,7 @@ pub extern "C" fn cryptocore_generate_nonce(out_buf: *mut c_uchar, out_len: c_ul
     if out_buf.is_null() || len < 24 {
         return 0;
     }
-    let mut nonce = generate_nonce();
+    let nonce = generate_nonce();
     unsafe {
         ptr::copy_nonoverlapping(nonce.as_ptr(), out_buf, 24);
     }

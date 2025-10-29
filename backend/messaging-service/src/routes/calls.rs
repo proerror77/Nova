@@ -97,14 +97,17 @@ pub async fn initiate_call(
     })
     .to_string();
 
-    state
-        .registry
-        .broadcast(
-            conversation_id,
-            axum::extract::ws::Message::Text(payload.clone()),
-        )
-        .await;
-    let _ = crate::websocket::pubsub::publish(&state.redis, conversation_id, &payload).await;
+    crate::websocket::events::broadcast_payload_str(
+        &state.registry,
+        &state.redis,
+        conversation_id,
+        payload,
+    )
+    .await
+    .map_err(|e| {
+        tracing::error!(error = %e, "failed to broadcast call event");
+        crate::error::AppError::Internal
+    })?;
 
     Ok((
         StatusCode::CREATED,
@@ -143,7 +146,7 @@ pub async fn answer_call(
             .await?;
 
     // Answer the call
-    let participant_id =
+    let _participant_id =
         CallService::answer_call(&state.db, call_id, user.id, &body.answer_sdp).await?;
 
     // Broadcast call answered event
@@ -156,14 +159,17 @@ pub async fn answer_call(
     })
     .to_string();
 
-    state
-        .registry
-        .broadcast(
-            conversation_id,
-            axum::extract::ws::Message::Text(payload.clone()),
-        )
-        .await;
-    let _ = crate::websocket::pubsub::publish(&state.redis, conversation_id, &payload).await;
+    crate::websocket::events::broadcast_payload_str(
+        &state.registry,
+        &state.redis,
+        conversation_id,
+        payload,
+    )
+    .await
+    .map_err(|e| {
+        tracing::error!(error = %e, "failed to broadcast call event");
+        crate::error::AppError::Internal
+    })?;
 
     Ok((
         StatusCode::OK,
@@ -212,14 +218,17 @@ pub async fn reject_call(
     })
     .to_string();
 
-    state
-        .registry
-        .broadcast(
-            conversation_id,
-            axum::extract::ws::Message::Text(payload.clone()),
-        )
-        .await;
-    let _ = crate::websocket::pubsub::publish(&state.redis, conversation_id, &payload).await;
+    crate::websocket::events::broadcast_payload_str(
+        &state.registry,
+        &state.redis,
+        conversation_id,
+        payload,
+    )
+    .await
+    .map_err(|e| {
+        tracing::error!(error = %e, "failed to broadcast call event");
+        crate::error::AppError::Internal
+    })?;
 
     Ok(StatusCode::NO_CONTENT)
 }
@@ -261,14 +270,17 @@ pub async fn end_call(
     })
     .to_string();
 
-    state
-        .registry
-        .broadcast(
-            conversation_id,
-            axum::extract::ws::Message::Text(payload.clone()),
-        )
-        .await;
-    let _ = crate::websocket::pubsub::publish(&state.redis, conversation_id, &payload).await;
+    crate::websocket::events::broadcast_payload_str(
+        &state.registry,
+        &state.redis,
+        conversation_id,
+        payload,
+    )
+    .await
+    .map_err(|e| {
+        tracing::error!(error = %e, "failed to broadcast call event");
+        crate::error::AppError::Internal
+    })?;
 
     Ok(StatusCode::NO_CONTENT)
 }

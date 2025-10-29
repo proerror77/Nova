@@ -13,6 +13,7 @@ final class FeedViewModel: ObservableObject {
 
     // MARK: - Private Properties
     private let feedRepository: FeedRepository
+    private let interactionService = PostInteractionService()
     private var currentCursor: String?
     private var hasMore = true
     private var cancellables = Set<AnyCancellable>()
@@ -179,15 +180,15 @@ final class FeedViewModel: ObservableObject {
         // 3. 调用 API 持久化（后台执行）
         Task {
             do {
-                // TODO: 替换为真实的 PostRepository 调用
-                // let postRepository = PostRepository()
-                // try await postRepository.toggleLike(postId: post.id)
+                if wasLiked {
+                    try await interactionService.unlikePost(postId: post.id.uuidString)
+                } else {
+                    try await interactionService.likePost(postId: post.id.uuidString)
+                }
 
-                // 模拟网络延迟
-                try await Task.sleep(nanoseconds: 500_000_000) // 0.5s
-
-                // 成功后清除备份
-                optimisticUpdateBackup.removeValue(forKey: post.id)
+                await MainActor.run {
+                    optimisticUpdateBackup.removeValue(forKey: post.id)
+                }
 
             } catch {
                 // 4. 失败时回滚到原始状态

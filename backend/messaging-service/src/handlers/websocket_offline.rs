@@ -91,7 +91,7 @@ async fn handle_socket(
         for (msg_id, fields) in offline_messages.iter() {
             // 构造消息负载并发送
             if let Some(payload) = fields.get("payload") {
-                let msg = axum::extract::ws::Message::Text(payload.clone());
+                let msg = axum::extract::ws::Message::Text(payload.clone().into());
                 if sender.send(msg).await.is_err() {
                     tracing::warn!("failed to send offline message");
                     return;  // 客户端已断开

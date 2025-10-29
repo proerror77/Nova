@@ -2,9 +2,9 @@
 use crate::error::Result;
 use crate::services::CommentService;
 use actix_web::{web, HttpResponse};
+use serde::Deserialize;
 use sqlx::PgPool;
 use uuid::Uuid;
-use serde::Deserialize;
 
 #[derive(Deserialize)]
 pub struct PaginationParams {

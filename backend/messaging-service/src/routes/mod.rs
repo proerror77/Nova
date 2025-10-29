@@ -9,8 +9,8 @@ pub mod calls;
 use calls::{answer_call, end_call, get_call_history, initiate_call, reject_call};
 pub mod conversations;
 use conversations::{
-    create_conversation, create_group_conversation, delete_group, get_conversation, leave_group,
-    mark_as_read,
+    create_conversation, create_group_conversation, delete_group, get_conversation,
+    get_conversation_key, leave_group, mark_as_read,
 };
 pub mod messages;
 use messages::{
@@ -141,6 +141,7 @@ pub fn build_router() -> Router<AppState> {
             "/conversations/:id",
             get(get_conversation).delete(delete_group),
         )
+        .route("/conversations/:id/encryption-key", get(get_conversation_key))
         .route("/conversations/:id/leave", post(leave_group))
         .route("/conversations/:id/messages", post(send_message))
         .route(

@@ -114,9 +114,10 @@ pub async fn ingest_events(
 
     // If any events failed validation or couldn't be processed, return partial success
     if failed_count > 0 && published_count == 0 && queued_count == 0 {
-        return Err(AppError::Internal(
-            format!("Failed to process {} events", failed_count)
-        ));
+        return Err(AppError::Internal(format!(
+            "Failed to process {} events",
+            failed_count
+        )));
     }
 
     // Return 202 Accepted since events are being processed (either published or queued)

@@ -46,9 +46,10 @@ pub struct UpdatePreferencesPayload {
     quiet_hours_end: Option<String>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 pub struct SubscribePayload {
-    notification_type: String,
+    pub notification_type: String,
 }
 
 #[derive(Debug, Deserialize)]

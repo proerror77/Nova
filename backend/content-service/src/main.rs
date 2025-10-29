@@ -131,7 +131,7 @@ async fn main() -> io::Result<()> {
     );
 
     let feed_cache_manager = redis_client
-        .get_tokio_connection_manager()
+        .get_connection_manager()
         .await
         .map_err(|e| {
             io::Error::new(
@@ -139,10 +139,7 @@ async fn main() -> io::Result<()> {
                 format!("Failed to connect Redis: {e}"),
             )
         })?;
-    let feed_cache = Arc::new(tokio::sync::Mutex::new(FeedCache::new(
-        feed_cache_manager,
-        120,
-    )));
+    let feed_cache = Arc::new(FeedCache::new(feed_cache_manager, 120));
 
     let ch_cfg = &config.clickhouse;
     let ch_client = Arc::new(ClickHouseClient::new(

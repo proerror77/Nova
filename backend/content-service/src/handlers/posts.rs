@@ -1,19 +1,22 @@
 /// Post handlers - HTTP endpoints for post operations
+use crate::cache::ContentCache;
 use crate::error::Result;
 use crate::services::PostService;
 use actix_web::{web, HttpResponse};
 use sqlx::PgPool;
+use std::sync::Arc;
 use uuid::Uuid;
 
 /// Create a new post
 pub async fn create_post(
     pool: web::Data<PgPool>,
+    cache: web::Data<Arc<ContentCache>>,
     user_id: Uuid,
     caption: Option<String>,
     image_key: String,
     content_type: String,
 ) -> Result<HttpResponse> {
-    let service = PostService::new((**pool).clone());
+    let service = PostService::with_cache((**pool).clone(), cache.get_ref().clone());
     let post = service
         .create_post(user_id, caption.as_deref(), &image_key, &content_type)
         .await?;
@@ -24,9 +27,10 @@ pub async fn create_post(
 /// Get a post by ID
 pub async fn get_post(
     pool: web::Data<PgPool>,
+    cache: web::Data<Arc<ContentCache>>,
     post_id: web::Path<Uuid>,
 ) -> Result<HttpResponse> {
-    let service = PostService::new((**pool).clone());
+    let service = PostService::with_cache((**pool).clone(), cache.get_ref().clone());
     match service.get_post(*post_id).await? {
         Some(post) => Ok(HttpResponse::Ok().json(post)),
         None => Ok(HttpResponse::NotFound().finish()),
@@ -36,10 +40,11 @@ pub async fn get_post(
 /// Get posts for a user
 pub async fn get_user_posts(
     pool: web::Data<PgPool>,
+    cache: web::Data<Arc<ContentCache>>,
     user_id: web::Path<Uuid>,
     query: web::Query<PaginationParams>,
 ) -> Result<HttpResponse> {
-    let service = PostService::new((**pool).clone());
+    let service = PostService::with_cache((**pool).clone(), cache.get_ref().clone());
     let posts = service
         .get_user_posts(*user_id, query.limit, query.offset)
         .await?;
@@ -50,12 +55,15 @@ pub async fn get_user_posts(
 /// Update post status
 pub async fn update_post_status(
     pool: web::Data<PgPool>,
+    cache: web::Data<Arc<ContentCache>>,
     post_id: web::Path<Uuid>,
     user_id: Uuid,
     status: String,
 ) -> Result<HttpResponse> {
-    let service = PostService::new((**pool).clone());
-    let updated = service.update_post_status(*post_id, user_id, &status).await?;
+    let service = PostService::with_cache((**pool).clone(), cache.get_ref().clone());
+    let updated = service
+        .update_post_status(*post_id, user_id, &status)
+        .await?;
 
     if updated {
         Ok(HttpResponse::Ok().finish())
@@ -67,10 +75,11 @@ pub async fn update_post_status(
 /// Delete a post
 pub async fn delete_post(
     pool: web::Data<PgPool>,
+    cache: web::Data<Arc<ContentCache>>,
     post_id: web::Path<Uuid>,
     user_id: Uuid,
 ) -> Result<HttpResponse> {
-    let service = PostService::new((**pool).clone());
+    let service = PostService::with_cache((**pool).clone(), cache.get_ref().clone());
     let deleted = service.delete_post(*post_id, user_id).await?;
 
     if deleted {

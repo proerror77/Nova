@@ -272,6 +272,8 @@ services:
       CLICKHOUSE_DB: nova_feed
       CLICKHOUSE_USER: default
       CLICKHOUSE_PASSWORD: clickhouse
+      # Content service gRPC endpoint
+      CONTENT_SERVICE_GRPC_URL: http://content-service:9081
       # Neo4j
       NEO4J_ENABLED: "true"
       NEO4J_URI: bolt://neo4j:7687

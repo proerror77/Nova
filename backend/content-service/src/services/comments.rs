@@ -146,10 +146,12 @@ impl CommentService {
 
     /// Count comments for a post
     pub async fn count_post_comments(&self, post_id: Uuid) -> Result<i32> {
-        let row = sqlx::query("SELECT COUNT(*) as count FROM comments WHERE post_id = $1 AND soft_delete IS NULL")
-            .bind(post_id)
-            .fetch_one(&self.pool)
-            .await?;
+        let row = sqlx::query(
+            "SELECT COUNT(*) as count FROM comments WHERE post_id = $1 AND soft_delete IS NULL",
+        )
+        .bind(post_id)
+        .fetch_one(&self.pool)
+        .await?;
 
         Ok(row.get::<i32, _>("count"))
     }
