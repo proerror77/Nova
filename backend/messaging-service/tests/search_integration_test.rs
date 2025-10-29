@@ -1,9 +1,9 @@
 // Integration test for message search functionality
 // Tests search with pagination, sorting, and full-text search capabilities
 
-use uuid::Uuid;
-use sqlx::{Pool, Postgres, postgres::PgPoolOptions, Row};
 use chrono::Utc;
+use sqlx::{postgres::PgPoolOptions, Pool, Postgres, Row};
+use uuid::Uuid;
 
 #[tokio::test]
 #[ignore] // Run manually: cargo test --test search_integration_test -- --nocapture
@@ -147,15 +147,16 @@ impl SearchTestScenario {
 
         // Insert message into database
         sqlx::query(
-            "INSERT INTO messages (id, conversation_id, sender_id, content, encrypted_content, nonce, created_at) \
-             VALUES ($1, $2, $3, $4, $5, $6, $7)"
+            "INSERT INTO messages (id, conversation_id, sender_id, content, content_encrypted, content_nonce, encryption_version, created_at) \
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)"
         )
         .bind(message_id)
         .bind(self.conversation_id)
         .bind(self.user_id)
         .bind(&content)
-        .bind("") // encrypted_content (placeholder)
-        .bind("") // nonce (placeholder)
+        .bind::<Option<Vec<u8>>>(None) // content_encrypted placeholder
+        .bind::<Option<Vec<u8>>>(None) // content_nonce placeholder
+        .bind(0)
         .bind(Utc::now())
         .execute(&self.db)
         .await
@@ -177,7 +178,7 @@ impl SearchTestScenario {
              WHERE m.conversation_id = $1 \
                AND m.deleted_at IS NULL \
                AND m.content IS NOT NULL \
-               AND m.content_tsv @@ plainto_tsquery('english', $2)"
+               AND m.content_tsv @@ plainto_tsquery('english', $2)",
         )
         .bind(self.conversation_id)
         .bind(query)
@@ -190,7 +191,9 @@ impl SearchTestScenario {
         // Build sort clause
         let sort_clause = match sort_by {
             "oldest" => "m.created_at ASC",
-            "relevance" => "ts_rank(m.content_tsv, plainto_tsquery('english', $2)) DESC, m.created_at DESC",
+            "relevance" => {
+                "ts_rank(m.content_tsv, plainto_tsquery('english', $2)) DESC, m.created_at DESC"
+            }
             "recent" | _ => "m.created_at DESC",
         };
 

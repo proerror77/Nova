@@ -143,18 +143,9 @@ impl HotPostGenerator {
 
         debug!("Executing ClickHouse query for hot posts");
 
-        // TODO: Execute query with real clickhouse-rs client
-        // Example:
-        // let response = self.clickhouse_client
-        //     .query(_query)
-        //     .bind(self.config.top_posts_count)
-        //     .fetch_all()
-        //     .await?;
-        // let posts: Vec<HotPost> = serde_json::from_slice(&response)?;
-        // Ok(posts)
-
-        // Placeholder implementation
-        Ok(vec![])
+        // NOTE: feed ranking已移轉至 content-service，此 ClickHouse 聚合後續將透過 content-service gRPC 重新實作。
+        // 目前回傳空集合避免產生舊有快取。對應 backlog: BACKEND-173。
+        Ok(Vec::new())
     }
 
     /// Cache hot posts to Redis
@@ -171,12 +162,8 @@ impl HotPostGenerator {
             self.config.redis_ttl_secs
         );
 
-        // TODO: Implement Redis SET with TTL
-        // Example:
-        // self.redis_client
-        //     .set_ex(&self.config.redis_key, json_data, self.config.redis_ttl_secs)
-        //     .await?;
-
+        // TODO(BACKEND-173): 將熱門貼文改由 content-service 緩存後再寫入 Redis。
+        let _ = json_data; // keep clippy happy until整合完成
         Ok(())
     }
 }
@@ -312,18 +299,13 @@ impl SuggestedUsersGenerator {
             user_id
         );
 
-        // TODO: Execute real ClickHouse query
-        // Example:
-        // let response = self.clickhouse_client.query(&_query).fetch_all().await?;
-        // let suggestions: Vec<SuggestedUser> = serde_json::from_slice(&response)?;
-        // Ok(suggestions)
-
-        Ok(vec![])
+        // NOTE: 建議使用者是 Content Service 後續任務的一部分（BACKEND-172）。目前先回傳空集合避免不一致。
+        Ok(Vec::new())
     }
 
     /// Get cached suggestions from Redis
     async fn get_cached_suggestions(&self, _cache_key: &str) -> Result<Vec<SuggestedUser>> {
-        // TODO: Implement Redis GET + deserialize
+        // TODO(BACKEND-172): 改用 content-service/Redis 線上資料，現在總是視為快取 miss。
         Err(crate::error::AppError::NotFound("Cache miss".to_string()))
     }
 
@@ -334,7 +316,7 @@ impl SuggestedUsersGenerator {
         suggestions: &[SuggestedUser],
     ) -> Result<()> {
         let json_data = serde_json::to_string(suggestions)?;
-        // TODO: Implement Redis SET with TTL
+        let _ = (cache_key, json_data); // 延後實作 Redis 寫入（BACKEND-172）
         Ok(())
     }
 }
