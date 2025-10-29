@@ -19,9 +19,10 @@ use uuid::Uuid;
 use chrono::{Utc, Duration};
 use std::sync::Arc;
 use tracing::{debug, error, warn, info};
+use serde::{Serialize, Deserialize};
 
 /// Push notification result
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PushNotificationResult {
     pub device_token_id: Uuid,
     pub success: bool,
