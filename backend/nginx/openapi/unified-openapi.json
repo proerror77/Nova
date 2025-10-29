@@ -72,9 +72,9 @@
     },
     {
       "name": "Feed",
-      "description": "Personalized content feed (user-service)",
+      "description": "Personalized content feed (content-service)",
       "externalDocs": {
-        "url": "/api/v1/openapi/user-service.json"
+        "url": "/api/v1/openapi/content-service.json"
       }
     },
     {
