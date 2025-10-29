@@ -2,7 +2,6 @@
 ///
 /// This module defines all error types that can occur in the media-service.
 /// Errors are converted to appropriate HTTP responses for API clients.
-
 use actix_web::{error::ResponseError, http::StatusCode, HttpResponse};
 use std::fmt;
 

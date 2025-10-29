@@ -22,8 +22,8 @@ pub mod transcoding_queue;
 pub mod trending;
 // pub mod uploads; // REMOVED - moved to media-service (port 8082)
 pub mod users; // Public user profile endpoints (minimal)
-// pub mod videos; // REMOVED - moved to media-service (port 8082)
-// pub mod videos_admin; // REMOVED - moved to media-service (port 8082)
+               // pub mod videos; // REMOVED - moved to media-service (port 8082)
+               // pub mod videos_admin; // REMOVED - moved to media-service (port 8082)
 
 pub use auth::*;
 // pub use comments::*; // REMOVED - moved to content-service (port 8081)

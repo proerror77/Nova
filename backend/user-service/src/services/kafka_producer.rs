@@ -1,4 +1,4 @@
-use rdkafka::producer::{FutureProducer, FutureRecord};
+use rdkafka::producer::{FutureProducer, FutureRecord, Producer};
 use rdkafka::ClientConfig;
 use std::time::Duration;
 use tokio::time::timeout;
@@ -45,5 +45,15 @@ impl EventProducer {
                 Err(AppError::Internal("Kafka publish timeout".into()))
             }
         }
+    }
+
+    /// Lightweight health check by fetching cluster metadata
+    pub async fn health_check(&self) -> Result<()> {
+        // librdkafka performs metadata fetch synchronously; scope is limited to readiness probes.
+        self.producer
+            .client()
+            .fetch_metadata(Some(&self.topic), self.timeout)
+            .map(|_| ())
+            .map_err(AppError::Kafka)
     }
 }

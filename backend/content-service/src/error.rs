@@ -2,7 +2,6 @@
 ///
 /// This module defines all error types that can occur in the content-service.
 /// Errors are converted to appropriate HTTP responses for API clients.
-
 use actix_web::{error::ResponseError, http::StatusCode, HttpResponse};
 use std::fmt;
 
@@ -102,5 +101,11 @@ impl From<sqlx::Error> for AppError {
 impl From<serde_json::Error> for AppError {
     fn from(err: serde_json::Error) -> Self {
         AppError::Internal(err.to_string())
+    }
+}
+
+impl From<redis::RedisError> for AppError {
+    fn from(err: redis::RedisError) -> Self {
+        AppError::CacheError(err.to_string())
     }
 }

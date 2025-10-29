@@ -52,6 +52,7 @@ reqwest.workspace = true
 urlencoding.workspace = true
 clickhouse.workspace = true
 utoipa.workspace = true
+crypto-core = { path = "../libs/crypto-core" }
 
 # Service-specific dependencies
 futures = "0.3"

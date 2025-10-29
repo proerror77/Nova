@@ -55,7 +55,7 @@ pub struct RankedPost {
 
 pub struct FeedRankingService {
     ch_client: Arc<ClickHouseClient>,
-    cache: Arc<tokio::sync::Mutex<FeedCache>>,
+    cache: Arc<FeedCache>,
     circuit_breaker: CircuitBreaker,
     db_pool: PgPool,
     freshness_weight: f64,
@@ -70,7 +70,7 @@ pub struct FeedRankingService {
 impl FeedRankingService {
     pub fn new(
         ch_client: Arc<ClickHouseClient>,
-        cache: Arc<tokio::sync::Mutex<FeedCache>>,
+        cache: Arc<FeedCache>,
         db_pool: PgPool,
         config: FeedRankingConfig,
     ) -> Self {
@@ -181,15 +181,12 @@ impl FeedRankingService {
         let page_posts = all_posts[start_index..end].to_vec();
         let has_more = end < total_count;
 
-        {
-            let mut cache = self.cache.lock().await;
-            if total_count > 0 {
-                cache
-                    .write_feed_cache(user_id, all_posts.clone(), None)
-                    .await?;
-            } else {
-                cache.invalidate_feed(user_id).await?;
-            }
+        if total_count > 0 {
+            self.cache
+                .write_feed_cache(user_id, all_posts.clone(), None)
+                .await?;
+        } else {
+            self.cache.invalidate_feed(user_id).await?;
         }
 
         let elapsed = start.elapsed().as_secs_f64();
@@ -219,9 +216,7 @@ impl FeedRankingService {
 
         let start = Instant::now();
 
-        {
-            let mut cache = self.cache.lock().await;
-            match cache.read_feed_cache(user_id).await? {
+        match self.cache.read_feed_cache(user_id).await? {
                 Some(cached) => {
                     let total_count = cached.post_ids.len();
                     if offset < total_count {
@@ -259,7 +254,6 @@ impl FeedRankingService {
                         .with_label_values(&["miss"])
                         .inc();
                 }
-            }
         }
 
         let fetch_limit = offset.saturating_add(limit).saturating_add(1) as i64;
@@ -284,8 +278,8 @@ impl FeedRankingService {
         let has_more = end < total_count;
 
         if total_count > 0 {
-            let mut cache = self.cache.lock().await;
-            cache
+            self
+                .cache
                 .write_feed_cache(user_id, posts.clone(), Some(self.fallback_cache_ttl_secs))
                 .await?;
         }
