@@ -2,7 +2,10 @@ use axum::extract::Request;
 use axum::middleware;
 use crypto_core::jwt as core_jwt;
 use messaging_service::{
-    config, db, error, logging, routes, services::push::ApnsPush, state::AppState,
+    config, db, error, logging, routes,
+    services::{encryption::EncryptionService, push::ApnsPush},
+    state::AppState,
+    websocket::streams::{start_streams_listener, StreamsConfig},
 };
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -56,19 +59,21 @@ async fn main() -> Result<(), error::AppError> {
         None => None,
     };
 
+    let encryption = Arc::new(EncryptionService::new(cfg.encryption_master_key));
+
     let state = AppState {
         db: db.clone(),
         registry: registry.clone(),
         redis: redis.clone(),
         config: cfg.clone(),
         apns: apns_client.clone(),
+        encryption: encryption.clone(),
     };
-    // Start Redis psubscribe listener for cross-instance fanout
+    // Start Redis Streams listener for cross-instance fanout
     tokio::spawn(async move {
-        if let Err(e) =
-            messaging_service::websocket::pubsub::start_psub_listener(redis, registry).await
-        {
-            tracing::warn!(error=%e, "redis psub listener exited");
+        let config = StreamsConfig::default();
+        if let Err(e) = start_streams_listener(redis, registry, config).await {
+            tracing::warn!(error=%e, "redis streams listener exited");
         }
     });
 
