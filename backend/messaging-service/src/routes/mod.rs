@@ -33,6 +33,11 @@ pub mod rtc;
 use rtc::get_ice_config;
 pub mod wsroute;
 use wsroute::ws_handler;
+pub mod key_exchange;
+use key_exchange::{
+    complete_key_exchange, get_peer_public_key, list_conversation_key_exchanges,
+    store_device_public_key,
+};
 
 // OpenAPI endpoint handler
 async fn openapi_json() -> Json<serde_json::Value> {
@@ -223,6 +228,20 @@ pub fn build_router() -> Router<AppState> {
         .route(
             "/notifications/users/:user_id/unsubscribe/:notification_type",
             post(unsubscribe),
+        )
+        // ECDH Key Exchange routes
+        .route("/keys/device", post(store_device_public_key))
+        .route(
+            "/conversations/:conversation_id/keys/:peer_user_id/:peer_device_id",
+            get(get_peer_public_key),
+        )
+        .route(
+            "/conversations/:conversation_id/complete-key-exchange",
+            post(complete_key_exchange),
+        )
+        .route(
+            "/conversations/:conversation_id/key-exchanges",
+            get(list_conversation_key_exchanges),
         )
         // WebSocket endpoint (with API version prefix for consistency)
         .route("/ws", get(ws_handler));
