@@ -18,4 +18,4 @@ pub use config::Config;
 pub use error::{AppError, Result};
 
 // Re-export for integration tests
-pub use services::{image_processing, job_queue};
+pub use services::image_processing;
