@@ -7,6 +7,7 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use tokio::time::{self, Duration};
 use uuid::Uuid;
+use crate::models::message::MessageEnvelope;
 
 /// Represents a stream message entry
 #[derive(Debug, Clone)]
@@ -56,13 +57,19 @@ static TRIM_COUNTER: AtomicU64 = AtomicU64::new(0);
 const TRIM_INTERVAL: u64 = 100; // Trim every 100 messages
 
 /// Publish message to stream for a specific conversation
-pub async fn publish_to_stream(
+pub async fn publish_envelope(
     client: &Client,
-    conversation_id: Uuid,
-    payload: &str,
+    envelope: &MessageEnvelope,
 ) -> redis::RedisResult<String> {
     let mut conn = client.get_multiplexed_async_connection().await?;
-    let key = stream_key(conversation_id);
+    let key = stream_key(envelope.conversation_id);
+    let envelope_json = envelope.to_json().map_err(|e| {
+        redis::RedisError::from((
+            redis::ErrorKind::TypeError,
+            "serialize message envelope",
+            e.to_string(),
+        ))
+    })?;
 
     // Add to conversation-specific stream
     let entry_id: String = conn
@@ -70,8 +77,8 @@ pub async fn publish_to_stream(
             &key,
             "*", // Auto-generate ID with current timestamp
             &[
-                ("conversation_id", conversation_id.to_string().as_str()),
-                ("payload", payload),
+                ("conversation_id", envelope.conversation_id.to_string().as_str()),
+                ("payload", envelope_json.as_str()),
                 (
                     "timestamp",
                     &chrono::Utc::now().timestamp_millis().to_string(),
@@ -85,7 +92,7 @@ pub async fn publish_to_stream(
         group_stream_key(),
         "*",
         &[
-            ("conversation_id", conversation_id.to_string().as_str()),
+            ("conversation_id", envelope.conversation_id.to_string().as_str()),
             ("stream_key", key.as_str()),
             ("entry_id", entry_id.as_str()),
         ],
@@ -174,28 +181,67 @@ pub async fn read_pending_messages(
         let conversation_id_str = fields.get("conversation_id").ok_or_else(|| {
             redis::RedisError::from((redis::ErrorKind::TypeError, "missing conversation_id"))
         })?;
-        let payload = fields
-            .get("payload")
-            .cloned()
-            .or_else(|| {
-                // For fanout stream, fetch from conversation stream
-                fields.get("entry_id").cloned()
-            })
-            .ok_or_else(|| {
-                redis::RedisError::from((redis::ErrorKind::TypeError, "missing payload"))
-            })?;
 
-        if let Ok(conversation_id) = Uuid::parse_str(conversation_id_str) {
-            results.push(StreamMessage {
-                id: stream_id,
-                conversation_id,
-                payload,
-                timestamp: chrono::Utc::now().timestamp_millis() as u64,
-            });
-        }
+        let conversation_id = match Uuid::parse_str(conversation_id_str) {
+            Ok(id) => id,
+            Err(_) => {
+                tracing::warn!(
+                    "Invalid conversation_id in stream entry: {}",
+                    conversation_id_str
+                );
+                continue;
+            }
+        };
+
+        let payload = match fields.get("payload").cloned() {
+            Some(p) => p,
+            None => {
+                let entry_id = fields.get("entry_id").ok_or_else(|| {
+                    redis::RedisError::from((redis::ErrorKind::TypeError, "missing entry_id"))
+                })?;
+                match fetch_conversation_payload(&mut conn, conversation_id, entry_id).await? {
+                    Some(p) => p,
+                    None => {
+                        tracing::warn!(
+                            "Fanout entry {} missing payload in conversation stream {}",
+                            entry_id,
+                            conversation_id
+                        );
+                        continue;
+                    }
+                }
+            }
+        };
+
+        results.push(StreamMessage {
+            id: stream_id,
+            conversation_id,
+            payload,
+            timestamp: chrono::Utc::now().timestamp_millis() as u64,
+        });
     }
 
     Ok(results)
+}
+
+async fn fetch_conversation_payload(
+    conn: &mut MultiplexedConnection,
+    conversation_id: Uuid,
+    entry_id: &str,
+) -> redis::RedisResult<Option<String>> {
+    let key = stream_key(conversation_id);
+    let entries: Vec<(String, HashMap<String, String>)> = redis::cmd("XRANGE")
+        .arg(&key)
+        .arg(entry_id)
+        .arg(entry_id)
+        .query_async(conn)
+        .await?;
+
+    if let Some((_, fields)) = entries.into_iter().next() {
+        Ok(fields.get("payload").cloned())
+    } else {
+        Ok(None)
+    }
 }
 
 /// Acknowledge message (mark as processed)
@@ -289,17 +335,28 @@ pub async fn start_streams_listener(
                         if let Ok(conversation_id) = Uuid::parse_str(conv_id_str) {
                             // Fetch actual message from conversation stream
                             if let Some(stream_key_name) = fields.get("stream_key") {
+                                let entry_id = fields.get("entry_id").cloned().unwrap_or_default();
                                 if let Ok(msg_data) = fetch_stream_entry(
                                     &mut conn,
                                     stream_key_name,
-                                    &fields.get("entry_id").cloned().unwrap_or_default(),
+                                    &entry_id,
                                 )
                                 .await
                                 {
+                                    let payload = match MessageEnvelope::from_json(&msg_data) {
+                                        Ok(mut envelope) => {
+                                            envelope.set_stream_id(entry_id.clone());
+                                            envelope
+                                                .to_json()
+                                                .unwrap_or(msg_data.clone())
+                                        }
+                                        Err(_) => msg_data.clone(),
+                                    };
+
                                     registry
                                         .broadcast(
                                             conversation_id,
-                                            axum::extract::ws::Message::Text(msg_data),
+                                            axum::extract::ws::Message::Text(payload.into()),
                                         )
                                         .await;
                                 }

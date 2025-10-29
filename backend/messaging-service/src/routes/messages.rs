@@ -10,6 +10,7 @@ use uuid::Uuid;
 use crate::middleware::guards::User;
 use crate::services::message_service::MessageService;
 use crate::state::AppState;
+use base64::{engine::general_purpose, Engine as _};
 use crate::websocket::events::{broadcast_event, WebSocketEvent};
 
 #[derive(Deserialize)]
@@ -41,6 +42,7 @@ pub async fn send_message(
 
     let (msg_id, seq) = MessageService::send_message_db(
         &state.db,
+        &state.encryption,
         conversation_id,
         user.id,
         body.plaintext.as_bytes(),
@@ -78,6 +80,11 @@ pub struct MessageDto {
     pub sequence_number: i64,
     pub created_at: String,
     pub content: String,
+    pub encrypted: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub encrypted_payload: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub nonce: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub message_type: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -163,6 +170,7 @@ pub async fn get_message_history(
 
     let rows = MessageService::get_message_history_with_details(
         &state.db,
+        &state.encryption,
         conversation_id,
         user.id,
         pagination.limit,
@@ -202,9 +210,11 @@ pub async fn update_message(
 
     // 1. Get message with FOR UPDATE lock (prevents concurrent modifications)
     let msg_row = sqlx::query(
-        "SELECT conversation_id, sender_id, version_number, created_at, content
-         FROM messages
-         WHERE id = $1
+        "SELECT m.conversation_id, m.sender_id, m.version_number, m.created_at, m.content,
+                m.content_encrypted, m.content_nonce, c.privacy_mode::text AS privacy_mode
+         FROM messages m
+         JOIN conversations c ON c.id = m.conversation_id
+         WHERE m.id = $1
          FOR UPDATE",
     )
     .bind(message_id)
@@ -216,7 +226,22 @@ pub async fn update_message(
     let sender_id: Uuid = msg_row.get("sender_id");
     let current_version: i32 = msg_row.get("version_number");
     let created_at: chrono::DateTime<chrono::Utc> = msg_row.get("created_at");
-    let old_content: String = msg_row.get("content");
+    let privacy_str: String = msg_row.get("privacy_mode");
+    let privacy_mode = match privacy_str.as_str() {
+        "strict_e2e" => crate::services::conversation_service::PrivacyMode::StrictE2e,
+        _ => crate::services::conversation_service::PrivacyMode::SearchEnabled,
+    };
+
+    let mut old_content: String = msg_row.get("content");
+    let ciphertext: Option<Vec<u8>> = msg_row
+        .try_get::<Option<Vec<u8>>, _>("content_encrypted")
+        .unwrap_or(None);
+    if matches!(privacy_mode, crate::services::conversation_service::PrivacyMode::StrictE2e) {
+        old_content = ciphertext
+            .as_ref()
+            .map(|c| general_purpose::STANDARD.encode(c))
+            .unwrap_or_else(|| "[Encrypted message unavailable]".to_string());
+    }
 
     // 2. Verify ownership (only sender can edit their own messages)
     if sender_id != user.id {
@@ -249,25 +274,52 @@ pub async fn update_message(
         });
     }
 
-    // 6. Update message with version increment (CAS - Compare-And-Swap)
+    // 6. Prepare encrypted payload if needed (before CAS update)
+    let (new_content_value, encrypted_payload, nonce_payload, encryption_version) =
+        if matches!(privacy_mode, crate::services::conversation_service::PrivacyMode::StrictE2e) {
+            let (ciphertext, nonce) = state
+                .encryption
+                .encrypt(conversation_id, body.plaintext.as_bytes())?;
+            (
+                String::new(),
+                Some(ciphertext),
+                Some(nonce.to_vec()),
+                1,
+            )
+        } else {
+            (
+                body.plaintext.clone(),
+                None,
+                None,
+                0,
+            )
+        };
+
+    // 7. Update message with version increment (CAS - Compare-And-Swap)
     let update_result = sqlx::query(
         r#"
         UPDATE messages
         SET
             content = $1,
+            content_encrypted = $2,
+            content_nonce = $3,
+            encryption_version = $4,
             version_number = version_number + 1,
             updated_at = NOW()
-        WHERE id = $2 AND version_number = $3
+        WHERE id = $5 AND version_number = $6
         RETURNING id, conversation_id, version_number
         "#,
     )
-    .bind(&body.plaintext)
+    .bind(&new_content_value)
+    .bind(encrypted_payload.as_ref().map(|v| v.as_slice()))
+    .bind(nonce_payload.as_ref().map(|v| v.as_slice()))
+    .bind(encryption_version)
     .bind(message_id)
     .bind(current_version) // CAS: only update if version matches
     .fetch_optional(&mut *tx)
     .await?;
 
-    // 7. Verify update succeeded (if None, version changed concurrently)
+    // 8. Verify update succeeded (if None, version changed concurrently)
     let updated = update_result.ok_or_else(|| {
         // Concurrent update detected: re-fetch current state
         crate::error::AppError::VersionConflict {
@@ -279,10 +331,10 @@ pub async fn update_message(
 
     let new_version: i32 = updated.get("version_number");
 
-    // 8. Commit transaction (trigger will record version history)
+    // 9. Commit transaction (trigger will record version history)
     tx.commit().await?;
 
-    // 9. Broadcast message.edited event using unified event system
+    // 10. Broadcast message.edited event using unified event system
     let event = WebSocketEvent::MessageEdited {
         conversation_id,
         message_id,
@@ -582,6 +634,7 @@ pub async fn forward_message(
     // 4) Create new message in target conversation with same content
     let (new_message_id, _seq) = crate::services::message_service::MessageService::send_message_db(
         &state.db,
+        &state.encryption,
         body.target_conversation_id,
         user.id,
         original_content.as_bytes(),
@@ -593,6 +646,7 @@ pub async fn forward_message(
     if let Some(note) = &body.custom_note {
         let _ = crate::services::message_service::MessageService::send_message_db(
             &state.db,
+            &state.encryption,
             body.target_conversation_id,
             user.id,
             note.as_bytes(),
@@ -661,6 +715,7 @@ pub async fn send_audio_message(
     // Store the audio message
     let (msg_id, seq) = MessageService::send_audio_message_db(
         &state.db,
+        &state.encryption,
         conversation_id,
         user.id,
         &body.audio_url,
