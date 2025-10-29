@@ -33,7 +33,10 @@ async fn handle_client_message(
 ) -> bool {
     match incoming {
         Some(Ok(Message::Text(txt))) => match serde_json::from_str::<WsInboundEvent>(txt) {
-            Ok(WsInboundEvent::Ack { msg_id, conversation_id }) => {
+            Ok(WsInboundEvent::Ack {
+                msg_id,
+                conversation_id,
+            }) => {
                 if conversation_id == params.conversation_id {
                     if let Err(e) = offline_queue::acknowledge_message(
                         &state.redis,
@@ -389,4 +392,3 @@ async fn handle_socket(state: AppState, params: WsParams, mut socket: WebSocket)
         params.conversation_id
     );
 }
-

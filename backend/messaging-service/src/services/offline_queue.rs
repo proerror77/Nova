@@ -2,7 +2,8 @@
 //! Implements "sync from last known ID" pattern for message recovery
 //! Allows clients to resume from where they left off when reconnecting
 
-use redis::{AsyncCommands, Client, FromRedisValue, RedisResult, Value as RedisValue};
+use crate::redis_client::RedisClient;
+use redis::{AsyncCommands, FromRedisValue, RedisResult, Value as RedisValue};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use uuid::Uuid;
@@ -87,7 +88,7 @@ fn convert_entry(
 
 /// Record client sync state after receiving messages
 pub async fn update_client_sync_state(
-    client: &Client,
+    client: &RedisClient,
     state: &ClientSyncState,
 ) -> redis::RedisResult<()> {
     let mut conn = client.get_multiplexed_async_connection().await?;
@@ -114,7 +115,7 @@ pub async fn update_client_sync_state(
 
 /// Get client sync state (last known position)
 pub async fn get_client_sync_state(
-    client: &Client,
+    client: &RedisClient,
     user_id: Uuid,
     client_id: Uuid,
 ) -> redis::RedisResult<Option<ClientSyncState>> {
@@ -128,7 +129,7 @@ pub async fn get_client_sync_state(
 
 /// Get all clients in a conversation (for broadcast tracking)
 pub async fn get_conversation_clients(
-    client: &Client,
+    client: &RedisClient,
     conversation_id: Uuid,
 ) -> redis::RedisResult<Vec<Uuid>> {
     let mut conn = client.get_multiplexed_async_connection().await?;
@@ -144,7 +145,7 @@ pub async fn get_conversation_clients(
 
 /// Clear client sync state (when client logs out)
 pub async fn clear_client_sync_state(
-    client: &Client,
+    client: &RedisClient,
     user_id: Uuid,
     client_id: Uuid,
 ) -> redis::RedisResult<()> {
@@ -158,7 +159,7 @@ pub async fn clear_client_sync_state(
 
 /// Find offline messages for a user in specific conversations
 pub async fn get_messages_since(
-    client: &Client,
+    client: &RedisClient,
     conversation_id: Uuid,
     since_id: &str,
 ) -> redis::RedisResult<Vec<(String, HashMap<String, String>)>> {
@@ -186,7 +187,7 @@ pub async fn get_messages_since(
 
 /// Store offline message notification
 pub async fn queue_offline_notification(
-    client: &Client,
+    client: &RedisClient,
     user_id: Uuid,
     conversation_id: Uuid,
     message_count: usize,
@@ -206,7 +207,7 @@ pub async fn queue_offline_notification(
 
 /// Get offline message count for conversation
 pub async fn get_offline_message_count(
-    client: &Client,
+    client: &RedisClient,
     user_id: Uuid,
     conversation_id: Uuid,
 ) -> redis::RedisResult<usize> {
@@ -220,7 +221,7 @@ pub async fn get_offline_message_count(
 
 /// Batch clear offline notifications for user
 pub async fn clear_offline_notifications(
-    client: &Client,
+    client: &RedisClient,
     user_id: Uuid,
     conversation_ids: &[Uuid],
 ) -> redis::RedisResult<()> {
@@ -241,7 +242,7 @@ pub async fn clear_offline_notifications(
 
 /// Initialize consumer group for a conversation (wrapper)
 pub async fn init_consumer_group(
-    client: &Client,
+    client: &RedisClient,
     conversation_id: Uuid,
 ) -> redis::RedisResult<()> {
     let mut conn = client.get_multiplexed_async_connection().await?;
@@ -262,7 +263,7 @@ pub async fn init_consumer_group(
 
 /// Read pending messages for a consumer (wrapper)
 pub async fn read_pending_messages(
-    client: &Client,
+    client: &RedisClient,
     conversation_id: Uuid,
     user_id: Uuid,
     client_id: Uuid,
@@ -327,7 +328,7 @@ pub async fn read_pending_messages(
 
 /// Read new messages (alias to read_pending_messages for now)
 pub async fn read_new_messages(
-    client: &Client,
+    client: &RedisClient,
     conversation_id: Uuid,
     user_id: Uuid,
     client_id: Uuid,
@@ -355,7 +356,7 @@ pub async fn read_new_messages(
 
 /// Acknowledge message (wrapper)
 pub async fn acknowledge_message(
-    client: &Client,
+    client: &RedisClient,
     conversation_id: Uuid,
     stream_id: &str,
 ) -> redis::RedisResult<()> {
@@ -375,7 +376,7 @@ pub async fn acknowledge_message(
 
 /// Trim stream to keep recent messages (wrapper)
 pub async fn trim_stream(
-    client: &Client,
+    client: &RedisClient,
     _conversation_id: Uuid,
     _max_len: usize,
 ) -> redis::RedisResult<()> {

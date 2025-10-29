@@ -32,7 +32,13 @@ pub struct NotificationJob {
 
 impl NotificationJob {
     /// Creates a new notification job
-    pub fn new(device_token: String, platform: String, title: String, body: String, badge: Option<i32>) -> Self {
+    pub fn new(
+        device_token: String,
+        platform: String,
+        title: String,
+        body: String,
+        badge: Option<i32>,
+    ) -> Self {
         Self {
             id: Uuid::new_v4(),
             device_token,
@@ -75,7 +81,11 @@ pub struct PostgresNotificationQueue {
 
 impl PostgresNotificationQueue {
     /// Creates a new PostgreSQL notification queue
-    pub fn new(db: Arc<PgPool>, apns_provider: Option<Arc<ApnsPush>>, fcm_provider: Option<Arc<FcmPush>>) -> Self {
+    pub fn new(
+        db: Arc<PgPool>,
+        apns_provider: Option<Arc<ApnsPush>>,
+        fcm_provider: Option<Arc<FcmPush>>,
+    ) -> Self {
         Self {
             db,
             apns_provider,
@@ -116,7 +126,10 @@ impl PostgresNotificationQueue {
                     )
                     .await
             }
-            platform => Err(AppError::BadRequest(format!("Unsupported platform: {}", platform))),
+            platform => Err(AppError::BadRequest(format!(
+                "Unsupported platform: {}",
+                platform
+            ))),
         }
     }
 
@@ -182,7 +195,10 @@ impl NotificationQueue for PostgresNotificationQueue {
         .execute(&*self.db)
         .await?;
 
-        info!("Queued notification job {} for {} device", job.id, job.platform);
+        info!(
+            "Queued notification job {} for {} device",
+            job.id, job.platform
+        );
         Ok(())
     }
 
@@ -197,7 +213,7 @@ impl NotificationQueue for PostgresNotificationQueue {
               AND retry_count < max_retries
             ORDER BY created_at ASC
             LIMIT 100
-            "#
+            "#,
         )
         .fetch_all(&*self.db)
         .await?;
@@ -233,7 +249,10 @@ impl NotificationQueue for PostgresNotificationQueue {
         }
 
         if total > 0 {
-            info!("Processed {}/{} pending notification jobs", processed, total);
+            info!(
+                "Processed {}/{} pending notification jobs",
+                processed, total
+            );
         }
 
         Ok(processed)

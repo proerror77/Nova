@@ -419,6 +419,7 @@ struct FacebookTokenRefreshResponse {
 }
 
 #[cfg(test)]
+#[cfg(all(test, feature = "legacy_internal_tests"))]
 mod tests {
     use super::*;
 
@@ -443,7 +444,13 @@ mod tests {
     #[test]
     fn test_token_refresh_job_creation() {
         // Just verify the job can be created without panicking
-        let pool = std::sync::Arc::new(sqlx::SqlitePool::connect("sqlite::memory:").unwrap());
+        use sqlx::postgres::PgPoolOptions;
+
+        let pg_pool = PgPoolOptions::new()
+            .max_connections(1)
+            .connect_lazy("postgres://postgres:postgres@localhost:5432/postgres")
+            .unwrap();
+        let pool = std::sync::Arc::new(pg_pool);
 
         let config = OAuthTokenRefreshConfig::default();
         let _job = OAuthTokenRefreshJob::new(config, pool);

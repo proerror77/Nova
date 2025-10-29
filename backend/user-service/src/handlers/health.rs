@@ -10,6 +10,7 @@ use std::time::Instant;
 use crate::db::ch_client::ClickHouseClient;
 use crate::grpc::health::{HealthChecker, HealthStatus};
 use crate::services::kafka_producer::EventProducer;
+use crate::utils::redis_timeout::run_with_timeout;
 
 #[derive(Serialize)]
 struct HealthResponse {
@@ -81,7 +82,7 @@ impl HealthCheckState {
 
     async fn check_redis(&self) -> Result<(), redis::RedisError> {
         let mut conn = self.redis_client.get_multiplexed_async_connection().await?;
-        let response: String = redis::cmd("PING").query_async(&mut conn).await?;
+        let response: String = run_with_timeout(redis::cmd("PING").query_async(&mut conn)).await?;
         if response == "PONG" {
             Ok(())
         } else {

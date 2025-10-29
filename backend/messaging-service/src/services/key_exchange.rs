@@ -56,10 +56,10 @@ impl KeyExchangeService {
             ));
         }
 
-        let private_array = <[u8; 32]>::try_from(our_private_key)
-            .map_err(|_| AppError::Internal)?;
-        let public_array = <[u8; 32]>::try_from(their_public_key)
-            .map_err(|_| AppError::Internal)?;
+        let private_array =
+            <[u8; 32]>::try_from(our_private_key).map_err(|_| AppError::Internal)?;
+        let public_array =
+            <[u8; 32]>::try_from(their_public_key).map_err(|_| AppError::Internal)?;
 
         let shared_secret = x25519_dalek::x25519(private_array, public_array);
 
@@ -211,8 +211,7 @@ mod tests {
         let (alice_priv, alice_pub) = KeyExchangeService::generate_keypair().unwrap();
         let (bob_priv, bob_pub) = KeyExchangeService::generate_keypair().unwrap();
 
-        let alice_secret =
-            KeyExchangeService::perform_ecdh(&alice_priv, &bob_pub).unwrap();
+        let alice_secret = KeyExchangeService::perform_ecdh(&alice_priv, &bob_pub).unwrap();
         let bob_secret = KeyExchangeService::perform_ecdh(&bob_priv, &alice_pub).unwrap();
 
         assert_eq!(alice_secret, bob_secret);
@@ -224,12 +223,13 @@ mod tests {
         let (alice_priv, alice_pub) = KeyExchangeService::generate_keypair().unwrap();
         let (bob_priv, bob_pub) = KeyExchangeService::generate_keypair().unwrap();
 
-        let shared_secret =
-            KeyExchangeService::perform_ecdh(&alice_priv, &bob_pub).unwrap();
+        let shared_secret = KeyExchangeService::perform_ecdh(&alice_priv, &bob_pub).unwrap();
         let conversation_id = Uuid::new_v4();
 
-        let key1 = KeyExchangeService::derive_message_key(&shared_secret, conversation_id, 1).unwrap();
-        let key2 = KeyExchangeService::derive_message_key(&shared_secret, conversation_id, 2).unwrap();
+        let key1 =
+            KeyExchangeService::derive_message_key(&shared_secret, conversation_id, 1).unwrap();
+        let key2 =
+            KeyExchangeService::derive_message_key(&shared_secret, conversation_id, 2).unwrap();
 
         assert_eq!(key1.len(), 32);
         assert_eq!(key2.len(), 32);

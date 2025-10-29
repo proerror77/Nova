@@ -13,6 +13,7 @@ use crate::error::{AppError, Result};
 use crate::middleware::jwt_auth::UserId;
 use crate::middleware::CircuitBreaker;
 use crate::services::trending::TrendingService;
+use crate::utils::redis_timeout::run_with_timeout;
 
 /// Query parameters for GET /trending
 #[derive(Debug, Deserialize)]
@@ -65,10 +66,12 @@ async fn get_cached_trending(
 
     let mut conn = redis.as_ref().clone();
 
-    match redis::cmd("GET")
-        .arg(&cache_key)
-        .query_async::<_, Option<String>>(&mut conn)
-        .await
+    match run_with_timeout(
+        redis::cmd("GET")
+            .arg(&cache_key)
+            .query_async::<_, Option<String>>(&mut conn),
+    )
+    .await
     {
         Ok(Some(json_str)) => {
             debug!(

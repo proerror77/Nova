@@ -1,4 +1,5 @@
 pub mod conversation;
+pub mod location;
 pub mod member;
 pub mod message;
 

@@ -56,7 +56,7 @@ impl JobContext {
 /// 缓存刷新任务的统一接口
 ///
 /// # 实现示例
-/// ```rust
+/// ```ignore
 /// struct TrendingJob;
 ///
 /// #[async_trait]

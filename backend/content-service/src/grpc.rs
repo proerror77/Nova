@@ -8,9 +8,10 @@ use crate::services::feed_ranking::FeedRankingService;
 use crate::services::posts::PostService;
 use sqlx::PgPool;
 use std::sync::Arc;
+use tokio::sync::broadcast;
 use tonic::{Request, Response, Status};
-use uuid::Uuid;
 use tracing::warn;
+use uuid::Uuid;
 
 // Import generated proto code
 pub mod nova {
@@ -229,7 +230,12 @@ impl ContentService for ContentServiceImpl {
                     }
                 }
 
-                tracing::error!("Error inserting like (user={} post={}): {}", user_id, post_id, err);
+                tracing::error!(
+                    "Error inserting like (user={} post={}): {}",
+                    user_id,
+                    post_id,
+                    err
+                );
                 Err(Status::internal("Failed to like post"))
             }
         }
@@ -288,16 +294,15 @@ impl ContentService for ContentServiceImpl {
         })?;
 
         // Fetch total count for pagination
-        let total = sqlx::query_scalar::<_, i64>(
-            "SELECT COUNT(*) FROM bookmarks WHERE user_id = $1",
-        )
-        .bind(user_id)
-        .fetch_one(&self.db_pool)
-        .await
-        .map_err(|e| {
-            tracing::error!("Database error counting bookmarks: {}", e);
-            Status::internal("Failed to count bookmarks")
-        })?;
+        let total =
+            sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM bookmarks WHERE user_id = $1")
+                .bind(user_id)
+                .fetch_one(&self.db_pool)
+                .await
+                .map_err(|e| {
+                    tracing::error!("Database error counting bookmarks: {}", e);
+                    Status::internal("Failed to count bookmarks")
+                })?;
 
         let bookmark_posts = posts
             .into_iter()
@@ -337,9 +342,7 @@ impl ContentService for ContentServiceImpl {
             ));
         }
 
-        let limit = if req.limit == 0 { 20 } else { req.limit }
-            .min(100)
-            .max(1);
+        let limit = if req.limit == 0 { 20 } else { req.limit }.min(100).max(1);
 
         let params = FeedQueryParams {
             algo: algo.clone(),
@@ -404,8 +407,7 @@ impl ContentService for ContentServiceImpl {
             )
         };
 
-        self
-            .feed_cache
+        self.feed_cache
             .invalidate_by_event(&req.event_type, user_id, target_user_id)
             .await
             .map_err(|e| map_app_error(e, "invalidate_feed_event"))?;
@@ -428,8 +430,7 @@ impl ContentService for ContentServiceImpl {
             user_ids.push(parsed);
         }
 
-        self
-            .feed_cache
+        self.feed_cache
             .batch_invalidate(user_ids)
             .await
             .map_err(|e| map_app_error(e, "batch_invalidate_feed"))?;
@@ -450,13 +451,12 @@ impl ContentService for ContentServiceImpl {
 
         let mut post_ids = Vec::with_capacity(req.post_ids.len());
         for id in req.post_ids {
-            let parsed = Uuid::parse_str(&id)
-                .map_err(|_| Status::invalid_argument("Invalid post ID"))?;
+            let parsed =
+                Uuid::parse_str(&id).map_err(|_| Status::invalid_argument("Invalid post ID"))?;
             post_ids.push(parsed);
         }
 
-        self
-            .feed_cache
+        self.feed_cache
             .warm_cache(user_id, post_ids)
             .await
             .map_err(|e| map_app_error(e, "warm_feed"))?;
@@ -492,6 +492,7 @@ pub async fn start_grpc_server(
     cache: Arc<ContentCache>,
     feed_cache: Arc<FeedCache>,
     feed_ranking: Arc<FeedRankingService>,
+    mut shutdown: broadcast::Receiver<()>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     use nova::content::content_service_server::ContentServiceServer;
     use tonic::transport::Server;
@@ -501,7 +502,10 @@ pub async fn start_grpc_server(
     let service = ContentServiceImpl::new(db_pool, cache, feed_cache, feed_ranking);
     Server::builder()
         .add_service(ContentServiceServer::new(service))
-        .serve(addr)
+        .serve_with_shutdown(addr, async move {
+            // Wait for shutdown notification; ignore errors if sender dropped.
+            let _ = shutdown.recv().await;
+        })
         .await?;
 
     Ok(())

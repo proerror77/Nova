@@ -25,7 +25,9 @@ fn app_error_to_status(error: AppError) -> Status {
         AppError::Forbidden => Status::permission_denied("Forbidden"),
         AppError::VersionConflict { .. } => Status::already_exists("Version conflict"),
         AppError::AlreadyRecalled => Status::failed_precondition("Message already recalled"),
-        AppError::RecallWindowExpired { .. } => Status::failed_precondition("Recall window expired"),
+        AppError::RecallWindowExpired { .. } => {
+            Status::failed_precondition("Recall window expired")
+        }
         AppError::EditWindowExpired { .. } => Status::failed_precondition("Edit window expired"),
         AppError::Internal => Status::internal("Internal server error"),
         _ => Status::internal("Unknown error"),

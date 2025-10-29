@@ -21,7 +21,7 @@
 - **大小**: 57 行
 - **关键变量**:
   - `APP_ENV`: 应用环境 (production)
-  - `DATABASE_MAX_CONNECTIONS`: 数据库连接池大小 (30)
+  - `DATABASE_MAX_CONNECTIONS`: 数据库连接池大小 (10)
   - `REDIS_POOL_SIZE`: Redis连接池 (20)
   - `VIDEO_CALL_MAX_DURATION_HOURS`: 最长通话时长 (12小时)
   - `MESSAGE_MAX_LENGTH`: 最大消息长度 (4096字符)

@@ -78,20 +78,17 @@ pub async fn get_feed(
         ));
     }
 
-    let (post_ids, has_more, total_count) = match state
-        .feed_ranking
-        .get_feed(user_id, limit, offset)
-        .await
-    {
-        Ok(result) => result,
-        Err(e) => {
-            warn!("Feed primary path failed for user {}: {}", user_id, e);
-            state
-                .feed_ranking
-                .fallback_feed(user_id, limit, offset)
-                .await?
-        }
-    };
+    let (post_ids, has_more, total_count) =
+        match state.feed_ranking.get_feed(user_id, limit, offset).await {
+            Ok(result) => result,
+            Err(e) => {
+                warn!("Feed primary path failed for user {}: {}", user_id, e);
+                state
+                    .feed_ranking
+                    .fallback_feed(user_id, limit, offset)
+                    .await?
+            }
+        };
 
     let cursor = if has_more && !post_ids.is_empty() {
         Some(FeedQueryParams::encode_cursor(offset + post_ids.len()))

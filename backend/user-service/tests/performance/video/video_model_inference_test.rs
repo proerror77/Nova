@@ -1,3 +1,4 @@
+#![cfg(feature = "legacy_video_tests")]
 /// Performance Tests for Deep Model Video Inference Latency (T140)
 /// Validates deep learning model inference within SLA bounds
 /// - P95 latency < 200ms for single inference

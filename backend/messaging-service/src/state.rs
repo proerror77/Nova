@@ -1,9 +1,9 @@
 use crate::{
     config::Config,
+    redis_client::RedisClient,
     services::{encryption::EncryptionService, key_exchange::KeyExchangeService, push::ApnsPush},
     websocket::ConnectionRegistry,
 };
-use redis::Client as RedisClient;
 use sqlx::{Pool, Postgres};
 use std::sync::Arc;
 

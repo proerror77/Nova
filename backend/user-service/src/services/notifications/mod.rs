@@ -7,10 +7,15 @@
 pub mod apns_client;
 pub mod fcm_client;
 pub mod kafka_consumer;
+pub mod notification_service;
 
 pub use apns_client::{APNsClient, APNsPriority, APNsSendResult};
 pub use fcm_client::{FCMClient, FCMSendResult, ServiceAccountKey};
 pub use kafka_consumer::{
     KafkaNotification, KafkaNotificationConsumer, NotificationBatch, NotificationEventType,
     RetryPolicy,
+};
+pub use notification_service::{
+    DevicePushConfig, DeviceType, NotificationPreferences, NotificationService,
+    PushNotificationResult,
 };

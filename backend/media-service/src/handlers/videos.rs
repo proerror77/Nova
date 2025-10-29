@@ -7,6 +7,7 @@ use uuid::Uuid;
 use crate::cache::MediaCache;
 use crate::db::video_repo;
 use crate::error::{AppError, Result};
+use crate::middleware::UserId;
 use crate::models::{CreateVideoRequest, UpdateVideoRequest, VideoResponse};
 use crate::services::VideoService;
 
@@ -40,7 +41,7 @@ pub async fn get_video(
 pub async fn create_video(
     pool: web::Data<PgPool>,
     cache: web::Data<Arc<MediaCache>>,
-    creator_id: Uuid,
+    user_id: UserId,
     req: web::Json<CreateVideoRequest>,
 ) -> Result<actix_web::HttpResponse> {
     if req.title.is_empty() {
@@ -54,7 +55,7 @@ pub async fn create_video(
     let video = video_repo::create_video(
         pool.get_ref(),
         video_id,
-        creator_id,
+        user_id.0,
         &req.title,
         req.description.as_deref(),
         visibility,

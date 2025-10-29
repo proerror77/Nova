@@ -29,16 +29,23 @@ pub struct ContentCache {
 }
 
 impl ContentCache {
-    /// Create a new cache wrapper from a Redis client
+    /// Create a new cache wrapper from a Redis client (legacy constructor used in tests)
     pub async fn new(client: redis::Client, ttl_seconds: Option<u64>) -> Result<Self> {
         let manager = ConnectionManager::new(client)
             .await
             .map_err(|e| AppError::CacheError(format!("Failed to connect to Redis: {e}")))?;
+        Ok(Self::with_manager(Arc::new(Mutex::new(manager)), ttl_seconds))
+    }
 
-        Ok(Self {
-            conn: Arc::new(Mutex::new(manager)),
+    /// Create a new cache wrapper from an existing connection manager
+    pub fn with_manager(
+        manager: Arc<Mutex<ConnectionManager>>,
+        ttl_seconds: Option<u64>,
+    ) -> Self {
+        Self {
+            conn: manager,
             ttl_seconds: ttl_seconds.unwrap_or(DEFAULT_TTL_SECONDS),
-        })
+        }
     }
 
     /// Cache a post entity

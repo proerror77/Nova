@@ -35,7 +35,12 @@ pub async fn create_post(
 ) -> Result<HttpResponse> {
     let service = PostService::with_cache((**pool).clone(), cache.get_ref().clone());
     let post = service
-        .create_post(user_id.0, req.caption.as_deref(), &req.image_key, &req.content_type)
+        .create_post(
+            user_id.0,
+            req.caption.as_deref(),
+            &req.image_key,
+            &req.content_type,
+        )
         .await?;
 
     Ok(HttpResponse::Created().json(post))

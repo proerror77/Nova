@@ -4,6 +4,7 @@ pub mod e2ee;
 pub mod encryption;
 pub mod fcm;
 pub mod key_exchange;
+pub mod location_service;
 pub mod message_service;
 pub mod notification_queue;
 pub mod notification_service;

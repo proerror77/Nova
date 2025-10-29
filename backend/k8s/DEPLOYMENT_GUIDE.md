@@ -117,7 +117,7 @@ vim messaging-service-secret.yaml
 ### 3. Configure ConfigMap (Optional)
 
 Edit `messaging-service-configmap.yaml` to adjust:
-- `DATABASE_MAX_CONNECTIONS`: Connection pool size (default: 30)
+- `DATABASE_MAX_CONNECTIONS`: Connection pool size (default: 10)
 - `REDIS_POOL_SIZE`: Redis connection pool (default: 20)
 - `WS_MAX_FRAME_SIZE`: WebSocket frame size (default: 1MB)
 - `VIDEO_CALL_MAX_DURATION_HOURS`: Max call duration (default: 12 hours)
@@ -437,7 +437,7 @@ kubectl exec -i postgres-pod -n nova-db -- \
 ### Database Connection Pool
 Adjust in ConfigMap:
 ```yaml
-DATABASE_MAX_CONNECTIONS: "30"
+DATABASE_MAX_CONNECTIONS: "10"
 DATABASE_POOL_TIMEOUT: "30"
 DATABASE_IDLE_TIMEOUT: "600"
 ```

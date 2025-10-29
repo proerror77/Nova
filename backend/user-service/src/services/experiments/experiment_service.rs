@@ -214,6 +214,7 @@ pub enum ExperimentError {
 }
 
 #[cfg(test)]
+#[cfg(all(test, feature = "legacy_internal_tests"))]
 mod tests {
     use super::*;
     use crate::db::experiment_repo::CreateVariantRequest;

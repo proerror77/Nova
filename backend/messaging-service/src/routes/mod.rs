@@ -6,7 +6,15 @@ use axum::{
 };
 use serde_json::json;
 pub mod calls;
-use calls::{answer_call, end_call, get_call_history, initiate_call, reject_call};
+use calls::{
+    answer_call, end_call, get_call_history, get_participants, initiate_call, join_call,
+    leave_call, reject_call,
+};
+pub mod locations;
+use locations::{
+    get_conversation_locations, get_location_permissions, get_location_stats, get_user_location,
+    share_location, stop_sharing_location, update_location_permissions,
+};
 pub mod conversations;
 use conversations::{
     create_conversation, create_group_conversation, delete_group, get_conversation,
@@ -14,8 +22,8 @@ use conversations::{
 };
 pub mod messages;
 use messages::{
-    delete_message, forward_message, get_message_history, recall_message, search_messages,
-    send_audio_message, send_message, update_message,
+    delete_message, forward_message, get_audio_presigned_url, get_message_history, recall_message,
+    search_messages, send_audio_message, send_message, update_message,
 };
 pub mod groups;
 use groups::{add_member, list_members, remove_member, update_group_settings, update_member_role};
@@ -134,11 +142,31 @@ pub fn build_router() -> Router<AppState> {
         // Video calls
         .route("/conversations/:id/calls", post(initiate_call))
         .route("/calls/:id/answer", post(answer_call))
+        .route("/calls/:id/join", post(join_call))
+        .route("/calls/:id/leave", post(leave_call))
+        .route("/calls/:id/participants", get(get_participants))
         .route("/calls/:id/reject", post(reject_call))
         .route("/calls/:id/end", post(end_call))
         .route("/calls/history", get(get_call_history))
         // RTC configuration
         .route("/rtc/ice-config", get(get_ice_config))
+        // Location sharing
+        .route("/conversations/:id/location", post(share_location))
+        .route(
+            "/conversations/:id/locations",
+            get(get_conversation_locations),
+        )
+        .route(
+            "/conversations/:id/location/:user_id",
+            get(get_user_location),
+        )
+        .route(
+            "/conversations/:id/location/stop",
+            post(stop_sharing_location),
+        )
+        .route("/conversations/:id/location/stats", get(get_location_stats))
+        .route("/location/permissions", get(get_location_permissions))
+        .route("/location/permissions", put(update_location_permissions))
         // Conversations
         .route("/conversations", post(create_conversation))
         .route("/conversations/groups", post(create_group_conversation))
@@ -146,12 +174,19 @@ pub fn build_router() -> Router<AppState> {
             "/conversations/:id",
             get(get_conversation).delete(delete_group),
         )
-        .route("/conversations/:id/encryption-key", get(get_conversation_key))
+        .route(
+            "/conversations/:id/encryption-key",
+            get(get_conversation_key),
+        )
         .route("/conversations/:id/leave", post(leave_group))
         .route("/conversations/:id/messages", post(send_message))
         .route(
             "/conversations/:id/messages/audio",
             post(send_audio_message),
+        )
+        .route(
+            "/conversations/:id/messages/audio/presigned-url",
+            post(get_audio_presigned_url),
         )
         .route("/conversations/:id/messages", get(get_message_history))
         .route("/conversations/:id/messages/search", get(search_messages))

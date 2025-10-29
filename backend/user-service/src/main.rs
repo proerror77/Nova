@@ -15,6 +15,9 @@ use user_service::{
     config::Config,
     db::{ch_client::ClickHouseClient, create_pool, run_migrations},
     handlers,
+    handlers::preferences::{
+        block_user as preferences_block_user, unblock_user as preferences_unblock_user,
+    },
     handlers::{
         events::EventHandlerState, feed::FeedHandlerState, health::HealthCheckState,
         streams::StreamHandlerState,
@@ -289,10 +292,8 @@ async fn main() -> io::Result<()> {
     // ========================================
     // Initialize Kafka producer for events (moved earlier)
     // ========================================
-    let event_producer = Arc::new(
-        EventProducer::new(&config.kafka.brokers, config.kafka.events_topic.clone())
-            .expect("Failed to create Kafka producer"),
-    );
+    let event_producer =
+        Arc::new(EventProducer::new(&config.kafka).expect("Failed to create Kafka producer"));
 
     let stream_service = Arc::new(Mutex::new(StreamService::new(
         stream_repo.clone(),
@@ -493,7 +494,9 @@ async fn main() -> io::Result<()> {
             if svc.is_configured() {
                 tracing::info!("✅ Email service initialized and configured");
             } else {
-                tracing::warn!("⚠️ Email service initialized but not configured (SMTP credentials missing)");
+                tracing::warn!(
+                    "⚠️ Email service initialized but not configured (SMTP credentials missing)"
+                );
                 tracing::warn!("   Email verification and password reset will be skipped");
                 tracing::warn!("   Set SMTP_HOST, SMTP_PORT, SMTP_USERNAME, SMTP_PASSWORD environment variables");
             }
@@ -503,15 +506,17 @@ async fn main() -> io::Result<()> {
             tracing::warn!("⚠️ Failed to initialize email service: {}", e);
             tracing::warn!("   Email verification and password reset will be skipped");
             // Create with defaults (not configured)
-            EmailService::new(EmailConfig::from_env().unwrap_or_else(|_| EmailConfig {
-                smtp_host: "localhost".to_string(),
-                smtp_port: 587,
-                smtp_username: String::new(),
-                smtp_password: String::new(),
-                from_email: "noreply@nova.dev".to_string(),
-                from_name: "Nova Team".to_string(),
-                frontend_url: std::env::var("FRONTEND_URL")
-                    .unwrap_or_else(|_| "https://app.nova.dev".to_string()),
+            EmailService::new(EmailConfig::from_env().unwrap_or_else(|_| {
+                EmailConfig {
+                    smtp_host: "localhost".to_string(),
+                    smtp_port: 587,
+                    smtp_username: String::new(),
+                    smtp_password: String::new(),
+                    from_email: "noreply@nova.dev".to_string(),
+                    from_name: "Nova Team".to_string(),
+                    frontend_url: std::env::var("FRONTEND_URL")
+                        .unwrap_or_else(|_| "https://app.nova.dev".to_string()),
+                }
             }))
         }
     };
@@ -869,8 +874,8 @@ async fn main() -> io::Result<()> {
                             .route("/public-key", web::put().to(handlers::upsert_my_public_key))
                             .route("/preferences", web::get().to(handlers::get_feed_preferences))
                             .route("/preferences", web::put().to(handlers::update_feed_preferences))
-                            .route("/preferences/blocked-users/{id}", web::post().to(handlers::block_user))
-                            .route("/preferences/blocked-users/{id}", web::delete().to(handlers::unblock_user))
+                            .route("/preferences/blocked-users/{id}", web::post().to(preferences_block_user))
+                            .route("/preferences/blocked-users/{id}", web::delete().to(preferences_unblock_user))
                             // /bookmarks moved to content-service (port 8081)
                     )
                     // Users endpoints (place after /users/me to avoid route collision)
@@ -894,8 +899,8 @@ async fn main() -> io::Result<()> {
                                     )
                                     .service(
                                         web::resource("/{id}/block")
-                                            .route(web::post().to(handlers::block_user))
-                                            .route(web::delete().to(handlers::unblock_user)),
+                                            .route(web::post().to(preferences_block_user))
+                                            .route(web::delete().to(preferences_unblock_user)),
                                     ),
                             )
                             .route("/{id}/followers", web::get().to(handlers::get_followers))

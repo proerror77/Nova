@@ -104,9 +104,7 @@ impl PushProvider for ApnsPush {
 
             let notification = builder.build();
 
-            let guard = client
-                .lock()
-                .map_err(|_| AppError::Internal)?;
+            let guard = client.lock().map_err(|_| AppError::Internal)?;
 
             guard
                 .send(notification)
@@ -117,8 +115,7 @@ impl PushProvider for ApnsPush {
                 .map(|apns_id| {
                     info!(
                         "APNs notification sent successfully to token {} (apns_id: {:?})",
-                        device_token_prefix,
-                        apns_id
+                        device_token_prefix, apns_id
                     );
                 })
         })
