@@ -20,7 +20,7 @@ uuid = { version = "1", features = ["v4", "serde"] }
 redis = { version = "0.25", features = ["tokio-comp", "connection-manager", "streams"] }
 rdkafka = { version = "0.36", features = ["tokio"] }
 dotenvy = "0.15"
-thiserror = "1"
+thiserror = "2"
 crypto-core = { path = "../libs/crypto-core" }
 redis-utils = { path = "../libs/redis-utils" }
 nova-apns-shared = { path = "../libs/nova-apns-shared" }
