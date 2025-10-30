@@ -4,11 +4,11 @@ use std::time::Duration;
 pub mod bookmark_repo;
 pub mod ch_client;
 // pub mod comment_repo; // REMOVED - moved to content-service (port 8081) [DELETED]
-pub mod experiment_repo;
+// pub mod experiment_repo; // REMOVED - moved to feed-service (port 8089) [DELETED]
 // pub mod messaging_repo; // REMOVED - moved to messaging-service (port 8085) [DELETED]
 // pub mod like_repo; // REMOVED - moved to content-service (port 8081) [DELETED]
-pub mod oauth_repo;
-pub mod password_reset_repo;
+// pub mod oauth_repo; // REMOVED - moved to auth-service (port 8084) [DELETED]
+// pub mod password_reset_repo; // REMOVED - moved to auth-service (port 8084) [DELETED]
 // pub mod post_repo; // REMOVED - moved to content-service (port 8081) [DELETED]
 pub mod post_share_repo;
 // pub mod trending_repo; // REMOVED - moved to feed-service (port 8089) [DELETED]
