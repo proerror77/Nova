@@ -69,7 +69,7 @@ anyhow = "1.0"
 
 # Security
 argon2 = "0.5"
-jsonwebtoken = "9.2"
+jsonwebtoken = "10.1"
 rand = "0.8"
 rsa = { version = "0.9", features = ["sha2"] }
 aes-gcm = "0.10"

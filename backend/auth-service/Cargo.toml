@@ -37,7 +37,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 # Security
-jsonwebtoken = "9.2"
+jsonwebtoken = "10.1"
 argon2 = "0.5"
 rand = "0.8"
 sha2 = "0.10"
