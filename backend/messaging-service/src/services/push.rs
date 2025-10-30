@@ -1,32 +1,37 @@
-use std::sync::{Arc, Mutex};
-
-use apns2::{ApnsSync, NotificationBuilder, Priority};
-use tokio::task;
+// Re-export APNs types from shared library (internal use only)
+pub use nova_apns_shared::{ApnsPush as NovaApnsPush, PushProvider as NovaPushProvider, client::ApnsError};
 
 use crate::{config::ApnsConfig, error::AppError};
+use async_trait::async_trait;
 
-#[derive(Clone)]
-pub struct ApnsPush {
-    inner: Arc<Mutex<ApnsSync>>,
-    topic: String,
+/// Local PushProvider trait that uses AppError for consistency across the service
+/// This trait abstracts both APNs and FCM providers with a unified error type
+#[async_trait]
+pub trait PushProvider: Send + Sync {
+    /// Send a push notification
+    async fn send(
+        &self,
+        device_token: String,
+        title: String,
+        body: String,
+        badge: Option<u32>,
+    ) -> Result<(), AppError>;
 }
 
+/// Wrapper around nova-apns-shared ApnsPush that converts ApnsError to AppError
+#[derive(Clone)]
+pub struct ApnsPush(NovaApnsPush);
+
 impl ApnsPush {
+    /// Creates a new APNs push provider
     pub fn new(cfg: &ApnsConfig) -> Result<Self, AppError> {
-        let mut client = ApnsSync::with_certificate(
-            &cfg.certificate_path,
-            cfg.certificate_passphrase.clone(),
-        )
-        .map_err(|e| AppError::StartServer(format!("failed to initialize APNs client: {e}")))?;
-
-        client.set_production(cfg.is_production);
-
-        Ok(Self {
-            inner: Arc::new(Mutex::new(client)),
-            topic: cfg.bundle_id.clone(),
-        })
+        NovaApnsPush::new(cfg)
+            .map(ApnsPush)
+            .map_err(|e| AppError::Config(e.to_string()))
     }
 
+    /// Legacy method for sending alerts (kept for backward compatibility)
+    #[deprecated(note = "Use the PushProvider trait directly")]
     pub async fn send_alert(
         &self,
         device_token: String,
@@ -34,27 +39,41 @@ impl ApnsPush {
         body: String,
         badge: Option<u32>,
     ) -> Result<(), AppError> {
-        let topic = self.topic.clone();
-        let client = self.inner.clone();
+        self.0
+            .send(device_token, title, body, badge)
+            .await
+            .map_err(|e| AppError::Config(e.to_string()))
+    }
 
-        task::spawn_blocking(move || {
-            let mut builder = NotificationBuilder::new(topic, device_token);
-            builder = builder.title(title).body(body).sound("default");
-            if let Some(badge) = badge {
-                builder = builder.badge(badge);
-            }
-            builder = builder.priority(Priority::High);
+    /// Send notification using underlying provider
+    pub async fn send(
+        &self,
+        device_token: String,
+        title: String,
+        body: String,
+        badge: Option<u32>,
+    ) -> Result<(), AppError> {
+        self.0
+            .send(device_token, title, body, badge)
+            .await
+            .map_err(|e| AppError::Config(e.to_string()))
+    }
+}
 
-            let notification = builder.build();
-
-            let guard = client.lock().map_err(|_| AppError::Internal)?;
-
-            guard
-                .send(notification)
-                .map_err(|e| AppError::Config(format!("apns send failed: {e}")))
-                .map(|_| ())
-        })
-        .await
-        .map_err(|_| AppError::Internal)?
+/// Implement local PushProvider trait for ApnsPush
+/// This provides a unified interface with AppError for both APNs and FCM
+#[async_trait]
+impl PushProvider for ApnsPush {
+    async fn send(
+        &self,
+        device_token: String,
+        title: String,
+        body: String,
+        badge: Option<u32>,
+    ) -> Result<(), AppError> {
+        self.0
+            .send(device_token, title, body, badge)
+            .await
+            .map_err(|e| AppError::Config(e.to_string()))
     }
 }

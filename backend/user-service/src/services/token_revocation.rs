@@ -3,6 +3,7 @@ use anyhow::{anyhow, Result};
 /// Manages JWT token blacklist in Redis to prevent token reuse after logout
 use redis::aio::ConnectionManager;
 
+use crate::utils::redis_timeout::run_with_timeout;
 /// Add a token to the blacklist after logout
 /// Stores the token with expiration matching the token's exp claim
 pub async fn revoke_token(
@@ -21,8 +22,7 @@ pub async fn revoke_token(
     }
 
     let mut redis_conn = redis.clone();
-    let _: () = redis_conn
-        .set_ex(&blacklist_key, "revoked", ttl as u64)
+    let _: () = run_with_timeout(redis_conn.set_ex(&blacklist_key, "revoked", ttl as u64))
         .await
         .map_err(|e| anyhow!("Failed to revoke token: {}", e))?;
 
@@ -36,8 +36,7 @@ pub async fn is_token_revoked(redis: &ConnectionManager, token: &str) -> Result<
     let blacklist_key = format!("token_blacklist:{}", token);
 
     let mut redis_conn = redis.clone();
-    let exists: bool = redis_conn
-        .exists(&blacklist_key)
+    let exists: bool = run_with_timeout(redis_conn.exists(&blacklist_key))
         .await
         .map_err(|e| anyhow!("Failed to check token revocation status: {}", e))?;
 

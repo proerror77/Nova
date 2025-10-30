@@ -191,36 +191,18 @@ pub struct JWKS {
 /// Get JWKS for JWT key distribution (for verification by external services)
 ///
 /// # Arguments
-/// * `pool` - Database connection pool
-/// * `grace_period_days` - Days to keep old keys active after rotation
+/// * `pool` - Database connection pool (deprecated, not used)
+/// * `_grace_period_days` - Days to keep old keys active after rotation (deprecated)
 ///
 /// # Returns
-/// JWKS structure with all valid public keys
-pub async fn get_jwks(pool: &sqlx::PgPool, _grace_period_days: i64) -> Result<JWKS> {
-    use crate::services::jwt_key_rotation;
-
-    // Get all valid keys from database
-    let keys = jwt_key_rotation::get_valid_keys(pool).await?;
-
-    let mut jwks_keys = Vec::new();
-
-    for key in keys {
-        // Note: Simplified JWKS - in production, would need to parse RSA modulus and exponent
-        // from the PEM public key. For now, we'll return basic key information.
-        // A full implementation would use an RSA library to extract the key parameters.
-
-        jwks_keys.push(JWKSKey {
-            kty: "RSA".to_string(),
-            alg: key.algorithm.clone(),
-            kid: key.key_id.clone(),
-            use_: "sig".to_string(),
-            // These would need to be extracted from the PEM public key in production
-            n: "...".to_string(),  // Base64-encoded RSA modulus
-            e: "AQAB".to_string(), // Standard RSA public exponent (65537)
-        });
-    }
-
-    Ok(JWKS { keys: jwks_keys })
+/// Error - JWKS endpoint moved to auth-service
+#[deprecated(since = "0.2.0", note = "JWKS endpoint moved to auth-service (port 8084)")]
+pub async fn get_jwks(_pool: &sqlx::PgPool, _grace_period_days: i64) -> Result<JWKS> {
+    // DEPRECATED: This function has been moved to auth-service
+    // Call auth-service's /.well-known/jwks.json endpoint instead
+    Err(anyhow!(
+        "JWKS endpoint has been moved to auth-service. Use auth-service's /.well-known/jwks.json endpoint"
+    ))
 }
 
 #[cfg(test)]

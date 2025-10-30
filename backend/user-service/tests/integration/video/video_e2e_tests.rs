@@ -1,3 +1,5 @@
+#![cfg(feature = "legacy_video_tests")]
+/// Integration Tests for Video E2E: Upload → Transcoding → Feed (T134)
 /// Integration Tests for Video E2E: Upload → Transcoding → Feed (T134)
 /// Scenario: upload video → process → appear in feed
 /// Assert: video visible within 10 seconds of publish

@@ -1,103 +1,191 @@
+/// Nova Auth Service - Main entry point
+/// Provides both gRPC and REST API for authentication
+
+mod metrics;
+mod routes;
+
 use axum::{
-    http::StatusCode,
-    response::IntoResponse,
+    middleware,
     routing::{get, post},
-    Json, Router,
+    Router,
 };
-use serde_json::json;
+use redis::aio::ConnectionManager;
 use sqlx::postgres::PgPoolOptions;
-use std::sync::Arc;
-use tracing_subscriber::layer::SubscriberExt;
+use std::net::SocketAddr;
+use tokio::net::TcpListener;
+use tonic::transport::Server as GrpcServer;
+use tower_http::trace::TraceLayer;
+use tracing_subscriber;
 
-mod db;
-mod error;
-mod handlers;
-mod models;
-mod services;
-mod telemetry;
-
-use auth_service::Result;
-use tracing::{info, subscriber::set_global_default};
-
-#[derive(Clone)]
-pub struct AppState {
-    db: sqlx::PgPool,
-}
+use auth_service::{
+    config::Config,
+    handlers::{register, login, logout, refresh_token, change_password, request_password_reset},
+    handlers::{start_oauth_flow, complete_oauth_flow},
+    services::KafkaEventProducer,
+    AppState,
+};
 
 #[tokio::main]
-async fn main() -> Result<()> {
-    // Initialize Jaeger tracing
-    telemetry::init_tracer();
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Initialize tracing
+    tracing_subscriber::fmt::init();
 
-    // Initialize tracing subscriber
-    let subscriber = tracing_subscriber::registry()
-        .with(tracing_subscriber::EnvFilter::from_default_env())
-        .with(tracing_subscriber::fmt::layer());
-    set_global_default(subscriber).map_err(|e| {
-        auth_service::AuthError::Internal(format!("Failed to set subscriber: {}", e))
-    })?;
+    // Load configuration
+    let config = Config::from_env()
+        .expect("Failed to load configuration from environment");
 
-    // Database setup
-    let database_url = std::env::var("DATABASE_URL")
-        .unwrap_or_else(|_| "postgresql://postgres:postgres@localhost:5432/nova_auth".to_string());
+    tracing::info!("Starting Nova Auth Service on {}:{}", config.server_host, config.server_port);
 
-    let pool = PgPoolOptions::new()
-        .max_connections(20)
+    // Initialize database connection pool
+    let database_url = config.database_url.clone();
+    let db_pool = PgPoolOptions::new()
+        .max_connections(5)
         .connect(&database_url)
-        .await
-        .map_err(|e| {
-            auth_service::AuthError::Internal(format!("Failed to connect to DB: {}", e))
-        })?;
+        .await?;
 
-    // Verify database connection
-    sqlx::query("SELECT 1")
-        .execute(&pool)
-        .await
-        .map_err(|e| auth_service::AuthError::Internal(format!("DB health check failed: {}", e)))?;
+    tracing::info!("Database connection pool initialized");
 
-    let state = AppState { db: pool };
+    // Initialize Redis connection
+    let redis_client = redis::Client::open(config.redis_url.clone())?;
+    let redis_conn = ConnectionManager::new(redis_client).await?;
 
-    // Build router
-    let app = Router::new()
+    tracing::info!("Redis connection initialized");
+
+    // Initialize JWT keys from shared crypto-core library
+    crypto_core::jwt::initialize_jwt_keys(
+        &config.jwt_private_key_pem,
+        &config.jwt_public_key_pem,
+    ).map_err(|e| format!("Failed to initialize JWT keys: {}", e))?;
+
+    tracing::info!("JWT keys initialized");
+
+    // Initialize Kafka event producer (optional)
+    let kafka_producer = match std::env::var("KAFKA_BROKERS") {
+        Ok(brokers) => {
+            match KafkaEventProducer::new(&brokers, "auth-events") {
+                Ok(producer) => {
+                    tracing::info!("Kafka event producer initialized");
+                    Some(producer)
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to initialize Kafka producer: {}", e);
+                    None
+                }
+            }
+        }
+        Err(_) => {
+            tracing::warn!("KAFKA_BROKERS environment variable not set, event publishing disabled");
+            None
+        }
+    };
+
+    // Create shared application state
+    let app_state = AppState {
+        db: db_pool.clone(),
+        redis: redis_conn,
+        kafka_producer,
+    };
+
+    // Build REST API router
+    let rest_router = Router::new()
+        // Authentication endpoints
+        .route("/api/v1/auth/register", post(register))
+        .route("/api/v1/auth/login", post(login))
+        .route("/api/v1/auth/logout", post(logout))
+        .route("/api/v1/auth/refresh", post(refresh_token))
+        .route("/api/v1/auth/change-password", post(change_password))
+        .route("/api/v1/auth/password-reset/request", post(request_password_reset))
+
+        // OAuth endpoints
+        .route("/api/v1/oauth/start", post(start_oauth_flow))
+        .route("/api/v1/oauth/complete", post(complete_oauth_flow))
+
+        // Health check
         .route("/health", get(health_check))
-        .route("/api/v1/auth/register", post(handlers::auth::register))
-        .route("/api/v1/auth/login", post(handlers::auth::login))
-        .route(
-            "/api/v1/auth/verify-email",
-            post(handlers::auth::verify_email),
-        )
-        .route("/api/v1/auth/refresh", post(handlers::auth::refresh_token))
-        .route("/api/v1/auth/logout", post(handlers::auth::logout))
-        .with_state(Arc::new(state));
+        .route("/readiness", get(readiness_check))
+        .route("/metrics", get(metrics::metrics_handler))
 
-    // Start server
-    let host = std::env::var("APP_HOST").unwrap_or_else(|_| "0.0.0.0".to_string());
-    let port = std::env::var("APP_PORT")
-        .unwrap_or_else(|_| "8084".to_string())
-        .parse::<u16>()
-        .map_err(|e| auth_service::AuthError::Internal(format!("Invalid port: {}", e)))?;
+        .layer(middleware::from_fn(metrics::track_http_metrics))
+        .layer(TraceLayer::new_for_http())
+        .with_state(app_state.clone());
 
-    let addr = format!("{}:{}", host, port);
-    let listener = tokio::net::TcpListener::bind(&addr)
-        .await
-        .map_err(|e| auth_service::AuthError::Internal(format!("Failed to bind: {}", e)))?;
+    // Build gRPC server
+    let grpc_service = build_grpc_service(app_state)?;
 
-    info!("Auth service listening on {}", addr);
-
-    axum::serve(listener, app)
-        .await
-        .map_err(|e| auth_service::AuthError::Internal(format!("Server error: {}", e)))?;
+    // Start both servers
+    start_servers(
+        rest_router,
+        grpc_service,
+        &config.server_host,
+        config.server_port,
+    )
+    .await?;
 
     Ok(())
 }
 
-async fn health_check() -> impl IntoResponse {
-    (
-        StatusCode::OK,
-        Json(json!({
-            "status": "healthy",
-            "service": "auth-service",
-            "version": "0.1.0"
-        })),
-    )
+/// Health check endpoint
+async fn health_check() -> &'static str {
+    "OK"
+}
+
+/// Readiness check endpoint
+async fn readiness_check() -> &'static str {
+    "READY"
+}
+
+/// Build gRPC service
+fn build_grpc_service(
+    app_state: AppState,
+) -> Result<auth_service::nova::auth::v1::auth_service_server::AuthServiceServer<
+    auth_service::grpc::AuthServiceImpl,
+>, Box<dyn std::error::Error>> {
+    let auth_service = auth_service::grpc::AuthServiceImpl::new(app_state);
+    Ok(auth_service::nova::auth::v1::auth_service_server::AuthServiceServer::new(auth_service))
+}
+
+/// Start both REST and gRPC servers
+async fn start_servers(
+    rest_router: Router,
+    grpc_service: auth_service::nova::auth::v1::auth_service_server::AuthServiceServer<
+        auth_service::grpc::AuthServiceImpl,
+    >,
+    host: &str,
+    port: u16,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let addr: SocketAddr = format!("{}:{}", host, port).parse()?;
+
+    // REST API server on port `port`
+    let rest_listener = TcpListener::bind(&addr).await?;
+    tracing::info!("REST API listening on {}", addr);
+
+    let rest_handle = tokio::spawn(async move {
+        axum::serve(rest_listener, rest_router)
+            .await
+            .expect("REST server failed");
+    });
+
+    // gRPC server on port `port + 1000`
+    let grpc_addr = format!("{}:{}", host, port + 1000).parse()?;
+    tracing::info!("gRPC server listening on {}", grpc_addr);
+
+    let grpc_handle = tokio::spawn(async move {
+        GrpcServer::builder()
+            .add_service(grpc_service)
+            .serve(grpc_addr)
+            .await
+            .expect("gRPC server failed");
+    });
+
+    // Wait for both servers
+    tokio::select! {
+        _ = rest_handle => {
+            tracing::error!("REST server stopped");
+        }
+        _ = grpc_handle => {
+            tracing::error!("gRPC server stopped");
+        }
+    }
+
+    Ok(())
 }

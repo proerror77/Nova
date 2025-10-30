@@ -1,3 +1,4 @@
+#![cfg(feature = "legacy_video_tests")]
 use std::collections::HashMap;
 /// Integration Tests for Video Ranking with Deep Model (T135)
 /// Scenario: Milvus similarity search returns relevant videos

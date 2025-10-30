@@ -1,0 +1,226 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: nova-redis
+  namespace: nova
+  labels:
+    app: nova-redis
+    role: master
+spec:
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: redis
+  selector:
+    app: nova-redis
+    role: master
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nova-redis-headless
+  namespace: nova
+  labels:
+    app: nova-redis
+    role: master
+spec:
+  clusterIP: None
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: redis
+  selector:
+    app: nova-redis
+    role: master
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nova-redis-replicas
+  namespace: nova
+  labels:
+    app: nova-redis
+    role: replica
+spec:
+  clusterIP: None
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: redis
+  selector:
+    app: nova-redis
+    role: replica
+
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: nova-redis-master
+  namespace: nova
+  labels:
+    app: nova-redis
+    role: master
+spec:
+  serviceName: nova-redis-headless
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nova-redis
+      role: master
+  template:
+    metadata:
+      labels:
+        app: nova-redis
+        role: master
+    spec:
+      containers:
+        - name: redis
+          image: bitnami/redis:7.2.4
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: ALLOW_EMPTY_PASSWORD
+              value: "yes"
+            - name: REDIS_REPLICATION_MODE
+              value: master
+          ports:
+            - containerPort: 6379
+              name: redis
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "512Mi"
+            limits:
+              cpu: "500m"
+              memory: "1Gi"
+          volumeMounts:
+            - name: redis-data
+              mountPath: /bitnami/redis/data
+      volumes:
+        - name: redis-data
+          emptyDir: {}
+
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: nova-redis-replica
+  namespace: nova
+  labels:
+    app: nova-redis
+    role: replica
+spec:
+  serviceName: nova-redis-replicas
+  replicas: 2
+  selector:
+    matchLabels:
+      app: nova-redis
+      role: replica
+  template:
+    metadata:
+      labels:
+        app: nova-redis
+        role: replica
+    spec:
+      containers:
+        - name: redis
+          image: bitnami/redis:7.2.4
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: ALLOW_EMPTY_PASSWORD
+              value: "yes"
+            - name: REDIS_REPLICATION_MODE
+              value: replica
+            - name: REDIS_MASTER_HOST
+              value: nova-redis
+            - name: REDIS_MASTER_PORT_NUMBER
+              value: "6379"
+          ports:
+            - containerPort: 6379
+              name: redis
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "512Mi"
+            limits:
+              cpu: "500m"
+              memory: "1Gi"
+          volumeMounts:
+            - name: redis-data
+              mountPath: /bitnami/redis/data
+      volumes:
+        - name: redis-data
+          emptyDir: {}
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-sentinel
+  namespace: nova
+  labels:
+    app: redis-sentinel
+spec:
+  ports:
+    - name: sentinel
+      port: 26379
+      targetPort: sentinel
+  selector:
+    app: redis-sentinel
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis-sentinel
+  namespace: nova
+  labels:
+    app: redis-sentinel
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: redis-sentinel
+  template:
+    metadata:
+      labels:
+        app: redis-sentinel
+    spec:
+      containers:
+        - name: sentinel
+          image: bitnami/redis-sentinel:7.2.4
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: ALLOW_EMPTY_PASSWORD
+              value: "yes"
+            - name: REDIS_MASTER_HOST
+              value: nova-redis
+            - name: REDIS_MASTER_PORT_NUMBER
+              value: "6379"
+            - name: REDIS_SENTINEL_QUORUM
+              value: "2"
+            - name: REDIS_SENTINEL_DOWN_AFTER_TIMEOUT
+              value: "10000"
+            - name: REDIS_SENTINEL_FAILOVER_TIMEOUT
+              value: "60000"
+          ports:
+            - containerPort: 26379
+              name: sentinel
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "1Gi"
+          readinessProbe:
+            tcpSocket:
+              port: sentinel
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: sentinel
+            initialDelaySeconds: 10
+            periodSeconds: 10

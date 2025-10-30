@@ -1,7 +1,6 @@
-use redis::Client;
+use crate::redis_client::RedisClient;
+use redis::RedisResult;
 
-pub fn new_redis_client(url: &str) -> Result<Client, redis::RedisError> {
-    // To be implemented: create client and possibly establish a connection for health check
-    Client::open(url)
+pub async fn new_redis_client(url: &str) -> RedisResult<RedisClient> {
+    RedisClient::from_url(url).await
 }
-

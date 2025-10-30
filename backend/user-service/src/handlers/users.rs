@@ -1,5 +1,5 @@
 use crate::cache::{get_cached_user, invalidate_user_cache, set_cached_user, CachedUser};
-use actix_web::{error::ResponseError, web, HttpMessage, HttpRequest, HttpResponse, Responder};
+use actix_web::{web, HttpMessage, HttpRequest, HttpResponse, Responder};
 use base64::engine::general_purpose;
 use base64::Engine;
 use redis::aio::ConnectionManager;

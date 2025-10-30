@@ -26,6 +26,7 @@ final class FeedViewModelEnhanced: ObservableObject {
     private var currentCursor: String?
     private var hasMore = true
     private var cancellables = Set<AnyCancellable>()
+    private let interactionService = PostInteractionService()
 
     // 乐观更新备份
     private var optimisticUpdateBackup: [UUID: Post] = [:]
@@ -187,16 +188,15 @@ final class FeedViewModelEnhanced: ObservableObject {
 
         Task {
             do {
-                // 使用增强版 Repository（带本地缓存）
-                let postRepository = PostRepositoryEnhanced()
-
                 if wasLiked {
-                    _ = try await postRepository.unlikePost(id: post.id)
+                    try await interactionService.unlikePost(postId: post.id.uuidString)
                 } else {
-                    _ = try await postRepository.likePost(id: post.id)
+                    try await interactionService.likePost(postId: post.id.uuidString)
                 }
 
-                optimisticUpdateBackup.removeValue(forKey: post.id)
+                await MainActor.run {
+                    optimisticUpdateBackup.removeValue(forKey: post.id)
+                }
 
             } catch {
                 await rollbackOptimisticUpdate(for: post.id)

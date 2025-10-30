@@ -8,6 +8,8 @@ use tokio::time::sleep;
 use tracing::{error, warn};
 use uuid::Uuid;
 
+use crate::utils::redis_timeout::run_with_timeout;
+
 /// Maximum number of retry attempts
 const MAX_RETRIES: u32 = 3;
 /// Initial backoff duration (500ms)
@@ -24,11 +26,8 @@ pub async fn invalidate_user_cache_with_retry(
     let key = format!("nova:cache:user:{}", user_id);
 
     for attempt in 1..=MAX_RETRIES {
-        match redis::cmd("DEL")
-            .arg(&key)
-            .query_async::<_, ()>(&mut redis.clone())
-            .await
-        {
+        let mut conn = redis.clone();
+        match run_with_timeout(redis::cmd("DEL").arg(&key).query_async::<_, ()>(&mut conn)).await {
             Ok(_) => {
                 if attempt > 1 {
                     tracing::info!(
@@ -121,15 +120,17 @@ async fn invalidate_search_cache_internal(
 
     // SCAN loop using SCAN instead of blocking KEYS
     loop {
-        let (next_cursor, batch_keys): (u64, Vec<String>) = redis::cmd("SCAN")
-            .arg(cursor)
-            .arg("MATCH")
-            .arg(pattern)
-            .arg("COUNT")
-            .arg(100)
-            .query_async(&mut redis)
-            .await
-            .map_err(|e| e.to_string())?;
+        let (next_cursor, batch_keys): (u64, Vec<String>) = run_with_timeout(
+            redis::cmd("SCAN")
+                .arg(cursor)
+                .arg("MATCH")
+                .arg(pattern)
+                .arg("COUNT")
+                .arg(100)
+                .query_async::<_, (u64, Vec<String>)>(&mut redis),
+        )
+        .await
+        .map_err(|e| e.to_string())?;
 
         all_keys.extend(batch_keys);
 
@@ -145,11 +146,13 @@ async fn invalidate_search_cache_internal(
         let count = all_keys.len();
 
         for chunk in all_keys.chunks(1000) {
-            redis::cmd("DEL")
-                .arg(chunk)
-                .query_async(&mut redis)
-                .await
-                .map_err(|e| e.to_string())?;
+            run_with_timeout(
+                redis::cmd("DEL")
+                    .arg(chunk)
+                    .query_async::<_, ()>(&mut redis),
+            )
+            .await
+            .map_err(|e| e.to_string())?;
         }
 
         Ok(count)
@@ -167,11 +170,8 @@ pub async fn invalidate_feed_cache_with_retry(
     let key = format!("nova:cache:feed:{}", user_id);
 
     for attempt in 1..=MAX_RETRIES {
-        match redis::cmd("DEL")
-            .arg(&key)
-            .query_async::<_, ()>(&mut redis.clone())
-            .await
-        {
+        let mut conn = redis.clone();
+        match run_with_timeout(redis::cmd("DEL").arg(&key).query_async::<_, ()>(&mut conn)).await {
             Ok(_) => {
                 if attempt > 1 {
                     tracing::info!(

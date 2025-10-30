@@ -1,8 +1,9 @@
 //! Authorization guards that enforce permission checks at the type level
 //! This prevents developers from accidentally bypassing authorization
 
-use axum::{async_trait, extract::FromRequestParts, http::request::Parts};
+use axum::{extract::FromRequestParts, http::request::Parts};
 use sqlx::PgPool;
+use std::future::Future;
 use uuid::Uuid;
 
 use crate::error::AppError;
@@ -14,22 +15,23 @@ pub struct User {
     pub id: Uuid,
 }
 
-#[async_trait]
 impl<S> FromRequestParts<S> for User
 where
     S: Send + Sync,
 {
     type Rejection = AppError;
 
-    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
-        // Extract from JWT claim in extensions (set by auth middleware)
-        let user_id = parts
-            .extensions
-            .get::<Uuid>()
-            .cloned()
-            .ok_or(AppError::Unauthorized)?;
+    fn from_request_parts(
+        parts: &mut Parts,
+        _state: &S,
+    ) -> impl Future<Output = Result<Self, Self::Rejection>> + Send {
+        // Extract from JWT claim in extensions (set by auth middleware).
+        let user_id = parts.extensions.get::<Uuid>().cloned();
 
-        Ok(User { id: user_id })
+        async move {
+            let user_id = user_id.ok_or(AppError::Unauthorized)?;
+            Ok(User { id: user_id })
+        }
     }
 }
 

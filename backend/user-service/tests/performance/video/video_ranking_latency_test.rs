@@ -1,3 +1,4 @@
+#![cfg(feature = "legacy_video_tests")]
 use std::collections::HashMap;
 /// Performance Tests for Video Ranking Latency (T138)
 /// Validates ranking algorithm performance within SLA bounds

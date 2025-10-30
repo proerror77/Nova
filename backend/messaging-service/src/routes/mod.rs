@@ -4,18 +4,25 @@ use axum::{
     routing::{delete, get, post, put},
     Json, Router,
 };
-use serde_json::json;
 pub mod calls;
-use calls::{answer_call, end_call, get_call_history, initiate_call, reject_call};
+use calls::{
+    answer_call, end_call, get_call_history, get_participants, initiate_call, join_call,
+    leave_call, reject_call,
+};
+pub mod locations;
+use locations::{
+    get_conversation_locations, get_location_permissions, get_location_stats, get_user_location,
+    share_location, stop_sharing_location, update_location_permissions,
+};
 pub mod conversations;
 use conversations::{
-    create_conversation, create_group_conversation, delete_group, get_conversation, leave_group,
-    mark_as_read,
+    create_conversation, create_group_conversation, delete_group, get_conversation,
+    get_conversation_key, leave_group, mark_as_read,
 };
 pub mod messages;
 use messages::{
-    delete_message, forward_message, get_message_history, recall_message, search_messages,
-    send_audio_message, send_message, update_message,
+    delete_message, forward_message, get_audio_presigned_url, get_message_history, recall_message,
+    search_messages, send_audio_message, send_message, update_message,
 };
 pub mod groups;
 use groups::{add_member, list_members, remove_member, update_group_settings, update_member_role};
@@ -33,6 +40,11 @@ pub mod rtc;
 use rtc::get_ice_config;
 pub mod wsroute;
 use wsroute::ws_handler;
+pub mod key_exchange;
+use key_exchange::{
+    complete_key_exchange, get_peer_public_key, list_conversation_key_exchanges,
+    store_device_public_key,
+};
 
 // OpenAPI endpoint handler
 async fn openapi_json() -> Json<serde_json::Value> {
@@ -103,23 +115,11 @@ async fn docs() -> axum::response::Html<&'static str> {
     )
 }
 
-// Metrics endpoint for monitoring (Prometheus-compatible format)
-async fn metrics() -> String {
-    // Basic metrics - can be extended with actual Prometheus instrumentation
-    json!({
-        "service": "messaging-service",
-        "version": "0.1.0",
-        "status": "healthy",
-        "timestamp": chrono::Utc::now().to_rfc3339(),
-    })
-    .to_string()
-}
-
 pub fn build_router() -> Router<AppState> {
     // Service introspection endpoints (no API version prefix)
     let introspection = Router::new()
         .route("/health", get(|| async { "OK" }))
-        .route("/metrics", get(metrics))
+        .route("/metrics", get(crate::metrics::metrics_handler))
         .route("/openapi.json", get(openapi_json))
         .route("/swagger-ui", get(swagger_ui))
         .route("/docs", get(docs));
@@ -129,11 +129,31 @@ pub fn build_router() -> Router<AppState> {
         // Video calls
         .route("/conversations/:id/calls", post(initiate_call))
         .route("/calls/:id/answer", post(answer_call))
+        .route("/calls/:id/join", post(join_call))
+        .route("/calls/:id/leave", post(leave_call))
+        .route("/calls/:id/participants", get(get_participants))
         .route("/calls/:id/reject", post(reject_call))
         .route("/calls/:id/end", post(end_call))
         .route("/calls/history", get(get_call_history))
         // RTC configuration
         .route("/rtc/ice-config", get(get_ice_config))
+        // Location sharing
+        .route("/conversations/:id/location", post(share_location))
+        .route(
+            "/conversations/:id/locations",
+            get(get_conversation_locations),
+        )
+        .route(
+            "/conversations/:id/location/:user_id",
+            get(get_user_location),
+        )
+        .route(
+            "/conversations/:id/location/stop",
+            post(stop_sharing_location),
+        )
+        .route("/conversations/:id/location/stats", get(get_location_stats))
+        .route("/location/permissions", get(get_location_permissions))
+        .route("/location/permissions", put(update_location_permissions))
         // Conversations
         .route("/conversations", post(create_conversation))
         .route("/conversations/groups", post(create_group_conversation))
@@ -141,11 +161,19 @@ pub fn build_router() -> Router<AppState> {
             "/conversations/:id",
             get(get_conversation).delete(delete_group),
         )
+        .route(
+            "/conversations/:id/encryption-key",
+            get(get_conversation_key),
+        )
         .route("/conversations/:id/leave", post(leave_group))
         .route("/conversations/:id/messages", post(send_message))
         .route(
             "/conversations/:id/messages/audio",
             post(send_audio_message),
+        )
+        .route(
+            "/conversations/:id/messages/audio/presigned-url",
+            post(get_audio_presigned_url),
         )
         .route("/conversations/:id/messages", get(get_message_history))
         .route("/conversations/:id/messages/search", get(search_messages))
@@ -222,6 +250,20 @@ pub fn build_router() -> Router<AppState> {
         .route(
             "/notifications/users/:user_id/unsubscribe/:notification_type",
             post(unsubscribe),
+        )
+        // ECDH Key Exchange routes
+        .route("/keys/device", post(store_device_public_key))
+        .route(
+            "/conversations/:conversation_id/keys/:peer_user_id/:peer_device_id",
+            get(get_peer_public_key),
+        )
+        .route(
+            "/conversations/:conversation_id/complete-key-exchange",
+            post(complete_key_exchange),
+        )
+        .route(
+            "/conversations/:conversation_id/key-exchanges",
+            get(list_conversation_key_exchanges),
         )
         // WebSocket endpoint (with API version prefix for consistency)
         .route("/ws", get(ws_handler));

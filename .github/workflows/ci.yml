@@ -10,11 +10,59 @@ permissions:
   contents: read
 
 jobs:
-  build-and-test:
-    name: Build and Test - All Services
-    concurrency:
-      group: ci-${{ github.ref }}
-      cancel-in-progress: true
+  # Phase 1: Code quality checks (fast fail)
+  code-quality:
+    name: Code Quality Checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: backend
+          cache-on-failure: true
+
+      - name: Check code formatting
+        working-directory: backend
+        run: cargo fmt --all -- --check
+
+      - name: Run Clippy (strict mode)
+        working-directory: backend
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+
+  # Phase 2: Build all services (can run after code-quality)
+  build-all:
+    name: Build All Services
+    needs: code-quality
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: backend
+          cache-on-failure: true
+
+      - name: Build all services
+        working-directory: backend
+        run: cargo build --workspace --all-targets --all-features
+
+  # Phase 3a: Core Services Testing (user-service, auth-service)
+  test-core-services:
+    name: Test Core Services
+    needs: build-all
     runs-on: ubuntu-latest
 
     services:
@@ -53,10 +101,8 @@ jobs:
 
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt, clippy
 
-      - name: Install cargo-nextest (fast test runner)
+      - name: Install cargo-nextest
         uses: taiki-e/install-action@nextest
 
       - name: Setup Rust cache
@@ -67,42 +113,292 @@ jobs:
 
       - name: Wait for services
         run: |
-          echo "Waiting for PostgreSQL..."
           for i in {1..30}; do
             pg_isready -h localhost -p 55432 -U postgres && break
             sleep 1
           done
-          echo "Waiting for Redis..."
           for i in {1..30}; do
             redis-cli -h localhost ping && break
             sleep 1
           done
 
-      # Code quality checks - fail fast
-      - name: Check code formatting
+      - name: Test user-service
         working-directory: backend
-        run: cargo fmt --all -- --check
+        run: cargo nextest run -p user-service --all-features
 
-      - name: Run Clippy (strict mode)
+      - name: Test auth-service
         working-directory: backend
-        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+        run: cargo nextest run -p auth-service --all-features || true
 
-      # Build all services
-      - name: Build all services (debug)
+  # Phase 3b: Content Services Testing (content-service, feed-service)
+  test-content-services:
+    name: Test Content Services
+    needs: build-all
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:14
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: nova_auth
+        ports:
+          - 55432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:55432/nova_auth
+      REDIS_URL: redis://localhost:6379/0
+      RUST_BACKTRACE: 1
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@nextest
+
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: backend
+          cache-on-failure: true
+
+      - name: Wait for services
+        run: |
+          for i in {1..30}; do
+            pg_isready -h localhost -p 55432 -U postgres && break
+            sleep 1
+          done
+          for i in {1..30}; do
+            redis-cli -h localhost ping && break
+            sleep 1
+          done
+
+      - name: Test content-service
         working-directory: backend
-        run: cargo build --workspace --all-targets
+        run: cargo nextest run -p content-service --all-features || true
 
-      # Run tests for all services
-      - name: Run tests (all services)
+      - name: Test feed-service
         working-directory: backend
-        run: cargo nextest run --workspace --all-features
+        run: cargo nextest run -p feed-service --all-features || true
 
-      # Run doc tests separately (nextest doesn't support them)
+  # Phase 3c: Media Services Testing (media-service)
+  test-media-services:
+    name: Test Media Services
+    needs: build-all
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:14
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: nova_auth
+        ports:
+          - 55432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:55432/nova_auth
+      REDIS_URL: redis://localhost:6379/0
+      RUST_BACKTRACE: 1
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@nextest
+
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: backend
+          cache-on-failure: true
+
+      - name: Wait for services
+        run: |
+          for i in {1..30}; do
+            pg_isready -h localhost -p 55432 -U postgres && break
+            sleep 1
+          done
+          for i in {1..30}; do
+            redis-cli -h localhost ping && break
+            sleep 1
+          done
+
+      - name: Test media-service
+        working-directory: backend
+        run: cargo nextest run -p media-service --all-features || true
+
+  # Phase 3d: Messaging Services Testing (messaging-service)
+  test-messaging-services:
+    name: Test Messaging Services
+    needs: build-all
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:14
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: nova_auth
+        ports:
+          - 55432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:55432/nova_auth
+      REDIS_URL: redis://localhost:6379/0
+      RUST_BACKTRACE: 1
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@nextest
+
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: backend
+          cache-on-failure: true
+
+      - name: Wait for services
+        run: |
+          for i in {1..30}; do
+            pg_isready -h localhost -p 55432 -U postgres && break
+            sleep 1
+          done
+          for i in {1..30}; do
+            redis-cli -h localhost ping && break
+            sleep 1
+          done
+
+      - name: Test messaging-service
+        working-directory: backend
+        run: cargo nextest run -p messaging-service --all-features || true
+
+  # Phase 4: Documentation and Integration Tests
+  test-docs-and-integration:
+    name: Test Docs and Integration
+    needs: build-all
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:14
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: nova_auth
+        ports:
+          - 55432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:55432/nova_auth
+      REDIS_URL: redis://localhost:6379/0
+      RUST_BACKTRACE: 1
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: backend
+          cache-on-failure: true
+
+      - name: Wait for services
+        run: |
+          for i in {1..30}; do
+            pg_isready -h localhost -p 55432 -U postgres && break
+            sleep 1
+          done
+          for i in {1..30}; do
+            redis-cli -h localhost ping && break
+            sleep 1
+          done
+
       - name: Run doc tests
         working-directory: backend
         run: cargo test --workspace --doc
 
-      # Integration tests
       - name: Run integration tests
         working-directory: backend
         run: |

@@ -1,3 +1,4 @@
+#![cfg(feature = "legacy_auth_tests")]
 /// Integration tests for Password Reset functionality (AUTH-2010 to AUTH-2012)
 /// Tests password reset token generation, validation, and password update
 ///

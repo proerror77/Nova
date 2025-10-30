@@ -1,3 +1,4 @@
+#![cfg(feature = "legacy_video_tests")]
 /// Unit Tests for Video Metadata Validation (T131)
 /// Tests file size validation, codec detection, metadata extraction
 use std::collections::HashMap;

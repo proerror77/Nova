@@ -9,10 +9,10 @@ use prometheus::{
 pub mod cache_metrics;
 pub mod cdc_metrics;
 pub mod events_metrics;
-pub mod feed_metrics;
+// pub mod feed_metrics; // REMOVED - moved to feed-service (port 8089) [DELETED]
 pub mod job_metrics;
 pub mod messaging_metrics;
-pub mod oauth_metrics;
+// pub mod oauth_metrics; // REMOVED - moved to auth-service (port 8084) [DELETED]
 
 lazy_static! {
     /// Global registry for all metrics

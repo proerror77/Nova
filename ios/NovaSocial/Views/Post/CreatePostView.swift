@@ -11,30 +11,76 @@ struct CreatePostView: View {
             ZStack {
                 ScrollView {
                     VStack(spacing: 20) {
-                        // Image Selection
-                        if let image = viewModel.selectedImage {
-                            ZStack(alignment: .topTrailing) {
-                                Image(uiImage: image)
-                                    .resizable()
-                                    .aspectRatio(1, contentMode: .fill)
-                                    .frame(maxWidth: .infinity)
-                                    .clipped()
-                                    .cornerRadius(12)
+                        // Image Count Display
+                        if !viewModel.selectedImages.isEmpty {
+                            HStack {
+                                Text("Images Selected")
+                                    .font(.subheadline)
+                                    .fontWeight(.semibold)
 
-                                // Remove Button
-                                Button {
-                                    viewModel.removeImage()
-                                } label: {
-                                    Image(systemName: "xmark.circle.fill")
-                                        .font(.title)
-                                        .foregroundColor(.white)
-                                        .background(Color.black.opacity(0.6))
-                                        .clipShape(Circle())
+                                Spacer()
+
+                                Text(viewModel.imageCountDisplay)
+                                    .font(.subheadline)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+
+                        // Image Grid
+                        if !viewModel.selectedImages.isEmpty {
+                            let columns = [
+                                GridItem(.flexible(), spacing: 8),
+                                GridItem(.flexible(), spacing: 8),
+                                GridItem(.flexible(), spacing: 8)
+                            ]
+
+                            LazyVGrid(columns: columns, spacing: 8) {
+                                ForEach(Array(viewModel.selectedImages.enumerated()), id: \.offset) { index, image in
+                                    ZStack(alignment: .topTrailing) {
+                                        Image(uiImage: image)
+                                            .resizable()
+                                            .scaledToFill()
+                                            .frame(minHeight: 100)
+                                            .clipped()
+                                            .cornerRadius(8)
+
+                                        // Remove Button
+                                        Button {
+                                            viewModel.removeImage(at: index)
+                                        } label: {
+                                            Image(systemName: "xmark.circle.fill")
+                                                .font(.title2)
+                                                .foregroundColor(.white)
+                                                .background(Color.black.opacity(0.6))
+                                                .clipShape(Circle())
+                                        }
+                                        .padding(4)
+                                    }
                                 }
-                                .padding(8)
+
+                                // Add More Button (if limit not reached)
+                                if viewModel.canAddMoreImages {
+                                    Button {
+                                        viewModel.showImagePicker = true
+                                    } label: {
+                                        VStack(spacing: 8) {
+                                            Image(systemName: "plus")
+                                                .font(.title2)
+                                                .foregroundColor(.gray)
+
+                                            Text("Add")
+                                                .font(.caption)
+                                                .foregroundColor(.secondary)
+                                        }
+                                        .frame(maxWidth: .infinity)
+                                        .frame(minHeight: 100)
+                                        .background(Color(.systemGray6))
+                                        .cornerRadius(8)
+                                    }
+                                }
                             }
                         } else {
-                            // Image Picker Button
+                            // Image Picker Button (empty state)
                             Button {
                                 viewModel.showImagePicker = true
                             } label: {
@@ -43,9 +89,13 @@ struct CreatePostView: View {
                                         .font(.system(size: 60))
                                         .foregroundColor(.gray)
 
-                                    Text("Select Photo")
+                                    Text("Select Photos")
                                         .font(.headline)
                                         .foregroundColor(.primary)
+
+                                    Text("Up to 9 images")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
                                 }
                                 .frame(maxWidth: .infinity)
                                 .frame(height: 300)
@@ -120,7 +170,10 @@ struct CreatePostView: View {
             .navigationTitle("New Post")
             .navigationBarTitleDisplayMode(.inline)
             .sheet(isPresented: $viewModel.showImagePicker) {
-                ImagePicker(image: $viewModel.selectedImage)
+                MultiImagePicker(
+                    images: $viewModel.selectedImages,
+                    maxSelectable: CreatePostViewModel.maxImagesPerPost
+                )
             }
             .alert("Success", isPresented: $showSuccessAlert) {
                 Button("OK") {
@@ -137,16 +190,18 @@ struct CreatePostView: View {
     }
 }
 
-// MARK: - Image Picker
+// MARK: - Multi Image Picker
 
-struct ImagePicker: UIViewControllerRepresentable {
-    @Binding var image: UIImage?
+struct MultiImagePicker: UIViewControllerRepresentable {
+    @Binding var images: [UIImage]
+    let maxSelectable: Int
     @Environment(\.dismiss) private var dismiss
 
     func makeUIViewController(context: Context) -> PHPickerViewController {
         var config = PHPickerConfiguration()
         config.filter = .images
-        config.selectionLimit = 1
+        config.selectionLimit = maxSelectable
+        config.preferredAssetRepresentationMode = .current
 
         let picker = PHPickerViewController(configuration: config)
         picker.delegate = context.coordinator
@@ -160,23 +215,37 @@ struct ImagePicker: UIViewControllerRepresentable {
     }
 
     class Coordinator: NSObject, PHPickerViewControllerDelegate {
-        let parent: ImagePicker
+        let parent: MultiImagePicker
 
-        init(_ parent: ImagePicker) {
+        init(_ parent: MultiImagePicker) {
             self.parent = parent
         }
 
         func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
             parent.dismiss()
 
-            guard let provider = results.first?.itemProvider else { return }
+            let dispatchGroup = DispatchGroup()
+            var selectedImages: [UIImage] = []
+            var loadedCount = 0
 
-            if provider.canLoadObject(ofClass: UIImage.self) {
-                provider.loadObject(ofClass: UIImage.self) { image, _ in
-                    DispatchQueue.main.async {
-                        self.parent.image = image as? UIImage
+            for result in results {
+                dispatchGroup.enter()
+
+                if result.itemProvider.canLoadObject(ofClass: UIImage.self) {
+                    result.itemProvider.loadObject(ofClass: UIImage.self) { image, _ in
+                        if let uiImage = image as? UIImage {
+                            selectedImages.append(uiImage)
+                        }
+                        loadedCount += 1
+                        dispatchGroup.leave()
                     }
+                } else {
+                    dispatchGroup.leave()
                 }
+            }
+
+            dispatchGroup.notify(queue: .main) {
+                self.parent.images = selectedImages
             }
         }
     }

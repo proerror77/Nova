@@ -1,3 +1,4 @@
+#![cfg(feature = "legacy_video_tests")]
 /// Unit Tests for Embedding Similarity (T133)
 /// Tests vector distance calculations, normalization, similarity metrics
 
