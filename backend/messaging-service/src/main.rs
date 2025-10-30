@@ -2,8 +2,9 @@ use axum::extract::Request;
 use axum::middleware;
 use crypto_core::jwt as core_jwt;
 use messaging_service::{
-    config, db, error, logging, routes,
+    config, db, error, logging,
     redis_client::RedisClient,
+    routes,
     services::{encryption::EncryptionService, key_exchange::KeyExchangeService, push::ApnsPush},
     state::AppState,
     websocket::streams::{start_streams_listener, StreamsConfig},
@@ -100,6 +101,9 @@ async fn main() -> Result<(), error::AppError> {
     // and apply JWT authentication middleware
     let app = routes::build_router()
         .with_state(state)
+        .layer(middleware::from_fn(
+            messaging_service::metrics::track_http_metrics,
+        ))
         .layer(middleware::from_fn(
             move |mut req: Request, next: axum::middleware::Next| {
                 let db = db_arc.clone();
