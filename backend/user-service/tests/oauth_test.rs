@@ -1,3 +1,4 @@
+#![cfg(feature = "legacy_auth_tests")]
 /// Integration tests for OAuth2 authentication flows (AUTH-3001)
 /// Tests OAuth provider integration for Google, Apple, and Facebook
 ///

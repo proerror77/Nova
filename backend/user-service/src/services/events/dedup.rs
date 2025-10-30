@@ -4,6 +4,8 @@ use std::time::Duration;
 use tracing::{debug, error, warn};
 
 use crate::error::{AppError, Result};
+#[cfg(test)]
+use crate::utils::redis_timeout::run_with_timeout;
 
 /// Event deduplicator using Redis
 ///
@@ -227,20 +229,24 @@ impl EventDeduplicator {
             })?;
 
         // Scan for all dedup keys
-        let keys: Vec<String> = redis::cmd("KEYS")
-            .arg("events:dedup:*")
-            .query_async(&mut conn)
-            .await
-            .map_err(|e| {
-                error!("Failed to scan dedup keys: {}", e);
-                AppError::Redis(e)
-            })?;
+        let keys: Vec<String> = run_with_timeout(
+            redis::cmd("KEYS")
+                .arg("events:dedup:*")
+                .query_async(&mut conn),
+        )
+        .await
+        .map_err(|e| {
+            error!("Failed to scan dedup keys: {}", e);
+            AppError::Redis(e)
+        })?;
 
         if !keys.is_empty() {
-            let deleted: u32 = conn.del(&keys).await.map_err(|e| {
-                error!("Failed to delete dedup keys: {}", e);
-                AppError::Redis(e)
-            })?;
+            let deleted: usize = run_with_timeout(conn.del::<_, usize>(&keys))
+                .await
+                .map_err(|e| {
+                    error!("Failed to delete dedup keys: {}", e);
+                    AppError::Redis(e)
+                })?;
 
             warn!("Cleared {} dedup keys", deleted);
         }

@@ -7,7 +7,7 @@ use futures::future::LocalBoxFuture;
 use std::future::{ready, Ready};
 use std::time::Instant;
 
-use crate::metrics::{RATE_LIMITED_IPS_GAUGE, RATE_LIMIT_HITS};
+use crate::metrics::RATE_LIMIT_HITS;
 
 /// Middleware factory for metrics collection
 pub struct MetricsMiddleware;

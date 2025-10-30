@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::Write;
 use std::path::PathBuf;
-use tracing::{error, info, warn};
+use tracing::{info, warn};
 
 use crate::error::Result;
 

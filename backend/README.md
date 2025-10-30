@@ -257,7 +257,7 @@ SMTP_USERNAME=your-email@gmail.com
 SMTP_PASSWORD=your-app-password
 
 # 设置合适的连接池大小
-DATABASE_MAX_CONNECTIONS=50
+DATABASE_MAX_CONNECTIONS=10
 REDIS_POOL_SIZE=20
 
 # 生产环境日志级别

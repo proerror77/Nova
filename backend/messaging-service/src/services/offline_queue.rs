@@ -2,10 +2,12 @@
 //! Implements "sync from last known ID" pattern for message recovery
 //! Allows clients to resume from where they left off when reconnecting
 
-use redis::{AsyncCommands, Client};
+use crate::redis_client::RedisClient;
+use redis::{AsyncCommands, FromRedisValue, RedisResult, Value as RedisValue};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use uuid::Uuid;
+use crate::models::message::MessageEnvelope;
 
 /// Represents a client's position in the message stream
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -29,9 +31,64 @@ fn conversation_clients_key(conversation_id: Uuid) -> String {
     format!("conversation:clients:{}", conversation_id)
 }
 
+fn conversation_stream_key(conversation_id: Uuid) -> String {
+    format!("stream:conversation:{}", conversation_id)
+}
+
+fn conversation_group_name(conversation_id: Uuid) -> String {
+    format!("ws:{}", conversation_id)
+}
+
+fn consumer_name(user_id: Uuid, client_id: Uuid) -> String {
+    format!("{}:{}", user_id, client_id)
+}
+
+fn flatten_read_entries(
+    raw: RedisValue,
+    conversation_id: Uuid,
+) -> RedisResult<Vec<(String, HashMap<String, String>)>> {
+    if raw == RedisValue::Nil {
+        return Ok(Vec::new());
+    }
+
+    let parsed: Vec<(String, Vec<(String, Vec<(String, String)>)>)> =
+        FromRedisValue::from_redis_value(&raw)?;
+
+    Ok(parsed
+        .into_iter()
+        .flat_map(|(_, entries)| entries)
+        .map(|(id, fields)| convert_entry(conversation_id, id, fields))
+        .collect())
+}
+
+fn convert_entry(
+    conversation_id: Uuid,
+    entry_id: String,
+    fields: Vec<(String, String)>,
+) -> (String, HashMap<String, String>) {
+    let mut map = HashMap::new();
+    for (k, v) in fields {
+        map.insert(k, v);
+    }
+
+    map.entry("conversation_id".to_string())
+        .or_insert(conversation_id.to_string());
+
+    if let Some(payload) = map.get_mut("payload") {
+        if let Ok(mut envelope) = MessageEnvelope::from_json(payload) {
+            envelope.set_stream_id(entry_id.clone());
+            if let Ok(serialized) = envelope.to_json() {
+                *payload = serialized;
+            }
+        }
+    }
+
+    (entry_id, map)
+}
+
 /// Record client sync state after receiving messages
 pub async fn update_client_sync_state(
-    client: &Client,
+    client: &RedisClient,
     state: &ClientSyncState,
 ) -> redis::RedisResult<()> {
     let mut conn = client.get_multiplexed_async_connection().await?;
@@ -58,7 +115,7 @@ pub async fn update_client_sync_state(
 
 /// Get client sync state (last known position)
 pub async fn get_client_sync_state(
-    client: &Client,
+    client: &RedisClient,
     user_id: Uuid,
     client_id: Uuid,
 ) -> redis::RedisResult<Option<ClientSyncState>> {
@@ -72,7 +129,7 @@ pub async fn get_client_sync_state(
 
 /// Get all clients in a conversation (for broadcast tracking)
 pub async fn get_conversation_clients(
-    client: &Client,
+    client: &RedisClient,
     conversation_id: Uuid,
 ) -> redis::RedisResult<Vec<Uuid>> {
     let mut conn = client.get_multiplexed_async_connection().await?;
@@ -88,7 +145,7 @@ pub async fn get_conversation_clients(
 
 /// Clear client sync state (when client logs out)
 pub async fn clear_client_sync_state(
-    client: &Client,
+    client: &RedisClient,
     user_id: Uuid,
     client_id: Uuid,
 ) -> redis::RedisResult<()> {
@@ -102,7 +159,7 @@ pub async fn clear_client_sync_state(
 
 /// Find offline messages for a user in specific conversations
 pub async fn get_messages_since(
-    client: &Client,
+    client: &RedisClient,
     conversation_id: Uuid,
     since_id: &str,
 ) -> redis::RedisResult<Vec<(String, HashMap<String, String>)>> {
@@ -130,7 +187,7 @@ pub async fn get_messages_since(
 
 /// Store offline message notification
 pub async fn queue_offline_notification(
-    client: &Client,
+    client: &RedisClient,
     user_id: Uuid,
     conversation_id: Uuid,
     message_count: usize,
@@ -150,7 +207,7 @@ pub async fn queue_offline_notification(
 
 /// Get offline message count for conversation
 pub async fn get_offline_message_count(
-    client: &Client,
+    client: &RedisClient,
     user_id: Uuid,
     conversation_id: Uuid,
 ) -> redis::RedisResult<usize> {
@@ -164,7 +221,7 @@ pub async fn get_offline_message_count(
 
 /// Batch clear offline notifications for user
 pub async fn clear_offline_notifications(
-    client: &Client,
+    client: &RedisClient,
     user_id: Uuid,
     conversation_ids: &[Uuid],
 ) -> redis::RedisResult<()> {
@@ -185,67 +242,141 @@ pub async fn clear_offline_notifications(
 
 /// Initialize consumer group for a conversation (wrapper)
 pub async fn init_consumer_group(
-    client: &Client,
-    _conversation_id: Uuid,
+    client: &RedisClient,
+    conversation_id: Uuid,
 ) -> redis::RedisResult<()> {
-    use crate::websocket::streams::{ensure_consumer_group, StreamsConfig};
-    let config = StreamsConfig::default();
-    ensure_consumer_group(client, &config).await
+    let mut conn = client.get_multiplexed_async_connection().await?;
+    let stream_key = conversation_stream_key(conversation_id);
+    let group = conversation_group_name(conversation_id);
+
+    let _: Result<(), _> = redis::cmd("XGROUP")
+        .arg("CREATE")
+        .arg(&stream_key)
+        .arg(&group)
+        .arg("0")
+        .arg("MKSTREAM")
+        .query_async(&mut conn)
+        .await;
+
+    Ok(())
 }
 
 /// Read pending messages for a consumer (wrapper)
 pub async fn read_pending_messages(
-    client: &Client,
-    _conversation_id: Uuid,
-    _user_id: Uuid,
-    _client_id: Uuid,
-) -> redis::RedisResult<Vec<(String, HashMap<String, String>)>> {
-    use crate::websocket::streams::{read_pending_messages as streams_read_pending, StreamsConfig};
-    let config = StreamsConfig::default();
-    let messages = streams_read_pending(client, &config, "0").await?;
-
-    // Convert StreamMessage to HashMap format
-    let result = messages
-        .into_iter()
-        .map(|msg| {
-            let mut fields = HashMap::new();
-            fields.insert("payload".to_string(), msg.payload);
-            fields.insert(
-                "conversation_id".to_string(),
-                msg.conversation_id.to_string(),
-            );
-            fields.insert("timestamp".to_string(), msg.timestamp.to_string());
-            (msg.id, fields)
-        })
-        .collect();
-
-    Ok(result)
-}
-
-/// Read new messages (alias to read_pending_messages for now)
-pub async fn read_new_messages(
-    client: &Client,
+    client: &RedisClient,
     conversation_id: Uuid,
     user_id: Uuid,
     client_id: Uuid,
 ) -> redis::RedisResult<Vec<(String, HashMap<String, String>)>> {
-    read_pending_messages(client, conversation_id, user_id, client_id).await
+    let stream_key = conversation_stream_key(conversation_id);
+    let group = conversation_group_name(conversation_id);
+    let consumer = consumer_name(user_id, client_id);
+
+    let mut conn = client.get_multiplexed_async_connection().await?;
+    let mut results: Vec<(String, HashMap<String, String>)> = Vec::new();
+
+    // Claim stale pending entries
+    let mut start = "0".to_string();
+    loop {
+        let raw: RedisValue = redis::cmd("XAUTOCLAIM")
+            .arg(&stream_key)
+            .arg(&group)
+            .arg(&consumer)
+            .arg(1000) // minimum idle (ms)
+            .arg(&start)
+            .arg("COUNT")
+            .arg(100)
+            .query_async(&mut conn)
+            .await?;
+
+        if raw == RedisValue::Nil {
+            break;
+        }
+
+        let (next_start, entries): (String, Vec<(String, Vec<(String, String)>)>) =
+            FromRedisValue::from_redis_value(&raw)?;
+
+        for (entry_id, fields) in &entries {
+            results.push(convert_entry(conversation_id, entry_id.clone(), fields.clone()));
+        }
+
+        if next_start == "0-0" || entries.is_empty() {
+            break;
+        }
+
+        start = next_start;
+    }
+
+    // Read pending entries assigned to this consumer
+    let raw_pending: RedisValue = redis::cmd("XREADGROUP")
+        .arg("GROUP")
+        .arg(&group)
+        .arg(&consumer)
+        .arg("COUNT")
+        .arg(100)
+        .arg("STREAMS")
+        .arg(&stream_key)
+        .arg("0")
+        .query_async(&mut conn)
+        .await
+        .unwrap_or(RedisValue::Nil);
+
+    results.extend(flatten_read_entries(raw_pending, conversation_id)?);
+
+    Ok(results)
+}
+
+/// Read new messages (alias to read_pending_messages for now)
+pub async fn read_new_messages(
+    client: &RedisClient,
+    conversation_id: Uuid,
+    user_id: Uuid,
+    client_id: Uuid,
+) -> redis::RedisResult<Vec<(String, HashMap<String, String>)>> {
+    let stream_key = conversation_stream_key(conversation_id);
+    let group = conversation_group_name(conversation_id);
+    let consumer = consumer_name(user_id, client_id);
+
+    let mut conn = client.get_multiplexed_async_connection().await?;
+    let raw: RedisValue = redis::cmd("XREADGROUP")
+        .arg("GROUP")
+        .arg(&group)
+        .arg(&consumer)
+        .arg("COUNT")
+        .arg(100)
+        .arg("STREAMS")
+        .arg(&stream_key)
+        .arg(">")
+        .query_async(&mut conn)
+        .await
+        .unwrap_or(RedisValue::Nil);
+
+    flatten_read_entries(raw, conversation_id)
 }
 
 /// Acknowledge message (wrapper)
 pub async fn acknowledge_message(
-    client: &Client,
-    _conversation_id: Uuid,
+    client: &RedisClient,
+    conversation_id: Uuid,
     stream_id: &str,
 ) -> redis::RedisResult<()> {
-    use crate::websocket::streams::{ack_message, StreamsConfig};
-    let config = StreamsConfig::default();
-    ack_message(client, &config, stream_id).await
+    let stream_key = conversation_stream_key(conversation_id);
+    let group = conversation_group_name(conversation_id);
+    let mut conn = client.get_multiplexed_async_connection().await?;
+
+    redis::cmd("XACK")
+        .arg(&stream_key)
+        .arg(&group)
+        .arg(stream_id)
+        .query_async::<_, ()>(&mut conn)
+        .await?;
+
+    Ok(())
 }
 
 /// Trim stream to keep recent messages (wrapper)
 pub async fn trim_stream(
-    client: &Client,
+    client: &RedisClient,
     _conversation_id: Uuid,
     _max_len: usize,
 ) -> redis::RedisResult<()> {

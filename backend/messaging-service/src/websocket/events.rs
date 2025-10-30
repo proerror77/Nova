@@ -20,6 +20,9 @@
 //! - Serialization is centralized in one place
 //! - No special cases - all events have the same top-level structure
 
+use crate::models::message::MessageEnvelope;
+use crate::redis_client::RedisClient;
+use crate::websocket::streams;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -135,11 +138,33 @@ pub enum WebSocketEvent {
     // ============================================================================
     /// Video call initiated
     #[serde(rename = "call.initiated")]
-    CallInitiated { call_id: Uuid, initiator_id: Uuid },
+    CallInitiated {
+        call_id: Uuid,
+        initiator_id: Uuid,
+        call_type: String,
+        max_participants: i32,
+    },
 
-    /// Video call answered
+    /// Video call answered (backward compatible - for 1:1 calls)
     #[serde(rename = "call.answered")]
     CallAnswered { call_id: Uuid, answerer_id: Uuid },
+
+    /// Participant joined group call
+    #[serde(rename = "call.participant_joined")]
+    CallParticipantJoined {
+        call_id: Uuid,
+        participant_id: Uuid,
+        user_id: Uuid,
+        sdp: String,
+    },
+
+    /// Participant left group call
+    #[serde(rename = "call.participant_left")]
+    CallParticipantLeft {
+        call_id: Uuid,
+        participant_id: Uuid,
+        user_id: Uuid,
+    },
 
     /// Video call rejected
     #[serde(rename = "call.rejected")]
@@ -167,6 +192,31 @@ pub enum WebSocketEvent {
         conversation_id: Uuid,
         updated_fields: Vec<String>,
     },
+
+    // ============================================================================
+    // Location Sharing Events
+    // ============================================================================
+    /// User started sharing location
+    #[serde(rename = "location.shared")]
+    LocationShared {
+        user_id: Uuid,
+        latitude: f64,
+        longitude: f64,
+        accuracy_meters: i32,
+    },
+
+    /// User updated their location
+    #[serde(rename = "location.updated")]
+    LocationUpdated {
+        user_id: Uuid,
+        latitude: f64,
+        longitude: f64,
+        accuracy_meters: i32,
+    },
+
+    /// User stopped sharing location
+    #[serde(rename = "location.stopped")]
+    LocationStopped { user_id: Uuid },
 }
 
 impl WebSocketEvent {
@@ -188,10 +238,15 @@ impl WebSocketEvent {
             Self::MemberRoleChanged { .. } => "member.role_changed",
             Self::CallInitiated { .. } => "call.initiated",
             Self::CallAnswered { .. } => "call.answered",
+            Self::CallParticipantJoined { .. } => "call.participant_joined",
+            Self::CallParticipantLeft { .. } => "call.participant_left",
             Self::CallRejected { .. } => "call.rejected",
             Self::CallEnded { .. } => "call.ended",
             Self::CallIceCandidate { .. } => "call.ice_candidate",
             Self::ConversationUpdated { .. } => "conversation.updated",
+            Self::LocationShared { .. } => "location.shared",
+            Self::LocationUpdated { .. } => "location.updated",
+            Self::LocationStopped { .. } => "location.stopped",
         }
     }
 
@@ -217,6 +272,15 @@ impl WebSocketEvent {
         conversation_id: Uuid,
         user_id: Uuid,
     ) -> Result<String, serde_json::Error> {
+        let value = self.to_payload_value(conversation_id, user_id)?;
+        serde_json::to_string(&value)
+    }
+
+    pub fn to_payload_value(
+        &self,
+        conversation_id: Uuid,
+        user_id: Uuid,
+    ) -> Result<serde_json::Value, serde_json::Error> {
         let mut payload = serde_json::json!({
             "type": self.event_type(),
             "timestamp": Utc::now().to_rfc3339(),
@@ -232,7 +296,7 @@ impl WebSocketEvent {
             }
         }
 
-        serde_json::to_string(&payload)
+        Ok(payload)
     }
 }
 
@@ -246,30 +310,20 @@ impl WebSocketEvent {
 /// manually calling registry.broadcast() and pubsub::publish().
 pub async fn broadcast_event(
     registry: &crate::websocket::ConnectionRegistry,
-    redis: &redis::Client,
+    redis: &RedisClient,
     conversation_id: Uuid,
     user_id: Uuid,
     event: WebSocketEvent,
 ) -> Result<(), BroadcastError> {
-    // Serialize event
-    let payload = event
-        .to_broadcast_payload(conversation_id, user_id)
+    let payload_value = event
+        .to_payload_value(conversation_id, user_id)
         .map_err(|e| BroadcastError::Serialization(e.to_string()))?;
 
-    // Broadcast via in-process registry
-    registry
-        .broadcast(
-            conversation_id,
-            axum::extract::ws::Message::Text(payload.clone()),
-        )
-        .await;
+    let mut envelope = MessageEnvelope::from_payload(conversation_id, payload_value)
+        .map_err(BroadcastError::Serialization)?;
+    envelope.ensure_field("sender_id", serde_json::json!(user_id));
 
-    // Broadcast via Redis pub/sub (for cross-instance delivery)
-    crate::websocket::pubsub::publish(redis, conversation_id, &payload)
-        .await
-        .map_err(|e| BroadcastError::Redis(e.to_string()))?;
-
-    Ok(())
+    broadcast_envelope(registry, redis, envelope).await
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -279,6 +333,57 @@ pub enum BroadcastError {
 
     #[error("Failed to publish to Redis: {0}")]
     Redis(String),
+}
+
+/// Broadcast a pre-built JSON payload, optionally embedding the Redis stream ID.
+pub async fn broadcast_payload_json(
+    registry: &crate::websocket::ConnectionRegistry,
+    redis: &RedisClient,
+    conversation_id: Uuid,
+    payload_value: serde_json::Value,
+) -> Result<(), BroadcastError> {
+    let envelope = MessageEnvelope::from_payload(conversation_id, payload_value)
+        .map_err(BroadcastError::Serialization)?;
+    broadcast_envelope(registry, redis, envelope).await
+}
+
+async fn broadcast_envelope(
+    registry: &crate::websocket::ConnectionRegistry,
+    redis: &RedisClient,
+    mut envelope: MessageEnvelope,
+) -> Result<(), BroadcastError> {
+    let stream_id = streams::publish_envelope(redis, &envelope)
+        .await
+        .map_err(|e| BroadcastError::Redis(e.to_string()))?;
+
+    envelope.set_stream_id(stream_id);
+
+    let final_payload = envelope
+        .to_json()
+        .map_err(|e| BroadcastError::Serialization(e.to_string()))?;
+
+    registry
+        .broadcast(
+            envelope.conversation_id,
+            axum::extract::ws::Message::Text(final_payload.into()),
+        )
+        .await;
+
+    Ok(())
+}
+
+/// Broadcast an already serialized payload string.
+pub async fn broadcast_payload_str(
+    registry: &crate::websocket::ConnectionRegistry,
+    redis: &RedisClient,
+    conversation_id: Uuid,
+    payload: String,
+) -> Result<(), BroadcastError> {
+    let value: serde_json::Value =
+        serde_json::from_str(&payload).map_err(|e| BroadcastError::Serialization(e.to_string()))?;
+    let envelope = MessageEnvelope::from_payload(conversation_id, value)
+        .map_err(BroadcastError::Serialization)?;
+    broadcast_envelope(registry, redis, envelope).await
 }
 
 // ============================================================================

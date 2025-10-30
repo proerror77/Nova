@@ -2,10 +2,17 @@ use axum::extract::Request;
 use axum::middleware;
 use crypto_core::jwt as core_jwt;
 use messaging_service::{
-    config, db, error, logging, routes, services::push::ApnsPush, state::AppState,
+    config, db, error, logging,
+    redis_client::RedisClient,
+    routes,
+    services::{encryption::EncryptionService, key_exchange::KeyExchangeService, push::ApnsPush},
+    state::AppState,
+    websocket::streams::{start_streams_listener, StreamsConfig},
 };
+use redis_utils::{RedisPool, SentinelConfig};
 use std::net::SocketAddr;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::net::TcpListener;
 
 #[tokio::main]
@@ -18,8 +25,18 @@ async fn main() -> Result<(), error::AppError> {
         .await
         .map_err(|e| error::AppError::StartServer(format!("db: {e}")))?;
 
-    let redis = redis::Client::open(cfg.redis_url.as_str())
+    let sentinel_cfg = cfg.redis_sentinel.as_ref().map(|cfg| {
+        SentinelConfig::new(
+            cfg.endpoints.clone(),
+            cfg.master_name.clone(),
+            Duration::from_millis(cfg.poll_interval_ms),
+        )
+    });
+
+    let redis_pool = RedisPool::connect(&cfg.redis_url, sentinel_cfg)
+        .await
         .map_err(|e| error::AppError::StartServer(format!("redis: {e}")))?;
+    let redis = RedisClient::new(redis_pool.manager());
     let registry = messaging_service::websocket::ConnectionRegistry::new();
     // Run embedded migrations (idempotent)
     if let Err(e) = messaging_service::migrations::run_all(&db).await {
@@ -56,19 +73,24 @@ async fn main() -> Result<(), error::AppError> {
         None => None,
     };
 
+    let encryption = Arc::new(EncryptionService::new(cfg.encryption_master_key));
+    let key_exchange_service = Arc::new(KeyExchangeService::new(Arc::new(db.clone())));
+
     let state = AppState {
         db: db.clone(),
         registry: registry.clone(),
         redis: redis.clone(),
         config: cfg.clone(),
         apns: apns_client.clone(),
+        encryption: encryption.clone(),
+        key_exchange_service: Some(key_exchange_service),
     };
-    // Start Redis psubscribe listener for cross-instance fanout
+    // Start Redis Streams listener for cross-instance fanout
+    let redis_stream = redis.clone();
     tokio::spawn(async move {
-        if let Err(e) =
-            messaging_service::websocket::pubsub::start_psub_listener(redis, registry).await
-        {
-            tracing::warn!(error=%e, "redis psub listener exited");
+        let config = StreamsConfig::default();
+        if let Err(e) = start_streams_listener(redis_stream, registry, config).await {
+            tracing::warn!(error=%e, "redis streams listener exited");
         }
     });
 
@@ -79,6 +101,9 @@ async fn main() -> Result<(), error::AppError> {
     // and apply JWT authentication middleware
     let app = routes::build_router()
         .with_state(state)
+        .layer(middleware::from_fn(
+            messaging_service::metrics::track_http_metrics,
+        ))
         .layer(middleware::from_fn(
             move |mut req: Request, next: axum::middleware::Next| {
                 let db = db_arc.clone();

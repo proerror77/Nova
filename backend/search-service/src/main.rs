@@ -5,11 +5,15 @@ use axum::{
     routing::{get, post},
     Router,
 };
+use error_types::ErrorResponse;
 use redis::aio::ConnectionManager;
+use search_service::elasticsearch::{ElasticsearchClient, ElasticsearchError, PostDocument};
+use search_service::events::consumers::EventContext;
+use search_service::events::kafka::{spawn_message_consumer, KafkaConsumerConfig};
 use search_service::search_suggestions::SearchSuggestionsService;
 use serde::{Deserialize, Serialize};
 use sqlx::{postgres::PgPoolOptions, PgPool};
-use std::net::SocketAddr;
+use std::{net::SocketAddr, sync::Arc};
 use tokio::net::TcpListener;
 use uuid::Uuid;
 
@@ -27,17 +31,61 @@ enum AppError {
     Redis(#[from] redis::RedisError),
     #[error("Serialization error: {0}")]
     Serialization(#[from] serde_json::Error),
+    #[error("Search backend error: {0}")]
+    SearchBackend(String),
 }
 
 impl IntoResponse for AppError {
     fn into_response(self) -> axum::response::Response {
-        let (status, message) = match self {
-            AppError::Database(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
-            AppError::Config(e) => (StatusCode::INTERNAL_SERVER_ERROR, e),
-            AppError::Redis(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
-            AppError::Serialization(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+        let (status, error_type, code) = match &self {
+            AppError::Database(_) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "server_error",
+                error_types::error_codes::DATABASE_ERROR,
+            ),
+            AppError::Config(_) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "server_error",
+                error_types::error_codes::INTERNAL_SERVER_ERROR,
+            ),
+            AppError::Redis(_) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "server_error",
+                error_types::error_codes::CACHE_ERROR,
+            ),
+            AppError::Serialization(_) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "server_error",
+                error_types::error_codes::INTERNAL_SERVER_ERROR,
+            ),
+            AppError::SearchBackend(_) => (
+                StatusCode::BAD_GATEWAY,
+                "server_error",
+                error_types::error_codes::SERVICE_UNAVAILABLE,
+            ),
         };
-        (status, Json(serde_json::json!({ "error": message }))).into_response()
+
+        let message = self.to_string();
+        let response = ErrorResponse::new(
+            &match status {
+                StatusCode::BAD_REQUEST => "Bad Request",
+                StatusCode::INTERNAL_SERVER_ERROR => "Internal Server Error",
+                StatusCode::BAD_GATEWAY => "Bad Gateway",
+                _ => "Error",
+            },
+            &message,
+            status.as_u16(),
+            error_type,
+            code,
+        );
+
+        (status, Json(response)).into_response()
+    }
+}
+
+impl From<ElasticsearchError> for AppError {
+    fn from(err: ElasticsearchError) -> Self {
+        AppError::SearchBackend(err.to_string())
     }
 }
 
@@ -94,6 +142,17 @@ struct PostResult {
     created_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
+impl From<PostDocument> for PostResult {
+    fn from(doc: PostDocument) -> Self {
+        Self {
+            id: doc.id,
+            user_id: doc.user_id,
+            caption: doc.caption,
+            created_at: doc.created_at,
+        }
+    }
+}
+
 #[derive(Debug, Serialize)]
 struct HashtagResult {
     tag: String,
@@ -107,6 +166,18 @@ struct SearchResponse<T> {
     count: usize,
 }
 
+#[derive(Debug, Deserialize)]
+struct ReindexRequest {
+    #[serde(default = "default_reindex_batch_size")]
+    batch_size: i64,
+    #[serde(default)]
+    offset: i64,
+}
+
+fn default_reindex_batch_size() -> i64 {
+    500
+}
+
 // ============================================
 // Application State
 // ============================================
@@ -115,6 +186,7 @@ struct SearchResponse<T> {
 struct AppState {
     db: PgPool,
     redis: ConnectionManager,
+    search_backend: Option<Arc<ElasticsearchClient>>,
 }
 
 // ============================================
@@ -166,6 +238,23 @@ async fn search_posts(
             results: vec![],
             count: 0,
         }));
+    }
+
+    if let Some(search_backend) = &state.search_backend {
+        match search_backend.search_posts(&params.q, params.limit).await {
+            Ok(documents) => {
+                let posts: Vec<PostResult> = documents.into_iter().map(PostResult::from).collect();
+                let count = posts.len();
+                return Ok(Json(SearchResponse {
+                    query: params.q,
+                    results: posts,
+                    count,
+                }));
+            }
+            Err(err) => {
+                tracing::warn!("Elasticsearch search failed for '{}': {}", params.q, err);
+            }
+        }
     }
 
     let cache_key = format!("search:posts:{}", params.q);
@@ -264,6 +353,51 @@ async fn clear_search_cache(
     Ok(Json(serde_json::json!({
         "message": "Search cache cleared",
         "deleted_count": deleted_count
+    })))
+}
+
+async fn reindex_posts(
+    State(state): State<AppState>,
+    Json(payload): Json<ReindexRequest>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let search_backend = state
+        .search_backend
+        .clone()
+        .ok_or_else(|| AppError::Config("Elasticsearch backend disabled".into()))?;
+
+    let limit = payload.batch_size.clamp(1, 1_000);
+    let offset = payload.offset.max(0);
+
+    let posts = sqlx::query_as::<_, PostResult>(
+        r#"
+        SELECT id, user_id, caption, created_at
+        FROM posts
+        WHERE soft_delete IS NULL
+          AND status = 'published'
+        ORDER BY created_at DESC
+        LIMIT $1 OFFSET $2
+        "#,
+    )
+    .bind(limit)
+    .bind(offset)
+    .fetch_all(&state.db)
+    .await?;
+
+    for post in &posts {
+        let doc = PostDocument {
+            id: post.id,
+            user_id: post.user_id,
+            caption: post.caption.clone(),
+            created_at: post.created_at,
+        };
+        search_backend.index_post(&doc).await?;
+    }
+
+    Ok(Json(serde_json::json!({
+        "message": "Reindex completed",
+        "indexed_count": posts.len(),
+        "batch_size": limit,
+        "offset": offset,
     })))
 }
 
@@ -606,6 +740,7 @@ fn build_router() -> Router<AppState> {
         .route("/api/v1/search/hashtags", get(search_hashtags))
         // Cache management
         .route("/api/v1/search/clear-cache", post(clear_search_cache))
+        .route("/api/v1/search/posts/reindex", post(reindex_posts))
         // Search suggestions and trends
         .route("/api/v1/search/suggestions", get(get_search_suggestions))
         .route("/api/v1/search/trending", get(get_trending_searches))
@@ -671,7 +806,51 @@ async fn main() -> Result<(), AppError> {
     tracing::info!("Redis connection established");
 
     // Create application state
-    let state = AppState { db, redis };
+    let search_backend = match std::env::var("ELASTICSEARCH_URL") {
+        Ok(url) if !url.is_empty() => {
+            let index_name = std::env::var("ELASTICSEARCH_POST_INDEX")
+                .unwrap_or_else(|_| "nova_posts".to_string());
+            let message_index = std::env::var("ELASTICSEARCH_MESSAGE_INDEX")
+                .unwrap_or_else(|_| "nova_messages".to_string());
+            match ElasticsearchClient::new(&url, &index_name, &message_index).await {
+                Ok(client) => {
+                    tracing::info!(
+                        "Elasticsearch enabled: post_index={}, message_index={}",
+                        index_name,
+                        message_index
+                    );
+                    Some(Arc::new(client))
+                }
+                Err(err) => {
+                    tracing::warn!("Failed to initialize Elasticsearch client: {}", err);
+                    None
+                }
+            }
+        }
+        _ => {
+            tracing::info!(
+                "Elasticsearch URL not set. Falling back to PostgreSQL full-text search"
+            );
+            None
+        }
+    };
+
+    if let Some(search_backend_clone) = search_backend.clone() {
+        if let Some(kafka_config) = KafkaConsumerConfig::from_env() {
+            let ctx = EventContext::new(Some(search_backend_clone));
+            spawn_message_consumer(ctx, kafka_config);
+        } else {
+            tracing::info!("Kafka configuration missing; skipping message indexing consumer");
+        }
+    } else {
+        tracing::info!("Search backend disabled; Kafka consumer not started");
+    }
+
+    let state = AppState {
+        db,
+        redis,
+        search_backend,
+    };
 
     // Build router with state
     let app = build_router().with_state(state);

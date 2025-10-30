@@ -17,6 +17,15 @@ impl Default for PrivacyMode {
     }
 }
 
+impl PrivacyMode {
+    pub fn from_str(value: &str) -> Self {
+        match value {
+            "search_enabled" => PrivacyMode::SearchEnabled,
+            _ => PrivacyMode::StrictE2e,
+        }
+    }
+}
+
 pub struct ConversationDetails {
     pub id: Uuid,
     pub member_count: i32,
@@ -416,6 +425,7 @@ impl ConversationService {
             .ok_or_else(|| crate::error::AppError::Config("Conversation not found".into()))?;
 
         let kind: String = conv_row.get("kind");
+
         if kind != "group" {
             return Err(crate::error::AppError::Config(
                 "Only group conversations can be deleted".into(),
@@ -484,6 +494,10 @@ impl ConversationService {
             .ok_or_else(|| crate::error::AppError::Config("Conversation not found".into()))?;
 
         let kind: String = conv_row.get("kind");
+
+        if kind == "direct" && member_id != requester_id {
+            return Err(crate::error::AppError::Forbidden);
+        }
 
         // If removing someone else, need permission check
         if member_id != requester_id {
@@ -562,5 +576,21 @@ impl ConversationService {
             .ok_or_else(|| crate::error::AppError::Config("Conversation not found".into()))?;
 
         Ok(row.get("kind"))
+    }
+
+    pub async fn get_privacy_mode(
+        db: &Pool<Postgres>,
+        conversation_id: Uuid,
+    ) -> Result<PrivacyMode, crate::error::AppError> {
+        let value: Option<String> =
+            sqlx::query_scalar("SELECT privacy_mode::text FROM conversations WHERE id = $1")
+                .bind(conversation_id)
+                .fetch_optional(db)
+                .await
+                .map_err(|e| crate::error::AppError::StartServer(format!("get privacy: {e}")))?;
+
+        value
+            .map(|v| PrivacyMode::from_str(&v))
+            .ok_or(crate::error::AppError::NotFound)
     }
 }

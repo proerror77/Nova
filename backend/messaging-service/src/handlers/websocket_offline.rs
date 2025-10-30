@@ -8,9 +8,10 @@ use axum::{
 use uuid::Uuid;
 use futures_util::{SinkExt, StreamExt};
 use crate::{
-    state::AppState,
     middleware::guards::User,
+    redis_client::RedisClient,
     services::offline_queue::{self, ClientSyncState},
+    state::AppState,
 };
 
 /// WebSocket upgrade handler with offline message recovery
@@ -39,7 +40,7 @@ async fn handle_socket(
     socket: WebSocket,
     user_id: Uuid,
     conversation_id: Uuid,
-    redis: redis::Client,
+    redis: RedisClient,
     db: sqlx::PgPool,
     registry: crate::websocket::ConnectionRegistry,
 ) {
@@ -91,7 +92,7 @@ async fn handle_socket(
         for (msg_id, fields) in offline_messages.iter() {
             // 构造消息负载并发送
             if let Some(payload) = fields.get("payload") {
-                let msg = axum::extract::ws::Message::Text(payload.clone());
+                let msg = axum::extract::ws::Message::Text(payload.clone().into());
                 if sender.send(msg).await.is_err() {
                     tracing::warn!("failed to send offline message");
                     return;  // 客户端已断开

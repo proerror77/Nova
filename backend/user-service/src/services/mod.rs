@@ -1,53 +1,44 @@
-/// Service layer for authentication, email operations, S3 storage, and social features
-/// UNIFIED MODULE: Integrates streaming infrastructure with ML-based feed ranking
-///
-/// This module now combines three major feature sets:
-/// 1. Streaming Infrastructure: RTMP/HLS/DASH live streaming with transcoding
-/// 2. CDN & Video Processing: Edge caching, optimization, and video processing
-/// 3. ML Ranking System: Deep learning-based feed personalization and recommendations
-pub mod backup_codes;
+/// Service layer for social features and infrastructure
+/// Authentication and email services have been extracted to auth-service
+// pub mod backup_codes; // REMOVED - moved to auth-service (port 8084) [DELETED]
 pub mod cdc;
-pub mod cdn_failover;
-pub mod cdn_handler_integration;
-pub mod cdn_service;
-// pub mod clickhouse_feature_extractor;  // TODO: Phase 2 - needs RankingSignals with Serialize/Deserialize
-pub mod deep_learning_inference;
-pub mod email_verification;
+// pub mod cdn_failover; // REMOVED - moved to media-service (port 8082) [DELETED]
+// pub mod cdn_handler_integration; // REMOVED - moved to media-service (port 8082) [DELETED]
+// pub mod cdn_service; // REMOVED - moved to media-service (port 8082) [DELETED]
+// pub mod deep_learning_inference; // REMOVED - should be in ML service [DELETED]
+// pub mod email_service; // REMOVED - moved to auth-service (port 8084) [DELETED]
+// pub mod email_verification; // REMOVED - moved to auth-service (port 8084) [DELETED]
 pub mod events;
-pub mod experiments;
-pub mod feed_ranking;
-pub mod ffmpeg_optimizer;
-pub mod image_processing;
-pub mod job_queue;
-pub mod jwt_key_rotation;
-pub mod kafka_producer;
-// pub mod messaging; // REMOVED - moved to messaging-service (port 8085)
+// pub mod experiments; // REMOVED - moved to feed-service (port 8089) [DELETED]
+// pub mod ffmpeg_optimizer; // REMOVED - moved to media-service (port 8082) [DELETED]
 pub mod graph;
+// pub mod image_processing; // REMOVED - moved to media-service (port 8082) [DELETED]
+// pub mod job_queue; // REMOVED - moved to content-service (port 8081) [DELETED]
+// pub mod jwt_key_rotation; // REMOVED - moved to auth-service (port 8084) [DELETED]
+pub mod kafka_producer;
 pub mod moderation_service;
-pub mod notifications;
-pub mod oauth;
-pub mod origin_shield;
-pub mod password_reset_service;
+// pub mod notifications; // REMOVED - moved to notification-service (port 8090) [DELETED]
+// pub mod oauth; // REMOVED - moved to auth-service (port 8084) [DELETED]
+// pub mod origin_shield; // REMOVED - moved to media-service (port 8082) [DELETED]
+// pub mod password_reset_service; // REMOVED - moved to auth-service (port 8084) [DELETED]
 pub mod query_profiler;
-pub mod ranking_engine;
-pub mod recommendation_v2;
+// pub mod ranking_engine; // REMOVED - moved to feed-service (port 8089) [DELETED]
 pub mod redis_job;
-pub mod resumable_upload_service;
-pub mod s3_service;
-pub mod streaming;
-pub mod streaming_manifest;
+pub mod social_graph_sync;
+// pub mod resumable_upload_service; // REMOVED - moved to media-service (port 8082) [DELETED]
+// pub mod s3_service; // REMOVED - moved to media-service (port 8082) [DELETED]
+// pub mod stories; // REMOVED - moved to content-service (port 8081) [DELETED]
+// pub mod streaming; // REMOVED - moved to streaming-service (port 8088) [DELETED]
+// pub mod streaming_manifest; // REMOVED - moved to media-service (port 8082) [DELETED]
 pub mod token_revocation;
-pub mod transcoding_optimizer;
-pub mod transcoding_progress;
-pub mod transcoding_progress_handler;
-pub mod trending;
-pub mod two_fa;
-// pub mod video_processing_pipeline;     // TODO: Phase 2 - depends on VideoTranscodingService methods
-pub mod stories;
-pub mod video_job_queue;
-pub mod video_service;
-pub mod video_transcoding;
-pub mod webhooks;
+// pub mod transcoding_optimizer; // REMOVED - moved to media-service (port 8082) [DELETED]
+// pub mod transcoding_progress; // REMOVED - moved to media-service (port 8082) [DELETED]
+// pub mod transcoding_progress_handler; // REMOVED - moved to media-service (port 8082) [DELETED]
+// pub mod two_fa; // REMOVED - moved to auth-service (port 8084) [DELETED]
+// pub mod video_job_queue; // REMOVED - moved to media-service (port 8082) [DELETED]
+// pub mod video_service; // REMOVED - moved to media-service (port 8082) [DELETED]
+// pub mod video_transcoding; // REMOVED - moved to media-service (port 8082) [DELETED]
+// pub mod webhooks; // REMOVED - video webhook handling moved to media-service (port 8082) [DELETED]
 
 // ==================== SERVICE MODULES DOCUMENTATION ====================
 //
@@ -70,22 +61,29 @@ pub mod webhooks;
 // - video_processing_pipeline: Orchestrates entire video processing workflow (Phase 7)
 //
 // MACHINE LEARNING & RANKING:
-// - feed_ranking: Core feed ranking algorithm with ClickHouse integration, caching, and circuit breaker
-// - recommendation_v2: Hybrid recommendation engine v2 (collaborative filtering + content-based + AB testing)
+// - Recommendation engine moved to feed-service
+//
+// GRAPH & SOCIAL:
+// - graph: Neo4j integration for social graph (follows, suggestions, mutual connections)
+// - social_graph_sync: Kafka consumer for syncing social events (follow/unfollow) to Neo4j
 //
 // COMMON SERVICES:
-// - backup_codes: Two-factor authentication backup codes management
 // - cdc: Change Data Capture consumer (PostgreSQL → Kafka → ClickHouse sync)
-// - email_verification: Email verification token management with Redis
 // - events: Application events consumer (Kafka → ClickHouse for analytics)
-// - image_processing: Image resizing and variant generation (thumbnail, medium, original)
-// - job_queue: Background job queue for async image processing (MPSC channel-based)
-// - jwt_key_rotation: JWT signing key rotation for enhanced security
-// - kafka_producer: Kafka message producer for events and CDC
-// - oauth: OAuth2 authentication (Google, GitHub providers)
-// - password_reset_service: Password reset token management
+// - kafka_producer: Kafka message producer for events and CDC (now supports multiple topics)
 // - query_profiler: PostgreSQL query performance profiling
 // - redis_job: Background jobs for hot posts, suggestions, and feed cache warming
-// - s3_service: AWS S3 integration for image upload and storage
 // - token_revocation: JWT token blacklist management for logout
+//
+// REMOVED (moved to media-service):
+// - image_processing: Image resizing and variant generation (thumbnail, medium, original)
+// - origin_shield: Origin protection and intelligent caching layer
+// - s3_service: AWS S3 integration for image upload and storage
+//
+// REMOVED (moved to auth-service):
+// - backup_codes: Two-factor authentication backup codes management
+// - email_verification: Email verification token management with Redis
+// - jwt_key_rotation: JWT signing key rotation for enhanced security
+// - oauth: OAuth2 authentication (Google, GitHub providers)
+// - password_reset_service: Password reset token management
 // - two_fa: Two-factor authentication (TOTP) management
