@@ -161,19 +161,6 @@ impl From<validator::ValidationErrors> for AppError {
     }
 }
 
-// Convert lettre errors to AppError
-impl From<lettre::error::Error> for AppError {
-    fn from(error: lettre::error::Error) -> Self {
-        AppError::Email(error.to_string())
-    }
-}
-
-impl From<lettre::transport::smtp::Error> for AppError {
-    fn from(error: lettre::transport::smtp::Error) -> Self {
-        AppError::Email(error.to_string())
-    }
-}
-
 // Convert serde_json errors to AppError
 impl From<serde_json::Error> for AppError {
     fn from(error: serde_json::Error) -> Self {
