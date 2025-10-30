@@ -17,5 +17,4 @@ pub mod validators;
 pub use config::Config;
 pub use error::{AppError, Result};
 
-// Re-export for integration tests
-pub use services::image_processing;
+// image_processing re-export removed - moved to media-service (port 8082)
