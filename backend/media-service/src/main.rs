@@ -9,6 +9,7 @@ use media_service::handlers;
 use media_service::middleware;
 use media_service::services::ReelTranscodePipeline;
 use media_service::Config;
+use redis_utils::{RedisPool, SentinelConfig};
 use sqlx::postgres::PgPoolOptions;
 use std::io;
 use std::net::SocketAddr;
@@ -18,7 +19,6 @@ use tokio::sync::broadcast;
 use tokio::task::JoinSet;
 use tracing::info;
 use tracing_subscriber;
-use redis_utils::{RedisPool, SentinelConfig};
 
 async fn shutdown_signal() {
     #[cfg(unix)]
@@ -126,6 +126,10 @@ async fn main() -> io::Result<()> {
             .app_data(web::Data::new(reel_pipeline.clone()))
             .app_data(web::Data::new(media_cache_http.clone()))
             .wrap(actix_middleware::Logger::default())
+            .route(
+                "/metrics",
+                web::get().to(media_service::metrics::serve_metrics),
+            )
             .route(
                 "/api/v1/health",
                 web::get()

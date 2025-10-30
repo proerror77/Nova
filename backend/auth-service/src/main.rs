@@ -1,9 +1,11 @@
 /// Nova Auth Service - Main entry point
 /// Provides both gRPC and REST API for authentication
 
+mod metrics;
 mod routes;
 
 use axum::{
+    middleware,
     routing::{get, post},
     Router,
 };
@@ -101,7 +103,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Health check
         .route("/health", get(health_check))
         .route("/readiness", get(readiness_check))
+        .route("/metrics", get(metrics::metrics_handler))
 
+        .layer(middleware::from_fn(metrics::track_http_metrics))
         .layer(TraceLayer::new_for_http())
         .with_state(app_state.clone());
 

@@ -16,6 +16,8 @@ use std::sync::Arc;
 use std::time::Instant;
 use uuid::Uuid;
 
+use crate::metrics;
+
 // =====================================================================
 // JWT Authentication
 // =====================================================================
@@ -275,8 +277,26 @@ where
 
         Box::pin(async move {
             let res = service.call(req).await;
-            let elapsed = start.elapsed().as_millis();
-            tracing::debug!(%method, %path, %elapsed, "request completed");
+            let elapsed = start.elapsed();
+            match &res {
+                Ok(response) => {
+                    metrics::observe_http_request(
+                        &method,
+                        &path,
+                        response.status().as_u16(),
+                        elapsed,
+                    );
+                }
+                Err(_) => {
+                    metrics::observe_http_request(&method, &path, 500, elapsed);
+                }
+            }
+            tracing::debug!(
+                %method,
+                %path,
+                elapsed_ms = elapsed.as_millis(),
+                "request completed"
+            );
             res
         })
     }

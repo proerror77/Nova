@@ -1,7 +1,9 @@
 pub mod config;
 pub mod db;
 pub mod error;
+pub mod grpc_service;
 pub mod logging;
+pub mod metrics;
 pub mod middleware;
 pub mod migrations;
 pub mod models;
@@ -12,7 +14,6 @@ pub mod security;
 pub mod services;
 pub mod state;
 pub mod websocket;
-pub mod grpc_service;
 
 // gRPC service module - generated from protos
 pub mod grpc {

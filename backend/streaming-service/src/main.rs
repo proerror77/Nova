@@ -6,17 +6,18 @@
 //! - RTMP webhook integration
 //! - Stream discovery and analytics
 
-use actix_web::{web, App, HttpServer};
+use actix_web::{dev::Service, middleware as actix_middleware, web, App, HttpServer};
 use std::io;
 use std::sync::Arc;
+use std::time::Instant;
 use tokio::sync::Mutex;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use streaming_service::handlers::StreamHandlerState;
+use streaming_service::metrics;
 use streaming_service::services::{
-    EventProducer, RtmpWebhookHandler, StreamAnalyticsService,
-    StreamChatStore, StreamConnectionRegistry, StreamDiscoveryService,
-    StreamRepository, StreamService, ViewerCounter,
+    EventProducer, RtmpWebhookHandler, StreamAnalyticsService, StreamChatStore,
+    StreamDiscoveryService, StreamRepository, StreamService, ViewerCounter,
 };
 
 #[actix_web::main]
@@ -33,10 +34,10 @@ async fn main() -> io::Result<()> {
     tracing::info!("Starting streaming-service v{}", env!("CARGO_PKG_VERSION"));
 
     // Load configuration from environment
-    let database_url = std::env::var("DATABASE_URL")
-        .unwrap_or_else(|_| "postgres://localhost/nova".to_string());
-    let redis_url = std::env::var("REDIS_URL")
-        .unwrap_or_else(|_| "redis://localhost:6379".to_string());
+    let database_url =
+        std::env::var("DATABASE_URL").unwrap_or_else(|_| "postgres://localhost/nova".to_string());
+    let redis_url =
+        std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://localhost:6379".to_string());
     let port = std::env::var("PORT")
         .unwrap_or_else(|_| "8083".to_string())
         .parse::<u16>()
@@ -50,8 +51,8 @@ async fn main() -> io::Result<()> {
         .expect("Failed to create database pool");
 
     // Initialize Redis client and connection manager
-    let redis_client = redis::Client::open(redis_url.clone())
-        .expect("Failed to create Redis client");
+    let redis_client =
+        redis::Client::open(redis_url.clone()).expect("Failed to create Redis client");
     let redis_conn_mgr = redis::aio::ConnectionManager::new(redis_client.clone())
         .await
         .expect("Failed to create Redis connection manager");
@@ -99,8 +100,40 @@ async fn main() -> io::Result<()> {
     HttpServer::new(move || {
         App::new()
             .app_data(handler_state.clone())
+            .wrap(actix_middleware::Logger::default())
+            .wrap_fn(|req, srv| {
+                let method = req.method().to_string();
+                let path = req
+                    .match_pattern()
+                    .map(|p| p.to_string())
+                    .unwrap_or_else(|| req.path().to_string());
+                let start = Instant::now();
+
+                let fut = srv.call(req);
+                async move {
+                    match fut.await {
+                        Ok(res) => {
+                            metrics::observe_http_request(
+                                &method,
+                                &path,
+                                res.status().as_u16(),
+                                start.elapsed(),
+                            );
+                            Ok(res)
+                        }
+                        Err(err) => {
+                            metrics::observe_http_request(&method, &path, 500, start.elapsed());
+                            Err(err)
+                        }
+                    }
+                }
+            })
             .route("/health", web::get().to(|| async { "OK" }))
-            // TODO: Add route configuration when ready
+            .route(
+                "/metrics",
+                web::get().to(streaming_service::metrics::serve_metrics),
+            )
+        // TODO: Add route configuration when ready
     })
     .bind(format!("0.0.0.0:{}", port))?
     .run()

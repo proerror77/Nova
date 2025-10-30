@@ -4,7 +4,6 @@ use axum::{
     routing::{delete, get, post, put},
     Json, Router,
 };
-use serde_json::json;
 pub mod calls;
 use calls::{
     answer_call, end_call, get_call_history, get_participants, initiate_call, join_call,
@@ -116,23 +115,11 @@ async fn docs() -> axum::response::Html<&'static str> {
     )
 }
 
-// Metrics endpoint for monitoring (Prometheus-compatible format)
-async fn metrics() -> String {
-    // Basic metrics - can be extended with actual Prometheus instrumentation
-    json!({
-        "service": "messaging-service",
-        "version": "0.1.0",
-        "status": "healthy",
-        "timestamp": chrono::Utc::now().to_rfc3339(),
-    })
-    .to_string()
-}
-
 pub fn build_router() -> Router<AppState> {
     // Service introspection endpoints (no API version prefix)
     let introspection = Router::new()
         .route("/health", get(|| async { "OK" }))
-        .route("/metrics", get(metrics))
+        .route("/metrics", get(crate::metrics::metrics_handler))
         .route("/openapi.json", get(openapi_json))
         .route("/swagger-ui", get(swagger_ui))
         .route("/docs", get(docs));

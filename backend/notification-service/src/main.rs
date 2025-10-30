@@ -1,10 +1,11 @@
-use actix_web::{web, App, HttpServer, middleware};
+use actix_web::{middleware, web, App, HttpServer};
 use std::io;
 use std::sync::Arc;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use notification_service::{
     NotificationService,
     ConnectionManager,
+    metrics,
     handlers::{
         notifications::register_routes as register_notifications,
         devices::register_routes as register_devices,
@@ -73,7 +74,9 @@ async fn main() -> io::Result<()> {
             .app_data(web::Data::new(notification_service.clone()))
             .app_data(web::Data::new(connection_manager.clone()))
             .wrap(middleware::Logger::default())
+            .wrap(metrics::MetricsMiddleware)
             .route("/health", web::get().to(|| async { "OK" }))
+            .route("/metrics", web::get().to(notification_service::metrics::serve_metrics))
             .route("/", web::get().to(|| async { "Notification Service v1.0" }))
             .configure(|cfg| {
                 register_notifications(cfg);

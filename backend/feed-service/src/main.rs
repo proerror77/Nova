@@ -1,16 +1,18 @@
-use actix_web::{web, App, HttpServer};
+use actix_web::{dev::Service, web, App, HttpServer};
 use std::io;
 use std::sync::Arc;
+use std::time::Instant;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
+use rdkafka::config::ClientConfig;
+use rdkafka::consumer::{Consumer, StreamConsumer};
+use rdkafka::Message;
 use recommendation_service::config::Config;
 use recommendation_service::handlers::{
-    get_recommendations, get_model_info, rank_candidates, semantic_search, RecommendationHandlerState,
+    get_model_info, get_recommendations, rank_candidates, semantic_search,
+    RecommendationHandlerState,
 };
-use recommendation_service::services::{RecommendationServiceV2, RecommendationEventConsumer};
-use rdkafka::consumer::{Consumer, StreamConsumer};
-use rdkafka::config::ClientConfig;
-use rdkafka::Message;
+use recommendation_service::services::{RecommendationEventConsumer, RecommendationServiceV2};
 use serde_json::from_slice;
 use tracing::{error, info, warn};
 
@@ -126,21 +128,22 @@ async fn main() -> io::Result<()> {
         enable_ab_testing: config.recommendation.enable_ab_testing,
     };
 
-    let recommendation_svc = match RecommendationServiceV2::new(rec_config, db_pool.get_ref().clone()).await {
-        Ok(service) => {
-            tracing::info!("Recommendation service initialized successfully");
-            Arc::new(service)
-        }
-        Err(e) => {
-            tracing::error!("Failed to initialize recommendation service: {:?}", e);
-            // Continue without recommendation service (fallback to v1.0)
-            // For now, we'll still fail startup since this is critical
-            return Err(io::Error::new(
-                io::ErrorKind::Other,
-                format!("Failed to initialize recommendation service: {:?}", e),
-            ));
-        }
-    };
+    let recommendation_svc =
+        match RecommendationServiceV2::new(rec_config, db_pool.get_ref().clone()).await {
+            Ok(service) => {
+                tracing::info!("Recommendation service initialized successfully");
+                Arc::new(service)
+            }
+            Err(e) => {
+                tracing::error!("Failed to initialize recommendation service: {:?}", e);
+                // Continue without recommendation service (fallback to v1.0)
+                // For now, we'll still fail startup since this is critical
+                return Err(io::Error::new(
+                    io::ErrorKind::Other,
+                    format!("Failed to initialize recommendation service: {:?}", e),
+                ));
+            }
+        };
 
     let rec_handler_state = web::Data::new(RecommendationHandlerState {
         service: Arc::clone(&recommendation_svc),
@@ -164,6 +167,42 @@ async fn main() -> io::Result<()> {
             .app_data(db_pool.clone())
             .app_data(rec_handler_state.clone())
             .route("/health", web::get().to(|| async { "OK" }))
+            .route(
+                "/metrics",
+                web::get().to(recommendation_service::metrics::serve_metrics),
+            )
+            .wrap_fn(|req, srv| {
+                let method = req.method().to_string();
+                let path = req
+                    .match_pattern()
+                    .map(|p| p.to_string())
+                    .unwrap_or_else(|| req.path().to_string());
+                let start = Instant::now();
+
+                let fut = srv.call(req);
+                async move {
+                    match fut.await {
+                        Ok(res) => {
+                            recommendation_service::metrics::observe_http_request(
+                                &method,
+                                &path,
+                                res.status().as_u16(),
+                                start.elapsed(),
+                            );
+                            Ok(res)
+                        }
+                        Err(err) => {
+                            recommendation_service::metrics::observe_http_request(
+                                &method,
+                                &path,
+                                500,
+                                start.elapsed(),
+                            );
+                            Err(err)
+                        }
+                    }
+                }
+            })
             .service(get_recommendations)
             .service(get_model_info)
             .service(rank_candidates)
