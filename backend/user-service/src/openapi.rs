@@ -7,7 +7,7 @@ use utoipa::OpenApi;
     info(
         title = "Nova User Service API",
         version = "1.0.0",
-        description = "User authentication, profiles, relationships, feed, and trending content discovery. This service provides core user management functionality including registration, login, 2FA, password reset, profile management, social relationships (follow/unfollow), personalized feeds, and trending content discovery.",
+        description = "User profiles, relationships, and preferences management. This service provides core user account functionality including profile management, social relationships (follow/unfollow), user preferences, and relationship management. Authentication, feed generation, and trending content discovery have been moved to dedicated microservices.",
         contact(
             name = "Nova Team",
             email = "support@nova.app"
@@ -22,13 +22,13 @@ use utoipa::OpenApi;
     ),
     tags(
         (name = "health", description = "Service health and readiness checks"),
-        (name = "auth", description = "Authentication and authorization - registration, login, 2FA, JWT tokens"),
         (name = "users", description = "User profile and account management"),
-        (name = "preferences", description = "User feed preferences and privacy settings"),
+        (name = "preferences", description = "User preferences and privacy settings"),
         (name = "relationships", description = "Social graph - follow, unfollow, block users"),
-        (name = "feed", description = "Personalized content feed with ranking algorithms"),
-        (name = "trending", description = "Trending posts, videos, streams, and categories"),
     ),
+    // NOTE: Auth endpoints moved to auth-service (port 8084)
+    // NOTE: Feed endpoints moved to feed-service (port 8089)
+    // NOTE: Trending endpoints moved to feed-service (port 8089)
     modifiers(&SecurityAddon),
 )]
 pub struct ApiDoc;
@@ -44,7 +44,7 @@ impl utoipa::Modify for SecurityAddon {
                     HttpBuilder::new()
                         .scheme(HttpAuthScheme::Bearer)
                         .bearer_format("JWT")
-                        .description(Some("JWT Bearer token. Obtain from /api/v1/auth/login or /api/v1/auth/register"))
+                        .description(Some("JWT Bearer token. Obtain from auth-service (port 8084) via /api/v1/auth/login or /api/v1/auth/register"))
                         .build()
                 ),
             )

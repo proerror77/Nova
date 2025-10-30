@@ -9,7 +9,6 @@ use tokio::sync::Mutex;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use user_service::grpc::{ContentServiceClient, GrpcClientConfig, HealthChecker};
-use user_service::services::email_service::{EmailConfig, EmailService};
 use user_service::{
     config::Config,
     db::{ch_client::ClickHouseClient, create_pool, run_migrations},
@@ -18,7 +17,7 @@ use user_service::{
         block_user as preferences_block_user, unblock_user as preferences_unblock_user,
     },
     handlers::{
-        events::EventHandlerState, feed::FeedHandlerState, health::HealthCheckState,
+        events::EventHandlerState, health::HealthCheckState,
     },
     jobs::{
         self, run_jobs, suggested_users_generator::SuggestedUsersJob,
@@ -34,8 +33,6 @@ use user_service::{
         events::{EventDeduplicator, EventsConsumer, EventsConsumerConfig},
         graph::GraphService,
         kafka_producer::EventProducer,
-        oauth::jwks_cache::JWKSCache,
-        s3_service,
         social_graph_sync::SocialGraphSyncConsumer,
     },
 };
@@ -143,12 +140,6 @@ async fn main() -> io::Result<()> {
 
     tracing::info!("Redis connection established");
 
-    // ========================================
-    // Initialize JWKS cache for OAuth providers
-    // ========================================
-    let jwks_cache = Arc::new(JWKSCache::new(redis_client.clone()));
-    tracing::info!("JWKS cache initialized for OAuth providers (24-hour TTL)");
-
     // Initialize global rate limiter (100 requests per 15 minutes per IP/user)
     use user_service::middleware::rate_limit::RateLimitConfig;
     let rate_limit_config = RateLimitConfig {
@@ -235,9 +226,7 @@ async fn main() -> io::Result<()> {
             .expect("Failed to initialize content-service gRPC client"),
     );
 
-    let feed_state = web::Data::new(FeedHandlerState {
-        content_client: content_client.clone(),
-    });
+    // Feed state moved to feed-service (port 8089)
     let content_client_data = web::Data::new(content_client.clone());
     let health_checker_data = web::Data::new(health_checker.clone());
 
@@ -387,67 +376,8 @@ async fn main() -> io::Result<()> {
         }
     };
 
-    // ========================================
-    // Initialize S3 client with health check
-    // ========================================
-    // CRITICAL: S3 health check MUST succeed before startup
-    // Video upload/processing is 100% dependent on S3. No fallback available.
-    let s3_client = s3_service::get_s3_client(&config.s3)
-        .await
-        .expect("Failed to create S3 client");
-
-    // Perform S3 health check (bucket access, credentials validation)
-    match s3_service::health_check(&s3_client, &config.s3).await {
-        Ok(()) => {
-            tracing::info!("✅ S3 health check passed");
-        }
-        Err(e) => {
-            tracing::error!("❌ FATAL: S3 health check failed - {}", e);
-            tracing::error!("   Video upload functionality cannot work without S3");
-            tracing::error!("   Application will not start");
-            return Err(io::Error::new(
-                io::ErrorKind::ConnectionRefused,
-                format!("S3 initialization failed: {}", e),
-            ));
-        }
-    }
-
-    // ========================================
-    // Initialize Email Service
-    // ========================================
-    let email_config = EmailConfig::from_env();
-    let email_service = match &email_config {
-        Ok(cfg) => {
-            let svc = EmailService::new(cfg.clone());
-            if svc.is_configured() {
-                tracing::info!("✅ Email service initialized and configured");
-            } else {
-                tracing::warn!(
-                    "⚠️ Email service initialized but not configured (SMTP credentials missing)"
-                );
-                tracing::warn!("   Email verification and password reset will be skipped");
-                tracing::warn!("   Set SMTP_HOST, SMTP_PORT, SMTP_USERNAME, SMTP_PASSWORD environment variables");
-            }
-            svc
-        }
-        Err(e) => {
-            tracing::warn!("⚠️ Failed to initialize email service: {}", e);
-            tracing::warn!("   Email verification and password reset will be skipped");
-            // Create with defaults (not configured)
-            EmailService::new(EmailConfig::from_env().unwrap_or_else(|_| {
-                EmailConfig {
-                    smtp_host: "localhost".to_string(),
-                    smtp_port: 587,
-                    smtp_username: String::new(),
-                    smtp_password: String::new(),
-                    from_email: "noreply@nova.dev".to_string(),
-                    from_name: "Nova Team".to_string(),
-                    frontend_url: std::env::var("FRONTEND_URL")
-                        .unwrap_or_else(|_| "https://app.nova.dev".to_string()),
-                }
-            }))
-        }
-    };
+    // S3 client initialization removed - moved to media-service (port 8082)
+    // Use media-service API for image upload and storage operations
 
     // Clone config for server closure
     let server_config = config.clone();
@@ -499,16 +429,13 @@ async fn main() -> io::Result<()> {
     };
 
     // Create and run HTTP server
-    let email_service_data = web::Data::new(email_service);
     let server = HttpServer::new(move || {
-        let feed_state = feed_state.clone();
         let content_client_data = content_client_data.clone();
         let health_checker_data = health_checker_data.clone();
         let health_state = health_state.clone();
         let events_state = events_state.clone();
         let graph_data = graph_data.clone();
         let global_rate_limit = global_rate_limit.clone();
-        let email_service_data = email_service_data.clone();
         // Build CORS configuration from allowed_origins
         let cors_builder = Cors::default();
 
@@ -532,8 +459,7 @@ async fn main() -> io::Result<()> {
             .app_data(web::Data::new(db_pool.clone()))
             .app_data(web::Data::new(redis_manager.clone()))
             .app_data(web::Data::new(server_config.clone()))
-            .app_data(email_service_data.clone())
-            .app_data(feed_state.clone())
+            // Feed state moved to feed-service (port 8089)
             .app_data(content_client_data.clone())
             .app_data(health_state.clone())
             .app_data(health_checker_data.clone())
@@ -541,7 +467,6 @@ async fn main() -> io::Result<()> {
             .app_data(graph_data.clone())
             // posts_state, videos_state, likes_state, comments_state REMOVED - moved to content/media services
             .app_data(relationships_state.clone())
-            .app_data(web::Data::new(jwks_cache.clone()))
             // Circuit breakers for critical service protection
             .app_data(web::Data::new(clickhouse_circuit_breaker.clone()))
             .app_data(web::Data::new(kafka_circuit_breaker.clone()))
@@ -560,8 +485,6 @@ async fn main() -> io::Result<()> {
                         .body(metrics::gather_metrics())
                 }),
             )
-            // JWKS public key endpoint
-            .route("/.well-known/jwks.json", web::get().to(handlers::get_jwks))
             // OpenAPI JSON endpoint
             .route(
                 "/api/v1/openapi.json",
@@ -649,13 +572,8 @@ async fn main() -> io::Result<()> {
                     .route("/health", web::get().to(handlers::health_check))
                     .route("/health/ready", web::get().to(handlers::readiness_check))
                     .route("/health/live", web::get().to(handlers::liveness_check))
-                    .service(
-                        web::scope("/feed")
-                            .wrap(JwtAuthMiddleware)
-                            .app_data(feed_state.clone())
-                            .service(handlers::get_feed)
-                            .service(handlers::invalidate_feed_cache),
-                    )
+                    // Feed endpoints REMOVED - moved to feed-service (port 8089)
+                    // Use feed-service API for feed generation and caching
                     .service(
                         web::scope("/events")
                             .app_data(events_state.clone())
@@ -667,40 +585,8 @@ async fn main() -> io::Result<()> {
                     // Videos, reels, uploads endpoints REMOVED - moved to media-service (port 8082)
                     // Admin endpoints (protected)
                     // Admin endpoints - milvus init moved to media-service
-                    // Auth endpoints
-                    .service(
-                        web::scope("/auth")
-                            .route("/dev-verify", web::post().to(handlers::dev_verify_email))
-                            .route("/register", web::post().to(handlers::register))
-                            .route("/login", web::post().to(handlers::login))
-                            .route("/verify-email", web::post().to(handlers::verify_email))
-                            .route("/logout", web::post().to(handlers::logout))
-                            .route("/refresh", web::post().to(handlers::refresh_token))
-                            .route(
-                                "/forgot-password",
-                                web::post().to(handlers::forgot_password),
-                            )
-                            .route("/reset-password", web::post().to(handlers::reset_password))
-                            // 2FA endpoints
-                            .service(
-                                web::scope("/2fa")
-                                    .wrap(JwtAuthMiddleware)
-                                    .route("/enable", web::post().to(handlers::enable_2fa))
-                                    .route("/confirm", web::post().to(handlers::confirm_2fa)),
-                            )
-                            .route("/2fa/verify", web::post().to(handlers::verify_2fa))
-                            // OAuth endpoints
-                            .route("/oauth/authorize", web::post().to(handlers::authorize))
-                            .service(
-                                web::scope("/oauth")
-                                    .wrap(JwtAuthMiddleware)
-                                    .route("/link", web::post().to(handlers::link_provider))
-                                    .route(
-                                        "/link/{provider}",
-                                        web::delete().to(handlers::unlink_provider),
-                                    ),
-                            ),
-                    )
+                    // Auth endpoints REMOVED - moved to auth-service (port 8084)
+                    // Use auth-service API for registration, login, OAuth, and 2FA
                     // Authenticated user endpoints under /users/me (must be defined BEFORE /users/{id})
                     .service(
                         web::scope("/users/me")
@@ -708,8 +594,7 @@ async fn main() -> io::Result<()> {
                             .route("", web::get().to(handlers::get_current_user))
                             .route("", web::patch().to(handlers::update_profile))
                             .route("/public-key", web::put().to(handlers::upsert_my_public_key))
-                            .route("/preferences", web::get().to(handlers::get_feed_preferences))
-                            .route("/preferences", web::put().to(handlers::update_feed_preferences))
+                            // Feed preferences moved to feed-service (port 8089)
                             .route("/preferences/blocked-users/{id}", web::post().to(preferences_block_user))
                             .route("/preferences/blocked-users/{id}", web::delete().to(preferences_unblock_user))
                             // /bookmarks moved to content-service (port 8081)
@@ -743,13 +628,7 @@ async fn main() -> io::Result<()> {
                             .route("/{id}/following", web::get().to(handlers::get_following)),
                     )
                     // Posts and comments endpoints REMOVED - moved to content-service (port 8081)
-                    // Discover endpoints
-                    .service(
-                        web::scope("")
-                            .wrap(JwtAuthMiddleware)
-                            .app_data(graph_data.clone())
-                            .service(handlers::get_suggested_users),
-                    )
+                    // Discover endpoints REMOVED - moved to feed-service (port 8089)
                     // NOTE: Search endpoints moved to search-service:8086
                     // Use /api/v1/search/* routes via API Gateway (Nginx)
                     // NOTE: Trending endpoints moved to feed-service:8089
