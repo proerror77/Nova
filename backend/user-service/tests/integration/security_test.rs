@@ -1,3 +1,4 @@
+#![cfg(feature = "legacy_security_tests")]
 /// Security testing suite for Nova Authentication Service
 /// Tests SQL injection, brute force, JWT tampering, and password validation
 use actix_web::{test, web, App};

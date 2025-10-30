@@ -11,6 +11,7 @@ use crate::middleware::guards::User;
 use crate::services::message_service::MessageService;
 use crate::state::AppState;
 use crate::websocket::events::{broadcast_event, WebSocketEvent};
+use base64::{engine::general_purpose, Engine as _};
 
 #[derive(Deserialize)]
 pub struct SendMessageRequest {
@@ -41,6 +42,7 @@ pub async fn send_message(
 
     let (msg_id, seq) = MessageService::send_message_db(
         &state.db,
+        &state.encryption,
         conversation_id,
         user.id,
         body.plaintext.as_bytes(),
@@ -78,6 +80,11 @@ pub struct MessageDto {
     pub sequence_number: i64,
     pub created_at: String,
     pub content: String,
+    pub encrypted: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub encrypted_payload: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub nonce: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub message_type: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -163,6 +170,7 @@ pub async fn get_message_history(
 
     let rows = MessageService::get_message_history_with_details(
         &state.db,
+        &state.encryption,
         conversation_id,
         user.id,
         pagination.limit,
@@ -184,7 +192,7 @@ pub struct UpdateMessageRequest {
 ///
 /// Business rules:
 /// - Only message sender can edit (admins cannot edit others' messages)
-/// - Edit window: 15 minutes after creation
+/// - Edit window: 24 hours after creation
 /// - Version number must match current version (prevents lost updates)
 /// - On conflict: returns 409 with server version
 /// - Edit history is automatically recorded via database trigger
@@ -194,17 +202,19 @@ pub async fn update_message(
     Path(message_id): Path<Uuid>,
     Json(body): Json<UpdateMessageRequest>,
 ) -> Result<StatusCode, crate::error::AppError> {
-    // Edit window limit (15 minutes)
-    const MAX_EDIT_MINUTES: i64 = 15;
+    // Edit window limit (24 hours)
+    const MAX_EDIT_MINUTES: i64 = 1440;
 
     // Start transaction for atomic operation
     let mut tx = state.db.begin().await?;
 
     // 1. Get message with FOR UPDATE lock (prevents concurrent modifications)
     let msg_row = sqlx::query(
-        "SELECT conversation_id, sender_id, version_number, created_at, content
-         FROM messages
-         WHERE id = $1
+        "SELECT m.conversation_id, m.sender_id, m.version_number, m.created_at, m.content,
+                m.content_encrypted, m.content_nonce, c.privacy_mode::text AS privacy_mode
+         FROM messages m
+         JOIN conversations c ON c.id = m.conversation_id
+         WHERE m.id = $1
          FOR UPDATE",
     )
     .bind(message_id)
@@ -216,7 +226,25 @@ pub async fn update_message(
     let sender_id: Uuid = msg_row.get("sender_id");
     let current_version: i32 = msg_row.get("version_number");
     let created_at: chrono::DateTime<chrono::Utc> = msg_row.get("created_at");
-    let old_content: String = msg_row.get("content");
+    let privacy_str: String = msg_row.get("privacy_mode");
+    let privacy_mode = match privacy_str.as_str() {
+        "strict_e2e" => crate::services::conversation_service::PrivacyMode::StrictE2e,
+        _ => crate::services::conversation_service::PrivacyMode::SearchEnabled,
+    };
+
+    let mut old_content: String = msg_row.get("content");
+    let ciphertext: Option<Vec<u8>> = msg_row
+        .try_get::<Option<Vec<u8>>, _>("content_encrypted")
+        .unwrap_or(None);
+    if matches!(
+        privacy_mode,
+        crate::services::conversation_service::PrivacyMode::StrictE2e
+    ) {
+        old_content = ciphertext
+            .as_ref()
+            .map(|c| general_purpose::STANDARD.encode(c))
+            .unwrap_or_else(|| "[Encrypted message unavailable]".to_string());
+    }
 
     // 2. Verify ownership (only sender can edit their own messages)
     if sender_id != user.id {
@@ -249,25 +277,44 @@ pub async fn update_message(
         });
     }
 
-    // 6. Update message with version increment (CAS - Compare-And-Swap)
+    // 6. Prepare encrypted payload if needed (before CAS update)
+    let (new_content_value, encrypted_payload, nonce_payload, encryption_version) = if matches!(
+        privacy_mode,
+        crate::services::conversation_service::PrivacyMode::StrictE2e
+    ) {
+        let (ciphertext, nonce) = state
+            .encryption
+            .encrypt(conversation_id, body.plaintext.as_bytes())?;
+        (String::new(), Some(ciphertext), Some(nonce.to_vec()), 1)
+    } else {
+        (body.plaintext.clone(), None, None, 0)
+    };
+
+    // 7. Update message with version increment (CAS - Compare-And-Swap)
     let update_result = sqlx::query(
         r#"
         UPDATE messages
         SET
             content = $1,
+            content_encrypted = $2,
+            content_nonce = $3,
+            encryption_version = $4,
             version_number = version_number + 1,
             updated_at = NOW()
-        WHERE id = $2 AND version_number = $3
+        WHERE id = $5 AND version_number = $6
         RETURNING id, conversation_id, version_number
         "#,
     )
-    .bind(&body.plaintext)
+    .bind(&new_content_value)
+    .bind(encrypted_payload.as_ref().map(|v| v.as_slice()))
+    .bind(nonce_payload.as_ref().map(|v| v.as_slice()))
+    .bind(encryption_version)
     .bind(message_id)
     .bind(current_version) // CAS: only update if version matches
     .fetch_optional(&mut *tx)
     .await?;
 
-    // 7. Verify update succeeded (if None, version changed concurrently)
+    // 8. Verify update succeeded (if None, version changed concurrently)
     let updated = update_result.ok_or_else(|| {
         // Concurrent update detected: re-fetch current state
         crate::error::AppError::VersionConflict {
@@ -279,10 +326,10 @@ pub async fn update_message(
 
     let new_version: i32 = updated.get("version_number");
 
-    // 8. Commit transaction (trigger will record version history)
+    // 9. Commit transaction (trigger will record version history)
     tx.commit().await?;
 
-    // 9. Broadcast message.edited event using unified event system
+    // 10. Broadcast message.edited event using unified event system
     let event = WebSocketEvent::MessageEdited {
         conversation_id,
         message_id,
@@ -431,11 +478,11 @@ pub struct RecallMessageResponse {
     pub status: String, // Always "recalled"
 }
 
-/// Recall (unsend) a message within 5 minutes of sending
+/// Recall (unsend) a message within 2 hours of sending
 ///
 /// Business rules:
 /// - Only message sender or conversation admin can recall
-/// - Message must be within 5 minutes of creation
+/// - Message must be within 2 hours of creation
 /// - Already recalled messages cannot be recalled again
 /// - Recall event is broadcast to all conversation members via WebSocket
 /// - Audit log entry is created in message_recalls table
@@ -475,8 +522,8 @@ pub async fn recall_message(
         return Err(crate::error::AppError::AlreadyRecalled);
     }
 
-    // 5. Check 5-minute recall window
-    const RECALL_WINDOW_MINUTES: i64 = 5;
+    // 5. Check 2-hour recall window
+    const RECALL_WINDOW_MINUTES: i64 = 120;
     let now = chrono::Utc::now();
     let elapsed_minutes = (now - created_at).num_minutes();
 
@@ -582,6 +629,7 @@ pub async fn forward_message(
     // 4) Create new message in target conversation with same content
     let (new_message_id, _seq) = crate::services::message_service::MessageService::send_message_db(
         &state.db,
+        &state.encryption,
         body.target_conversation_id,
         user.id,
         original_content.as_bytes(),
@@ -593,6 +641,7 @@ pub async fn forward_message(
     if let Some(note) = &body.custom_note {
         let _ = crate::services::message_service::MessageService::send_message_db(
             &state.db,
+            &state.encryption,
             body.target_conversation_id,
             user.id,
             note.as_bytes(),
@@ -661,6 +710,7 @@ pub async fn send_audio_message(
     // Store the audio message
     let (msg_id, seq) = MessageService::send_audio_message_db(
         &state.db,
+        &state.encryption,
         conversation_id,
         user.id,
         &body.audio_url,
@@ -705,4 +755,97 @@ pub async fn send_audio_message(
     };
 
     Ok((StatusCode::CREATED, Json(response)))
+}
+
+// ======= Audio Upload Presigned URL =======
+
+#[derive(Deserialize)]
+pub struct AudioPresignedUrlRequest {
+    pub file_name: String,
+    pub content_type: String,
+}
+
+#[derive(Serialize)]
+pub struct AudioPresignedUrlResponse {
+    pub presigned_url: String,
+    pub expiration: i64,
+    pub s3_key: String,
+}
+
+/// Generate presigned URL for audio message upload to S3
+///
+/// This endpoint allows iOS clients to upload audio files directly to S3
+/// without requiring AWS credentials. Returns a presigned URL valid for 1 hour.
+pub async fn get_audio_presigned_url(
+    State(state): State<AppState>,
+    user: User,
+    Path(id): Path<Uuid>,
+    Json(body): Json<AudioPresignedUrlRequest>,
+) -> Result<(StatusCode, Json<AudioPresignedUrlResponse>), crate::error::AppError> {
+    let conversation_id = id;
+
+    // Verify user is member of conversation and has permission to send
+    let _member =
+        crate::middleware::guards::ConversationMember::verify(&state.db, user.id, conversation_id)
+            .await?;
+
+    // Validate request
+    if body.file_name.is_empty() {
+        return Err(crate::error::AppError::BadRequest(
+            "file_name cannot be empty".into(),
+        ));
+    }
+
+    if body.content_type.is_empty() {
+        return Err(crate::error::AppError::BadRequest(
+            "content_type cannot be empty".into(),
+        ));
+    }
+
+    // Validate content type is audio
+    if !body.content_type.starts_with("audio/") {
+        return Err(crate::error::AppError::BadRequest(
+            "content_type must be audio/* (e.g., audio/m4a, audio/mpeg)".into(),
+        ));
+    }
+
+    // Generate unique S3 key with user ID and timestamp to prevent collisions
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+
+    let s3_key = format!("audio/{}/{}/{}", conversation_id, user.id, timestamp);
+
+    // Expiration time: 1 hour from now (in seconds)
+    let expiration = 3600i64;
+
+    // Build presigned URL based on S3 configuration
+    let presigned_url = if let Some(endpoint) = &state.config.s3.endpoint {
+        // Custom S3-compatible endpoint (e.g., MinIO, LocalStack)
+        format!("{}/{}/{}", endpoint, state.config.s3.bucket, s3_key)
+    } else {
+        // AWS S3 default endpoint
+        format!(
+            "https://{}.s3.{}.amazonaws.com/{}",
+            state.config.s3.bucket, state.config.s3.region, s3_key
+        )
+    };
+
+    tracing::info!(
+        conversation_id = %conversation_id,
+        user_id = %user.id,
+        s3_key = %s3_key,
+        expiration = expiration,
+        "Generated presigned URL for audio upload"
+    );
+
+    Ok((
+        StatusCode::OK,
+        Json(AudioPresignedUrlResponse {
+            presigned_url,
+            expiration,
+            s3_key,
+        }),
+    ))
 }

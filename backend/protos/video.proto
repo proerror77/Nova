@@ -1,0 +1,141 @@
+syntax = "proto3";
+
+package nova.video.v1;
+
+option go_package = "github.com/novacorp/nova/backend/proto/video/v1";
+option java_multiple_files = true;
+option java_outer_classname = "VideoProto";
+
+// VideoService provides video processing and transcoding capabilities
+service VideoService {
+  // UploadVideo initiates a video upload
+  rpc UploadVideo(UploadVideoRequest) returns (UploadVideoResponse);
+
+  // GetVideoMetadata retrieves video metadata
+  rpc GetVideoMetadata(GetVideoMetadataRequest) returns (VideoMetadata);
+
+  // TranscodeVideo initiates video transcoding
+  rpc TranscodeVideo(TranscodeVideoRequest) returns (TranscodeVideoResponse);
+
+  // GetTranscodingProgress gets transcoding status
+  rpc GetTranscodingProgress(GetTranscodingProgressRequest)
+    returns (TranscodingProgress);
+
+  // ListVideos lists videos for a user
+  rpc ListVideos(ListVideosRequest) returns (ListVideosResponse);
+
+  // DeleteVideo deletes a video
+  rpc DeleteVideo(DeleteVideoRequest) returns (DeleteVideoResponse);
+}
+
+// UploadVideoRequest initiates video upload
+message UploadVideoRequest {
+  string user_id = 1;
+  string title = 2;
+  string description = 3;
+  string file_name = 4;
+  int64 file_size = 5;
+  string mime_type = 6;
+}
+
+// UploadVideoResponse contains upload session details
+message UploadVideoResponse {
+  string video_id = 1;
+  string upload_url = 2;  // Presigned S3 URL
+  string upload_session_id = 3;
+}
+
+// GetVideoMetadataRequest requests video metadata
+message GetVideoMetadataRequest {
+  string video_id = 1;
+}
+
+// VideoMetadata contains video information
+message VideoMetadata {
+  string id = 1;
+  string user_id = 2;
+  string title = 3;
+  string description = 4;
+  int32 duration = 5;  // In seconds
+  uint32 width = 6;
+  uint32 height = 7;
+  string mime_type = 8;
+  int64 created_at = 9;  // Unix timestamp
+  int64 updated_at = 10;
+  string thumbnail_url = 11;
+  string status = 12;  // "uploading", "processing", "ready", "failed"
+  VideoQuality quality = 13;
+}
+
+// VideoQuality represents available quality variants
+message VideoQuality {
+  string resolution = 1;  // "360p", "720p", "1080p", etc.
+  string url = 2;  // CDN URL
+  string bitrate = 3;  // e.g., "1500k", "2500k"
+}
+
+// TranscodeVideoRequest initiates transcoding
+message TranscodeVideoRequest {
+  string video_id = 1;
+  repeated string target_resolutions = 2;  // ["360p", "720p", "1080p"]
+  map<string, string> ffmpeg_options = 3;
+}
+
+// TranscodeVideoResponse contains transcoding job details
+message TranscodeVideoResponse {
+  string job_id = 1;
+  string video_id = 2;
+  string status = 3;  // "queued", "processing", "completed", "failed"
+}
+
+// GetTranscodingProgressRequest requests transcoding status
+message GetTranscodingProgressRequest {
+  string job_id = 1;
+}
+
+// TranscodingProgress represents transcoding status
+message TranscodingProgress {
+  string job_id = 1;
+  string status = 2;  // "queued", "processing", "completed", "failed"
+  int32 progress_percent = 3;  // 0-100
+  string current_resolution = 4;
+  string estimated_time_remaining = 5;  // ISO 8601 duration
+  string error_message = 6;
+}
+
+// ListVideosRequest requests list of videos
+message ListVideosRequest {
+  string user_id = 1;
+  uint32 limit = 2;
+  string cursor = 3;  // Pagination cursor
+  string sort_by = 4;  // "created", "updated", "popular"
+}
+
+// VideoSummary represents a video in list
+message VideoSummary {
+  string id = 1;
+  string title = 2;
+  string thumbnail_url = 3;
+  int32 duration = 4;
+  int64 created_at = 5;
+  string status = 6;
+}
+
+// ListVideosResponse contains paginated video list
+message ListVideosResponse {
+  repeated VideoSummary videos = 1;
+  string next_cursor = 2;
+  bool has_more = 3;
+}
+
+// DeleteVideoRequest deletes a video
+message DeleteVideoRequest {
+  string video_id = 1;
+  string user_id = 2;
+}
+
+// DeleteVideoResponse confirms deletion
+message DeleteVideoResponse {
+  string video_id = 1;
+  bool success = 2;
+}

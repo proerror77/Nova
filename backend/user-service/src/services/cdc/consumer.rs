@@ -12,6 +12,7 @@ use tracing::{debug, error, info, warn};
 
 use crate::db::ch_client::ClickHouseClient;
 use crate::error::{AppError, Result};
+use uuid::Uuid;
 
 use super::models::{CdcMessage, CdcOperation};
 use super::offset_manager::OffsetManager;
@@ -205,7 +206,7 @@ impl CdcConsumer {
 
     /// Process a single CDC message
     async fn process_message(&self, msg: &rdkafka::message::BorrowedMessage<'_>) -> Result<()> {
-        let topic = msg.topic();
+        let _topic = msg.topic();
         let payload = msg
             .payload()
             .ok_or_else(|| AppError::Validation("CDC message has no payload".to_string()))?;
@@ -283,8 +284,13 @@ impl CdcConsumer {
         .ok_or_else(|| AppError::Validation("CDC message missing data field".to_string()))?;
 
         // Extract fields from JSON
-        let id: i64 = Self::extract_field(data, "id")?;
-        let user_id: i64 = Self::extract_field(data, "user_id")?;
+        let id_raw: String = Self::extract_field(data, "id")?;
+        let user_id_raw: String = Self::extract_field(data, "user_id")?;
+        let post_id = Uuid::parse_str(&id_raw)
+            .map_err(|e| AppError::Validation(format!("Invalid post UUID '{}': {}", id_raw, e)))?;
+        let author_id = Uuid::parse_str(&user_id_raw).map_err(|e| {
+            AppError::Validation(format!("Invalid user UUID '{}': {}", user_id_raw, e))
+        })?;
         let content: String = Self::extract_field(data, "content")?;
         let media_url: Option<String> = Self::extract_optional_field(data, "media_url");
         let created_at: String = Self::extract_field(data, "created_at")?;
@@ -298,24 +304,24 @@ impl CdcConsumer {
                 id, user_id, content, media_url, created_at,
                 cdc_timestamp, is_deleted
             ) VALUES (
-                {}, {}, '{}', {}, '{}',
+                '{post_id}', '{author_id}', '{content}', {media}, parseDateTimeBestEffort('{created_at}'),
                 {}, {}
             )
             "#,
-            id,
-            user_id,
-            Self::escape_string(&content),
-            media_url
+            msg.payload.ts_ms,
+            if is_deleted { 1 } else { 0 },
+            post_id = post_id,
+            author_id = author_id,
+            content = Self::escape_string(&content),
+            media = media_url
                 .map(|u| format!("'{}'", Self::escape_string(&u)))
                 .unwrap_or_else(|| "NULL".to_string()),
-            created_at,
-            msg.payload.ts_ms,
-            if is_deleted { 1 } else { 0 }
+            created_at = Self::escape_string(&created_at)
         );
 
         self.ch_client.execute(&query).await?;
 
-        debug!("Inserted posts CDC: id={}, op={:?}", id, op);
+        debug!("Inserted posts CDC: id={}, op={:?}", post_id, op);
         Ok(())
     }
 
@@ -328,8 +334,14 @@ impl CdcConsumer {
         }
         .ok_or_else(|| AppError::Validation("CDC message missing data field".to_string()))?;
 
-        let follower_id: i64 = Self::extract_field(data, "follower_id")?;
-        let followee_id: i64 = Self::extract_field(data, "followee_id")?;
+        let follower_raw: String = Self::extract_field(data, "follower_id")?;
+        let followee_raw: String = Self::extract_field(data, "followee_id")?;
+        let follower_id = Uuid::parse_str(&follower_raw).map_err(|e| {
+            AppError::Validation(format!("Invalid follower UUID '{}': {}", follower_raw, e))
+        })?;
+        let followee_id = Uuid::parse_str(&followee_raw).map_err(|e| {
+            AppError::Validation(format!("Invalid followee UUID '{}': {}", followee_raw, e))
+        })?;
         let created_at: String = Self::extract_field(data, "created_at")?;
 
         let is_deleted = matches!(op, CdcOperation::Delete);
@@ -340,15 +352,15 @@ impl CdcConsumer {
                 follower_id, followee_id, created_at,
                 cdc_timestamp, is_deleted
             ) VALUES (
-                {}, {}, '{}',
-                {}, {}
+                '{follower}', '{followee}', parseDateTimeBestEffort('{created_at}'),
+                {ts}, {deleted}
             )
             "#,
-            follower_id,
-            followee_id,
-            created_at,
-            msg.payload.ts_ms,
-            if is_deleted { 1 } else { 0 }
+            follower = follower_id,
+            followee = followee_id,
+            created_at = Self::escape_string(&created_at),
+            ts = msg.payload.ts_ms,
+            deleted = if is_deleted { 1 } else { 0 }
         );
 
         self.ch_client.execute(&query).await?;
@@ -369,9 +381,18 @@ impl CdcConsumer {
         }
         .ok_or_else(|| AppError::Validation("CDC message missing data field".to_string()))?;
 
-        let id: i64 = Self::extract_field(data, "id")?;
-        let post_id: i64 = Self::extract_field(data, "post_id")?;
-        let user_id: i64 = Self::extract_field(data, "user_id")?;
+        let id_raw: String = Self::extract_field(data, "id")?;
+        let post_raw: String = Self::extract_field(data, "post_id")?;
+        let user_raw: String = Self::extract_field(data, "user_id")?;
+        let comment_id = Uuid::parse_str(&id_raw).map_err(|e| {
+            AppError::Validation(format!("Invalid comment UUID '{}': {}", id_raw, e))
+        })?;
+        let post_id = Uuid::parse_str(&post_raw).map_err(|e| {
+            AppError::Validation(format!("Invalid post UUID '{}': {}", post_raw, e))
+        })?;
+        let user_id = Uuid::parse_str(&user_raw).map_err(|e| {
+            AppError::Validation(format!("Invalid user UUID '{}': {}", user_raw, e))
+        })?;
         let content: String = Self::extract_field(data, "content")?;
         let created_at: String = Self::extract_field(data, "created_at")?;
 
@@ -383,24 +404,24 @@ impl CdcConsumer {
                 id, post_id, user_id, content, created_at,
                 cdc_timestamp, is_deleted
             ) VALUES (
-                {}, {}, {}, '{}', '{}',
-                {}, {}
+                '{comment}', '{post}', '{user}', '{content}', parseDateTimeBestEffort('{created_at}'),
+                {ts}, {deleted}
             )
             "#,
-            id,
-            post_id,
-            user_id,
-            Self::escape_string(&content),
-            created_at,
-            msg.payload.ts_ms,
-            if is_deleted { 1 } else { 0 }
+            comment = comment_id,
+            post = post_id,
+            user = user_id,
+            content = Self::escape_string(&content),
+            created_at = Self::escape_string(&created_at),
+            ts = msg.payload.ts_ms,
+            deleted = if is_deleted { 1 } else { 0 }
         );
 
         self.ch_client.execute(&query).await?;
 
         debug!(
             "Inserted comments CDC: id={}, post_id={}, op={:?}",
-            id, post_id, op
+            comment_id, post_id, op
         );
         Ok(())
     }
@@ -414,8 +435,14 @@ impl CdcConsumer {
         }
         .ok_or_else(|| AppError::Validation("CDC message missing data field".to_string()))?;
 
-        let user_id: i64 = Self::extract_field(data, "user_id")?;
-        let post_id: i64 = Self::extract_field(data, "post_id")?;
+        let user_raw: String = Self::extract_field(data, "user_id")?;
+        let post_raw: String = Self::extract_field(data, "post_id")?;
+        let user_id = Uuid::parse_str(&user_raw).map_err(|e| {
+            AppError::Validation(format!("Invalid like user UUID '{}': {}", user_raw, e))
+        })?;
+        let post_id = Uuid::parse_str(&post_raw).map_err(|e| {
+            AppError::Validation(format!("Invalid like post UUID '{}': {}", post_raw, e))
+        })?;
         let created_at: String = Self::extract_field(data, "created_at")?;
 
         let is_deleted = matches!(op, CdcOperation::Delete);
@@ -426,15 +453,15 @@ impl CdcConsumer {
                 user_id, post_id, created_at,
                 cdc_timestamp, is_deleted
             ) VALUES (
-                {}, {}, '{}',
-                {}, {}
+                '{user}', '{post}', parseDateTimeBestEffort('{created_at}'),
+                {ts}, {deleted}
             )
             "#,
-            user_id,
-            post_id,
-            created_at,
-            msg.payload.ts_ms,
-            if is_deleted { 1 } else { 0 }
+            user = user_id,
+            post = post_id,
+            created_at = Self::escape_string(&created_at),
+            ts = msg.payload.ts_ms,
+            deleted = if is_deleted { 1 } else { 0 }
         );
 
         self.ch_client.execute(&query).await?;

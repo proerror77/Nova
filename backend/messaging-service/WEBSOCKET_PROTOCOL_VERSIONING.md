@@ -540,7 +540,22 @@ pub struct WsInboundEvent {
 
 ---
 
-## 11. Version Documentation
+## 11. Strict E2E Payload Fields
+
+When a conversation is configured for `strict_e2e`, message-related events (`message.new`,
+`message.audio_sent`, etc.) include additional optional fields:
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `encrypted` | boolean | `true` when the payload is encrypted |
+| `encrypted_payload` | string (base64) | XSalsa20-Poly1305 ciphertext |
+| `nonce` | string (base64) | 24-byte nonce paired with the ciphertext |
+
+Clients should fall back to fetching the message via REST if these fields are absent.
+
+---
+
+## 12. Version Documentation
 
 Each release MUST include:
 
@@ -564,4 +579,3 @@ Each release MUST include:
 ---
 
 **Status**: ✅ Protocol versioning strategy defined and documented
-

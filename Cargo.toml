@@ -1,5 +1,17 @@
 [workspace]
-members = ["backend/user-service", "backend/auth-service"]
+members = [
+    "backend/user-service",
+    "backend/content-service",
+    "backend/feed-service",
+    "backend/media-service",
+    "backend/messaging-service",
+    "backend/search-service",
+    "backend/streaming-service",
+    "backend/libs/crypto-core",
+    "backend/libs/db-pool",
+    "backend/libs/error-handling",
+    "backend/libs/redis-utils"
+]
 resolver = "2"
 
 [workspace.package]
@@ -35,6 +47,7 @@ uuid = { version = "1.7", features = ["v4", "v5", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 dotenv = "0.15"
 envy = "0.4"
+hkdf = "0.12"
 
 # Logging
 tracing = "0.1"

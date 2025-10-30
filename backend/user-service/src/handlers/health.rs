@@ -1,7 +1,16 @@
 use actix_web::{web, HttpResponse, Responder};
+use chrono::Utc;
 use serde::Serialize;
 use sqlx::PgPool;
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use std::time::Instant;
+
+use crate::db::ch_client::ClickHouseClient;
+use crate::grpc::health::{HealthChecker, HealthStatus};
+use crate::services::kafka_producer::EventProducer;
+use crate::utils::redis_timeout::run_with_timeout;
 
 #[derive(Serialize)]
 struct HealthResponse {
@@ -34,22 +43,85 @@ struct ReadinessResponse {
     timestamp: String,
 }
 
+/// Aggregated state for health/readiness probes
+#[derive(Clone)]
+pub struct HealthCheckState {
+    pub db_pool: PgPool,
+    pub redis_client: redis::Client,
+    pub clickhouse_client: Option<Arc<ClickHouseClient>>,
+    pub kafka_producer: Option<Arc<EventProducer>>,
+    pub health_checker: Arc<HealthChecker>,
+    pub cdc_healthy: Arc<AtomicBool>,
+}
+
+impl HealthCheckState {
+    pub fn new(
+        db_pool: PgPool,
+        redis_client: redis::Client,
+        clickhouse_client: Option<Arc<ClickHouseClient>>,
+        kafka_producer: Option<Arc<EventProducer>>,
+        health_checker: Arc<HealthChecker>,
+        cdc_healthy: Arc<AtomicBool>,
+    ) -> Self {
+        Self {
+            db_pool,
+            redis_client,
+            clickhouse_client,
+            kafka_producer,
+            health_checker,
+            cdc_healthy,
+        }
+    }
+
+    async fn check_postgres(&self) -> Result<(), sqlx::Error> {
+        sqlx::query("SELECT 1")
+            .fetch_one(&self.db_pool)
+            .await
+            .map(|_| ())
+    }
+
+    async fn check_redis(&self) -> Result<(), redis::RedisError> {
+        let mut conn = self.redis_client.get_multiplexed_async_connection().await?;
+        let response: String = run_with_timeout(redis::cmd("PING").query_async(&mut conn)).await?;
+        if response == "PONG" {
+            Ok(())
+        } else {
+            Err(redis::RedisError::from((
+                redis::ErrorKind::ResponseError,
+                "unexpected PING response",
+            )))
+        }
+    }
+
+    async fn check_clickhouse(&self) -> Option<Result<(), String>> {
+        let client = self.clickhouse_client.clone()?;
+        Some(client.health_check().await.map_err(|e| e.to_string()))
+    }
+
+    async fn check_kafka(&self) -> Option<Result<(), String>> {
+        let producer = self.kafka_producer.clone()?;
+        Some(producer.health_check().await.map_err(|e| e.to_string()))
+    }
+}
+
 /// Basic health check (快速检查,仅检查数据库连接)
-pub async fn health_check(pool: web::Data<PgPool>) -> impl Responder {
-    let db_status = match sqlx::query("SELECT 1").fetch_one(pool.get_ref()).await {
+pub async fn health_check(state: web::Data<HealthCheckState>) -> impl Responder {
+    let database_status = match state.check_postgres().await {
         Ok(_) => "healthy",
-        Err(_) => "unhealthy",
+        Err(e) => {
+            tracing::error!("PostgreSQL health check failed: {}", e);
+            "unhealthy"
+        }
     };
 
     HttpResponse::Ok().json(HealthResponse {
-        status: if db_status == "healthy" {
-            "ok"
+        status: if database_status == "healthy" {
+            "ok".to_string()
         } else {
-            "degraded"
-        }
-        .to_string(),
+            "degraded".to_string()
+        },
         version: env!("CARGO_PKG_VERSION").to_string(),
-        database: db_status.to_string(),
+        database: database_status.to_string(),
     })
 }
 
@@ -64,69 +136,204 @@ pub async fn health_check(pool: web::Data<PgPool>) -> impl Responder {
 /// Returns:
 /// - 200 OK: All critical components healthy
 /// - 503 Service Unavailable: One or more critical components unhealthy
-pub async fn readiness_check(pool: web::Data<PgPool>) -> impl Responder {
+pub async fn readiness_check(state: web::Data<HealthCheckState>) -> impl Responder {
     let mut checks = HashMap::new();
     let mut overall_status = ComponentStatus::Healthy;
+    let mut ready = true;
+    let mut has_degraded = false;
 
     // 1. PostgreSQL check (critical)
-    let start = std::time::Instant::now();
-    let pg_check = match sqlx::query("SELECT 1").fetch_one(pool.get_ref()).await {
+    let start = Instant::now();
+    let pg_result = state.check_postgres().await;
+    let pg_latency = Some(start.elapsed().as_millis() as u64);
+    let postgres_check = match pg_result {
         Ok(_) => ComponentCheck {
             status: ComponentStatus::Healthy,
             message: "PostgreSQL connection successful".to_string(),
-            latency_ms: Some(start.elapsed().as_millis() as u64),
+            latency_ms: pg_latency,
         },
         Err(e) => {
+            ready = false;
             overall_status = ComponentStatus::Unhealthy;
             ComponentCheck {
                 status: ComponentStatus::Unhealthy,
                 message: format!("PostgreSQL connection failed: {}", e),
-                latency_ms: Some(start.elapsed().as_millis() as u64),
+                latency_ms: pg_latency,
             }
         }
     };
-    checks.insert("postgresql".to_string(), pg_check);
+    checks.insert("postgresql".to_string(), postgres_check);
 
     // 2. Redis check (critical for sessions)
-    // TODO: Add actual Redis connection check when RedisManager is available
-    // For now, mark as healthy by default
-    checks.insert(
-        "redis".to_string(),
-        ComponentCheck {
+    let start = Instant::now();
+    let redis_result = state.check_redis().await;
+    let redis_latency = Some(start.elapsed().as_millis() as u64);
+    let redis_check = match redis_result {
+        Ok(_) => ComponentCheck {
             status: ComponentStatus::Healthy,
-            message: "Redis check not implemented (assumed healthy)".to_string(),
+            message: "Redis ping successful".to_string(),
+            latency_ms: redis_latency,
+        },
+        Err(e) => {
+            ready = false;
+            overall_status = ComponentStatus::Unhealthy;
+            ComponentCheck {
+                status: ComponentStatus::Unhealthy,
+                message: format!("Redis ping failed: {}", e),
+                latency_ms: redis_latency,
+            }
+        }
+    };
+    checks.insert("redis".to_string(), redis_check);
+
+    // 3. Content-service gRPC health (critical for feed)
+    let content_health = state.health_checker.content_service_health().await;
+    let (content_status, content_message, content_ready) = match content_health.status {
+        HealthStatus::Healthy => (
+            ComponentStatus::Healthy,
+            "Content-service reachable".to_string(),
+            true,
+        ),
+        HealthStatus::Unavailable => {
+            has_degraded = true;
+            (
+                ComponentStatus::Degraded,
+                "Content-service reports transient failures".to_string(),
+                false,
+            )
+        }
+        HealthStatus::Unreachable => (
+            ComponentStatus::Unhealthy,
+            "Content-service unreachable (gRPC connection failed)".to_string(),
+            false,
+        ),
+    };
+
+    if !content_ready {
+        ready = false;
+        if matches!(content_status, ComponentStatus::Unhealthy) {
+            overall_status = ComponentStatus::Unhealthy;
+        } else {
+            has_degraded = true;
+        }
+    }
+
+    checks.insert(
+        "content_service".to_string(),
+        ComponentCheck {
+            status: content_status.clone(),
+            message: format!(
+                "{}; last_checked={:?}",
+                content_message, content_health.last_check
+            ),
             latency_ms: None,
         },
     );
 
-    // 3. ClickHouse check (optional, degrades gracefully)
-    // TODO: Add actual ClickHouse connection check when ClickHouseClient is available
-    checks.insert(
-        "clickhouse".to_string(),
-        ComponentCheck {
-            status: ComponentStatus::Healthy,
-            message: "ClickHouse check not implemented (assumed healthy)".to_string(),
-            latency_ms: None,
-        },
-    );
+    // 4. ClickHouse check (optional, degrades gracefully)
+    match state.check_clickhouse().await {
+        Some(Ok(())) => {
+            checks.insert(
+                "clickhouse".to_string(),
+                ComponentCheck {
+                    status: ComponentStatus::Healthy,
+                    message: "ClickHouse query successful".to_string(),
+                    latency_ms: None,
+                },
+            );
+        }
+        Some(Err(e)) => {
+            has_degraded = true;
+            checks.insert(
+                "clickhouse".to_string(),
+                ComponentCheck {
+                    status: ComponentStatus::Degraded,
+                    message: format!("ClickHouse health check failed: {}", e),
+                    latency_ms: None,
+                },
+            );
+        }
+        None => {
+            checks.insert(
+                "clickhouse".to_string(),
+                ComponentCheck {
+                    status: ComponentStatus::Healthy,
+                    message: "ClickHouse not configured for this deployment".to_string(),
+                    latency_ms: None,
+                },
+            );
+        }
+    }
 
-    // 4. Kafka check (optional for event streaming)
-    // TODO: Add actual Kafka broker check when KafkaProducer is available
-    checks.insert(
-        "kafka".to_string(),
-        ComponentCheck {
-            status: ComponentStatus::Healthy,
-            message: "Kafka check not implemented (assumed healthy)".to_string(),
-            latency_ms: None,
-        },
-    );
+    // 5. Kafka check (optional for event streaming)
+    match state.check_kafka().await {
+        Some(Ok(())) => {
+            checks.insert(
+                "kafka".to_string(),
+                ComponentCheck {
+                    status: ComponentStatus::Healthy,
+                    message: "Kafka metadata fetch successful".to_string(),
+                    latency_ms: None,
+                },
+            );
+        }
+        Some(Err(e)) => {
+            has_degraded = true;
+            checks.insert(
+                "kafka".to_string(),
+                ComponentCheck {
+                    status: ComponentStatus::Degraded,
+                    message: format!("Kafka metadata fetch failed: {}", e),
+                    latency_ms: None,
+                },
+            );
+        }
+        None => {
+            checks.insert(
+                "kafka".to_string(),
+                ComponentCheck {
+                    status: ComponentStatus::Healthy,
+                    message: "Kafka producer not configured for this deployment".to_string(),
+                    latency_ms: None,
+                },
+            );
+        }
+    }
 
-    let ready = matches!(overall_status, ComponentStatus::Healthy);
+    // 6. CDC replication check (critical for analytics consistency)
+    if state.cdc_healthy.load(Ordering::SeqCst) {
+        checks.insert(
+            "cdc_replication".to_string(),
+            ComponentCheck {
+                status: ComponentStatus::Healthy,
+                message: "CDC replication is healthy".to_string(),
+                latency_ms: None,
+            },
+        );
+    } else {
+        ready = false;
+        overall_status = ComponentStatus::Unhealthy;
+        checks.insert(
+            "cdc_replication".to_string(),
+            ComponentCheck {
+                status: ComponentStatus::Unhealthy,
+                message: "CDC replication halted due to unrecoverable error".to_string(),
+                latency_ms: None,
+            },
+        );
+    }
+
+    if ready && has_degraded {
+        overall_status = ComponentStatus::Degraded;
+    } else if !ready {
+        overall_status = ComponentStatus::Unhealthy;
+    }
+
     let response = ReadinessResponse {
         ready,
         status: overall_status,
         checks,
-        timestamp: chrono::Utc::now().to_rfc3339(),
+        timestamp: Utc::now().to_rfc3339(),
     };
 
     if ready {

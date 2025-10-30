@@ -13,7 +13,6 @@ use rdkafka::producer::{FutureProducer, FutureRecord};
 use rdkafka::ClientConfig;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, error, warn};
-use uuid::Uuid;
 
 /// DLQ 消息格式
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -185,6 +184,7 @@ pub fn create_dlq_message_from_error(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use uuid::Uuid;
 
     #[test]
     fn test_dlq_message_creation() {

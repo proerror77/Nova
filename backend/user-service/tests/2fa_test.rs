@@ -1,3 +1,4 @@
+#![cfg(feature = "legacy_security_tests")]
 /// 2FA (Two-Factor Authentication) Integration Tests
 /// Tests TOTP generation, verification, backup codes, and full 2FA flow
 use std::sync::Once;

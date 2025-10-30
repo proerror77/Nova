@@ -8,6 +8,7 @@ use axum::{
     http::StatusCode,
     Json,
 };
+use base64::{engine::general_purpose, Engine as _};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -27,6 +28,15 @@ pub struct GroupConversationResponse {
     pub avatar_url: Option<String>,
     pub member_count: i32,
     pub privacy_mode: String,
+}
+
+#[derive(Serialize)]
+pub struct ConversationKeyResponse {
+    pub conversation_id: Uuid,
+    pub key_base64: String,
+    pub key_version: i32,
+    pub cipher: &'static str,
+    pub nonce_size: usize,
 }
 
 #[derive(Deserialize)]
@@ -142,6 +152,38 @@ pub async fn create_group_conversation(
     Ok((StatusCode::CREATED, Json(response)))
 }
 
+/// GET /conversations/{id}/encryption-key
+/// Returns the symmetric conversation key for Strict E2E conversations.
+pub async fn get_conversation_key(
+    State(state): State<AppState>,
+    user: User,
+    Path(id): Path<Uuid>,
+) -> Result<Json<ConversationKeyResponse>, crate::error::AppError> {
+    let conversation_id = id;
+
+    crate::middleware::guards::ConversationMember::verify(&state.db, user.id, conversation_id)
+        .await?;
+
+    let privacy_mode = ConversationService::get_privacy_mode(&state.db, conversation_id).await?;
+
+    if !matches!(privacy_mode, PrivacyMode::StrictE2e) {
+        return Err(crate::error::AppError::BadRequest(
+            "Conversation does not use strict_e2e privacy mode".into(),
+        ));
+    }
+
+    let key = state.encryption.conversation_key(conversation_id);
+    let key_b64 = general_purpose::STANDARD.encode(key);
+
+    Ok(Json(ConversationKeyResponse {
+        conversation_id,
+        key_base64: key_b64,
+        key_version: 1,
+        cipher: "xsalsa20poly1305",
+        nonce_size: 24,
+    }))
+}
+
 /// Delete/dissolve a group conversation (owner only)
 /// DELETE /conversations/{id}
 pub async fn delete_group(
@@ -162,14 +204,17 @@ pub async fn delete_group(
     })
     .to_string();
 
-    state
-        .registry
-        .broadcast(
-            conversation_id,
-            axum::extract::ws::Message::Text(payload.clone()),
-        )
-        .await;
-    let _ = crate::websocket::pubsub::publish(&state.redis, conversation_id, &payload).await;
+    crate::websocket::events::broadcast_payload_str(
+        &state.registry,
+        &state.redis,
+        conversation_id,
+        payload,
+    )
+    .await
+    .map_err(|e| {
+        tracing::error!(error = %e, "failed to broadcast conversation event");
+        crate::error::AppError::Internal
+    })?;
 
     Ok(StatusCode::NO_CONTENT)
 }
@@ -200,14 +245,17 @@ pub async fn leave_group(
     })
     .to_string();
 
-    state
-        .registry
-        .broadcast(
-            conversation_id,
-            axum::extract::ws::Message::Text(payload.clone()),
-        )
-        .await;
-    let _ = crate::websocket::pubsub::publish(&state.redis, conversation_id, &payload).await;
+    crate::websocket::events::broadcast_payload_str(
+        &state.registry,
+        &state.redis,
+        conversation_id,
+        payload,
+    )
+    .await
+    .map_err(|e| {
+        tracing::error!(error = %e, "failed to broadcast conversation event");
+        crate::error::AppError::Internal
+    })?;
 
     Ok(StatusCode::NO_CONTENT)
 }
@@ -237,14 +285,17 @@ pub async fn mark_as_read(
     })
     .to_string();
 
-    state
-        .registry
-        .broadcast(
-            conversation_id,
-            axum::extract::ws::Message::Text(payload.clone()),
-        )
-        .await;
-    let _ = crate::websocket::pubsub::publish(&state.redis, conversation_id, &payload).await;
+    crate::websocket::events::broadcast_payload_str(
+        &state.registry,
+        &state.redis,
+        conversation_id,
+        payload,
+    )
+    .await
+    .map_err(|e| {
+        tracing::error!(error = %e, "failed to broadcast conversation event");
+        crate::error::AppError::Internal
+    })?;
 
     Ok(StatusCode::NO_CONTENT)
 }

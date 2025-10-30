@@ -7,6 +7,8 @@ use redis::aio::ConnectionManager;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use crate::utils::redis_timeout::run_with_timeout;
+
 const USER_CACHE_TTL: usize = 3600; // 1 hour
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -41,7 +43,12 @@ pub async fn get_cached_user(
 ) -> Result<Option<CachedUser>, redis::RedisError> {
     let key = format!("nova:cache:user:{}", user_id);
     let mut redis = redis.clone();
-    let cached: Option<String> = redis::cmd("GET").arg(&key).query_async(&mut redis).await?;
+    let cached: Option<String> = run_with_timeout(
+        redis::cmd("GET")
+            .arg(&key)
+            .query_async::<_, Option<String>>(&mut redis),
+    )
+    .await?;
 
     if let Some(json_str) = cached {
         if let Ok(user) = serde_json::from_str::<CachedUser>(&json_str) {
@@ -65,13 +72,15 @@ pub async fn set_cached_user(
     })?;
 
     let mut redis = redis.clone();
-    redis::cmd("SET")
-        .arg(&key)
-        .arg(&json)
-        .arg("EX")
-        .arg(USER_CACHE_TTL)
-        .query_async(&mut redis)
-        .await?;
+    run_with_timeout(
+        redis::cmd("SET")
+            .arg(&key)
+            .arg(&json)
+            .arg("EX")
+            .arg(USER_CACHE_TTL)
+            .query_async::<_, ()>(&mut redis),
+    )
+    .await?;
 
     Ok(())
 }
@@ -83,7 +92,7 @@ pub async fn invalidate_user_cache(
 ) -> Result<(), redis::RedisError> {
     let key = format!("nova:cache:user:{}", user_id);
     let mut redis = redis.clone();
-    redis::cmd("DEL").arg(&key).query_async(&mut redis).await?;
+    run_with_timeout(redis::cmd("DEL").arg(&key).query_async::<_, ()>(&mut redis)).await?;
 
     Ok(())
 }
@@ -99,13 +108,15 @@ pub async fn cache_search_results(
     let key = format!("nova:cache:search:users:{}:{}:{}", query, limit, offset);
 
     let mut redis = redis.clone();
-    redis::cmd("SET")
-        .arg(&key)
-        .arg(results)
-        .arg("EX")
-        .arg(1800) // 30 minutes TTL for search results
-        .query_async(&mut redis)
-        .await?;
+    run_with_timeout(
+        redis::cmd("SET")
+            .arg(&key)
+            .arg(results)
+            .arg("EX")
+            .arg(1800) // 30 minutes TTL for search results
+            .query_async::<_, ()>(&mut redis),
+    )
+    .await?;
 
     Ok(())
 }
@@ -119,7 +130,12 @@ pub async fn get_cached_search_results(
 ) -> Result<Option<String>, redis::RedisError> {
     let key = format!("nova:cache:search:users:{}:{}:{}", query, limit, offset);
     let mut redis = redis.clone();
-    let cached: Option<String> = redis::cmd("GET").arg(&key).query_async(&mut redis).await?;
+    let cached: Option<String> = run_with_timeout(
+        redis::cmd("GET")
+            .arg(&key)
+            .query_async::<_, Option<String>>(&mut redis),
+    )
+    .await?;
 
     Ok(cached)
 }
@@ -142,14 +158,16 @@ pub async fn invalidate_search_cache(
 
     loop {
         // SCAN with MATCH pattern and COUNT for batch size
-        let (next_cursor, batch_keys): (u64, Vec<String>) = redis::cmd("SCAN")
-            .arg(cursor)
-            .arg("MATCH")
-            .arg(&pattern)
-            .arg("COUNT")
-            .arg(100) // Process 100 keys at a time
-            .query_async(&mut redis)
-            .await?;
+        let (next_cursor, batch_keys): (u64, Vec<String>) = run_with_timeout(
+            redis::cmd("SCAN")
+                .arg(cursor)
+                .arg("MATCH")
+                .arg(&pattern)
+                .arg("COUNT")
+                .arg(100) // Process 100 keys at a time
+                .query_async::<_, (u64, Vec<String>)>(&mut redis),
+        )
+        .await?;
 
         all_keys.extend(batch_keys);
 
@@ -166,7 +184,12 @@ pub async fn invalidate_search_cache(
 
         // Delete in batches of 1000 to avoid protocol limits
         for chunk in all_keys.chunks(1000) {
-            redis::cmd("DEL").arg(chunk).query_async(&mut redis).await?;
+            run_with_timeout(
+                redis::cmd("DEL")
+                    .arg(chunk)
+                    .query_async::<_, ()>(&mut redis),
+            )
+            .await?;
         }
 
         tracing::info!(
