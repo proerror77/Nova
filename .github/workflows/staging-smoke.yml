@@ -1,0 +1,63 @@
+name: Staging Smoke Tests
+
+on:
+  workflow_dispatch:
+    inputs:
+      namespace:
+        description: "Kubernetes namespace to target"
+        required: false
+        default: "nova"
+  schedule:
+    - cron: "0 7 * * *" # daily smoke run at 07:00 UTC
+  workflow_run:
+    workflows: ["Deploy"]
+    types:
+      - completed
+
+permissions:
+  contents: read
+
+jobs:
+  smoke-test:
+    name: Run Staging Smoke Tests
+    runs-on: ubuntu-latest
+    if: >
+      (github.event_name != 'workflow_run') ||
+      (github.event.workflow_run.conclusion == 'success')
+    environment: staging
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Ensure kubeconfig secret is present
+        shell: bash
+        env:
+          KUBECONFIG_B64: ${{ secrets.STAGING_KUBE_CONFIG }}
+        run: |
+          if [[ -z "$KUBECONFIG_B64" ]]; then
+            echo "::error::STAGING_KUBE_CONFIG secret is not configured."
+            exit 1
+          fi
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: "latest"
+
+      - name: Configure kubeconfig
+        shell: bash
+        env:
+          KUBECONFIG_B64: ${{ secrets.STAGING_KUBE_CONFIG }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.kube
+          echo "$KUBECONFIG_B64" | base64 --decode > ~/.kube/config
+          chmod 600 ~/.kube/config
+
+      - name: Run staging smoke script
+        shell: bash
+        env:
+          NAMESPACE: ${{ github.event.inputs.namespace || 'nova' }}
+          CURL_IMAGE: ${{ vars.STAGING_CURL_IMAGE || 'curlimages/curl:8.10.1' }}
+        run: |
+          bash scripts/smoke-staging.sh

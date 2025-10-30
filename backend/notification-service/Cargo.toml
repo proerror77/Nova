@@ -36,6 +36,7 @@ async-trait.workspace = true
 reqwest.workspace = true
 prometheus.workspace = true
 jsonwebtoken.workspace = true
+once_cell = "1.19"
 
 # Notification-specific
 futures = "0.3"
