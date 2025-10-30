@@ -92,7 +92,7 @@ ndarray = "0.15"
 http = "0.2"
 
 # ONNX Model Serving
-tract-onnx = "0.21"
+tract-onnx = "0.22"
 once_cell = "1.19"
 
 # Swagger/OpenAPI

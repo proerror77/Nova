@@ -37,7 +37,7 @@ prometheus.workspace = true
 
 # Recommendation-specific
 ndarray = "0.15"
-tract-onnx = "0.21"
+tract-onnx = "0.22"
 once_cell = "1.19"
 neo4rs = "0.8"
 rdkafka.workspace = true
