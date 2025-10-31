@@ -9,6 +9,7 @@ RUN apt-get update && apt-get install -y \
     cmake \
     build-essential \
     protobuf-compiler \
+    librdkafka-dev \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
