@@ -21,6 +21,7 @@ jobs:
   detect-aws:
     name: Detect AWS Credentials
     runs-on: ubuntu-latest
+    continue-on-error: true
     outputs:
       has_aws: ${{ steps.set.outputs.has_aws }}
     steps:
@@ -76,6 +77,7 @@ jobs:
           fi
 
       - name: Configure AWS credentials
+        id: aws-creds
         if: ${{ env.AWS_ROLE_ARN != '' }}
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -83,7 +85,7 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Login to ECR
-        if: ${{ env.AWS_ROLE_ARN != '' }}
+        if: ${{ steps.aws-creds.outcome == 'success' }}
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
@@ -91,7 +93,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Build and push ${{ matrix.service }}
-        if: ${{ env.AWS_ROLE_ARN != '' }}
+        if: ${{ steps.aws-creds.outcome == 'success' }}
         uses: docker/build-push-action@v5
         with:
           context: ./backend
@@ -105,14 +107,14 @@ jobs:
           cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.REGISTRY_ALIAS }}/${{ matrix.service }}:buildcache,mode=max
 
       - name: Local build without push (no AWS credentials)
-        if: ${{ env.AWS_ROLE_ARN == '' }}
+        if: ${{ steps.aws-creds.outcome != 'success' }}
         run: |
           echo "⚠️  AWS credentials not available - building locally only"
           docker build -f ./backend/${{ matrix.service }}/Dockerfile ./backend -t ${{ matrix.service }}:local
           echo "✅ Local build complete for ${{ matrix.service }}"
 
       - name: Verify image pushed
-        if: ${{ env.AWS_ROLE_ARN != '' }}
+        if: ${{ steps.aws-creds.outcome == 'success' }}
         run: |
           echo "✅ ${{ matrix.service }} pushed successfully"
           aws ecr describe-images \
@@ -122,7 +124,7 @@ jobs:
             --output table || echo "Image verification pending..."
 
       - name: Local build verification
-        if: ${{ env.AWS_ROLE_ARN == '' }}
+        if: ${{ steps.aws-creds.outcome != 'success' }}
         run: |
           echo "✅ Local build completed for ${{ matrix.service }}"
           docker images | grep "${{ matrix.service }}" || echo "Image not in registry"
