@@ -5,7 +5,7 @@ on:
 
 jobs:
   diag:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - name: Print environment
         run: |
@@ -13,8 +13,3 @@ jobs:
           echo "Ref: $GITHUB_REF"
           echo "SHA: $GITHUB_SHA"
           echo "Actor: $GITHUB_ACTOR"
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: List repo
-        run: |
-          ls -la

@@ -20,7 +20,7 @@ env:
 jobs:
   build-and-push:
     name: Build Docker Images
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     permissions:
       contents: read
       id-token: write
@@ -141,7 +141,7 @@ jobs:
   update-deployment:
     name: Update Deployment Manifests
     needs: [build-and-push]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     permissions:
       contents: write
     if: ${{ needs.build-and-push.outputs.has_aws == 'true' }}
@@ -201,7 +201,7 @@ jobs:
   skip-deployment-notice:
     name: Skip Notice - AWS Credentials Not Configured
     needs: [build-and-push]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     if: ${{ always() && needs.build-and-push.outputs.has_aws != 'true' }}
     steps:
       - name: Print notice
@@ -218,7 +218,7 @@ jobs:
   deploy-to-staging:
     name: Trigger ArgoCD Sync
     needs: [build-and-push]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     if: ${{ needs.build-and-push.outputs.has_aws == 'true' }}
 
     steps:
@@ -286,7 +286,7 @@ jobs:
   smoke-test:
     name: Run Staging Smoke Tests
     needs: [build-and-push]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     if: ${{ needs.build-and-push.outputs.has_aws == 'true' }}
 
     steps:
@@ -322,7 +322,7 @@ jobs:
   notify-completion:
     name: Notify Staging Deployment
     needs: build-and-push
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     if: always()
 
     steps:
