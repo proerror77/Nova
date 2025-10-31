@@ -18,33 +18,14 @@ env:
   AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
 
 jobs:
-  detect-aws:
-    name: Detect AWS Credentials
-    runs-on: ubuntu-latest
-    continue-on-error: true
-    outputs:
-      has_aws: ${{ steps.set.outputs.has_aws }}
-    steps:
-      - id: set
-        name: Compute has_aws flag
-        shell: bash
-        env:
-          ROLE: ${{ secrets.AWS_ROLE_ARN }}
-        run: |
-          set +e
-          if [ -n "${ROLE}" ]; then
-            echo "has_aws=true" >> "$GITHUB_OUTPUT"
-            echo "✅ AWS credentials detected"
-          else
-            echo "has_aws=false" >> "$GITHUB_OUTPUT"
-            echo "⚠️  AWS credentials not configured"
-          fi
   build-and-push:
     name: Build Docker Images
     runs-on: ubuntu-latest
     permissions:
       contents: read
       id-token: write
+    outputs:
+      has_aws: ${{ steps.detect.outputs.has_aws }}
 
     strategy:
       matrix:
@@ -74,6 +55,15 @@ jobs:
             echo "Without it, ECR push will fail"
           else
             echo "✅ AWS_ROLE_ARN configured"
+          fi
+
+      - id: detect
+        name: Detect AWS availability
+        run: |
+          if [ -n "${{ secrets.AWS_ROLE_ARN }}" ]; then
+            echo "has_aws=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_aws=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Configure AWS credentials
@@ -148,11 +138,11 @@ jobs:
 
   update-deployment:
     name: Update Deployment Manifests
-    needs: [detect-aws, build-and-push]
+    needs: [build-and-push]
     runs-on: ubuntu-latest
     permissions:
       contents: write
-    if: ${{ needs.detect-aws.outputs.has_aws == 'true' }}
+    if: ${{ needs.build-and-push.outputs.has_aws == 'true' }}
 
     steps:
       - name: Checkout code
@@ -208,9 +198,9 @@ jobs:
 
   skip-deployment-notice:
     name: Skip Notice - AWS Credentials Not Configured
-    needs: [detect-aws, build-and-push]
+    needs: [build-and-push]
     runs-on: ubuntu-latest
-    if: ${{ needs.detect-aws.outputs.has_aws != 'true' }}
+    if: ${{ always() && needs.build-and-push.outputs.has_aws != 'true' }}
     steps:
       - name: Print notice
         run: |
@@ -225,9 +215,9 @@ jobs:
 
   deploy-to-staging:
     name: Trigger ArgoCD Sync
-    needs: [detect-aws, build-and-push]
+    needs: [build-and-push]
     runs-on: ubuntu-latest
-    if: ${{ needs.detect-aws.outputs.has_aws == 'true' }}
+    if: ${{ needs.build-and-push.outputs.has_aws == 'true' }}
 
     steps:
       - name: Checkout code
@@ -293,9 +283,9 @@ jobs:
 
   smoke-test:
     name: Run Staging Smoke Tests
-    needs: [detect-aws, build-and-push]
+    needs: [build-and-push]
     runs-on: ubuntu-latest
-    if: ${{ needs.detect-aws.outputs.has_aws == 'true' }}
+    if: ${{ needs.build-and-push.outputs.has_aws == 'true' }}
 
     steps:
       - name: Checkout code
