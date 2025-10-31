@@ -16,11 +16,11 @@ WORKDIR /app
 COPY Cargo.toml ./
 # Copy full backend workspace to satisfy workspace members
 COPY backend ./backend
-
-WORKDIR /app
+# Copy proto definitions from backend
+COPY backend/protos ./backend/protos
 
 # Build feed-service
-RUN cargo build --release --package feed-service
+RUN cargo build --release --bin feed-service
 
 FROM debian:bookworm-slim AS runtime
 
