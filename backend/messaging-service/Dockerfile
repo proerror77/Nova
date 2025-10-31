@@ -14,10 +14,10 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-# Copy workspace files
-COPY Cargo.toml Cargo.lock ./
-COPY messaging-service ./messaging-service
-COPY libs ./libs
+# Copy workspace files (build context is repo root)
+COPY backend/Cargo.toml backend/Cargo.lock ./
+COPY backend/messaging-service ./messaging-service
+COPY backend/libs ./libs
 
 # Build messaging-service
 RUN cargo build --release --package messaging-service

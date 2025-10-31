@@ -13,10 +13,10 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-# Copy workspace files
-COPY Cargo.toml Cargo.lock ./
-COPY user-service ./user-service
-COPY libs ./libs
+# Copy workspace files (build context is repo root)
+COPY backend/Cargo.toml backend/Cargo.lock ./
+COPY backend/user-service ./user-service
+COPY backend/libs ./libs
 
 # Build user-service
 RUN cargo build --release --package user-service
