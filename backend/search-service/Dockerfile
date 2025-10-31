@@ -13,16 +13,15 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 # Copy workspace files from repo root
-COPY Cargo.toml ./
+COPY Cargo.toml Cargo.lock ./
 # Copy full backend workspace to satisfy workspace members
 COPY backend ./backend
-# Copy proto definitions from backend
-COPY backend/protos ./backend/protos
 
 RUN cargo build --release -p search-service --bin search-service
 
 FROM debian:bookworm-slim AS runtime
-RUN apt-get update && apt-get install -y ca-certificates libssl3 librdkafka1 && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y ca-certificates libssl3 librdkafka1 && rm -rf /var/lib/apt/lists/* \
+    curl
 
 # Create non-root user and group
 RUN useradd -m -u 1001 -s /bin/bash appuser

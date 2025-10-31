@@ -3,6 +3,10 @@ name = "auth-service"
 version = "0.1.0"
 edition = "2021"
 
+[[bin]]
+name = "auth-service"
+path = "src/main.rs"
+
 [dependencies]
 # Web framework
 axum = { version = "0.8", features = ["macros"] }

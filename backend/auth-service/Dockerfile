@@ -15,11 +15,9 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 # Copy workspace files from repo root
-COPY Cargo.toml ./
+COPY Cargo.toml Cargo.lock ./
 # Copy full backend workspace to satisfy workspace members
 COPY backend ./backend
-# Copy proto definitions from backend
-COPY backend/protos ./backend/protos
 
 # Build auth-service
 RUN cargo build --release -p auth-service --bin auth-service
@@ -31,6 +29,7 @@ RUN apt-get update && apt-get install -y \
     ca-certificates \
     libssl3 \
     librdkafka1 \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user
