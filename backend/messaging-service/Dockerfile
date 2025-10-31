@@ -22,7 +22,7 @@ COPY backend ./backend
 COPY backend/protos ./backend/protos
 
 # Build messaging-service
-RUN cargo build --release --package messaging-service
+RUN cargo build --release --bin messaging-service
 
 # Runtime stage
 FROM debian:bookworm-slim AS runtime

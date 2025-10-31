@@ -21,7 +21,7 @@ COPY backend ./backend
 COPY backend/protos ./backend/protos
 
 # Build media-service
-RUN cargo build --release --package media-service
+RUN cargo build --release --bin media-service
 
 # Runtime stage
 FROM debian:bookworm-slim AS runtime
