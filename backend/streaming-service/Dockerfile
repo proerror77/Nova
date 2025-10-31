@@ -13,10 +13,10 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-# Copy workspace files
-COPY Cargo.toml Cargo.lock ./
-COPY streaming-service ./streaming-service
-COPY libs ./libs
+# Copy workspace files (build context is repo root)
+COPY backend/Cargo.toml backend/Cargo.lock ./
+COPY backend/streaming-service ./streaming-service
+COPY backend/libs ./libs
 
 # Build streaming-service
 RUN cargo build --release --package streaming-service
