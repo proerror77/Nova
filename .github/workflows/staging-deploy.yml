@@ -14,6 +14,8 @@ env:
   REGISTRY: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com
   REGISTRY_ALIAS: nova
   KUSTOMIZE_PATH: k8s/infrastructure/overlays/staging
+  # 將 Secret 映射為 env 以便在 if 條件中安全判斷存在性
+  AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
 
 jobs:
   build-and-push:
@@ -53,14 +55,14 @@ jobs:
           fi
 
       - name: Configure AWS credentials
-        if: secrets.AWS_ROLE_ARN != ''
+        if: ${{ env.AWS_ROLE_ARN != '' }}
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Login to ECR
-        if: secrets.AWS_ROLE_ARN != ''
+        if: ${{ env.AWS_ROLE_ARN != '' }}
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
@@ -68,7 +70,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Build and push ${{ matrix.service }}
-        if: secrets.AWS_ROLE_ARN != ''
+        if: ${{ env.AWS_ROLE_ARN != '' }}
         uses: docker/build-push-action@v5
         with:
           context: ./backend
@@ -82,14 +84,14 @@ jobs:
           cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.REGISTRY_ALIAS }}/${{ matrix.service }}:buildcache,mode=max
 
       - name: Local build without push (no AWS credentials)
-        if: secrets.AWS_ROLE_ARN == ''
+        if: ${{ env.AWS_ROLE_ARN == '' }}
         run: |
           echo "⚠️  AWS credentials not available - building locally only"
           docker build -f ./backend/${{ matrix.service }}/Dockerfile ./backend -t ${{ matrix.service }}:local
           echo "✅ Local build complete for ${{ matrix.service }}"
 
       - name: Verify image pushed
-        if: secrets.AWS_ROLE_ARN != ''
+        if: ${{ env.AWS_ROLE_ARN != '' }}
         run: |
           echo "✅ ${{ matrix.service }} pushed successfully"
           aws ecr describe-images \
@@ -99,7 +101,7 @@ jobs:
             --output table || echo "Image verification pending..."
 
       - name: Local build verification
-        if: secrets.AWS_ROLE_ARN == ''
+        if: ${{ env.AWS_ROLE_ARN == '' }}
         run: |
           echo "✅ Local build completed for ${{ matrix.service }}"
           docker images | grep "${{ matrix.service }}" || echo "Image not in registry"
@@ -110,7 +112,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-    if: ${{ secrets.AWS_ROLE_ARN != '' }}
+    if: ${{ env.AWS_ROLE_ARN != '' }}
 
     steps:
       - name: Checkout code
@@ -168,7 +170,7 @@ jobs:
     name: Skip Notice - AWS Credentials Not Configured
     needs: build-and-push
     runs-on: ubuntu-latest
-    if: ${{ secrets.AWS_ROLE_ARN == '' }}
+    if: ${{ env.AWS_ROLE_ARN == '' }}
     steps:
       - name: Print notice
         run: |
@@ -185,7 +187,7 @@ jobs:
     name: Trigger ArgoCD Sync
     needs: build-and-push
     runs-on: ubuntu-latest
-    if: ${{ secrets.AWS_ROLE_ARN != '' }}
+    if: ${{ env.AWS_ROLE_ARN != '' }}
 
     steps:
       - name: Checkout code
@@ -253,7 +255,7 @@ jobs:
     name: Run Staging Smoke Tests
     needs: build-and-push
     runs-on: ubuntu-latest
-    if: ${{ secrets.AWS_ROLE_ARN != '' }}
+    if: ${{ env.AWS_ROLE_ARN != '' }}
 
     steps:
       - name: Checkout code
@@ -304,7 +306,7 @@ jobs:
           echo "📊 Pipeline Summary:"
           echo "   Build Status: ${{ needs.build-and-push.result }}"
 
-          if [ -n "${{ secrets.AWS_ROLE_ARN }}" ]; then
+          if [ -n "${AWS_ROLE_ARN}" ]; then
             echo "   AWS Credentials: ✅ Configured"
             echo "   Update Status: (check workflow logs)"
             echo "   Deploy Status: (check workflow logs)"
