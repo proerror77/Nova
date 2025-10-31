@@ -22,7 +22,7 @@ COPY backend ./backend
 COPY backend/protos ./backend/protos
 
 # Build streaming-service
-RUN cargo build --release -p streaming-service
+RUN cargo build --release -p streaming-service --bin streaming-service
 
 # Runtime stage
 FROM debian:bookworm-slim AS runtime
