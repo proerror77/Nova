@@ -36,7 +36,7 @@ WORKDIR /app
 
 # Copy binary and migrations
 COPY --from=builder /app/target/release/streaming-service /app/streaming-service
-COPY --chown=appuser:appuser streaming-service/migrations /app/migrations
+COPY --chown=appuser:appuser backend/streaming-service/migrations /app/migrations
 
 # Adjust ownership
 RUN chown -R appuser:appuser /app
