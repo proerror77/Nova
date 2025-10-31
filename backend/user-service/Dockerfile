@@ -15,11 +15,9 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 # Copy workspace files from repo root
-COPY Cargo.toml ./
+COPY Cargo.toml Cargo.lock ./
 # Copy full backend workspace to satisfy workspace members
 COPY backend ./backend
-# Copy proto definitions from backend
-COPY backend/protos ./backend/protos
 
 # Build user-service
 RUN cargo build --release -p user-service --bin user-service

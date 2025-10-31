@@ -1,6 +1,75 @@
-# Keep docker context simple; exclude only obvious heavy/irrelevant dirs
-.git/
-.github/
-target/
+# Git and CI
+.git
+.github
+.gitignore
+
+# Build artifacts (local, not needed in Docker)
+**/target
+target
+**/debug
+**/doc
+**/*.d
+**/*.rlib
+
+# macOS
 .DS_Store
-node_modules/
+**/.DS_Store
+
+# Node (frontend)
+node_modules
+npm-debug.log
+yarn-error.log
+pnpm-debug.log
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+.cursor
+.windsurf
+
+# Environment files
+.env
+.env.local
+.env.*.local
+**/.env
+
+# Test outputs
+coverage
+*.profdata
+*.gcda
+*.gcno
+
+# Documentation (not needed for builds)
+docs/
+*.md
+!backend/*/README.md
+
+# iOS (frontend mobile)
+ios/
+*.xcodeproj
+*.xcworkspace
+
+# Frontend (not needed for backend builds)
+frontend/
+
+# Scripts and tools (not needed at runtime)
+scripts/
+tools/
+
+# Kubernetes manifests (not needed in container)
+k8s/
+
+# Temporary files
+*.log
+*.tmp
+*.bak
+*.swp
+*.swo
+*~
+
+# Keep these for Docker builds:
+# - Cargo.lock (reproducible builds)
+# - backend/ source code
+# - migrations
