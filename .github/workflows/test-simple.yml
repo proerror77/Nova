@@ -1,0 +1,13 @@
+name: Test Simple Workflow
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/test-simple.yml'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Hello from GitHub Actions"
