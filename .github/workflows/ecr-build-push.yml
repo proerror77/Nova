@@ -62,9 +62,7 @@ jobs:
           else
             TAG="${{ github.ref_name }}"
           fi
-
           TAG="$TAG-${{ github.sha }}"
-
           echo "tag=$TAG" >> $GITHUB_OUTPUT
           echo "image=${{ env.ECR_REGISTRY }}/${{ env.REGISTRY_ALIAS }}/${{ matrix.service }}:$TAG" >> $GITHUB_OUTPUT
           echo "image-latest=${{ env.ECR_REGISTRY }}/${{ env.REGISTRY_ALIAS }}/${{ matrix.service }}:latest" >> $GITHUB_OUTPUT
@@ -87,7 +85,7 @@ jobs:
       - name: Log build summary
         if: github.event_name != 'pull_request'
         run: |
-          echo " Built and pushed: ${{ matrix.service }}"
+          echo "Built and pushed: ${{ matrix.service }}"
           echo "Image: ${{ steps.meta.outputs.image }}"
 
   notify-completion:
@@ -108,17 +106,15 @@ jobs:
 
       - name: Verify all images in ECR
         run: |
-          echo "= Verifying all service images in ECR..."
+          echo "Verifying all service images in ECR..."
           for service in auth-service user-service content-service feed-service media-service messaging-service search-service streaming-service; do
             IMAGE="${{ env.ECR_REGISTRY }}/${{ env.REGISTRY_ALIAS }}/$service:${{ github.ref_name }}-${{ github.sha }}"
-
             if aws ecr describe-images --repository-name "${{ env.REGISTRY_ALIAS }}/$service" --region ${{ env.AWS_REGION }} --query "imageDetails[?contains(imageTags, '${{ github.ref_name }}-${{ github.sha }}')]" | grep -q "."; then
-              echo " $service: Image found in ECR"
+              echo "OK: $service image found in ECR"
             else
-              echo "  $service: Image not yet available"
+              echo "WARN: $service image not yet available"
             fi
           done
-
           echo ""
-          echo "<‰ All services built successfully!"
-          echo "Ready for deployment: \`${{ github.ref_name }}-${{ github.sha }}\`"
+          echo "All services built successfully!"
+          echo "Ready for deployment: ${{ github.ref_name }}-${{ github.sha }}"
