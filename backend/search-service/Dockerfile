@@ -10,11 +10,12 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
+# Build with workspace context
 COPY Cargo.toml ./
-COPY src ./src
-COPY migrations ./migrations
+COPY backend/search-service ./backend/search-service
+COPY backend/libs ./backend/libs
 
-RUN cargo build --release
+RUN cargo build --release --package search-service
 
 FROM debian:bookworm-slim AS runtime
 RUN apt-get update && apt-get install -y ca-certificates libssl3 && rm -rf /var/lib/apt/lists/*
@@ -24,7 +25,6 @@ RUN useradd -m -u 1001 -s /bin/bash appuser
 
 WORKDIR /app
 COPY --from=builder /app/target/release/search-service /app/search-service
-COPY migrations /app/migrations
 
 # Adjust ownership and drop privileges
 RUN chown -R appuser:appuser /app
