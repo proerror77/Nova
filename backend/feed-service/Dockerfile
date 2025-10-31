@@ -14,6 +14,7 @@ WORKDIR /app
 # Copy workspace files from repo root
 COPY Cargo.toml ./
 COPY backend/feed-service ./backend/feed-service
+COPY backend/protos ./backend/protos
 COPY backend/libs ./backend/libs
 
 WORKDIR /app

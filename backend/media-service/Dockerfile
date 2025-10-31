@@ -16,6 +16,7 @@ WORKDIR /app
 # Copy workspace files from repo root
 COPY Cargo.toml ./
 COPY backend/media-service ./backend/media-service
+COPY backend/protos ./backend/protos
 COPY backend/libs ./backend/libs
 
 # Build media-service
