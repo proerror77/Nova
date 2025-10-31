@@ -15,8 +15,8 @@ WORKDIR /app
 
 # Copy workspace files from repo root
 COPY Cargo.toml ./
-COPY backend/media-service ./media-service
-COPY backend/libs ./libs
+COPY backend/media-service ./backend/media-service
+COPY backend/libs ./backend/libs
 
 # Build media-service
 RUN cargo build --release --package media-service
@@ -36,7 +36,7 @@ WORKDIR /app
 
 # Copy binary and migrations
 COPY --from=builder /app/target/release/media-service /app/media-service
-COPY --chown=appuser:appuser backend/media-service/migrations /app/migrations
+COPY --from=builder --chown=appuser:appuser /app/backend/media-service/migrations /app/migrations
 
 # Adjust ownership
 RUN chown -R appuser:appuser /app

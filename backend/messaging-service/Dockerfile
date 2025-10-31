@@ -16,8 +16,8 @@ WORKDIR /app
 
 # Copy workspace files from repo root
 COPY Cargo.toml ./
-COPY backend/messaging-service ./messaging-service
-COPY backend/libs ./libs
+COPY backend/messaging-service ./backend/messaging-service
+COPY backend/libs ./backend/libs
 
 # Build messaging-service
 RUN cargo build --release --package messaging-service
@@ -38,7 +38,7 @@ WORKDIR /app
 
 # Copy binary and migrations
 COPY --from=builder /app/target/release/messaging-service /app/messaging-service
-COPY --chown=appuser:appuser backend/messaging-service/migrations /app/migrations
+COPY --from=builder --chown=appuser:appuser /app/backend/messaging-service/migrations /app/migrations
 
 # Adjust ownership
 RUN chown -R appuser:appuser /app

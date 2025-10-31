@@ -15,8 +15,8 @@ WORKDIR /app
 
 # Copy workspace files from repo root
 COPY Cargo.toml ./
-COPY backend/auth-service ./auth-service
-COPY backend/libs ./libs
+COPY backend/auth-service ./backend/auth-service
+COPY backend/libs ./backend/libs
 
 # Build auth-service
 RUN cargo build --release --package auth-service
@@ -36,7 +36,7 @@ WORKDIR /app
 
 # Copy binary and migrations
 COPY --from=builder /app/target/release/auth-service /app/auth-service
-COPY --chown=appuser:appuser backend/auth-service/migrations /app/migrations
+COPY --from=builder --chown=appuser:appuser /app/backend/auth-service/migrations /app/migrations
 
 # Adjust ownership
 RUN chown -R appuser:appuser /app

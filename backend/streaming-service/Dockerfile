@@ -15,8 +15,8 @@ WORKDIR /app
 
 # Copy workspace files from repo root
 COPY Cargo.toml ./
-COPY backend/streaming-service ./streaming-service
-COPY backend/libs ./libs
+COPY backend/streaming-service ./backend/streaming-service
+COPY backend/libs ./backend/libs
 
 # Build streaming-service
 RUN cargo build --release --package streaming-service
@@ -36,7 +36,7 @@ WORKDIR /app
 
 # Copy binary and migrations
 COPY --from=builder /app/target/release/streaming-service /app/streaming-service
-COPY --chown=appuser:appuser backend/streaming-service/migrations /app/migrations
+COPY --from=builder --chown=appuser:appuser /app/backend/streaming-service/migrations /app/migrations
 
 # Adjust ownership
 RUN chown -R appuser:appuser /app
