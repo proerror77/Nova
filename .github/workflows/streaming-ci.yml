@@ -1,15 +1,8 @@
 name: Streaming CI/CD Pipeline
 
 on:
-  push:
-    branches: [main, develop]
-    paths:
-      - 'backend/**'
-      - '.github/workflows/streaming-ci.yml'
-  pull_request:
-    branches: [main, develop]
-    paths:
-      - 'backend/**'
+  # 临时禁用 - GitHub Actions 运行器分配失败
+  workflow_dispatch:
 
 permissions:
   contents: read

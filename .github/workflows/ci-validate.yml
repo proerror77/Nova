@@ -1,9 +1,8 @@
 name: CI Validate
 
 on:
-  pull_request:
-  push:
-    branches: [ main, develop ]
+  # 临时禁用 - GitHub Actions 运行器分配失败
+  workflow_dispatch:
 
 jobs:
   validate:

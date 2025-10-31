@@ -1,11 +1,8 @@
 name: Build & Push Docker Images
 
 on:
-  push:
-    branches: [main, develop]
-    tags: ['v*']
-  pull_request:
-    branches: [main, develop]
+  # 临时禁用 - GitHub Actions 运行器分配失败
+  workflow_dispatch:
 
 permissions:
   contents: read

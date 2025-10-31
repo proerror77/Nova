@@ -1,13 +1,8 @@
 name: Security Scanning
 
 on:
-  push:
-    branches: [main, develop]
-  pull_request:
-    branches: [main, develop]
-  schedule:
-    # Run security audit daily at 00:00 UTC
-    - cron: '0 0 * * *'
+  # 临时禁用 - GitHub Actions 运行器分配失败
+  workflow_dispatch:
 
 permissions:
   contents: read

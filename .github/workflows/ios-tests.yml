@@ -1,15 +1,8 @@
 name: iOS Tests
 
 on:
-  push:
-    branches: [ main, develop, 'feature/**' ]
-    paths:
-      - 'frontend/ios/**'
-      - '.github/workflows/ios-tests.yml'
-  pull_request:
-    branches: [ main, develop ]
-    paths:
-      - 'frontend/ios/**'
+  # 临时禁用 - GitHub Actions 运行器分配失败
+  workflow_dispatch:
 
 permissions:
   contents: read
