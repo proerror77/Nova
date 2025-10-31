@@ -1,0 +1,57 @@
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.circleci/
+azure-pipelines.yml
+
+# Rust build artifacts
+target/
+*.rlib
+*.rmeta
+*.profraw
+*.profdata
+
+# Logs
+*.log
+logs/
+
+# Environment
+.env*
+!.env.example
+
+# Documentation
+*.md
+docs/
+
+# Test files
+tests/
+*.test
+test_*.rs
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
+*.tmp
+
+# Node (if any frontend tools)
+node_modules/
+*.lock
+!backend/Cargo.lock
+
+# Root level configs (keep for build)
+!Cargo.toml
+!Cargo.lock
+!sqlx-data.json
