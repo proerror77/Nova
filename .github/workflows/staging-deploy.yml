@@ -89,12 +89,7 @@ jobs:
       - name: Compute build context
         id: ctx
         run: |
-          svc="${{ matrix.service }}"
-          if [ "$svc" = "search-service" ]; then
-            echo "CONTEXT=./backend/search-service" >> $GITHUB_ENV
-          else
-            echo "CONTEXT=." >> $GITHUB_ENV
-          fi
+          echo "CONTEXT=." >> $GITHUB_ENV
           echo "Using context: ${CONTEXT}"
 
       - name: Build and push ${{ matrix.service }}
