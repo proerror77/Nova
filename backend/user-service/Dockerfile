@@ -36,7 +36,7 @@ WORKDIR /app
 
 # Copy binary and migrations
 COPY --from=builder /app/target/release/user-service /app/user-service
-COPY --chown=appuser:appuser user-service/migrations /app/migrations
+COPY --chown=appuser:appuser backend/user-service/migrations /app/migrations
 
 # Adjust ownership
 RUN chown -R appuser:appuser /app
