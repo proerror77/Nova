@@ -19,7 +19,7 @@ COPY backend ./backend
 # Copy proto definitions from backend
 COPY backend/protos ./backend/protos
 
-RUN cargo build --release -p search-service
+RUN cargo build --release -p search-service --bin search-service
 
 FROM debian:bookworm-slim AS runtime
 RUN apt-get update && apt-get install -y ca-certificates libssl3 && rm -rf /var/lib/apt/lists/*
