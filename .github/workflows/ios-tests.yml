@@ -95,7 +95,7 @@ jobs:
 
       - name: Upload Test Results
         if: always()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v5
         with:
           name: unit-test-results
           path: frontend/ios/NovaApp/TestResults/
@@ -141,7 +141,7 @@ jobs:
 
       - name: Upload Test Results
         if: always()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v5
         with:
           name: integration-test-results
           path: frontend/ios/NovaApp/TestResults/
@@ -194,7 +194,7 @@ jobs:
 
       - name: Upload Test Results
         if: always()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v5
         with:
           name: ui-test-results
           path: frontend/ios/NovaApp/TestResults/
@@ -202,7 +202,7 @@ jobs:
 
       - name: Upload Screenshots
         if: failure()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v5
         with:
           name: ui-test-screenshots
           path: |
@@ -338,7 +338,7 @@ jobs:
           echo "Performance results saved to performance.json"
 
       - name: Upload Performance Results
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v5
         with:
           name: performance-results
           path: frontend/ios/NovaApp/TestResults/
