@@ -16,7 +16,7 @@ COPY Cargo.toml ./
 COPY backend/search-service ./backend/search-service
 COPY backend/libs ./backend/libs
 
-RUN cargo build --release --package search-service
+RUN cargo build --release --bin search-service
 
 FROM debian:bookworm-slim AS runtime
 RUN apt-get update && apt-get install -y ca-certificates libssl3 && rm -rf /var/lib/apt/lists/*

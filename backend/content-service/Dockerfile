@@ -22,7 +22,7 @@ COPY backend ./backend
 COPY backend/protos ./backend/protos
 
 # Build content-service
-RUN cargo build --release --package content-service
+RUN cargo build --release --bin content-service
 
 # Runtime stage
 FROM debian:bookworm-slim AS runtime

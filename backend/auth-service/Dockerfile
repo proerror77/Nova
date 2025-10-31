@@ -20,7 +20,7 @@ COPY Cargo.toml ./
 COPY backend ./backend
 
 # Build auth-service
-RUN cargo build --release --package auth-service
+RUN cargo build --release --bin auth-service
 
 # Runtime stage
 FROM debian:bookworm-slim AS runtime

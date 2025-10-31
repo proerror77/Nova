@@ -20,7 +20,7 @@ COPY Cargo.toml ./
 COPY backend ./backend
 
 # Build user-service
-RUN cargo build --release --package user-service
+RUN cargo build --release --bin user-service
 
 # Runtime stage
 FROM debian:bookworm-slim AS runtime
