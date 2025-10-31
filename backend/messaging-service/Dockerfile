@@ -14,8 +14,8 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-# Copy workspace files (build context is repo root)
-COPY backend/Cargo.toml backend/Cargo.lock ./
+# Copy workspace files from repo root
+COPY Cargo.toml Cargo.lock ./
 COPY backend/messaging-service ./messaging-service
 COPY backend/libs ./libs
 
