@@ -22,7 +22,7 @@ COPY backend ./backend
 COPY backend/protos ./backend/protos
 
 # Build user-service
-RUN cargo build --release -p user-service
+RUN cargo build --release -p user-service --bin user-service
 
 # Runtime stage
 FROM debian:bookworm-slim AS runtime

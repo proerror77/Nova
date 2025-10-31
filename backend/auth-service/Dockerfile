@@ -22,7 +22,7 @@ COPY backend ./backend
 COPY backend/protos ./backend/protos
 
 # Build auth-service
-RUN cargo build --release -p auth-service
+RUN cargo build --release -p auth-service --bin auth-service
 
 # Runtime stage
 FROM debian:bookworm-slim AS runtime
