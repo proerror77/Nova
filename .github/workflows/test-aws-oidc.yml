@@ -16,7 +16,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Debug OIDC: fetch token and try STS manually
+      - name: Debug OIDC - fetch token and try STS manually
         shell: bash
         continue-on-error: true
         env:
