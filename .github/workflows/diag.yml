@@ -1,0 +1,20 @@
+name: Diagnostics
+
+on:
+  workflow_dispatch:
+
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Print environment
+        run: |
+          echo "Hello from diagnostics"
+          echo "Ref: $GITHUB_REF"
+          echo "SHA: $GITHUB_SHA"
+          echo "Actor: $GITHUB_ACTOR"
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: List repo
+        run: |
+          ls -la
