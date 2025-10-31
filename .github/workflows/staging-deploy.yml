@@ -93,7 +93,7 @@ jobs:
           if [ "$svc" = "search-service" ]; then
             echo "CONTEXT=./backend/search-service" >> $GITHUB_ENV
           else
-            echo "CONTEXT=./backend" >> $GITHUB_ENV
+            echo "CONTEXT=." >> $GITHUB_ENV
           fi
           echo "Using context: ${CONTEXT}"
 
