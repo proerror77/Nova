@@ -1,15 +1,8 @@
 name: Build & Push to AWS ECR
 
 on:
-  push:
-    branches: [main, develop, feature/backend-optimization]
-    paths:
-      - 'backend/**'
-      - '.github/workflows/ecr-build-push.yml'
-  pull_request:
-    branches: [main, develop]
-    paths:
-      - 'backend/**'
+  # 临时禁用 - GitHub Actions 运行器分配失败
+  workflow_dispatch:
 
 env:
   AWS_REGION: ap-northeast-1
