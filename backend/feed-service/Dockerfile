@@ -11,12 +11,12 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-# Copy workspace files from repo root context
-COPY backend/Cargo.toml backend/Cargo.lock ./
-COPY backend/feed-service ./feed-service
-COPY backend/libs ./libs
+# Copy workspace files from repo root
+COPY Cargo.toml ./
+COPY backend/feed-service ./backend/feed-service
+COPY backend/libs ./backend/libs
 
-WORKDIR /app/feed-service
+WORKDIR /app
 
 # Build feed-service
 RUN cargo build --release --package feed-service
@@ -34,7 +34,7 @@ RUN useradd -m -u 1001 -s /bin/bash appuser
 
 WORKDIR /app
 
-COPY --from=builder /app/feed-service/target/release/feed-service /app/feed-service
+COPY --from=builder /app/target/release/feed-service /app/feed-service
 
 # Adjust ownership and drop privileges
 RUN chown -R appuser:appuser /app
