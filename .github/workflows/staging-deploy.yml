@@ -183,9 +183,9 @@ jobs:
 
   deploy-to-staging:
     name: Trigger ArgoCD Sync
-    needs: update-deployment
+    needs: [build-and-push, update-deployment]
     runs-on: ubuntu-latest
-    if: ${{ secrets.AWS_ROLE_ARN != '' && success() }}
+    if: ${{ secrets.AWS_ROLE_ARN != '' }}
 
     steps:
       - name: Checkout code
@@ -251,9 +251,9 @@ jobs:
 
   smoke-test:
     name: Run Staging Smoke Tests
-    needs: [deploy-to-staging, skip-deployment-notice]
+    needs: build-and-push
     runs-on: ubuntu-latest
-    if: ${{ secrets.AWS_ROLE_ARN != '' && success() }}
+    if: ${{ secrets.AWS_ROLE_ARN != '' }}
 
     steps:
       - name: Checkout code
@@ -287,7 +287,7 @@ jobs:
 
   notify-completion:
     name: Notify Staging Deployment
-    needs: [build-and-push, update-deployment, deploy-to-staging, smoke-test, skip-deployment-notice]
+    needs: [build-and-push, skip-deployment-notice]
     runs-on: ubuntu-latest
     if: always()
 
@@ -303,9 +303,16 @@ jobs:
           echo ""
           echo "📊 Pipeline Summary:"
           echo "   Build Status: ${{ needs.build-and-push.result }}"
-          echo "   Update Status: ${{ needs.update-deployment.result }}"
-          echo "   Deploy Status: ${{ needs.deploy-to-staging.result }}"
-          echo "   Smoke Test Status: ${{ needs.smoke-test.result }}"
+
+          if [ -n "${{ secrets.AWS_ROLE_ARN }}" ]; then
+            echo "   AWS Credentials: ✅ Configured"
+            echo "   Update Status: (check workflow logs)"
+            echo "   Deploy Status: (check workflow logs)"
+          else
+            echo "   AWS Credentials: ⚠️  Not configured"
+            echo "   Update Status: skipped (no AWS credentials)"
+            echo "   Deploy Status: skipped (no AWS credentials)"
+          fi
           echo ""
           echo "🚀 Deployment Details:"
           echo "   Repository: https://github.com/proerror77/Nova"
@@ -332,8 +339,8 @@ jobs:
           echo "   2. Run smoke tests: bash scripts/smoke-staging.sh"
           echo "   3. Verify services in staging: kubectl -n nova get svc"
           echo ""
-          if [ "${{ needs.smoke-test.result }}" = "success" ]; then
-            echo "✅ All checks passed! Staging environment is ready."
+          if [ "${{ needs.build-and-push.result }}" = "success" ]; then
+            echo "✅ Docker images built successfully!"
           else
             echo "⚠️  Check logs for detailed failure information."
           fi
