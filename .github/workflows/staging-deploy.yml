@@ -42,13 +42,25 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Check AWS credentials
+        run: |
+          if [ -z "${{ secrets.AWS_ROLE_ARN }}" ]; then
+            echo "⚠️  AWS_ROLE_ARN not configured"
+            echo "Please set AWS_ROLE_ARN secret in GitHub Settings"
+            echo "Without it, ECR push will fail"
+          else
+            echo "✅ AWS_ROLE_ARN configured"
+          fi
+
       - name: Configure AWS credentials
+        if: secrets.AWS_ROLE_ARN != ''
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Login to ECR
+        if: secrets.AWS_ROLE_ARN != ''
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
@@ -56,6 +68,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Build and push ${{ matrix.service }}
+        if: secrets.AWS_ROLE_ARN != ''
         uses: docker/build-push-action@v5
         with:
           context: ./backend
@@ -68,7 +81,15 @@ jobs:
           cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.REGISTRY_ALIAS }}/${{ matrix.service }}:buildcache
           cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.REGISTRY_ALIAS }}/${{ matrix.service }}:buildcache,mode=max
 
+      - name: Local build without push (no AWS credentials)
+        if: secrets.AWS_ROLE_ARN == ''
+        run: |
+          echo "⚠️  AWS credentials not available - building locally only"
+          docker build -f ./backend/${{ matrix.service }}/Dockerfile ./backend -t ${{ matrix.service }}:local
+          echo "✅ Local build complete for ${{ matrix.service }}"
+
       - name: Verify image pushed
+        if: secrets.AWS_ROLE_ARN != ''
         run: |
           echo "✅ ${{ matrix.service }} pushed successfully"
           aws ecr describe-images \
@@ -77,12 +98,19 @@ jobs:
             --query 'imageDetails[-1].[imageTags,imageSizeInBytes]' \
             --output table || echo "Image verification pending..."
 
+      - name: Local build verification
+        if: secrets.AWS_ROLE_ARN == ''
+        run: |
+          echo "✅ Local build completed for ${{ matrix.service }}"
+          docker images | grep "${{ matrix.service }}" || echo "Image not in registry"
+
   update-deployment:
     name: Update Deployment Manifests
     needs: build-and-push
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    if: ${{ secrets.AWS_ROLE_ARN != '' }}
 
     steps:
       - name: Checkout code
@@ -136,11 +164,28 @@ jobs:
             echo "✅ Changes pushed to main"
           fi
 
+  skip-deployment-notice:
+    name: Skip Notice - AWS Credentials Not Configured
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    if: ${{ secrets.AWS_ROLE_ARN == '' }}
+    steps:
+      - name: Print notice
+        run: |
+          echo "⚠️  AWS_ROLE_ARN secret not configured"
+          echo "Skipping deployment steps"
+          echo ""
+          echo "To enable automatic staging deployment:"
+          echo "1. Go to GitHub Settings → Secrets and variables → Actions"
+          echo "2. Create secret AWS_ROLE_ARN with value: arn:aws:iam::025434362120:role/github-actions-role"
+          echo ""
+          echo "Docker images were built locally in this run"
+
   deploy-to-staging:
     name: Trigger ArgoCD Sync
     needs: update-deployment
     runs-on: ubuntu-latest
-    if: success()
+    if: ${{ secrets.AWS_ROLE_ARN != '' && success() }}
 
     steps:
       - name: Checkout code
@@ -206,9 +251,9 @@ jobs:
 
   smoke-test:
     name: Run Staging Smoke Tests
-    needs: deploy-to-staging
+    needs: [deploy-to-staging, skip-deployment-notice]
     runs-on: ubuntu-latest
-    if: success()
+    if: ${{ secrets.AWS_ROLE_ARN != '' && success() }}
 
     steps:
       - name: Checkout code
@@ -242,7 +287,7 @@ jobs:
 
   notify-completion:
     name: Notify Staging Deployment
-    needs: smoke-test
+    needs: [build-and-push, update-deployment, deploy-to-staging, smoke-test, skip-deployment-notice]
     runs-on: ubuntu-latest
     if: always()
 
