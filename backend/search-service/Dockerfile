@@ -6,15 +6,18 @@ RUN apt-get update && apt-get install -y \
     ca-certificates \
     cmake \
     build-essential \
+    protobuf-compiler \
     librdkafka-dev \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Build with workspace context
+# Copy workspace files from repo root
 COPY Cargo.toml ./
-COPY backend/search-service ./backend/search-service
-COPY backend/libs ./backend/libs
+# Copy full backend workspace to satisfy workspace members
+COPY backend ./backend
+# Copy proto definitions from backend
+COPY backend/protos ./backend/protos
 
 RUN cargo build --release --bin search-service
 

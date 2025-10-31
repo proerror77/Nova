@@ -18,6 +18,8 @@ WORKDIR /app
 COPY Cargo.toml ./
 # Copy full backend workspace to satisfy workspace members
 COPY backend ./backend
+# Copy proto definitions from backend
+COPY backend/protos ./backend/protos
 
 # Build auth-service
 RUN cargo build --release --bin auth-service
