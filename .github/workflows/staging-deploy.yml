@@ -108,8 +108,8 @@ jobs:
           tags: |
             ${{ env.REGISTRY }}/${{ env.REGISTRY_ALIAS }}/${{ matrix.service }}:${{ github.sha }}
             ${{ env.REGISTRY }}/${{ env.REGISTRY_ALIAS }}/${{ matrix.service }}:latest
-          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.REGISTRY_ALIAS }}/${{ matrix.service }}:buildcache
-          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.REGISTRY_ALIAS }}/${{ matrix.service }}:buildcache,mode=max
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - name: Local build without push (no AWS credentials)
         if: ${{ steps.aws-creds.outcome != 'success' }}
