@@ -15,8 +15,8 @@ WORKDIR /app
 
 # Copy workspace files from repo root
 COPY Cargo.toml ./
-COPY backend/user-service ./user-service
-COPY backend/libs ./libs
+COPY backend/user-service ./backend/user-service
+COPY backend/libs ./backend/libs
 
 # Build user-service
 RUN cargo build --release --package user-service
