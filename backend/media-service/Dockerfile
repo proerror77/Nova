@@ -9,6 +9,7 @@ RUN apt-get update && apt-get install -y \
     cmake \
     build-essential \
     protobuf-compiler \
+    librdkafka-dev \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -21,7 +22,7 @@ COPY backend ./backend
 COPY backend/protos ./backend/protos
 
 # Build media-service
-RUN cargo build --release -p media-service --bin media-service
+RUN cargo build --release --bin media-service
 
 # Runtime stage
 FROM debian:bookworm-slim AS runtime
@@ -29,6 +30,7 @@ FROM debian:bookworm-slim AS runtime
 RUN apt-get update && apt-get install -y \
     ca-certificates \
     libssl3 \
+    librdkafka1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user

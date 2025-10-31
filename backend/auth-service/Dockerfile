@@ -22,7 +22,7 @@ COPY backend ./backend
 COPY backend/protos ./backend/protos
 
 # Build auth-service
-RUN cargo build --release -p auth-service --bin auth-service
+RUN cargo build --release --bin auth-service
 
 # Runtime stage
 FROM debian:bookworm-slim AS runtime
@@ -30,6 +30,7 @@ FROM debian:bookworm-slim AS runtime
 RUN apt-get update && apt-get install -y \
     ca-certificates \
     libssl3 \
+    librdkafka1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user

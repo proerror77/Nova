@@ -20,7 +20,7 @@ COPY backend ./backend
 COPY backend/protos ./backend/protos
 
 # Build feed-service
-RUN cargo build --release -p feed-service --bin feed-service
+RUN cargo build --release --bin feed-service
 
 FROM debian:bookworm-slim AS runtime
 
