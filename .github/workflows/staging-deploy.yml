@@ -76,6 +76,7 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
           audience: sts.amazonaws.com
           role-session-name: gha-staging-${{ github.run_id }}
+          role-skip-session-tagging: true
 
       - name: Login to ECR
         if: ${{ steps.aws-creds.outcome == 'success' }}
