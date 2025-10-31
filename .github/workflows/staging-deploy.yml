@@ -30,6 +30,7 @@ jobs:
         env:
           ROLE: ${{ secrets.AWS_ROLE_ARN }}
         run: |
+          set +e
           if [ -n "${ROLE}" ]; then
             echo "has_aws=true" >> "$GITHUB_OUTPUT"
             echo "✅ AWS credentials detected"
