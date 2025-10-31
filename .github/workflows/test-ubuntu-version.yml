@@ -1,10 +1,8 @@
 name: Test Ubuntu Version
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/test-ubuntu-version.yml'
+  # 临时禁用 - GitHub Actions 运行器分配失败
+  workflow_dispatch:
 
 jobs:
   test-ubuntu-24:
