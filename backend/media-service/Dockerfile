@@ -17,6 +17,8 @@ WORKDIR /app
 COPY Cargo.toml ./
 # Copy full backend workspace to satisfy workspace members
 COPY backend ./backend
+# Copy proto definitions
+COPY protos ./protos
 
 # Build media-service
 RUN cargo build --release --package media-service
