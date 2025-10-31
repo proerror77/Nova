@@ -57,6 +57,7 @@ jobs:
           - search-service
           - streaming-service
       max-parallel: 2
+      fail-fast: false
 
     steps:
       - name: Checkout code
