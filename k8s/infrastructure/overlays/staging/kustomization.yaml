@@ -31,28 +31,28 @@ patchesStrategicMerge:
 images:
 - name: nova/auth-service
   newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/auth-service
-  newTag: 3938e2c69c02d057dc47437a165ffd4fe99b4c33
+  newTag: f5e055f582830d1551287dbe8f43739af667a4aa
 - name: nova/content-service
   newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/content-service
-  newTag: 3938e2c69c02d057dc47437a165ffd4fe99b4c33
+  newTag: f5e055f582830d1551287dbe8f43739af667a4aa
 - name: nova/feed-service
   newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/feed-service
-  newTag: 3938e2c69c02d057dc47437a165ffd4fe99b4c33
+  newTag: f5e055f582830d1551287dbe8f43739af667a4aa
 - name: nova/media-service
   newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/media-service
-  newTag: 3938e2c69c02d057dc47437a165ffd4fe99b4c33
+  newTag: f5e055f582830d1551287dbe8f43739af667a4aa
 - name: nova/messaging-service
   newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/messaging-service
-  newTag: 3938e2c69c02d057dc47437a165ffd4fe99b4c33
+  newTag: f5e055f582830d1551287dbe8f43739af667a4aa
 - name: nova/search-service
   newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/search-service
-  newTag: 3938e2c69c02d057dc47437a165ffd4fe99b4c33
+  newTag: f5e055f582830d1551287dbe8f43739af667a4aa
 - name: nova/streaming-service
   newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/streaming-service
-  newTag: 3938e2c69c02d057dc47437a165ffd4fe99b4c33
+  newTag: f5e055f582830d1551287dbe8f43739af667a4aa
 - name: nova/user-service
   newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/user-service
-  newTag: 3938e2c69c02d057dc47437a165ffd4fe99b4c33
+  newTag: f5e055f582830d1551287dbe8f43739af667a4aa
 
 # 副本数配置 (降低至 1 以适应资源限制)
 replicas:
