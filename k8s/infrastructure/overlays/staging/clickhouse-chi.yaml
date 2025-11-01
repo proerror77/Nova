@@ -5,6 +5,20 @@ metadata:
   namespace: clickhouse
 spec:
   configuration:
+    files:
+      users.d/nova.xml: |
+        <yandex>
+          <users>
+            <nova>
+              <password_sha256_hex>f6884edbbb3e10794ba1321c07aaf231f174550a71bfb541a1c149c0f61fbbea</password_sha256_hex>
+              <networks>
+                <ip>0.0.0.0/0</ip>
+              </networks>
+              <profile>default</profile>
+              <quota>default</quota>
+            </nova>
+          </users>
+        </yandex>
     clusters:
       - name: single
         layout:
