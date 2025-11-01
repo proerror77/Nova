@@ -13,13 +13,11 @@ spec:
         templates:
           podTemplate: ch-pod
     users:
-      nova:
-        password_sha256_hex: "f6884edbbb3e10794ba1321c07aaf231f174550a71bfb541a1c149c0f61fbbea"
-        networks:
-          ip:
-            - 0.0.0.0/0
-        profile: default
-        quota: default
+      nova/password_sha256_hex: "f6884edbbb3e10794ba1321c07aaf231f174550a71bfb541a1c149c0f61fbbea"
+      nova/networks/ip:
+        - 0.0.0.0/0
+      nova/profile: default
+      nova/quota: default
   templates:
     podTemplates:
       - name: ch-pod
