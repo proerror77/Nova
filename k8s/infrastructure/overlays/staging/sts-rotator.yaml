@@ -1,0 +1,83 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: sts-rotator
+  namespace: nova
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: sts-rotator-role
+  namespace: nova
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["nova-s3-credentials"]
+    verbs: ["get", "update", "patch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "update", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: sts-rotator-rb
+  namespace: nova
+subjects:
+  - kind: ServiceAccount
+    name: sts-rotator
+    namespace: nova
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: sts-rotator-role
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: sts-rotate-patch
+  namespace: nova
+spec:
+  schedule: "0 */4 * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: sts-rotator
+          restartPolicy: OnFailure
+          containers:
+            - name: rotator
+              image: alpine:3.20
+              imagePullPolicy: IfNotPresent
+              command: ["sh","-lc"]
+              args:
+                - |
+                  set -euo pipefail
+                  apk add --no-cache curl jq aws-cli >/dev/null
+                  CREDS=$(aws sts get-session-token --duration-seconds 43200)
+                  AKID=$(echo "$CREDS" | jq -r .Credentials.AccessKeyId)
+                  SECK=$(echo "$CREDS" | jq -r .Credentials.SecretAccessKey)
+                  STOK=$(echo "$CREDS" | jq -r .Credentials.SessionToken)
+                  B64_AKID=$(printf %s "$AKID" | base64 -w0)
+                  B64_SECK=$(printf %s "$SECK" | base64 -w0)
+                  B64_STOK=$(printf %s "$STOK" | base64 -w0)
+                  PATCH=$(cat <<JSON
+                  {"data":{"AWS_ACCESS_KEY_ID":"$B64_AKID","AWS_SECRET_ACCESS_KEY":"$B64_SECK","AWS_SESSION_TOKEN":"$B64_STOK"}}
+                  JSON
+                  )
+                  TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
+                  CACERT=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+                  API=https://kubernetes.default.svc
+                  ns=nova
+                  # Patch secret
+                  curl -sS -X PATCH "$API/api/v1/namespaces/$ns/secrets/nova-s3-credentials" \
+                    -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/merge-patch+json' \
+                    --cacert "$CACERT" -d "$PATCH" >/dev/null
+                  # Trigger rollout restarts
+                  ts=$(date -Iseconds)
+                  RPATCH=$(printf '{"spec":{"template":{"metadata":{"annotations":{"kubectl.kubernetes.io/restartedAt":"%s"}}}}}' "$ts")
+                  for d in user-service content-service media-service messaging-service streaming-service; do
+                    curl -sS -X PATCH "$API/apis/apps/v1/namespaces/$ns/deployments/$d" \
+                      -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/merge-patch+json' \
+                      --cacert "$CACERT" -d "$RPATCH" >/dev/null || true
+                  done

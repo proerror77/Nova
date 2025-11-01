@@ -16,6 +16,7 @@ patchesStrategicMerge:
 - elasticsearch-replicas-patch.yaml
 - s3-env-patch.yaml
 - hpa-min1-patch.yaml
+ - sts-rotator.yaml
 
 images:
 - name: nova/auth-service
