@@ -29,3 +29,8 @@ spec:
             secretKeyRef:
               name: nova-s3-credentials
               key: AWS_REGION
+        - name: AWS_SESSION_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: nova-s3-credentials
+              key: AWS_SESSION_TOKEN
