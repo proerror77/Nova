@@ -51,12 +51,7 @@ images:
 - name: nova/streaming-service
   newTag: latest
 
-# ConfigMap 生成器
-configMapGenerator:
-- name: nova-config
-  literals:
-  - APP_ENV=production
-  - LOG_LEVEL=info
+# ConfigMap 已在 configmap.yaml 中定义,不使用生成器避免冲突
 
 # Secret 生成器 (最好用于开发环境)
 # secretGenerator:

@@ -8,15 +8,15 @@ namespace: nova
 patchesStrategicMerge:
 - deployment-patch.yaml
 
-# 环境变量覆盖
-configMapGenerator:
-- behavior: merge
-  literals:
-  - APP_ENV=staging
-  - LOG_LEVEL=info
-  - RUST_LOG=info,actix_web=info
-  - FEATURE_FLAG_BETA=true
-  name: nova-config
+# 环境变量覆盖 (不使用 generator,改用 patch 方式)
+# configMapGenerator:
+# - behavior: merge
+#   literals:
+#   - APP_ENV=staging
+#   - LOG_LEVEL=info
+#   - RUST_LOG=info,actix_web=info
+#   - FEATURE_FLAG_BETA=true
+#   name: nova-config
 
 # 镜像标签配置（通过 CI/CD 动态更新）
 images:
