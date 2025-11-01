@@ -7,6 +7,9 @@ namespace: nova
 # Staging 环境特定配置
 patchesStrategicMerge:
 - deployment-patch.yaml
+- secrets-patch.yaml
+- configmap-patch.yaml
+- deployment-images-patch.yaml
 
 # 环境变量覆盖 (不使用 generator,改用 patch 方式)
 # configMapGenerator:
@@ -71,3 +74,4 @@ commonAnnotations:
   environment: staging
 resources:
 - ../../base
+- clickhouse-chi.yaml
