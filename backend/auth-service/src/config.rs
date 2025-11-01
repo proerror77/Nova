@@ -9,10 +9,11 @@ pub struct Config {
     pub redis_url: String,
     pub jwt_private_key_pem: String,
     pub jwt_public_key_pem: String,
+    #[serde(default)]
     pub oauth_providers: OAuthConfig,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Default)]
 pub struct OAuthConfig {
     pub google_client_id: Option<String>,
     pub google_client_secret: Option<String>,
