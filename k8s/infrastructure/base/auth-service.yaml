@@ -69,11 +69,16 @@ spec:
             secretKeyRef:
               name: nova-db-credentials
               key: auth-db-url
-        - name: JWT_SECRET
+        - name: JWT_PRIVATE_KEY_PEM
           valueFrom:
             secretKeyRef:
-              name: nova-secrets
-              key: jwt-secret
+              name: nova-jwt-keys
+              key: JWT_PRIVATE_KEY_PEM
+        - name: JWT_PUBLIC_KEY_PEM
+          valueFrom:
+            secretKeyRef:
+              name: nova-jwt-keys
+              key: JWT_PUBLIC_KEY_PEM
         - name: KAFKA_BROKERS
           valueFrom:
             configMapKeyRef:

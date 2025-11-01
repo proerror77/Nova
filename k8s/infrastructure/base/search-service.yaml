@@ -74,6 +74,11 @@ spec:
             secretKeyRef:
               name: nova-db-credentials
               key: elasticsearch-url
+        - name: REDIS_URL
+          valueFrom:
+            secretKeyRef:
+              name: nova-db-credentials
+              key: redis-url
         - name: KAFKA_BROKERS
           valueFrom:
             configMapKeyRef:
