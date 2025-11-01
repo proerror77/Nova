@@ -14,3 +14,8 @@ spec:
             secretKeyRef:
               name: nova-jwt-keys
               key: JWT_SECRET
+        - name: S3_BUCKET_NAME
+          valueFrom:
+            secretKeyRef:
+              name: nova-s3-credentials
+              key: S3_BUCKET
