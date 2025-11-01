@@ -12,6 +12,7 @@ patchesStrategicMerge:
 - deployment-images-patch.yaml
 - postgres-deploy-patch.yaml
 - postgres-pvc-patch.yaml
+- service-selectors-patch.yaml
 
 # 环境变量覆盖 (不使用 generator,改用 patch 方式)
 # configMapGenerator:
