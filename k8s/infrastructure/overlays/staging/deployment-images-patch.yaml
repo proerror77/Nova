@@ -8,7 +8,7 @@ spec:
     spec:
       containers:
       - name: content-service
-        image: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/content-service:1419ad043b4153df056a8314fe7ff13c9298dbb8
+        image: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/content-service:ca18176a188598ae52ce5b19ab410de8a4673f37
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -20,7 +20,7 @@ spec:
     spec:
       containers:
       - name: user-service
-        image: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/user-service:1419ad043b4153df056a8314fe7ff13c9298dbb8
+        image: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/user-service:ca18176a188598ae52ce5b19ab410de8a4673f37
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -32,7 +32,7 @@ spec:
     spec:
       containers:
       - name: media-service
-        image: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/media-service:1419ad043b4153df056a8314fe7ff13c9298dbb8
+        image: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/media-service:ca18176a188598ae52ce5b19ab410de8a4673f37
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -44,4 +44,4 @@ spec:
     spec:
       containers:
       - name: messaging-service
-        image: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/messaging-service:1419ad043b4153df056a8314fe7ff13c9298dbb8
+        image: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/messaging-service:ca18176a188598ae52ce5b19ab410de8a4673f37

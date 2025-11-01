@@ -76,4 +76,3 @@ commonAnnotations:
 resources:
 - ../../base
 - clickhouse-chi.yaml
-- postgres-pvc.yaml
