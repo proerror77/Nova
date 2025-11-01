@@ -55,8 +55,8 @@ images:
 replicas:
 - count: 0
   name: auth-service
- - count: 1
-   name: user-service
+- count: 1
+  name: user-service
 - count: 0
   name: content-service
 - count: 0
@@ -78,4 +78,4 @@ commonAnnotations:
 resources:
 - ../../base
 - clickhouse-chi.yaml
- - postgres-pvc-gp3.yaml
+- postgres-pvc-gp3.yaml
