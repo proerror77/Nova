@@ -1,8 +1,6 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-bases:
-- ../../base
 
 namespace: nova
 
@@ -12,62 +10,64 @@ patchesStrategicMerge:
 
 # 环境变量覆盖
 configMapGenerator:
-- name: nova-config
-  behavior: merge
+- behavior: merge
   literals:
   - APP_ENV=staging
   - LOG_LEVEL=info
   - RUST_LOG=info,actix_web=info
   - FEATURE_FLAG_BETA=true
+  name: nova-config
 
 # 镜像标签配置（通过 CI/CD 动态更新）
 images:
 - name: nova/auth-service
-  newTag: latest
   newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/auth-service
-- name: nova/user-service
-  newTag: latest
-  newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/user-service
+  newTag: 481cf0186dabc705bd969bc188115590cf4d76c2
 - name: nova/content-service
-  newTag: latest
   newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/content-service
+  newTag: 481cf0186dabc705bd969bc188115590cf4d76c2
 - name: nova/feed-service
-  newTag: latest
   newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/feed-service
+  newTag: 481cf0186dabc705bd969bc188115590cf4d76c2
 - name: nova/media-service
-  newTag: latest
   newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/media-service
+  newTag: 481cf0186dabc705bd969bc188115590cf4d76c2
 - name: nova/messaging-service
-  newTag: latest
   newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/messaging-service
+  newTag: 481cf0186dabc705bd969bc188115590cf4d76c2
 - name: nova/search-service
-  newTag: latest
   newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/search-service
+  newTag: 481cf0186dabc705bd969bc188115590cf4d76c2
 - name: nova/streaming-service
-  newTag: latest
   newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/streaming-service
+  newTag: 481cf0186dabc705bd969bc188115590cf4d76c2
+- name: nova/user-service
+  newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/user-service
+  newTag: 481cf0186dabc705bd969bc188115590cf4d76c2
 
 # 副本数配置
 replicas:
-- name: auth-service
-  count: 2
-- name: user-service
-  count: 2
-- name: content-service
-  count: 2
-- name: feed-service
-  count: 2
-- name: media-service
-  count: 2
-- name: messaging-service
-  count: 2
-- name: search-service
-  count: 2
-- name: streaming-service
-  count: 2
+- count: 2
+  name: auth-service
+- count: 2
+  name: user-service
+- count: 2
+  name: content-service
+- count: 2
+  name: feed-service
+- count: 2
+  name: media-service
+- count: 2
+  name: messaging-service
+- count: 2
+  name: search-service
+- count: 2
+  name: streaming-service
 
 # 公共注解
 commonAnnotations:
-  environment: staging
-  deployment.kubernetes.io/version: "1"
   argocd.argoproj.io/compare-result: "false"
+  deployment.kubernetes.io/version: "1"
+  environment: staging
+resources:
+- ../../base
