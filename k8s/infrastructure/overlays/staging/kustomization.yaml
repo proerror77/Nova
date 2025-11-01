@@ -11,7 +11,6 @@ patchesStrategicMerge:
 - configmap-patch.yaml
 - deployment-images-patch.yaml
 - postgres-deploy-patch.yaml
-- postgres-pvc-patch.yaml
 - service-selectors-patch.yaml
 - redis-deploy-patch.yaml
 
