@@ -1,0 +1,115 @@
+# Optimized Multi-stage Dockerfile with Cargo dependency caching
+# This version caches Rust dependencies separately from source code
+# to reduce rebuild time when only code changes
+
+# ============================================
+# Stage 1: Cargo Chef - Plan dependencies
+# ============================================
+FROM rust:1.88-slim-bookworm AS chef
+RUN cargo install cargo-chef
+WORKDIR /app
+
+# ============================================
+# Stage 2: Prepare dependency recipe
+# ============================================
+FROM chef AS planner
+COPY Cargo.toml Cargo.lock ./
+COPY backend ./backend
+RUN cargo chef prepare --recipe-path recipe.json
+
+# ============================================
+# Stage 3: Build dependencies (CACHED LAYER)
+# ============================================
+FROM chef AS builder-deps
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    pkg-config \
+    libssl-dev \
+    ca-certificates \
+    cmake \
+    build-essential \
+    protobuf-compiler \
+    librdkafka-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Build dependencies based on recipe (THIS LAYER IS CACHED!)
+COPY --from=planner /app/recipe.json recipe.json
+RUN cargo chef cook --release --recipe-path recipe.json
+
+# ============================================
+# Stage 4: Build application code
+# ============================================
+FROM builder-deps AS builder
+
+# Copy workspace structure
+COPY Cargo.toml Cargo.lock ./
+COPY backend ./backend
+
+# Build only auth-service binary
+# Dependencies are already compiled from previous stage
+RUN cargo build --release -p auth-service --bin auth-service
+
+# Verify binary was built
+RUN ls -lh /app/target/release/auth-service
+
+# ============================================
+# Stage 5: Runtime image (minimal)
+# ============================================
+FROM debian:bookworm-slim AS runtime
+
+# Install only runtime dependencies
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    libssl3 \
+    librdkafka1 \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user with specific UID
+RUN useradd -m -u 1001 -s /bin/bash appuser
+
+WORKDIR /app
+
+# Copy binary from builder
+COPY --from=builder /app/target/release/auth-service /app/auth-service
+
+# Copy migrations with correct ownership
+COPY --from=builder --chown=appuser:appuser \
+    /app/backend/auth-service/migrations /app/migrations
+
+# Set ownership
+RUN chown -R appuser:appuser /app
+
+# Switch to non-root user
+USER appuser
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8080/health || exit 1
+
+# Environment variables
+ENV RUST_LOG=info \
+    RUST_BACKTRACE=1 \
+    SERVER_HOST=0.0.0.0 \
+    SERVER_PORT=8080
+
+# Expose ports
+EXPOSE 8080 9080
+
+# Run binary
+CMD ["/app/auth-service"]
+
+# ============================================
+# Build Instructions:
+# ============================================
+# docker buildx build \
+#   --platform linux/amd64 \
+#   --cache-from type=registry,ref=registry/nova/auth-service:buildcache \
+#   --cache-to type=registry,ref=registry/nova/auth-service:buildcache,mode=max \
+#   --cache-to type=inline \
+#   -t registry/nova/auth-service:latest \
+#   -f backend/auth-service/Dockerfile.optimized \
+#   .
