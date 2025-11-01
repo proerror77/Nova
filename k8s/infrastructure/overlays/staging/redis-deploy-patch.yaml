@@ -6,8 +6,8 @@ metadata:
 spec:
   selector:
     matchLabels:
-      app: redis
+      component: redis
   template:
     metadata:
       labels:
-        app: redis
+        component: redis

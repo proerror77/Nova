@@ -14,4 +14,4 @@ metadata:
   namespace: nova
 spec:
   selector:
-    app: nova
+    component: redis
