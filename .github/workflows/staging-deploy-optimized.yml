@@ -34,7 +34,6 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::025434362120:role/github-actions-role
-          source-account-id: '025434362120'
           aws-region: ${{ env.AWS_REGION }}
           audience: sts.amazonaws.com
           role-session-name: gha-verify-${{ github.run_id }}
@@ -84,7 +83,6 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::025434362120:role/github-actions-role
-          source-account-id: '025434362120'
           aws-region: ${{ env.AWS_REGION }}
           audience: sts.amazonaws.com
           role-session-name: gha-build-${{ github.run_id }}-${{ matrix.service }}
@@ -106,16 +104,13 @@ jobs:
           push: true
           # 优化: 只推 SHA tag,不推 latest
           tags: ${{ env.REGISTRY }}/${{ env.REGISTRY_ALIAS }}/${{ matrix.service }}:${{ github.sha }}
-          # 优化: 多层缓存 (GHA + Registry + Inline)
+          # 优化: 多层缓存 (GHA + Registry)
           cache-from: |
             type=gha
             type=registry,ref=${{ env.REGISTRY }}/${{ env.REGISTRY_ALIAS }}/${{ matrix.service }}:buildcache
           cache-to: |
             type=gha,mode=max
             type=registry,ref=${{ env.REGISTRY }}/${{ env.REGISTRY_ALIAS }}/${{ matrix.service }}:buildcache,mode=max
-            type=inline
-          build-args: |
-            BUILDKIT_INLINE_CACHE=1
 
       - name: Verify image
         run: |
