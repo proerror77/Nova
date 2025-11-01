@@ -24,3 +24,18 @@ spec:
             secretKeyRef:
               name: nova-s3-credentials
               key: AWS_REGION
+        - name: AWS_REGION
+          valueFrom:
+            secretKeyRef:
+              name: nova-s3-credentials
+              key: AWS_REGION
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: nova-s3-credentials
+              key: AWS_ACCESS_KEY_ID
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: nova-s3-credentials
+              key: AWS_SECRET_ACCESS_KEY
