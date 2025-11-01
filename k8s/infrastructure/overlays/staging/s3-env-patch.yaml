@@ -1,0 +1,167 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: content-service
+  namespace: nova
+spec:
+  template:
+    spec:
+      containers:
+      - name: content-service
+        env:
+        - name: S3_BUCKET_NAME
+          valueFrom:
+            secretKeyRef:
+              name: nova-s3-credentials
+              key: S3_BUCKET
+        - name: S3_REGION
+          valueFrom:
+            secretKeyRef:
+              name: nova-s3-credentials
+              key: AWS_REGION
+        - name: AWS_REGION
+          valueFrom:
+            secretKeyRef:
+              name: nova-s3-credentials
+              key: AWS_REGION
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: nova-s3-credentials
+              key: AWS_ACCESS_KEY_ID
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: nova-s3-credentials
+              key: AWS_SECRET_ACCESS_KEY
+        - name: AWS_SESSION_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: nova-s3-credentials
+              key: AWS_SESSION_TOKEN
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: media-service
+  namespace: nova
+spec:
+  template:
+    spec:
+      containers:
+      - name: media-service
+        env:
+        - name: S3_BUCKET_NAME
+          valueFrom:
+            secretKeyRef:
+              name: nova-s3-credentials
+              key: S3_BUCKET
+        - name: S3_REGION
+          valueFrom:
+            secretKeyRef:
+              name: nova-s3-credentials
+              key: AWS_REGION
+        - name: AWS_REGION
+          valueFrom:
+            secretKeyRef:
+              name: nova-s3-credentials
+              key: AWS_REGION
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: nova-s3-credentials
+              key: AWS_ACCESS_KEY_ID
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: nova-s3-credentials
+              key: AWS_SECRET_ACCESS_KEY
+        - name: AWS_SESSION_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: nova-s3-credentials
+              key: AWS_SESSION_TOKEN
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: messaging-service
+  namespace: nova
+spec:
+  template:
+    spec:
+      containers:
+      - name: messaging-service
+        env:
+        - name: S3_BUCKET_NAME
+          valueFrom:
+            secretKeyRef:
+              name: nova-s3-credentials
+              key: S3_BUCKET
+        - name: S3_REGION
+          valueFrom:
+            secretKeyRef:
+              name: nova-s3-credentials
+              key: AWS_REGION
+        - name: AWS_REGION
+          valueFrom:
+            secretKeyRef:
+              name: nova-s3-credentials
+              key: AWS_REGION
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: nova-s3-credentials
+              key: AWS_ACCESS_KEY_ID
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: nova-s3-credentials
+              key: AWS_SECRET_ACCESS_KEY
+        - name: AWS_SESSION_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: nova-s3-credentials
+              key: AWS_SESSION_TOKEN
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: streaming-service
+  namespace: nova
+spec:
+  template:
+    spec:
+      containers:
+      - name: streaming-service
+        env:
+        - name: S3_BUCKET_NAME
+          valueFrom:
+            secretKeyRef:
+              name: nova-s3-credentials
+              key: S3_BUCKET
+        - name: S3_REGION
+          valueFrom:
+            secretKeyRef:
+              name: nova-s3-credentials
+              key: AWS_REGION
+        - name: AWS_REGION
+          valueFrom:
+            secretKeyRef:
+              name: nova-s3-credentials
+              key: AWS_REGION
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: nova-s3-credentials
+              key: AWS_ACCESS_KEY_ID
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: nova-s3-credentials
+              key: AWS_SECRET_ACCESS_KEY
+        - name: AWS_SESSION_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: nova-s3-credentials
+              key: AWS_SESSION_TOKEN
