@@ -79,6 +79,11 @@ spec:
             configMapKeyRef:
               name: nova-config
               key: KAFKA_BROKERS
+        - name: REDIS_URL
+          valueFrom:
+            secretKeyRef:
+              name: nova-db-credentials
+              key: redis-url
         envFrom:
         - configMapRef:
             name: nova-config
