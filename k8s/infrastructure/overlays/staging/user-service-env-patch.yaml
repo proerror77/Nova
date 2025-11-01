@@ -1,0 +1,16 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: user-service
+  namespace: nova
+spec:
+  template:
+    spec:
+      containers:
+      - name: user-service
+        env:
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: nova-jwt-keys
+              key: JWT_SECRET
