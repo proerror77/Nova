@@ -53,21 +53,21 @@ images:
 
 # 副本数配置 (降低至 1 以适应资源限制)
 replicas:
-- count: 1
+- count: 0
   name: auth-service
-- count: 1
+- count: 0
   name: user-service
-- count: 1
+- count: 0
   name: content-service
-- count: 1
+- count: 0
   name: feed-service
-- count: 1
+- count: 0
   name: media-service
-- count: 1
+- count: 0
   name: messaging-service
-- count: 1
+- count: 0
   name: search-service
-- count: 1
+- count: 0
   name: streaming-service
 
 # 公共注解
