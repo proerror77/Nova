@@ -10,10 +10,10 @@ patchesStrategicMerge:
 - secrets-patch.yaml
 - configmap-patch.yaml
 - deployment-images-patch.yaml
- - postgres-deploy-patch.yaml
- - postgres-pvc-patch.yaml
- - service-selectors-patch.yaml
- - redis-deploy-patch.yaml
+- postgres-deploy-patch.yaml
+- postgres-pvc-patch.yaml
+- service-selectors-patch.yaml
+- redis-deploy-patch.yaml
 
 # 环境变量覆盖 (不使用 generator,改用 patch 方式)
 # configMapGenerator:
@@ -79,3 +79,4 @@ commonAnnotations:
 resources:
 - ../../base
 - clickhouse-chi.yaml
+ - postgres-pvc-gp3.yaml
