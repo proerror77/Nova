@@ -15,6 +15,7 @@ patchesStrategicMerge:
 - redis-deploy-patch.yaml
 - deploy-labels-patch.yaml
 - user-service-env-patch.yaml
+- elasticsearch-replicas-patch.yaml
 
 # 环境变量覆盖 (不使用 generator,改用 patch 方式)
 # configMapGenerator:
@@ -59,17 +60,17 @@ replicas:
   name: auth-service
 - count: 1
   name: user-service
-- count: 0
+- count: 1
   name: content-service
-- count: 0
+- count: 1
   name: feed-service
-- count: 0
+- count: 1
   name: media-service
-- count: 0
+- count: 1
   name: messaging-service
-- count: 0
+- count: 1
   name: search-service
-- count: 0
+- count: 1
   name: streaming-service
 
 # 公共注解
