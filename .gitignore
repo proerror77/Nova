@@ -38,7 +38,8 @@
 .vscode/
 /.github-runner/
 /target/
-Cargo.lock
+# Cargo.lock - Include for reproducible builds (Rust best practice for applications)
+# Cargo.lock
 Thumbs.db
 bin/
 build/
