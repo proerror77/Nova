@@ -82,5 +82,4 @@ commonAnnotations:
   environment: staging
 resources:
 - ../../base
-- clickhouse-chi.yaml
-- postgres-pvc-gp3.yaml
+ - postgres-pvc-gp3.yaml
