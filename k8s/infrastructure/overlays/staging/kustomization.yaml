@@ -56,7 +56,7 @@ replicas:
 - count: 0
   name: auth-service
  - count: 1
-  name: user-service
+   name: user-service
 - count: 0
   name: content-service
 - count: 0
