@@ -2,6 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: auth-service
+  namespace: nova
 spec:
   template:
     spec:
@@ -20,6 +21,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: user-service
+  namespace: nova
 spec:
   template:
     spec:
@@ -38,6 +40,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: content-service
+  namespace: nova
 spec:
   template:
     spec:
@@ -56,6 +59,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: feed-service
+  namespace: nova
 spec:
   template:
     spec:
@@ -74,6 +78,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: media-service
+  namespace: nova
 spec:
   template:
     spec:
@@ -92,6 +97,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: messaging-service
+  namespace: nova
 spec:
   template:
     spec:
@@ -110,6 +116,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: search-service
+  namespace: nova
 spec:
   template:
     spec:
@@ -128,6 +135,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: streaming-service
+  namespace: nova
 spec:
   template:
     spec:
