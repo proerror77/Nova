@@ -88,7 +88,7 @@ regex = "1"
 # Phase 4: Video Processing & gRPC
 tonic.workspace = true
 prost.workspace = true
-ndarray = "0.15"
+ndarray = "0.16"
 http = "0.2"
 
 # ONNX Model Serving
