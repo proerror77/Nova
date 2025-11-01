@@ -17,6 +17,7 @@ patchesStrategicMerge:
 - user-service-env-patch.yaml
 - elasticsearch-replicas-patch.yaml
  - s3-env-patch.yaml
+ - hpa-min1-patch.yaml
 
 # 环境变量覆盖 (不使用 generator,改用 patch 方式)
 # configMapGenerator:
