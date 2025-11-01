@@ -10,10 +10,14 @@ resources:
 - namespace.yaml
 - configmap.yaml
 - secrets.yaml
-- content-service.yaml
-- media-service.yaml
+- auth-service.yaml
 - user-service.yaml
+- content-service.yaml
+- feed-service.yaml
+- media-service.yaml
 - messaging-service.yaml
+- search-service.yaml
+- streaming-service.yaml
 - ingress.yaml
 
 # 命名空间配置
@@ -30,13 +34,21 @@ commonAnnotations:
 
 # 镜像替换 (用于 CI/CD 流程)
 images:
-- name: nova/content-service
-  newTag: latest
-- name: nova/media-service
+- name: nova/auth-service
   newTag: latest
 - name: nova/user-service
   newTag: latest
+- name: nova/content-service
+  newTag: latest
+- name: nova/feed-service
+  newTag: latest
+- name: nova/media-service
+  newTag: latest
 - name: nova/messaging-service
+  newTag: latest
+- name: nova/search-service
+  newTag: latest
+- name: nova/streaming-service
   newTag: latest
 
 # ConfigMap 生成器
@@ -52,15 +64,23 @@ configMapGenerator:
 #   literals:
 #   - DATABASE_URL=postgres://nova:password@postgres:5432/nova_content
 
-# 替换配置
+# 副本数配置
 replicas:
-- name: content-service
-  count: 2
-- name: media-service
+- name: auth-service
   count: 2
 - name: user-service
   count: 2
+- name: content-service
+  count: 2
+- name: feed-service
+  count: 2
+- name: media-service
+  count: 2
 - name: messaging-service
+  count: 2
+- name: search-service
+  count: 2
+- name: streaming-service
   count: 2
 
 # 处理器 (patchesStrategicMerge 用于部分覆盖)
