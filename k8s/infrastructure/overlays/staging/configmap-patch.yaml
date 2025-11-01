@@ -4,4 +4,4 @@ metadata:
   name: nova-config
   namespace: nova
 data:
-  CLICKHOUSE_URL: "http://nova:PiaJqE+swXRm0p6MHXkE4pZt3PFfZNJ/DsliD7oAg2I=@clickhouse:8123"
+  CLICKHOUSE_URL: "http://clickhouse:8123"

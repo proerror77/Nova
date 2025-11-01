@@ -4,7 +4,13 @@ metadata:
   name: postgres
   namespace: nova
 spec:
+  selector:
+    matchLabels:
+      app: postgres
   template:
+    metadata:
+      labels:
+        app: postgres
     spec:
       volumes:
       - name: postgres-data
