@@ -1,0 +1,47 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: content-service
+  namespace: nova
+spec:
+  template:
+    spec:
+      containers:
+      - name: content-service
+        image: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/content-service:1419ad043b4153df056a8314fe7ff13c9298dbb8
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: user-service
+  namespace: nova
+spec:
+  template:
+    spec:
+      containers:
+      - name: user-service
+        image: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/user-service:1419ad043b4153df056a8314fe7ff13c9298dbb8
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: media-service
+  namespace: nova
+spec:
+  template:
+    spec:
+      containers:
+      - name: media-service
+        image: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/media-service:1419ad043b4153df056a8314fe7ff13c9298dbb8
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: messaging-service
+  namespace: nova
+spec:
+  template:
+    spec:
+      containers:
+      - name: messaging-service
+        image: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/messaging-service:1419ad043b4153df056a8314fe7ff13c9298dbb8
