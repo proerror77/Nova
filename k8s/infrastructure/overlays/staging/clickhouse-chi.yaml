@@ -1,0 +1,36 @@
+apiVersion: clickhouse.altinity.com/v1
+kind: ClickHouseInstallation
+metadata:
+  name: nova-ch
+  namespace: clickhouse
+spec:
+  configuration:
+    clusters:
+      - name: single
+        layout:
+          shardsCount: 1
+          replicasCount: 1
+        templates:
+          podTemplate: ch-pod
+    users:
+      nova:
+        password_sha256_hex: "f6884edbbb3e10794ba1321c07aaf231f174550a71bfb541a1c149c0f61fbbea"
+        networks:
+          ip:
+            - 0.0.0.0/0
+        profile: default
+        quota: default
+  templates:
+    podTemplates:
+      - name: ch-pod
+        spec:
+          containers:
+            - name: clickhouse
+              image: clickhouse/clickhouse-server:24.8
+              volumeMounts:
+                - name: data
+                  mountPath: /var/lib/clickhouse
+          volumes:
+            - name: data
+              persistentVolumeClaim:
+                claimName: nova-ch-data
