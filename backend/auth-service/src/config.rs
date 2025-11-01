@@ -10,7 +10,7 @@ pub struct Config {
     pub jwt_private_key_pem: String,
     pub jwt_public_key_pem: String,
     #[serde(default)]
-    pub oauth_providers: OAuthConfig,
+    pub oauth_providers: Option<OAuthConfig>,
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
