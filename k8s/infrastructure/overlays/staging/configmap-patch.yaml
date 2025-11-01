@@ -5,3 +5,4 @@ metadata:
   namespace: nova
 data:
   CLICKHOUSE_URL: "http://clickhouse:8123"
+  CLOUDFRONT_URL: "https://cdn.example.com"
