@@ -10,6 +10,11 @@ resources:
 - namespace.yaml
 - configmap.yaml
 - secrets.yaml
+# 基础设施服务
+- postgres.yaml
+- redis.yaml
+- elasticsearch.yaml
+# 微服务
 - auth-service.yaml
 - user-service.yaml
 - content-service.yaml
