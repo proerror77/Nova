@@ -19,3 +19,8 @@ spec:
             secretKeyRef:
               name: nova-s3-credentials
               key: S3_BUCKET
+        - name: S3_REGION
+          valueFrom:
+            secretKeyRef:
+              name: nova-s3-credentials
+              key: AWS_REGION
