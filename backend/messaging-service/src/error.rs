@@ -81,9 +81,7 @@ impl AppError {
     pub fn is_retryable(&self) -> bool {
         match self {
             AppError::Database(msg) => {
-                msg.contains("PoolTimedOut")
-                    || msg.contains("PoolClosed")
-                    || msg.contains("Io")
+                msg.contains("PoolTimedOut") || msg.contains("PoolClosed") || msg.contains("Io")
             }
             AppError::Internal => true,
             _ => false,

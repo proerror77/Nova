@@ -147,21 +147,22 @@ pub async fn initiate_call(
     let max_participants = body.max_participants;
 
     if call_type != "direct" && call_type != "group" {
-        return Err(crate::error::AppError::Config(
-            "call_type must be 'direct' or 'group'".into(),
-        ).into());
+        return Err(
+            crate::error::AppError::Config("call_type must be 'direct' or 'group'".into()).into(),
+        );
     }
 
     if call_type == "group" && max_participants < 2 {
         return Err(crate::error::AppError::Config(
             "max_participants must be >= 2 for group calls".into(),
-        ).into());
+        )
+        .into());
     }
 
     if max_participants > 50 {
-        return Err(crate::error::AppError::Config(
-            "max_participants cannot exceed 50".into(),
-        ).into());
+        return Err(
+            crate::error::AppError::Config("max_participants cannot exceed 50".into()).into(),
+        );
     }
 
     // Create the call

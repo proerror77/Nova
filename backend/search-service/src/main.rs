@@ -1,17 +1,20 @@
+use actix_middleware::MetricsMiddleware;
 use actix_web::{
     web::{self, Data, Json, Query},
     App, HttpResponse, HttpServer, Responder,
 };
-use actix_middleware::MetricsMiddleware;
 use error_types::ErrorResponse;
 use redis::aio::ConnectionManager;
 use search_service::elasticsearch::{ElasticsearchClient, ElasticsearchError, PostDocument};
 use search_service::events::consumers::EventContext;
 use search_service::events::kafka::{spawn_message_consumer, KafkaConsumerConfig};
+use search_service::openapi::ApiDoc;
 use search_service::search_suggestions::SearchSuggestionsService;
 use serde::{Deserialize, Serialize};
 use sqlx::{postgres::PgPoolOptions, PgPool};
 use std::sync::Arc;
+use utoipa::OpenApi;
+use utoipa_swagger_ui::SwaggerUi;
 use uuid::Uuid;
 
 // ============================================
@@ -313,9 +316,7 @@ async fn search_posts(
     }))
 }
 
-async fn clear_search_cache(
-    state: Data<AppState>,
-) -> Result<Json<serde_json::Value>, AppError> {
+async fn clear_search_cache(state: Data<AppState>) -> Result<Json<serde_json::Value>, AppError> {
     let mut redis_conn = state.redis.clone();
 
     // Use SCAN to find all search:posts:* keys
@@ -655,47 +656,13 @@ async fn unified_search(
 // ============================================
 
 // OpenAPI endpoint handler
-async fn openapi_json() -> impl Responder {
-    use utoipa::OpenApi;
-    HttpResponse::Ok().json(serde_json::to_value(&search_service::openapi::ApiDoc::openapi()).unwrap())
-}
+async fn openapi_json(doc: Data<utoipa::openapi::OpenApi>) -> HttpResponse {
+    let body = serde_json::to_string(&*doc)
+        .expect("Failed to serialize OpenAPI document for search-service");
 
-// Swagger UI handler
-async fn swagger_ui() -> impl Responder {
     HttpResponse::Ok()
-        .content_type("text/html; charset=utf-8")
-        .body(
-            r#"<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Nova Search Service API</title>
-    <link rel="stylesheet" type="text/css" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css" />
-</head>
-<body>
-    <div id="swagger-ui"></div>
-    <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
-    <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-standalone-preset.js"></script>
-    <script>
-        window.onload = function() {
-            SwaggerUIBundle({
-                url: "/openapi.json",
-                dom_id: '#swagger-ui',
-                deepLinking: true,
-                presets: [
-                    SwaggerUIBundle.presets.apis,
-                    SwaggerUIStandalonePreset
-                ],
-                plugins: [
-                    SwaggerUIBundle.plugins.DownloadUrl
-                ],
-                layout: "StandaloneLayout"
-            });
-        };
-    </script>
-</body>
-</html>"#,
-        )
+        .content_type("application/json")
+        .body(body)
 }
 
 // Documentation entry point
@@ -719,8 +686,8 @@ async fn docs() -> impl Responder {
     <div class="container">
         <h1>Nova Search Service API</h1>
         <p>Choose your preferred documentation viewer:</p>
-        <a href="/swagger-ui">📘 Swagger UI (Interactive)</a>
-        <a href="/openapi.json">📄 OpenAPI JSON (Raw)</a>
+        <a href="/swagger-ui/">📘 Swagger UI (Interactive)</a>
+        <a href="/api/v1/openapi.json">📄 OpenAPI JSON (Raw)</a>
     </div>
 </body>
 </html>"#,
@@ -757,8 +724,7 @@ async fn main() -> std::io::Result<()> {
     dotenvy::dotenv().ok();
 
     // Get configuration from environment
-    let database_url = std::env::var("DATABASE_URL")
-        .expect("DATABASE_URL must be set");
+    let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
 
     let redis_url =
         std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379".to_string());
@@ -837,14 +803,21 @@ async fn main() -> std::io::Result<()> {
     tracing::info!("search-service listening on 0.0.0.0:{}", port);
 
     HttpServer::new(move || {
+        let openapi_doc = ApiDoc::openapi();
+
         App::new()
             .app_data(state_data.clone())
+            .app_data(Data::new(openapi_doc.clone()))
             .wrap(MetricsMiddleware)
             // Health endpoint (no auth)
             .route("/health", web::get().to(health_handler))
             // Documentation endpoints (no auth)
+            .service(
+                SwaggerUi::new("/swagger-ui/{_:.*}")
+                    .url("/api/v1/openapi.json", openapi_doc.clone()),
+            )
+            .route("/api/v1/openapi.json", web::get().to(openapi_json))
             .route("/openapi.json", web::get().to(openapi_json))
-            .route("/swagger-ui", web::get().to(swagger_ui))
             .route("/docs", web::get().to(docs))
             // API endpoints (with auth middleware if needed)
             .service(
@@ -862,7 +835,7 @@ async fn main() -> std::io::Result<()> {
                     .route("/suggestions", web::get().to(get_search_suggestions))
                     .route("/trending", web::get().to(get_trending_searches))
                     // Search analytics
-                    .route("/clicks", web::post().to(record_search_click))
+                    .route("/clicks", web::post().to(record_search_click)),
             )
     })
     .bind(("0.0.0.0", port))?

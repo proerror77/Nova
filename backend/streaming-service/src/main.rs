@@ -6,12 +6,15 @@
 //! - RTMP webhook integration
 //! - Stream discovery and analytics
 
+mod openapi;
+
 use actix_web::{dev::Service, middleware as actix_middleware, web, App, HttpServer};
 use std::io;
 use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::Mutex;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+use utoipa_swagger_ui::SwaggerUi;
 
 use streaming_service::handlers::StreamHandlerState;
 use streaming_service::metrics;
@@ -19,6 +22,15 @@ use streaming_service::services::{
     EventProducer, RtmpWebhookHandler, StreamAnalyticsService, StreamChatStore,
     StreamDiscoveryService, StreamRepository, StreamService, ViewerCounter,
 };
+
+async fn openapi_json(doc: web::Data<utoipa::openapi::OpenApi>) -> actix_web::HttpResponse {
+    let body = serde_json::to_string(&*doc)
+        .expect("Failed to serialize OpenAPI document for streaming-service");
+
+    actix_web::HttpResponse::Ok()
+        .content_type("application/json")
+        .body(body)
+}
 
 #[actix_web::main]
 async fn main() -> io::Result<()> {
@@ -98,7 +110,15 @@ async fn main() -> io::Result<()> {
 
     // Start HTTP server
     HttpServer::new(move || {
+        let openapi_doc = openapi::doc();
+
         App::new()
+            .app_data(web::Data::new(openapi_doc.clone()))
+            .service(
+                SwaggerUi::new("/swagger-ui/{_:.*}")
+                    .url("/api/v1/openapi.json", openapi_doc.clone()),
+            )
+            .route("/api/v1/openapi.json", web::get().to(openapi_json))
             .app_data(handler_state.clone())
             .wrap(actix_middleware::Logger::default())
             .wrap_fn(|req, srv| {

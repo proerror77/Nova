@@ -84,7 +84,9 @@ where
             })?;
 
             if is_revoked {
-                return Err(actix_web::error::ErrorUnauthorized("Token has been revoked"));
+                return Err(actix_web::error::ErrorUnauthorized(
+                    "Token has been revoked",
+                ));
             }
 
             drop(conn);

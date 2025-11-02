@@ -1,4 +1,5 @@
 use crate::middleware::auth::verify_jwt;
+use crate::redis_client::RedisClient;
 use crate::services::conversation_service::ConversationService;
 use crate::services::offline_queue;
 use crate::state::AppState;
@@ -6,9 +7,8 @@ use crate::websocket::events::{broadcast_event, WebSocketEvent};
 use crate::websocket::message_types::WsInboundEvent;
 use crate::websocket::ConnectionRegistry;
 use actix::{Actor, ActorContext, AsyncContext, Handler, Message as ActixMessage, StreamHandler};
-use actix_web::{web, HttpRequest, HttpResponse, Error};
+use actix_web::{web, Error, HttpRequest, HttpResponse};
 use actix_web_actors::ws;
-use crate::redis_client::RedisClient;
 use serde::Deserialize;
 use sqlx::{Pool, Postgres};
 use std::time::{Duration, Instant};
@@ -220,23 +220,14 @@ impl Actor for WsSession {
 
         let addr = ctx.address();
         actix::spawn(async move {
-            let pending = offline_queue::read_pending_messages(
-                &redis,
-                conversation_id,
-                user_id,
-                client_id,
-            )
-            .await
-            .unwrap_or_default();
+            let pending =
+                offline_queue::read_pending_messages(&redis, conversation_id, user_id, client_id)
+                    .await
+                    .unwrap_or_default();
 
-            let new = offline_queue::read_new_messages(
-                &redis,
-                conversation_id,
-                user_id,
-                client_id,
-            )
-            .await
-            .unwrap_or_default();
+            let new = offline_queue::read_new_messages(&redis, conversation_id, user_id, client_id)
+                .await
+                .unwrap_or_default();
 
             for (_, fields) in pending.into_iter().chain(new.into_iter()) {
                 if let Some(payload) = fields.get("payload") {
@@ -259,7 +250,9 @@ impl Actor for WsSession {
         let subscriber_id = self.subscriber_id;
 
         actix::spawn(async move {
-            registry.remove_subscriber(conversation_id, subscriber_id).await;
+            registry
+                .remove_subscriber(conversation_id, subscriber_id)
+                .await;
         });
 
         // Update final sync state
@@ -394,17 +387,17 @@ async fn validate_ws_token(
                 );
             })
             .map_err(|e| {
-                error!("🚫 WebSocket connection REJECTED: Invalid JWT token - {:?}", e);
+                error!(
+                    "🚫 WebSocket connection REJECTED: Invalid JWT token - {:?}",
+                    e
+                );
                 actix_web::http::StatusCode::UNAUTHORIZED
             }),
     }
 }
 
 // Membership verification
-async fn verify_conversation_membership(
-    db: &Pool<Postgres>,
-    params: &WsParams,
-) -> Result<(), ()> {
+async fn verify_conversation_membership(db: &Pool<Postgres>, params: &WsParams) -> Result<(), ()> {
     match ConversationService::is_member(db, params.conversation_id, params.user_id).await {
         Ok(true) => {
             tracing::debug!(
@@ -454,9 +447,7 @@ pub async fn ws_handler(
     }
 
     // Initialize consumer group
-    if let Err(e) =
-        offline_queue::init_consumer_group(&state.redis, params.conversation_id).await
-    {
+    if let Err(e) = offline_queue::init_consumer_group(&state.redis, params.conversation_id).await {
         error!("Failed to initialize consumer group: {:?}", e);
         return Ok(HttpResponse::InternalServerError().finish());
     }

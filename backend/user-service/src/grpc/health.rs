@@ -41,6 +41,8 @@ pub struct HealthChecker {
     content_service_health: Arc<RwLock<ServiceHealth>>,
     /// Health status for media service
     media_service_health: Arc<RwLock<ServiceHealth>>,
+    /// Health status for auth service
+    auth_service_health: Arc<RwLock<ServiceHealth>>,
 }
 
 impl HealthChecker {
@@ -54,6 +56,11 @@ impl HealthChecker {
             })),
             media_service_health: Arc::new(RwLock::new(ServiceHealth {
                 name: "media-service".to_string(),
+                status: HealthStatus::Unreachable,
+                last_check: std::time::SystemTime::now(),
+            })),
+            auth_service_health: Arc::new(RwLock::new(ServiceHealth {
+                name: "auth-service".to_string(),
                 status: HealthStatus::Unreachable,
                 last_check: std::time::SystemTime::now(),
             })),
@@ -86,23 +93,39 @@ impl HealthChecker {
         tracing::info!("Media service health updated: {}", status);
     }
 
+    /// Get auth service health status
+    pub async fn auth_service_health(&self) -> ServiceHealth {
+        self.auth_service_health.read().await.clone()
+    }
+
+    /// Update auth service health status
+    pub async fn set_auth_service_health(&self, status: HealthStatus) {
+        let mut health = self.auth_service_health.write().await;
+        health.status = status;
+        health.last_check = std::time::SystemTime::now();
+        tracing::info!("Auth service health updated: {}", status);
+    }
+
     /// Check if all services are healthy
     pub async fn all_healthy(&self) -> bool {
         let content_health = self.content_service_health.read().await;
         let media_health = self.media_service_health.read().await;
+        let auth_health = self.auth_service_health.read().await;
 
         content_health.status == HealthStatus::Healthy
             && media_health.status == HealthStatus::Healthy
+            && auth_health.status == HealthStatus::Healthy
     }
 
     /// Get overall health status string
     pub async fn overall_status(&self) -> String {
         let content_health = self.content_service_health.read().await;
         let media_health = self.media_service_health.read().await;
+        let auth_health = self.auth_service_health.read().await;
 
         format!(
-            "{{\"content_service\": \"{}\", \"media_service\": \"{}\"}}",
-            content_health.status, media_health.status
+            "{{\"content_service\": \"{}\", \"media_service\": \"{}\", \"auth_service\": \"{}\"}}",
+            content_health.status, media_health.status, auth_health.status
         )
     }
 }
@@ -122,6 +145,8 @@ mod tests {
         let checker = HealthChecker::new();
         let content_health = checker.content_service_health().await;
         assert_eq!(content_health.status, HealthStatus::Unreachable);
+        let auth_health = checker.auth_service_health().await;
+        assert_eq!(auth_health.status, HealthStatus::Unreachable);
     }
 
     #[tokio::test]
@@ -130,6 +155,7 @@ mod tests {
         checker
             .set_content_service_health(HealthStatus::Healthy)
             .await;
+        checker.set_auth_service_health(HealthStatus::Healthy).await;
         let health = checker.content_service_health().await;
         assert_eq!(health.status, HealthStatus::Healthy);
     }
@@ -145,6 +171,7 @@ mod tests {
         checker
             .set_media_service_health(HealthStatus::Healthy)
             .await;
+        checker.set_auth_service_health(HealthStatus::Healthy).await;
         assert!(checker.all_healthy().await);
     }
 }

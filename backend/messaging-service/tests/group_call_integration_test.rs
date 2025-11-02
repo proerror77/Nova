@@ -11,8 +11,8 @@
 
 use actix_web::{web, App, HttpServer};
 use messaging_service::{
-    config::Config, db, routes, state::AppState, websocket::ConnectionRegistry,
-    redis_client::RedisClient, services::encryption::EncryptionService,
+    config::Config, db, redis_client::RedisClient, routes, services::encryption::EncryptionService,
+    state::AppState, websocket::ConnectionRegistry,
 };
 use serde_json::json;
 use sqlx::{Pool, Postgres};
@@ -103,7 +103,9 @@ async fn setup() -> TestSetup {
     tokio::spawn(async move {
         let config = messaging_service::websocket::streams::StreamsConfig::default();
         let _ = messaging_service::websocket::streams::start_streams_listener(
-            redis_clone, registry_clone, config,
+            redis_clone,
+            registry_clone,
+            config,
         )
         .await;
     });

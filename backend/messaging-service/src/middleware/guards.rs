@@ -8,8 +8,8 @@ use uuid::Uuid;
 
 use crate::error::AppError;
 use crate::models::MemberRole;
-use actix_web::{HttpRequest, FromRequest, HttpMessage, Error};
 use actix_middleware::UserId;
+use actix_web::{Error, FromRequest, HttpMessage, HttpRequest};
 
 /// Represents an authenticated user extracted from JWT claims
 #[derive(Debug, Clone)]
