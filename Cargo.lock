@@ -2367,6 +2367,8 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "serde",
+ "sqlx",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
