@@ -6,11 +6,9 @@ authors.workspace = true
 license.workspace = true
 
 [dependencies]
+error-types = { path = "../error-types" }
 thiserror.workspace = true
 serde.workspace = true
-serde_json.workspace = true
-chrono.workspace = true
-sqlx = { version = "0.7", features = ["postgres"] }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["full"] }
