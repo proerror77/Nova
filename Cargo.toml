@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    # Services
     "backend/auth-service",
     "backend/user-service",
     "backend/content-service",
@@ -8,11 +9,17 @@ members = [
     "backend/messaging-service",
     "backend/search-service",
     "backend/streaming-service",
+    # Shared Libraries
     "backend/libs/actix-middleware",
     "backend/libs/crypto-core",
     "backend/libs/db-pool",
     "backend/libs/error-handling",
-    "backend/libs/redis-utils"
+    "backend/libs/error-types",
+    "backend/libs/event-schema",
+    "backend/libs/nova-apns-shared",
+    "backend/libs/nova-fcm-shared",
+    "backend/libs/redis-utils",
+    "backend/libs/video-core"
 ]
 resolver = "2"
 
