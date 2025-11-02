@@ -8,7 +8,7 @@ spec:
     spec:
       containers:
       - name: content-service
-        image: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/content-service:ca18176a188598ae52ce5b19ab410de8a4673f37
+        image: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/content-service:38cc45e2f3b81a611e60955577b5a0a1120fbf56
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -20,7 +20,7 @@ spec:
     spec:
       containers:
       - name: user-service
-        image: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/user-service:ca18176a188598ae52ce5b19ab410de8a4673f37
+        image: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/user-service:38cc45e2f3b81a611e60955577b5a0a1120fbf56
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -32,7 +32,7 @@ spec:
     spec:
       containers:
       - name: media-service
-        image: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/media-service:ca18176a188598ae52ce5b19ab410de8a4673f37
+        image: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/media-service:38cc45e2f3b81a611e60955577b5a0a1120fbf56
 ---
 apiVersion: apps/v1
 kind: Deployment
