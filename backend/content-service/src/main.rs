@@ -11,6 +11,7 @@ use content_service::services::{FeedRankingConfig, FeedRankingService};
 use crypto_core::jwt;
 use redis::aio::ConnectionManager;
 use redis::RedisError;
+use redis_utils::{RedisPool, SentinelConfig};
 use serde::Serialize;
 use sqlx::postgres::PgPoolOptions;
 use std::collections::HashMap;
@@ -21,7 +22,6 @@ use std::time::{Duration, Instant};
 use tokio::sync::{broadcast, Mutex};
 use tokio::task::JoinSet;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
-use redis_utils::{RedisPool, SentinelConfig};
 
 struct HealthState {
     db_pool: sqlx::Pool<sqlx::Postgres>,

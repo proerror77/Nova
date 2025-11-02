@@ -1,40 +1,36 @@
 /// Nova Auth Service - Main entry point
 /// Provides both gRPC and REST API for authentication
-
 mod metrics;
-mod routes;
 
-use axum::{
-    middleware,
-    routing::{get, post},
-    Router,
-};
+use actix_web::{web, App, HttpResponse, HttpServer, Responder};
+use actix_middleware::MetricsMiddleware;
 use redis::aio::ConnectionManager;
 use sqlx::postgres::PgPoolOptions;
 use std::net::SocketAddr;
-use tokio::net::TcpListener;
 use tonic::transport::Server as GrpcServer;
-use tower_http::trace::TraceLayer;
 use tracing_subscriber;
 
 use auth_service::{
     config::Config,
-    handlers::{register, login, logout, refresh_token, change_password, request_password_reset},
-    handlers::{start_oauth_flow, complete_oauth_flow},
+    handlers::{change_password, login, logout, refresh_token, register, request_password_reset},
+    handlers::{complete_oauth_flow, start_oauth_flow},
     services::KafkaEventProducer,
     AppState,
 };
 
-#[tokio::main]
+#[actix_web::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize tracing
     tracing_subscriber::fmt::init();
 
     // Load configuration
-    let config = Config::from_env()
-        .expect("Failed to load configuration from environment");
+    let config = Config::from_env().expect("Failed to load configuration from environment");
 
-    tracing::info!("Starting Nova Auth Service on {}:{}", config.server_host, config.server_port);
+    tracing::info!(
+        "Starting Nova Auth Service on {}:{}",
+        config.server_host,
+        config.server_port
+    );
 
     // Initialize database connection pool
     let database_url = config.database_url.clone();
@@ -52,27 +48,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing::info!("Redis connection initialized");
 
     // Initialize JWT keys from shared crypto-core library
-    crypto_core::jwt::initialize_jwt_keys(
-        &config.jwt_private_key_pem,
-        &config.jwt_public_key_pem,
-    ).map_err(|e| format!("Failed to initialize JWT keys: {}", e))?;
+    crypto_core::jwt::initialize_jwt_keys(&config.jwt_private_key_pem, &config.jwt_public_key_pem)
+        .map_err(|e| format!("Failed to initialize JWT keys: {}", e))?;
 
     tracing::info!("JWT keys initialized");
 
     // Initialize Kafka event producer (optional)
     let kafka_producer = match std::env::var("KAFKA_BROKERS") {
-        Ok(brokers) => {
-            match KafkaEventProducer::new(&brokers, "auth-events") {
-                Ok(producer) => {
-                    tracing::info!("Kafka event producer initialized");
-                    Some(producer)
-                }
-                Err(e) => {
-                    tracing::warn!("Failed to initialize Kafka producer: {}", e);
-                    None
-                }
+        Ok(brokers) => match KafkaEventProducer::new(&brokers, "auth-events") {
+            Ok(producer) => {
+                tracing::info!("Kafka event producer initialized");
+                Some(producer)
             }
-        }
+            Err(e) => {
+                tracing::warn!("Failed to initialize Kafka producer: {}", e);
+                None
+            }
+        },
         Err(_) => {
             tracing::warn!("KAFKA_BROKERS environment variable not set, event publishing disabled");
             None
@@ -86,35 +78,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         kafka_producer,
     };
 
-    // Build REST API router
-    let rest_router = Router::new()
-        // Authentication endpoints
-        .route("/api/v1/auth/register", post(register))
-        .route("/api/v1/auth/login", post(login))
-        .route("/api/v1/auth/logout", post(logout))
-        .route("/api/v1/auth/refresh", post(refresh_token))
-        .route("/api/v1/auth/change-password", post(change_password))
-        .route("/api/v1/auth/password-reset/request", post(request_password_reset))
-
-        // OAuth endpoints
-        .route("/api/v1/oauth/start", post(start_oauth_flow))
-        .route("/api/v1/oauth/complete", post(complete_oauth_flow))
-
-        // Health check
-        .route("/health", get(health_check))
-        .route("/readiness", get(readiness_check))
-        .route("/metrics", get(metrics::metrics_handler))
-
-        .layer(middleware::from_fn(metrics::track_http_metrics))
-        .layer(TraceLayer::new_for_http())
-        .with_state(app_state.clone());
-
-    // Build gRPC server
-    let grpc_service = build_grpc_service(app_state)?;
+    // Build gRPC service
+    let grpc_service = build_grpc_service(app_state.clone())?;
 
     // Start both servers
     start_servers(
-        rest_router,
+        app_state,
         grpc_service,
         &config.server_host,
         config.server_port,
@@ -125,28 +94,55 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 /// Health check endpoint
-async fn health_check() -> &'static str {
-    "OK"
+async fn health_check() -> impl Responder {
+    HttpResponse::Ok().body("OK")
 }
 
 /// Readiness check endpoint
-async fn readiness_check() -> &'static str {
-    "READY"
+async fn readiness_check() -> impl Responder {
+    HttpResponse::Ok().body("READY")
 }
 
 /// Build gRPC service
 fn build_grpc_service(
     app_state: AppState,
-) -> Result<auth_service::nova::auth::v1::auth_service_server::AuthServiceServer<
-    auth_service::grpc::AuthServiceImpl,
->, Box<dyn std::error::Error>> {
+) -> Result<
+    auth_service::nova::auth::v1::auth_service_server::AuthServiceServer<
+        auth_service::grpc::AuthServiceImpl,
+    >,
+    Box<dyn std::error::Error>,
+> {
     let auth_service = auth_service::grpc::AuthServiceImpl::new(app_state);
     Ok(auth_service::nova::auth::v1::auth_service_server::AuthServiceServer::new(auth_service))
 }
 
+/// Configure REST API routes
+fn configure_routes(cfg: &mut web::ServiceConfig) {
+    cfg.service(
+        web::scope("/api/v1")
+            .service(
+                web::scope("/auth")
+                    .route("/register", web::post().to(register))
+                    .route("/login", web::post().to(login))
+                    .route("/logout", web::post().to(logout))
+                    .route("/refresh", web::post().to(refresh_token))
+                    .route("/change-password", web::post().to(change_password))
+                    .route("/password-reset/request", web::post().to(request_password_reset))
+            )
+            .service(
+                web::scope("/oauth")
+                    .route("/start", web::post().to(start_oauth_flow))
+                    .route("/complete", web::post().to(complete_oauth_flow))
+            )
+    )
+    .route("/health", web::get().to(health_check))
+    .route("/readiness", web::get().to(readiness_check))
+    .route("/metrics", web::get().to(metrics::metrics_handler));
+}
+
 /// Start both REST and gRPC servers
 async fn start_servers(
-    rest_router: Router,
+    app_state: AppState,
     grpc_service: auth_service::nova::auth::v1::auth_service_server::AuthServiceServer<
         auth_service::grpc::AuthServiceImpl,
     >,
@@ -155,14 +151,24 @@ async fn start_servers(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let addr: SocketAddr = format!("{}:{}", host, port).parse()?;
 
-    // REST API server on port `port`
-    let rest_listener = TcpListener::bind(&addr).await?;
-    tracing::info!("REST API listening on {}", addr);
+    // Clone state for REST server
+    let rest_state = app_state.clone();
 
+    // REST API server on port `port`
     let rest_handle = tokio::spawn(async move {
-        axum::serve(rest_listener, rest_router)
-            .await
-            .expect("REST server failed");
+        tracing::info!("REST API listening on {}", addr);
+
+        HttpServer::new(move || {
+            App::new()
+                .app_data(web::Data::new(rest_state.clone()))
+                .wrap(MetricsMiddleware)
+                .configure(configure_routes)
+        })
+        .bind(addr)
+        .expect("Failed to bind REST server")
+        .run()
+        .await
+        .expect("REST server failed");
     });
 
     // gRPC server on port `port + 1000`

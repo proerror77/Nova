@@ -9,11 +9,7 @@ pub struct ApnsConfig {
 
 impl ApnsConfig {
     /// Create new APNs configuration
-    pub fn new(
-        certificate_path: String,
-        bundle_id: String,
-        is_production: bool,
-    ) -> Self {
+    pub fn new(certificate_path: String, bundle_id: String, is_production: bool) -> Self {
         Self {
             certificate_path,
             certificate_passphrase: None,

@@ -1,0 +1,155 @@
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: cdc.posts
+  namespace: kafka
+  labels:
+    strimzi.io/cluster: nova-kafka
+spec:
+  partitions: 3
+  replicas: 1
+  config:
+    cleanup.policy: delete
+    retention.ms: 2592000000
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: cdc.follows
+  namespace: kafka
+  labels:
+    strimzi.io/cluster: nova-kafka
+spec:
+  partitions: 3
+  replicas: 1
+  config:
+    cleanup.policy: delete
+    retention.ms: 2592000000
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: cdc.comments
+  namespace: kafka
+  labels:
+    strimzi.io/cluster: nova-kafka
+spec:
+  partitions: 3
+  replicas: 1
+  config:
+    cleanup.policy: delete
+    retention.ms: 2592000000
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: cdc.likes
+  namespace: kafka
+  labels:
+    strimzi.io/cluster: nova-kafka
+spec:
+  partitions: 3
+  replicas: 1
+  config:
+    cleanup.policy: delete
+    retention.ms: 2592000000
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: social.events
+  namespace: kafka
+  labels:
+    strimzi.io/cluster: nova-kafka
+spec:
+  partitions: 3
+  replicas: 1
+  config:
+    cleanup.policy: delete
+    retention.ms: 2592000000
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: social.events.dlq
+  namespace: kafka
+  labels:
+    strimzi.io/cluster: nova-kafka
+spec:
+  partitions: 1
+  replicas: 1
+  config:
+    cleanup.policy: delete
+    retention.ms: 2592000000
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: nova-events
+  namespace: kafka
+  labels:
+    strimzi.io/cluster: nova-kafka
+spec:
+  topicName: nova_events
+  partitions: 3
+  replicas: 1
+  config:
+    cleanup.policy: delete
+    retention.ms: 2592000000
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: events
+  namespace: kafka
+  labels:
+    strimzi.io/cluster: nova-kafka
+spec:
+  partitions: 3
+  replicas: 1
+  config:
+    cleanup.policy: delete
+    retention.ms: 2592000000
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: recommendations-model-updates
+  namespace: kafka
+  labels:
+    strimzi.io/cluster: nova-kafka
+spec:
+  topicName: recommendations.model_updates
+  partitions: 3
+  replicas: 1
+  config:
+    cleanup.policy: delete
+    retention.ms: 2592000000
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: recommendations.feedback
+  namespace: kafka
+  labels:
+    strimzi.io/cluster: nova-kafka
+spec:
+  partitions: 3
+  replicas: 1
+  config:
+    cleanup.policy: delete
+    retention.ms: 2592000000
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: experiments.config
+  namespace: kafka
+  labels:
+    strimzi.io/cluster: nova-kafka
+spec:
+  partitions: 3
+  replicas: 1
+  config:
+    cleanup.policy: delete
+    retention.ms: 2592000000

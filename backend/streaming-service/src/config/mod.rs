@@ -5,4 +5,4 @@
 
 pub mod video_config;
 
-pub use video_config::{StreamingConfig, CdnConfig};
+pub use video_config::{CdnConfig, StreamingConfig};

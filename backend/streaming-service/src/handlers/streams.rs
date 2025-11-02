@@ -7,11 +7,9 @@
 //! - Stream analytics
 //! - RTMP webhook integration
 
-use actix_web::{
-    web, Either, HttpMessage, HttpRequest, HttpResponse, Result as ActixResult,
-};
-use anyhow::Error;
 use crate::AppError;
+use actix_web::{web, Either, HttpMessage, HttpRequest, HttpResponse, Result as ActixResult};
+use anyhow::Error;
 use serde::Deserialize;
 use serde_json::json;
 use std::sync::Arc;
@@ -20,8 +18,8 @@ use uuid::Uuid;
 use validator::Validate;
 
 use crate::services::streaming::{
-    CreateStreamRequest, RtmpWebhookHandler, StreamAnalyticsService,
-    StreamCategory, StreamComment, StreamDiscoveryService, StreamService,
+    CreateStreamRequest, RtmpWebhookHandler, StreamAnalyticsService, StreamCategory, StreamComment,
+    StreamDiscoveryService, StreamService,
 };
 
 /// Shared state for streaming handlers

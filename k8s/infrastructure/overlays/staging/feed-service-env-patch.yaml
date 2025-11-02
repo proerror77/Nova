@@ -1,0 +1,20 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: feed-service
+  namespace: nova
+spec:
+  template:
+    spec:
+      containers:
+      - name: feed-service
+        env:
+        - name: APP_PORT
+          value: "8080"
+        - name: KAFKA_BOOTSTRAP_SERVERS
+          valueFrom:
+            configMapKeyRef:
+              name: nova-config
+              key: KAFKA_BROKERS
+        - name: USER_SERVICE_GRPC_URL
+          value: http://user-service:9083

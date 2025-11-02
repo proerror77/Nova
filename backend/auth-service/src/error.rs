@@ -1,11 +1,7 @@
+use actix_web::{error::ResponseError, HttpResponse};
+use serde_json::json;
 use thiserror::Error;
 use tonic::{Code, Status};
-use axum::{
-    http::StatusCode,
-    response::{IntoResponse, Response},
-    Json,
-};
-use serde_json::json;
 
 pub type AuthResult<T> = Result<T, AuthError>;
 
@@ -101,7 +97,9 @@ impl AuthError {
             AuthError::InvalidOAuthProvider => {
                 Status::new(Code::InvalidArgument, "Invalid OAuth provider")
             }
-            AuthError::OAuthError(msg) => Status::new(Code::Internal, format!("OAuth error: {}", msg)),
+            AuthError::OAuthError(msg) => {
+                Status::new(Code::Internal, format!("OAuth error: {}", msg))
+            }
             AuthError::PasswordResetTokenExpired => {
                 Status::new(Code::InvalidArgument, "Password reset token expired")
             }
@@ -116,9 +114,10 @@ impl AuthError {
             AuthError::TwoFANotEnabled => {
                 Status::new(Code::FailedPrecondition, "Two FA not enabled")
             }
-            AuthError::Database(_) | AuthError::Redis(_) | AuthError::JwtError(_) | AuthError::Internal(_) => {
-                Status::new(Code::Internal, "Internal server error")
-            }
+            AuthError::Database(_)
+            | AuthError::Redis(_)
+            | AuthError::JwtError(_)
+            | AuthError::Internal(_) => Status::new(Code::Internal, "Internal server error"),
         }
     }
 }
@@ -166,83 +165,62 @@ impl From<AuthError> for Status {
     }
 }
 
-impl IntoResponse for AuthError {
-    fn into_response(self) -> Response {
+impl ResponseError for AuthError {
+    fn error_response(&self) -> HttpResponse {
         let (status, error_message) = match self {
-            AuthError::InvalidCredentials => (
-                StatusCode::UNAUTHORIZED,
-                "Invalid credentials".to_string(),
-            ),
-            AuthError::UserNotFound => (
-                StatusCode::NOT_FOUND,
-                "User not found".to_string(),
-            ),
-            AuthError::EmailAlreadyExists => (
-                StatusCode::CONFLICT,
-                "Email already exists".to_string(),
-            ),
-            AuthError::UsernameAlreadyExists => (
-                StatusCode::CONFLICT,
-                "Username already exists".to_string(),
-            ),
-            AuthError::InvalidEmailFormat => (
-                StatusCode::BAD_REQUEST,
-                "Invalid email format".to_string(),
-            ),
-            AuthError::WeakPassword => (
-                StatusCode::BAD_REQUEST,
-                "Password too weak".to_string(),
-            ),
+            AuthError::InvalidCredentials => {
+                (actix_web::http::StatusCode::UNAUTHORIZED, "Invalid credentials".to_string())
+            }
+            AuthError::UserNotFound => (actix_web::http::StatusCode::NOT_FOUND, "User not found".to_string()),
+            AuthError::EmailAlreadyExists => {
+                (actix_web::http::StatusCode::CONFLICT, "Email already exists".to_string())
+            }
+            AuthError::UsernameAlreadyExists => {
+                (actix_web::http::StatusCode::CONFLICT, "Username already exists".to_string())
+            }
+            AuthError::InvalidEmailFormat => {
+                (actix_web::http::StatusCode::BAD_REQUEST, "Invalid email format".to_string())
+            }
+            AuthError::WeakPassword => (actix_web::http::StatusCode::BAD_REQUEST, "Password too weak".to_string()),
             AuthError::InvalidToken | AuthError::TokenExpired => (
-                StatusCode::UNAUTHORIZED,
+                actix_web::http::StatusCode::UNAUTHORIZED,
                 "Invalid or expired token".to_string(),
             ),
-            AuthError::InvalidOAuthState => (
-                StatusCode::BAD_REQUEST,
-                "Invalid OAuth state".to_string(),
-            ),
+            AuthError::InvalidOAuthState => {
+                (actix_web::http::StatusCode::BAD_REQUEST, "Invalid OAuth state".to_string())
+            }
             AuthError::InvalidOAuthProvider => (
-                StatusCode::BAD_REQUEST,
+                actix_web::http::StatusCode::BAD_REQUEST,
                 "Invalid OAuth provider".to_string(),
             ),
             AuthError::OAuthError(msg) => (
-                StatusCode::INTERNAL_SERVER_ERROR,
+                actix_web::http::StatusCode::INTERNAL_SERVER_ERROR,
                 format!("OAuth error: {}", msg),
             ),
             AuthError::PasswordResetTokenExpired => (
-                StatusCode::BAD_REQUEST,
+                actix_web::http::StatusCode::BAD_REQUEST,
                 "Password reset token expired".to_string(),
             ),
             AuthError::InvalidPasswordResetToken => (
-                StatusCode::BAD_REQUEST,
+                actix_web::http::StatusCode::BAD_REQUEST,
                 "Invalid password reset token".to_string(),
             ),
-            AuthError::SessionNotFound => (
-                StatusCode::NOT_FOUND,
-                "Session not found".to_string(),
-            ),
-            AuthError::TwoFARequired => (
-                StatusCode::UNAUTHORIZED,
-                "Two FA required".to_string(),
-            ),
-            AuthError::InvalidTwoFACode => (
-                StatusCode::UNAUTHORIZED,
-                "Invalid two FA code".to_string(),
-            ),
-            AuthError::TwoFANotEnabled => (
-                StatusCode::BAD_REQUEST,
-                "Two FA not enabled".to_string(),
-            ),
-            AuthError::Database(msg) | AuthError::Redis(msg) | AuthError::JwtError(msg) | AuthError::Internal(msg) => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                msg,
-            ),
+            AuthError::SessionNotFound => (actix_web::http::StatusCode::NOT_FOUND, "Session not found".to_string()),
+            AuthError::TwoFARequired => (actix_web::http::StatusCode::UNAUTHORIZED, "Two FA required".to_string()),
+            AuthError::InvalidTwoFACode => {
+                (actix_web::http::StatusCode::UNAUTHORIZED, "Invalid two FA code".to_string())
+            }
+            AuthError::TwoFANotEnabled => {
+                (actix_web::http::StatusCode::BAD_REQUEST, "Two FA not enabled".to_string())
+            }
+            AuthError::Database(msg)
+            | AuthError::Redis(msg)
+            | AuthError::JwtError(msg)
+            | AuthError::Internal(msg) => (actix_web::http::StatusCode::INTERNAL_SERVER_ERROR, msg.clone()),
         };
 
-        let body = Json(json!({
+        HttpResponse::build(status).json(json!({
             "error": error_message,
-        }));
-
-        (status, body).into_response()
+        }))
     }
 }

@@ -5,7 +5,6 @@ pub mod events;
 // pub mod experiments; // REMOVED - moved to feed-service (port 8089) [DELETED]
 // pub mod feed; // REMOVED - moved to feed-service (port 8089) [DELETED]
 pub mod health;
-pub mod jwks;
 // pub mod likes; // REMOVED - moved to content-service (port 8081) [DELETED]
 pub mod relationships;
 // pub mod messaging; // REMOVED - moved to messaging-service (port 8085) [DELETED]
@@ -32,7 +31,6 @@ pub mod users; // Public user profile endpoints (minimal)
 pub use events::*;
 // pub use feed::*; // REMOVED - moved to feed-service (port 8089) [DELETED]
 pub use health::*;
-pub use jwks::*;
 // pub use likes::*; // REMOVED - moved to content-service (port 8081) [DELETED]
 pub use relationships::*;
 // pub use messaging::*; // REMOVED - moved to messaging-service (port 8085) [DELETED]

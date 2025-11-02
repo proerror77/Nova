@@ -2,12 +2,12 @@
 //! Implements "sync from last known ID" pattern for message recovery
 //! Allows clients to resume from where they left off when reconnecting
 
+use crate::models::message::MessageEnvelope;
 use crate::redis_client::RedisClient;
 use redis::{AsyncCommands, FromRedisValue, RedisResult, Value as RedisValue};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use uuid::Uuid;
-use crate::models::message::MessageEnvelope;
 
 /// Represents a client's position in the message stream
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -297,7 +297,11 @@ pub async fn read_pending_messages(
             FromRedisValue::from_redis_value(&raw)?;
 
         for (entry_id, fields) in &entries {
-            results.push(convert_entry(conversation_id, entry_id.clone(), fields.clone()));
+            results.push(convert_entry(
+                conversation_id,
+                entry_id.clone(),
+                fields.clone(),
+            ));
         }
 
         if next_start == "0-0" || entries.is_empty() {

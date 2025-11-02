@@ -1,5 +1,4 @@
-use axum::extract::Request;
-use axum::middleware;
+use actix_web::{web, App, HttpServer};
 use crypto_core::jwt as core_jwt;
 use messaging_service::{
     config, db, error, logging,
@@ -10,12 +9,10 @@ use messaging_service::{
     websocket::streams::{start_streams_listener, StreamsConfig},
 };
 use redis_utils::{RedisPool, SentinelConfig};
-use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::net::TcpListener;
 
-#[tokio::main]
+#[actix_web::main]
 async fn main() -> Result<(), error::AppError> {
     logging::init_tracing();
     let cfg = Arc::new(config::Config::from_env()?);
@@ -38,12 +35,13 @@ async fn main() -> Result<(), error::AppError> {
         .map_err(|e| error::AppError::StartServer(format!("redis: {e}")))?;
     let redis = RedisClient::new(redis_pool.manager());
     let registry = messaging_service::websocket::ConnectionRegistry::new();
+
     // Run embedded migrations (idempotent)
     if let Err(e) = messaging_service::migrations::run_all(&db).await {
         tracing::warn!(error=%e, "failed to run migrations at startup");
     }
-    // 初始化 JWT 驗證（支援從檔案讀取）
-    // debug: print whether file env exists
+
+    // Initialize JWT validation (support reading from file)
     if let Ok(path) = std::env::var("JWT_PUBLIC_KEY_FILE") {
         tracing::info!(jwt_public_key_file=%path, "JWT public key file env detected");
     } else {
@@ -85,6 +83,7 @@ async fn main() -> Result<(), error::AppError> {
         encryption: encryption.clone(),
         key_exchange_service: Some(key_exchange_service),
     };
+
     // Start Redis Streams listener for cross-instance fanout
     let redis_stream = redis.clone();
     tokio::spawn(async move {
@@ -94,34 +93,21 @@ async fn main() -> Result<(), error::AppError> {
         }
     });
 
-    // Wrap db in Arc for sharing across middleware
-    let db_arc = Arc::new(db);
+    let bind_addr = format!("0.0.0.0:{}", cfg.port);
+    tracing::info!(%bind_addr, "starting messaging-service");
 
-    // Add DB pool to all request extensions via middleware
-    // and apply JWT authentication middleware
-    let app = routes::build_router()
-        .with_state(state)
-        .layer(middleware::from_fn(
-            messaging_service::metrics::track_http_metrics,
-        ))
-        .layer(middleware::from_fn(
-            move |mut req: Request, next: axum::middleware::Next| {
-                let db = db_arc.clone();
-                async move {
-                    req.extensions_mut().insert(db);
-                    next.run(req).await
-                }
-            },
-        ));
-
-    let addr: SocketAddr = ([0, 0, 0, 0], cfg.port).into();
-    tracing::info!(%addr, "starting messaging-service");
-    let listener = TcpListener::bind(addr)
-        .await
-        .map_err(|e| error::AppError::StartServer(e.to_string()))?;
-    axum::serve(listener, app)
-        .await
-        .map_err(|e| error::AppError::StartServer(e.to_string()))?;
+    HttpServer::new(move || {
+        App::new()
+            .app_data(web::Data::new(state.clone()))
+            .app_data(web::Data::new(db.clone()))
+            .configure(routes::configure_routes)
+            .wrap(actix_middleware::MetricsMiddleware)
+    })
+    .bind(&bind_addr)
+    .map_err(|e| error::AppError::StartServer(e.to_string()))?
+    .run()
+    .await
+    .map_err(|e| error::AppError::StartServer(e.to_string()))?;
 
     Ok(())
 }

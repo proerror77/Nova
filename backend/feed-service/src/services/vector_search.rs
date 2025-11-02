@@ -8,7 +8,6 @@
 /// - Semantic similarity search
 /// - Vector query optimization
 /// - Connection pooling with health checks
-
 use crate::error::{AppError, Result};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -57,9 +56,7 @@ impl VectorSearchService {
             milvus_url,
             collection_name,
             vector_dim,
-            embedding_cache: Arc::new(tokio::sync::RwLock::new(
-                std::collections::HashMap::new(),
-            )),
+            embedding_cache: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
         }
     }
 

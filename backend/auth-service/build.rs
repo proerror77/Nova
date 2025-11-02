@@ -4,9 +4,6 @@ fn main() {
     tonic_build::configure()
         .build_server(true)
         .build_client(false)
-        .compile(
-            &["../protos/auth.proto"],
-            &["../protos/"],
-        )
+        .compile(&["../protos/auth.proto"], &["../protos/"])
         .expect("Failed to compile auth.proto");
 }

@@ -2,8 +2,8 @@
 //!
 //! Shared data structures for video-service and related systems
 
-pub mod models;
 pub mod constants;
+pub mod models;
 
 pub use models::*;
 

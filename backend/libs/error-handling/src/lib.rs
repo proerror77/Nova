@@ -124,9 +124,15 @@ mod tests {
 
     #[test]
     fn test_error_status_codes() {
-        assert_eq!(ServiceError::NotFound("test".to_string()).status_code(), 404);
+        assert_eq!(
+            ServiceError::NotFound("test".to_string()).status_code(),
+            404
+        );
         assert_eq!(ServiceError::Unauthorized.status_code(), 401);
-        assert_eq!(ServiceError::ValidationError("test".to_string()).status_code(), 400);
+        assert_eq!(
+            ServiceError::ValidationError("test".to_string()).status_code(),
+            400
+        );
     }
 
     #[test]

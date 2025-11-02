@@ -10,8 +10,8 @@
 
 use crate::error::{AppError, Result};
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 use std::path::Path;
+use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{info, warn};
 
@@ -94,7 +94,10 @@ impl ONNXModelServer {
     /// Reload model from disk (hot-reload)
     pub async fn reload(&self, model_path: &str) -> Result<()> {
         if !Path::new(model_path).exists() {
-            return Err(AppError::NotFound(format!("Model file not found: {}", model_path)));
+            return Err(AppError::NotFound(format!(
+                "Model file not found: {}",
+                model_path
+            )));
         }
 
         // Update path
@@ -140,7 +143,7 @@ impl ONNXModelServer {
         let avg: u128 = sorted.iter().sum::<u128>() / sorted.len() as u128;
 
         LatencyStats {
-            p50_ms: sorted[p50_idx] as f64 / 1_000_000.0,  // Convert ns to ms
+            p50_ms: sorted[p50_idx] as f64 / 1_000_000.0, // Convert ns to ms
             p95_ms: sorted[p95_idx.min(sorted.len() - 1)] as f64 / 1_000_000.0,
             p99_ms: sorted[p99_idx.min(sorted.len() - 1)] as f64 / 1_000_000.0,
             avg_ms: avg as f64 / 1_000_000.0,
