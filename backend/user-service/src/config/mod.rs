@@ -114,6 +114,8 @@ pub struct CorsConfig {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct ClickHouseConfig {
+    #[serde(default = "default_clickhouse_enabled")]
+    pub enabled: bool,
     pub url: String,
     #[serde(default = "default_clickhouse_database")]
     pub database: String,
@@ -199,6 +201,10 @@ fn default_s3_presigned_url_expiry_secs() -> u64 {
 
 fn default_cors_max_age() -> u64 {
     3600 // 1 hour
+}
+
+fn default_clickhouse_enabled() -> bool {
+    true
 }
 
 fn default_clickhouse_database() -> String {
@@ -366,6 +372,10 @@ impl Config {
         };
 
         let clickhouse = ClickHouseConfig {
+            enabled: env::var("CLICKHOUSE_ENABLED")
+                .unwrap_or_else(|_| default_clickhouse_enabled().to_string())
+                .parse()
+                .unwrap_or(default_clickhouse_enabled()),
             url: env::var("CLICKHOUSE_URL").expect("CLICKHOUSE_URL must be set"),
             database: env::var("CLICKHOUSE_DB").unwrap_or_else(|_| default_clickhouse_database()),
             username: env::var("CLICKHOUSE_USER").unwrap_or_else(|_| default_clickhouse_user()),

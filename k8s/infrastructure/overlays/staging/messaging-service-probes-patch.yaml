@@ -1,0 +1,23 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: messaging-service
+  namespace: nova
+spec:
+  template:
+    spec:
+      containers:
+      - name: messaging-service
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: http
+        startupProbe:
+          httpGet:
+            path: /health
+            port: http
+

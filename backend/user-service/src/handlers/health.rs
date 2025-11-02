@@ -52,6 +52,8 @@ pub struct HealthCheckState {
     pub kafka_producer: Option<Arc<EventProducer>>,
     pub health_checker: Arc<HealthChecker>,
     pub cdc_healthy: Arc<AtomicBool>,
+    pub clickhouse_enabled: bool,
+    pub cdc_enabled: bool,
 }
 
 impl HealthCheckState {
@@ -62,6 +64,8 @@ impl HealthCheckState {
         kafka_producer: Option<Arc<EventProducer>>,
         health_checker: Arc<HealthChecker>,
         cdc_healthy: Arc<AtomicBool>,
+        clickhouse_enabled: bool,
+        cdc_enabled: bool,
     ) -> Self {
         Self {
             db_pool,
@@ -70,6 +74,8 @@ impl HealthCheckState {
             kafka_producer,
             health_checker,
             cdc_healthy,
+            clickhouse_enabled,
+            cdc_enabled,
         }
     }
 
@@ -231,37 +237,50 @@ pub async fn readiness_check(state: web::Data<HealthCheckState>) -> impl Respond
     );
 
     // 4. ClickHouse check (optional, degrades gracefully)
-    match state.check_clickhouse().await {
-        Some(Ok(())) => {
-            checks.insert(
-                "clickhouse".to_string(),
-                ComponentCheck {
-                    status: ComponentStatus::Healthy,
-                    message: "ClickHouse query successful".to_string(),
-                    latency_ms: None,
-                },
-            );
-        }
-        Some(Err(e)) => {
-            has_degraded = true;
-            checks.insert(
-                "clickhouse".to_string(),
-                ComponentCheck {
-                    status: ComponentStatus::Degraded,
-                    message: format!("ClickHouse health check failed: {}", e),
-                    latency_ms: None,
-                },
-            );
-        }
-        None => {
-            checks.insert(
-                "clickhouse".to_string(),
-                ComponentCheck {
-                    status: ComponentStatus::Healthy,
-                    message: "ClickHouse not configured for this deployment".to_string(),
-                    latency_ms: None,
-                },
-            );
+    if !state.clickhouse_enabled {
+        checks.insert(
+            "clickhouse".to_string(),
+            ComponentCheck {
+                status: ComponentStatus::Healthy,
+                message: "ClickHouse integration disabled by configuration".to_string(),
+                latency_ms: None,
+            },
+        );
+    } else {
+        match state.check_clickhouse().await {
+            Some(Ok(())) => {
+                checks.insert(
+                    "clickhouse".to_string(),
+                    ComponentCheck {
+                        status: ComponentStatus::Healthy,
+                        message: "ClickHouse query successful".to_string(),
+                        latency_ms: None,
+                    },
+                );
+            }
+            Some(Err(e)) => {
+                has_degraded = true;
+                checks.insert(
+                    "clickhouse".to_string(),
+                    ComponentCheck {
+                        status: ComponentStatus::Degraded,
+                        message: format!("ClickHouse health check failed: {}", e),
+                        latency_ms: None,
+                    },
+                );
+            }
+            None => {
+                has_degraded = true;
+                checks.insert(
+                    "clickhouse".to_string(),
+                    ComponentCheck {
+                        status: ComponentStatus::Degraded,
+                        message: "ClickHouse client unavailable (initialization failed)"
+                            .to_string(),
+                        latency_ms: None,
+                    },
+                );
+            }
         }
     }
 
@@ -301,7 +320,16 @@ pub async fn readiness_check(state: web::Data<HealthCheckState>) -> impl Respond
     }
 
     // 6. CDC replication check (critical for analytics consistency)
-    if state.cdc_healthy.load(Ordering::SeqCst) {
+    if !state.cdc_enabled {
+        checks.insert(
+            "cdc_replication".to_string(),
+            ComponentCheck {
+                status: ComponentStatus::Healthy,
+                message: "CDC replication disabled".to_string(),
+                latency_ms: None,
+            },
+        );
+    } else if state.cdc_healthy.load(Ordering::SeqCst) {
         checks.insert(
             "cdc_replication".to_string(),
             ComponentCheck {

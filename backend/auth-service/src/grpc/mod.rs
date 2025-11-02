@@ -2,14 +2,11 @@
 use tonic::{Request, Response, Status};
 use uuid::Uuid;
 
-use crate::{
-    nova::auth::v1::auth_service_server::AuthService,
-    nova::auth::v1::*,
-    AppState,
-};
+use crate::{nova::auth::v1::auth_service_server::AuthService, nova::auth::v1::*, AppState};
 
 /// gRPC AuthService implementation
 pub struct AuthServiceImpl {
+    #[allow(dead_code)]
     state: AppState,
 }
 
@@ -39,12 +36,9 @@ impl AuthService for AuthServiceImpl {
                 // TODO: Save user to database
                 let user_id = Uuid::new_v4();
 
-                let token_pair = crate::security::jwt::generate_token_pair(
-                    user_id,
-                    &req.email,
-                    &req.username,
-                )
-                .map_err(|e| Status::internal(e.to_string()))?;
+                let token_pair =
+                    crate::security::jwt::generate_token_pair(user_id, &req.email, &req.username)
+                        .map_err(|e| Status::internal(e.to_string()))?;
 
                 Ok(Response::new(AuthResponse {
                     user_id: user_id.to_string(),
@@ -83,20 +77,18 @@ impl AuthService for AuthServiceImpl {
         let req = request.into_inner();
 
         match crate::security::jwt::validate_token(&req.token) {
-            Ok(token_data) => {
-                Ok(Response::new(ValidateTokenResponse {
-                    valid: true,
-                    claims: Some(TokenClaims {
-                        user_id: token_data.claims.sub,
-                        email: token_data.claims.email,
-                        username: token_data.claims.username,
-                        roles: vec![],
-                        issued_at: token_data.claims.iat as i64,
-                        expires_at: token_data.claims.exp as i64,
-                    }),
-                    error: String::new(),
-                }))
-            }
+            Ok(token_data) => Ok(Response::new(ValidateTokenResponse {
+                valid: true,
+                claims: Some(TokenClaims {
+                    user_id: token_data.claims.sub,
+                    email: token_data.claims.email,
+                    username: token_data.claims.username,
+                    roles: vec![],
+                    issued_at: token_data.claims.iat as i64,
+                    expires_at: token_data.claims.exp as i64,
+                }),
+                error: String::new(),
+            })),
             Err(e) => Ok(Response::new(ValidateTokenResponse {
                 valid: false,
                 claims: None,
@@ -345,4 +337,3 @@ impl AuthService for AuthServiceImpl {
         Ok(Response::new(DisableTwoFaResponse { success: true }))
     }
 }
-

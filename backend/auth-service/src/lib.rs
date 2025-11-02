@@ -16,13 +16,11 @@
 /// - Redis for sessions and caching
 /// - Argon2id for password hashing
 /// - RS256 for JWT signing with key rotation
-
 pub mod config;
 pub mod db;
 pub mod error;
 pub mod grpc;
 pub mod handlers;
-pub mod middleware;
 pub mod models;
 pub mod security;
 pub mod services;
@@ -31,8 +29,8 @@ pub mod validators;
 
 pub use error::{AuthError, AuthResult};
 use redis::aio::ConnectionManager;
-use sqlx::PgPool;
 use services::KafkaEventProducer;
+use sqlx::PgPool;
 
 /// Application state shared across all handlers
 #[derive(Clone)]

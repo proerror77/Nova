@@ -36,11 +36,11 @@ impl VideoStatus {
 /// Video quality/transcoding profile
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VideoQuality {
-    pub resolution: String,      // e.g., "1080p", "720p"
-    pub bitrate: i32,             // in kbps
-    pub format: String,           // "mp4", "webm", etc.
-    pub codec: String,            // "h264", "h265", etc.
-    pub url: Option<String>,      // CDN URL after transcoding
+    pub resolution: String,  // e.g., "1080p", "720p"
+    pub bitrate: i32,        // in kbps
+    pub format: String,      // "mp4", "webm", etc.
+    pub codec: String,       // "h264", "h265", etc.
+    pub url: Option<String>, // CDN URL after transcoding
 }
 
 /// Core video metadata
@@ -51,13 +51,13 @@ pub struct Video {
     pub title: String,
     pub description: Option<String>,
     pub status: VideoStatus,
-    pub duration: Option<i32>,    // in seconds
+    pub duration: Option<i32>, // in seconds
     pub width: Option<i32>,
     pub height: Option<i32>,
-    pub file_size: Option<i64>,   // in bytes
+    pub file_size: Option<i64>,    // in bytes
     pub file_path: Option<String>, // S3 or storage path
     pub thumbnail_url: Option<String>,
-    pub hls_url: Option<String>,  // HLS streaming URL
+    pub hls_url: Option<String>, // HLS streaming URL
     pub qualities: Vec<VideoQuality>,
     pub views: i64,
     pub likes: i64,

@@ -4,11 +4,7 @@ use uuid::Uuid;
 
 /// Create a new like on a post
 /// Returns the created like, or an error if already liked
-pub async fn create_like(
-    pool: &PgPool,
-    post_id: Uuid,
-    user_id: Uuid,
-) -> Result<Like, sqlx::Error> {
+pub async fn create_like(pool: &PgPool, post_id: Uuid, user_id: Uuid) -> Result<Like, sqlx::Error> {
     let like = sqlx::query_as::<_, Like>(
         r#"
         INSERT INTO likes (post_id, user_id)
@@ -25,11 +21,7 @@ pub async fn create_like(
 }
 
 /// Delete a like from a post
-pub async fn delete_like(
-    pool: &PgPool,
-    post_id: Uuid,
-    user_id: Uuid,
-) -> Result<(), sqlx::Error> {
+pub async fn delete_like(pool: &PgPool, post_id: Uuid, user_id: Uuid) -> Result<(), sqlx::Error> {
     sqlx::query(
         r#"
         DELETE FROM likes
@@ -67,12 +59,10 @@ pub async fn find_like(
 
 /// Count total likes for a post
 pub async fn count_likes_by_post(pool: &PgPool, post_id: Uuid) -> Result<i64, sqlx::Error> {
-    let row = sqlx::query(
-        "SELECT COUNT(*) as count FROM likes WHERE post_id = $1",
-    )
-    .bind(post_id)
-    .fetch_one(pool)
-    .await?;
+    let row = sqlx::query("SELECT COUNT(*) as count FROM likes WHERE post_id = $1")
+        .bind(post_id)
+        .fetch_one(pool)
+        .await?;
 
     Ok(row.get::<i64, _>("count"))
 }

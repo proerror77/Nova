@@ -1,10 +1,10 @@
 use crate::middleware::error_handling;
-use axum::response::{IntoResponse, Response};
+use actix_web::{HttpResponse, ResponseError};
 use thiserror::Error;
 
-impl IntoResponse for AppError {
-    fn into_response(self) -> Response {
-        error_handling::into_response(self).into_response()
+impl ResponseError for AppError {
+    fn error_response(&self) -> HttpResponse {
+        error_handling::into_response(self.clone())
     }
 }
 
@@ -17,7 +17,7 @@ pub enum ErrorKind {
     Permanent,
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Clone)]
 pub enum AppError {
     #[error("configuration error: {0}")]
     Config(String),
@@ -38,7 +38,7 @@ pub enum AppError {
     NotFound,
 
     #[error("database error: {0}")]
-    Database(#[from] sqlx::Error),
+    Database(String),
 
     #[error("encryption error: {0}")]
     Encryption(String),
@@ -66,15 +66,24 @@ pub enum AppError {
     },
 }
 
+impl From<sqlx::Error> for AppError {
+    fn from(e: sqlx::Error) -> Self {
+        AppError::Database(e.to_string())
+    }
+}
+
+// NOTE: No need to implement From<AppError> for actix_web::Error
+// because actix-web provides a blanket impl for all ResponseError types:
+// impl<T: ResponseError + 'static> From<T> for actix_web::Error
+
 impl AppError {
     /// Returns whether this error is retryable (e.g., database connection timeout)
     pub fn is_retryable(&self) -> bool {
         match self {
-            AppError::Database(e) => {
-                matches!(
-                    e,
-                    sqlx::Error::PoolTimedOut | sqlx::Error::PoolClosed | sqlx::Error::Io(_)
-                )
+            AppError::Database(msg) => {
+                msg.contains("PoolTimedOut")
+                    || msg.contains("PoolClosed")
+                    || msg.contains("Io")
             }
             AppError::Internal => true,
             _ => false,

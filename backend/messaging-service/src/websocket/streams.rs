@@ -356,7 +356,7 @@ pub async fn start_streams_listener(
                                     registry
                                         .broadcast(
                                             conversation_id,
-                                            axum::extract::ws::Message::Text(payload.into()),
+                                            payload,
                                         )
                                         .await;
                                 }

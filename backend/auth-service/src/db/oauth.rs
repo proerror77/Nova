@@ -1,9 +1,9 @@
 /// OAuth database operations
 use crate::error::AuthResult;
 use crate::models::OAuthConnection;
+use chrono::{DateTime, Utc};
 use sqlx::PgPool;
 use uuid::Uuid;
-use chrono::{DateTime, Utc};
 
 /// Find OAuth connection by provider and provider user ID
 pub async fn find_by_provider(
@@ -12,7 +12,7 @@ pub async fn find_by_provider(
     provider_user_id: &str,
 ) -> AuthResult<Option<OAuthConnection>> {
     let connection = sqlx::query_as::<_, OAuthConnection>(
-        "SELECT * FROM oauth_connections WHERE provider = $1 AND provider_user_id = $2"
+        "SELECT * FROM oauth_connections WHERE provider = $1 AND provider_user_id = $2",
     )
     .bind(provider)
     .bind(provider_user_id)
@@ -26,7 +26,7 @@ pub async fn find_by_provider(
 /// Find all OAuth connections for a user
 pub async fn find_by_user_id(pool: &PgPool, user_id: Uuid) -> AuthResult<Vec<OAuthConnection>> {
     let connections = sqlx::query_as::<_, OAuthConnection>(
-        "SELECT * FROM oauth_connections WHERE user_id = $1 ORDER BY created_at DESC"
+        "SELECT * FROM oauth_connections WHERE user_id = $1 ORDER BY created_at DESC",
     )
     .bind(user_id)
     .fetch_all(pool)
@@ -96,7 +96,7 @@ pub async fn update_tokens(
             expires_at = COALESCE($4, expires_at),
             updated_at = CURRENT_TIMESTAMP
         WHERE id = $5
-        "#
+        "#,
     )
     .bind(access_token_encrypted)
     .bind(refresh_token_encrypted)
@@ -128,7 +128,7 @@ pub async fn has_provider_connection(
     provider: &str,
 ) -> AuthResult<bool> {
     let exists = sqlx::query_scalar::<_, bool>(
-        "SELECT EXISTS(SELECT 1 FROM oauth_connections WHERE user_id = $1 AND provider = $2)"
+        "SELECT EXISTS(SELECT 1 FROM oauth_connections WHERE user_id = $1 AND provider = $2)",
     )
     .bind(user_id)
     .bind(provider)

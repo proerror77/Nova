@@ -8,6 +8,7 @@ members = [
     "backend/messaging-service",
     "backend/search-service",
     "backend/streaming-service",
+    "backend/libs/actix-middleware",
     "backend/libs/crypto-core",
     "backend/libs/db-pool",
     "backend/libs/error-handling",
