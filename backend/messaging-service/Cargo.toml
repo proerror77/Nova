@@ -33,7 +33,7 @@ chrono = { workspace = true }
 once_cell = "1.19"
 base64 = { workspace = true }
 utoipa = { workspace = true }
-utoipa-swagger-ui = { version = "9.0", features = ["actix-web"] }
+utoipa-swagger-ui = { version = "5", features = ["actix-web"] }
 hmac = { workspace = true }
 sha2 = { workspace = true }
 hkdf = { workspace = true }

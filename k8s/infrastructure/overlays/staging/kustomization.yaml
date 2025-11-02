@@ -25,6 +25,7 @@ patchesStrategicMerge:
 - s3-env-patch.yaml
 - hpa-min1-patch.yaml
 - prefer-large-nodes-patch.yaml
+- resource-optimization-patch.yaml
 # Harden ClickHouse exposure
 
 images:

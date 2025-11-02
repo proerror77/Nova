@@ -144,7 +144,10 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig) {
             // RTC configuration
             .route("/rtc/ice-config", web::get().to(get_ice_config))
             // Location sharing
-            .route("/conversations/{id}/location", web::post().to(share_location))
+            .route(
+                "/conversations/{id}/location",
+                web::post().to(share_location),
+            )
             .route(
                 "/conversations/{id}/locations",
                 web::get().to(get_conversation_locations),
@@ -175,23 +178,14 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig) {
                 "/conversations/groups",
                 web::post().to(create_group_conversation),
             )
-            .route(
-                "/conversations/{id}",
-                web::get().to(get_conversation),
-            )
-            .route(
-                "/conversations/{id}",
-                web::delete().to(delete_group),
-            )
+            .route("/conversations/{id}", web::get().to(get_conversation))
+            .route("/conversations/{id}", web::delete().to(delete_group))
             .route(
                 "/conversations/{id}/encryption-key",
                 web::get().to(get_conversation_key),
             )
             .route("/conversations/{id}/leave", web::post().to(leave_group))
-            .route(
-                "/conversations/{id}/messages",
-                web::post().to(send_message),
-            )
+            .route("/conversations/{id}/messages", web::post().to(send_message))
             .route(
                 "/conversations/{id}/messages/audio",
                 web::post().to(send_audio_message),

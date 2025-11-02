@@ -1,8 +1,11 @@
+mod openapi;
+
 use actix_web::{dev::Service, web, App, HttpServer};
 use std::io;
 use std::sync::Arc;
 use std::time::Instant;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+use utoipa_swagger_ui::SwaggerUi;
 
 use rdkafka::config::ClientConfig;
 use rdkafka::consumer::{Consumer, StreamConsumer};
@@ -15,6 +18,15 @@ use recommendation_service::handlers::{
 use recommendation_service::services::{RecommendationEventConsumer, RecommendationServiceV2};
 use serde_json::from_slice;
 use tracing::{error, info, warn};
+
+async fn openapi_json(doc: web::Data<utoipa::openapi::OpenApi>) -> actix_web::HttpResponse {
+    let body = serde_json::to_string(&*doc)
+        .expect("Failed to serialize OpenAPI document for feed-service");
+
+    actix_web::HttpResponse::Ok()
+        .content_type("application/json")
+        .body(body)
+}
 
 /// Start Kafka consumer for recommendation events
 async fn start_kafka_consumer(
@@ -163,7 +175,15 @@ async fn main() -> io::Result<()> {
 
     // Start HTTP server
     let http_server = HttpServer::new(move || {
+        let openapi_doc = openapi::doc();
+
         App::new()
+            .app_data(web::Data::new(openapi_doc.clone()))
+            .service(
+                SwaggerUi::new("/swagger-ui/{_:.*}")
+                    .url("/api/v1/openapi.json", openapi_doc.clone()),
+            )
+            .route("/api/v1/openapi.json", web::get().to(openapi_json))
             .app_data(db_pool.clone())
             .app_data(rec_handler_state.clone())
             .route("/health", web::get().to(|| async { "OK" }))

@@ -39,6 +39,7 @@ md5 = "0.7"
 
 # OpenAPI
 utoipa = { workspace = true }
+utoipa-swagger-ui = { version = "5", features = ["actix-web"] }
 elasticsearch = "8.19.0-alpha.1"
 url = "2"
 error-types = { path = "../libs/error-types" }

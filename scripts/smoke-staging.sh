@@ -28,6 +28,17 @@ METRICS_CHECKS=(
   "streaming-service:8083:/metrics"
 )
 
+OPENAPI_CHECKS=(
+  "auth-service:8084:/api/v1/openapi.json"
+  "user-service:8080:/api/v1/openapi.json"
+  "content-service:8081:/api/v1/openapi.json"
+  "feed-service:8000:/api/v1/openapi.json"
+  "messaging-service:3000:/api/v1/openapi.json"
+  "media-service:8082:/api/v1/openapi.json"
+  "search-service:8080:/api/v1/openapi.json"
+  "streaming-service:8083:/api/v1/openapi.json"
+)
+
 echo ">>> Using namespace: ${NAMESPACE}"
 echo ">>> Verifying kubectl context..."
 kubectl cluster-info >/dev/null
@@ -66,6 +77,12 @@ for entry in "${METRICS_CHECKS[@]}"; do
   run_curl "${service}-metrics" "${service}" "${port}" "${path}" || {
     echo "!!! Warning: metrics endpoint failed for ${service}"
   }
+done
+
+echo ">>> Checking OpenAPI documentation endpoints"
+for entry in "${OPENAPI_CHECKS[@]}"; do
+  IFS=":" read -r service port path <<<"${entry}"
+  run_curl "${service}-openapi" "${service}" "${port}" "${path}"
 done
 
 echo ">>> Verifying Redis Sentinel topology (optional)"

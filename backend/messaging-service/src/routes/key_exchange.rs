@@ -1,10 +1,10 @@
 use crate::error::AppError;
 use crate::middleware::guards::User;
 use crate::state::AppState;
+use actix_web::{web, HttpResponse};
 use base64::{engine::general_purpose, Engine as _};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use actix_web::{web, HttpResponse};
 
 /// Request to initiate ECDH key exchange
 #[derive(Deserialize)]

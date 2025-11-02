@@ -1,8 +1,37 @@
 /// User database operations
-use crate::error::AuthResult;
+use crate::error::{AuthError, AuthResult};
 use crate::models::User;
-use sqlx::PgPool;
+use chrono::{DateTime, Utc};
+use serde_json::json;
+use sqlx::{PgPool, Postgres, Transaction};
 use uuid::Uuid;
+
+/// Lightweight projection for profile-centric views
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct UserProfileRecord {
+    pub id: Uuid,
+    pub username: String,
+    pub email: String,
+    pub display_name: Option<String>,
+    pub bio: Option<String>,
+    pub avatar_url: Option<String>,
+    pub cover_photo_url: Option<String>,
+    pub location: Option<String>,
+    pub private_account: bool,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+/// Optional fields for profile updates (single writer via auth-service)
+#[derive(Debug, Default)]
+pub struct UpdateUserProfileFields {
+    pub display_name: Option<String>,
+    pub bio: Option<String>,
+    pub avatar_url: Option<String>,
+    pub cover_photo_url: Option<String>,
+    pub location: Option<String>,
+    pub private_account: Option<bool>,
+}
 
 /// Find user by email (excluding soft-deleted users)
 pub async fn find_by_email(pool: &PgPool, email: &str) -> AuthResult<Option<User>> {
@@ -50,6 +79,210 @@ pub async fn create_user(
     .map_err(|e| crate::error::AuthError::Database(e.to_string()))?;
 
     Ok(user)
+}
+
+/// Retrieve profile snapshot for a given user
+pub async fn get_user_profile(
+    pool: &PgPool,
+    user_id: Uuid,
+) -> AuthResult<Option<UserProfileRecord>> {
+    let profile = sqlx::query_as::<_, UserProfileRecord>(
+        r#"
+        SELECT
+            id,
+            username,
+            email,
+            display_name,
+            bio,
+            avatar_url,
+            cover_photo_url,
+            location,
+            COALESCE(private_account, FALSE) AS private_account,
+            created_at,
+            updated_at
+        FROM users
+        WHERE id = $1 AND deleted_at IS NULL
+        "#,
+    )
+    .bind(user_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| AuthError::Database(e.to_string()))?;
+
+    Ok(profile)
+}
+
+/// Update profile fields in a single writer service (auth-service)
+pub async fn update_user_profile(
+    pool: &PgPool,
+    user_id: Uuid,
+    fields: UpdateUserProfileFields,
+) -> AuthResult<UserProfileRecord> {
+    let now = Utc::now();
+
+    let profile = sqlx::query_as::<_, UserProfileRecord>(
+        r#"
+        UPDATE users
+        SET
+            display_name = COALESCE($2, display_name),
+            bio = COALESCE($3, bio),
+            avatar_url = COALESCE($4, avatar_url),
+            cover_photo_url = COALESCE($5, cover_photo_url),
+            location = COALESCE($6, location),
+            private_account = COALESCE($7, private_account),
+            updated_at = $8
+        WHERE id = $1
+        RETURNING
+            id,
+            username,
+            email,
+            display_name,
+            bio,
+            avatar_url,
+            cover_photo_url,
+            location,
+            COALESCE(private_account, FALSE) AS private_account,
+            created_at,
+            updated_at
+        "#,
+    )
+    .bind(user_id)
+    .bind(fields.display_name)
+    .bind(fields.bio)
+    .bind(fields.avatar_url)
+    .bind(fields.cover_photo_url)
+    .bind(fields.location)
+    .bind(fields.private_account)
+    .bind(now)
+    .fetch_one(pool)
+    .await
+    .map_err(|e| {
+        tracing::error!(user_id=%user_id, error=%e, "Failed to update user profile");
+        AuthError::Database(e.to_string())
+    })?;
+
+    Ok(profile)
+}
+
+/// Upsert a user's public key used for end-to-end encryption flows
+pub async fn upsert_user_public_key(
+    pool: &PgPool,
+    user_id: Uuid,
+    public_key_b64: &str,
+) -> AuthResult<()> {
+    sqlx::query(
+        r#"
+        UPDATE users
+        SET public_key = $2, updated_at = CURRENT_TIMESTAMP
+        WHERE id = $1 AND deleted_at IS NULL
+        "#,
+    )
+    .bind(user_id)
+    .bind(public_key_b64)
+    .execute(pool)
+    .await
+    .map_err(|e| AuthError::Database(e.to_string()))?;
+
+    Ok(())
+}
+
+/// Fetch a user's public key if present
+pub async fn get_user_public_key(pool: &PgPool, user_id: Uuid) -> AuthResult<Option<String>> {
+    let public_key = sqlx::query_scalar::<_, Option<String>>(
+        "SELECT public_key FROM users WHERE id = $1 AND deleted_at IS NULL",
+    )
+    .bind(user_id)
+    .fetch_one(pool)
+    .await
+    .map_err(|e| AuthError::Database(e.to_string()))?;
+
+    Ok(public_key)
+}
+
+async fn insert_outbox_event(
+    tx: &mut Transaction<'_, Postgres>,
+    user_id: Uuid,
+    deleted_at: DateTime<Utc>,
+    deleted_by: Option<Uuid>,
+) -> AuthResult<()> {
+    let payload = json!({
+        "user_id": user_id,
+        "deleted_at": deleted_at,
+        "deleted_by": deleted_by,
+    });
+
+    sqlx::query(
+        r#"
+        INSERT INTO outbox_events (aggregate_type, aggregate_id, event_type, payload)
+        VALUES ($1, $2, $3, $4)
+        "#,
+    )
+    .bind("User")
+    .bind(user_id)
+    .bind("UserDeleted")
+    .bind(payload)
+    .execute(tx.as_mut())
+    .await
+    .map_err(|e| AuthError::Database(e.to_string()))?;
+
+    Ok(())
+}
+
+/// Soft delete user (GDPR) and enqueue outbox event for downstream services
+pub async fn soft_delete_user(
+    pool: &PgPool,
+    user_id: Uuid,
+    deleted_by: Option<Uuid>,
+) -> AuthResult<DateTime<Utc>> {
+    let deleted_at = Utc::now();
+    let mut tx = pool
+        .begin()
+        .await
+        .map_err(|e| AuthError::Database(e.to_string()))?;
+
+    let result = sqlx::query(
+        r#"
+        UPDATE users
+        SET deleted_at = $2, is_active = FALSE, updated_at = $2
+        WHERE id = $1 AND (deleted_at IS NULL OR deleted_at > $2)
+        "#,
+    )
+    .bind(user_id)
+    .bind(deleted_at)
+    .execute(tx.as_mut())
+    .await
+    .map_err(|e| AuthError::Database(e.to_string()))?;
+
+    if result.rows_affected() == 0 {
+        tx.rollback()
+            .await
+            .map_err(|e| AuthError::Database(e.to_string()))?;
+        return Err(AuthError::UserNotFound);
+    }
+
+    // Emit outbox event for messaging-service / downstream consumers
+    insert_outbox_event(&mut tx, user_id, deleted_at, deleted_by).await?;
+
+    // Immediate soft-delete of user messages to satisfy GDPR even if consumer lags
+    sqlx::query(
+        r#"
+        UPDATE messages
+        SET deleted_at = $2, deleted_by = $3
+        WHERE sender_id = $1 AND deleted_at IS NULL
+        "#,
+    )
+    .bind(user_id)
+    .bind(deleted_at)
+    .bind(deleted_by)
+    .execute(tx.as_mut())
+    .await
+    .map_err(|e| AuthError::Database(e.to_string()))?;
+
+    tx.commit()
+        .await
+        .map_err(|e| AuthError::Database(e.to_string()))?;
+
+    Ok(deleted_at)
 }
 
 /// Check if email exists (excluding soft-deleted users)

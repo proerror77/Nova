@@ -8,7 +8,9 @@ use std::sync::{
 use tokio::sync::Mutex;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-use user_service::grpc::{ContentServiceClient, GrpcClientConfig, HealthChecker};
+use user_service::grpc::{
+    AuthServiceClient, ContentServiceClient, GrpcClientConfig, HealthChecker,
+};
 use user_service::{
     config::Config,
     db::{ch_client::ClickHouseClient, create_pool, run_migrations},
@@ -229,8 +231,15 @@ async fn main() -> io::Result<()> {
             .expect("Failed to initialize content-service gRPC client"),
     );
 
+    let auth_client = Arc::new(
+        AuthServiceClient::new(&grpc_config, health_checker.clone())
+            .await
+            .expect("Failed to initialize auth-service gRPC client"),
+    );
+
     // Feed state moved to feed-service (port 8089)
     let content_client_data = web::Data::new(content_client.clone());
+    let auth_client_data = web::Data::new(auth_client.clone());
     let health_checker_data = web::Data::new(health_checker.clone());
 
     // Initialize Neo4j Graph service (optional)
@@ -466,6 +475,7 @@ async fn main() -> io::Result<()> {
             .app_data(web::Data::new(server_config.clone()))
             // Feed state moved to feed-service (port 8089)
             .app_data(content_client_data.clone())
+            .app_data(auth_client_data.clone())
             .app_data(health_state.clone())
             .app_data(health_checker_data.clone())
             .app_data(events_state.clone())
