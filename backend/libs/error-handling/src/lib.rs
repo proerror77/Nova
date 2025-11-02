@@ -6,5 +6,10 @@
 //! This is maintained for compatibility with existing services.
 //! Will be removed in the next major version.
 
-// Re-export everything from error-types
-pub use error_types::{ServiceError, ErrorResponse, error_codes, error_types};
+// Re-export main types and modules from error-types for backward compatibility
+pub use ::error_types::{ServiceError, ErrorResponse, error_codes};
+
+// Re-export the error_types module with full path to avoid naming conflict
+pub mod error_types {
+    pub use ::error_types::error_types::*;
+}
