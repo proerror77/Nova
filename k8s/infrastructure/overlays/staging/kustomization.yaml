@@ -54,7 +54,7 @@ images:
   newTag: 38cc45e2f3b81a611e60955577b5a0a1120fbf56
 
 replicas:
-- count: 0
+- count: 1
   name: auth-service
 - count: 1
   name: user-service
@@ -79,6 +79,13 @@ commonAnnotations:
 resources:
 - ../../base
 - postgres-pvc-gp3.yaml
+- clickhouse-pvc.yaml
 - sts-rotator.yaml
+- secrets-sync.yaml
 - nova-messaging-keys.yaml
 - nova-clickhouse-credentials.yaml
+- clickhouse-chi.yaml
+- clickhouse-service-clusterip.yaml
+- clickhouse-service-internal.yaml
+- external-secrets-store.yaml
+- external-secrets.yaml
