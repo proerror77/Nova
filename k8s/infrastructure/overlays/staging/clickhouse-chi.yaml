@@ -27,6 +27,7 @@ spec:
           replicasCount: 1
         templates:
           podTemplate: ch-pod
+          serviceTemplate: ch-svc
     users:
       nova/password_sha256_hex: "6700484bed513440d69da5d453592123145c31bbd61b5116b604eb94661036ef"
       nova/networks/ip:
@@ -47,3 +48,19 @@ spec:
             - name: data
               persistentVolumeClaim:
                 claimName: nova-ch-data
+    serviceTemplates:
+      - name: ch-svc
+        # Use fixed prefix so ExternalName (nova/clickhouse) keeps working
+        generateName: clickhouse-nova-ch
+        metadata:
+          labels:
+            app: nova
+        spec:
+          type: ClusterIP
+          ports:
+            - name: http
+              port: 8123
+              targetPort: http
+            - name: tcp
+              port: 9000
+              targetPort: tcp

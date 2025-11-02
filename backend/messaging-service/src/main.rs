@@ -1,5 +1,6 @@
 use actix_web::{web, App, HttpServer};
 use crypto_core::jwt as core_jwt;
+use messaging_service::openapi::ApiDoc;
 use messaging_service::{
     config, db, error, logging,
     redis_client::RedisClient,
@@ -11,6 +12,17 @@ use messaging_service::{
 use redis_utils::{RedisPool, SentinelConfig};
 use std::sync::Arc;
 use std::time::Duration;
+use utoipa::OpenApi;
+use utoipa_swagger_ui::SwaggerUi;
+
+async fn openapi_json(doc: web::Data<utoipa::openapi::OpenApi>) -> actix_web::HttpResponse {
+    let body = serde_json::to_string(&*doc)
+        .expect("Failed to serialize OpenAPI document for messaging-service");
+
+    actix_web::HttpResponse::Ok()
+        .content_type("application/json")
+        .body(body)
+}
 
 #[actix_web::main]
 async fn main() -> Result<(), error::AppError> {
@@ -97,7 +109,15 @@ async fn main() -> Result<(), error::AppError> {
     tracing::info!(%bind_addr, "starting messaging-service");
 
     HttpServer::new(move || {
+        let openapi_doc = ApiDoc::openapi();
+
         App::new()
+            .app_data(web::Data::new(openapi_doc.clone()))
+            .service(
+                SwaggerUi::new("/swagger-ui/{_:.*}")
+                    .url("/api/v1/openapi.json", openapi_doc.clone()),
+            )
+            .route("/api/v1/openapi.json", web::get().to(openapi_json))
             .app_data(web::Data::new(state.clone()))
             .app_data(web::Data::new(db.clone()))
             .configure(routes::configure_routes)

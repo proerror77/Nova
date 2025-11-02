@@ -1,18 +1,22 @@
 /// Authentication handlers
 use actix_web::{web, HttpResponse};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
+use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::{
     error::AuthError,
-    models::user::{ChangePasswordRequest, LoginRequest, RegisterRequest},
+    models::user::{
+        ChangePasswordRequest, LoginRequest, RefreshTokenRequest, RegisterRequest,
+        RequestPasswordResetRequest,
+    },
     security::{jwt, password},
     AppState,
 };
 use actix_middleware::UserId;
 
 /// Register response with tokens
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct RegisterResponse {
     pub user_id: Uuid,
     pub email: String,
@@ -22,7 +26,7 @@ pub struct RegisterResponse {
 }
 
 /// Login response with tokens
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct LoginResponse {
     pub user_id: Uuid,
     pub email: String,
@@ -31,26 +35,37 @@ pub struct LoginResponse {
     pub refresh_token: String,
 }
 
-/// Refresh token request
-#[derive(Debug, Deserialize)]
-pub struct RefreshTokenRequest {
-    pub refresh_token: String,
-}
-
 /// Refresh token response
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct RefreshTokenResponse {
     pub access_token: String,
     pub refresh_token: String,
 }
 
 /// Logout response
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct LogoutResponse {
     pub message: String,
 }
 
+/// 通用錯誤回應（與 `AuthError` 對應）
+#[derive(Debug, Serialize, ToSchema)]
+pub struct ErrorResponse {
+    pub error: String,
+    pub code: u16,
+}
+
 /// Register endpoint handler
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/register",
+    tag = "Auth",
+    request_body = RegisterRequest,
+    responses(
+        (status = 201, description = "User registered", body = RegisterResponse),
+        (status = 400, description = "Invalid input", body = ErrorResponse)
+    )
+)]
 pub async fn register(
     _state: web::Data<AppState>,
     payload: web::Json<RegisterRequest>,
@@ -80,6 +95,16 @@ pub async fn register(
 }
 
 /// Login endpoint handler
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/login",
+    tag = "Auth",
+    request_body = LoginRequest,
+    responses(
+        (status = 200, description = "User logged in", body = LoginResponse),
+        (status = 401, description = "Invalid credentials", body = ErrorResponse)
+    )
+)]
 pub async fn login(
     _state: web::Data<AppState>,
     payload: web::Json<LoginRequest>,
@@ -95,6 +120,15 @@ pub async fn login(
 }
 
 /// Logout endpoint handler
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/logout",
+    tag = "Auth",
+    responses(
+        (status = 200, description = "User logged out", body = LogoutResponse),
+        (status = 401, description = "Unauthorized", body = ErrorResponse)
+    )
+)]
 pub async fn logout(
     _state: web::Data<AppState>,
     user_id: UserId,
@@ -112,6 +146,16 @@ pub async fn logout(
 }
 
 /// Refresh token endpoint handler
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/refresh",
+    tag = "Auth",
+    request_body = RefreshTokenRequest,
+    responses(
+        (status = 200, description = "Token refreshed", body = RefreshTokenResponse),
+        (status = 400, description = "Invalid token", body = ErrorResponse)
+    )
+)]
 pub async fn refresh_token(
     _state: web::Data<AppState>,
     payload: web::Json<RefreshTokenRequest>,
@@ -140,6 +184,16 @@ pub async fn refresh_token(
 }
 
 /// Change password endpoint handler
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/change-password",
+    tag = "Auth",
+    request_body = ChangePasswordRequest,
+    responses(
+        (status = 204, description = "Password changed"),
+        (status = 401, description = "Unauthorized", body = ErrorResponse)
+    )
+)]
 pub async fn change_password(
     _state: web::Data<AppState>,
     user_id: UserId,
@@ -156,6 +210,16 @@ pub async fn change_password(
 }
 
 /// Request password reset endpoint handler
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/password-reset/request",
+    tag = "Auth",
+    request_body = RequestPasswordResetRequest,
+    responses(
+        (status = 202, description = "Password reset requested"),
+        (status = 404, description = "User not found", body = ErrorResponse)
+    )
+)]
 pub async fn request_password_reset(
     _state: web::Data<AppState>,
     _payload: web::Json<RequestPasswordResetRequest>,
@@ -166,10 +230,4 @@ pub async fn request_password_reset(
     // Return 202 Accepted
 
     Ok(HttpResponse::Accepted().finish())
-}
-
-/// Request password reset payload
-#[derive(Debug, Deserialize)]
-pub struct RequestPasswordResetRequest {
-    pub email: String,
 }

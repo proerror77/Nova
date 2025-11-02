@@ -353,12 +353,7 @@ pub async fn start_streams_listener(
                                         Err(_) => msg_data.clone(),
                                     };
 
-                                    registry
-                                        .broadcast(
-                                            conversation_id,
-                                            payload,
-                                        )
-                                        .await;
+                                    registry.broadcast(conversation_id, payload).await;
                                 }
                             }
                         }

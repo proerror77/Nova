@@ -2,6 +2,8 @@
 
 use crate::grpc::config::GrpcClientConfig;
 use crate::grpc::health::{HealthChecker, HealthStatus};
+use crate::grpc::nova::auth::v1::auth_service_client::AuthServiceClient as TonicAuthServiceClient;
+use crate::grpc::nova::auth::v1::*;
 use crate::grpc::nova::content::content_service_client::ContentServiceClient as TonicContentServiceClient;
 use crate::grpc::nova::content::*;
 use crate::grpc::nova::media::media_service_client::MediaServiceClient as TonicMediaServiceClient;
@@ -14,6 +16,7 @@ use std::time::Duration;
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 use tokio::time::sleep;
 use tonic::transport::{Channel, Endpoint};
+use uuid::Uuid;
 
 /// Lightweight async pool for tonic gRPC clients.
 struct GrpcClientPool<T> {
@@ -717,5 +720,241 @@ impl MediaServiceClient {
             "complete_upload",
         )
         .await
+    }
+}
+
+/// User profile update parameters forwarded to auth-service
+#[derive(Debug, Default, Clone, Copy)]
+pub struct UserProfileUpdate<'a> {
+    pub display_name: Option<&'a str>,
+    pub bio: Option<&'a str>,
+    pub avatar_url: Option<&'a str>,
+    pub cover_photo_url: Option<&'a str>,
+    pub location: Option<&'a str>,
+    pub private_account: Option<bool>,
+}
+
+/// Auth service gRPC client wrapper (single writer for users table)
+#[derive(Clone)]
+pub struct AuthServiceClient {
+    client_pool: Arc<GrpcClientPool<TonicAuthServiceClient<Channel>>>,
+    health_checker: Arc<HealthChecker>,
+    request_timeout: Duration,
+    retry_attempts: u32,
+    retry_backoff: Duration,
+}
+
+impl AuthServiceClient {
+    /// Create new auth-service client with connection pool
+    pub async fn new(
+        config: &GrpcClientConfig,
+        health_checker: Arc<HealthChecker>,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
+        tracing::info!(
+            "Creating auth service gRPC client: {}",
+            config.auth_service_url
+        );
+
+        let pool_size = config.pool_size();
+        let endpoint = Endpoint::from_shared(config.auth_service_url.clone())?
+            .connect_timeout(config.connection_timeout())
+            .timeout(config.connection_timeout())
+            .http2_keep_alive_interval(config.http2_keep_alive_interval())
+            .keep_alive_while_idle(true)
+            .tcp_keepalive(Some(config.http2_keep_alive_interval()))
+            .keep_alive_timeout(config.connection_timeout())
+            .tcp_nodelay(true)
+            .concurrency_limit(config.max_concurrent_streams as usize);
+
+        let mut clients = Vec::with_capacity(pool_size);
+        for _ in 0..pool_size {
+            let channel = connect_with_retry(
+                endpoint.clone(),
+                config.connect_retry_attempts(),
+                config.connect_retry_backoff(),
+            )
+            .await?;
+            clients.push(TonicAuthServiceClient::new(channel));
+        }
+
+        let client_pool = GrpcClientPool::new(clients);
+        health_checker
+            .set_auth_service_health(HealthStatus::Healthy)
+            .await;
+
+        Ok(Self {
+            client_pool,
+            health_checker,
+            request_timeout: config.request_timeout(),
+            retry_attempts: config.connect_retry_attempts(),
+            retry_backoff: config.connect_retry_backoff(),
+        })
+    }
+
+    /// Update profile fields via auth-service
+    pub async fn update_user_profile(
+        &self,
+        user_id: Uuid,
+        payload: UserProfileUpdate<'_>,
+    ) -> Result<UserProfile, tonic::Status> {
+        let attempts = self.retry_attempts.max(1);
+        let mut last_err: Option<tonic::Status> = None;
+
+        for attempt in 0..attempts {
+            let mut client = self.client_pool.acquire().await;
+            let mut request = tonic::Request::new(UpdateUserProfileRequest {
+                user_id: user_id.to_string(),
+                display_name: payload.display_name.map(|v| v.to_owned()),
+                bio: payload.bio.map(|v| v.to_owned()),
+                avatar_url: payload.avatar_url.map(|v| v.to_owned()),
+                cover_photo_url: payload.cover_photo_url.map(|v| v.to_owned()),
+                location: payload.location.map(|v| v.to_owned()),
+                private_account: payload.private_account,
+            });
+            request.set_timeout(self.request_timeout);
+
+            match client.update_user_profile(request).await {
+                Ok(response) => {
+                    let profile = response
+                        .into_inner()
+                        .profile
+                        .ok_or_else(|| tonic::Status::internal("Missing profile data"))?;
+                    self.health_checker
+                        .set_auth_service_health(HealthStatus::Healthy)
+                        .await;
+                    return Ok(profile);
+                }
+                Err(err) => {
+                    self.health_checker
+                        .set_auth_service_health(HealthStatus::Unavailable)
+                        .await;
+                    last_err = Some(err);
+                    if attempt + 1 < attempts {
+                        let delay = self
+                            .retry_backoff
+                            .checked_mul((attempt + 1) as u32)
+                            .unwrap_or(self.retry_backoff);
+                        sleep(delay).await;
+                    }
+                }
+            }
+        }
+
+        Err(last_err
+            .unwrap_or_else(|| tonic::Status::internal("auth-service update_user_profile failed")))
+    }
+
+    /// Upsert a base64 public key via auth-service
+    pub async fn upsert_public_key(
+        &self,
+        user_id: Uuid,
+        public_key: &str,
+    ) -> Result<(), tonic::Status> {
+        let attempts = self.retry_attempts.max(1);
+        let mut last_err: Option<tonic::Status> = None;
+
+        for attempt in 0..attempts {
+            let mut client = self.client_pool.acquire().await;
+            let mut request = tonic::Request::new(UpsertUserPublicKeyRequest {
+                user_id: user_id.to_string(),
+                public_key: public_key.to_owned(),
+            });
+            request.set_timeout(self.request_timeout);
+
+            match client.upsert_user_public_key(request).await {
+                Ok(_) => {
+                    self.health_checker
+                        .set_auth_service_health(HealthStatus::Healthy)
+                        .await;
+                    return Ok(());
+                }
+                Err(err) => {
+                    self.health_checker
+                        .set_auth_service_health(HealthStatus::Unavailable)
+                        .await;
+                    last_err = Some(err);
+                    if attempt + 1 < attempts {
+                        let delay = self
+                            .retry_backoff
+                            .checked_mul((attempt + 1) as u32)
+                            .unwrap_or(self.retry_backoff);
+                        sleep(delay).await;
+                    }
+                }
+            }
+        }
+
+        Err(last_err
+            .unwrap_or_else(|| tonic::Status::internal("auth-service upsert_public_key failed")))
+    }
+
+    /// Fetch public key if present
+    pub async fn get_public_key(&self, user_id: Uuid) -> Result<Option<String>, tonic::Status> {
+        let mut client = self.client_pool.acquire().await;
+        let mut request = tonic::Request::new(GetUserPublicKeyRequest {
+            user_id: user_id.to_string(),
+        });
+        request.set_timeout(self.request_timeout);
+
+        let response = client.get_user_public_key(request).await;
+        match response {
+            Ok(resp) => {
+                self.health_checker
+                    .set_auth_service_health(HealthStatus::Healthy)
+                    .await;
+                let body = resp.into_inner();
+                Ok(body.public_key)
+            }
+            Err(err) => {
+                self.health_checker
+                    .set_auth_service_health(HealthStatus::Unavailable)
+                    .await;
+                Err(err)
+            }
+        }
+    }
+
+    /// Soft delete user and return deleted_at timestamp (seconds)
+    pub async fn soft_delete_user(
+        &self,
+        user_id: Uuid,
+        deleted_by: Option<Uuid>,
+    ) -> Result<i64, tonic::Status> {
+        let attempts = self.retry_attempts.max(1);
+        let mut last_err: Option<tonic::Status> = None;
+
+        for attempt in 0..attempts {
+            let mut client = self.client_pool.acquire().await;
+            let mut request = tonic::Request::new(SoftDeleteUserRequest {
+                user_id: user_id.to_string(),
+                deleted_by: deleted_by.map(|v| v.to_string()),
+            });
+            request.set_timeout(self.request_timeout);
+
+            match client.soft_delete_user(request).await {
+                Ok(resp) => {
+                    self.health_checker
+                        .set_auth_service_health(HealthStatus::Healthy)
+                        .await;
+                    return Ok(resp.into_inner().deleted_at);
+                }
+                Err(err) => {
+                    self.health_checker
+                        .set_auth_service_health(HealthStatus::Unavailable)
+                        .await;
+                    last_err = Some(err);
+                    if attempt + 1 < attempts {
+                        let delay = self
+                            .retry_backoff
+                            .checked_mul((attempt + 1) as u32)
+                            .unwrap_or(self.retry_backoff);
+                        sleep(delay).await;
+                    }
+                }
+            }
+        }
+
+        Err(last_err
+            .unwrap_or_else(|| tonic::Status::internal("auth-service soft_delete_user failed")))
     }
 }

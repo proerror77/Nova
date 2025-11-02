@@ -1,14 +1,17 @@
 /// Nova Auth Service - Main entry point
 /// Provides both gRPC and REST API for authentication
 mod metrics;
+mod openapi;
 
-use actix_web::{web, App, HttpResponse, HttpServer, Responder};
 use actix_middleware::MetricsMiddleware;
+use actix_web::{web, App, HttpResponse, HttpServer, Responder};
 use redis::aio::ConnectionManager;
 use sqlx::postgres::PgPoolOptions;
 use std::net::SocketAddr;
 use tonic::transport::Server as GrpcServer;
 use tracing_subscriber;
+use utoipa::OpenApi;
+use utoipa_swagger_ui::SwaggerUi;
 
 use auth_service::{
     config::Config,
@@ -103,6 +106,16 @@ async fn readiness_check() -> impl Responder {
     HttpResponse::Ok().body("READY")
 }
 
+/// OpenAPI 規格輸出
+async fn openapi_json(doc: web::Data<utoipa::openapi::OpenApi>) -> impl Responder {
+    let body = serde_json::to_string(&*doc)
+        .expect("Failed to serialize OpenAPI document for auth-service");
+
+    HttpResponse::Ok()
+        .content_type("application/json")
+        .body(body)
+}
+
 /// Build gRPC service
 fn build_grpc_service(
     app_state: AppState,
@@ -118,26 +131,34 @@ fn build_grpc_service(
 
 /// Configure REST API routes
 fn configure_routes(cfg: &mut web::ServiceConfig) {
-    cfg.service(
-        web::scope("/api/v1")
-            .service(
-                web::scope("/auth")
-                    .route("/register", web::post().to(register))
-                    .route("/login", web::post().to(login))
-                    .route("/logout", web::post().to(logout))
-                    .route("/refresh", web::post().to(refresh_token))
-                    .route("/change-password", web::post().to(change_password))
-                    .route("/password-reset/request", web::post().to(request_password_reset))
-            )
-            .service(
-                web::scope("/oauth")
-                    .route("/start", web::post().to(start_oauth_flow))
-                    .route("/complete", web::post().to(complete_oauth_flow))
-            )
-    )
-    .route("/health", web::get().to(health_check))
-    .route("/readiness", web::get().to(readiness_check))
-    .route("/metrics", web::get().to(metrics::metrics_handler));
+    let openapi = openapi::ApiDoc::openapi();
+
+    cfg.app_data(web::Data::new(openapi.clone()))
+        .service(SwaggerUi::new("/swagger-ui/{_:.*}").url("/api/v1/openapi.json", openapi))
+        .route("/api/v1/openapi.json", web::get().to(openapi_json))
+        .service(
+            web::scope("/api/v1")
+                .service(
+                    web::scope("/auth")
+                        .route("/register", web::post().to(register))
+                        .route("/login", web::post().to(login))
+                        .route("/logout", web::post().to(logout))
+                        .route("/refresh", web::post().to(refresh_token))
+                        .route("/change-password", web::post().to(change_password))
+                        .route(
+                            "/password-reset/request",
+                            web::post().to(request_password_reset),
+                        ),
+                )
+                .service(
+                    web::scope("/oauth")
+                        .route("/start", web::post().to(start_oauth_flow))
+                        .route("/complete", web::post().to(complete_oauth_flow)),
+                ),
+        )
+        .route("/health", web::get().to(health_check))
+        .route("/readiness", web::get().to(readiness_check))
+        .route("/metrics", web::get().to(metrics::metrics_handler));
 }
 
 /// Start both REST and gRPC servers

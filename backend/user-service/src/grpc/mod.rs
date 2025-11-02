@@ -8,7 +8,7 @@ pub mod config;
 pub mod health;
 pub mod servers;
 
-pub use clients::{ContentServiceClient, MediaServiceClient};
+pub use clients::{AuthServiceClient, ContentServiceClient, MediaServiceClient, UserProfileUpdate};
 pub use config::GrpcClientConfig;
 pub use health::HealthChecker;
 
@@ -19,6 +19,11 @@ pub mod nova {
     }
     pub mod media {
         tonic::include_proto!("nova.media");
+    }
+    pub mod auth {
+        pub mod v1 {
+            tonic::include_proto!("nova.auth.v1");
+        }
     }
     pub mod recommendation {
         pub mod v1 {

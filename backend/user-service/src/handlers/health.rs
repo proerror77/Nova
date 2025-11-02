@@ -236,6 +236,45 @@ pub async fn readiness_check(state: web::Data<HealthCheckState>) -> impl Respond
         },
     );
 
+    let auth_health = state.health_checker.auth_service_health().await;
+    let (auth_status, auth_message, auth_ready) = match auth_health.status {
+        HealthStatus::Healthy => (
+            ComponentStatus::Healthy,
+            "Auth-service reachable".to_string(),
+            true,
+        ),
+        HealthStatus::Unavailable => (
+            ComponentStatus::Degraded,
+            "Auth-service reporting transient failures".to_string(),
+            false,
+        ),
+        HealthStatus::Unreachable => (
+            ComponentStatus::Unhealthy,
+            "Auth-service unreachable (gRPC connection failed)".to_string(),
+            false,
+        ),
+    };
+
+    if !auth_ready {
+        has_degraded = true;
+        if matches!(auth_status, ComponentStatus::Unhealthy) {
+            ready = false;
+            overall_status = ComponentStatus::Unhealthy;
+        }
+    }
+
+    checks.insert(
+        "auth_service".to_string(),
+        ComponentCheck {
+            status: auth_status,
+            message: format!(
+                "{}; last_checked={:?}",
+                auth_message, auth_health.last_check
+            ),
+            latency_ms: None,
+        },
+    );
+
     // 4. ClickHouse check (optional, degrades gracefully)
     if !state.clickhouse_enabled {
         checks.insert(

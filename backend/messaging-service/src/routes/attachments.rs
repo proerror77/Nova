@@ -1,9 +1,9 @@
 use crate::{error::AppError, middleware::guards::User, state::AppState};
+use actix_web::{web, HttpResponse};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
 use uuid::Uuid;
-use actix_web::{web, HttpResponse};
 
 #[derive(Deserialize)]
 pub struct CreateAttachmentRequest {

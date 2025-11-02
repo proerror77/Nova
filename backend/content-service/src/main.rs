@@ -7,6 +7,7 @@ use content_service::db::ensure_feed_tables;
 use content_service::handlers::{self, feed::FeedHandlerState};
 use content_service::jobs::feed_candidates::FeedCandidateRefreshJob;
 use content_service::middleware;
+use content_service::openapi::ApiDoc;
 use content_service::services::{FeedRankingConfig, FeedRankingService};
 use crypto_core::jwt;
 use redis::aio::ConnectionManager;
@@ -22,6 +23,8 @@ use std::time::{Duration, Instant};
 use tokio::sync::{broadcast, Mutex};
 use tokio::task::JoinSet;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+use utoipa::OpenApi;
+use utoipa_swagger_ui::SwaggerUi;
 
 struct HealthState {
     db_pool: sqlx::Pool<sqlx::Postgres>,
@@ -195,6 +198,15 @@ async fn readiness_summary(state: web::Data<HealthState>) -> HttpResponse {
 
 async fn liveness_check() -> HttpResponse {
     HttpResponse::Ok().json(serde_json::json!({"alive": true}))
+}
+
+async fn openapi_json(doc: web::Data<utoipa::openapi::OpenApi>) -> HttpResponse {
+    let body = serde_json::to_string(&*doc)
+        .expect("Failed to serialize OpenAPI document for content-service");
+
+    HttpResponse::Ok()
+        .content_type("application/json")
+        .body(body)
 }
 
 async fn shutdown_signal() {
@@ -421,7 +433,15 @@ async fn main() -> io::Result<()> {
         }
         cors = cors.allow_any_method().allow_any_header().max_age(3600);
 
+        let openapi_doc = ApiDoc::openapi();
+
         App::new()
+            .app_data(web::Data::new(openapi_doc.clone()))
+            .service(
+                SwaggerUi::new("/swagger-ui/{_:.*}")
+                    .url("/api/v1/openapi.json", openapi_doc.clone()),
+            )
+            .route("/api/v1/openapi.json", web::get().to(openapi_json))
             .app_data(web::Data::new(db_pool_http.clone()))
             .app_data(content_cache_data.clone())
             .app_data(feed_state.clone())
@@ -437,16 +457,6 @@ async fn main() -> io::Result<()> {
             .route("/api/v1/health", web::get().to(health_summary))
             .route("/api/v1/health/ready", web::get().to(readiness_summary))
             .route("/api/v1/health/live", web::get().to(liveness_check))
-            // OpenAPI JSON endpoint
-            .route(
-                "/api/v1/openapi.json",
-                web::get().to(|| async {
-                    use utoipa::OpenApi;
-                    HttpResponse::Ok()
-                        .content_type("application/json")
-                        .json(content_service::openapi::ApiDoc::openapi())
-                }),
-            )
             .service(
                 web::scope("/api/v1")
                     .wrap(middleware::JwtAuthMiddleware)

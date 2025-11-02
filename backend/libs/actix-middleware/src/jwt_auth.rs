@@ -64,11 +64,9 @@ where
                 })?;
 
             // Extract token
-            let token = auth_header
-                .strip_prefix("Bearer ")
-                .ok_or_else(|| {
-                    actix_web::error::ErrorUnauthorized("Invalid Authorization header format")
-                })?;
+            let token = auth_header.strip_prefix("Bearer ").ok_or_else(|| {
+                actix_web::error::ErrorUnauthorized("Invalid Authorization header format")
+            })?;
 
             // Validate token (uses crypto-core)
             let token_data = crypto_core::jwt::validate_token(token).map_err(|e| {

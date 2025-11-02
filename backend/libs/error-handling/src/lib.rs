@@ -7,7 +7,7 @@
 //! Will be removed in the next major version.
 
 // Re-export main types and modules from error-types for backward compatibility
-pub use ::error_types::{ServiceError, ErrorResponse, error_codes};
+pub use ::error_types::{error_codes, ErrorResponse, ServiceError};
 
 // Re-export the error_types module with full path to avoid naming conflict
 pub mod error_types {

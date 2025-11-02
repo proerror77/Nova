@@ -2,11 +2,18 @@
 use tonic::{Request, Response, Status};
 use uuid::Uuid;
 
-use crate::{nova::auth::v1::auth_service_server::AuthService, nova::auth::v1::*, AppState};
+use crate::{
+    db::{
+        get_user_public_key, soft_delete_user, update_user_profile, upsert_user_public_key,
+        UpdateUserProfileFields,
+    },
+    nova::auth::v1::auth_service_server::AuthService,
+    nova::auth::v1::*,
+    AppState,
+};
 
 /// gRPC AuthService implementation
 pub struct AuthServiceImpl {
-    #[allow(dead_code)]
     state: AppState,
 }
 
@@ -335,5 +342,121 @@ impl AuthService for AuthServiceImpl {
         // TODO: Disable 2FA in database
 
         Ok(Response::new(DisableTwoFaResponse { success: true }))
+    }
+
+    /// Update user profile fields (single-writer)
+    async fn update_user_profile(
+        &self,
+        request: Request<UpdateUserProfileRequest>,
+    ) -> Result<Response<UpdateUserProfileResponse>, Status> {
+        let req = request.into_inner();
+        let user_id = Uuid::parse_str(&req.user_id)
+            .map_err(|_| Status::invalid_argument("Invalid user_id"))?;
+
+        let UpdateUserProfileRequest {
+            display_name,
+            bio,
+            avatar_url,
+            cover_photo_url,
+            location,
+            private_account,
+            ..
+        } = req;
+
+        let fields = UpdateUserProfileFields {
+            display_name,
+            bio,
+            avatar_url,
+            cover_photo_url,
+            location,
+            private_account,
+        };
+
+        let profile = update_user_profile(&self.state.db, user_id, fields)
+            .await
+            .map_err(Status::from)?;
+
+        Ok(Response::new(UpdateUserProfileResponse {
+            profile: Some(to_proto_profile(profile)),
+        }))
+    }
+
+    /// Upsert public key managed by auth-service
+    async fn upsert_user_public_key(
+        &self,
+        request: Request<UpsertUserPublicKeyRequest>,
+    ) -> Result<Response<UpsertUserPublicKeyResponse>, Status> {
+        let req = request.into_inner();
+        let user_id = Uuid::parse_str(&req.user_id)
+            .map_err(|_| Status::invalid_argument("Invalid user_id"))?;
+
+        if req.public_key.trim().is_empty() {
+            return Err(Status::invalid_argument("public_key must not be empty"));
+        }
+
+        upsert_user_public_key(&self.state.db, user_id, &req.public_key)
+            .await
+            .map_err(Status::from)?;
+
+        Ok(Response::new(UpsertUserPublicKeyResponse { success: true }))
+    }
+
+    /// Get a user's public key
+    async fn get_user_public_key(
+        &self,
+        request: Request<GetUserPublicKeyRequest>,
+    ) -> Result<Response<GetUserPublicKeyResponse>, Status> {
+        let req = request.into_inner();
+        let user_id = Uuid::parse_str(&req.user_id)
+            .map_err(|_| Status::invalid_argument("Invalid user_id"))?;
+
+        let value = get_user_public_key(&self.state.db, user_id)
+            .await
+            .map_err(Status::from)?;
+
+        Ok(Response::new(GetUserPublicKeyResponse {
+            found: value.is_some(),
+            public_key: value,
+        }))
+    }
+
+    /// Soft delete a user and emit GDPR-compliant event
+    async fn soft_delete_user(
+        &self,
+        request: Request<SoftDeleteUserRequest>,
+    ) -> Result<Response<SoftDeleteUserResponse>, Status> {
+        let req = request.into_inner();
+        let user_id = Uuid::parse_str(&req.user_id)
+            .map_err(|_| Status::invalid_argument("Invalid user_id"))?;
+        let deleted_by = req
+            .deleted_by
+            .map(|v| Uuid::parse_str(&v))
+            .transpose()
+            .map_err(|_| Status::invalid_argument("Invalid deleted_by"))?;
+
+        let deleted_at = soft_delete_user(&self.state.db, user_id, deleted_by)
+            .await
+            .map_err(Status::from)?;
+
+        Ok(Response::new(SoftDeleteUserResponse {
+            success: true,
+            deleted_at: deleted_at.timestamp(),
+        }))
+    }
+}
+
+fn to_proto_profile(record: crate::db::UserProfileRecord) -> UserProfile {
+    UserProfile {
+        user_id: record.id.to_string(),
+        username: record.username,
+        email: Some(record.email),
+        display_name: record.display_name,
+        bio: record.bio,
+        avatar_url: record.avatar_url,
+        cover_photo_url: record.cover_photo_url,
+        location: record.location,
+        private_account: record.private_account,
+        created_at: record.created_at.timestamp(),
+        updated_at: record.updated_at.timestamp(),
     }
 }

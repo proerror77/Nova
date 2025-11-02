@@ -226,7 +226,7 @@ ALTER TABLE messages
 ## 修订版文件列表
 
 ### 新增文档
-- ✅ **ARCHITECTURE_REVIEW_REVISED.md** (修订版，6500 行)
+- ✅ **ARCHITECTURE_REVIEW_REVISED.md** (修订版，≈1000 行)
   - 整合两位专家反馈
   - 详细的修订方案对比
   - Phase 0-2 完整路线图

@@ -26,7 +26,8 @@ pub async fn share_location(
 ) -> Result<HttpResponse, AppError> {
     let conversation_id = conversation_id.into_inner();
     let location =
-        LocationService::start_sharing(&state.db, user.id, conversation_id, request.into_inner()).await?;
+        LocationService::start_sharing(&state.db, user.id, conversation_id, request.into_inner())
+            .await?;
 
     // Broadcast location shared event
     let event = WebSocketEvent::LocationShared {
@@ -95,7 +96,8 @@ pub async fn stop_sharing_location(
     request: web::Json<StopSharingRequest>,
 ) -> Result<HttpResponse, AppError> {
     let conversation_id = conversation_id.into_inner();
-    LocationService::stop_sharing(&state.db, user.id, conversation_id, request.into_inner()).await?;
+    LocationService::stop_sharing(&state.db, user.id, conversation_id, request.into_inner())
+        .await?;
 
     // Broadcast location stopped event
     let event = WebSocketEvent::LocationStopped { user_id: user.id };
@@ -136,7 +138,8 @@ pub async fn update_location_permissions(
     user: User,
     request: web::Json<UpdateLocationPermissionsRequest>,
 ) -> Result<HttpResponse, AppError> {
-    let perm = LocationService::update_permissions(&state.db, user.id, request.into_inner()).await?;
+    let perm =
+        LocationService::update_permissions(&state.db, user.id, request.into_inner()).await?;
 
     Ok(HttpResponse::Ok().json(LocationPermissionResponse::from(perm)))
 }

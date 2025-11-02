@@ -363,10 +363,7 @@ async fn broadcast_envelope(
         .map_err(|e| BroadcastError::Serialization(e.to_string()))?;
 
     registry
-        .broadcast(
-            envelope.conversation_id,
-            final_payload,
-        )
+        .broadcast(envelope.conversation_id, final_payload)
         .await;
 
     Ok(())
