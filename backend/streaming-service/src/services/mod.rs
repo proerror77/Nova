@@ -13,11 +13,10 @@ pub mod streaming_manifest;
 // Re-export commonly used types
 pub use kafka_producer::{EventProducer, SharedEventProducer};
 pub use streaming::{
-    CreateStreamRequest, CreateStreamResponse, JoinStreamResponse,
-    RtmpWebhookHandler, StreamAnalytics, StreamAnalyticsService,
-    StreamCategory, StreamChatActor, StreamChatHandlerState,
-    StreamChatStore, StreamComment, StreamConnectionRegistry,
-    StreamDetails, StreamDiscoveryService, StreamRepository,
-    StreamService, StreamStatus, StreamSummary, ViewerCounter,
+    CreateStreamRequest, CreateStreamResponse, JoinStreamResponse, RtmpWebhookHandler,
+    StreamAnalytics, StreamAnalyticsService, StreamCategory, StreamChatActor,
+    StreamChatHandlerState, StreamChatStore, StreamComment, StreamConnectionRegistry,
+    StreamDetails, StreamDiscoveryService, StreamRepository, StreamService, StreamStatus,
+    StreamSummary, ViewerCounter,
 };
 pub use streaming_manifest::{QualityTier, StreamingManifestGenerator};

@@ -2,11 +2,10 @@
 ///
 /// Provides ownership-based permission checks for posts, comments, and other content.
 /// This service verifies that users can only modify content they own.
-
 use actix_web::{error::ErrorForbidden, Error};
 use uuid::Uuid;
 
-use crate::models::{Post, Comment, Like, Bookmark, PostShare};
+use crate::models::{Bookmark, Comment, Like, Post, PostShare};
 
 /// Result type for permission checks
 pub type PermissionResult = Result<(), Error>;

@@ -34,14 +34,14 @@ impl ContentCache {
         let manager = ConnectionManager::new(client)
             .await
             .map_err(|e| AppError::CacheError(format!("Failed to connect to Redis: {e}")))?;
-        Ok(Self::with_manager(Arc::new(Mutex::new(manager)), ttl_seconds))
+        Ok(Self::with_manager(
+            Arc::new(Mutex::new(manager)),
+            ttl_seconds,
+        ))
     }
 
     /// Create a new cache wrapper from an existing connection manager
-    pub fn with_manager(
-        manager: Arc<Mutex<ConnectionManager>>,
-        ttl_seconds: Option<u64>,
-    ) -> Self {
+    pub fn with_manager(manager: Arc<Mutex<ConnectionManager>>, ttl_seconds: Option<u64>) -> Self {
         Self {
             conn: manager,
             ttl_seconds: ttl_seconds.unwrap_or(DEFAULT_TTL_SECONDS),

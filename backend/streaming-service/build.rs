@@ -4,9 +4,6 @@ fn main() {
     tonic_build::configure()
         .build_server(true)
         .build_client(false)
-        .compile(
-            &["../protos/streaming.proto"],
-            &["../protos/"],
-        )
+        .compile(&["../protos/streaming.proto"], &["../protos/"])
         .expect("Failed to compile streaming.proto");
 }

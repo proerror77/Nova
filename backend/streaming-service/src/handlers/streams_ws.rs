@@ -6,9 +6,9 @@
 //! - Connection initialization
 //! - Message broadcasting
 
+use crate::AppError;
 use actix_web::{web, HttpMessage, HttpRequest, HttpResponse};
 use actix_web_actors::ws;
-use crate::AppError;
 use uuid::Uuid;
 
 use crate::services::streaming::{StreamChatActor, StreamChatHandlerState};

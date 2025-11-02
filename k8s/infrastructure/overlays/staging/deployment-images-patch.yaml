@@ -44,4 +44,4 @@ spec:
     spec:
       containers:
       - name: messaging-service
-        image: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/messaging-service:ca18176a188598ae52ce5b19ab410de8a4673f37
+        image: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/messaging-service:fix-routes-amd64-20251102092900

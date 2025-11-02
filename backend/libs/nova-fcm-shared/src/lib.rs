@@ -9,11 +9,10 @@
 /// - Single and multicast message delivery
 /// - Topic subscriptions and messaging
 /// - Device token validation
-
 pub mod client;
-pub mod models;
 pub mod errors;
+pub mod models;
 
 pub use client::FCMClient;
-pub use models::{FCMSendResult, MulticastSendResult, TopicSubscriptionResult, ServiceAccountKey};
 pub use errors::FCMError;
+pub use models::{FCMSendResult, MulticastSendResult, ServiceAccountKey, TopicSubscriptionResult};

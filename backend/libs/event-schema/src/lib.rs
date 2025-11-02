@@ -1,11 +1,10 @@
+use chrono::{DateTime, Utc};
 /// Event Schema Registry for all Kafka topics across Nova microservices
 ///
 /// This library defines versioned event schemas to prevent payload incompatibilities
 /// as services evolve. Each event has a required `schema_version` field.
-
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use chrono::{DateTime, Utc};
 
 /// Current schema version for all events
 pub const SCHEMA_VERSION: u32 = 1;
@@ -118,7 +117,7 @@ pub struct CommentDeletedEvent {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LikeCreatedEvent {
     pub like_id: Uuid,
-    pub target_id: Uuid, // post_id or comment_id
+    pub target_id: Uuid,     // post_id or comment_id
     pub target_type: String, // "post", "comment"
     pub user_id: Uuid,
     pub created_at: DateTime<Utc>,

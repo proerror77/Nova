@@ -1,0 +1,14 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: search-service
+  namespace: nova
+spec:
+  template:
+    spec:
+      containers:
+      - name: search-service
+        env:
+        - name: PORT
+          value: "8080"
+

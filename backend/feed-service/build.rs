@@ -4,9 +4,6 @@ fn main() {
     tonic_build::configure()
         .build_server(true)
         .build_client(false)
-        .compile(
-            &["../protos/recommendation.proto"],
-            &["../protos/"],
-        )
+        .compile(&["../protos/recommendation.proto"], &["../protos/"])
         .expect("Failed to compile recommendation.proto");
 }

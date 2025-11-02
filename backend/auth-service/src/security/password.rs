@@ -1,9 +1,9 @@
+use crate::error::{AuthError, AuthResult};
 /// Password hashing and verification using Argon2id
 use argon2::{
     password_hash::{PasswordHasher, SaltString},
     Argon2, PasswordHash, PasswordVerifier,
 };
-use crate::error::{AuthError, AuthResult};
 
 /// Hash a password using Argon2id
 /// Returns the hash string suitable for storage in database

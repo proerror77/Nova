@@ -2,8 +2,7 @@
 use crate::error::{AuthError, AuthResult};
 use chrono::Utc;
 use event_schema::{
-    EventEnvelope, UserCreatedEvent, UserDeletedEvent,
-    PasswordChangedEvent, TwoFAEnabledEvent,
+    EventEnvelope, PasswordChangedEvent, TwoFAEnabledEvent, UserCreatedEvent, UserDeletedEvent,
 };
 use rdkafka::producer::{FutureProducer, FutureRecord};
 use std::time::Duration;
@@ -46,8 +45,8 @@ impl KafkaEventProducer {
             created_at: Utc::now(),
         };
 
-        let envelope = EventEnvelope::new("auth-service", event)
-            .with_correlation_id(Uuid::new_v4());
+        let envelope =
+            EventEnvelope::new("auth-service", event).with_correlation_id(Uuid::new_v4());
 
         self.publish_event(&envelope, user_id).await
     }
@@ -60,8 +59,8 @@ impl KafkaEventProducer {
             invalidate_all_sessions: true,
         };
 
-        let envelope = EventEnvelope::new("auth-service", event)
-            .with_correlation_id(Uuid::new_v4());
+        let envelope =
+            EventEnvelope::new("auth-service", event).with_correlation_id(Uuid::new_v4());
 
         self.publish_event(&envelope, user_id).await
     }
@@ -74,8 +73,8 @@ impl KafkaEventProducer {
             method: "totp".to_string(),
         };
 
-        let envelope = EventEnvelope::new("auth-service", event)
-            .with_correlation_id(Uuid::new_v4());
+        let envelope =
+            EventEnvelope::new("auth-service", event).with_correlation_id(Uuid::new_v4());
 
         self.publish_event(&envelope, user_id).await
     }
@@ -88,8 +87,8 @@ impl KafkaEventProducer {
             soft_delete: true,
         };
 
-        let envelope = EventEnvelope::new("auth-service", event)
-            .with_correlation_id(Uuid::new_v4());
+        let envelope =
+            EventEnvelope::new("auth-service", event).with_correlation_id(Uuid::new_v4());
 
         self.publish_event(&envelope, user_id).await
     }

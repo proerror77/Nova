@@ -6,26 +6,24 @@ use uuid::Uuid;
 
 /// Find user by email (excluding soft-deleted users)
 pub async fn find_by_email(pool: &PgPool, email: &str) -> AuthResult<Option<User>> {
-    let user = sqlx::query_as::<_, User>(
-        "SELECT * FROM users WHERE email = $1 AND deleted_at IS NULL"
-    )
-    .bind(email)
-    .fetch_optional(pool)
-    .await
-    .map_err(|e| crate::error::AuthError::Database(e.to_string()))?;
+    let user =
+        sqlx::query_as::<_, User>("SELECT * FROM users WHERE email = $1 AND deleted_at IS NULL")
+            .bind(email)
+            .fetch_optional(pool)
+            .await
+            .map_err(|e| crate::error::AuthError::Database(e.to_string()))?;
 
     Ok(user)
 }
 
 /// Find user by ID (excluding soft-deleted users)
 pub async fn find_by_id(pool: &PgPool, user_id: Uuid) -> AuthResult<Option<User>> {
-    let user = sqlx::query_as::<_, User>(
-        "SELECT * FROM users WHERE id = $1 AND deleted_at IS NULL"
-    )
-    .bind(user_id)
-    .fetch_optional(pool)
-    .await
-    .map_err(|e| crate::error::AuthError::Database(e.to_string()))?;
+    let user =
+        sqlx::query_as::<_, User>("SELECT * FROM users WHERE id = $1 AND deleted_at IS NULL")
+            .bind(user_id)
+            .fetch_optional(pool)
+            .await
+            .map_err(|e| crate::error::AuthError::Database(e.to_string()))?;
 
     Ok(user)
 }
@@ -57,7 +55,7 @@ pub async fn create_user(
 /// Check if email exists (excluding soft-deleted users)
 pub async fn email_exists(pool: &PgPool, email: &str) -> AuthResult<bool> {
     let exists = sqlx::query_scalar::<_, bool>(
-        "SELECT EXISTS(SELECT 1 FROM users WHERE email = $1 AND deleted_at IS NULL)"
+        "SELECT EXISTS(SELECT 1 FROM users WHERE email = $1 AND deleted_at IS NULL)",
     )
     .bind(email)
     .fetch_one(pool)
@@ -70,7 +68,7 @@ pub async fn email_exists(pool: &PgPool, email: &str) -> AuthResult<bool> {
 /// Check if username exists (excluding soft-deleted users)
 pub async fn username_exists(pool: &PgPool, username: &str) -> AuthResult<bool> {
     let exists = sqlx::query_scalar::<_, bool>(
-        "SELECT EXISTS(SELECT 1 FROM users WHERE username = $1 AND deleted_at IS NULL)"
+        "SELECT EXISTS(SELECT 1 FROM users WHERE username = $1 AND deleted_at IS NULL)",
     )
     .bind(username)
     .fetch_one(pool)
@@ -114,7 +112,10 @@ pub async fn record_failed_login(
     lock_duration_secs: i64,
 ) -> AuthResult<()> {
     let lock_until = if max_attempts > 0 {
-        format!("CURRENT_TIMESTAMP + INTERVAL '{} seconds'", lock_duration_secs)
+        format!(
+            "CURRENT_TIMESTAMP + INTERVAL '{} seconds'",
+            lock_duration_secs
+        )
     } else {
         "NULL".to_string()
     };
@@ -144,27 +145,23 @@ pub async fn record_failed_login(
 
 /// Enable TOTP 2FA
 pub async fn enable_totp(pool: &PgPool, user_id: Uuid, secret: &str) -> AuthResult<()> {
-    sqlx::query(
-        "UPDATE users SET totp_enabled = true, totp_secret = $1 WHERE id = $2"
-    )
-    .bind(secret)
-    .bind(user_id)
-    .execute(pool)
-    .await
-    .map_err(|e| crate::error::AuthError::Database(e.to_string()))?;
+    sqlx::query("UPDATE users SET totp_enabled = true, totp_secret = $1 WHERE id = $2")
+        .bind(secret)
+        .bind(user_id)
+        .execute(pool)
+        .await
+        .map_err(|e| crate::error::AuthError::Database(e.to_string()))?;
 
     Ok(())
 }
 
 /// Verify TOTP secret
 pub async fn verify_totp(pool: &PgPool, user_id: Uuid) -> AuthResult<()> {
-    sqlx::query(
-        "UPDATE users SET totp_verified = true WHERE id = $1"
-    )
-    .bind(user_id)
-    .execute(pool)
-    .await
-    .map_err(|e| crate::error::AuthError::Database(e.to_string()))?;
+    sqlx::query("UPDATE users SET totp_verified = true WHERE id = $1")
+        .bind(user_id)
+        .execute(pool)
+        .await
+        .map_err(|e| crate::error::AuthError::Database(e.to_string()))?;
 
     Ok(())
 }
@@ -179,7 +176,7 @@ pub async fn update_password(pool: &PgPool, user_id: Uuid, password_hash: &str) 
             failed_login_attempts = 0,
             locked_until = NULL
         WHERE id = $2
-        "#
+        "#,
     )
     .bind(password_hash)
     .bind(user_id)

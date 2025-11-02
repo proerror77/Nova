@@ -16,9 +16,7 @@ use user_service::{
     handlers::preferences::{
         block_user as preferences_block_user, unblock_user as preferences_unblock_user,
     },
-    handlers::{
-        events::EventHandlerState, health::HealthCheckState,
-    },
+    handlers::{events::EventHandlerState, health::HealthCheckState},
     jobs::{
         self, run_jobs, suggested_users_generator::SuggestedUsersJob,
         suggested_users_generator::SuggestionConfig,
@@ -151,35 +149,40 @@ async fn main() -> io::Result<()> {
     tracing::info!("Global rate limiter initialized: 100 requests per 15 minutes");
 
     // ========================================
-    // Initialize ClickHouse client & feed services
+    // Initialize ClickHouse client (optional analytics dependency)
     // ========================================
-    let clickhouse_client = Arc::new(ClickHouseClient::new(
-        &config.clickhouse.url,
-        &config.clickhouse.database,
-        &config.clickhouse.username,
-        &config.clickhouse.password,
-        config.clickhouse.timeout_ms,
-    ));
+    let (clickhouse_client, clickhouse_writer) = if config.clickhouse.enabled {
+        let client = Arc::new(ClickHouseClient::new(
+            &config.clickhouse.url,
+            &config.clickhouse.database,
+            &config.clickhouse.username,
+            &config.clickhouse.password,
+            config.clickhouse.timeout_ms,
+        ));
 
-    // CRITICAL: ClickHouse health check MUST succeed before startup
-    // Feed ranking is 100% dependent on ClickHouse. No fallback available.
-    match clickhouse_client.health_check().await {
-        Ok(()) => {
-            tracing::info!("✅ ClickHouse connection validated");
+        match client.health_check().await {
+            Ok(()) => {
+                tracing::info!("ClickHouse connection validated");
+                let writer = Arc::new(ClickHouseClient::new_writable(
+                    &config.clickhouse.url,
+                    &config.clickhouse.database,
+                    &config.clickhouse.username,
+                    &config.clickhouse.password,
+                    config.clickhouse.timeout_ms,
+                ));
+                (Some(client), Some(writer))
+            }
+            Err(e) => {
+                tracing::warn!("ClickHouse health check failed (analytics disabled): {}", e);
+                (None, None)
+            }
         }
-        Err(e) => {
-            tracing::error!("❌ FATAL: ClickHouse health check failed - {}", e);
-            tracing::error!("   Feed ranking cannot function without ClickHouse");
-            tracing::error!(
-                "   Fix: Ensure ClickHouse is running and accessible at {}",
-                config.clickhouse.url
-            );
-            return Err(io::Error::new(
-                io::ErrorKind::ConnectionRefused,
-                format!("ClickHouse initialization failed: {}", e),
-            ));
-        }
-    }
+    } else {
+        tracing::info!("ClickHouse integration disabled via CLICKHOUSE_ENABLED=false");
+        (None, None)
+    };
+
+    let clickhouse_available = clickhouse_client.is_some();
 
     // ========================================
     // Initialize Circuit Breakers for critical services
@@ -274,10 +277,12 @@ async fn main() -> io::Result<()> {
     let health_state = web::Data::new(HealthCheckState::new(
         db_pool.clone(),
         redis_client.clone(),
-        Some(clickhouse_client.clone()),
+        clickhouse_client.clone(),
         Some(event_producer.clone()),
         health_checker.clone(),
         cdc_health_flag.clone(),
+        config.clickhouse.enabled,
+        clickhouse_writer.is_some(),
     ));
 
     // ========================================
@@ -290,70 +295,67 @@ async fn main() -> io::Result<()> {
     });
 
     // ========================================
-    // Initialize CDC Consumer (PostgreSQL → Kafka → ClickHouse) - MANDATORY
+    // Initialize ClickHouse-dependent background pipelines
     // ========================================
-    // NOTE: CDC is REQUIRED for data consistency between PostgreSQL and ClickHouse
-    // Feed ranking depends on ClickHouse sync. Disabling CDC = data inconsistency bug.
-    let ch_writable = Arc::new(ClickHouseClient::new_writable(
-        &config.clickhouse.url,
-        &config.clickhouse.database,
-        &config.clickhouse.username,
-        &config.clickhouse.password,
-        config.clickhouse.timeout_ms,
-    ));
+    let (cdc_handle, events_handle) = if let Some(ch_writer) = clickhouse_writer.clone() {
+        // CDC: PostgreSQL → Kafka → ClickHouse
+        let cdc_config = CdcConsumerConfig {
+            brokers: config.kafka.brokers.clone(),
+            group_id: "nova-cdc-consumer-v1".to_string(),
+            topics: vec![
+                "cdc.posts".to_string(),
+                "cdc.follows".to_string(),
+                "cdc.comments".to_string(),
+                "cdc.likes".to_string(),
+            ],
+            max_concurrent_inserts: 10,
+        };
 
-    let cdc_config = CdcConsumerConfig {
-        brokers: config.kafka.brokers.clone(),
-        group_id: "nova-cdc-consumer-v1".to_string(),
-        topics: vec![
-            "cdc.posts".to_string(),
-            "cdc.follows".to_string(),
-            "cdc.comments".to_string(),
-            "cdc.likes".to_string(),
-        ],
-        max_concurrent_inserts: 10,
+        let cdc_consumer =
+            CdcConsumer::new(cdc_config, ch_writer.as_ref().clone(), db_pool.clone())
+                .await
+                .expect("Failed to create CDC consumer");
+
+        let cdc_health_for_task = cdc_health_flag.clone();
+        let cdc_handle = tokio::spawn(async move {
+            if let Err(e) = cdc_consumer.run().await {
+                tracing::error!("CDC consumer error: {}", e);
+                cdc_health_for_task.store(false, Ordering::SeqCst);
+            }
+        });
+        tracing::info!("CDC consumer spawned");
+
+        // Events consumer: Kafka → ClickHouse
+        let event_deduplicator = EventDeduplicator::new(redis_client.clone(), 3600);
+
+        let events_config = EventsConsumerConfig {
+            brokers: config.kafka.brokers.clone(),
+            group_id: "nova-events-consumer-v1".to_string(),
+            topic: config.kafka.events_topic.clone(),
+            batch_size: 100,
+            max_concurrent_inserts: 5,
+        };
+
+        let events_consumer = EventsConsumer::new(
+            events_config,
+            ch_writer.as_ref().clone(),
+            event_deduplicator,
+            content_client.clone(),
+        )
+        .expect("Failed to create Events consumer");
+
+        let events_handle = tokio::spawn(async move {
+            if let Err(e) = events_consumer.run().await {
+                tracing::error!("Events consumer error: {}", e);
+            }
+        });
+        tracing::info!("Events consumer spawned");
+
+        (Some(cdc_handle), Some(events_handle))
+    } else {
+        tracing::info!("Skipping CDC and events consumers (ClickHouse unavailable)");
+        (None, None)
     };
-
-    let cdc_consumer = CdcConsumer::new(cdc_config, ch_writable.as_ref().clone(), db_pool.clone())
-        .await
-        .expect("Failed to create CDC consumer - CDC is mandatory for data consistency");
-
-    let cdc_health_for_task = cdc_health_flag.clone();
-    let cdc_handle = tokio::spawn(async move {
-        if let Err(e) = cdc_consumer.run().await {
-            tracing::error!("CDC consumer error: {}", e);
-            cdc_health_for_task.store(false, Ordering::SeqCst);
-        }
-    });
-    tracing::info!("CDC consumer spawned (MANDATORY for data consistency)");
-
-    // ========================================
-    // Initialize Events Consumer (Kafka → ClickHouse for analytics)
-    // ========================================
-    let event_deduplicator = EventDeduplicator::new(redis_client.clone(), 3600);
-
-    let events_config = EventsConsumerConfig {
-        brokers: config.kafka.brokers.clone(),
-        group_id: "nova-events-consumer-v1".to_string(),
-        topic: config.kafka.events_topic.clone(),
-        batch_size: 100,
-        max_concurrent_inserts: 5,
-    };
-
-    let events_consumer = EventsConsumer::new(
-        events_config,
-        ch_writable.as_ref().clone(),
-        event_deduplicator,
-        content_client.clone(),
-    )
-    .expect("Failed to create Events consumer");
-
-    let events_handle = tokio::spawn(async move {
-        if let Err(e) = events_consumer.run().await {
-            tracing::error!("Events consumer error: {}", e);
-        }
-    });
-    tracing::info!("Events consumer spawned");
 
     // ========================================
     // Initialize social graph sync consumer (Neo4j)
@@ -388,7 +390,7 @@ async fn main() -> io::Result<()> {
     // ========================================
     // Background jobs: Suggested Users (fallback cache)
     // ========================================
-    let jobs_handle = {
+    let jobs_handle = if clickhouse_available {
         let (shutdown_tx, _) = tokio::sync::broadcast::channel::<()>(1);
 
         // Build JobContext
@@ -425,7 +427,10 @@ async fn main() -> io::Result<()> {
             )
             .await;
         });
-        handle
+        Some(handle)
+    } else {
+        tracing::info!("Skipping background cache jobs (ClickHouse unavailable)");
+        None
     };
 
     // Create and run HTTP server
@@ -648,46 +653,55 @@ async fn main() -> io::Result<()> {
     // ========================================
     tracing::info!("Server shutting down. Stopping background services...");
 
-    // Abort CDC consumer (always running, mandatory for consistency)
-    cdc_handle.abort();
-    match tokio::time::timeout(std::time::Duration::from_secs(5), cdc_handle).await {
-        Ok(Ok(())) => {
-            tracing::info!("CDC consumer shut down gracefully");
+    if let Some(handle) = cdc_handle {
+        handle.abort();
+        match tokio::time::timeout(std::time::Duration::from_secs(5), handle).await {
+            Ok(Ok(())) => {
+                tracing::info!("CDC consumer shut down gracefully");
+            }
+            Ok(Err(_)) => {
+                tracing::info!("CDC consumer aborted");
+            }
+            Err(_) => {
+                tracing::warn!("CDC consumer did not shut down within timeout");
+            }
         }
-        Ok(Err(_)) => {
-            tracing::info!("CDC consumer aborted");
-        }
-        Err(_) => {
-            tracing::warn!("CDC consumer did not shut down within timeout");
-        }
+    } else {
+        tracing::info!("CDC consumer not running; skipping shutdown");
     }
 
-    // Abort Events consumer
-    events_handle.abort();
-    match tokio::time::timeout(std::time::Duration::from_secs(5), events_handle).await {
-        Ok(Ok(())) => {
-            tracing::info!("Events consumer shut down gracefully");
+    if let Some(handle) = events_handle {
+        handle.abort();
+        match tokio::time::timeout(std::time::Duration::from_secs(5), handle).await {
+            Ok(Ok(())) => {
+                tracing::info!("Events consumer shut down gracefully");
+            }
+            Ok(Err(_)) => {
+                tracing::info!("Events consumer aborted");
+            }
+            Err(_) => {
+                tracing::warn!("Events consumer did not shut down within timeout");
+            }
         }
-        Ok(Err(_)) => {
-            tracing::info!("Events consumer aborted");
-        }
-        Err(_) => {
-            tracing::warn!("Events consumer did not shut down within timeout");
-        }
+    } else {
+        tracing::info!("Events consumer not running; skipping shutdown");
     }
 
-    // Stop jobs
-    jobs_handle.abort();
-    match tokio::time::timeout(std::time::Duration::from_secs(5), jobs_handle).await {
-        Ok(Ok(())) => {
-            tracing::info!("Background jobs shut down gracefully");
+    if let Some(handle) = jobs_handle {
+        handle.abort();
+        match tokio::time::timeout(std::time::Duration::from_secs(5), handle).await {
+            Ok(Ok(())) => {
+                tracing::info!("Background jobs shut down gracefully");
+            }
+            Ok(Err(_)) => {
+                tracing::info!("Background jobs aborted");
+            }
+            Err(_) => {
+                tracing::warn!("Background jobs did not shut down within timeout");
+            }
         }
-        Ok(Err(_)) => {
-            tracing::info!("Background jobs aborted");
-        }
-        Err(_) => {
-            tracing::warn!("Background jobs did not shut down within timeout");
-        }
+    } else {
+        tracing::info!("No background cache jobs running; skipping shutdown");
     }
 
     tracing::info!("All workers, consumers, and jobs stopped. Server shutdown complete.");

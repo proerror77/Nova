@@ -115,10 +115,8 @@ impl Config {
                     .unwrap_or_else(|_| "false".to_string())
                     .parse()
                     .unwrap_or(false),
-                neo4j_uri: std::env::var("NEO4J_URI")
-                    .unwrap_or_else(|_| default_neo4j_uri()),
-                neo4j_user: std::env::var("NEO4J_USER")
-                    .unwrap_or_else(|_| "neo4j".to_string()),
+                neo4j_uri: std::env::var("NEO4J_URI").unwrap_or_else(|_| default_neo4j_uri()),
+                neo4j_user: std::env::var("NEO4J_USER").unwrap_or_else(|_| "neo4j".to_string()),
                 neo4j_password: std::env::var("NEO4J_PASSWORD")
                     .unwrap_or_else(|_| "password".to_string()),
             },

@@ -37,7 +37,7 @@ pub async fn run_migrations(pool: &PgPool) -> Result<(), sqlx::migrate::MigrateE
         tracing::warn!("Failed to prepare legacy video migration marker: {}", e);
     }
 
-    let mut migrator = sqlx::migrate!("../migrations");
+    let mut migrator = sqlx::migrate!("./migrations");
     // 忽略数据库中已存在但本地缺失的迁移版本（用于对齐历史环境）
     migrator.set_ignore_missing(true);
     migrator.run(pool).await

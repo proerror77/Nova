@@ -102,6 +102,9 @@ pub fn decrypt_at_rest(
 // Expose JWT utilities (RS256-only) for services
 pub mod jwt;
 
+// Expose hash utilities
+pub mod hash;
+
 // =============================
 // C FFI (for iOS xcframework)
 // =============================

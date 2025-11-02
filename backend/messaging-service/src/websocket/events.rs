@@ -365,7 +365,7 @@ async fn broadcast_envelope(
     registry
         .broadcast(
             envelope.conversation_id,
-            axum::extract::ws::Message::Text(final_payload.into()),
+            final_payload,
         )
         .await;
 

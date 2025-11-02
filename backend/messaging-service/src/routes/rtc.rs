@@ -1,5 +1,5 @@
 use crate::state::AppState;
-use axum::{extract::State, Json};
+use actix_web::{web, HttpResponse};
 use serde::Serialize;
 
 #[derive(Serialize)]
@@ -19,7 +19,7 @@ pub struct IceConfigResponse {
     pub ttl_seconds: u32,
 }
 
-pub async fn get_ice_config(State(state): State<AppState>) -> Json<IceConfigResponse> {
+pub async fn get_ice_config(state: web::Data<AppState>) -> HttpResponse {
     let response = IceConfigResponse {
         ice_servers: state
             .config
@@ -35,5 +35,5 @@ pub async fn get_ice_config(State(state): State<AppState>) -> Json<IceConfigResp
         ttl_seconds: state.config.ice_ttl_seconds,
     };
 
-    Json(response)
+    HttpResponse::Ok().json(response)
 }

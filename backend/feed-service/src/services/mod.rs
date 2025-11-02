@@ -20,16 +20,13 @@ pub mod vector_search;
 
 pub use graph::GraphService;
 pub use kafka_consumer::{
-    RecommendationEventConsumer, RecommendationEventBatch, RecommendationKafkaEvent,
-    RecommendationEventType, ExperimentVariant,
+    ExperimentVariant, RecommendationEventBatch, RecommendationEventConsumer,
+    RecommendationEventType, RecommendationKafkaEvent,
 };
 pub use recommendation_v2::{
     ABTestingFramework, CollaborativeFilteringModel, ContentBasedModel, Experiment,
-    ExperimentEvent, HybridRanker, HybridWeights, ModelInfo, ONNXModelServer,
-    RankedPost, RankingStrategy, RecommendationConfig, RecommendationServiceV2, UserContext,
-    Variant,
+    ExperimentEvent, HybridRanker, HybridWeights, ModelInfo, ONNXModelServer, RankedPost,
+    RankingStrategy, RecommendationConfig, RecommendationServiceV2, UserContext, Variant,
 };
 pub use trending::TrendingService;
-pub use vector_search::{
-    VectorSearchService, PostEmbedding, VectorSearchResult,
-};
+pub use vector_search::{PostEmbedding, VectorSearchResult, VectorSearchService};

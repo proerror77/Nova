@@ -1,13 +1,9 @@
 use crate::{error::AppError, middleware::guards::User, state::AppState};
-use axum::{
-    extract::{Path, State},
-    http::StatusCode,
-    Json,
-};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
 use uuid::Uuid;
+use actix_web::{web, HttpResponse};
 
 #[derive(Deserialize)]
 pub struct CreateAttachmentRequest {
@@ -40,11 +36,13 @@ pub struct AttachmentsListResponse {
 ///
 /// Permission: User must be the message sender or a conversation admin
 pub async fn upload_attachment(
-    State(state): State<AppState>,
+    state: web::Data<AppState>,
     user: User,
-    Path((conversation_id, message_id)): Path<(Uuid, Uuid)>,
-    Json(body): Json<CreateAttachmentRequest>,
-) -> Result<Json<AttachmentResponse>, AppError> {
+    path: web::Path<(Uuid, Uuid)>,
+    body: web::Json<CreateAttachmentRequest>,
+) -> Result<HttpResponse, AppError> {
+    let (conversation_id, message_id) = path.into_inner();
+
     // Validate input
     if body.file_name.is_empty() || body.file_name.len() > 255 {
         return Err(AppError::BadRequest("Invalid file name".into()));
@@ -77,13 +75,13 @@ pub async fn upload_attachment(
 
     // Ensure message belongs to this conversation
     if msg_conversation_id != conversation_id {
-        return Err(AppError::Forbidden);
+        return Err(AppError::Forbidden.into());
     }
 
     // Check permission: message sender or conversation admin
     let is_sender = sender_id == user.id;
     if !is_sender && !member.is_admin() {
-        return Err(AppError::Forbidden);
+        return Err(AppError::Forbidden.into());
     }
 
     // Create attachment record
@@ -107,13 +105,13 @@ pub async fn upload_attachment(
     .await
     .map_err(|e| AppError::StartServer(format!("Failed to create attachment: {e}")))?;
 
-    Ok(Json(AttachmentResponse {
+    Ok(HttpResponse::Ok().json(AttachmentResponse {
         id,
         message_id,
-        file_name: body.file_name,
-        file_type: body.file_type,
+        file_name: body.file_name.clone(),
+        file_type: body.file_type.clone(),
         file_size: body.file_size,
-        s3_key: body.s3_key,
+        s3_key: body.s3_key.clone(),
         created_at: now,
     }))
 }
@@ -123,10 +121,11 @@ pub async fn upload_attachment(
 ///
 /// Permission: User must be a member of the conversation containing this message
 pub async fn get_attachments(
-    State(state): State<AppState>,
+    state: web::Data<AppState>,
     user: User,
-    Path(message_id): Path<Uuid>,
-) -> Result<Json<AttachmentsListResponse>, AppError> {
+    message_id: web::Path<Uuid>,
+) -> Result<HttpResponse, AppError> {
+    let message_id = message_id.into_inner();
     // Get message's conversation to verify user access
     let message_row = sqlx::query("SELECT conversation_id FROM messages WHERE id = $1")
         .bind(message_id)
@@ -185,7 +184,7 @@ pub async fn get_attachments(
 
     let count = attachment_list.len();
 
-    Ok(Json(AttachmentsListResponse {
+    Ok(HttpResponse::Ok().json(AttachmentsListResponse {
         message_id,
         attachments: attachment_list,
         count,
@@ -197,10 +196,12 @@ pub async fn get_attachments(
 ///
 /// Permission: User must be the message sender or a conversation admin
 pub async fn delete_attachment(
-    State(state): State<AppState>,
+    state: web::Data<AppState>,
     user: User,
-    Path((message_id, attachment_id)): Path<(Uuid, Uuid)>,
-) -> Result<StatusCode, AppError> {
+    path: web::Path<(Uuid, Uuid)>,
+) -> Result<HttpResponse, AppError> {
+    let (message_id, attachment_id) = path.into_inner();
+
     // Get attachment and message details for authorization
     let attachment_row =
         sqlx::query("SELECT ma.message_id FROM message_attachments ma WHERE ma.id = $1")
@@ -213,7 +214,7 @@ pub async fn delete_attachment(
     // Verify message matches
     let msg_id: Uuid = attachment_row.get("message_id");
     if msg_id != message_id {
-        return Err(AppError::NotFound);
+        return Err(AppError::NotFound.into());
     }
 
     // Get message details to verify user permission
@@ -235,7 +236,7 @@ pub async fn delete_attachment(
     // Check permission: message sender or conversation admin
     let is_sender = sender_id == user.id;
     if !is_sender && !member.is_admin() {
-        return Err(AppError::Forbidden);
+        return Err(AppError::Forbidden.into());
     }
 
     let affected = sqlx::query("DELETE FROM message_attachments WHERE id = $1")
@@ -246,8 +247,8 @@ pub async fn delete_attachment(
         .rows_affected();
 
     if affected == 0 {
-        return Err(AppError::NotFound);
+        return Err(AppError::NotFound.into());
     }
 
-    Ok(StatusCode::NO_CONTENT)
+    Ok(HttpResponse::NoContent().finish())
 }

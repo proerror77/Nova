@@ -13,9 +13,19 @@ patchesStrategicMerge:
 - redis-deploy-patch.yaml
 - deploy-labels-patch.yaml
 - user-service-env-patch.yaml
+- user-service-probes-patch.yaml
+- feed-service-env-patch.yaml
+- messaging-service-env-patch.yaml
+- messaging-service-env-port-patch.yaml
+- messaging-service-probes-patch.yaml
+- content-service-env-patch.yaml
+- streaming-service-env-patch.yaml
+- search-service-env-patch.yaml
 - elasticsearch-replicas-patch.yaml
 - s3-env-patch.yaml
 - hpa-min1-patch.yaml
+- prefer-large-nodes-patch.yaml
+# Harden ClickHouse exposure
 
 images:
 - name: nova/auth-service
@@ -32,7 +42,7 @@ images:
   newTag: 38cc45e2f3b81a611e60955577b5a0a1120fbf56
 - name: nova/messaging-service
   newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/messaging-service
-  newTag: 38cc45e2f3b81a611e60955577b5a0a1120fbf56
+  newTag: fix-routes-amd64-20251102092900
 - name: nova/search-service
   newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/search-service
   newTag: 38cc45e2f3b81a611e60955577b5a0a1120fbf56
@@ -69,4 +79,6 @@ commonAnnotations:
 resources:
 - ../../base
 - postgres-pvc-gp3.yaml
- - sts-rotator.yaml
+- sts-rotator.yaml
+- nova-messaging-keys.yaml
+- nova-clickhouse-credentials.yaml

@@ -1,8 +1,8 @@
+use crate::error::{AuthError, AuthResult};
+use base64::{engine::general_purpose::STANDARD as base64_engine, Engine as _};
+use rand::Rng;
 /// Two-Factor Authentication (2FA) using TOTP (Time-based One-Time Password)
 use totp_lite::{totp, Sha1};
-use rand::Rng;
-use base64::{engine::general_purpose::STANDARD as base64_engine, Engine as _};
-use crate::error::{AuthError, AuthResult};
 
 pub struct TOTPGenerator;
 

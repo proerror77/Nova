@@ -117,7 +117,10 @@ impl streaming_service_server::StreamingService for StreamingServiceImpl {
         request: Request<GetStreamingManifestRequest>,
     ) -> Result<Response<GetStreamingManifestResponse>, Status> {
         let req = request.into_inner();
-        debug!("Getting manifest for stream: {} (format: {})", req.stream_id, req.format);
+        debug!(
+            "Getting manifest for stream: {} (format: {})",
+            req.stream_id, req.format
+        );
 
         // TODO: Implement actual manifest generation logic
         let now = std::time::SystemTime::now()
@@ -172,7 +175,10 @@ impl streaming_service_server::StreamingService for StreamingServiceImpl {
         request: Request<BroadcastChatMessageRequest>,
     ) -> Result<Response<BroadcastChatMessageResponse>, Status> {
         let req = request.into_inner();
-        debug!("Broadcasting message to stream: {} from user: {}", req.stream_id, req.user_id);
+        debug!(
+            "Broadcasting message to stream: {} from user: {}",
+            req.stream_id, req.user_id
+        );
 
         // TODO: Implement actual message broadcast logic
         let now = std::time::SystemTime::now()

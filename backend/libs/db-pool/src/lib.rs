@@ -84,25 +84,23 @@ pub async fn create_pool(config: DbConfig) -> Result<PgPool, sqlx::Error> {
         .await?;
 
     // Verify connection
-    sqlx::query("SELECT 1")
-        .execute(&pool)
-        .await
-        .map_err(|e| {
-            error!("Database connection verification failed: {}", e);
-            e
-        })?;
+    sqlx::query("SELECT 1").execute(&pool).await.map_err(|e| {
+        error!("Database connection verification failed: {}", e);
+        e
+    })?;
 
     info!("Database pool created successfully");
     Ok(pool)
 }
 
 /// Migrate database schema
-pub async fn migrate(pool: &PgPool, migrations_path: &str) -> Result<(), sqlx::migrate::MigrateError> {
+pub async fn migrate(
+    pool: &PgPool,
+    migrations_path: &str,
+) -> Result<(), sqlx::migrate::MigrateError> {
     debug!("Running database migrations from {}", migrations_path);
 
-    sqlx::migrate!("./migrations")
-        .run(pool)
-        .await?;
+    sqlx::migrate!("./migrations").run(pool).await?;
 
     info!("Database migrations completed successfully");
     Ok(())

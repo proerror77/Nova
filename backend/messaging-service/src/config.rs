@@ -1,8 +1,8 @@
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine as _;
 use dotenvy::dotenv;
-use std::env;
 pub use nova_apns_shared::ApnsConfig;
+use std::env;
 
 #[derive(Debug, Clone)]
 pub struct FcmConfig {
@@ -107,11 +107,12 @@ impl Config {
             .and_then(|v| v.parse().ok())
             .unwrap_or(3600);
 
-        let master_key_b64 = env::var("MESSAGE_ENCRYPTION_MASTER_KEY")
-            .map_err(|_| crate::error::AppError::Config("MESSAGE_ENCRYPTION_MASTER_KEY missing".into()))?;
-        let master_key_bytes = STANDARD
-            .decode(master_key_b64.trim())
-            .map_err(|_| crate::error::AppError::Config("MESSAGE_ENCRYPTION_MASTER_KEY invalid base64".into()))?;
+        let master_key_b64 = env::var("MESSAGE_ENCRYPTION_MASTER_KEY").map_err(|_| {
+            crate::error::AppError::Config("MESSAGE_ENCRYPTION_MASTER_KEY missing".into())
+        })?;
+        let master_key_bytes = STANDARD.decode(master_key_b64.trim()).map_err(|_| {
+            crate::error::AppError::Config("MESSAGE_ENCRYPTION_MASTER_KEY invalid base64".into())
+        })?;
         if master_key_bytes.len() != 32 {
             return Err(crate::error::AppError::Config(
                 "MESSAGE_ENCRYPTION_MASTER_KEY must decode to 32 bytes".into(),
@@ -212,8 +213,8 @@ fn parse_sentinel_config() -> Option<RedisSentinelConfig> {
         return None;
     }
 
-    let master_name = env::var("REDIS_SENTINEL_MASTER_NAME")
-        .unwrap_or_else(|_| "mymaster".to_string());
+    let master_name =
+        env::var("REDIS_SENTINEL_MASTER_NAME").unwrap_or_else(|_| "mymaster".to_string());
     let poll_interval_ms = env::var("REDIS_SENTINEL_POLL_INTERVAL_MS")
         .ok()
         .and_then(|v| v.parse().ok())

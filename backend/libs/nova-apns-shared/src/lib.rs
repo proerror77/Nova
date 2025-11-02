@@ -9,7 +9,6 @@
 /// - Notification building and sending
 /// - Error handling and logging
 /// - Support for badges, sounds, and priority levels
-
 pub mod client;
 pub mod config;
 

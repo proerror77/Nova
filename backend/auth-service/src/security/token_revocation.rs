@@ -1,8 +1,8 @@
+use crate::error::{AuthError, AuthResult};
 /// JWT Token Revocation Management
 /// Handles token blacklisting for logout and password change scenarios
 use redis::aio::ConnectionManager;
 use sha2::{Digest, Sha256};
-use crate::error::{AuthError, AuthResult};
 
 const DEFAULT_TOKEN_TTL_SECS: u64 = 3600; // 1 hour
 

@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: nova-messaging-keys
+  namespace: nova
+  labels:
+    app: nova
+    managed-by: kustomize
+type: Opaque
+stringData:
+  # 32-byte base64 master key for message encryption
+  MESSAGE_ENCRYPTION_MASTER_KEY: "8ibFgqKyxT7Gx241sSAyJoArxhGUisfAc1wSTkLCPP8="
+

@@ -1,13 +1,10 @@
 use crate::middleware::guards::User;
 use crate::{
+    error::AppError,
     services::conversation_service::{ConversationService, PrivacyMode},
     state::AppState,
 };
-use axum::{
-    extract::{Path, State},
-    http::StatusCode,
-    Json,
-};
+use actix_web::{web, HttpResponse};
 use base64::{engine::general_purpose, Engine as _};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -55,17 +52,17 @@ pub struct CreateGroupConversationRequest {
 }
 
 pub async fn create_conversation(
-    State(state): State<AppState>,
+    state: web::Data<AppState>,
     _user: User, // Authenticated user from JWT
-    Json(body): Json<CreateConversationRequest>,
-) -> Result<Json<ConversationResponse>, crate::error::AppError> {
+    body: web::Json<CreateConversationRequest>,
+) -> Result<HttpResponse, AppError> {
     // Security: Can only create conversations with yourself or another user
     // For now, we allow creation. In future, might want to verify user_a == authenticated user
     let id = ConversationService::create_direct_conversation(&state.db, body.user_a, body.user_b)
         .await?;
     // fetch details for response
     let details = ConversationService::get_conversation_db(&state.db, id).await?;
-    Ok(Json(ConversationResponse {
+    Ok(HttpResponse::Ok().json(ConversationResponse {
         id: details.id,
         member_count: details.member_count,
         last_message_id: details.last_message_id,
@@ -73,11 +70,11 @@ pub async fn create_conversation(
 }
 
 pub async fn get_conversation(
-    State(state): State<AppState>,
+    state: web::Data<AppState>,
     user: User,
-    Path(id): Path<Uuid>,
-) -> Result<Json<ConversationResponse>, crate::error::AppError> {
-    let conversation_id = id;
+    id: web::Path<Uuid>,
+) -> Result<HttpResponse, AppError> {
+    let conversation_id = id.into_inner();
 
     // Verify user is member of conversation
     let _member =
@@ -85,7 +82,7 @@ pub async fn get_conversation(
             .await?;
 
     let details = ConversationService::get_conversation_db(&state.db, conversation_id).await?;
-    Ok(Json(ConversationResponse {
+    Ok(HttpResponse::Ok().json(ConversationResponse {
         id: details.id,
         member_count: details.member_count,
         last_message_id: details.last_message_id,
@@ -101,10 +98,10 @@ pub struct MarkAsReadRequest {
 /// POST /conversations/groups
 /// Authenticated users can create groups with specified members
 pub async fn create_group_conversation(
-    State(state): State<AppState>,
+    state: web::Data<AppState>,
     user: User, // Creator of the group (becomes owner)
-    Json(body): Json<CreateGroupConversationRequest>,
-) -> Result<(StatusCode, Json<GroupConversationResponse>), crate::error::AppError> {
+    body: web::Json<CreateGroupConversationRequest>,
+) -> Result<HttpResponse, AppError> {
     // Save values before they are moved
     let name = body.name.clone();
     let description = body.description.clone();
@@ -128,7 +125,7 @@ pub async fn create_group_conversation(
         name.clone(),
         description.clone(),
         avatar_url.clone(),
-        body.member_ids,
+        body.member_ids.clone(),
         privacy_mode,
     )
     .await?;
@@ -149,17 +146,17 @@ pub async fn create_group_conversation(
         },
     };
 
-    Ok((StatusCode::CREATED, Json(response)))
+    Ok(HttpResponse::Created().json(response))
 }
 
 /// GET /conversations/{id}/encryption-key
 /// Returns the symmetric conversation key for Strict E2E conversations.
 pub async fn get_conversation_key(
-    State(state): State<AppState>,
+    state: web::Data<AppState>,
     user: User,
-    Path(id): Path<Uuid>,
-) -> Result<Json<ConversationKeyResponse>, crate::error::AppError> {
-    let conversation_id = id;
+    id: web::Path<Uuid>,
+) -> Result<HttpResponse, AppError> {
+    let conversation_id = id.into_inner();
 
     crate::middleware::guards::ConversationMember::verify(&state.db, user.id, conversation_id)
         .await?;
@@ -175,7 +172,7 @@ pub async fn get_conversation_key(
     let key = state.encryption.conversation_key(conversation_id);
     let key_b64 = general_purpose::STANDARD.encode(key);
 
-    Ok(Json(ConversationKeyResponse {
+    Ok(HttpResponse::Ok().json(ConversationKeyResponse {
         conversation_id,
         key_base64: key_b64,
         key_version: 1,
@@ -187,11 +184,11 @@ pub async fn get_conversation_key(
 /// Delete/dissolve a group conversation (owner only)
 /// DELETE /conversations/{id}
 pub async fn delete_group(
-    State(state): State<AppState>,
+    state: web::Data<AppState>,
     user: User,
-    Path(id): Path<Uuid>,
-) -> Result<StatusCode, crate::error::AppError> {
-    let conversation_id = id;
+    id: web::Path<Uuid>,
+) -> Result<HttpResponse, AppError> {
+    let conversation_id = id.into_inner();
 
     // Delete the group (ConversationService will check permissions)
     ConversationService::delete_group_conversation(&state.db, conversation_id, user.id).await?;
@@ -216,17 +213,17 @@ pub async fn delete_group(
         crate::error::AppError::Internal
     })?;
 
-    Ok(StatusCode::NO_CONTENT)
+    Ok(HttpResponse::NoContent().finish())
 }
 
 /// Leave a group conversation
 /// POST /conversations/{id}/leave
 pub async fn leave_group(
-    State(state): State<AppState>,
+    state: web::Data<AppState>,
     user: User,
-    Path(id): Path<Uuid>,
-) -> Result<StatusCode, crate::error::AppError> {
-    let conversation_id = id;
+    id: web::Path<Uuid>,
+) -> Result<HttpResponse, AppError> {
+    let conversation_id = id.into_inner();
 
     // Verify user is member
     let _member =
@@ -257,17 +254,17 @@ pub async fn leave_group(
         crate::error::AppError::Internal
     })?;
 
-    Ok(StatusCode::NO_CONTENT)
+    Ok(HttpResponse::NoContent().finish())
 }
 
 /// Mark conversation as read (update last_read_at timestamp)
 pub async fn mark_as_read(
-    State(state): State<AppState>,
+    state: web::Data<AppState>,
     user: User,
-    Path(id): Path<Uuid>,
-    Json(_body): Json<MarkAsReadRequest>,
-) -> Result<StatusCode, crate::error::AppError> {
-    let conversation_id = id;
+    id: web::Path<Uuid>,
+    _body: web::Json<MarkAsReadRequest>,
+) -> Result<HttpResponse, AppError> {
+    let conversation_id = id.into_inner();
 
     // Verify user is member of conversation
     let _member =
@@ -297,5 +294,5 @@ pub async fn mark_as_read(
         crate::error::AppError::Internal
     })?;
 
-    Ok(StatusCode::NO_CONTENT)
+    Ok(HttpResponse::NoContent().finish())
 }

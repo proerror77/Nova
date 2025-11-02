@@ -50,7 +50,7 @@ pub async fn create_test_pool() -> PgPool {
                                 .await
                                 .expect("Failed to prepare legacy video migration workaround");
                             // 迁移：忽略历史环境中缺失的版本，避免阻塞本地/CI
-                            let mut migrator = sqlx::migrate!("../migrations");
+                            let mut migrator = sqlx::migrate!("./migrations");
                             migrator.set_ignore_missing(true);
                             if let Err(e) = migrator.run(&pool).await {
                                 panic!("Failed to run migrations: {:#?}", e);

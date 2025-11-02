@@ -1,12 +1,9 @@
-use axum::http::StatusCode;
-use axum::{
-    extract::{Path, Query, State},
-    Json,
-};
+use actix_web::{web, HttpResponse};
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
 use uuid::Uuid;
 
+use crate::error::AppError;
 use crate::middleware::guards::User;
 use crate::services::message_service::MessageService;
 use crate::state::AppState;
@@ -26,12 +23,12 @@ pub struct SendMessageResponse {
 }
 
 pub async fn send_message(
-    State(state): State<AppState>,
+    state: web::Data<AppState>,
     user: User, // Authenticated user from JWT
-    Path(id): Path<Uuid>,
-    Json(body): Json<SendMessageRequest>,
-) -> Result<Json<SendMessageResponse>, crate::error::AppError> {
-    let conversation_id = id;
+    id: web::Path<Uuid>,
+    body: web::Json<SendMessageRequest>,
+) -> Result<HttpResponse, AppError> {
+    let conversation_id = id.into_inner();
 
     // Verify user is member of conversation and has permission to send
     let member =
@@ -67,7 +64,7 @@ pub async fn send_message(
     )
     .await;
 
-    Ok(Json(SendMessageResponse {
+    Ok(HttpResponse::Ok().json(SendMessageResponse {
         id: msg_id,
         sequence_number: seq,
     }))
@@ -156,12 +153,12 @@ fn default_include_recalled() -> bool {
 }
 
 pub async fn get_message_history(
-    State(state): State<AppState>,
+    state: web::Data<AppState>,
     user: User,
-    Path(id): Path<Uuid>,
-    Query(pagination): Query<PaginationQuery>,
-) -> Result<Json<Vec<MessageDto>>, crate::error::AppError> {
-    let conversation_id = id;
+    id: web::Path<Uuid>,
+    pagination: web::Query<PaginationQuery>,
+) -> Result<HttpResponse, AppError> {
+    let conversation_id = id.into_inner();
 
     // Verify user is member of conversation
     let _member =
@@ -178,7 +175,7 @@ pub async fn get_message_history(
         pagination.include_recalled,
     )
     .await?;
-    Ok(Json(rows))
+    Ok(HttpResponse::Ok().json(rows))
 }
 
 #[derive(Deserialize)]
@@ -197,11 +194,12 @@ pub struct UpdateMessageRequest {
 /// - On conflict: returns 409 with server version
 /// - Edit history is automatically recorded via database trigger
 pub async fn update_message(
-    State(state): State<AppState>,
+    state: web::Data<AppState>,
     user: User,
-    Path(message_id): Path<Uuid>,
-    Json(body): Json<UpdateMessageRequest>,
-) -> Result<StatusCode, crate::error::AppError> {
+    message_id: web::Path<Uuid>,
+    body: web::Json<UpdateMessageRequest>,
+) -> Result<HttpResponse, AppError> {
+    let message_id = message_id.into_inner();
     // Edit window limit (24 hours)
     const MAX_EDIT_MINUTES: i64 = 1440;
 
@@ -345,14 +343,15 @@ pub async fn update_message(
     )
     .await;
 
-    Ok(StatusCode::NO_CONTENT)
+    Ok(HttpResponse::NoContent().finish())
 }
 
 pub async fn delete_message(
-    State(state): State<AppState>,
+    state: web::Data<AppState>,
     user: User,
-    Path(message_id): Path<Uuid>,
-) -> Result<StatusCode, crate::error::AppError> {
+    message_id: web::Path<Uuid>,
+) -> Result<HttpResponse, AppError> {
+    let message_id = message_id.into_inner();
     // TOCTOU fix: Use atomic transaction for permission check + delete
     let mut tx = state.db.begin().await?;
 
@@ -411,7 +410,7 @@ pub async fn delete_message(
     )
     .await;
 
-    Ok(StatusCode::NO_CONTENT)
+    Ok(HttpResponse::NoContent().finish())
 }
 
 #[derive(Deserialize)]
@@ -442,11 +441,12 @@ pub struct SearchQuery {
 /// - Database-level encryption (TDE) provides at-rest protection
 /// - See: backend/ENCRYPTION_ARCHITECTURE.md for design rationale
 pub async fn search_messages(
-    State(state): State<AppState>,
+    state: web::Data<AppState>,
     user: User,
-    Path(conversation_id): Path<Uuid>,
-    Query(search): Query<SearchQuery>,
-) -> Result<Json<Vec<MessageDto>>, crate::error::AppError> {
+    conversation_id: web::Path<Uuid>,
+    search: web::Query<SearchQuery>,
+) -> Result<HttpResponse, AppError> {
+    let conversation_id = conversation_id.into_inner();
     // Verify user is member of conversation
     let _member =
         crate::middleware::guards::ConversationMember::verify(&state.db, user.id, conversation_id)
@@ -454,7 +454,7 @@ pub async fn search_messages(
 
     // Validate search query is not empty
     if search.q.trim().is_empty() {
-        return Ok(Json(vec![]));
+        return Ok(HttpResponse::Ok().json(Vec::<MessageDto>::new()));
     }
 
     // Execute search
@@ -468,7 +468,7 @@ pub async fn search_messages(
     )
     .await?;
 
-    Ok(Json(results))
+    Ok(HttpResponse::Ok().json(results))
 }
 
 #[derive(Serialize)]
@@ -487,10 +487,11 @@ pub struct RecallMessageResponse {
 /// - Recall event is broadcast to all conversation members via WebSocket
 /// - Audit log entry is created in message_recalls table
 pub async fn recall_message(
-    State(state): State<AppState>,
+    state: web::Data<AppState>,
     user: User,
-    Path((conversation_id, message_id)): Path<(Uuid, Uuid)>,
-) -> Result<Json<RecallMessageResponse>, crate::error::AppError> {
+    path: web::Path<(Uuid, Uuid)>,
+) -> Result<HttpResponse, AppError> {
+    let (conversation_id, message_id) = path.into_inner();
     // 1. Verify user is member of conversation and get permissions
     let member =
         crate::middleware::guards::ConversationMember::verify(&state.db, user.id, conversation_id)
@@ -574,7 +575,7 @@ pub async fn recall_message(
     .await;
 
     // 8. Return success response
-    Ok(Json(RecallMessageResponse {
+    Ok(HttpResponse::Ok().json(RecallMessageResponse {
         message_id,
         recalled_at: now.to_rfc3339(),
         status: "recalled".to_string(),
@@ -597,11 +598,12 @@ pub struct ForwardMessageResponse {
 }
 
 pub async fn forward_message(
-    State(state): State<AppState>,
+    state: web::Data<AppState>,
     user: User,
-    Path((conversation_id, message_id)): Path<(Uuid, Uuid)>,
-    Json(body): Json<ForwardMessageRequest>,
-) -> Result<Json<ForwardMessageResponse>, crate::error::AppError> {
+    path: web::Path<(Uuid, Uuid)>,
+    body: web::Json<ForwardMessageRequest>,
+) -> Result<HttpResponse, AppError> {
+    let (conversation_id, message_id) = path.into_inner();
     // 1) Verify membership in source conversation
     let _source_member =
         crate::middleware::guards::ConversationMember::verify(&state.db, user.id, conversation_id)
@@ -667,7 +669,7 @@ pub async fn forward_message(
     )
     .await;
 
-    Ok(Json(ForwardMessageResponse {
+    Ok(HttpResponse::Ok().json(ForwardMessageResponse {
         forwarded_message_id: new_message_id,
         target_conversation_id: body.target_conversation_id,
         forwarded_at: now.to_rfc3339(),
@@ -677,12 +679,12 @@ pub async fn forward_message(
 /// Send an audio message to a conversation
 /// POST /conversations/{id}/messages/audio
 pub async fn send_audio_message(
-    State(state): State<AppState>,
+    state: web::Data<AppState>,
     user: User, // Authenticated user from JWT
-    Path(id): Path<Uuid>,
-    Json(body): Json<SendAudioMessageRequest>,
-) -> Result<(StatusCode, Json<AudioMessageDto>), crate::error::AppError> {
-    let conversation_id = id;
+    id: web::Path<Uuid>,
+    body: web::Json<SendAudioMessageRequest>,
+) -> Result<HttpResponse, AppError> {
+    let conversation_id = id.into_inner();
 
     // Verify user is member of conversation and has permission to send
     let member =
@@ -747,14 +749,14 @@ pub async fn send_audio_message(
         sender_id: user.id,
         sequence_number: seq,
         created_at: created_at.to_rfc3339(),
-        audio_url: body.audio_url,
+        audio_url: body.audio_url.clone(),
         duration_ms: body.duration_ms,
-        audio_codec: body.audio_codec,
+        audio_codec: body.audio_codec.clone(),
         transcription: None,
         transcription_language: None,
     };
 
-    Ok((StatusCode::CREATED, Json(response)))
+    Ok(HttpResponse::Created().json(response))
 }
 
 // ======= Audio Upload Presigned URL =======
@@ -777,12 +779,12 @@ pub struct AudioPresignedUrlResponse {
 /// This endpoint allows iOS clients to upload audio files directly to S3
 /// without requiring AWS credentials. Returns a presigned URL valid for 1 hour.
 pub async fn get_audio_presigned_url(
-    State(state): State<AppState>,
+    state: web::Data<AppState>,
     user: User,
-    Path(id): Path<Uuid>,
-    Json(body): Json<AudioPresignedUrlRequest>,
-) -> Result<(StatusCode, Json<AudioPresignedUrlResponse>), crate::error::AppError> {
-    let conversation_id = id;
+    id: web::Path<Uuid>,
+    body: web::Json<AudioPresignedUrlRequest>,
+) -> Result<HttpResponse, AppError> {
+    let conversation_id = id.into_inner();
 
     // Verify user is member of conversation and has permission to send
     let _member =
@@ -840,12 +842,9 @@ pub async fn get_audio_presigned_url(
         "Generated presigned URL for audio upload"
     );
 
-    Ok((
-        StatusCode::OK,
-        Json(AudioPresignedUrlResponse {
-            presigned_url,
-            expiration,
-            s3_key,
-        }),
-    ))
+    Ok(HttpResponse::Ok().json(AudioPresignedUrlResponse {
+        presigned_url,
+        expiration,
+        s3_key,
+    }))
 }

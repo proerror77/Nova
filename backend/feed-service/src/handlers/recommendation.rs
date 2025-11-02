@@ -85,7 +85,8 @@ pub async fn get_recommendations(
     state: web::Data<RecommendationHandlerState>,
 ) -> Result<HttpResponse> {
     // Extract user ID from JWT token
-    let user_id = req.extensions()
+    let user_id = req
+        .extensions()
         .get::<UserId>()
         .cloned()
         .ok_or_else(|| AppError::Authentication("Missing user ID".to_string()))?
@@ -93,15 +94,15 @@ pub async fn get_recommendations(
 
     let limit = query.limit.min(100).max(1);
 
-    debug!("Getting recommendations for user: {}, limit: {}", user_id, limit);
+    debug!(
+        "Getting recommendations for user: {}, limit: {}",
+        user_id, limit
+    );
 
     match state.service.get_recommendations(user_id, limit).await {
         Ok(posts) => {
             let count = posts.len();
-            Ok(HttpResponse::Ok().json(RecommendationResponse {
-                posts,
-                count,
-            }))
+            Ok(HttpResponse::Ok().json(RecommendationResponse { posts, count }))
         }
         Err(err) => {
             error!("Failed to get recommendations: {:?}", err);
@@ -113,9 +114,7 @@ pub async fn get_recommendations(
 /// GET /api/v1/recommendations/model-info
 /// Get current model version information
 #[get("/api/v1/recommendations/model-info")]
-pub async fn get_model_info(
-    state: web::Data<RecommendationHandlerState>,
-) -> Result<HttpResponse> {
+pub async fn get_model_info(state: web::Data<RecommendationHandlerState>) -> Result<HttpResponse> {
     debug!("Getting model info");
 
     let info = state.service.get_model_info().await;
@@ -155,24 +154,20 @@ pub async fn rank_candidates(
     );
 
     if body.candidates.is_empty() {
-        return Err(AppError::BadRequest(
-            "No candidates provided".to_string(),
-        ));
+        return Err(AppError::BadRequest("No candidates provided".to_string()));
     }
 
     // Create default user context (no recent posts/profile)
     let context = crate::services::UserContext::default();
 
-    match state.service
+    match state
+        .service
         .rank_with_context(body.user_id, context, body.candidates.clone(), limit)
         .await
     {
         Ok(posts) => {
             let count = posts.len();
-            Ok(HttpResponse::Ok().json(RecommendationResponse {
-                posts,
-                count,
-            }))
+            Ok(HttpResponse::Ok().json(RecommendationResponse { posts, count }))
         }
         Err(err) => {
             error!("Failed to rank candidates: {:?}", err);
@@ -234,7 +229,8 @@ pub async fn semantic_search(
         body.post_id, limit
     );
 
-    match state.service
+    match state
+        .service
         .search_semantically_similar(body.post_id, limit)
         .await
     {

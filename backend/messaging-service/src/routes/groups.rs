@@ -4,16 +4,13 @@
 //! Permission checks are performed by ConversationMember guard.
 
 use crate::{
+    error::AppError,
     middleware::guards::{ConversationAdmin, ConversationMember, User},
     models::MemberRole,
     state::AppState,
     websocket::events::{broadcast_event, WebSocketEvent},
 };
-use axum::{
-    extract::{Path, Query, State},
-    http::StatusCode,
-    Json,
-};
+use actix_web::{web, HttpResponse};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -81,11 +78,12 @@ pub struct UpdateGroupSettingsRequest {
 ///
 /// Authorization: Requires admin role
 pub async fn add_member(
-    State(state): State<AppState>,
+    state: web::Data<AppState>,
     user: User,
-    Path(conversation_id): Path<Uuid>,
-    Json(body): Json<AddMemberRequest>,
-) -> Result<StatusCode, crate::error::AppError> {
+    conversation_id: web::Path<Uuid>,
+    body: web::Json<AddMemberRequest>,
+) -> Result<HttpResponse, AppError> {
+    let conversation_id = conversation_id.into_inner();
     // Verify requester is admin and conversation is group
     let admin = ConversationAdmin::verify(&state.db, user.id, conversation_id).await?;
     admin.inner.require_group()?;
@@ -146,7 +144,7 @@ pub async fn add_member(
     )
     .await;
 
-    Ok(StatusCode::CREATED)
+    Ok(HttpResponse::Created().finish())
 }
 
 /// DELETE /conversations/{id}/members/{user_id}
@@ -156,10 +154,11 @@ pub async fn add_member(
 /// - Requester must be admin (to remove others)
 /// - OR requester is removing themselves (leaving the group)
 pub async fn remove_member(
-    State(state): State<AppState>,
+    state: web::Data<AppState>,
     requesting_user: User,
-    Path((conversation_id, target_user_id)): Path<(Uuid, Uuid)>,
-) -> Result<StatusCode, crate::error::AppError> {
+    path: web::Path<(Uuid, Uuid)>,
+) -> Result<HttpResponse, AppError> {
+    let (conversation_id, target_user_id) = path.into_inner();
     let is_self_remove = requesting_user.id == target_user_id;
 
     if is_self_remove {
@@ -235,7 +234,7 @@ pub async fn remove_member(
     )
     .await;
 
-    Ok(StatusCode::NO_CONTENT)
+    Ok(HttpResponse::NoContent().finish())
 }
 
 /// PUT /conversations/{id}/members/{user_id}
@@ -243,11 +242,12 @@ pub async fn remove_member(
 ///
 /// Authorization: Requires admin role
 pub async fn update_member_role(
-    State(state): State<AppState>,
+    state: web::Data<AppState>,
     requesting_user: User,
-    Path((conversation_id, target_user_id)): Path<(Uuid, Uuid)>,
-    Json(body): Json<UpdateMemberRequest>,
-) -> Result<StatusCode, crate::error::AppError> {
+    path: web::Path<(Uuid, Uuid)>,
+    body: web::Json<UpdateMemberRequest>,
+) -> Result<HttpResponse, AppError> {
+    let (conversation_id, target_user_id) = path.into_inner();
     // Verify requester is admin
     let admin = ConversationAdmin::verify(&state.db, requesting_user.id, conversation_id).await?;
     admin.inner.require_group()?;
@@ -304,7 +304,7 @@ pub async fn update_member_role(
     )
     .await;
 
-    Ok(StatusCode::NO_CONTENT)
+    Ok(HttpResponse::NoContent().finish())
 }
 
 /// GET /conversations/{id}/members
@@ -312,11 +312,12 @@ pub async fn update_member_role(
 ///
 /// Authorization: Requires membership in the conversation
 pub async fn list_members(
-    State(state): State<AppState>,
+    state: web::Data<AppState>,
     user: User,
-    Path(conversation_id): Path<Uuid>,
-    Query(query): Query<ListMembersQuery>,
-) -> Result<Json<MembersListResponse>, crate::error::AppError> {
+    conversation_id: web::Path<Uuid>,
+    query: web::Query<ListMembersQuery>,
+) -> Result<HttpResponse, AppError> {
+    let conversation_id = conversation_id.into_inner();
     // Verify user is a member
     let member = ConversationMember::verify(&state.db, user.id, conversation_id).await?;
     member.require_group()?;
@@ -370,7 +371,7 @@ pub async fn list_members(
         })
         .collect();
 
-    Ok(Json(MembersListResponse {
+    Ok(HttpResponse::Ok().json(MembersListResponse {
         members: member_list,
         total: total as usize,
     }))
@@ -381,11 +382,12 @@ pub async fn list_members(
 ///
 /// Authorization: Requires admin role
 pub async fn update_group_settings(
-    State(state): State<AppState>,
+    state: web::Data<AppState>,
     user: User,
-    Path(conversation_id): Path<Uuid>,
-    Json(body): Json<UpdateGroupSettingsRequest>,
-) -> Result<StatusCode, crate::error::AppError> {
+    conversation_id: web::Path<Uuid>,
+    body: web::Json<UpdateGroupSettingsRequest>,
+) -> Result<HttpResponse, AppError> {
+    let conversation_id = conversation_id.into_inner();
     // Verify requester is admin
     let admin = ConversationAdmin::verify(&state.db, user.id, conversation_id).await?;
     admin.inner.require_group()?;
@@ -461,5 +463,5 @@ pub async fn update_group_settings(
     )
     .await;
 
-    Ok(StatusCode::NO_CONTENT)
+    Ok(HttpResponse::NoContent().finish())
 }

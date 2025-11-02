@@ -13,6 +13,7 @@ resources:
 # 基础设施服务
 - postgres.yaml
 - redis.yaml
+- redis-pvc.yaml
 - elasticsearch.yaml
 # 微服务
 - auth-service.yaml

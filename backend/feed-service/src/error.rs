@@ -55,14 +55,20 @@ impl ResponseError for AppError {
     fn error_response(&self) -> HttpResponse {
         let (code, message) = match self {
             AppError::NotFound(msg) => (StatusCode::NOT_FOUND, msg.clone()),
-            AppError::ValidationError(msg) | AppError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg.clone()),
+            AppError::ValidationError(msg) | AppError::BadRequest(msg) => {
+                (StatusCode::BAD_REQUEST, msg.clone())
+            }
             AppError::Authentication(msg) => (StatusCode::UNAUTHORIZED, msg.clone()),
             AppError::Authorization(msg) => (StatusCode::FORBIDDEN, msg.clone()),
             AppError::ServiceUnavailable(msg) => (StatusCode::SERVICE_UNAVAILABLE, msg.clone()),
-            AppError::Database(msg) | AppError::DatabaseError(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg.clone()),
+            AppError::Database(msg) | AppError::DatabaseError(msg) => {
+                (StatusCode::INTERNAL_SERVER_ERROR, msg.clone())
+            }
             AppError::ModelLoadError(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg.clone()),
             AppError::InferenceError(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg.clone()),
-            AppError::Internal(msg) | AppError::InternalError(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg.clone()),
+            AppError::Internal(msg) | AppError::InternalError(msg) => {
+                (StatusCode::INTERNAL_SERVER_ERROR, msg.clone())
+            }
         };
 
         HttpResponse::build(code).json(ErrorResponse {

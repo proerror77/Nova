@@ -7,13 +7,10 @@ use crate::middleware::guards::User;
 use crate::models::location::*;
 use crate::services::location_service::LocationService;
 use crate::websocket::events::{broadcast_event, WebSocketEvent};
-use axum::{
-    extract::{Path, State},
-    Json,
-};
 use uuid::Uuid;
 
 use crate::state::AppState;
+use actix_web::{web, HttpResponse};
 
 /// Share or update location in a conversation
 ///
@@ -22,13 +19,14 @@ use crate::state::AppState;
 ///
 /// **Endpoint**: `POST /conversations/:id/location`
 pub async fn share_location(
-    State(state): State<AppState>,
+    state: web::Data<AppState>,
     user: User,
-    Path(conversation_id): Path<Uuid>,
-    Json(request): Json<ShareLocationRequest>,
-) -> Result<Json<SharedLocation>, AppError> {
+    conversation_id: web::Path<Uuid>,
+    request: web::Json<ShareLocationRequest>,
+) -> Result<HttpResponse, AppError> {
+    let conversation_id = conversation_id.into_inner();
     let location =
-        LocationService::start_sharing(&state.db, user.id, conversation_id, request).await?;
+        LocationService::start_sharing(&state.db, user.id, conversation_id, request.into_inner()).await?;
 
     // Broadcast location shared event
     let event = WebSocketEvent::LocationShared {
@@ -47,7 +45,7 @@ pub async fn share_location(
     )
     .await;
 
-    Ok(Json(location))
+    Ok(HttpResponse::Ok().json(location))
 }
 
 /// Get all active locations in a conversation
@@ -56,12 +54,13 @@ pub async fn share_location(
 ///
 /// **Endpoint**: `GET /conversations/:id/locations`
 pub async fn get_conversation_locations(
-    State(state): State<AppState>,
-    Path(conversation_id): Path<Uuid>,
-) -> Result<Json<ConversationLocations>, AppError> {
+    state: web::Data<AppState>,
+    conversation_id: web::Path<Uuid>,
+) -> Result<HttpResponse, AppError> {
+    let conversation_id = conversation_id.into_inner();
     let locations = LocationService::get_conversation_locations(&state.db, conversation_id).await?;
 
-    Ok(Json(locations))
+    Ok(HttpResponse::Ok().json(locations))
 }
 
 /// Get a specific user's location in a conversation
@@ -71,15 +70,16 @@ pub async fn get_conversation_locations(
 ///
 /// **Endpoint**: `GET /conversations/:id/location/:user_id`
 pub async fn get_user_location(
-    State(state): State<AppState>,
-    Path((conversation_id, target_user_id)): Path<(Uuid, Uuid)>,
-) -> Result<Json<SharedLocation>, AppError> {
+    state: web::Data<AppState>,
+    path: web::Path<(Uuid, Uuid)>,
+) -> Result<HttpResponse, AppError> {
+    let (conversation_id, target_user_id) = path.into_inner();
     let location =
         LocationService::get_user_location(&state.db, target_user_id, conversation_id).await?;
 
     match location {
-        Some(loc) => Ok(Json(loc)),
-        None => Err(AppError::NotFound),
+        Some(loc) => Ok(HttpResponse::Ok().json(loc)),
+        None => Err(AppError::NotFound.into()),
     }
 }
 
@@ -89,12 +89,13 @@ pub async fn get_user_location(
 ///
 /// **Endpoint**: `POST /conversations/:id/location/stop`
 pub async fn stop_sharing_location(
-    State(state): State<AppState>,
+    state: web::Data<AppState>,
     user: User,
-    Path(conversation_id): Path<Uuid>,
-    Json(request): Json<StopSharingRequest>,
-) -> Result<Json<serde_json::Value>, AppError> {
-    LocationService::stop_sharing(&state.db, user.id, conversation_id, request).await?;
+    conversation_id: web::Path<Uuid>,
+    request: web::Json<StopSharingRequest>,
+) -> Result<HttpResponse, AppError> {
+    let conversation_id = conversation_id.into_inner();
+    LocationService::stop_sharing(&state.db, user.id, conversation_id, request.into_inner()).await?;
 
     // Broadcast location stopped event
     let event = WebSocketEvent::LocationStopped { user_id: user.id };
@@ -108,7 +109,7 @@ pub async fn stop_sharing_location(
     )
     .await;
 
-    Ok(Json(serde_json::json!({ "status": "stopped" })))
+    Ok(HttpResponse::Ok().json(serde_json::json!({ "status": "stopped" })))
 }
 
 /// Get location permissions
@@ -117,12 +118,12 @@ pub async fn stop_sharing_location(
 ///
 /// **Endpoint**: `GET /location/permissions`
 pub async fn get_location_permissions(
-    State(state): State<AppState>,
+    state: web::Data<AppState>,
     user: User,
-) -> Result<Json<LocationPermissionResponse>, AppError> {
+) -> Result<HttpResponse, AppError> {
     let perm = LocationService::get_or_create_permission(&state.db, user.id).await?;
 
-    Ok(Json(LocationPermissionResponse::from(perm)))
+    Ok(HttpResponse::Ok().json(LocationPermissionResponse::from(perm)))
 }
 
 /// Update location permissions
@@ -131,13 +132,13 @@ pub async fn get_location_permissions(
 ///
 /// **Endpoint**: `PUT /location/permissions`
 pub async fn update_location_permissions(
-    State(state): State<AppState>,
+    state: web::Data<AppState>,
     user: User,
-    Json(request): Json<UpdateLocationPermissionsRequest>,
-) -> Result<Json<LocationPermissionResponse>, AppError> {
-    let perm = LocationService::update_permissions(&state.db, user.id, request).await?;
+    request: web::Json<UpdateLocationPermissionsRequest>,
+) -> Result<HttpResponse, AppError> {
+    let perm = LocationService::update_permissions(&state.db, user.id, request.into_inner()).await?;
 
-    Ok(Json(LocationPermissionResponse::from(perm)))
+    Ok(HttpResponse::Ok().json(LocationPermissionResponse::from(perm)))
 }
 
 /// Get location sharing statistics
@@ -146,10 +147,11 @@ pub async fn update_location_permissions(
 ///
 /// **Endpoint**: `GET /conversations/:id/location/stats`
 pub async fn get_location_stats(
-    State(state): State<AppState>,
-    Path(conversation_id): Path<Uuid>,
-) -> Result<Json<serde_json::Value>, AppError> {
+    state: web::Data<AppState>,
+    conversation_id: web::Path<Uuid>,
+) -> Result<HttpResponse, AppError> {
+    let conversation_id = conversation_id.into_inner();
     let stats = LocationService::get_sharing_stats(&state.db, conversation_id).await?;
 
-    Ok(Json(stats))
+    Ok(HttpResponse::Ok().json(stats))
 }

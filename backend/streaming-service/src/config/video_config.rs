@@ -1,7 +1,6 @@
 /// Video Streaming Configuration
 ///
 /// Configuration structures for streaming manifest generation and CDN delivery.
-
 use serde::{Deserialize, Serialize};
 
 /// Video Streaming Configuration (HLS/DASH)

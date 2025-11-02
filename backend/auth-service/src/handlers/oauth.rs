@@ -1,13 +1,11 @@
 /// OAuth handlers
-use axum::{
-    extract::{State, Json},
-};
+use actix_web::{web, HttpResponse};
 use serde::Serialize;
 use uuid::Uuid;
 
 use crate::{
     error::AuthError,
-    models::oauth::{OAuthProvider, StartOAuthFlowRequest, CompleteOAuthFlowRequest},
+    models::oauth::{CompleteOAuthFlowRequest, OAuthProvider, StartOAuthFlowRequest},
     AppState,
 };
 
@@ -30,37 +28,31 @@ pub struct OAuthLoginResponse {
 
 /// Start OAuth authorization flow
 pub async fn start_oauth_flow(
-    State(_state): State<AppState>,
-    Json(payload): Json<StartOAuthFlowRequest>,
-) -> Result<Json<StartOAuthFlowResponse>, AuthError> {
+    _state: web::Data<AppState>,
+    payload: web::Json<StartOAuthFlowRequest>,
+) -> Result<HttpResponse, AuthError> {
     // Parse provider
-    let _provider = OAuthProvider::from_str(&payload.provider)
-        .ok_or(AuthError::InvalidOAuthProvider)?;
+    let _provider =
+        OAuthProvider::from_str(&payload.provider).ok_or(AuthError::InvalidOAuthProvider)?;
 
     // Generate state token for CSRF protection
     let state = uuid::Uuid::new_v4().to_string();
 
     // Build OAuth authorization URL
     // This would connect to the actual provider (Google, Apple, etc.)
-    let auth_url = format!(
-        "https://oauth.example.com/authorize?state={}",
-        state
-    );
+    let auth_url = format!("https://oauth.example.com/authorize?state={}", state);
 
-    Ok(Json(StartOAuthFlowResponse {
-        auth_url,
-        state,
-    }))
+    Ok(HttpResponse::Ok().json(StartOAuthFlowResponse { auth_url, state }))
 }
 
 /// Complete OAuth authorization flow
 pub async fn complete_oauth_flow(
-    State(_state): State<AppState>,
-    Json(payload): Json<CompleteOAuthFlowRequest>,
-) -> Result<Json<OAuthLoginResponse>, AuthError> {
+    _state: web::Data<AppState>,
+    payload: web::Json<CompleteOAuthFlowRequest>,
+) -> Result<HttpResponse, AuthError> {
     // Parse provider
-    let _provider = OAuthProvider::from_str(&payload.provider)
-        .ok_or(AuthError::InvalidOAuthProvider)?;
+    let _provider =
+        OAuthProvider::from_str(&payload.provider).ok_or(AuthError::InvalidOAuthProvider)?;
 
     // Verify state token
     // Exchange authorization code for tokens
@@ -70,7 +62,7 @@ pub async fn complete_oauth_flow(
 
     let user_id = Uuid::new_v4();
 
-    Ok(Json(OAuthLoginResponse {
+    Ok(HttpResponse::Ok().json(OAuthLoginResponse {
         user_id,
         email: "user@example.com".to_string(),
         access_token: "stub_access_token".to_string(),

@@ -71,10 +71,9 @@ impl RedisPool {
                 tls: tls_mode,
             };
 
-            let (initial_client, addr_label) =
-                resolve_master(&sentinel_cfg, &node_settings).await.context(
-                    "failed to resolve Redis master from sentinel during startup",
-                )?;
+            let (initial_client, addr_label) = resolve_master(&sentinel_cfg, &node_settings)
+                .await
+                .context("failed to resolve Redis master from sentinel during startup")?;
 
             info!("Redis Sentinel master resolved at {}", addr_label);
 
@@ -83,13 +82,9 @@ impl RedisPool {
                 .context("failed to initialize Redis connection manager")?;
             let manager = Arc::new(Mutex::new(connection_manager));
 
-            let supervisor = SentinelSupervisor::spawn(
-                manager.clone(),
-                sentinel_cfg,
-                node_settings,
-                addr_label,
-            )
-            .await?;
+            let supervisor =
+                SentinelSupervisor::spawn(manager.clone(), sentinel_cfg, node_settings, addr_label)
+                    .await?;
 
             Ok(Self {
                 manager,

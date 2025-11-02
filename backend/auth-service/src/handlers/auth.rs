@@ -1,19 +1,15 @@
 /// Authentication handlers
-use axum::{
-    extract::{State, Json},
-    http::StatusCode,
-};
-use axum::http::request::Parts;
+use actix_web::{web, HttpResponse};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
     error::AuthError,
-    middleware::jwt_auth::UserId,
-    models::user::{RegisterRequest, LoginRequest, ChangePasswordRequest},
-    security::{password, jwt},
+    models::user::{ChangePasswordRequest, LoginRequest, RegisterRequest},
+    security::{jwt, password},
     AppState,
 };
+use actix_middleware::UserId;
 
 /// Register response with tokens
 #[derive(Debug, Serialize)]
@@ -56,9 +52,9 @@ pub struct LogoutResponse {
 
 /// Register endpoint handler
 pub async fn register(
-    State(_state): State<AppState>,
-    Json(payload): Json<RegisterRequest>,
-) -> Result<(StatusCode, Json<RegisterResponse>), AuthError> {
+    _state: web::Data<AppState>,
+    payload: web::Json<RegisterRequest>,
+) -> Result<HttpResponse, AuthError> {
     // Validate input
     if payload.email.is_empty() || payload.username.is_empty() || payload.password.is_empty() {
         return Err(AuthError::InvalidCredentials);
@@ -72,29 +68,22 @@ pub async fn register(
     let user_id = Uuid::new_v4();
 
     // Generate token pair
-    let token_pair = jwt::generate_token_pair(
-        user_id,
-        &payload.email,
-        &payload.username,
-    )?;
+    let token_pair = jwt::generate_token_pair(user_id, &payload.email, &payload.username)?;
 
-    Ok((
-        StatusCode::CREATED,
-        Json(RegisterResponse {
-            user_id,
-            email: payload.email,
-            username: payload.username,
-            access_token: token_pair.access_token,
-            refresh_token: token_pair.refresh_token,
-        }),
-    ))
+    Ok(HttpResponse::Created().json(RegisterResponse {
+        user_id,
+        email: payload.email.clone(),
+        username: payload.username.clone(),
+        access_token: token_pair.access_token,
+        refresh_token: token_pair.refresh_token,
+    }))
 }
 
 /// Login endpoint handler
 pub async fn login(
-    State(_state): State<AppState>,
-    Json(payload): Json<LoginRequest>,
-) -> Result<Json<LoginResponse>, AuthError> {
+    _state: web::Data<AppState>,
+    payload: web::Json<LoginRequest>,
+) -> Result<HttpResponse, AuthError> {
     // Validate input
     if payload.email.is_empty() || payload.password.is_empty() {
         return Err(AuthError::InvalidCredentials);
@@ -107,26 +96,26 @@ pub async fn login(
 
 /// Logout endpoint handler
 pub async fn logout(
-    State(_state): State<AppState>,
-    parts: Parts,
-) -> Result<Json<LogoutResponse>, AuthError> {
-    // Extract user ID from JWT
-    let UserId(_user_id) = UserId::from_parts(&parts)?;
+    _state: web::Data<AppState>,
+    user_id: UserId,
+) -> Result<HttpResponse, AuthError> {
+    // user_id is extracted by JwtAuthMiddleware
+    let _user_id = user_id.0;
 
     // Revoke token (optional - can be stateless)
     // In a stateless JWT system, logout is handled client-side by discarding the token
     // But we can add to blacklist for extra security
 
-    Ok(Json(LogoutResponse {
+    Ok(HttpResponse::Ok().json(LogoutResponse {
         message: "Logged out successfully".to_string(),
     }))
 }
 
 /// Refresh token endpoint handler
 pub async fn refresh_token(
-    State(_state): State<AppState>,
-    Json(payload): Json<RefreshTokenRequest>,
-) -> Result<Json<RefreshTokenResponse>, AuthError> {
+    _state: web::Data<AppState>,
+    payload: web::Json<RefreshTokenRequest>,
+) -> Result<HttpResponse, AuthError> {
     // Validate refresh token
     let token_data = jwt::validate_token(&payload.refresh_token)?;
 
@@ -136,8 +125,7 @@ pub async fn refresh_token(
     }
 
     // Generate new token pair
-    let user_id = Uuid::parse_str(&token_data.claims.sub)
-        .map_err(|_| AuthError::InvalidToken)?;
+    let user_id = Uuid::parse_str(&token_data.claims.sub).map_err(|_| AuthError::InvalidToken)?;
 
     let new_pair = jwt::generate_token_pair(
         user_id,
@@ -145,7 +133,7 @@ pub async fn refresh_token(
         &token_data.claims.username,
     )?;
 
-    Ok(Json(RefreshTokenResponse {
+    Ok(HttpResponse::Ok().json(RefreshTokenResponse {
         access_token: new_pair.access_token,
         refresh_token: new_pair.refresh_token,
     }))
@@ -153,31 +141,31 @@ pub async fn refresh_token(
 
 /// Change password endpoint handler
 pub async fn change_password(
-    State(_state): State<AppState>,
-    parts: Parts,
-    Json(_payload): Json<ChangePasswordRequest>,
-) -> Result<StatusCode, AuthError> {
-    // Extract user ID from JWT
-    let UserId(_user_id) = UserId::from_parts(&parts)?;
+    _state: web::Data<AppState>,
+    user_id: UserId,
+    _payload: web::Json<ChangePasswordRequest>,
+) -> Result<HttpResponse, AuthError> {
+    // user_id is extracted by JwtAuthMiddleware
+    let _user_id = user_id.0;
 
     // Verify old password (will need database implementation)
     // Update password (will need database implementation)
     // Revoke all existing tokens for security
 
-    Ok(StatusCode::NO_CONTENT)
+    Ok(HttpResponse::NoContent().finish())
 }
 
 /// Request password reset endpoint handler
 pub async fn request_password_reset(
-    State(_state): State<AppState>,
-    Json(_payload): Json<RequestPasswordResetRequest>,
-) -> Result<StatusCode, AuthError> {
+    _state: web::Data<AppState>,
+    _payload: web::Json<RequestPasswordResetRequest>,
+) -> Result<HttpResponse, AuthError> {
     // Find user by email
     // Generate password reset token
     // Send email with reset link
     // Return 202 Accepted
 
-    Ok(StatusCode::ACCEPTED)
+    Ok(HttpResponse::Accepted().finish())
 }
 
 /// Request password reset payload

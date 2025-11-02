@@ -1,14 +1,10 @@
 use crate::error::AppError;
 use crate::middleware::guards::User;
 use crate::state::AppState;
-use axum::{
-    extract::{Path, State},
-    http::StatusCode,
-    Json,
-};
 use base64::{engine::general_purpose, Engine as _};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
+use actix_web::{web, HttpResponse};
 
 /// Request to initiate ECDH key exchange
 #[derive(Deserialize)]
@@ -40,10 +36,10 @@ pub struct KeyExchangeMetadataResponse {
 
 /// Store device public key for future ECDH operations
 pub async fn store_device_public_key(
-    State(state): State<AppState>,
+    state: web::Data<AppState>,
     User { id: user_id, .. }: User,
-    Json(payload): Json<InitiateKeyExchangeRequest>,
-) -> Result<StatusCode, AppError> {
+    payload: web::Json<InitiateKeyExchangeRequest>,
+) -> Result<HttpResponse, AppError> {
     // Validate public key format (should be 32 bytes, base64 encoded)
     let public_key_bytes = general_purpose::STANDARD
         .decode(&payload.public_key)
@@ -67,21 +63,22 @@ pub async fn store_device_public_key(
     key_exchange
         .store_device_key(
             user_id,
-            payload.device_id,
+            payload.device_id.clone(),
             public_key_bytes,
             private_key_encrypted.as_bytes().to_vec(),
         )
         .await?;
 
-    Ok(StatusCode::CREATED)
+    Ok(HttpResponse::Created().finish())
 }
 
 /// Get peer's public key for ECDH in a conversation
 pub async fn get_peer_public_key(
-    State(state): State<AppState>,
+    state: web::Data<AppState>,
     User { id: _user_id, .. }: User,
-    Path((_conversation_id, peer_user_id, peer_device_id)): Path<(Uuid, Uuid, String)>,
-) -> Result<Json<KeyExchangeResponse>, AppError> {
+    path: web::Path<(Uuid, Uuid, String)>,
+) -> Result<HttpResponse, AppError> {
+    let (_conversation_id, peer_user_id, peer_device_id) = path.into_inner();
     let key_exchange = state
         .key_exchange_service
         .as_ref()
@@ -99,7 +96,7 @@ pub async fn get_peer_public_key(
 
     let peer_public_key = general_purpose::STANDARD.encode(&public_key_bytes);
 
-    Ok(Json(KeyExchangeResponse {
+    Ok(HttpResponse::Ok().json(KeyExchangeResponse {
         peer_user_id,
         peer_device_id,
         peer_public_key,
@@ -109,11 +106,12 @@ pub async fn get_peer_public_key(
 
 /// Complete ECDH key exchange and record it
 pub async fn complete_key_exchange(
-    State(state): State<AppState>,
+    state: web::Data<AppState>,
     User { id: user_id, .. }: User,
-    Path(conversation_id): Path<Uuid>,
-    Json(payload): Json<CompleteKeyExchangeRequest>,
-) -> Result<Json<KeyExchangeMetadataResponse>, AppError> {
+    conversation_id: web::Path<Uuid>,
+    payload: web::Json<CompleteKeyExchangeRequest>,
+) -> Result<HttpResponse, AppError> {
+    let conversation_id = conversation_id.into_inner();
     let key_exchange = state
         .key_exchange_service
         .as_ref()
@@ -139,7 +137,7 @@ pub async fn complete_key_exchange(
 
     let last_exchange_at = exchanges.first().map(|e| e.created_at);
 
-    Ok(Json(KeyExchangeMetadataResponse {
+    Ok(HttpResponse::Ok().json(KeyExchangeMetadataResponse {
         conversation_id,
         encryption_version: 2, // E2EE with ECDH
         key_exchange_count: exchanges.len() as i64,
@@ -157,10 +155,11 @@ pub struct CompleteKeyExchangeRequest {
 
 /// List key exchanges for a conversation (admin/audit purposes)
 pub async fn list_conversation_key_exchanges(
-    State(state): State<AppState>,
+    state: web::Data<AppState>,
     User { id: _user_id, .. }: User,
-    Path(conversation_id): Path<Uuid>,
-) -> Result<Json<Vec<KeyExchangeMetadata>>, AppError> {
+    conversation_id: web::Path<Uuid>,
+) -> Result<HttpResponse, AppError> {
+    let conversation_id = conversation_id.into_inner();
     let key_exchange = state
         .key_exchange_service
         .as_ref()
@@ -168,7 +167,7 @@ pub async fn list_conversation_key_exchanges(
 
     let exchanges = key_exchange.list_key_exchanges(conversation_id).await?;
 
-    let metadata = exchanges
+    let metadata: Vec<KeyExchangeMetadata> = exchanges
         .into_iter()
         .map(|e| KeyExchangeMetadata {
             id: e.id,
@@ -179,7 +178,7 @@ pub async fn list_conversation_key_exchanges(
         })
         .collect();
 
-    Ok(Json(metadata))
+    Ok(HttpResponse::Ok().json(metadata))
 }
 
 #[derive(Serialize)]

@@ -43,7 +43,9 @@ impl ResponseError for AppError {
     fn error_response(&self) -> HttpResponse {
         let (code, message) = match self {
             AppError::NotFound(msg) => (StatusCode::NOT_FOUND, msg.clone()),
-            AppError::ValidationError(msg) | AppError::Validation(msg) => (StatusCode::BAD_REQUEST, msg.clone()),
+            AppError::ValidationError(msg) | AppError::Validation(msg) => {
+                (StatusCode::BAD_REQUEST, msg.clone())
+            }
             AppError::Authentication(msg) => (StatusCode::UNAUTHORIZED, msg.clone()),
             AppError::Authorization(msg) => (StatusCode::FORBIDDEN, msg.clone()),
             _ => (StatusCode::INTERNAL_SERVER_ERROR, self.to_string()),

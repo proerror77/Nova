@@ -10,7 +10,6 @@
 /// - Graceful error handling with retry logic
 /// - Batch processing for efficiency
 /// - Circuit breaker for Kafka failures
-
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -25,7 +24,7 @@ use crate::services::RecommendationServiceV2;
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ExperimentVariant {
     pub name: String,
-    pub allocation: u8,  // 0-100
+    pub allocation: u8, // 0-100
 }
 
 /// Recommendation event types
@@ -33,14 +32,14 @@ pub struct ExperimentVariant {
 pub enum RecommendationEventType {
     /// Model update event - trigger hot-reload
     ModelUpdate {
-        model_type: String,  // "collaborative" | "content_based" | "onnx"
+        model_type: String, // "collaborative" | "content_based" | "onnx"
         model_path: String,
     },
     /// User feedback event - for training data collection
     UserFeedback {
         user_id: Uuid,
         post_id: Uuid,
-        feedback_type: String,  // "like" | "dislike" | "click" | "dwell"
+        feedback_type: String, // "like" | "dislike" | "click" | "dwell"
         duration_ms: Option<u32>,
     },
     /// Experiment config update
@@ -56,7 +55,7 @@ pub struct RecommendationKafkaEvent {
     pub event_id: String,
     pub event_type: RecommendationEventType,
     pub timestamp: DateTime<Utc>,
-    pub source: String,  // Service that produced the event
+    pub source: String, // Service that produced the event
 }
 
 impl RecommendationKafkaEvent {
@@ -181,7 +180,10 @@ impl RecommendationEventConsumer {
 
     /// Process an incoming event from Kafka
     pub async fn handle_event(&mut self, event: RecommendationKafkaEvent) -> Result<()> {
-        debug!("Received recommendation event: {} - {:?}", event.event_id, event.event_type);
+        debug!(
+            "Received recommendation event: {} - {:?}",
+            event.event_id, event.event_type
+        );
 
         // Add event to batch
         self.batch.add(event.clone());
@@ -261,7 +263,10 @@ impl RecommendationEventConsumer {
                     model_type,
                     model_path,
                 } => {
-                    if let Err(e) = self.handle_model_update(model_type.clone(), model_path.clone()).await {
+                    if let Err(e) = self
+                        .handle_model_update(model_type.clone(), model_path.clone())
+                        .await
+                    {
                         error!("Failed to handle model update: {:?}", e);
                         // Continue processing other events
                     }
@@ -273,7 +278,12 @@ impl RecommendationEventConsumer {
                     duration_ms,
                 } => {
                     if let Err(e) = self
-                        .handle_user_feedback(*user_id, *post_id, feedback_type.clone(), *duration_ms)
+                        .handle_user_feedback(
+                            *user_id,
+                            *post_id,
+                            feedback_type.clone(),
+                            *duration_ms,
+                        )
                         .await
                     {
                         error!("Failed to handle user feedback: {:?}", e);
@@ -283,8 +293,9 @@ impl RecommendationEventConsumer {
                     experiment_id,
                     variants,
                 } => {
-                    if let Err(e) =
-                        self.handle_experiment_config(experiment_id.clone(), variants.clone()).await
+                    if let Err(e) = self
+                        .handle_experiment_config(experiment_id.clone(), variants.clone())
+                        .await
                     {
                         error!("Failed to handle experiment config: {:?}", e);
                     }
@@ -322,7 +333,10 @@ mod tests {
         );
 
         match event.event_type {
-            RecommendationEventType::ModelUpdate { model_type, model_path } => {
+            RecommendationEventType::ModelUpdate {
+                model_type,
+                model_path,
+            } => {
                 assert_eq!(model_type, "collaborative");
                 assert_eq!(model_path, "/models/cf_v2.json");
             }

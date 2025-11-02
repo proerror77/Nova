@@ -1,5 +1,7 @@
 // Re-export APNs types from shared library (internal use only)
-pub use nova_apns_shared::{ApnsPush as NovaApnsPush, PushProvider as NovaPushProvider, client::ApnsError};
+pub use nova_apns_shared::{
+    client::ApnsError, ApnsPush as NovaApnsPush, PushProvider as NovaPushProvider,
+};
 
 use crate::{config::ApnsConfig, error::AppError};
 use async_trait::async_trait;
