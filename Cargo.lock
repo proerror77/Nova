@@ -2355,10 +2355,8 @@ dependencies = [
 name = "error-handling"
 version = "0.1.0"
 dependencies = [
- "chrono",
+ "error-types",
  "serde",
- "serde_json",
- "sqlx",
  "thiserror 1.0.69",
  "tokio",
 ]
