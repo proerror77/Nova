@@ -31,28 +31,28 @@ patchesStrategicMerge:
 images:
 - name: nova/auth-service
   newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/auth-service
-  newTag: 38cc45e2f3b81a611e60955577b5a0a1120fbf56
+  newTag: d69cad0a64e4661682092ab890fd35f44e8378f7
 - name: nova/content-service
   newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/content-service
-  newTag: 38cc45e2f3b81a611e60955577b5a0a1120fbf56
+  newTag: d69cad0a64e4661682092ab890fd35f44e8378f7
 - name: nova/feed-service
   newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/feed-service
-  newTag: 38cc45e2f3b81a611e60955577b5a0a1120fbf56
+  newTag: d69cad0a64e4661682092ab890fd35f44e8378f7
 - name: nova/media-service
   newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/media-service
-  newTag: 38cc45e2f3b81a611e60955577b5a0a1120fbf56
+  newTag: d69cad0a64e4661682092ab890fd35f44e8378f7
 - name: nova/messaging-service
   newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/messaging-service
-  newTag: fix-routes-amd64-20251102092900
+  newTag: d69cad0a64e4661682092ab890fd35f44e8378f7
 - name: nova/search-service
   newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/search-service
-  newTag: 38cc45e2f3b81a611e60955577b5a0a1120fbf56
+  newTag: d69cad0a64e4661682092ab890fd35f44e8378f7
 - name: nova/streaming-service
   newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/streaming-service
-  newTag: 38cc45e2f3b81a611e60955577b5a0a1120fbf56
+  newTag: d69cad0a64e4661682092ab890fd35f44e8378f7
 - name: nova/user-service
   newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/user-service
-  newTag: 38cc45e2f3b81a611e60955577b5a0a1120fbf56
+  newTag: d69cad0a64e4661682092ab890fd35f44e8378f7
 
 replicas:
 - count: 1
