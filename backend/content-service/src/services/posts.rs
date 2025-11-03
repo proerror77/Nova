@@ -93,7 +93,7 @@ impl PostService {
         let post = sqlx::query_as::<_, Post>(
             r#"
             INSERT INTO posts (user_id, caption, image_key, status, content_type)
-            VALUES ($1, $2, $3, 'draft', $4)
+            VALUES ($1, $2, $3, 'published', $4)
             RETURNING id, user_id, caption, image_key, image_sizes, status, content_type,
                       created_at, updated_at, soft_delete
             "#,
