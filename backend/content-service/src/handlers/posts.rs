@@ -37,7 +37,7 @@ pub async fn create_post(
 
     // Use default values for text-only posts
     let image_key = req.image_key.as_deref().unwrap_or("text-only");
-    let content_type = req.content_type.as_deref().unwrap_or("text/plain");
+    let content_type = req.content_type.as_deref().unwrap_or("text");
 
     let post = service
         .create_post(
