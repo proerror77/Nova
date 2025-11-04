@@ -53,13 +53,14 @@ jobs:
         with:
           version: "latest"
 
-      - name: Configure kubeconfig
+      - name: Configure kubeconfig (v2)
         shell: bash
         env:
           KUBECONFIG_B64: ${{ secrets.STAGING_KUBE_CONFIG }}
         run: |
           set -euo pipefail
           mkdir -p ~/.kube
+          echo "::notice::decoder=robust v2 (openssl-fallback)"
           # Normalize and validate base64 (strip whitespace/newlines/CRs)
           CLEAN=$(printf "%s" "$KUBECONFIG_B64" | tr -d '\r\n\t ')
           if [ -z "$CLEAN" ]; then
