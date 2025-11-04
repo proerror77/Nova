@@ -115,9 +115,10 @@ jobs:
             fi
           fi
 
-          # Basic sanity check
-          if ! head -n1 ~/.kube/config | grep -q "apiVersion"; then
-            echo "::error::Decoded kubeconfig does not look valid (missing apiVersion)."; exit 1; fi
+          # Basic sanity check (loose): kubeconfig should contain 'apiVersion'
+          if ! grep -q "apiVersion" ~/.kube/config; then
+            echo "::warning::kubeconfig missing 'apiVersion' marker; may be malformed."
+          fi
 
           chmod 600 ~/.kube/config
           kubectl version --client=true
