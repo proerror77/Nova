@@ -1,0 +1,10 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: messaging-service
+  namespace: nova-messaging
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: messaging-service

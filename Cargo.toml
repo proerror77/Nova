@@ -1,5 +1,26 @@
 [workspace]
-members = ["backend/user-service", "backend/auth-service"]
+members = [
+    # Services
+    "backend/auth-service",
+    "backend/user-service",
+    "backend/content-service",
+    "backend/feed-service",
+    "backend/media-service",
+    "backend/messaging-service",
+    "backend/search-service",
+    "backend/streaming-service",
+    # Shared Libraries
+    "backend/libs/actix-middleware",
+    "backend/libs/crypto-core",
+    "backend/libs/db-pool",
+    "backend/libs/error-handling",
+    "backend/libs/error-types",
+    "backend/libs/event-schema",
+    "backend/libs/nova-apns-shared",
+    "backend/libs/nova-fcm-shared",
+    "backend/libs/redis-utils",
+    "backend/libs/video-core"
+]
 resolver = "2"
 
 [workspace.package]
@@ -35,6 +56,7 @@ uuid = { version = "1.7", features = ["v4", "v5", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 dotenv = "0.15"
 envy = "0.4"
+hkdf = "0.12"
 
 # Logging
 tracing = "0.1"

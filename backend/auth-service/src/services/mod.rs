@@ -1,3 +1,7 @@
-pub mod auth_service;
+pub mod email;
+pub mod kafka_events;
+/// Business logic services
+pub mod oauth;
+pub mod two_fa;
 
-pub use auth_service::*;
+pub use kafka_events::KafkaEventProducer;

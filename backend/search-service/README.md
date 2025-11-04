@@ -5,10 +5,11 @@
 ## 特性
 
 - **用户搜索**: 在 username 和 email 字段搜索
-- **帖子搜索**: 使用 PostgreSQL 全文搜索（tsvector/tsquery）进行智能搜索
+- **帖子搜索**: 优先使用 Elasticsearch 多字段检索（若未配置则回退到 PostgreSQL 全文搜索）
 - **话题标签搜索**: 从帖子 caption 中提取并搜索话题标签
 - **Redis 缓存**: 搜索结果缓存 24 小时，显著提升响应速度
 - **相关性排序**: 帖子搜索按相关性（ts_rank）和时间排序
+- **Kafka 事件同步**: 自动消费 `message_persisted`/`message_deleted` 事件并更新 Elasticsearch 索引
 - Axum web 框架
 - 健康检查端点
 
@@ -19,6 +20,13 @@
 ```bash
 DATABASE_URL=postgresql://user:password@localhost:5432/nova
 REDIS_URL=redis://127.0.0.1:6379  # 可选，默认 redis://127.0.0.1:6379
+ELASTICSEARCH_URL=http://localhost:9200        # 可选，启用 Elasticsearch 作为搜索后端
+ELASTICSEARCH_POST_INDEX=nova_posts            # 可选，默认 nova_posts
+ELASTICSEARCH_MESSAGE_INDEX=nova_messages      # 可选，默认 nova_messages
+KAFKA_BROKERS=localhost:9092                   # 可选，启用 Kafka 消费 message 事件
+KAFKA_MESSAGE_PERSISTED_TOPIC=message_persisted
+KAFKA_MESSAGE_DELETED_TOPIC=message_deleted
+KAFKA_SEARCH_GROUP_ID=nova-search-service
 PORT=8081  # 可选，默认 8081
 ```
 
@@ -147,6 +155,25 @@ curl -X POST http://localhost:8081/api/v1/search/clear-cache
 }
 ```
 
+### 重新索引帖子（Elasticsearch）
+
+```bash
+curl -X POST http://localhost:8081/api/v1/search/posts/reindex \
+     -H "Content-Type: application/json" \
+     -d '{"batch_size": 500, "offset": 0}'
+```
+
+**响应示例**:
+
+```json
+{
+  "message": "Reindex completed",
+  "indexed_count": 500,
+  "batch_size": 500,
+  "offset": 0
+}
+```
+
 ## 测试
 
 ### 使用测试脚本
@@ -196,7 +223,7 @@ curl -X POST http://localhost:8081/api/v1/search/clear-cache
 6. **话题标签表**: 创建独立的 hashtags 表用于高效查询和统计
 7. **分页**: 添加 cursor-based 分页支持
 8. **查询规范化**: 缓存前规范化查询（小写、trim）
-9. **Elasticsearch**: 对于大规模数据，迁移到专用搜索引擎
+9. **Elasticsearch**: 若配置 `ELASTICSEARCH_URL` 即启用；否则回退 PostgreSQL 全文搜索
 
 详细实现文档：[FULLTEXT_SEARCH_IMPLEMENTATION.md](./FULLTEXT_SEARCH_IMPLEMENTATION.md)
 

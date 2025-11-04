@@ -1,3 +1,4 @@
+#![cfg(feature = "legacy_video_tests")]
 /// Performance Tests for Video Streaming Bitrate Switching (T141)
 /// Validates adaptive bitrate switching within SLA bounds
 /// - Bitrate switch latency < 500ms

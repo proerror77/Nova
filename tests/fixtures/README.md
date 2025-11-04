@@ -83,6 +83,45 @@ CREATE TABLE IF NOT EXISTS nova_test.feed_materialized (
 ) ENGINE = MergeTree()
 ORDER BY (user_id, rank)
 SETTINGS index_granularity = 8192;
+
+-- CDC 镜像 (供 ClickHouse 推荐/Feed 查询使用)
+CREATE TABLE IF NOT EXISTS nova_test.posts_cdc (
+    id String,
+    user_id String,
+    content String,
+    media_url Nullable(String),
+    created_at DateTime,
+    cdc_timestamp UInt64,
+    is_deleted UInt8
+) ENGINE = ReplacingMergeTree(cdc_timestamp)
+ORDER BY id;
+
+CREATE TABLE IF NOT EXISTS nova_test.comments_cdc (
+    id String,
+    post_id String,
+    user_id String,
+    content String,
+    created_at DateTime,
+    cdc_timestamp UInt64,
+    is_deleted UInt8
+) ENGINE = ReplacingMergeTree(cdc_timestamp)
+ORDER BY id;
+
+CREATE TABLE IF NOT EXISTS nova_test.likes_cdc (
+    user_id String,
+    post_id String,
+    created_at DateTime,
+    cdc_timestamp UInt64,
+    is_deleted UInt8
+) ENGINE = ReplacingMergeTree(cdc_timestamp)
+ORDER BY (user_id, post_id);
+
+-- 聚合视图(实时计算 Feed 排序所需信号)
+CREATE VIEW IF NOT EXISTS nova_test.post_metrics_1h AS
+SELECT * FROM post_metrics_1h; -- 详见 backend/clickhouse/init-db.sql
+
+CREATE VIEW IF NOT EXISTS nova_test.user_author_90d AS
+SELECT * FROM user_author_90d; -- 详见 backend/clickhouse/init-db.sql
 ```
 
 ## 实现原则

@@ -1,0 +1,158 @@
+---
+# ArgoCD Application for Nova Staging Environment
+# Apply this file AFTER ArgoCD is installed:
+#   kubectl create namespace argocd
+#   kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+#   kubectl apply -f k8s/argocd/nova-staging-application.yaml
+
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: nova-staging
+  namespace: argocd
+  labels:
+    app: nova
+    environment: staging
+    managed-by: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  # Project configuration
+  project: default
+
+  # Source repository
+  source:
+    repoURL: https://github.com/proerror77/Nova.git
+    targetRevision: main
+    path: k8s/infrastructure/overlays/staging
+
+    # Optional: Override specific parameters
+    # kustomize:
+    #   namePrefix: staging-
+    #   commonLabels:
+    #     environment: staging
+
+  # Destination cluster and namespace
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: nova
+
+  # Sync policy - AUTOMATED GITOPS
+  syncPolicy:
+    automated:
+      prune: true      # Delete resources removed from Git
+      selfHeal: true   # Auto-sync if cluster state drifts
+      allowEmpty: false # Prevent empty applications
+
+    syncOptions:
+      - CreateNamespace=true      # Auto-create namespace
+      - PrunePropagationPolicy=foreground  # Wait for dependent resources
+      - PruneLast=true            # Prune after new resources are healthy
+      - RespectIgnoreDifferences=true
+      - ApplyOutOfSyncOnly=true   # Only sync out-of-sync resources
+
+    # Retry strategy for transient failures
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+
+  # Health assessment
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      jsonPointers:
+        - /spec/replicas  # Ignore HPA-managed replicas
+    - group: ""
+      kind: Secret
+      name: nova-s3-credentials
+      namespace: nova
+      jsonPointers:
+        - /data
+    - group: ""
+      kind: Secret
+      name: nova-db-credentials
+      namespace: nova
+      jsonPointers:
+        - /data
+    - group: ""
+      kind: Secret
+      name: nova-jwt-keys
+      namespace: nova
+      jsonPointers:
+        - /data
+
+  # Notification hooks (optional)
+  # info:
+  #   - name: Last Commit
+  #     value: '{{.app.status.sync.revision}}'
+
+---
+# Optional: AppProject for RBAC and policy control
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: nova
+  namespace: argocd
+spec:
+  description: Nova Social Platform - All Environments
+
+  # Source repositories
+  sourceRepos:
+    - https://github.com/proerror77/Nova.git
+    - https://github.com/proerror77/*  # Allow all org repos
+
+  # Destination clusters and namespaces
+  destinations:
+    - namespace: nova
+      server: https://kubernetes.default.svc
+    - namespace: nova-*
+      server: https://kubernetes.default.svc
+
+  # Cluster resource whitelist (all resources allowed)
+  clusterResourceWhitelist:
+    - group: '*'
+      kind: '*'
+
+  # Namespace resource blacklist (safety restrictions)
+  namespaceResourceBlacklist:
+    - group: ''
+      kind: ResourceQuota
+    - group: ''
+      kind: LimitRange
+
+  # Roles for project access
+  roles:
+    - name: admin
+      description: Full access to nova project
+      policies:
+        - p, proj:nova:admin, applications, *, nova/*, allow
+      groups:
+        - nova-admins
+
+    - name: developer
+      description: Read-only access
+      policies:
+        - p, proj:nova:developer, applications, get, nova/*, allow
+        - p, proj:nova:developer, applications, sync, nova/*, allow
+      groups:
+        - nova-developers
+
+---
+# Optional: Secret for private Git repository access
+# Only needed if repository is private
+# apiVersion: v1
+# kind: Secret
+# metadata:
+#   name: nova-repo-credentials
+#   namespace: argocd
+#   labels:
+#     argocd.argoproj.io/secret-type: repository
+# type: Opaque
+# stringData:
+#   type: git
+#   url: https://github.com/proerror77/Nova.git
+#   username: git
+#   password: <GITHUB_TOKEN>  # GitHub Personal Access Token

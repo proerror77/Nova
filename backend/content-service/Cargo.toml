@@ -1,0 +1,91 @@
+[package]
+name = "content-service"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "content-service"
+path = "src/main.rs"
+
+[lib]
+name = "content_service"
+path = "src/lib.rs"
+
+[dependencies]
+# Workspace dependencies
+actix-web.workspace = true
+actix-rt.workspace = true
+actix-cors.workspace = true
+actix = "0.13"
+actix-web-actors = "4.3"
+actix-http = "3.9"
+tokio.workspace = true
+sqlx.workspace = true
+redis.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+uuid.workspace = true
+chrono.workspace = true
+dotenv.workspace = true
+envy.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+tracing-actix-web.workspace = true
+thiserror.workspace = true
+anyhow.workspace = true
+rand.workspace = true
+validator.workspace = true
+prometheus.workspace = true
+aws-config.workspace = true
+aws-sdk-s3.workspace = true
+sha1.workspace = true
+sha2.workspace = true
+hex.workspace = true
+mime.workspace = true
+base64.workspace = true
+rdkafka.workspace = true
+async-trait.workspace = true
+reqwest.workspace = true
+urlencoding.workspace = true
+clickhouse.workspace = true
+utoipa.workspace = true
+utoipa-swagger-ui = { version = "5", features = ["actix-web"] }
+crypto-core = { path = "../libs/crypto-core" }
+error-types = { path = "../libs/error-types" }
+redis-utils = { path = "../libs/redis-utils" }
+
+# Service-specific dependencies
+futures = "0.3"
+futures-util = "0.3"
+lazy_static = "1.4"
+actix-multipart = "0.4"
+image = "0.24"
+regex = "1"
+
+# gRPC (for inter-service communication)
+tonic.workspace = true
+prost.workspace = true
+
+[build-dependencies]
+tonic-build = "0.11"
+
+[dev-dependencies]
+tokio-test = "0.4"
+mockall = "0.12"
+actix-http = "3.9"
+tempfile = "3.8"
+
+[[test]]
+name = "posts_test"
+path = "tests/posts_test.rs"
+
+[[test]]
+name = "comments_test"
+path = "tests/comments_test.rs"
+
+[[test]]
+name = "stories_test"
+path = "tests/stories_test.rs"

@@ -1,13 +1,10 @@
 use crate::{
     error::AppError,
+    middleware::guards::User,
     state::AppState,
     websocket::events::{broadcast_event, WebSocketEvent},
 };
-use axum::{
-    extract::{Extension, Path, Query, State},
-    http::StatusCode,
-    Json,
-};
+use actix_web::{web, HttpResponse};
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
 use std::collections::HashMap;
@@ -34,14 +31,17 @@ pub struct ReactionsResponse {
 /// POST /messages/{id}/reactions
 /// Add or update a reaction to a message
 pub async fn add_reaction(
-    State(state): State<AppState>,
-    Path(message_id): Path<Uuid>,
-    Extension(user_id): Extension<Uuid>,
-    Json(body): Json<AddReactionRequest>,
-) -> Result<StatusCode, AppError> {
+    state: web::Data<AppState>,
+    message_id: web::Path<Uuid>,
+    user: User,
+    body: web::Json<AddReactionRequest>,
+) -> Result<HttpResponse, AppError> {
+    let message_id = message_id.into_inner();
+    let user_id = user.id;
+
     // Validate emoji length (basic check)
     if body.emoji.is_empty() || body.emoji.len() > 20 {
-        return Err(AppError::BadRequest("Invalid emoji".into()));
+        return Err(AppError::BadRequest("Invalid emoji".into()).into());
     }
 
     // Get conversation_id for the message (for broadcasting on conversation channel)
@@ -72,7 +72,7 @@ pub async fn add_reaction(
     // Broadcast reaction.added event using unified event system
     let event = WebSocketEvent::ReactionAdded {
         message_id,
-        emoji: body.emoji,
+        emoji: body.emoji.clone(),
     };
 
     let _ = broadcast_event(
@@ -84,16 +84,19 @@ pub async fn add_reaction(
     )
     .await;
 
-    Ok(StatusCode::CREATED)
+    Ok(HttpResponse::Created().finish())
 }
 
 /// GET /messages/{id}/reactions
 /// Get all reactions for a message with counts and whether current user has reacted
 pub async fn get_reactions(
-    State(state): State<AppState>,
-    Path(message_id): Path<Uuid>,
-    Extension(user_id): Extension<Uuid>,
-) -> Result<Json<ReactionsResponse>, AppError> {
+    state: web::Data<AppState>,
+    message_id: web::Path<Uuid>,
+    user: User,
+) -> Result<HttpResponse, AppError> {
+    let message_id = message_id.into_inner();
+    let user_id = user.id;
+
     // Fetch all reactions with counts for this message
     let reactions = sqlx::query_as::<_, (String, i64)>(
         r#"
@@ -137,7 +140,7 @@ pub async fn get_reactions(
         })
         .collect();
 
-    Ok(Json(ReactionsResponse {
+    Ok(HttpResponse::Ok().json(ReactionsResponse {
         message_id,
         reactions: reaction_counts,
     }))
@@ -150,11 +153,13 @@ pub async fn get_reactions(
 /// - Users can only remove their own reactions
 /// - OR conversation admins can remove any reaction
 pub async fn remove_reaction(
-    State(state): State<AppState>,
-    Extension(requesting_user_id): Extension<Uuid>, // From auth middleware
-    Path((message_id, target_user_id)): Path<(Uuid, Uuid)>,
-    Query(params): Query<HashMap<String, String>>,
-) -> Result<StatusCode, AppError> {
+    state: web::Data<AppState>,
+    user: User, // From auth middleware
+    path: web::Path<(Uuid, Uuid)>,
+    params: web::Query<HashMap<String, String>>,
+) -> Result<HttpResponse, AppError> {
+    let (message_id, target_user_id) = path.into_inner();
+
     // 1. Get message and conversation_id to check admin status
     let message_row = sqlx::query("SELECT conversation_id FROM messages WHERE id = $1")
         .bind(message_id)
@@ -166,19 +171,19 @@ pub async fn remove_reaction(
     let conversation_id: Uuid = message_row.get("conversation_id");
 
     // 2. Check authorization: either own reaction OR admin
-    let is_own_reaction = requesting_user_id == target_user_id;
+    let is_own_reaction = user.id == target_user_id;
 
     if !is_own_reaction {
         // Verify requester is admin of conversation
         let member = crate::middleware::guards::ConversationMember::verify(
             &state.db,
-            requesting_user_id,
+            user.id,
             conversation_id,
         )
         .await?;
 
         if !member.is_admin() {
-            return Err(AppError::Forbidden);
+            return Err(AppError::Forbidden.into());
         }
     }
 
@@ -196,7 +201,7 @@ pub async fn remove_reaction(
         .map_err(|e| AppError::StartServer(format!("Failed to remove reaction: {e}")))?;
 
         if result.is_none() {
-            return Err(AppError::NotFound);
+            return Err(AppError::NotFound.into());
         }
 
         // Broadcast reaction.removed event using unified event system
@@ -209,7 +214,7 @@ pub async fn remove_reaction(
             &state.registry,
             &state.redis,
             conversation_id,
-            requesting_user_id,
+            user.id,
             event,
         )
         .await;
@@ -229,11 +234,11 @@ pub async fn remove_reaction(
             &state.registry,
             &state.redis,
             conversation_id,
-            requesting_user_id,
+            user.id,
             event,
         )
         .await;
     }
 
-    Ok(StatusCode::NO_CONTENT)
+    Ok(HttpResponse::NoContent().finish())
 }

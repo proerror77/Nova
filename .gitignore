@@ -1,67 +1,58 @@
-# Rust
-/target/
-debug/
-release/
-*.rs.bk
-*.rlib
-*.prof*
-Cargo.lock
-.cargo/
-
-# IDE
-.idea/
-.vscode/
-*.swp
-*.swo
-*~
-*.user
-*.iml
-.DS_Store
-Thumbs.db
-
-# Environment
-.env
-.env.local
-.env.*.local
-.env.production.local
-
-# Logs
-*.log
-logs/
-
-# Dependencies
-node_modules/
-vendor/
-.bundle/
 
 # Build
-build/
-dist/
-out/
-bin/
-
-# Test coverage
-coverage/
-*.profraw
-*.profdata
-
-# OS
-.DS_Store
-Thumbs.db
-*.tmp
-
-# Docker
-docker-compose.override.yml
-.dockerignore
-
 # Database
+# Dependencies
+# Docker
+# Environment
+# IDE
+# Logs
+# OS
+# Rust
+# Temporary
+# Test coverage
 *.db
+*.iml
+*.log
+*.prof*
+*.profdata
+*.profraw
+*.rlib
+*.rs.bk
 *.sqlite
 *.sqlite3
-data/
-
-# Temporary
-tmp/
-temp/
+*.swo
 *.swp
+*.tmp
+*.user
+*~
 .#*
+.DS_Store
+.bundle/
+.cargo/
+.dockerignore
+.env
+.env.*.local
+.env.local
+.env.production.local
+.idea/
+.vscode/
+/.github-runner/
+/target/
+# Cargo.lock - Include for reproducible builds (Rust best practice for applications)
+# Cargo.lock
+Thumbs.db
+bin/
+build/
+coverage/
+data/
+debug/
+dist/
+docker-compose.override.yml
+logs/
+node_modules/
+out/
+release/
+temp/
+terraform/.terraform/
+tmp/
+vendor/

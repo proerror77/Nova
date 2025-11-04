@@ -1,0 +1,46 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: api-gateway
+  namespace: nova-gateway
+  labels:
+    app: api-gateway
+  annotations:
+    description: "API Gateway - Unified entry point for all microservices"
+spec:
+  type: LoadBalancer
+  sessionAffinity: None
+
+  ports:
+  - name: http
+    port: 80
+    targetPort: http
+    protocol: TCP
+
+  selector:
+    app: api-gateway
+
+  # LoadBalancer 特定配置
+  loadBalancerSourceRanges: []  # 允许所有来源
+  externalTrafficPolicy: Local  # 保留源 IP
+
+---
+# 内部 ClusterIP 服务 (用于内部通信)
+apiVersion: v1
+kind: Service
+metadata:
+  name: api-gateway-internal
+  namespace: nova-gateway
+  labels:
+    app: api-gateway
+spec:
+  type: ClusterIP
+
+  ports:
+  - name: http
+    port: 80
+    targetPort: http
+    protocol: TCP
+
+  selector:
+    app: api-gateway

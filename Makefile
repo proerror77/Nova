@@ -114,3 +114,26 @@ neo4j-init: ## Apply Neo4j schema (constraints/indexes)
 .PHONY: test-social
 test-social: ## Run social graph lightweight tests only
 	cd backend/user-service && cargo test --test social_graph_tests -- --nocapture
+
+.PHONY: test-grpc-integration
+test-grpc-integration: ## Run gRPC cross-service integration tests
+	@echo "Running gRPC integration tests..."
+	cargo test --test grpc_cross_service_integration_test -- --nocapture --ignored
+
+.PHONY: test-grpc-integration-local
+test-grpc-integration-local: ## Run gRPC integration tests against local services
+	@echo "Running local gRPC integration tests..."
+	@echo "Make sure services are running on:"
+	@echo "  - User Service: http://127.0.0.1:9081"
+	@echo "  - Messaging Service: http://127.0.0.1:9085"
+	SERVICES_RUNNING=true cargo test --test grpc_cross_service_integration_test -- --nocapture --ignored
+
+.PHONY: test-grpc-script
+test-grpc-script: ## Run gRPC integration test script
+	@chmod +x ./tests/grpc_integration_test.sh
+	./tests/grpc_integration_test.sh local
+
+.PHONY: test-grpc-script-staging
+test-grpc-script-staging: ## Run gRPC integration test script against staging
+	@chmod +x ./tests/grpc_integration_test.sh
+	./tests/grpc_integration_test.sh staging

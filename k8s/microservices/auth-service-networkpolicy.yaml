@@ -1,0 +1,171 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: auth-service-network-policy
+  namespace: nova-auth
+  labels:
+    app: auth-service
+spec:
+  podSelector:
+    matchLabels:
+      app: auth-service
+
+  # Policy types: Ingress and Egress
+  policyTypes:
+  - Ingress
+  - Egress
+
+  # Ingress rules: Allow traffic FROM
+  ingress:
+  # Allow from API Gateway / Ingress Controller
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    - podSelector:
+        matchLabels:
+          app: api-gateway
+    ports:
+    - protocol: TCP
+      port: 8080  # REST API
+    - protocol: TCP
+      port: 9080  # gRPC
+
+  # Allow from other services in nova namespace (gRPC inter-service communication)
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: nova-user
+    - namespaceSelector:
+        matchLabels:
+          name: nova-content
+    - namespaceSelector:
+        matchLabels:
+          name: nova-messaging
+    - namespaceSelector:
+        matchLabels:
+          name: nova-feed
+    - namespaceSelector:
+        matchLabels:
+          name: nova-search
+    - namespaceSelector:
+        matchLabels:
+          name: nova-media
+    - namespaceSelector:
+        matchLabels:
+          name: nova-notification
+    - namespaceSelector:
+        matchLabels:
+          name: nova-streaming
+    - namespaceSelector:
+        matchLabels:
+          name: nova-video
+    - namespaceSelector:
+        matchLabels:
+          name: nova-events
+    - namespaceSelector:
+        matchLabels:
+          name: nova-cdn
+    ports:
+    - protocol: TCP
+      port: 9080  # gRPC port
+
+  # Allow from prometheus (metrics scraping)
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: prometheus
+    ports:
+    - protocol: TCP
+      port: 8080
+
+  # Allow from service mesh (if using Istio/Linkerd)
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: istio-system
+    - namespaceSelector:
+        matchLabels:
+          name: linkerd
+    ports:
+    - protocol: TCP
+      port: 8080
+    - protocol: TCP
+      port: 9080
+
+  # Egress rules: Allow traffic TO
+  egress:
+  # Allow DNS for service discovery
+  - to:
+    - namespaceSelector: {}
+    ports:
+    - protocol: UDP
+      port: 53
+
+  # Allow to PostgreSQL database
+  - to:
+    - podSelector:
+        matchLabels:
+          app: postgres
+    ports:
+    - protocol: TCP
+      port: 5432
+
+  # Allow to Redis
+  - to:
+    - podSelector:
+        matchLabels:
+          app: redis
+    ports:
+    - protocol: TCP
+      port: 6379
+
+  # Allow to Kafka brokers
+  - to:
+    - podSelector:
+        matchLabels:
+          app: kafka
+    ports:
+    - protocol: TCP
+      port: 9092
+
+  # Allow outbound to all services on gRPC port (Phase 2: outbox pattern polling to events-service)
+  - to:
+    - namespaceSelector: {}
+      podSelector:
+        matchLabels:
+          app: events-service
+    ports:
+    - protocol: TCP
+      port: 9080
+
+  # Allow to external services (for OAuth, email, etc. - Phase 2)
+  - to:
+    - namespaceSelector: {}
+      podSelector:
+        matchLabels:
+          app: smtp-relay
+    ports:
+    - protocol: TCP
+      port: 587
+
+  # Allow egress to HTTPS for external OAuth providers
+  - to:
+    - namespaceSelector: {}
+    ports:
+    - protocol: TCP
+      port: 443
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: auth-service-deny-all
+  namespace: nova-auth
+  labels:
+    app: auth-service
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress

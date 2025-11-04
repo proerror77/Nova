@@ -1,0 +1,251 @@
+---
+# API Gateway Ingress Configuration
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: nova-api-gateway
+  namespace: nova
+  labels:
+    app: nova-api-gateway
+  annotations:
+    # 使用 Nginx 作为 Ingress Controller
+    kubernetes.io/ingress.class: nginx
+
+    # CORS 配置
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+    nginx.ingress.kubernetes.io/cors-allow-origin: "http://localhost:3000,http://localhost:3001"
+    nginx.ingress.kubernetes.io/cors-allow-credentials: "true"
+
+    # 请求体大小限制（用于文件上传）
+    nginx.ingress.kubernetes.io/proxy-body-size: 100m
+
+    # 连接超时配置
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "30"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "120"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "120"
+
+    # WebSocket 支持
+    nginx.ingress.kubernetes.io/websocket-services: "messaging-service"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+
+    # 速率限制
+    nginx.ingress.kubernetes.io/limit-rps: "100"
+
+spec:
+  rules:
+  # 贴文相关 API
+  - host: api.nova.local
+    http:
+      paths:
+      # Content Service - Posts
+      - path: /api/v1/posts
+        pathType: Prefix
+        backend:
+          service:
+            name: content-service
+            port:
+              number: 8081
+
+      # Media Service - Uploads
+      - path: /api/v1/uploads
+        pathType: Prefix
+        backend:
+          service:
+            name: media-service
+            port:
+              number: 8082
+
+      # Media Service - Videos
+      - path: /api/v1/videos
+        pathType: Prefix
+        backend:
+          service:
+            name: media-service
+            port:
+              number: 8082
+
+      # Media Service - Reels
+      - path: /api/v1/reels
+        pathType: Prefix
+        backend:
+          service:
+            name: media-service
+            port:
+              number: 8082
+
+      # User Service - Feed/Discovery/Relationships
+      - path: /api/v1/feed
+        pathType: Prefix
+        backend:
+          service:
+            name: user-service
+            port:
+              number: 8083
+
+      - path: /api/v1/discover
+        pathType: Prefix
+        backend:
+          service:
+            name: user-service
+            port:
+              number: 8083
+
+      - path: /api/v1/users
+        pathType: Prefix
+        backend:
+          service:
+            name: user-service
+            port:
+              number: 8083
+
+      - path: /api/v1/relationships
+        pathType: Prefix
+        backend:
+          service:
+            name: user-service
+            port:
+              number: 8083
+
+      - path: /api/v1/trending
+        pathType: Prefix
+        backend:
+          service:
+            name: user-service
+            port:
+              number: 8083
+
+      # Messaging Service - Messages/Calls/Notifications
+      - path: /api/v1/messages
+        pathType: Prefix
+        backend:
+          service:
+            name: messaging-service
+            port:
+              number: 8084
+
+      - path: /api/v1/conversations
+        pathType: Prefix
+        backend:
+          service:
+            name: messaging-service
+            port:
+              number: 8084
+
+      - path: /api/v1/calls
+        pathType: Prefix
+        backend:
+          service:
+            name: messaging-service
+            port:
+              number: 8084
+
+      - path: /api/v1/notifications
+        pathType: Prefix
+        backend:
+          service:
+            name: messaging-service
+            port:
+              number: 8084
+
+      # WebSocket endpoint for messaging
+      - path: /ws
+        pathType: Prefix
+        backend:
+          service:
+            name: messaging-service
+            port:
+              number: 8084
+
+      # Health checks
+      - path: /health
+        pathType: Prefix
+        backend:
+          service:
+            name: content-service
+            port:
+              number: 8081
+
+---
+# TLS 证书（使用自签名或 Let's Encrypt）
+apiVersion: v1
+kind: Secret
+metadata:
+  name: nova-tls-secret
+  namespace: nova
+  labels:
+    app: nova-api-gateway
+type: kubernetes.io/tls
+stringData:
+  # 这些值应该由 CI/CD 或 cert-manager 生成（這裡使用佔位內容，避免 base64 解析錯誤）
+  tls.crt: |
+    -----BEGIN CERTIFICATE-----
+    MIIBozCCAQygAwIBAgIUWplaceholdercertu8dYlY0wmU0YbEwDQYJKoZIhvcNAQEL
+    BQAwEjEQMA4GA1UEAwwHb3JpZ2luMB4XDTI1MTAzMTAwMDAwMFoXDTI2MTAzMTAw
+    MDAwMFowEjEQMA4GA1UEAwwHb3JpZ2luMFwwDQYJKoZIhvcNAQEBBQADSwAwSAJB
+    AMxplaceholderR6bXlG9z1b2rY8wq3lWuhm4BThc7Me6pM2QWc/1xXw1u
+    2JwYdV7z2kT+placeholderGsgYfYzK4YbFQKCAQEA
+    -----END CERTIFICATE-----
+  tls.key: |
+    -----BEGIN PRIVATE KEY-----
+    MIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDplaceholderkey
+    tJg+placeholderf3V9bJ0uK5QX7lGf0M2D8Z2H3rJ7XXlZ0s6vWq6wVt8u
+    sZ9placeholderYwIDAQABAoIBAHplaceholdertail
+    -----END PRIVATE KEY-----
+---
+# NetworkPolicy for security
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: nova-api-network-policy
+  namespace: nova
+  labels:
+    app: nova
+spec:
+  podSelector:
+    matchLabels:
+      app: nova
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Allow traffic from Ingress Controller
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+  # Allow inter-pod communication
+  - from:
+    - podSelector:
+        matchLabels:
+          app: content-service
+    - podSelector:
+        matchLabels:
+          app: media-service
+    - podSelector:
+        matchLabels:
+          app: user-service
+    - podSelector:
+        matchLabels:
+          app: messaging-service
+  egress:
+  # Allow outbound traffic to databases and external services
+  - to:
+    - namespaceSelector: {}
+    ports:
+    - protocol: TCP
+      port: 5432  # PostgreSQL
+    - protocol: TCP
+      port: 6379  # Redis
+    - protocol: TCP
+      port: 9092  # Kafka
+    - protocol: TCP
+      port: 8123  # ClickHouse
+  - to:
+    - namespaceSelector: {}
+    ports:
+    - protocol: TCP
+      port: 53   # DNS
+    - protocol: UDP
+      port: 53   # DNS

@@ -1,0 +1,28 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: nova-kafka
+  namespace: argocd
+  labels:
+    app: nova
+    environment: staging
+    managed-by: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/proerror77/Nova.git
+    targetRevision: main
+    path: k8s/infrastructure/overlays/kafka
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kafka
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true
+      - ApplyOutOfSyncOnly=true
+

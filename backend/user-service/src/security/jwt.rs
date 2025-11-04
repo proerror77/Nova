@@ -2,14 +2,11 @@ use anyhow::{anyhow, Result};
 /// JWT token generation and validation using RS256 (RSA with SHA-256)
 /// Access tokens: 1-hour expiry
 /// Refresh tokens: 30-day expiry
-use chrono::{Duration, Utc};
-use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, TokenData, Validation};
+use chrono::Utc;
+use jsonwebtoken::{decode, DecodingKey, EncodingKey, TokenData, Validation};
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-
-const ACCESS_TOKEN_EXPIRY_HOURS: i64 = 1;
-const REFRESH_TOKEN_EXPIRY_DAYS: i64 = 30;
 
 /// JWT Claims structure
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -26,15 +23,6 @@ pub struct Claims {
     pub email: String,
     /// Username
     pub username: String,
-}
-
-/// Access token response
-#[derive(Debug, Serialize, Deserialize)]
-pub struct TokenResponse {
-    pub access_token: String,
-    pub refresh_token: String,
-    pub token_type: String,
-    pub expires_in: i64,
 }
 
 use std::sync::RwLock;
@@ -61,17 +49,6 @@ pub fn initialize_keys(private_key_pem: &str, public_key_pem: &str) -> Result<()
     Ok(())
 }
 
-/// Get the encoding key for token generation
-fn get_encoding_key() -> Result<EncodingKey> {
-    let keys = JWT_KEYS
-        .read()
-        .map_err(|e| anyhow!("Failed to acquire read lock on JWT keys: {}", e))?;
-
-    keys.as_ref()
-        .map(|(enc, _)| enc.clone())
-        .ok_or_else(|| anyhow!("JWT keys not initialized. Call initialize_keys() during startup"))
-}
-
 /// Get the decoding key for token validation
 fn get_decoding_key() -> Result<DecodingKey> {
     let keys = JWT_KEYS
@@ -81,65 +58,6 @@ fn get_decoding_key() -> Result<DecodingKey> {
     keys.as_ref()
         .map(|(_, dec)| dec.clone())
         .ok_or_else(|| anyhow!("JWT keys not initialized. Call initialize_keys() during startup"))
-}
-
-/// Generate a new access token
-pub fn generate_access_token(user_id: Uuid, email: &str, username: &str) -> Result<String> {
-    let now = Utc::now();
-    let expiry = now + Duration::hours(ACCESS_TOKEN_EXPIRY_HOURS);
-
-    let claims = Claims {
-        sub: user_id.to_string(),
-        iat: now.timestamp(),
-        exp: expiry.timestamp(),
-        token_type: "access".to_string(),
-        email: email.to_string(),
-        username: username.to_string(),
-    };
-
-    let encoding_key = get_encoding_key()?;
-    encode(
-        &Header::new(jsonwebtoken::Algorithm::RS256),
-        &claims,
-        &encoding_key,
-    )
-    .map_err(|e| anyhow!("Failed to generate access token: {}", e))
-}
-
-/// Generate a new refresh token
-pub fn generate_refresh_token(user_id: Uuid, email: &str, username: &str) -> Result<String> {
-    let now = Utc::now();
-    let expiry = now + Duration::days(REFRESH_TOKEN_EXPIRY_DAYS);
-
-    let claims = Claims {
-        sub: user_id.to_string(),
-        iat: now.timestamp(),
-        exp: expiry.timestamp(),
-        token_type: "refresh".to_string(),
-        email: email.to_string(),
-        username: username.to_string(),
-    };
-
-    let encoding_key = get_encoding_key()?;
-    encode(
-        &Header::new(jsonwebtoken::Algorithm::RS256),
-        &claims,
-        &encoding_key,
-    )
-    .map_err(|e| anyhow!("Failed to generate refresh token: {}", e))
-}
-
-/// Generate both access and refresh tokens
-pub fn generate_token_pair(user_id: Uuid, email: &str, username: &str) -> Result<TokenResponse> {
-    let access_token = generate_access_token(user_id, email, username)?;
-    let refresh_token = generate_refresh_token(user_id, email, username)?;
-
-    Ok(TokenResponse {
-        access_token,
-        refresh_token,
-        token_type: "Bearer".to_string(),
-        expires_in: ACCESS_TOKEN_EXPIRY_HOURS * 3600, // Convert to seconds
-    })
 }
 
 /// Validate and decode a token
@@ -172,60 +90,11 @@ pub fn get_email_from_token(token: &str) -> Result<String> {
     Ok(token_data.claims.email)
 }
 
-/// JWKS (JSON Web Key Set) structure for OAuth 2.0 authorization server metadata
-#[derive(Debug, Serialize)]
-pub struct JWKSKey {
-    pub kty: String,  // Key type: "RSA"
-    pub alg: String,  // Algorithm: "RS256"
-    pub kid: String,  // Key ID
-    pub use_: String, // Use: "sig" (signing)
-    pub n: String,    // RSA modulus (base64)
-    pub e: String,    // RSA public exponent (base64)
-}
-
-#[derive(Debug, Serialize)]
-pub struct JWKS {
-    pub keys: Vec<JWKSKey>,
-}
-
-/// Get JWKS for JWT key distribution (for verification by external services)
-///
-/// # Arguments
-/// * `pool` - Database connection pool
-/// * `grace_period_days` - Days to keep old keys active after rotation
-///
-/// # Returns
-/// JWKS structure with all valid public keys
-pub async fn get_jwks(pool: &sqlx::PgPool, _grace_period_days: i64) -> Result<JWKS> {
-    use crate::services::jwt_key_rotation;
-
-    // Get all valid keys from database
-    let keys = jwt_key_rotation::get_valid_keys(pool).await?;
-
-    let mut jwks_keys = Vec::new();
-
-    for key in keys {
-        // Note: Simplified JWKS - in production, would need to parse RSA modulus and exponent
-        // from the PEM public key. For now, we'll return basic key information.
-        // A full implementation would use an RSA library to extract the key parameters.
-
-        jwks_keys.push(JWKSKey {
-            kty: "RSA".to_string(),
-            alg: key.algorithm.clone(),
-            kid: key.key_id.clone(),
-            use_: "sig".to_string(),
-            // These would need to be extracted from the PEM public key in production
-            n: "...".to_string(),  // Base64-encoded RSA modulus
-            e: "AQAB".to_string(), // Standard RSA public exponent (65537)
-        });
-    }
-
-    Ok(JWKS { keys: jwks_keys })
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::Duration;
+    use jsonwebtoken::{encode, Algorithm, Header};
 
     // Test RSA key pair - DO NOT USE IN PRODUCTION
     const TEST_PRIVATE_KEY: &str = r#"-----BEGIN PRIVATE KEY-----
@@ -267,56 +136,33 @@ a6MG6lCObfu2shOvkY+BkQYf89KxATuJBgJZ+/rd0/H+BygPLbRVsfYJYOgk1Dfc
 JwIDAQAB
 -----END PUBLIC KEY-----"#;
 
-    // Initialize JWT keys for testing
     fn init_test_keys() {
         let _ = initialize_keys(TEST_PRIVATE_KEY, TEST_PUBLIC_KEY);
     }
 
-    #[test]
-    fn test_generate_access_token() {
-        init_test_keys();
-        let user_id = Uuid::new_v4();
-        let email = "test@example.com";
-        let username = "testuser";
+    fn generate_test_token(
+        user_id: Uuid,
+        email: &str,
+        username: &str,
+        token_type: &str,
+        expiry_offset: Duration,
+    ) -> String {
+        let now = Utc::now();
+        let claims = Claims {
+            sub: user_id.to_string(),
+            iat: now.timestamp(),
+            exp: (now + expiry_offset).timestamp(),
+            token_type: token_type.to_string(),
+            email: email.to_string(),
+            username: username.to_string(),
+        };
 
-        let token = generate_access_token(user_id, email, username);
-        assert!(token.is_ok());
-
-        let token_str = token.unwrap();
-        assert!(!token_str.is_empty());
-        // JWT tokens have 3 parts separated by dots
-        assert_eq!(token_str.matches('.').count(), 2);
-    }
-
-    #[test]
-    fn test_generate_refresh_token() {
-        init_test_keys();
-        let user_id = Uuid::new_v4();
-        let email = "test@example.com";
-        let username = "testuser";
-
-        let token = generate_refresh_token(user_id, email, username);
-        assert!(token.is_ok());
-
-        let token_str = token.unwrap();
-        assert!(!token_str.is_empty());
-    }
-
-    #[test]
-    fn test_generate_token_pair() {
-        init_test_keys();
-        let user_id = Uuid::new_v4();
-        let email = "test@example.com";
-        let username = "testuser";
-
-        let response = generate_token_pair(user_id, email, username);
-        assert!(response.is_ok());
-
-        let tokens = response.unwrap();
-        assert!(!tokens.access_token.is_empty());
-        assert!(!tokens.refresh_token.is_empty());
-        assert_eq!(tokens.token_type, "Bearer");
-        assert_eq!(tokens.expires_in, 3600); // 1 hour in seconds
+        encode(
+            &Header::new(Algorithm::RS256),
+            &claims,
+            &EncodingKey::from_rsa_pem(TEST_PRIVATE_KEY.as_bytes()).unwrap(),
+        )
+        .expect("Failed to generate token")
     }
 
     #[test]
@@ -326,8 +172,7 @@ JwIDAQAB
         let email = "test@example.com";
         let username = "testuser";
 
-        let token =
-            generate_access_token(user_id, email, username).expect("Failed to generate token");
+        let token = generate_test_token(user_id, email, username, "access", Duration::hours(1));
 
         let validation = validate_token(&token);
         assert!(validation.is_ok());
@@ -362,12 +207,11 @@ JwIDAQAB
         let email = "test@example.com";
         let username = "testuser";
 
-        let token =
-            generate_access_token(user_id, email, username).expect("Failed to generate token");
+        let token = generate_test_token(user_id, email, username, "access", Duration::seconds(-30));
 
         let is_expired = is_token_expired(&token);
         assert!(is_expired.is_ok());
-        assert!(!is_expired.unwrap()); // Token should not be expired immediately
+        assert!(is_expired.unwrap());
     }
 
     #[test]
@@ -377,8 +221,7 @@ JwIDAQAB
         let email = "test@example.com";
         let username = "testuser";
 
-        let token =
-            generate_access_token(user_id, email, username).expect("Failed to generate token");
+        let token = generate_test_token(user_id, email, username, "access", Duration::hours(1));
 
         let extracted_id = get_user_id_from_token(&token);
         assert!(extracted_id.is_ok());
@@ -392,75 +235,10 @@ JwIDAQAB
         let email = "test@example.com";
         let username = "testuser";
 
-        let token =
-            generate_access_token(user_id, email, username).expect("Failed to generate token");
+        let token = generate_test_token(user_id, email, username, "access", Duration::hours(1));
 
         let extracted_email = get_email_from_token(&token);
         assert!(extracted_email.is_ok());
         assert_eq!(extracted_email.unwrap(), email);
-    }
-
-    #[test]
-    fn test_access_token_has_correct_expiry() {
-        init_test_keys();
-        let user_id = Uuid::new_v4();
-        let email = "test@example.com";
-        let username = "testuser";
-
-        let token =
-            generate_access_token(user_id, email, username).expect("Failed to generate token");
-
-        let token_data = validate_token(&token).expect("Failed to validate token");
-        let now = Utc::now().timestamp();
-        let expected_expiry = now + (ACCESS_TOKEN_EXPIRY_HOURS * 3600);
-
-        // Allow 1 second tolerance for execution time
-        assert!(token_data.claims.exp >= expected_expiry - 1);
-        assert!(token_data.claims.exp <= expected_expiry + 1);
-    }
-
-    #[test]
-    fn test_refresh_token_has_longer_expiry() {
-        init_test_keys();
-        let user_id = Uuid::new_v4();
-        let email = "test@example.com";
-        let username = "testuser";
-
-        let access_token = generate_access_token(user_id, email, username)
-            .expect("Failed to generate access token");
-        let refresh_token = generate_refresh_token(user_id, email, username)
-            .expect("Failed to generate refresh token");
-
-        let access_claims = validate_token(&access_token)
-            .expect("Failed to validate access token")
-            .claims;
-        let refresh_claims = validate_token(&refresh_token)
-            .expect("Failed to validate refresh token")
-            .claims;
-
-        // Refresh token should expire later than access token
-        assert!(refresh_claims.exp > access_claims.exp);
-    }
-
-    #[test]
-    fn test_token_contains_all_required_claims() {
-        init_test_keys();
-        let user_id = Uuid::new_v4();
-        let email = "test@example.com";
-        let username = "testuser";
-
-        let token =
-            generate_access_token(user_id, email, username).expect("Failed to generate token");
-
-        let token_data = validate_token(&token).expect("Failed to validate token");
-        let claims = token_data.claims;
-
-        // Verify all required claims are present
-        assert!(!claims.sub.is_empty());
-        assert!(claims.iat > 0);
-        assert!(claims.exp > claims.iat);
-        assert_eq!(claims.token_type, "access");
-        assert_eq!(claims.email, email);
-        assert_eq!(claims.username, username);
     }
 }

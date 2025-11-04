@@ -18,30 +18,7 @@
 name: Streaming Infrastructure CI
 
 on:
-  push:
-    branches:
-      - main
-      - develop
-      - 'feature/**'
-    paths:
-      - 'backend/docker-compose.yml'
-      - 'backend/nginx/**'
-      - 'backend/init-db/**'
-      - 'backend/*.sh'
-      - 'backend/Makefile'
-      - '.github/workflows/streaming-infrastructure.yml'
-
-  pull_request:
-    branches:
-      - main
-      - develop
-    paths:
-      - 'backend/docker-compose.yml'
-      - 'backend/nginx/**'
-      - 'backend/init-db/**'
-      - 'backend/*.sh'
-      - 'backend/Makefile'
-
+  # 临时禁用 - GitHub Actions 运行器分配失败
   workflow_dispatch:
     inputs:
       run_full_tests:

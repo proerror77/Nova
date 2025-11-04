@@ -137,6 +137,31 @@ FROM messages
 WHERE content_encrypted IS NOT NULL AND (content IS NULL OR length(content) = 0);
 ```
 
+### Phase 3b: Re-encrypt using conversation keys
+
+After migrating plaintext into `content`, re-apply the new Strict-E2E model so the REST API
+returns `encrypted_payload` instead of plaintext:
+
+```sql
+-- Generate encrypted payloads using application logic.
+-- Pseudo-code (execute via maintenance script):
+-- for each strict_e2e conversation:
+--   key = conversation_key(conversation_id)
+--   for each message:
+--       ciphertext, nonce = secretbox(content, key)
+--       UPDATE messages SET
+--           content_encrypted = ciphertext,
+--           content_nonce = nonce,
+--           encryption_version = 1,
+--           content = ''
+--       WHERE id = message_id;
+
+-- At the SQL level, ensure any rows that still expose plaintext are marked as unavailable
+UPDATE messages
+SET content = '[Encrypted message unavailable]'
+WHERE privacy_mode = 'strict_e2e' AND (content_encrypted IS NULL OR content_nonce IS NULL);
+```
+
 ### Phase 4: Cleanup (After Verification)
 ```sql
 -- Only after confirming all messages have plaintext content:

@@ -1,0 +1,32 @@
+[package]
+name = "actix-middleware"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+actix-web.workspace = true
+actix-rt.workspace = true
+actix.workspace = true
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+uuid.workspace = true
+chrono.workspace = true
+redis.workspace = true
+prometheus.workspace = true
+tracing.workspace = true
+thiserror.workspace = true
+jsonwebtoken.workspace = true
+async-trait.workspace = true
+hex.workspace = true
+lazy_static = "1.4"
+once_cell.workspace = true
+futures = "0.3"
+
+# 依赖共享库
+crypto-core = { path = "../crypto-core" }
+error-handling = { path = "../error-handling" }
+redis-utils = { path = "../redis-utils" }
+
+[dev-dependencies]
+tokio-test = "0.4"
