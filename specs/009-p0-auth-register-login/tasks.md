@@ -87,11 +87,11 @@ REST API wrappers for web/mobile clients (deferred if not needed).
 
 Add metrics and optimize for production.
 
-- [ ] T050 [P] Add Prometheus metrics: register_requests_total, login_requests_total, login_failures_total, account_lockouts_total
-- [ ] T051 [P] Add OpenTelemetry tracing to register/login handlers (per Constitution Principle VI)
-- [ ] T052 Optimize JWT generation/validation latency (target < 50ms)
-- [ ] T053 Add structured logging for security events (registration, login failure, account lockout)
-- [ ] T054 Measure p50/p95/p99 latencies; verify p95 < 200ms (SC-002)
+- [X] T050 [P] Add Prometheus metrics: register_requests_total, login_requests_total, login_failures_total, account_lockouts_total
+- [X] T051 [P] Add OpenTelemetry tracing to register/login handlers (per Constitution Principle VI)
+- [X] T052 Optimize JWT generation/validation latency (target < 50ms)
+- [X] T053 Add structured logging for security events (registration, login failure, account lockout)
+- [X] T054 Measure p50/p95/p99 latencies; verify p95 < 200ms (SC-002)
 
 ## Phase 6: Rate Limiter Integration (1 day)
 
