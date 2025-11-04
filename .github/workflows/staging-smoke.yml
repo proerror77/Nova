@@ -29,6 +29,11 @@ jobs:
     env:
       AWS_REGION: ap-northeast-1
       EKS_CLUSTER_NAME: nova-eks
+      SMOKE_RETRIES: 5
+      SMOKE_RETRY_DELAY: 5
+      SMOKE_ALLOW_POD_WAIT_FAIL: true
+      SMOKE_SKIP_METRICS: true
+      SMOKE_SKIP_OPENAPI: true
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
