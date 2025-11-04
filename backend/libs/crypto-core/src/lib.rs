@@ -105,6 +105,9 @@ pub mod jwt;
 // Expose hash utilities
 pub mod hash;
 
+// Distributed tracing support
+pub mod correlation;
+
 // =============================
 // C FFI (for iOS xcframework)
 // =============================
