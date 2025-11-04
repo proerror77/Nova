@@ -43,43 +43,61 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
         };
         let offset = if req.offset < 0 { 0 } else { req.offset as i64 };
 
-        // Build query with soft delete support
-        let deleted_clause = if req.include_deleted {
-            "".to_string()
+        // Get total count - fix: separate SQL statements instead of string concatenation
+        let total_count: i64 = if req.include_deleted {
+            sqlx::query_scalar(
+                "SELECT COUNT(*) FROM messages WHERE conversation_id = $1"
+            )
         } else {
-            "AND deleted_at IS NULL".to_string()
-        };
-
-        // Get total count
-        let total_count: i64 = sqlx::query_scalar(
-            &format!(
-                "SELECT COUNT(*) FROM messages WHERE conversation_id = $1 {}",
-                deleted_clause
-            ),
-        )
+            sqlx::query_scalar(
+                "SELECT COUNT(*) FROM messages WHERE conversation_id = $1 AND deleted_at IS NULL"
+            )
+        }
         .bind(&req.conversation_id)
         .fetch_one(&self.state.db)
         .await
-        .unwrap_or(0);
+        .map_err(|e| {
+            tracing::error!(
+                error = %e,
+                conversation_id = %req.conversation_id,
+                "Failed to count messages"
+            );
+            Status::internal("Failed to retrieve message count")
+        })?;
 
-        // Get messages
-        let rows = sqlx::query(
-            &format!(
+        // Get messages - fix: separate SQL statements instead of string concatenation
+        let rows = if req.include_deleted {
+            sqlx::query(
                 "SELECT id, conversation_id, sender_id, content, encrypted_content, nonce,
                         encryption_version, created_at, updated_at, deleted_at, version_number
                  FROM messages
-                 WHERE conversation_id = $1 {}
+                 WHERE conversation_id = $1
                  ORDER BY created_at DESC
-                 LIMIT $2 OFFSET $3",
-                deleted_clause
-            ),
-        )
+                 LIMIT $2 OFFSET $3"
+            )
+        } else {
+            sqlx::query(
+                "SELECT id, conversation_id, sender_id, content, encrypted_content, nonce,
+                        encryption_version, created_at, updated_at, deleted_at, version_number
+                 FROM messages
+                 WHERE conversation_id = $1 AND deleted_at IS NULL
+                 ORDER BY created_at DESC
+                 LIMIT $2 OFFSET $3"
+            )
+        }
         .bind(&req.conversation_id)
         .bind(limit)
         .bind(offset)
         .fetch_all(&self.state.db)
         .await
-        .unwrap_or_default();
+        .map_err(|e| {
+            tracing::error!(
+                error = %e,
+                conversation_id = %req.conversation_id,
+                "Failed to fetch messages"
+            );
+            Status::internal("Failed to retrieve messages")
+        })?;
 
         let messages = rows
             .iter()
@@ -169,7 +187,7 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
         let conversation = match conv_row {
             Some(row) => Conversation {
                 id: row.get("id"),
-                type_: row.get("type"),
+                r#type: row.get("type"),
                 name: row.get("name"),
                 member_ids: row.get::<Vec<String>, _>("member_ids"),
                 created_at: row.get("created_at"),
@@ -186,7 +204,14 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
         .bind(&req.conversation_id)
         .fetch_one(&self.state.db)
         .await
-        .unwrap_or(0);
+        .map_err(|e| {
+            tracing::error!(
+                error = %e,
+                conversation_id = %req.conversation_id,
+                "Failed to get unread count"
+            );
+            Status::internal("Failed to retrieve unread count")
+        })?;
 
         // Get last message
         let last_msg_row = sqlx::query(
@@ -425,7 +450,7 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
         // If message_id provided, mark only that message
         // Otherwise, mark all messages in conversation as read
         if !req.message_id.is_empty() {
-            let _ = sqlx::query(
+            sqlx::query(
                 "INSERT INTO message_reads (user_id, message_id, conversation_id, is_read)
                  VALUES ($1, $2, $3, true)
                  ON CONFLICT (user_id, message_id) DO UPDATE SET is_read = true",
@@ -434,16 +459,34 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
             .bind(&req.message_id)
             .bind(&req.conversation_id)
             .execute(&self.state.db)
-            .await;
+            .await
+            .map_err(|e| {
+                tracing::error!(
+                    error = %e,
+                    user_id = %req.user_id,
+                    message_id = %req.message_id,
+                    "Failed to mark message as read"
+                );
+                Status::internal("Failed to mark message as read")
+            })?;
         } else {
-            let _ = sqlx::query(
+            sqlx::query(
                 "UPDATE message_reads SET is_read = true
                  WHERE user_id = $1 AND conversation_id = $2",
             )
             .bind(&req.user_id)
             .bind(&req.conversation_id)
             .execute(&self.state.db)
-            .await;
+            .await
+            .map_err(|e| {
+                tracing::error!(
+                    error = %e,
+                    user_id = %req.user_id,
+                    conversation_id = %req.conversation_id,
+                    "Failed to mark conversation as read"
+                );
+                Status::internal("Failed to mark conversation as read")
+            })?;
         }
 
         // Get remaining unread count
@@ -455,7 +498,15 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
         .bind(&req.conversation_id)
         .fetch_one(&self.state.db)
         .await
-        .unwrap_or(0);
+        .map_err(|e| {
+            tracing::error!(
+                error = %e,
+                user_id = %req.user_id,
+                conversation_id = %req.conversation_id,
+                "Failed to get unread count after marking as read"
+            );
+            Status::internal("Failed to retrieve unread count")
+        })?;
 
         Ok(Response::new(MarkAsReadResponse {
             unread_count: unread_count as i32,
@@ -484,7 +535,15 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
         .bind(&req.conversation_id)
         .fetch_one(&self.state.db)
         .await
-        .unwrap_or(0);
+        .map_err(|e| {
+            tracing::error!(
+                error = %e,
+                user_id = %req.user_id,
+                conversation_id = %req.conversation_id,
+                "Failed to get unread count"
+            );
+            Status::internal("Failed to retrieve unread count")
+        })?;
 
         Ok(Response::new(GetUnreadCountResponse {
             unread_count: unread_count as i32,
@@ -516,13 +575,26 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
         .bind(&req.user_id)
         .fetch_one(&self.state.db)
         .await
-        .unwrap_or(0);
+        .map_err(|e| {
+            tracing::error!(
+                error = %e,
+                user_id = %req.user_id,
+                "Failed to count conversations"
+            );
+            Status::internal("Failed to count conversations")
+        })?;
 
-        // Get conversations
+        // Fix P0-3: Use single query with LEFT JOIN instead of N+1 queries
+        // Get conversations with unread counts in a single query
         let rows = sqlx::query(
-            "SELECT id, type, name, member_ids, created_at, updated_at
-             FROM conversations WHERE $1 = ANY(member_ids)
-             ORDER BY updated_at DESC
+            "SELECT c.id, c.type, c.name, c.member_ids, c.created_at, c.updated_at,
+                    COALESCE(COUNT(mr.id), 0)::bigint as unread_count
+             FROM conversations c
+             LEFT JOIN message_reads mr ON c.id = mr.conversation_id
+                 AND mr.user_id = $1 AND mr.is_read = false
+             WHERE $1 = ANY(c.member_ids)
+             GROUP BY c.id, c.type, c.name, c.member_ids, c.created_at, c.updated_at
+             ORDER BY c.updated_at DESC
              LIMIT $2 OFFSET $3",
         )
         .bind(&req.user_id)
@@ -530,36 +602,29 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
         .bind(offset)
         .fetch_all(&self.state.db)
         .await
-        .unwrap_or_default();
+        .map_err(|e| {
+            tracing::error!(
+                error = %e,
+                user_id = %req.user_id,
+                "Failed to fetch conversations with unread counts"
+            );
+            Status::internal("Failed to retrieve conversations")
+        })?;
 
-        let conversations: Vec<Conversation> = rows
-            .iter()
-            .map(|row| Conversation {
+        let mut conversations = Vec::new();
+        let mut unread_counts = Vec::new();
+
+        for row in rows {
+            conversations.push(Conversation {
                 id: row.get("id"),
-                type_: row.get("type"),
+                r#type: row.get("type"),
                 name: row.get("name"),
                 member_ids: row.get::<Vec<String>, _>("member_ids"),
                 created_at: row.get("created_at"),
                 updated_at: row.get("updated_at"),
-            })
-            .collect();
-
-        // Get unread counts for each conversation
-        let unread_counts: Vec<i32> = futures::future::join_all(
-            conversations.iter().map(|conv| async {
-                let count: i64 = sqlx::query_scalar(
-                    "SELECT COUNT(*) FROM message_reads
-                     WHERE user_id = $1 AND conversation_id = $2 AND is_read = false",
-                )
-                .bind(&req.user_id)
-                .bind(&conv.id)
-                .fetch_one(&self.state.db)
-                .await
-                .unwrap_or(0);
-                count as i32
-            }),
-        )
-        .await;
+            });
+            unread_counts.push(row.get::<i64, _>("unread_count") as i32);
+        }
 
         Ok(Response::new(ListConversationsResponse {
             conversations,

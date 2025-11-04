@@ -60,7 +60,25 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p ~/.kube
-          echo "$KUBECONFIG_B64" | base64 --decode > ~/.kube/config
+          # Normalize and validate base64 (strip whitespace/newlines/CRs)
+          CLEAN=$(printf "%s" "$KUBECONFIG_B64" | tr -d '\r\n\t ')
+          if [ -z "$CLEAN" ]; then
+            echo "::error::STAGING_KUBE_CONFIG is empty after normalization"; exit 1; fi
+
+          # Try openssl first, fallback to base64 -d
+          if command -v openssl >/dev/null 2>&1; then
+            if ! printf "%s" "$CLEAN" | openssl base64 -d -A > ~/.kube/config 2>/dev/null; then
+              echo "::warning::openssl -d failed; trying coreutils base64 -d";
+              printf "%s" "$CLEAN" | base64 -d > ~/.kube/config
+            fi
+          else
+            printf "%s" "$CLEAN" | base64 -d > ~/.kube/config
+          fi
+
+          # Basic sanity check
+          if ! head -n1 ~/.kube/config | grep -q "apiVersion"; then
+            echo "::error::Decoded kubeconfig does not look valid (missing apiVersion)."; exit 1; fi
+
           chmod 600 ~/.kube/config
           kubectl version --client=true
           kubectl config get-contexts || true

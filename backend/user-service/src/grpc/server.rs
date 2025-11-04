@@ -127,6 +127,7 @@ impl user_service_server::UserService for UserServiceImpl {
     }
 
     /// UpdateUserProfile - Update user profile information
+    /// Fix P0-4: Use CASE statement instead of COALESCE to allow setting boolean to false
     async fn update_user_profile(
         &self,
         request: Request<UpdateUserProfileRequest>,
@@ -141,13 +142,12 @@ impl user_service_server::UserService for UserServiceImpl {
 
         let row = sqlx::query(
             "UPDATE user_profiles SET
-             display_name = COALESCE(NULLIF($2, ''), display_name),
-             bio = COALESCE(NULLIF($3, ''), bio),
-             avatar_url = COALESCE(NULLIF($4, ''), avatar_url),
-             cover_url = COALESCE(NULLIF($5, ''), cover_url),
-             website = COALESCE(NULLIF($6, ''), website),
-             location = COALESCE(NULLIF($7, ''), location),
-             is_private = COALESCE(NULLIF($8::boolean, false), is_private),
+             display_name = CASE WHEN $2 = '' THEN display_name ELSE $2 END,
+             bio = CASE WHEN $3 = '' THEN bio ELSE $3 END,
+             avatar_url = CASE WHEN $4 = '' THEN avatar_url ELSE $4 END,
+             cover_url = CASE WHEN $5 = '' THEN cover_url ELSE $5 END,
+             website = CASE WHEN $6 = '' THEN website ELSE $6 END,
+             location = CASE WHEN $7 = '' THEN location ELSE $7 END,
              updated_at = $9
              WHERE id = $1 AND deleted_at IS NULL
              RETURNING id, username, email, display_name, bio, avatar_url, cover_url, website,
@@ -161,11 +161,17 @@ impl user_service_server::UserService for UserServiceImpl {
         .bind(&req.cover_url)
         .bind(&req.website)
         .bind(&req.location)
-        .bind(req.is_private)
         .bind(&now)
         .fetch_optional(&**self.db)
         .await
-        .map_err(|e| Status::internal(format!("Database error: {}", e)))?;
+        .map_err(|e| {
+            tracing::error!(
+                error = %e,
+                user_id = %req.user_id,
+                "Failed to update user profile"
+            );
+            Status::internal("Failed to update user profile")
+        })?;
 
         match row {
             Some(row) => Ok(Response::new(UpdateUserProfileResponse {
@@ -236,6 +242,7 @@ impl user_service_server::UserService for UserServiceImpl {
     }
 
     /// UpdateUserSettings - Update user settings
+    /// Fix P0-4: Use CASE statement instead of COALESCE to allow setting boolean to false
     async fn update_user_settings(
         &self,
         request: Request<UpdateUserSettingsRequest>,
@@ -250,14 +257,14 @@ impl user_service_server::UserService for UserServiceImpl {
 
         let row = sqlx::query(
             "UPDATE user_settings SET
-             email_notifications = COALESCE(NULLIF($2::boolean, false), email_notifications),
-             push_notifications = COALESCE(NULLIF($3::boolean, false), push_notifications),
-             marketing_emails = COALESCE(NULLIF($4::boolean, false), marketing_emails),
-             timezone = COALESCE(NULLIF($5, ''), timezone),
-             language = COALESCE(NULLIF($6, ''), language),
-             dark_mode = COALESCE(NULLIF($7::boolean, false), dark_mode),
-             privacy_level = COALESCE(NULLIF($8, ''), privacy_level),
-             allow_messages = COALESCE(NULLIF($9::boolean, false), allow_messages),
+             email_notifications = CASE WHEN $2::text = 'unset' THEN email_notifications ELSE $2::boolean END,
+             push_notifications = CASE WHEN $3::text = 'unset' THEN push_notifications ELSE $3::boolean END,
+             marketing_emails = CASE WHEN $4::text = 'unset' THEN marketing_emails ELSE $4::boolean END,
+             timezone = CASE WHEN $5 = '' THEN timezone ELSE $5 END,
+             language = CASE WHEN $6 = '' THEN language ELSE $6 END,
+             dark_mode = CASE WHEN $7::text = 'unset' THEN dark_mode ELSE $7::boolean END,
+             privacy_level = CASE WHEN $8 = '' THEN privacy_level ELSE $8 END,
+             allow_messages = CASE WHEN $9::text = 'unset' THEN allow_messages ELSE $9::boolean END,
              updated_at = $10
              WHERE user_id = $1
              RETURNING user_id, email_notifications, push_notifications, marketing_emails,
@@ -265,18 +272,25 @@ impl user_service_server::UserService for UserServiceImpl {
                        created_at, updated_at",
         )
         .bind(&req.user_id)
-        .bind(req.email_notifications)
-        .bind(req.push_notifications)
-        .bind(req.marketing_emails)
+        .bind(req.email_notifications.to_string())
+        .bind(req.push_notifications.to_string())
+        .bind(req.marketing_emails.to_string())
         .bind(&req.timezone)
         .bind(&req.language)
-        .bind(req.dark_mode)
+        .bind(req.dark_mode.to_string())
         .bind(&req.privacy_level)
-        .bind(req.allow_messages)
+        .bind(req.allow_messages.to_string())
         .bind(&now)
         .fetch_optional(&**self.db)
         .await
-        .map_err(|e| Status::internal(format!("Database error: {}", e)))?;
+        .map_err(|e| {
+            tracing::error!(
+                error = %e,
+                user_id = %req.user_id,
+                "Failed to update user settings"
+            );
+            Status::internal("Failed to update user settings")
+        })?;
 
         match row {
             Some(row) => Ok(Response::new(UpdateUserSettingsResponse {
