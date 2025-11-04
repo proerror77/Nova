@@ -188,7 +188,7 @@ impl ContentService for ContentServiceImpl {
 
         // Ensure the post exists and is not soft-deleted
         let post_exists = sqlx::query_scalar::<_, i64>(
-            "SELECT 1 FROM posts WHERE id = $1 AND soft_delete IS NULL",
+            "SELECT 1 FROM posts WHERE id = $1 AND deleted_at IS NULL",
         )
         .bind(post_id)
         .fetch_optional(&self.db_pool)
@@ -215,21 +215,21 @@ impl ContentService for ContentServiceImpl {
         .await;
 
         match insert_result {
-            Ok(_) => Ok(Response::new(LikePostResponse {
-                success: true,
-                error: String::new(),
-            })),
-            Err(err) => {
-                // Treat duplicate likes as success to keep the operation idempotent
-                if let Some(db_err) = err.as_database_error() {
-                    if db_err.code() == Some("23505".into()) {
-                        return Ok(Response::new(LikePostResponse {
-                            success: true,
-                            error: String::new(),
-                        }));
-                    }
+            Ok(result) => {
+                // If a new like was inserted, invalidate the post cache to ensure
+                // the like_count is refreshed on next read
+                if result.rows_affected() > 0 {
+                    // Invalidate post cache to force refresh on next get_post call
+                    let _ = self.cache.invalidate_post(post_id).await;
+                    tracing::debug!("Invalidated cache for post {} after new like", post_id);
                 }
 
+                Ok(Response::new(LikePostResponse {
+                    success: true,
+                    error: String::new(),
+                }))
+            }
+            Err(err) => {
                 tracing::error!(
                     "Error inserting like (user={} post={}): {}",
                     user_id,
@@ -239,6 +239,376 @@ impl ContentService for ContentServiceImpl {
                 Err(Status::internal("Failed to like post"))
             }
         }
+    }
+
+    /// Get multiple posts by IDs (batch operation)
+    async fn get_posts_by_ids(
+        &self,
+        request: Request<GetPostsByIdsRequest>,
+    ) -> Result<Response<GetPostsByIdsResponse>, Status> {
+        let req = request.into_inner();
+
+        if req.post_ids.is_empty() {
+            return Ok(Response::new(GetPostsByIdsResponse {
+                posts: vec![],
+            }));
+        }
+
+        tracing::info!("gRPC: Getting {} posts by IDs", req.post_ids.len());
+
+        // Parse all post IDs
+        let mut post_ids = Vec::with_capacity(req.post_ids.len());
+        for post_id_str in &req.post_ids {
+            let post_id = Uuid::parse_str(post_id_str)
+                .map_err(|_| Status::invalid_argument("Invalid post ID format"))?;
+            post_ids.push(post_id);
+        }
+
+        // Build the query with proper parameterization for all post IDs
+        let query_str = format!(
+            "SELECT id, user_id, caption, image_key, image_sizes, status, content_type, created_at, updated_at, deleted_at FROM posts WHERE id = ANY($1::uuid[]) AND deleted_at IS NULL ORDER BY created_at DESC",
+        );
+
+        let posts = sqlx::query_as::<_, Post>(&query_str)
+            .bind(&post_ids)
+            .fetch_all(&self.db_pool)
+            .await
+            .map_err(|e| {
+                tracing::error!("Database error fetching posts by IDs: {}", e);
+                Status::internal("Failed to fetch posts")
+            })?;
+
+        let proto_posts = posts
+            .iter()
+            .map(|p| convert_post_to_proto(p))
+            .collect();
+
+        Ok(Response::new(GetPostsByIdsResponse {
+            posts: proto_posts,
+        }))
+    }
+
+    /// Get posts by author with pagination
+    async fn get_posts_by_author(
+        &self,
+        request: Request<GetPostsByAuthorRequest>,
+    ) -> Result<Response<GetPostsByAuthorResponse>, Status> {
+        let req = request.into_inner();
+
+        tracing::info!(
+            "gRPC: Getting posts by author: {} (status: {}, limit: {}, offset: {})",
+            req.author_id,
+            req.status,
+            req.limit,
+            req.offset
+        );
+
+        // Parse author ID
+        let author_id = Uuid::parse_str(&req.author_id)
+            .map_err(|_| Status::invalid_argument("Invalid author ID format"))?;
+
+        let limit = req.limit.clamp(1, 100) as i64;
+        let offset = req.offset.max(0) as i64;
+
+        // Build query with optional status filter
+        let (query_str, count_query_str) = if req.status.is_empty() {
+            (
+                "SELECT id, user_id, caption, image_key, image_sizes, status, content_type, created_at, updated_at, deleted_at FROM posts WHERE user_id = $1 AND deleted_at IS NULL ORDER BY created_at DESC LIMIT $2 OFFSET $3".to_string(),
+                "SELECT COUNT(*) FROM posts WHERE user_id = $1 AND deleted_at IS NULL".to_string(),
+            )
+        } else {
+            (
+                "SELECT id, user_id, caption, image_key, image_sizes, status, content_type, created_at, updated_at, deleted_at FROM posts WHERE user_id = $1 AND status = $2 AND deleted_at IS NULL ORDER BY created_at DESC LIMIT $3 OFFSET $4".to_string(),
+                "SELECT COUNT(*) FROM posts WHERE user_id = $1 AND status = $2 AND deleted_at IS NULL".to_string(),
+            )
+        };
+
+        // Fetch posts
+        let posts = if req.status.is_empty() {
+            sqlx::query_as::<_, Post>(&query_str)
+                .bind(author_id)
+                .bind(limit)
+                .bind(offset)
+                .fetch_all(&self.db_pool)
+                .await
+        } else {
+            sqlx::query_as::<_, Post>(&query_str)
+                .bind(author_id)
+                .bind(&req.status)
+                .bind(limit)
+                .bind(offset)
+                .fetch_all(&self.db_pool)
+                .await
+        }
+        .map_err(|e| {
+            tracing::error!("Database error fetching posts by author: {}", e);
+            Status::internal("Failed to fetch posts")
+        })?;
+
+        // Fetch total count
+        let total: i64 = if req.status.is_empty() {
+            sqlx::query_scalar(&count_query_str)
+                .bind(author_id)
+                .fetch_one(&self.db_pool)
+                .await
+        } else {
+            sqlx::query_scalar(&count_query_str)
+                .bind(author_id)
+                .bind(&req.status)
+                .fetch_one(&self.db_pool)
+                .await
+        }
+        .map_err(|e| {
+            tracing::error!("Database error counting posts by author: {}", e);
+            Status::internal("Failed to count posts")
+        })?;
+
+        let proto_posts = posts
+            .iter()
+            .map(|p| convert_post_to_proto(p))
+            .collect();
+
+        let total_count = i32::try_from(total).unwrap_or_else(|_| {
+            tracing::warn!("Post count exceeded i32::MAX: {}", total);
+            i32::MAX
+        });
+
+        Ok(Response::new(GetPostsByAuthorResponse {
+            posts: proto_posts,
+            total_count,
+        }))
+    }
+
+    /// Update a post
+    async fn update_post(
+        &self,
+        request: Request<UpdatePostRequest>,
+    ) -> Result<Response<UpdatePostResponse>, Status> {
+        let req = request.into_inner();
+
+        tracing::info!("gRPC: Updating post: {}", req.post_id);
+
+        // Parse post ID
+        let post_id = Uuid::parse_str(&req.post_id)
+            .map_err(|_| Status::invalid_argument("Invalid post ID format"))?;
+
+        // Start a transaction to ensure atomicity
+        let mut tx = self.db_pool.begin().await.map_err(|e| {
+            tracing::error!("Database error starting transaction: {}", e);
+            Status::internal("Failed to update post")
+        })?;
+
+        // Update the post with only non-empty fields
+        let update_query = if req.title.is_empty() && req.content.is_empty() && req.privacy.is_empty() && req.status.is_empty() {
+            // No fields to update
+            sqlx::query("SELECT id FROM posts WHERE id = $1 AND deleted_at IS NULL")
+                .bind(post_id)
+                .execute(&mut *tx)
+                .await
+        } else {
+            // Build dynamic update based on provided fields
+            let mut updates = vec!["updated_at = NOW()".to_string()];
+            let mut bindings: Vec<String> = vec![];
+            let mut param_index = 2;
+
+            if !req.title.is_empty() {
+                updates.push(format!("title = ${}", param_index));
+                bindings.push(req.title.clone());
+                param_index += 1;
+            }
+
+            if !req.content.is_empty() {
+                updates.push(format!("caption = ${}", param_index));
+                bindings.push(req.content.clone());
+                param_index += 1;
+            }
+
+            if !req.privacy.is_empty() {
+                updates.push(format!("privacy = ${}", param_index));
+                bindings.push(req.privacy.clone());
+                param_index += 1;
+            }
+
+            if !req.status.is_empty() {
+                updates.push(format!("status = ${}", param_index));
+                bindings.push(req.status.clone());
+            }
+
+            let update_clause = updates.join(", ");
+            let query_str = format!(
+                "UPDATE posts SET {} WHERE id = $1 AND deleted_at IS NULL RETURNING id, user_id, caption, image_key, image_sizes, status, content_type, created_at, updated_at, deleted_at",
+                update_clause
+            );
+
+            let mut query = sqlx::query_as::<_, Post>(&query_str)
+                .bind(post_id);
+
+            for binding in bindings {
+                query = query.bind(binding);
+            }
+
+            query.fetch_optional(&mut *tx).await.map_err(|e| {
+                tracing::error!("Database error updating post: {}", e);
+                Status::internal("Failed to update post")
+            })?;
+
+            sqlx::query("SELECT 1")
+                .execute(&mut *tx)
+                .await
+        };
+
+        match update_query {
+            Ok(_) => {
+                // Commit transaction and invalidate cache
+                tx.commit().await.map_err(|e| {
+                    tracing::error!("Database error committing transaction: {}", e);
+                    Status::internal("Failed to update post")
+                })?;
+
+                // Invalidate cache for this post
+                let _ = self.cache.invalidate_post(post_id).await;
+                tracing::debug!("Invalidated cache for post {} after update", post_id);
+
+                // Fetch the updated post
+                let post_service = PostService::with_cache(self.db_pool.clone(), self.cache.clone());
+                match post_service.get_post(post_id).await {
+                    Ok(Some(post)) => {
+                        Ok(Response::new(UpdatePostResponse {
+                            post: Some(convert_post_to_proto(&post)),
+                        }))
+                    }
+                    Ok(None) => {
+                        tracing::warn!("Updated post {} not found", post_id);
+                        Err(Status::not_found("Post not found after update"))
+                    }
+                    Err(e) => {
+                        tracing::error!("Error fetching updated post: {}", e);
+                        Err(Status::internal("Failed to fetch updated post"))
+                    }
+                }
+            }
+            Err(e) => {
+                tracing::error!("Error updating post: {}", e);
+                Err(Status::internal("Failed to update post"))
+            }
+        }
+    }
+
+    /// Delete (soft delete) a post
+    async fn delete_post(
+        &self,
+        request: Request<DeletePostRequest>,
+    ) -> Result<Response<DeletePostResponse>, Status> {
+        let req = request.into_inner();
+
+        tracing::info!(
+            "gRPC: Deleting post: {} (deleted_by: {})",
+            req.post_id,
+            req.deleted_by_id
+        );
+
+        // Parse IDs
+        let post_id = Uuid::parse_str(&req.post_id)
+            .map_err(|_| Status::invalid_argument("Invalid post ID format"))?;
+        // Validate deleted_by_id exists (not used in this implementation but required by proto)
+        let _deleted_by_id = Uuid::parse_str(&req.deleted_by_id)
+            .map_err(|_| Status::invalid_argument("Invalid deleted_by_id format"))?;
+
+        // Soft delete the post (set deleted_at timestamp)
+        let result = sqlx::query_scalar::<_, String>(
+            "UPDATE posts SET deleted_at = NOW() WHERE id = $1 AND deleted_at IS NULL RETURNING deleted_at::text",
+        )
+        .bind(post_id)
+        .fetch_optional(&self.db_pool)
+        .await
+        .map_err(|e| {
+            tracing::error!("Database error deleting post: {}", e);
+            Status::internal("Failed to delete post")
+        })?;
+
+        match result {
+            Some(deleted_at) => {
+                // Invalidate cache for this post
+                let _ = self.cache.invalidate_post(post_id).await;
+                tracing::debug!("Invalidated cache for post {} after delete", post_id);
+
+                Ok(Response::new(DeletePostResponse {
+                    post_id: post_id.to_string(),
+                    deleted_at,
+                }))
+            }
+            None => {
+                tracing::warn!("Post {} not found or already deleted", post_id);
+                Err(Status::not_found("Post not found or already deleted"))
+            }
+        }
+    }
+
+    /// Decrement like count (unlike operation)
+    async fn decrement_like_count(
+        &self,
+        request: Request<DecrementLikeCountRequest>,
+    ) -> Result<Response<DecrementLikeCountResponse>, Status> {
+        let req = request.into_inner();
+
+        tracing::info!("gRPC: Decrementing like count for post: {}", req.post_id);
+
+        // Parse post ID
+        let post_id = Uuid::parse_str(&req.post_id)
+            .map_err(|_| Status::invalid_argument("Invalid post ID format"))?;
+
+        // Get the current like count from the likes table
+        let like_count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM likes WHERE post_id = $1",
+        )
+        .bind(post_id)
+        .fetch_one(&self.db_pool)
+        .await
+        .map_err(|e| {
+            tracing::error!("Database error counting likes: {}", e);
+            Status::internal("Failed to decrement like count")
+        })?;
+
+        // Invalidate cache to force refresh
+        let _ = self.cache.invalidate_post(post_id).await;
+        tracing::debug!("Invalidated cache for post {} after decrement", post_id);
+
+        let like_count_i32 = i32::try_from(like_count).unwrap_or_else(|_| {
+            tracing::warn!("Like count exceeded i32::MAX for post {}: {}", post_id, like_count);
+            i32::MAX
+        });
+
+        Ok(Response::new(DecrementLikeCountResponse {
+            like_count: like_count_i32,
+        }))
+    }
+
+    /// Check if a post exists
+    async fn check_post_exists(
+        &self,
+        request: Request<CheckPostExistsRequest>,
+    ) -> Result<Response<CheckPostExistsResponse>, Status> {
+        let req = request.into_inner();
+
+        tracing::info!("gRPC: Checking post existence: {}", req.post_id);
+
+        // Parse post ID
+        let post_id = Uuid::parse_str(&req.post_id)
+            .map_err(|_| Status::invalid_argument("Invalid post ID format"))?;
+
+        // Check if post exists and is not soft-deleted
+        let exists: bool = sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS(SELECT 1 FROM posts WHERE id = $1 AND deleted_at IS NULL)",
+        )
+        .bind(post_id)
+        .fetch_one(&self.db_pool)
+        .await
+        .map_err(|e| {
+            tracing::error!("Database error checking post existence: {}", e);
+            Status::internal("Failed to check post existence")
+        })?;
+
+        Ok(Response::new(CheckPostExistsResponse { exists }))
     }
 
     /// Get user bookmarks
@@ -309,7 +679,10 @@ impl ContentService for ContentServiceImpl {
             .map(|post| convert_post_to_proto(&post))
             .collect();
 
-        let total_i32 = i32::try_from(total).unwrap_or(i32::MAX);
+        let total_i32 = i32::try_from(total).unwrap_or_else(|_| {
+            tracing::warn!("Bookmark count exceeded i32::MAX: {}", total);
+            i32::MAX
+        });
 
         let response = GetUserBookmarksResponse {
             posts: bookmark_posts,

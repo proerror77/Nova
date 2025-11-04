@@ -110,6 +110,64 @@ message WarmFeedRequest {
     repeated string post_ids = 2;
 }
 
+message GetPostsByIdsRequest {
+    repeated string post_ids = 1;
+}
+
+message GetPostsByIdsResponse {
+    repeated Post posts = 1;
+}
+
+message GetPostsByAuthorRequest {
+    string author_id = 1;
+    string status = 2;
+    int32 limit = 3;
+    int32 offset = 4;
+}
+
+message GetPostsByAuthorResponse {
+    repeated Post posts = 1;
+    int32 total_count = 2;
+}
+
+message UpdatePostRequest {
+    string post_id = 1;
+    string title = 2;
+    string content = 3;
+    string privacy = 4;
+    string status = 5;
+}
+
+message UpdatePostResponse {
+    Post post = 1;
+}
+
+message DeletePostRequest {
+    string post_id = 1;
+    string deleted_by_id = 2;
+}
+
+message DeletePostResponse {
+    string post_id = 1;
+    string deleted_at = 2;
+}
+
+message DecrementLikeCountRequest {
+    string post_id = 1;
+}
+
+message DecrementLikeCountResponse {
+    int32 like_count = 1;
+}
+
+message CheckPostExistsRequest {
+    string post_id = 1;
+}
+
+message CheckPostExistsResponse {
+    bool exists = 1;
+}
+
 service ContentService {
     rpc GetPost(GetPostRequest) returns (GetPostResponse) {}
     rpc CreatePost(CreatePostRequest) returns (CreatePostResponse) {}
@@ -120,4 +178,10 @@ service ContentService {
     rpc InvalidateFeedEvent(InvalidateFeedEventRequest) returns (InvalidateFeedResponse) {}
     rpc BatchInvalidateFeed(BatchInvalidateFeedRequest) returns (InvalidateFeedResponse) {}
     rpc WarmFeed(WarmFeedRequest) returns (InvalidateFeedResponse) {}
+    rpc GetPostsByIds(GetPostsByIdsRequest) returns (GetPostsByIdsResponse) {}
+    rpc GetPostsByAuthor(GetPostsByAuthorRequest) returns (GetPostsByAuthorResponse) {}
+    rpc UpdatePost(UpdatePostRequest) returns (UpdatePostResponse) {}
+    rpc DeletePost(DeletePostRequest) returns (DeletePostResponse) {}
+    rpc DecrementLikeCount(DecrementLikeCountRequest) returns (DecrementLikeCountResponse) {}
+    rpc CheckPostExists(CheckPostExistsRequest) returns (CheckPostExistsResponse) {}
 }
