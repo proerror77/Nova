@@ -1,0 +1,21 @@
+[package]
+name = "nova-apns-shared"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+# Workspace dependencies
+tokio = { version = "1.36", features = ["rt", "sync"] }
+tracing = { workspace = true }
+uuid = { workspace = true }
+
+# APNs client
+apns2 = "0.1"
+
+# Error handling
+thiserror = { workspace = true }
+
+# Async traits
+async-trait = "0.1"

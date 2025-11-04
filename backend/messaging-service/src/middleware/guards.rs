@@ -1,12 +1,15 @@
 //! Authorization guards that enforce permission checks at the type level
 //! This prevents developers from accidentally bypassing authorization
 
-use axum::{async_trait, extract::FromRequestParts, http::request::Parts};
 use sqlx::PgPool;
+use std::future::Future;
+use std::pin::Pin;
 use uuid::Uuid;
 
 use crate::error::AppError;
 use crate::models::MemberRole;
+use actix_middleware::UserId;
+use actix_web::{Error, FromRequest, HttpMessage, HttpRequest};
 
 /// Represents an authenticated user extracted from JWT claims
 #[derive(Debug, Clone)]
@@ -14,22 +17,18 @@ pub struct User {
     pub id: Uuid,
 }
 
-#[async_trait]
-impl<S> FromRequestParts<S> for User
-where
-    S: Send + Sync,
-{
-    type Rejection = AppError;
+impl FromRequest for User {
+    type Error = Error;
+    type Future = Pin<Box<dyn Future<Output = Result<Self, Self::Error>>>>;
 
-    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
-        // Extract from JWT claim in extensions (set by auth middleware)
-        let user_id = parts
-            .extensions
-            .get::<Uuid>()
-            .cloned()
-            .ok_or(AppError::Unauthorized)?;
+    fn from_request(req: &HttpRequest, _payload: &mut actix_web::dev::Payload) -> Self::Future {
+        let extensions = req.extensions();
+        let user_id = extensions.get::<UserId>().map(|u| u.0);
 
-        Ok(User { id: user_id })
+        Box::pin(async move {
+            let user_id = user_id.ok_or_else(|| AppError::Unauthorized)?;
+            Ok(User { id: user_id })
+        })
     }
 }
 
@@ -72,7 +71,7 @@ impl ConversationMember {
         .bind(conversation_id)
         .fetch_optional(db)
         .await
-        .map_err(|_| AppError::Database(sqlx::Error::RowNotFound))?
+        .map_err(|_| AppError::Database("Row not found".to_string()))?
         .ok_or(AppError::Unauthorized)?;
 
         let role = MemberRole::from_db(&member.role)

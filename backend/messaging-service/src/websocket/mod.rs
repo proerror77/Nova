@@ -1,4 +1,3 @@
-use axum::extract::ws::Message;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::{
@@ -11,7 +10,6 @@ pub mod broadcast;
 pub mod events;
 pub mod handlers;
 pub mod message_types;
-pub mod pubsub;
 pub mod streams;
 pub mod subscription;
 
@@ -37,7 +35,7 @@ impl Default for SubscriberId {
 /// Subscriber entry with ID and channel
 struct Subscriber {
     id: SubscriberId,
-    sender: UnboundedSender<Message>,
+    sender: UnboundedSender<String>, // Changed from axum Message to String
 }
 
 /// Connection registry for WebSocket subscribers
@@ -63,7 +61,7 @@ impl ConnectionRegistry {
     pub async fn add_subscriber(
         &self,
         conversation_id: Uuid,
-    ) -> (SubscriberId, UnboundedReceiver<Message>) {
+    ) -> (SubscriberId, UnboundedReceiver<String>) {
         let (tx, rx) = unbounded_channel();
         let subscriber_id = SubscriberId::new();
 
@@ -120,7 +118,7 @@ impl ConnectionRegistry {
     /// Broadcast message to all subscribers of a conversation
     ///
     /// Automatically cleans up dead senders (where send fails).
-    pub async fn broadcast(&self, conversation_id: Uuid, msg: Message) {
+    pub async fn broadcast(&self, conversation_id: Uuid, msg: String) {
         let mut guard = self.inner.write().await;
         if let Some(subscribers) = guard.get_mut(&conversation_id) {
             let before = subscribers.len();

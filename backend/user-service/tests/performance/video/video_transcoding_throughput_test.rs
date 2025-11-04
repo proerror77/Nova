@@ -1,3 +1,4 @@
+#![cfg(feature = "legacy_video_tests")]
 /// Performance Tests for Video Transcoding Throughput (T139)
 /// Validates transcoding completes within SLA bounds
 /// - 99.9% of videos complete within 5 minutes

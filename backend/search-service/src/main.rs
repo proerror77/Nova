@@ -1,16 +1,20 @@
-use axum::{
-    extract::{Query, State},
-    http::StatusCode,
-    response::{IntoResponse, Json},
-    routing::{get, post},
-    Router,
+use actix_middleware::MetricsMiddleware;
+use actix_web::{
+    web::{self, Data, Json, Query},
+    App, HttpResponse, HttpServer, Responder,
 };
+use error_types::ErrorResponse;
 use redis::aio::ConnectionManager;
+use search_service::elasticsearch::{ElasticsearchClient, ElasticsearchError, PostDocument};
+use search_service::events::consumers::EventContext;
+use search_service::events::kafka::{spawn_message_consumer, KafkaConsumerConfig};
+use search_service::openapi::ApiDoc;
 use search_service::search_suggestions::SearchSuggestionsService;
 use serde::{Deserialize, Serialize};
 use sqlx::{postgres::PgPoolOptions, PgPool};
-use std::net::SocketAddr;
-use tokio::net::TcpListener;
+use std::sync::Arc;
+use utoipa::OpenApi;
+use utoipa_swagger_ui::SwaggerUi;
 use uuid::Uuid;
 
 // ============================================
@@ -27,17 +31,61 @@ enum AppError {
     Redis(#[from] redis::RedisError),
     #[error("Serialization error: {0}")]
     Serialization(#[from] serde_json::Error),
+    #[error("Search backend error: {0}")]
+    SearchBackend(String),
 }
 
-impl IntoResponse for AppError {
-    fn into_response(self) -> axum::response::Response {
-        let (status, message) = match self {
-            AppError::Database(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
-            AppError::Config(e) => (StatusCode::INTERNAL_SERVER_ERROR, e),
-            AppError::Redis(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
-            AppError::Serialization(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+impl actix_web::ResponseError for AppError {
+    fn error_response(&self) -> HttpResponse {
+        let (status, error_type, code) = match &self {
+            AppError::Database(_) => (
+                actix_web::http::StatusCode::INTERNAL_SERVER_ERROR,
+                "server_error",
+                error_types::error_codes::DATABASE_ERROR,
+            ),
+            AppError::Config(_) => (
+                actix_web::http::StatusCode::INTERNAL_SERVER_ERROR,
+                "server_error",
+                error_types::error_codes::INTERNAL_SERVER_ERROR,
+            ),
+            AppError::Redis(_) => (
+                actix_web::http::StatusCode::INTERNAL_SERVER_ERROR,
+                "server_error",
+                error_types::error_codes::CACHE_ERROR,
+            ),
+            AppError::Serialization(_) => (
+                actix_web::http::StatusCode::INTERNAL_SERVER_ERROR,
+                "server_error",
+                error_types::error_codes::INTERNAL_SERVER_ERROR,
+            ),
+            AppError::SearchBackend(_) => (
+                actix_web::http::StatusCode::BAD_GATEWAY,
+                "server_error",
+                error_types::error_codes::SERVICE_UNAVAILABLE,
+            ),
         };
-        (status, Json(serde_json::json!({ "error": message }))).into_response()
+
+        let message = self.to_string();
+        let response = ErrorResponse::new(
+            &match status {
+                actix_web::http::StatusCode::BAD_REQUEST => "Bad Request",
+                actix_web::http::StatusCode::INTERNAL_SERVER_ERROR => "Internal Server Error",
+                actix_web::http::StatusCode::BAD_GATEWAY => "Bad Gateway",
+                _ => "Error",
+            },
+            &message,
+            status.as_u16(),
+            error_type,
+            code,
+        );
+
+        HttpResponse::build(status).json(response)
+    }
+}
+
+impl From<ElasticsearchError> for AppError {
+    fn from(err: ElasticsearchError) -> Self {
+        AppError::SearchBackend(err.to_string())
     }
 }
 
@@ -94,6 +142,17 @@ struct PostResult {
     created_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
+impl From<PostDocument> for PostResult {
+    fn from(doc: PostDocument) -> Self {
+        Self {
+            id: doc.id,
+            user_id: doc.user_id,
+            caption: doc.caption,
+            created_at: doc.created_at,
+        }
+    }
+}
+
 #[derive(Debug, Serialize)]
 struct HashtagResult {
     tag: String,
@@ -107,6 +166,18 @@ struct SearchResponse<T> {
     count: usize,
 }
 
+#[derive(Debug, Deserialize)]
+struct ReindexRequest {
+    #[serde(default = "default_reindex_batch_size")]
+    batch_size: i64,
+    #[serde(default)]
+    offset: i64,
+}
+
+fn default_reindex_batch_size() -> i64 {
+    500
+}
+
 // ============================================
 // Application State
 // ============================================
@@ -115,19 +186,20 @@ struct SearchResponse<T> {
 struct AppState {
     db: PgPool,
     redis: ConnectionManager,
+    search_backend: Option<Arc<ElasticsearchClient>>,
 }
 
 // ============================================
 // Route Handlers
 // ============================================
 
-async fn health_handler() -> &'static str {
+async fn health_handler() -> impl Responder {
     "OK"
 }
 
 async fn search_users(
-    State(state): State<AppState>,
-    Query(params): Query<SearchParams>,
+    state: Data<AppState>,
+    params: Query<SearchParams>,
 ) -> Result<Json<SearchResponse<UserResult>>, AppError> {
     let search_pattern = format!("%{}%", params.q);
 
@@ -149,23 +221,40 @@ async fn search_users(
 
     let count = users.len();
     Ok(Json(SearchResponse {
-        query: params.q,
+        query: params.q.clone(),
         results: users,
         count,
     }))
 }
 
 async fn search_posts(
-    State(state): State<AppState>,
-    Query(params): Query<SearchParams>,
+    state: Data<AppState>,
+    params: Query<SearchParams>,
 ) -> Result<Json<SearchResponse<PostResult>>, AppError> {
     // Skip empty queries
     if params.q.trim().is_empty() {
         return Ok(Json(SearchResponse {
-            query: params.q,
+            query: params.q.clone(),
             results: vec![],
             count: 0,
         }));
+    }
+
+    if let Some(search_backend) = &state.search_backend {
+        match search_backend.search_posts(&params.q, params.limit).await {
+            Ok(documents) => {
+                let posts: Vec<PostResult> = documents.into_iter().map(PostResult::from).collect();
+                let count = posts.len();
+                return Ok(Json(SearchResponse {
+                    query: params.q.clone(),
+                    results: posts,
+                    count,
+                }));
+            }
+            Err(err) => {
+                tracing::warn!("Elasticsearch search failed for '{}': {}", params.q, err);
+            }
+        }
     }
 
     let cache_key = format!("search:posts:{}", params.q);
@@ -181,7 +270,7 @@ async fn search_posts(
             tracing::debug!("Cache hit for query: {}", params.q);
             let count = posts.len();
             return Ok(Json(SearchResponse {
-                query: params.q,
+                query: params.q.clone(),
                 results: posts,
                 count,
             }));
@@ -221,15 +310,13 @@ async fn search_posts(
 
     let count = posts.len();
     Ok(Json(SearchResponse {
-        query: params.q,
+        query: params.q.clone(),
         results: posts,
         count,
     }))
 }
 
-async fn clear_search_cache(
-    State(state): State<AppState>,
-) -> Result<Json<serde_json::Value>, AppError> {
+async fn clear_search_cache(state: Data<AppState>) -> Result<Json<serde_json::Value>, AppError> {
     let mut redis_conn = state.redis.clone();
 
     // Use SCAN to find all search:posts:* keys
@@ -267,9 +354,54 @@ async fn clear_search_cache(
     })))
 }
 
+async fn reindex_posts(
+    state: Data<AppState>,
+    payload: Json<ReindexRequest>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let search_backend = state
+        .search_backend
+        .clone()
+        .ok_or_else(|| AppError::Config("Elasticsearch backend disabled".into()))?;
+
+    let limit = payload.batch_size.clamp(1, 1_000);
+    let offset = payload.offset.max(0);
+
+    let posts = sqlx::query_as::<_, PostResult>(
+        r#"
+        SELECT id, user_id, caption, created_at
+        FROM posts
+        WHERE soft_delete IS NULL
+          AND status = 'published'
+        ORDER BY created_at DESC
+        LIMIT $1 OFFSET $2
+        "#,
+    )
+    .bind(limit)
+    .bind(offset)
+    .fetch_all(&state.db)
+    .await?;
+
+    for post in &posts {
+        let doc = PostDocument {
+            id: post.id,
+            user_id: post.user_id,
+            caption: post.caption.clone(),
+            created_at: post.created_at,
+        };
+        search_backend.index_post(&doc).await?;
+    }
+
+    Ok(Json(serde_json::json!({
+        "message": "Reindex completed",
+        "indexed_count": posts.len(),
+        "batch_size": limit,
+        "offset": offset,
+    })))
+}
+
 async fn get_search_suggestions(
-    State(state): State<AppState>,
-    Query(params): Query<SuggestionsParams>,
+    state: Data<AppState>,
+    params: Query<SuggestionsParams>,
 ) -> Result<Json<serde_json::Value>, AppError> {
     // For authenticated users, we'd get user_id from JWT
     // For now, we return global suggestions
@@ -292,8 +424,8 @@ async fn get_search_suggestions(
 }
 
 async fn get_trending_searches(
-    State(state): State<AppState>,
-    Query(params): Query<SearchParams>,
+    state: Data<AppState>,
+    params: Query<SearchParams>,
 ) -> Result<Json<serde_json::Value>, AppError> {
     let query_type = params.q.clone();
     let trending = SearchSuggestionsService::get_trending_searches(&state.db, &query_type, 20)
@@ -308,8 +440,8 @@ async fn get_trending_searches(
 }
 
 async fn record_search_click(
-    State(state): State<AppState>,
-    Json(params): Json<RecordClickParams>,
+    state: Data<AppState>,
+    params: Json<RecordClickParams>,
 ) -> Result<Json<serde_json::Value>, AppError> {
     // In production, user_id would come from JWT
     let user_id = Uuid::nil(); // Placeholder
@@ -330,8 +462,8 @@ async fn record_search_click(
 }
 
 async fn search_hashtags(
-    State(state): State<AppState>,
-    Query(params): Query<SearchParams>,
+    state: Data<AppState>,
+    params: Query<SearchParams>,
 ) -> Result<Json<SearchResponse<HashtagResult>>, AppError> {
     // Since there's no dedicated hashtags table, we extract them from post captions
     // This is a basic implementation - in production you'd want a proper hashtags table
@@ -382,7 +514,7 @@ async fn search_hashtags(
 
     let count = hashtags.len();
     Ok(Json(SearchResponse {
-        query: params.q,
+        query: params.q.clone(),
         results: hashtags,
         count,
     }))
@@ -412,8 +544,8 @@ struct UnifiedSearchResult {
 
 /// Unified search endpoint supporting multiple types
 async fn unified_search(
-    State(state): State<AppState>,
-    Query(params): Query<UnifiedSearchParams>,
+    state: Data<AppState>,
+    params: Query<UnifiedSearchParams>,
 ) -> Result<Json<UnifiedSearchResult>, AppError> {
     let mut users = vec![];
     let mut posts = vec![];
@@ -511,7 +643,7 @@ async fn unified_search(
     let total_results = users.len() + posts.len() + hashtags.len();
 
     Ok(Json(UnifiedSearchResult {
-        query: params.q,
+        query: params.q.clone(),
         users,
         posts,
         hashtags,
@@ -524,51 +656,21 @@ async fn unified_search(
 // ============================================
 
 // OpenAPI endpoint handler
-async fn openapi_json() -> axum::Json<serde_json::Value> {
-    use utoipa::OpenApi;
-    axum::Json(serde_json::to_value(&search_service::openapi::ApiDoc::openapi()).unwrap())
-}
+async fn openapi_json(doc: Data<utoipa::openapi::OpenApi>) -> HttpResponse {
+    let body = serde_json::to_string(&*doc)
+        .expect("Failed to serialize OpenAPI document for search-service");
 
-// Swagger UI handler
-async fn swagger_ui() -> axum::response::Html<&'static str> {
-    axum::response::Html(
-        r#"<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Nova Search Service API</title>
-    <link rel="stylesheet" type="text/css" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css" />
-</head>
-<body>
-    <div id="swagger-ui"></div>
-    <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
-    <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-standalone-preset.js"></script>
-    <script>
-        window.onload = function() {
-            SwaggerUIBundle({
-                url: "/openapi.json",
-                dom_id: '#swagger-ui',
-                deepLinking: true,
-                presets: [
-                    SwaggerUIBundle.presets.apis,
-                    SwaggerUIStandalonePreset
-                ],
-                plugins: [
-                    SwaggerUIBundle.plugins.DownloadUrl
-                ],
-                layout: "StandaloneLayout"
-            });
-        };
-    </script>
-</body>
-</html>"#,
-    )
+    HttpResponse::Ok()
+        .content_type("application/json")
+        .body(body)
 }
 
 // Documentation entry point
-async fn docs() -> axum::response::Html<&'static str> {
-    axum::response::Html(
-        r#"<!DOCTYPE html>
+async fn docs() -> impl Responder {
+    HttpResponse::Ok()
+        .content_type("text/html; charset=utf-8")
+        .body(
+            r#"<!DOCTYPE html>
 <html>
 <head>
     <title>Nova Search Service API</title>
@@ -584,33 +686,12 @@ async fn docs() -> axum::response::Html<&'static str> {
     <div class="container">
         <h1>Nova Search Service API</h1>
         <p>Choose your preferred documentation viewer:</p>
-        <a href="/swagger-ui">📘 Swagger UI (Interactive)</a>
-        <a href="/openapi.json">📄 OpenAPI JSON (Raw)</a>
+        <a href="/swagger-ui/">📘 Swagger UI (Interactive)</a>
+        <a href="/api/v1/openapi.json">📄 OpenAPI JSON (Raw)</a>
     </div>
 </body>
 </html>"#,
-    )
-}
-
-fn build_router() -> Router<AppState> {
-    Router::new()
-        .route("/health", get(health_handler))
-        .route("/openapi.json", get(openapi_json))
-        .route("/swagger-ui", get(swagger_ui))
-        .route("/docs", get(docs))
-        // Unified search endpoint
-        .route("/api/v1/search", get(unified_search))
-        // Type-specific search endpoints
-        .route("/api/v1/search/users", get(search_users))
-        .route("/api/v1/search/posts", get(search_posts))
-        .route("/api/v1/search/hashtags", get(search_hashtags))
-        // Cache management
-        .route("/api/v1/search/clear-cache", post(clear_search_cache))
-        // Search suggestions and trends
-        .route("/api/v1/search/suggestions", get(get_search_suggestions))
-        .route("/api/v1/search/trending", get(get_trending_searches))
-        // Search analytics
-        .route("/api/v1/search/clicks", post(record_search_click))
+        )
 }
 
 async fn init_db_pool(database_url: &str) -> Result<PgPool, sqlx::Error> {
@@ -629,13 +710,13 @@ async fn init_redis_connection(redis_url: &str) -> Result<ConnectionManager, red
 // Main Entry Point
 // ============================================
 
-#[tokio::main]
-async fn main() -> Result<(), AppError> {
+#[actix_web::main]
+async fn main() -> std::io::Result<()> {
     // Initialize tracing
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "search_service=debug,tower_http=debug".into()),
+                .unwrap_or_else(|_| "search_service=debug,actix_web=debug".into()),
         )
         .init();
 
@@ -643,8 +724,7 @@ async fn main() -> Result<(), AppError> {
     dotenvy::dotenv().ok();
 
     // Get configuration from environment
-    let database_url = std::env::var("DATABASE_URL")
-        .map_err(|_| AppError::Config("DATABASE_URL must be set".to_string()))?;
+    let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
 
     let redis_url =
         std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379".to_string());
@@ -658,7 +738,7 @@ async fn main() -> Result<(), AppError> {
     tracing::info!("Connecting to database...");
     let db = init_db_pool(&database_url)
         .await
-        .map_err(|e| AppError::Config(format!("Failed to connect to database: {e}")))?;
+        .expect("Failed to connect to database");
 
     tracing::info!("Database connection established");
 
@@ -666,27 +746,99 @@ async fn main() -> Result<(), AppError> {
     tracing::info!("Connecting to Redis at {}...", redis_url);
     let redis = init_redis_connection(&redis_url)
         .await
-        .map_err(|e| AppError::Config(format!("Failed to connect to Redis: {e}")))?;
+        .expect("Failed to connect to Redis");
 
     tracing::info!("Redis connection established");
 
     // Create application state
-    let state = AppState { db, redis };
+    let search_backend = match std::env::var("ELASTICSEARCH_URL") {
+        Ok(url) if !url.is_empty() => {
+            let index_name = std::env::var("ELASTICSEARCH_POST_INDEX")
+                .unwrap_or_else(|_| "nova_posts".to_string());
+            let message_index = std::env::var("ELASTICSEARCH_MESSAGE_INDEX")
+                .unwrap_or_else(|_| "nova_messages".to_string());
+            match ElasticsearchClient::new(&url, &index_name, &message_index).await {
+                Ok(client) => {
+                    tracing::info!(
+                        "Elasticsearch enabled: post_index={}, message_index={}",
+                        index_name,
+                        message_index
+                    );
+                    Some(Arc::new(client))
+                }
+                Err(err) => {
+                    tracing::warn!("Failed to initialize Elasticsearch client: {}", err);
+                    None
+                }
+            }
+        }
+        _ => {
+            tracing::info!(
+                "Elasticsearch URL not set. Falling back to PostgreSQL full-text search"
+            );
+            None
+        }
+    };
 
-    // Build router with state
-    let app = build_router().with_state(state);
+    if let Some(search_backend_clone) = search_backend.clone() {
+        if let Some(kafka_config) = KafkaConsumerConfig::from_env() {
+            let ctx = EventContext::new(Some(search_backend_clone));
+            spawn_message_consumer(ctx, kafka_config);
+        } else {
+            tracing::info!("Kafka configuration missing; skipping message indexing consumer");
+        }
+    } else {
+        tracing::info!("Search backend disabled; Kafka consumer not started");
+    }
+
+    let state = AppState {
+        db,
+        redis,
+        search_backend,
+    };
+
+    let state_data = Data::new(state);
 
     // Start server
-    let addr = SocketAddr::from(([0, 0, 0, 0], port));
-    tracing::info!("search-service listening on {}", addr);
+    tracing::info!("search-service listening on 0.0.0.0:{}", port);
 
-    let listener = TcpListener::bind(addr)
-        .await
-        .map_err(|e| AppError::Config(format!("Failed to bind to {addr}: {e}")))?;
+    HttpServer::new(move || {
+        let openapi_doc = ApiDoc::openapi();
 
-    axum::serve(listener, app)
-        .await
-        .map_err(|e| AppError::Config(format!("Server error: {e}")))?;
-
-    Ok(())
+        App::new()
+            .app_data(state_data.clone())
+            .app_data(Data::new(openapi_doc.clone()))
+            .wrap(MetricsMiddleware)
+            // Health endpoint (no auth)
+            .route("/health", web::get().to(health_handler))
+            // Documentation endpoints (no auth)
+            .service(
+                SwaggerUi::new("/swagger-ui/{_:.*}")
+                    .url("/api/v1/openapi.json", openapi_doc.clone()),
+            )
+            .route("/api/v1/openapi.json", web::get().to(openapi_json))
+            .route("/openapi.json", web::get().to(openapi_json))
+            .route("/docs", web::get().to(docs))
+            // API endpoints (with auth middleware if needed)
+            .service(
+                web::scope("/api/v1/search")
+                    // Unified search endpoint
+                    .route("", web::get().to(unified_search))
+                    // Type-specific search endpoints
+                    .route("/users", web::get().to(search_users))
+                    .route("/posts", web::get().to(search_posts))
+                    .route("/hashtags", web::get().to(search_hashtags))
+                    // Cache management
+                    .route("/clear-cache", web::post().to(clear_search_cache))
+                    .route("/posts/reindex", web::post().to(reindex_posts))
+                    // Search suggestions and trends
+                    .route("/suggestions", web::get().to(get_search_suggestions))
+                    .route("/trending", web::get().to(get_trending_searches))
+                    // Search analytics
+                    .route("/clicks", web::post().to(record_search_click)),
+            )
+    })
+    .bind(("0.0.0.0", port))?
+    .run()
+    .await
 }

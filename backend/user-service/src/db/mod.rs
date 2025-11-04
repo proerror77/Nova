@@ -3,18 +3,18 @@ use std::time::Duration;
 
 pub mod bookmark_repo;
 pub mod ch_client;
-pub mod comment_repo;
-pub mod experiment_repo;
-// pub mod messaging_repo; // REMOVED - moved to messaging-service
-pub mod like_repo;
-pub mod oauth_repo;
-pub mod password_reset_repo;
-pub mod post_repo;
+// pub mod comment_repo; // REMOVED - moved to content-service (port 8081) [DELETED]
+// pub mod experiment_repo; // REMOVED - moved to feed-service (port 8089) [DELETED]
+// pub mod messaging_repo; // REMOVED - moved to messaging-service (port 8085) [DELETED]
+// pub mod like_repo; // REMOVED - moved to content-service (port 8081) [DELETED]
+// pub mod oauth_repo; // REMOVED - moved to auth-service (port 8084) [DELETED]
+// pub mod password_reset_repo; // REMOVED - moved to auth-service (port 8084) [DELETED]
+// pub mod post_repo; // REMOVED - moved to content-service (port 8081) [DELETED]
 pub mod post_share_repo;
-pub mod trending_repo;
-pub mod upload_repo;
+// pub mod trending_repo; // REMOVED - moved to feed-service (port 8089) [DELETED]
+// pub mod upload_repo; // REMOVED - moved to media-service (port 8082) [DELETED]
 pub mod user_repo;
-pub mod video_repo;
+// pub mod video_repo; // REMOVED - moved to media-service (port 8082) [DELETED]
 pub mod webhook_repo;
 
 // NOTE: Messaging repository removed - use messaging-service API (port 8085)
@@ -37,7 +37,7 @@ pub async fn run_migrations(pool: &PgPool) -> Result<(), sqlx::migrate::MigrateE
         tracing::warn!("Failed to prepare legacy video migration marker: {}", e);
     }
 
-    let mut migrator = sqlx::migrate!("../migrations");
+    let mut migrator = sqlx::migrate!("./migrations");
     // 忽略数据库中已存在但本地缺失的迁移版本（用于对齐历史环境）
     migrator.set_ignore_missing(true);
     migrator.run(pool).await

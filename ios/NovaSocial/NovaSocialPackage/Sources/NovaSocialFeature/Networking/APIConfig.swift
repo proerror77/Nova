@@ -6,6 +6,7 @@ enum APIEnvironment: Sendable {
     case stagingLocal
     case stagingGitHub
     case stagingProxy
+    case stagingAWS
     case production
 
     var baseURL: String {
@@ -34,6 +35,12 @@ enum APIEnvironment: Sendable {
             #else
             return "http://localhost:3000"
             #endif
+        case .stagingAWS:
+            // AWS backend via port-forward
+            // You need to run: kubectl port-forward -n nova svc/content-service 8081:8081
+            // Note: kubectl port-forward binds to localhost, so both simulator and device use localhost
+            // Using content-service for posts/feed data
+            return "http://localhost:8081"
         case .production:
             return "https://api.nova.app"
         }
@@ -49,13 +56,15 @@ enum APIEnvironment: Sendable {
             return "Staging (GitHub - Remote)"
         case .stagingProxy:
             return "Staging (GitHub via Local Proxy)"
+        case .stagingAWS:
+            return "Staging (AWS via Port-Forward)"
         case .production:
             return "Production"
         }
     }
 
     var isLocalhost: Bool {
-        self == .development || self == .stagingLocal || self == .stagingProxy
+        self == .development || self == .stagingLocal || self == .stagingProxy || self == .stagingAWS
     }
 }
 
@@ -75,6 +84,8 @@ enum APIConfig {
                 return .stagingGitHub
             case "staging_proxy", "stagingproxy", "proxy":
                 return .stagingProxy
+            case "staging_aws", "stagingaws", "aws":
+                return .stagingAWS
             case "production", "prod":
                 return .production
             default:
@@ -84,8 +95,8 @@ enum APIConfig {
 
         // Default based on build configuration
         #if DEBUG
-        // In debug builds, default to proxy for accessing GitHub Staging in simulator
-        return .stagingProxy
+        // In debug builds, default to AWS staging for accessing real data
+        return .stagingAWS
         #else
         return .production
         #endif
@@ -98,7 +109,9 @@ enum APIConfig {
         if let token = ProcessInfo.processInfo.environment["API_TOKEN"] {
             return token
         }
-        return "demo_token_for_testing"
+        // Real JWT token from auth-service (registered user: iostest@nova.app)
+        // Expires: ~1 hour after generation (2025-11-03 21:33:03 UTC)
+        return "eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJzdWIiOiI0ZjI4YTQ3OC05ODUzLTRkZDgtYTE2Yy0xNDU4NjUwNGYwZTYiLCJpYXQiOjE3NjIyMTc5ODMsImV4cCI6MTc2MjIyMTU4MywidG9rZW5fdHlwZSI6ImFjY2VzcyIsImVtYWlsIjoiaW9zdGVzdEBub3ZhLmFwcCIsInVzZXJuYW1lIjoiaW9zdGVzdCJ9.evJyrE3mPg8RdhaK_RbVI6ftVWT6bYoL6-yjn8vWqbVkZtanBAsgszT4YtTjMlOZFsiCfeHeyrZvFlyCMSHjKFR3fblboxM_dRdFTBT1TwVAAVcprhAx7JLm00528JkWfwa_IbOjwoWNrJ0NFk8Y7Jly8qDB23sF-FMAE4MM4mVQQVSlbbxRnR43C5UTFz27ADxoi3Yrx6aB_oDUiR9qRZrCGlupA0-u-V8r6-BYuP9eeskj_gtxxFrXFpx2WtyiINOymenJCG6YVYGRFI9QpxWO_nThg6vAnIwS9g4WK6khnLRwETNzxaqL3Y-IxCoVIERnafxfsoATQ7_FE4qtcw"
     }()
 
     static let requestTimeout: TimeInterval = 10.0

@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: nova-messaging
+  labels:
+    environment: production
+    app: messaging-service

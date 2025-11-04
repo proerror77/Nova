@@ -1,0 +1,66 @@
+apiVersion: clickhouse.altinity.com/v1
+kind: ClickHouseInstallation
+metadata:
+  name: nova-ch
+  namespace: clickhouse
+spec:
+  configuration:
+    files:
+      users.d/nova.xml: |
+        <yandex>
+          <users>
+            <nova>
+              <password_sha256_hex>6700484bed513440d69da5d453592123145c31bbd61b5116b604eb94661036ef</password_sha256_hex>
+              <networks>
+                <!-- Restrict to VPC CIDR to avoid public access -->
+                <ip>10.0.0.0/8</ip>
+              </networks>
+              <profile>default</profile>
+              <quota>default</quota>
+            </nova>
+          </users>
+        </yandex>
+    clusters:
+      - name: single
+        layout:
+          shardsCount: 1
+          replicasCount: 1
+        templates:
+          podTemplate: ch-pod
+          serviceTemplate: ch-svc
+    users:
+      nova/password_sha256_hex: "6700484bed513440d69da5d453592123145c31bbd61b5116b604eb94661036ef"
+      nova/networks/ip:
+        - 10.0.0.0/8
+      nova/profile: default
+      nova/quota: default
+  templates:
+    podTemplates:
+      - name: ch-pod
+        spec:
+          containers:
+            - name: clickhouse
+              image: clickhouse/clickhouse-server:24.8
+              volumeMounts:
+                - name: data
+                  mountPath: /var/lib/clickhouse
+          volumes:
+            - name: data
+              persistentVolumeClaim:
+                claimName: nova-ch-data
+    serviceTemplates:
+      - name: ch-svc
+        # Use fixed prefix so ExternalName (nova/clickhouse) keeps working
+        generateName: clickhouse-nova-ch
+        metadata:
+          labels:
+            app: nova
+        spec:
+          type: ClusterIP
+          ports:
+            - name: http
+              port: 8123
+              targetPort: http
+            - name: tcp
+              port: 9000
+              targetPort: tcp

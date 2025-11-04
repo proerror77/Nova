@@ -3,9 +3,14 @@ name = "search-service"
 version = "0.1.0"
 edition = "2021"
 
+[[bin]]
+name = "search-service"
+path = "src/main.rs"
+
 [dependencies]
 # Web framework
-axum = { version = "0.8", features = ["macros"] }
+actix-web = { workspace = true }
+actix-rt = { workspace = true }
 tokio = { version = "1", features = ["full"] }
 
 # Database
@@ -27,12 +32,18 @@ redis = { version = "0.26", features = ["tokio-comp", "connection-manager"] }
 # Logging
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
+rdkafka = { workspace = true }
 
 # Hashing
 md5 = "0.7"
 
 # OpenAPI
 utoipa = { workspace = true }
+utoipa-swagger-ui = { version = "5", features = ["actix-web"] }
+elasticsearch = "8.19.0-alpha.1"
+url = "2"
+error-types = { path = "../libs/error-types" }
+actix-middleware = { path = "../libs/actix-middleware" }
 
 [profile.release]
 codegen-units = 1

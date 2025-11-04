@@ -1,11 +1,7 @@
 name: Deploy Docs to GitHub Pages
 
 on:
-  push:
-    branches: [ main ]
-    paths:
-      - 'docs/**'
-      - '.github/workflows/pages.yml'
+  # 临时禁用 - GitHub Actions 运行器分配失败
   workflow_dispatch:
 
 permissions:

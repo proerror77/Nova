@@ -1,3 +1,5 @@
+#![cfg(feature = "legacy_posts_tests")]
+
 /// Integration tests for POST endpoints (Phase 2)
 /// Tests get-post endpoint with comprehensive scenarios
 mod common;

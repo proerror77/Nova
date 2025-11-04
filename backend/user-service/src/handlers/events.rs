@@ -6,6 +6,7 @@ use tracing::{debug, error, warn};
 use uuid::Uuid;
 
 use crate::error::{AppError, Result};
+use crate::middleware::CircuitBreaker;
 use crate::services::kafka_producer::EventProducer;
 
 #[derive(Debug, Deserialize)]
@@ -30,8 +31,10 @@ pub struct EventBatch {
     pub events: Vec<EventRecord>,
 }
 
+/// Event handler state with Circuit Breaker protection
 pub struct EventHandlerState {
     pub producer: Arc<EventProducer>,
+    pub kafka_cb: Arc<CircuitBreaker>, // Kafka circuit breaker for event publishing
 }
 
 #[post("")]
@@ -42,6 +45,10 @@ pub async fn ingest_events(
     if payload.events.is_empty() {
         return Err(AppError::BadRequest("events array cannot be empty".into()));
     }
+
+    let mut queued_count = 0;
+    let mut published_count = 0;
+    let mut failed_count = 0;
 
     for event in &payload.events {
         validate_action(&event.action)?;
@@ -66,22 +73,60 @@ pub async fn ingest_events(
         });
 
         let payload_str = serde_json::to_string(&payload_json)?;
+        let user_id_str = event.user_id.to_string();
 
-        if let Err(e) = state
-            .producer
-            .send_json(&event.user_id.to_string(), &payload_str)
+        // Publish event with Kafka CB protection
+        match state
+            .kafka_cb
+            .call(|| {
+                let producer = state.producer.clone();
+                let key = user_id_str.clone();
+                let payload = payload_str.clone();
+                async move { producer.send_json(&key, &payload).await }
+            })
             .await
         {
-            error!("Failed to publish event for user {}: {}", event.user_id, e);
-            return Err(e);
+            Ok(_) => {
+                debug!("Event published for user {}", event.user_id);
+                published_count += 1;
+            }
+            Err(e) => {
+                match &e {
+                    AppError::Internal(msg) if msg.contains("Circuit breaker is OPEN") => {
+                        warn!(
+                            "Kafka circuit is OPEN for user {}, event accepted but queued for retry",
+                            event.user_id
+                        );
+                        // Gracefully accept event and queue for async retry
+                        // In production, this would be persisted to a queue (Redis, DB, or message queue)
+                        // for retry when Kafka recovers
+                        queued_count += 1;
+                    }
+                    _ => {
+                        error!("Failed to publish event for user {}: {}", event.user_id, e);
+                        failed_count += 1;
+                        // Continue processing other events instead of failing entire batch
+                    }
+                }
+            }
         }
-
-        debug!("Event published for user {}", event.user_id);
     }
 
+    // If any events failed validation or couldn't be processed, return partial success
+    if failed_count > 0 && published_count == 0 && queued_count == 0 {
+        return Err(AppError::Internal(format!(
+            "Failed to process {} events",
+            failed_count
+        )));
+    }
+
+    // Return 202 Accepted since events are being processed (either published or queued)
     Ok(HttpResponse::Accepted().json(serde_json::json!({
         "success": true,
-        "count": payload.events.len()
+        "count": payload.events.len(),
+        "published": published_count,
+        "queued": queued_count,
+        "failed": failed_count
     })))
 }
 

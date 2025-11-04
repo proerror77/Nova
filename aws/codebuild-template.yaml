@@ -1,0 +1,140 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Nova Project CodeBuild CI/CD Pipeline - Docker 镜像构建和 ECR 推送'
+
+Parameters:
+  GitHubRepo:
+    Type: String
+    Default: https://github.com/proerror77/Nova.git
+    Description: GitHub 仓库 URL
+
+  GitHubBranch:
+    Type: String
+    Default: main
+    Description: GitHub 分支名称
+
+Resources:
+  # CodeBuild 执行角色
+  CodeBuildServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: CodeBuildNovaECRRole
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: codebuild.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryPowerUser
+      Policies:
+        - PolicyName: CodeBuildLogsPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource:
+                  - !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/nova-ecr-build'
+                  - !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/nova-ecr-build:*'
+        - PolicyName: CodeBuildVPCPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ec2:CreateNetworkInterface
+                  - ec2:DescribeNetworkInterfaces
+                  - ec2:DeleteNetworkInterface
+                  - ec2:DescribeSubnets
+                  - ec2:DescribeSecurityGroups
+                  - ec2:DescribeDhcpOptions
+                  - ec2:CreateNetworkInterfacePermission
+                Resource: '*'
+        - PolicyName: CodeBuildECRPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ecr:CreateRepository
+                  - ecr:DescribeRepositories
+                Resource: !Sub 'arn:aws:ecr:${AWS::Region}:${AWS::AccountId}:repository/nova/*'
+
+  # CloudWatch 日志组
+  CodeBuildLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/codebuild/nova-ecr-build
+      RetentionInDays: 30
+
+  # CodeBuild 项目
+  NovaECRBuildProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: nova-ecr-build
+      Description: Nova 微服务 Docker 镜像构建和 ECR 推送
+      ServiceRole: !GetAtt CodeBuildServiceRole.Arn
+      Artifacts:
+        Type: NO_ARTIFACTS
+      Environment:
+        Type: LINUX_CONTAINER
+        ComputeType: BUILD_GENERAL1_LARGE
+        Image: aws/codebuild/standard:7.0
+        PrivilegedMode: true
+        EnvironmentVariables:
+          - Name: AWS_REGION
+            Value: ap-northeast-1
+          - Name: AWS_ACCOUNT_ID
+            Value: !Ref AWS::AccountId
+          - Name: ECR_REGISTRY_ALIAS
+            Value: nova
+          - Name: DOCKER_BUILDKIT
+            Value: '1'
+      Source:
+        Type: GITHUB
+        Location: !Ref GitHubRepo
+        GitCloneDepth: 1
+        BuildSpec: buildspec.yml
+      LogsConfig:
+        CloudWatchLogs:
+          Status: ENABLED
+          GroupName: !Ref CodeBuildLogGroup
+      Tags:
+        - Key: Project
+          Value: Nova
+        - Key: Component
+          Value: ECR-Build
+
+  # CodeBuild Webhook（可选 - GitHub 自动触发）
+  # 注意: 如果需要 webhook，需要先在 AWS Secrets Manager 中存储 GitHub token
+  # 命令: aws secretsmanager create-secret --name github-token --secret-string '{"token":"YOUR_PAT"}'
+  # 然后在此处启用 NovaECRBuildWebhook 资源
+
+Outputs:
+  CodeBuildProjectName:
+    Description: CodeBuild 项目名称
+    Value: !Ref NovaECRBuildProject
+    Export:
+      Name: !Sub '${AWS::StackName}-ProjectName'
+
+  CodeBuildProjectArn:
+    Description: CodeBuild 项目 ARN
+    Value: !GetAtt NovaECRBuildProject.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-ProjectArn'
+
+  CodeBuildServiceRoleArn:
+    Description: CodeBuild 执行角色 ARN
+    Value: !GetAtt CodeBuildServiceRole.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-ServiceRoleArn'
+
+  CloudWatchLogsGroupName:
+    Description: CloudWatch 日志组
+    Value: !Ref CodeBuildLogGroup
+    Export:
+      Name: !Sub '${AWS::StackName}-LogGroupName'

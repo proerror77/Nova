@@ -19,14 +19,21 @@ const MIG_0015: &str = include_str!("../migrations/0015_add_audio_message_suppor
 const MIG_0016: &str = include_str!("../migrations/0016_create_video_call_support.sql");
 const MIG_0017: &str = include_str!("../migrations/0017_create_notification_device_tokens.sql");
 const MIG_0018: &str = include_str!("../migrations/0018_add_message_forward_support.sql");
+const MIG_0019: &str = include_str!("../migrations/0019_create_conversation_counters.sql");
+const MIG_0020: &str = include_str!("../migrations/0020_remove_legacy_sequence_system.sql");
+const MIG_0021: &str = include_str!("../migrations/0021_create_notification_jobs.sql");
+const MIG_0022: &str = include_str!("../migrations/0022_notification_jobs_maintenance.sql");
 
 pub async fn run_all(db: &Pool<Postgres>) -> Result<(), sqlx::Error> {
     // Acquire global advisory lock to prevent concurrent migrations across services
-    let _ = sqlx::query("SELECT pg_advisory_lock(823746)").execute(db).await;
+    let _ = sqlx::query("SELECT pg_advisory_lock(823746)")
+        .execute(db)
+        .await;
     // Run sequentially; each migration may contain multiple statements
     let migrations = [
         MIG_0001, MIG_0002, MIG_0003, MIG_0004, MIG_0005, MIG_0006, MIG_0007, MIG_0008, MIG_0009,
         MIG_0010, MIG_0011, MIG_0012, MIG_0013, MIG_0014, MIG_0015, MIG_0016, MIG_0017, MIG_0018,
+        MIG_0019, MIG_0020, MIG_0021, MIG_0022,
     ];
 
     for (i, sql) in migrations.into_iter().enumerate() {
@@ -40,6 +47,8 @@ pub async fn run_all(db: &Pool<Postgres>) -> Result<(), sqlx::Error> {
         }
     }
     // Release advisory lock
-    let _ = sqlx::query("SELECT pg_advisory_unlock(823746)").execute(db).await;
+    let _ = sqlx::query("SELECT pg_advisory_unlock(823746)")
+        .execute(db)
+        .await;
     Ok(())
 }

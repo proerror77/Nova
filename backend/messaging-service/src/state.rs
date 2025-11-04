@@ -1,5 +1,9 @@
-use crate::{config::Config, services::push::ApnsPush, websocket::ConnectionRegistry};
-use redis::Client as RedisClient;
+use crate::{
+    config::Config,
+    redis_client::RedisClient,
+    services::{encryption::EncryptionService, key_exchange::KeyExchangeService, push::ApnsPush},
+    websocket::ConnectionRegistry,
+};
 use sqlx::{Pool, Postgres};
 use std::sync::Arc;
 
@@ -10,4 +14,6 @@ pub struct AppState {
     pub redis: RedisClient,
     pub config: Arc<Config>,
     pub apns: Option<Arc<ApnsPush>>,
+    pub encryption: Arc<EncryptionService>,
+    pub key_exchange_service: Option<Arc<KeyExchangeService>>,
 }

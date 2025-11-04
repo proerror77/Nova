@@ -4,8 +4,11 @@ import PhotosUI
 
 @MainActor
 final class CreatePostViewModel: ObservableObject {
+    // MARK: - Constants
+    static let maxImagesPerPost = 9
+
     // MARK: - Published Properties
-    @Published var selectedImage: UIImage?
+    @Published var selectedImages: [UIImage] = []
     @Published var caption = ""
     @Published var isUploading = false
     @Published var uploadProgress: Double = 0
@@ -18,7 +21,15 @@ final class CreatePostViewModel: ObservableObject {
 
     // MARK: - Computed Properties
     var canPost: Bool {
-        selectedImage != nil && !isUploading
+        !selectedImages.isEmpty && !isUploading
+    }
+
+    var canAddMoreImages: Bool {
+        selectedImages.count < Self.maxImagesPerPost
+    }
+
+    var imageCountDisplay: String {
+        "\(selectedImages.count)/\(Self.maxImagesPerPost)"
     }
 
     // MARK: - Initialization
@@ -29,8 +40,8 @@ final class CreatePostViewModel: ObservableObject {
     // MARK: - Public Methods
 
     func createPost() async -> Bool {
-        guard let image = selectedImage else {
-            showErrorMessage("Please select an image")
+        guard !selectedImages.isEmpty else {
+            showErrorMessage("Please select at least one image")
             return false
         }
 
@@ -39,38 +50,47 @@ final class CreatePostViewModel: ObservableObject {
         errorMessage = nil
 
         do {
-            // 1. Get upload URL
-            uploadProgress = 0.2
-            let uploadInfo = try await postRepository.getUploadURL(
-                contentType: "image/jpeg"
-            )
+            var uploadedImageIds: [String] = []
+            let totalImages = selectedImages.count
+            let progressPerImage = 0.8 / Double(totalImages)
 
-            // 2. Upload image
-            uploadProgress = 0.4
-            guard let imageData = image.jpegData(compressionQuality: 0.8) else {
-                throw NSError(domain: "ImageError", code: -1, userInfo: [
-                    NSLocalizedDescriptionKey: "Failed to convert image to data"
-                ])
+            // Upload each image
+            for (index, image) in selectedImages.enumerated() {
+                // 1. Get upload URL
+                let uploadInfo = try await postRepository.getUploadURL(
+                    contentType: "image/jpeg"
+                )
+
+                // 2. Upload image
+                guard let imageData = image.jpegData(compressionQuality: 0.8) else {
+                    throw NSError(domain: "ImageError", code: -1, userInfo: [
+                        NSLocalizedDescriptionKey: "Failed to convert image to data"
+                    ])
+                }
+
+                try await postRepository.uploadImage(
+                    data: imageData,
+                    to: uploadInfo.uploadUrl
+                )
+
+                uploadedImageIds.append(uploadInfo.fileKey)
+                uploadProgress = 0.2 + (Double(index + 1) * progressPerImage)
             }
 
-            try await postRepository.uploadImage(
-                data: imageData,
-                to: uploadInfo.uploadUrl
-            )
+            uploadProgress = 0.8
 
-            uploadProgress = 0.7
-
-            // 3. Create post
+            // 3. Create post with all images
             _ = try await postRepository.createPost(
-                fileKey: uploadInfo.fileKey,
-                caption: caption.isEmpty ? nil : caption
+                fileKey: uploadedImageIds.first ?? "",
+                caption: caption.isEmpty ? nil : caption,
+                imageIds: uploadedImageIds
             )
 
             uploadProgress = 1.0
             isUploading = false
 
             // Reset form
-            selectedImage = nil
+            selectedImages = []
             caption = ""
 
             return true
@@ -81,12 +101,23 @@ final class CreatePostViewModel: ObservableObject {
         }
     }
 
-    func selectImage(_ image: UIImage) {
-        selectedImage = image
+    func addImages(_ images: [UIImage]) {
+        let availableSlots = Self.maxImagesPerPost - selectedImages.count
+        let imagesToAdd = Array(images.prefix(availableSlots))
+        selectedImages.append(contentsOf: imagesToAdd)
+
+        if images.count > availableSlots {
+            showErrorMessage("Only \(availableSlots) more image(s) can be added (max \(Self.maxImagesPerPost) total)")
+        }
     }
 
-    func removeImage() {
-        selectedImage = nil
+    func removeImage(at index: Int) {
+        guard index >= 0 && index < selectedImages.count else { return }
+        selectedImages.remove(at: index)
+    }
+
+    func removeAllImages() {
+        selectedImages.removeAll()
     }
 
     func clearError() {

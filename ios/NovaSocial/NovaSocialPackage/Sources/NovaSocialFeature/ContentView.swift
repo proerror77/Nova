@@ -893,7 +893,7 @@ private struct FeedPostCell: View {
     let post: Post
     @State private var isLiked: Bool = false
     @State private var likeCount: Int = 0
-    private let interactionService = PostInteractionService()
+    // private let interactionService = PostInteractionService()
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -940,13 +940,11 @@ private struct FeedPostCell: View {
                 }
 
                 Button(action: {
-                    Task {
-                        try? await interactionService.sharePost(postId: post.id)
-                    }
+                    // Share functionality disabled temporarily
                 }) {
                     HStack(spacing: 4) {
                         Image(systemName: "arrowshape.turn.up.right")
-                        Text("\(interactionService.getShareCount(postId: post.id))")
+                        Text("0")
                             .font(.caption)
                     }
                 }
@@ -960,7 +958,7 @@ private struct FeedPostCell: View {
         .background(Color.gray.opacity(0.1))
         .cornerRadius(8)
         .onAppear {
-            isLiked = interactionService.isPostLiked(postId: post.id)
+            isLiked = post.isLiked
             likeCount = post.likeCount
         }
     }
@@ -968,12 +966,7 @@ private struct FeedPostCell: View {
     private func toggleLike() async {
         isLiked.toggle()
         likeCount += isLiked ? 1 : -1
-
-        if isLiked {
-            try? await interactionService.likePost(postId: post.id)
-        } else {
-            try? await interactionService.unlikePost(postId: post.id)
-        }
+        // API call disabled temporarily
     }
 }
 

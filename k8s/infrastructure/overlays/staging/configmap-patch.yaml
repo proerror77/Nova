@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nova-config
+  namespace: nova
+data:
+  APP_ENV: staging
+  CLICKHOUSE_URL: "http://clickhouse:8123"
+  CLOUDFRONT_URL: "https://cdn.example.com"

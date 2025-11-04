@@ -1,0 +1,73 @@
+name: Build One Service (Staging)
+
+on:
+  workflow_dispatch:
+    inputs:
+      service:
+        description: Service name (e.g., user-service)
+        required: true
+        type: choice
+        options:
+          - auth-service
+          - user-service
+          - content-service
+          - feed-service
+          - media-service
+          - messaging-service
+          - search-service
+          - streaming-service
+
+env:
+  AWS_REGION: ap-northeast-1
+  REGISTRY: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com
+  REGISTRY_ALIAS: nova
+
+jobs:
+  build-one:
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::025434362120:role/github-actions-role
+          aws-region: ${{ env.AWS_REGION }}
+          audience: sts.amazonaws.com
+          role-session-name: gha-build-one-${{ github.run_id }}
+          role-skip-session-tagging: true
+
+      - name: Login to ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Compute build context
+        run: |
+          svc='${{ inputs.service }}'
+          if [ "$svc" = "search-service" ]; then
+            echo "CONTEXT=./" >> $GITHUB_ENV
+          else
+            echo "CONTEXT=./" >> $GITHUB_ENV
+          fi
+          echo "Using context: ${CONTEXT}"
+
+      - name: Build and push ${{ inputs.service }}
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ env.CONTEXT }}
+          file: ./backend/${{ inputs.service }}/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.REGISTRY_ALIAS }}/${{ inputs.service }}:${{ github.sha }}
+            ${{ env.REGISTRY }}/${{ env.REGISTRY_ALIAS }}/${{ inputs.service }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
