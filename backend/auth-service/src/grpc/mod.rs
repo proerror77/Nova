@@ -5,6 +5,7 @@ use tonic::{Request, Response, Status};
 
 use crate::{
     nova::auth_service::auth_service_server::AuthService, nova::auth_service::*, AppState,
+    security::{hash_password, verify_password, generate_token_pair},
 };
 
 /// gRPC AuthService implementation
@@ -21,6 +22,149 @@ impl AuthServiceImpl {
 
 #[tonic::async_trait]
 impl AuthService for AuthServiceImpl {
+    /// User Registration: Create new account with email, username, password
+    /// Per 009-A spec: validates input, hashes password, creates user, returns JWT token
+    async fn register(
+        &self,
+        request: Request<RegisterRequest>,
+    ) -> Result<Response<RegisterResponse>, Status> {
+        let req = request.into_inner();
+
+        // Validate email format (basic check, full validation in 005-p1-input-validation)
+        if req.email.is_empty() || !req.email.contains('@') {
+            return Err(Status::invalid_argument("invalid_email_format"));
+        }
+
+        // Validate username (3-32 chars)
+        if req.username.len() < 3 || req.username.len() > 32 {
+            return Err(Status::invalid_argument("username_invalid_length"));
+        }
+
+        // Hash password (includes zxcvbn validation via 005)
+        let password_hash = hash_password(&req.password)
+            .map_err(|_| Status::invalid_argument("weak_password"))?;
+
+        // Check if email already exists
+        let email_exists = crate::db::users::email_exists(&self.state.db, &req.email)
+            .await
+            .map_err(|_| Status::internal("Failed to check email"))?;
+
+        if email_exists {
+            return Err(Status::already_exists("email_already_registered"));
+        }
+
+        // Create user in database
+        let user = crate::db::users::create_user(
+            &self.state.db,
+            &req.email,
+            &req.username,
+            &password_hash,
+        )
+        .await
+        .map_err(|_| Status::internal("Failed to create user"))?;
+
+        // Generate JWT token pair (access + refresh)
+        let token_response = generate_token_pair(user.id, &user.email, &user.username)
+            .map_err(|_| Status::internal("Failed to generate token"))?;
+
+        Ok(Response::new(RegisterResponse {
+            user_id: user.id.to_string(),
+            token: token_response.access_token,
+            refresh_token: token_response.refresh_token,
+            expires_in: token_response.expires_in as i64,
+        }))
+    }
+
+    /// User Login: Authenticate with email and password
+    /// Per 009-A spec: validates credentials, enforces 5-attempt lockout, returns JWT token
+    async fn login(
+        &self,
+        request: Request<LoginRequest>,
+    ) -> Result<Response<LoginResponse>, Status> {
+        let req = request.into_inner();
+
+        // Validate email format
+        if req.email.is_empty() || !req.email.contains('@') {
+            return Err(Status::invalid_argument("invalid_email_format"));
+        }
+
+        // Find user by email
+        let user = crate::db::users::find_by_email(&self.state.db, &req.email)
+            .await
+            .map_err(|_| Status::internal("Failed to find user"))?
+            .ok_or_else(|| Status::unauthenticated("invalid_credentials"))?;
+
+        // Check if account is locked
+        if user.is_locked() {
+            let locked_until = user
+                .locked_until
+                .map(|dt| dt.to_rfc3339())
+                .unwrap_or_default();
+            return Err(Status::permission_denied(format!(
+                "account_locked_until_{}",
+                locked_until
+            )));
+        }
+
+        // Verify password
+        verify_password(&req.password, &user.password_hash)
+            .map_err(|_| {
+                // Record failed attempt (fire-and-forget, don't block on errors)
+                let db = self.state.db.clone();
+                let user_id = user.id;
+                tokio::spawn(async move {
+                    let _ = crate::db::users::record_failed_login(&db, user_id, 5, 900).await;
+                });
+                Status::unauthenticated("invalid_credentials")
+            })?;
+
+        // Clear failed login attempts on success
+        let _ = crate::db::users::record_successful_login(&self.state.db, user.id).await;
+
+        // Generate JWT token pair
+        let token_response = generate_token_pair(user.id, &user.email, &user.username)
+            .map_err(|_| Status::internal("Failed to generate token"))?;
+
+        Ok(Response::new(LoginResponse {
+            user_id: user.id.to_string(),
+            token: token_response.access_token,
+            refresh_token: token_response.refresh_token,
+            expires_in: token_response.expires_in as i64,
+        }))
+    }
+
+    /// Token Refresh: Exchange refresh_token for new access_token
+    /// Per 009-A spec: validates refresh token, returns new access token
+    async fn refresh(
+        &self,
+        request: Request<RefreshTokenRequest>,
+    ) -> Result<Response<RefreshTokenResponse>, Status> {
+        let req = request.into_inner();
+
+        if req.refresh_token.is_empty() {
+            return Err(Status::unauthenticated("refresh_token_required"));
+        }
+
+        // Validate refresh token and extract claims
+        let token_data = crate::security::validate_token(&req.refresh_token)
+            .map_err(|_| Status::unauthenticated("refresh_token_invalid_or_expired"))?;
+
+        let claims = token_data.claims;
+
+        // Parse user_id UUID from claims.sub
+        let user_id = uuid::Uuid::parse_str(&claims.sub)
+            .map_err(|_| Status::internal("Invalid user_id in token"))?;
+
+        // Generate new access token with updated expiration
+        let token_response = generate_token_pair(user_id, &claims.email, &claims.username)
+            .map_err(|_| Status::internal("Failed to generate token"))?;
+
+        Ok(Response::new(RefreshTokenResponse {
+            token: token_response.access_token,
+            expires_in: token_response.expires_in as i64,
+        }))
+    }
+
     /// Get single user by ID
     /// Called by other services to retrieve user information
     async fn get_user(
