@@ -1,8 +1,12 @@
 name: Build & Push to AWS ECR
 
 on:
-  # 临时禁用 - GitHub Actions 运行器分配失败
   workflow_dispatch:
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/ecr-build-push.yml'
 
 env:
   AWS_REGION: ap-northeast-1
@@ -45,6 +49,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Configure AWS credentials
+        if: github.event_name != 'pull_request'
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::025434362120:role/github-actions-role
@@ -55,12 +60,14 @@ jobs:
           role-skip-session-tagging: true
 
       - name: Verify AWS credentials
+        if: github.event_name != 'pull_request'
         run: |
           aws sts get-caller-identity
           echo "AWS credentials configured successfully"
 
       - name: Login to Amazon ECR
         id: login-ecr
+        if: github.event_name != 'pull_request'
         uses: aws-actions/amazon-ecr-login@v2
 
       - name: Extract metadata
@@ -86,8 +93,8 @@ jobs:
           tags: |
             ${{ steps.meta.outputs.image }}
             ${{ github.event_name != 'pull_request' && steps.meta.outputs.image-latest || '' }}
-          cache-from: type=registry,ref=${{ env.ECR_REGISTRY }}/${{ env.REGISTRY_ALIAS }}/${{ matrix.service }}:buildcache
-          cache-to: type=registry,ref=${{ env.ECR_REGISTRY }}/${{ env.REGISTRY_ALIAS }}/${{ matrix.service }}:buildcache,mode=max
+          cache-from: ${{ github.event_name != 'pull_request' && format('type=registry,ref={0}/{1}/{2}:buildcache', env.ECR_REGISTRY, env.REGISTRY_ALIAS, matrix.service) || 'type=gha' }}
+          cache-to: ${{ github.event_name != 'pull_request' && format('type=registry,ref={0}/{1}/{2}:buildcache,mode=max', env.ECR_REGISTRY, env.REGISTRY_ALIAS, matrix.service) || 'type=gha,mode=max' }}
           build-args: |
             SERVICE_NAME=${{ matrix.service }}
 
