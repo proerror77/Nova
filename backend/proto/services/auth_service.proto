@@ -148,10 +148,74 @@ message RecordFailedLoginResponse {
 }
 
 // ============================================================================
+// User Registration (Phase 0 - 009-A: auth-register-login)
+// ============================================================================
+
+message RegisterRequest {
+  string email = 1;        // User email address (must be valid format)
+  string username = 2;     // User username (3-32 chars, alphanumeric + underscore)
+  string password = 3;     // User password (validated by zxcvbn score >= 3)
+}
+
+message RegisterResponse {
+  string user_id = 1;         // UUID of newly created user
+  string token = 2;           // JWT access token (RS256 signed, expires_in=3600s)
+  string refresh_token = 3;   // Refresh token (stateless or stored in sessions table)
+  int64 expires_in = 4;       // Seconds until access_token expires
+}
+
+// ============================================================================
+// User Login (Phase 0 - 009-A: auth-register-login)
+// ============================================================================
+
+message LoginRequest {
+  string email = 1;      // User email address
+  string password = 2;   // User password (plain text - validated against hash)
+}
+
+message LoginResponse {
+  string user_id = 1;         // UUID of authenticated user
+  string token = 2;           // JWT access token (RS256 signed, expires_in=3600s)
+  string refresh_token = 3;   // Refresh token
+  int64 expires_in = 4;       // Seconds until access_token expires
+}
+
+// ============================================================================
+// Token Refresh (Phase 0 - 009-A: auth-register-login)
+// ============================================================================
+
+message RefreshTokenRequest {
+  string refresh_token = 1;   // Refresh token (from previous login/register)
+}
+
+message RefreshTokenResponse {
+  string token = 1;           // New JWT access token (RS256 signed, expires_in=3600s)
+  int64 expires_in = 2;       // Seconds until new access_token expires
+}
+
+// ============================================================================
 // Auth Service Definition
 // ============================================================================
 
 service AuthService {
+  // User Registration: Create new account with email, username, password
+  // Returns: Status::Ok with token + user_id + expires_in
+  //          Status::InvalidArgument if email invalid or password weak
+  //          Status::AlreadyExists if email already registered
+  rpc Register(RegisterRequest) returns (RegisterResponse);
+
+  // User Login: Authenticate with email and password
+  // Returns: Status::Ok with token + user_id + expires_in
+  //          Status::InvalidArgument if email invalid
+  //          Status::Unauthenticated if password wrong (attempts < 5)
+  //          Status::PermissionDenied if account locked after 5 failed attempts
+  rpc Login(LoginRequest) returns (LoginResponse);
+
+  // Token Refresh: Exchange refresh_token for new access_token
+  // Returns: Status::Ok with new token + expires_in
+  //          Status::Unauthenticated if refresh_token expired or invalid
+  rpc Refresh(RefreshTokenRequest) returns (RefreshTokenResponse);
+
   // Get single user by ID
   rpc GetUser(GetUserRequest) returns (GetUserResponse);
 
