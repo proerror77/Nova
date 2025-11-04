@@ -121,6 +121,7 @@ jobs:
           fi
 
           chmod 600 ~/.kube/config
+          echo "::notice::kubeconfig_size_bytes=$(wc -c < ~/.kube/config)"
           kubectl version --client=true
           kubectl config get-contexts || true
 
