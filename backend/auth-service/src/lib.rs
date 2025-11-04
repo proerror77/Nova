@@ -21,6 +21,7 @@ pub mod db;
 pub mod error;
 pub mod grpc;
 pub mod handlers;
+pub mod metrics;
 pub mod models;
 pub mod security;
 pub mod services;
