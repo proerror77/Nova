@@ -96,7 +96,7 @@ jobs:
 
       # 优化: 增强缓存策略
       - name: Build and push ${{ matrix.service }}
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: ./backend/${{ matrix.service }}/Dockerfile

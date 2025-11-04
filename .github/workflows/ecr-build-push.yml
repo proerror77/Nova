@@ -77,7 +77,7 @@ jobs:
           echo "image-latest=${{ env.ECR_REGISTRY }}/${{ env.REGISTRY_ALIAS }}/${{ matrix.service }}:latest" >> $GITHUB_OUTPUT
 
       - name: Build and push Docker image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: ./backend/${{ matrix.service }}/Dockerfile

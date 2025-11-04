@@ -60,7 +60,7 @@ jobs:
           echo "Using context: ${CONTEXT}"
 
       - name: Build and push ${{ inputs.service }}
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: ${{ env.CONTEXT }}
           file: ./backend/${{ inputs.service }}/Dockerfile
