@@ -16,7 +16,7 @@ on:
 
 permissions:
   contents: read
-  id-token: read
+  id-token: write
 
 jobs:
   smoke-test:
@@ -26,6 +26,9 @@ jobs:
       (github.event_name != 'workflow_run') ||
       (github.event.workflow_run.conclusion == 'success')
     environment: staging
+    env:
+      AWS_REGION: ap-northeast-1
+      EKS_CLUSTER_NAME: nova-eks
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
@@ -59,32 +62,56 @@ jobs:
         with:
           version: "latest"
 
-      - name: Configure kubeconfig (v2)
+      - name: Configure AWS credentials (OIDC)
+        id: aws-creds
+        continue-on-error: true
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          audience: sts.amazonaws.com
+          role-session-name: gha-smoke-${{ github.run_id }}
+          role-skip-session-tagging: true
+
+      - name: Configure kubeconfig (v3 with AWS fallback)
         shell: bash
         env:
           KUBECONFIG_B64: ${{ secrets.STAGING_KUBE_CONFIG }}
           KUBECONFIG_RAW: ${{ secrets.STAGING_KUBE_CONFIG_RAW }}
+          AWS_REGION: ${{ env.AWS_REGION }}
+          EKS_CLUSTER_NAME: ${{ env.EKS_CLUSTER_NAME }}
         run: |
           set -euo pipefail
           mkdir -p ~/.kube
+          configured=""
           if [ -n "${KUBECONFIG_RAW:-}" ]; then
-            echo "::notice::decoder=raw v2"
+            echo "::notice::decoder=raw v3"
             printf "%s" "$KUBECONFIG_RAW" > ~/.kube/config
-          else
-            echo "::notice::decoder=robust v2 (openssl-fallback)"
-            # Normalize and validate base64 (strip whitespace/newlines/CRs)
+            configured="raw"
+          elif [ -n "${KUBECONFIG_B64:-}" ]; then
+            echo "::notice::decoder=robust v3 (openssl-fallback)"
             CLEAN=$(printf "%s" "$KUBECONFIG_B64" | tr -d '\r\n\t ')
-            if [ -z "$CLEAN" ]; then
-              echo "::error::STAGING_KUBE_CONFIG is empty after normalization"; exit 1; fi
-
-            # Try openssl first, fallback to base64 -d
+            if [ -z "$CLEAN" ]; then echo "::warning::Empty after normalization"; fi
             if command -v openssl >/dev/null 2>&1; then
               if ! printf "%s" "$CLEAN" | openssl base64 -d -A > ~/.kube/config 2>/dev/null; then
                 echo "::warning::openssl -d failed; trying coreutils base64 -d";
-                printf "%s" "$CLEAN" | base64 -d > ~/.kube/config
+                printf "%s" "$CLEAN" | base64 -d > ~/.kube/config || true
               fi
             else
-              printf "%s" "$CLEAN" | base64 -d > ~/.kube/config
+              printf "%s" "$CLEAN" | base64 -d > ~/.kube/config || true
+            fi
+            configured="base64"
+          else
+            echo "::notice::no secret provided; will try AWS fallback"
+          fi
+
+          # If config invalid, attempt AWS fallback using EKS
+          if ! grep -q "^apiVersion" ~/.kube/config 2>/dev/null; then
+            if [ "${{ steps.aws-creds.outcome }}" = "success" ] && command -v aws >/dev/null 2>&1; then
+              echo "::notice::attempting AWS EKS kubeconfig fallback (cluster=${EKS_CLUSTER_NAME}, region=${AWS_REGION})"
+              aws eks update-kubeconfig --name "${EKS_CLUSTER_NAME}" --region "${AWS_REGION}" --alias nova-staging
+            else
+              echo "::error::kubeconfig invalid and AWS creds not available for fallback."; exit 1
             fi
           fi
 
