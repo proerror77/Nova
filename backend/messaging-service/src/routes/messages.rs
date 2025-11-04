@@ -264,6 +264,29 @@ async fn prepare_content_payload(
     }
 }
 
+/// Validate audio message parameters
+/// - Duration must be between 1ms and 10 minutes (600000ms)
+/// - Codec must be one of the supported formats
+fn validate_audio_message(duration_ms: i64, audio_codec: &str) -> Result<(), AppError> {
+    // Validate audio duration (0 < duration <= 10 minutes)
+    if duration_ms == 0 || duration_ms > 600_000 {
+        return Err(crate::error::AppError::Config(
+            "Audio duration must be between 1 and 600000 milliseconds (10 minutes)".into(),
+        ));
+    }
+
+    // Validate audio codec
+    const VALID_CODECS: &[&str] = &["opus", "aac", "mp3", "wav", "flac", "ogg"];
+    if !VALID_CODECS.contains(&audio_codec) {
+        return Err(crate::error::AppError::Config(format!(
+            "Unsupported audio codec: {}. Supported: {:?}",
+            audio_codec, VALID_CODECS
+        )));
+    }
+
+    Ok(())
+}
+
 // ============================================================================
 
 pub async fn update_message(
@@ -740,21 +763,8 @@ pub async fn send_audio_message(
 
     member.can_send()?;
 
-    // Validate audio duration (0 < duration <= 10 minutes)
-    if body.duration_ms == 0 || body.duration_ms > 600_000 {
-        return Err(crate::error::AppError::Config(
-            "Audio duration must be between 1 and 600000 milliseconds (10 minutes)".into(),
-        ));
-    }
-
-    // Validate audio codec
-    let valid_codecs = vec!["opus", "aac", "mp3", "wav", "flac", "ogg"];
-    if !valid_codecs.contains(&body.audio_codec.as_str()) {
-        return Err(crate::error::AppError::Config(format!(
-            "Unsupported audio codec: {}. Supported: {:?}",
-            body.audio_codec, valid_codecs
-        )));
-    }
+    // Validate audio parameters (duration and codec)
+    validate_audio_message(body.duration_ms, &body.audio_codec)?;
 
     // Store the audio message
     let (msg_id, seq) = MessageService::send_audio_message_db(

@@ -123,6 +123,7 @@ dependencies = [
  "hex",
  "jsonwebtoken",
  "lazy_static",
+ "once_cell",
  "prometheus",
  "redis 0.25.4",
  "redis-utils",
@@ -1808,6 +1809,7 @@ dependencies = [
  "sha2",
  "sodiumoxide",
  "thiserror 1.0.69",
+ "tokio",
  "uuid 1.18.1",
 ]
 

@@ -9,6 +9,7 @@ use std::future::Future;
 use std::pin::Pin;
 use std::rc::Rc;
 use std::sync::Arc;
+use tokio::sync::Mutex;
 use uuid::Uuid;
 use crate::metrics::{JWT_CACHE_HIT, JWT_CACHE_MISS, JWT_REVOKED};
 
@@ -32,7 +33,7 @@ struct CachedClaims {
 /// Cache TTL: 10 minutes (standard JWT access token lifetime is 1 hour)
 /// Cache key: "jwt:validation:{token_hash}"
 pub struct JwtAuthMiddleware {
-    redis: Option<Arc<ConnectionManager>>,
+    redis: Option<Arc<Mutex<ConnectionManager>>>,
     cache_ttl_secs: usize,
 }
 
@@ -46,7 +47,7 @@ impl JwtAuthMiddleware {
     }
 
     /// Create middleware with Redis caching
-    pub fn with_cache(redis: Arc<ConnectionManager>, cache_ttl_secs: usize) -> Self {
+    pub fn with_cache(redis: Arc<Mutex<ConnectionManager>>, cache_ttl_secs: usize) -> Self {
         Self {
             redis: Some(redis),
             cache_ttl_secs,
@@ -83,7 +84,7 @@ where
 
 pub struct JwtAuthMiddlewareService<S> {
     service: Rc<S>,
-    redis: Option<Arc<ConnectionManager>>,
+    redis: Option<Arc<Mutex<ConnectionManager>>>,
     cache_ttl_secs: usize,
 }
 
@@ -125,7 +126,9 @@ where
 
             // Try to get cached claims from Redis (with double-check verification)
             let claims = if let Some(redis_conn) = &redis {
-                match redis_conn.get::<_, String>(&cache_key).await {
+                // Get exclusive access to the connection from the mutex
+                let mut conn = redis_conn.lock().await;
+                match conn.get::<_, String>(&cache_key).await {
                     Ok(cached_json) => {
                         match serde_json::from_str::<CachedClaims>(&cached_json) {
                             Ok(cached_claims) => {
@@ -225,7 +228,7 @@ async fn validate_token_directly(token: &str) -> Result<CachedClaims, actix_web:
 /// Validate token and cache the result in Redis
 async fn validate_and_cache_token(
     token: &str,
-    redis: &ConnectionManager,
+    redis: &Arc<Mutex<ConnectionManager>>,
     cache_key: &str,
     cache_ttl_secs: usize,
 ) -> Result<CachedClaims, actix_web::Error> {
@@ -251,8 +254,9 @@ async fn validate_and_cache_token(
     let redis_clone = redis.clone();
     let cache_key = cache_key.to_string();
     tokio::spawn(async move {
+        let mut conn = redis_clone.lock().await.clone();
         let _result: Result<(), redis::RedisError> =
-            redis_clone.set_ex(&cache_key, cached_json, cache_ttl_secs).await;
+            conn.set_ex(&cache_key, cached_json, cache_ttl_secs as u64).await;
         if let Err(e) = _result {
             tracing::warn!("Failed to cache JWT validation: {}", e);
         }
@@ -262,11 +266,12 @@ async fn validate_and_cache_token(
 }
 
 /// Check whether token is revoked via revocation store (Redis or DB-backed cache)
-async fn is_token_revoked(redis: &ConnectionManager, token: &str) -> Result<bool, actix_web::Error> {
+async fn is_token_revoked(redis: &Arc<Mutex<ConnectionManager>>, token: &str) -> Result<bool, actix_web::Error> {
     // Compute jti hash key when available; fallback to token hash
     let token_hash = crypto_core::hash::sha256(token.as_bytes());
     let key = format!("jwt:revoked:{}", hex::encode(token_hash));
-    match redis.exists::<_, bool>(&key).await {
+
+    match redis.lock().await.exists::<_, bool>(&key).await {
         Ok(exists) => Ok(exists),
         Err(e) => {
             tracing::warn!("revocation check failed: {}", e);

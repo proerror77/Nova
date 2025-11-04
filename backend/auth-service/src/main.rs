@@ -53,8 +53,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Spawn metrics updater for outbox backlog gauge
     crate::metrics::spawn_metrics_updater(db_pool.clone());
 
-    // Initialize JWT keys from shared crypto-core library
-    crypto_core::jwt::initialize_jwt_keys(&config.jwt_private_key_pem, &config.jwt_public_key_pem)
+    // Initialize JWT keys from environment variables (with file fallback support)
+    // Use shared crypto-core helpers for consistent key loading across services
+    let (private_key, public_key) = crypto_core::jwt::load_signing_keys()
+        .map_err(|e| format!("Failed to load JWT keys from environment: {}", e))?;
+
+    crypto_core::jwt::initialize_jwt_keys(&private_key, &public_key)
         .map_err(|e| format!("Failed to initialize JWT keys: {}", e))?;
 
     tracing::info!("JWT keys initialized");
