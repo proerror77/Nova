@@ -25,6 +25,7 @@
 use actix_web::{
     dev::{forward_ready, Service, ServiceRequest, ServiceResponse, Transform},
     Error, HttpMessage,
+    http::header::{HeaderName, HeaderValue},
 };
 use futures::future::LocalBoxFuture;
 use std::future::{ready, Ready};
@@ -79,16 +80,20 @@ where
         // Store in request extensions for handler access
         req.extensions_mut().insert(correlation_id.clone());
 
-        // Set response header
+        // Call inner service to get the response
         let fut = self.service.call(req);
 
         Box::pin(async move {
-            let res = fut.await?;
-            let mut response = res.into_response();
-            response
-                .headers_mut()
-                .insert("x-correlation-id", correlation_id.parse().unwrap());
-            Ok(ServiceResponse::new(response.into(), response))
+            let mut res = fut.await?;
+
+            // Add correlation ID header to response
+            // Parse header name and value with proper error handling
+            let header_name = HeaderName::from_static("x-correlation-id");
+            let header_value = HeaderValue::from_str(&correlation_id)
+                .expect("correlation_id should be valid header value");
+
+            res.headers_mut().insert(header_name, header_value);
+            Ok(res)
         })
     }
 }

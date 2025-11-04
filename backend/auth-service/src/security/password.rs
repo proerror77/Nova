@@ -63,14 +63,16 @@ mod tests {
     #[test]
     fn test_hash_and_verify() {
         let password = "SecurePass123!";
-        let hash = hash_password(password).unwrap();
+        let hash = hash_password(password)
+            .expect("password hashing should succeed with valid input");
         assert!(verify_password(password, &hash).is_ok());
     }
 
     #[test]
     fn test_wrong_password() {
         let password = "SecurePass123!";
-        let hash = hash_password(password).unwrap();
+        let hash = hash_password(password)
+            .expect("password hashing should succeed with valid input");
         assert!(verify_password("WrongPass123!", &hash).is_err());
     }
 

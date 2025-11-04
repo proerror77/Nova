@@ -7,8 +7,6 @@ pub struct Config {
     pub server_port: u16,
     pub database_url: String,
     pub redis_url: String,
-    pub jwt_private_key_pem: String,
-    pub jwt_public_key_pem: String,
     #[serde(default)]
     pub oauth_providers: Option<OAuthConfig>,
 }

@@ -54,24 +54,13 @@ async fn main() -> Result<(), error::AppError> {
     messaging_service::migrations::run_all(&db).await
         .map_err(|e| error::AppError::StartServer(format!("database migrations failed: {}", e)))?;
 
-    // Initialize JWT validation (support reading from file)
-    if let Ok(path) = std::env::var("JWT_PUBLIC_KEY_FILE") {
-        tracing::info!(jwt_public_key_file=%path, "JWT public key file env detected");
-    } else {
-        tracing::info!("JWT_PUBLIC_KEY_FILE not set");
-    }
+    // Initialize JWT validation using unified crypto-core helpers
+    // Supports both JWT_PUBLIC_KEY_PEM and JWT_PUBLIC_KEY_FILE environment variables
+    let public_key = core_jwt::load_validation_key()
+        .map_err(|e| error::AppError::StartServer(format!("Failed to load JWT public key: {e}")))?;
 
-    let public_key = match std::env::var("JWT_PUBLIC_KEY_PEM") {
-        Ok(pem) => pem,
-        Err(_) => {
-            let path = std::env::var("JWT_PUBLIC_KEY_FILE")
-                .map_err(|_| error::AppError::StartServer("JWT_PUBLIC_KEY_PEM missing".into()))?;
-            std::fs::read_to_string(path)
-                .map_err(|e| error::AppError::StartServer(format!("read jwt pubkey file: {e}")))?
-        }
-    };
     core_jwt::initialize_jwt_validation_only(&public_key)
-        .map_err(|e| error::AppError::StartServer(format!("init jwt: {e}")))?;
+        .map_err(|e| error::AppError::StartServer(format!("Failed to initialize JWT validation: {e}")))?;
 
     let apns_client = match cfg.apns.as_ref() {
         Some(apns_cfg) => match ApnsPush::new(apns_cfg) {
