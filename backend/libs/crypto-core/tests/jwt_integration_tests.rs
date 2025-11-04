@@ -5,7 +5,6 @@
 /// - Token expiration handling
 /// - Claims extraction
 /// - Error handling for invalid tokens
-
 use crypto_core::jwt::{
     generate_access_token, generate_refresh_token, generate_token_pair, initialize_jwt_keys,
     is_token_expired, validate_token,
@@ -77,7 +76,11 @@ fn test_generate_access_token_success() {
     assert!(result.is_ok(), "Should generate access token successfully");
     let token = result.unwrap();
     assert!(!token.is_empty(), "Token should not be empty");
-    assert_eq!(token.matches('.').count(), 2, "JWT should have 3 parts separated by dots");
+    assert_eq!(
+        token.matches('.').count(),
+        2,
+        "JWT should have 3 parts separated by dots"
+    );
 }
 
 #[test]
@@ -90,7 +93,11 @@ fn test_generate_refresh_token_success() {
     assert!(result.is_ok(), "Should generate refresh token successfully");
     let token = result.unwrap();
     assert!(!token.is_empty(), "Token should not be empty");
-    assert_eq!(token.matches('.').count(), 2, "JWT should have 3 parts separated by dots");
+    assert_eq!(
+        token.matches('.').count(),
+        2,
+        "JWT should have 3 parts separated by dots"
+    );
 }
 
 #[test]
@@ -102,8 +109,14 @@ fn test_generate_token_pair_success() {
 
     assert!(result.is_ok(), "Should generate token pair successfully");
     let tokens = result.unwrap();
-    assert!(!tokens.access_token.is_empty(), "Access token should not be empty");
-    assert!(!tokens.refresh_token.is_empty(), "Refresh token should not be empty");
+    assert!(
+        !tokens.access_token.is_empty(),
+        "Access token should not be empty"
+    );
+    assert!(
+        !tokens.refresh_token.is_empty(),
+        "Refresh token should not be empty"
+    );
     assert_eq!(tokens.token_type, "Bearer", "Token type should be Bearer");
 }
 
@@ -120,7 +133,10 @@ fn test_validate_valid_token() {
         .expect("Failed to generate token");
 
     let validation = validate_token(&token);
-    assert!(validation.is_ok(), "Should validate valid token successfully");
+    assert!(
+        validation.is_ok(),
+        "Should validate valid token successfully"
+    );
 
     let token_data = validation.unwrap();
     assert_eq!(token_data.claims.sub, user_id.to_string());
@@ -155,17 +171,15 @@ fn test_validate_tampered_token() {
 fn test_validate_malformed_token() {
     init_test_keys();
 
-    let malformed_tokens = vec![
-        "invalid",
-        "two.parts",
-        "",
-        "...",
-        "invalid!@#$.token",
-    ];
+    let malformed_tokens = vec!["invalid", "two.parts", "", "...", "invalid!@#$.token"];
 
     for malformed in malformed_tokens {
         let result = validate_token(malformed);
-        assert!(result.is_err(), "Should reject malformed token: {}", malformed);
+        assert!(
+            result.is_err(),
+            "Should reject malformed token: {}",
+            malformed
+        );
     }
 }
 
@@ -183,7 +197,10 @@ fn test_newly_generated_token_not_expired() {
 
     let is_expired = is_token_expired(&token);
     assert!(is_expired.is_ok(), "Should successfully check expiration");
-    assert!(!is_expired.unwrap(), "Newly generated token should not be expired");
+    assert!(
+        !is_expired.unwrap(),
+        "Newly generated token should not be expired"
+    );
 }
 
 // ============================================================================
@@ -198,8 +215,7 @@ fn test_extract_claims_from_valid_token() {
     let email = "user@example.com";
     let username = "john_doe";
 
-    let token = generate_access_token(user_id, email, username)
-        .expect("Failed to generate token");
+    let token = generate_access_token(user_id, email, username).expect("Failed to generate token");
 
     let token_data = validate_token(&token).expect("Failed to validate token");
 
@@ -216,10 +232,10 @@ fn test_refresh_token_has_longer_expiry() {
     let email = "test@example.com";
     let username = "testuser";
 
-    let access = generate_access_token(user_id, email, username)
-        .expect("Failed to generate access token");
-    let refresh = generate_refresh_token(user_id, email, username)
-        .expect("Failed to generate refresh token");
+    let access =
+        generate_access_token(user_id, email, username).expect("Failed to generate access token");
+    let refresh =
+        generate_refresh_token(user_id, email, username).expect("Failed to generate refresh token");
 
     let access_claims = validate_token(&access).unwrap().claims;
     let refresh_claims = validate_token(&refresh).unwrap().claims;
@@ -267,18 +283,18 @@ fn test_complete_token_lifecycle() {
     let username = "integration_user";
 
     // 1. Generate token pair
-    let token_pair = generate_token_pair(user_id, email, username)
-        .expect("Failed to generate token pair");
+    let token_pair =
+        generate_token_pair(user_id, email, username).expect("Failed to generate token pair");
 
     // 2. Validate access token
-    let access_data = validate_token(&token_pair.access_token)
-        .expect("Failed to validate access token");
+    let access_data =
+        validate_token(&token_pair.access_token).expect("Failed to validate access token");
     assert_eq!(access_data.claims.sub, user_id.to_string());
     assert_eq!(access_data.claims.email, email);
 
     // 3. Validate refresh token
-    let refresh_data = validate_token(&token_pair.refresh_token)
-        .expect("Failed to validate refresh token");
+    let refresh_data =
+        validate_token(&token_pair.refresh_token).expect("Failed to validate refresh token");
     assert_eq!(refresh_data.claims.sub, user_id.to_string());
 
     // 4. Check neither is expired

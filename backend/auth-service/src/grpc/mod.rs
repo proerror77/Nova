@@ -2,12 +2,9 @@
 /// Based on Phase 0 proto definitions (nova.auth_service)
 /// This is a core foundational service that provides user identity and authentication
 use tonic::{Request, Response, Status};
-use uuid::Uuid;
 
 use crate::{
-    nova::auth_service::auth_service_server::AuthService,
-    nova::auth_service::*,
-    AppState,
+    nova::auth_service::auth_service_server::AuthService, nova::auth_service::*, AppState,
 };
 
 /// gRPC AuthService implementation
@@ -42,19 +39,25 @@ impl AuthService for AuthServiceImpl {
         .map_err(|e| Status::internal(format!("Database error: {}", e)))?;
 
         match query_result {
-            Some((id, email, username, created_at, is_active, failed_login_attempts, locked_until)) => {
-                Ok(Response::new(GetUserResponse {
-                    user: Some(User {
-                        id,
-                        email,
-                        username,
-                        created_at,
-                        is_active,
-                        failed_login_attempts,
-                        locked_until: locked_until.unwrap_or_default(),
-                    }),
-                }))
-            }
+            Some((
+                id,
+                email,
+                username,
+                created_at,
+                is_active,
+                failed_login_attempts,
+                locked_until,
+            )) => Ok(Response::new(GetUserResponse {
+                user: Some(User {
+                    id,
+                    email,
+                    username,
+                    created_at,
+                    is_active,
+                    failed_login_attempts,
+                    locked_until: locked_until.unwrap_or_default(),
+                }),
+            })),
             None => Err(Status::not_found("User not found")),
         }
     }
@@ -82,15 +85,25 @@ impl AuthService for AuthServiceImpl {
 
         let users = query_result
             .into_iter()
-            .map(|(id, email, username, created_at, is_active, failed_login_attempts, locked_until)| User {
-                id,
-                email,
-                username,
-                created_at,
-                is_active,
-                failed_login_attempts,
-                locked_until: locked_until.unwrap_or_default(),
-            })
+            .map(
+                |(
+                    id,
+                    email,
+                    username,
+                    created_at,
+                    is_active,
+                    failed_login_attempts,
+                    locked_until,
+                )| User {
+                    id,
+                    email,
+                    username,
+                    created_at,
+                    is_active,
+                    failed_login_attempts,
+                    locked_until: locked_until.unwrap_or_default(),
+                },
+            )
             .collect();
 
         Ok(Response::new(GetUsersByIdsResponse { users }))
@@ -115,16 +128,14 @@ impl AuthService for AuthServiceImpl {
                     is_revoked: false,
                 }))
             }
-            Err(_e) => {
-                Ok(Response::new(VerifyTokenResponse {
-                    is_valid: false,
-                    user_id: String::new(),
-                    email: String::new(),
-                    username: String::new(),
-                    expires_at: 0,
-                    is_revoked: false,
-                }))
-            }
+            Err(_e) => Ok(Response::new(VerifyTokenResponse {
+                is_valid: false,
+                user_id: String::new(),
+                email: String::new(),
+                username: String::new(),
+                expires_at: 0,
+                is_revoked: false,
+            })),
         }
     }
 
@@ -137,7 +148,7 @@ impl AuthService for AuthServiceImpl {
         let req = request.into_inner();
 
         let exists = sqlx::query_scalar::<_, bool>(
-            "SELECT EXISTS(SELECT 1 FROM users WHERE id = $1 AND deleted_at IS NULL)"
+            "SELECT EXISTS(SELECT 1 FROM users WHERE id = $1 AND deleted_at IS NULL)",
         )
         .bind(req.user_id)
         .fetch_one(&self.state.db)
@@ -168,19 +179,25 @@ impl AuthService for AuthServiceImpl {
         .map_err(|e| Status::internal(format!("Database error: {}", e)))?;
 
         match query_result {
-            Some((id, email, username, created_at, is_active, failed_login_attempts, locked_until)) => {
-                Ok(Response::new(GetUserByEmailResponse {
-                    user: Some(User {
-                        id,
-                        email,
-                        username,
-                        created_at,
-                        is_active,
-                        failed_login_attempts,
-                        locked_until: locked_until.unwrap_or_default(),
-                    }),
-                }))
-            }
+            Some((
+                id,
+                email,
+                username,
+                created_at,
+                is_active,
+                failed_login_attempts,
+                locked_until,
+            )) => Ok(Response::new(GetUserByEmailResponse {
+                user: Some(User {
+                    id,
+                    email,
+                    username,
+                    created_at,
+                    is_active,
+                    failed_login_attempts,
+                    locked_until: locked_until.unwrap_or_default(),
+                }),
+            })),
             None => Ok(Response::new(GetUserByEmailResponse { user: None })),
         }
     }
@@ -196,12 +213,11 @@ impl AuthService for AuthServiceImpl {
         let limit = (req.limit as i64).min(100).max(1);
         let offset = (req.offset as i64).max(0);
 
-        let total = sqlx::query_scalar::<_, i64>(
-            "SELECT COUNT(*) FROM users WHERE deleted_at IS NULL"
-        )
-        .fetch_one(&self.state.db)
-        .await
-        .map_err(|e| Status::internal(format!("Database error: {}", e)))?;
+        let total =
+            sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM users WHERE deleted_at IS NULL")
+                .fetch_one(&self.state.db)
+                .await
+                .map_err(|e| Status::internal(format!("Database error: {}", e)))?;
 
         let query_result = sqlx::query_as::<_, (String, String, String, String, bool, i32, Option<String>)>(
             "SELECT id, email, username, created_at, is_active, failed_login_attempts, locked_until FROM users WHERE deleted_at IS NULL ORDER BY created_at DESC LIMIT $1 OFFSET $2"
@@ -214,15 +230,25 @@ impl AuthService for AuthServiceImpl {
 
         let users = query_result
             .into_iter()
-            .map(|(id, email, username, created_at, is_active, failed_login_attempts, locked_until)| User {
-                id,
-                email,
-                username,
-                created_at,
-                is_active,
-                failed_login_attempts,
-                locked_until: locked_until.unwrap_or_default(),
-            })
+            .map(
+                |(
+                    id,
+                    email,
+                    username,
+                    created_at,
+                    is_active,
+                    failed_login_attempts,
+                    locked_until,
+                )| User {
+                    id,
+                    email,
+                    username,
+                    created_at,
+                    is_active,
+                    failed_login_attempts,
+                    locked_until: locked_until.unwrap_or_default(),
+                },
+            )
             .collect();
 
         Ok(Response::new(ListUsersResponse {
@@ -240,12 +266,14 @@ impl AuthService for AuthServiceImpl {
         let req = request.into_inner();
 
         if req.user_id.is_empty() || req.permission.is_empty() {
-            return Err(Status::invalid_argument("user_id and permission must not be empty"));
+            return Err(Status::invalid_argument(
+                "user_id and permission must not be empty",
+            ));
         }
 
         // Check if user has permission via user_permissions table
         let has_permission = sqlx::query_scalar::<_, bool>(
-            "SELECT EXISTS(SELECT 1 FROM user_permissions WHERE user_id = $1 AND permission = $2)"
+            "SELECT EXISTS(SELECT 1 FROM user_permissions WHERE user_id = $1 AND permission = $2)",
         )
         .bind(&req.user_id)
         .bind(&req.permission)
@@ -269,7 +297,7 @@ impl AuthService for AuthServiceImpl {
         }
 
         let permissions = sqlx::query_scalar::<_, String>(
-            "SELECT permission FROM user_permissions WHERE user_id = $1 ORDER BY permission"
+            "SELECT permission FROM user_permissions WHERE user_id = $1 ORDER BY permission",
         )
         .bind(&req.user_id)
         .fetch_all(&self.state.db)
@@ -278,7 +306,10 @@ impl AuthService for AuthServiceImpl {
 
         // TODO: fetch roles from user_roles table if present; fallback empty
         let roles: Vec<String> = Vec::new();
-        Ok(Response::new(GetUserPermissionsResponse { permissions, roles }))
+        Ok(Response::new(GetUserPermissionsResponse {
+            permissions,
+            roles,
+        }))
     }
 
     /// Record a failed login attempt (for rate limiting)
@@ -294,8 +325,16 @@ impl AuthService for AuthServiceImpl {
         }
 
         // Configurable max attempts and lock duration
-        let max_attempts: i32 = if req.max_attempts > 0 { req.max_attempts } else { 5 };
-        let lock_secs: i64 = if req.lock_duration_secs > 0 { req.lock_duration_secs as i64 } else { 900 };
+        let max_attempts: i32 = if req.max_attempts > 0 {
+            req.max_attempts
+        } else {
+            5
+        };
+        let lock_secs: i64 = if req.lock_duration_secs > 0 {
+            req.lock_duration_secs as i64
+        } else {
+            900
+        };
 
         let (failed_attempts, is_locked, locked_until): (i32, bool, String) = sqlx::query_as(
             r#"
@@ -311,7 +350,7 @@ impl AuthService for AuthServiceImpl {
                 failed_login_attempts,
                 (locked_until IS NOT NULL AND locked_until > CURRENT_TIMESTAMP) AS is_locked,
                 COALESCE(TO_CHAR(locked_until, 'YYYY-MM-DD"T"HH24:MI:SSOF')::text, '')
-            "#
+            "#,
         )
         .bind(&req.user_id)
         .bind(max_attempts)
@@ -320,6 +359,10 @@ impl AuthService for AuthServiceImpl {
         .await
         .map_err(|e| Status::internal(format!("Database error: {}", e)))?;
 
-        Ok(Response::new(RecordFailedLoginResponse { failed_attempts, is_locked, locked_until }))
+        Ok(Response::new(RecordFailedLoginResponse {
+            failed_attempts,
+            is_locked,
+            locked_until,
+        }))
     }
 }

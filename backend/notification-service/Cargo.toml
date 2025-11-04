@@ -48,6 +48,7 @@ prost.workspace = true
 
 # Shared libraries
 error-types = { path = "../libs/error-types" }
+db-pool = { path = "../libs/db-pool" }
 nova-fcm-shared = { path = "../libs/nova-fcm-shared" }
 nova-apns-shared = { path = "../libs/nova-apns-shared" }
 

@@ -43,6 +43,33 @@ As a user, when a downstream service fails, my request returns partial/cached da
 
 ---
 
+## Observability Requirements *(mandatory - per Constitution Principle VI)*
+
+### Prometheus Metrics
+
+- `circuit_breaker_state_transitions_total` — Counter by state (closed→open, open→half-open, half-open→closed)
+- `circuit_breaker_failures_total` — Counter of failures triggering breaker open
+- `fallback_requests_total` — Counter of requests served via fallback path
+- `fallback_latency_seconds` — Histogram of fallback path latency
+- `circuit_breaker_probe_attempts_total` — Counter of half-open probe attempts
+
+### Distributed Tracing (OpenTelemetry)
+
+- Trace all cross-service gRPC calls with spans for:
+  - `circuit_breaker_check` — Check breaker state
+  - `primary_request` — Primary service call (if closed)
+  - `fallback_execution` — Fallback path execution (if open)
+  - `probe_attempt` — Half-open probe attempt
+
+### Logging
+
+- Structured logs for:
+  - State transitions (from_state, to_state, reason)
+  - Fallback execution (service_name, reason, data_source)
+  - Failure threshold breaches (failure_count, threshold)
+
+---
+
 ## Timeline Estimate
 
 - ~3-4 days (depends on 006 for Kafka/Redis integration tests)

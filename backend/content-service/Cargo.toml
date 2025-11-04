@@ -56,6 +56,7 @@ utoipa-swagger-ui = { version = "5", features = ["actix-web"] }
 crypto-core = { path = "../libs/crypto-core" }
 error-types = { path = "../libs/error-types" }
 redis-utils = { path = "../libs/redis-utils" }
+db-pool = { path = "../libs/db-pool" }
 
 # Service-specific dependencies
 futures = "0.3"

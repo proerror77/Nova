@@ -249,9 +249,7 @@ impl ContentService for ContentServiceImpl {
         let req = request.into_inner();
 
         if req.post_ids.is_empty() {
-            return Ok(Response::new(GetPostsByIdsResponse {
-                posts: vec![],
-            }));
+            return Ok(Response::new(GetPostsByIdsResponse { posts: vec![] }));
         }
 
         tracing::info!("gRPC: Getting {} posts by IDs", req.post_ids.len());
@@ -278,14 +276,9 @@ impl ContentService for ContentServiceImpl {
                 Status::internal("Failed to fetch posts")
             })?;
 
-        let proto_posts = posts
-            .iter()
-            .map(|p| convert_post_to_proto(p))
-            .collect();
+        let proto_posts = posts.iter().map(|p| convert_post_to_proto(p)).collect();
 
-        Ok(Response::new(GetPostsByIdsResponse {
-            posts: proto_posts,
-        }))
+        Ok(Response::new(GetPostsByIdsResponse { posts: proto_posts }))
     }
 
     /// Get posts by author with pagination
@@ -363,10 +356,7 @@ impl ContentService for ContentServiceImpl {
             Status::internal("Failed to count posts")
         })?;
 
-        let proto_posts = posts
-            .iter()
-            .map(|p| convert_post_to_proto(p))
-            .collect();
+        let proto_posts = posts.iter().map(|p| convert_post_to_proto(p)).collect();
 
         let total_count = i32::try_from(total).unwrap_or_else(|_| {
             tracing::warn!("Post count exceeded i32::MAX: {}", total);
@@ -399,7 +389,11 @@ impl ContentService for ContentServiceImpl {
         })?;
 
         // Update the post with only non-empty fields
-        let update_query = if req.title.is_empty() && req.content.is_empty() && req.privacy.is_empty() && req.status.is_empty() {
+        let update_query = if req.title.is_empty()
+            && req.content.is_empty()
+            && req.privacy.is_empty()
+            && req.status.is_empty()
+        {
             // No fields to update
             sqlx::query("SELECT id FROM posts WHERE id = $1 AND deleted_at IS NULL")
                 .bind(post_id)
@@ -440,8 +434,7 @@ impl ContentService for ContentServiceImpl {
                 update_clause
             );
 
-            let mut query = sqlx::query_as::<_, Post>(&query_str)
-                .bind(post_id);
+            let mut query = sqlx::query_as::<_, Post>(&query_str).bind(post_id);
 
             for binding in bindings {
                 query = query.bind(binding);
@@ -452,9 +445,7 @@ impl ContentService for ContentServiceImpl {
                 Status::internal("Failed to update post")
             })?;
 
-            sqlx::query("SELECT 1")
-                .execute(&mut *tx)
-                .await
+            sqlx::query("SELECT 1").execute(&mut *tx).await
         };
 
         match update_query {
@@ -470,13 +461,12 @@ impl ContentService for ContentServiceImpl {
                 tracing::debug!("Invalidated cache for post {} after update", post_id);
 
                 // Fetch the updated post
-                let post_service = PostService::with_cache(self.db_pool.clone(), self.cache.clone());
+                let post_service =
+                    PostService::with_cache(self.db_pool.clone(), self.cache.clone());
                 match post_service.get_post(post_id).await {
-                    Ok(Some(post)) => {
-                        Ok(Response::new(UpdatePostResponse {
-                            post: Some(convert_post_to_proto(&post)),
-                        }))
-                    }
+                    Ok(Some(post)) => Ok(Response::new(UpdatePostResponse {
+                        post: Some(convert_post_to_proto(&post)),
+                    })),
                     Ok(None) => {
                         tracing::warn!("Updated post {} not found", post_id);
                         Err(Status::not_found("Post not found after update"))
@@ -558,23 +548,25 @@ impl ContentService for ContentServiceImpl {
             .map_err(|_| Status::invalid_argument("Invalid post ID format"))?;
 
         // Get the current like count from the likes table
-        let like_count: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM likes WHERE post_id = $1",
-        )
-        .bind(post_id)
-        .fetch_one(&self.db_pool)
-        .await
-        .map_err(|e| {
-            tracing::error!("Database error counting likes: {}", e);
-            Status::internal("Failed to decrement like count")
-        })?;
+        let like_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM likes WHERE post_id = $1")
+            .bind(post_id)
+            .fetch_one(&self.db_pool)
+            .await
+            .map_err(|e| {
+                tracing::error!("Database error counting likes: {}", e);
+                Status::internal("Failed to decrement like count")
+            })?;
 
         // Invalidate cache to force refresh
         let _ = self.cache.invalidate_post(post_id).await;
         tracing::debug!("Invalidated cache for post {} after decrement", post_id);
 
         let like_count_i32 = i32::try_from(like_count).unwrap_or_else(|_| {
-            tracing::warn!("Like count exceeded i32::MAX for post {}: {}", post_id, like_count);
+            tracing::warn!(
+                "Like count exceeded i32::MAX for post {}: {}",
+                post_id,
+                like_count
+            );
             i32::MAX
         });
 

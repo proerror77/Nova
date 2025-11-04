@@ -138,7 +138,8 @@ mod integration_tests {
         // Basic sanity check that the auth-service binary exists
         let path = "target/debug/auth-service";
         assert!(
-            std::path::Path::new(path).exists() || std::path::Path::new("target/release/auth-service").exists(),
+            std::path::Path::new(path).exists()
+                || std::path::Path::new("target/release/auth-service").exists(),
             "Auth service binary should exist after build"
         );
     }

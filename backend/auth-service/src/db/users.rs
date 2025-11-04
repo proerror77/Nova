@@ -35,20 +35,22 @@ pub struct UpdateUserProfileFields {
 
 /// Find user by email (excluding soft-deleted users)
 pub async fn find_by_email(pool: &PgPool, email: &str) -> AuthResult<Option<User>> {
-    let user = sqlx::query_as::<_, User>("SELECT * FROM users WHERE email = $1 AND deleted_at IS NULL")
-        .bind(email)
-        .fetch_optional(pool)
-        .await?;
+    let user =
+        sqlx::query_as::<_, User>("SELECT * FROM users WHERE email = $1 AND deleted_at IS NULL")
+            .bind(email)
+            .fetch_optional(pool)
+            .await?;
 
     Ok(user)
 }
 
 /// Find user by ID (excluding soft-deleted users)
 pub async fn find_by_id(pool: &PgPool, user_id: Uuid) -> AuthResult<Option<User>> {
-    let user = sqlx::query_as::<_, User>("SELECT * FROM users WHERE id = $1 AND deleted_at IS NULL")
-        .bind(user_id)
-        .fetch_optional(pool)
-        .await?;
+    let user =
+        sqlx::query_as::<_, User>("SELECT * FROM users WHERE id = $1 AND deleted_at IS NULL")
+            .bind(user_id)
+            .fetch_optional(pool)
+            .await?;
 
     Ok(user)
 }
@@ -152,7 +154,7 @@ pub async fn update_user_profile(
     .await
     .map_err(|e| {
         tracing::error!(user_id=%user_id, error=%e, "Failed to update user profile");
-        e.into()
+        AuthError::from(e)
     })?;
 
     Ok(profile)
@@ -253,8 +255,7 @@ pub async fn soft_delete_user(
     // This maintains service boundary: auth-service only manages users, messaging-service manages messages
     insert_outbox_event(&mut tx, user_id, deleted_at, deleted_by).await?;
 
-    tx.commit()
-        .await?;
+    tx.commit().await?;
 
     Ok(deleted_at)
 }

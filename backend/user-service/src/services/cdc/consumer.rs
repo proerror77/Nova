@@ -1,3 +1,4 @@
+use chrono::{DateTime, NaiveDateTime, Utc};
 use rdkafka::config::ClientConfig;
 use rdkafka::consumer::{Consumer, StreamConsumer};
 use rdkafka::message::Message;
@@ -293,33 +294,33 @@ impl CdcConsumer {
         })?;
         let content: String = Self::extract_field(data, "content")?;
         let media_url: Option<String> = Self::extract_optional_field(data, "media_url");
-        let created_at: String = Self::extract_field(data, "created_at")?;
+        let created_at_raw: String = Self::extract_field(data, "created_at")?;
+        let created_at = Self::parse_datetime_best_effort(&created_at_raw)?;
 
         let is_deleted = matches!(op, CdcOperation::Delete);
 
-        // Insert into ClickHouse (ReplacingMergeTree handles upserts)
-        let query = format!(
-            r#"
-            INSERT INTO posts_cdc (
-                id, user_id, content, media_url, created_at,
-                cdc_timestamp, is_deleted
-            ) VALUES (
-                '{post_id}', '{author_id}', '{content}', {media}, parseDateTimeBestEffort('{created_at}'),
-                {}, {}
-            )
-            "#,
-            msg.payload.ts_ms,
-            if is_deleted { 1 } else { 0 },
-            post_id = post_id,
-            author_id = author_id,
-            content = Self::escape_string(&content),
-            media = media_url
-                .map(|u| format!("'{}'", Self::escape_string(&u)))
-                .unwrap_or_else(|| "NULL".to_string()),
-            created_at = Self::escape_string(&created_at)
-        );
+        #[derive(serde::Serialize, clickhouse::Row)]
+        struct PostCdcRow {
+            id: Uuid,
+            user_id: Uuid,
+            content: String,
+            media_url: Option<String>,
+            created_at: DateTime<Utc>,
+            cdc_timestamp: u64,
+            is_deleted: u8,
+        }
 
-        self.ch_client.execute(&query).await?;
+        let row = PostCdcRow {
+            id: post_id,
+            user_id: author_id,
+            content,
+            media_url,
+            created_at,
+            cdc_timestamp: Self::ts_ms_u64(msg.payload.ts_ms)?,
+            is_deleted: if is_deleted { 1 } else { 0 },
+        };
+
+        self.ch_client.insert_row("posts_cdc", &row).await?;
 
         debug!("Inserted posts CDC: id={}, op={:?}", post_id, op);
         Ok(())
@@ -342,28 +343,29 @@ impl CdcConsumer {
         let followee_id = Uuid::parse_str(&followee_raw).map_err(|e| {
             AppError::Validation(format!("Invalid followee UUID '{}': {}", followee_raw, e))
         })?;
-        let created_at: String = Self::extract_field(data, "created_at")?;
+        let created_at_raw: String = Self::extract_field(data, "created_at")?;
+        let created_at = Self::parse_datetime_best_effort(&created_at_raw)?;
 
         let is_deleted = matches!(op, CdcOperation::Delete);
 
-        let query = format!(
-            r#"
-            INSERT INTO follows_cdc (
-                follower_id, followee_id, created_at,
-                cdc_timestamp, is_deleted
-            ) VALUES (
-                '{follower}', '{followee}', parseDateTimeBestEffort('{created_at}'),
-                {ts}, {deleted}
-            )
-            "#,
-            follower = follower_id,
-            followee = followee_id,
-            created_at = Self::escape_string(&created_at),
-            ts = msg.payload.ts_ms,
-            deleted = if is_deleted { 1 } else { 0 }
-        );
+        #[derive(serde::Serialize, clickhouse::Row)]
+        struct FollowCdcRow {
+            follower_id: Uuid,
+            followee_id: Uuid,
+            created_at: DateTime<Utc>,
+            cdc_timestamp: u64,
+            is_deleted: u8,
+        }
 
-        self.ch_client.execute(&query).await?;
+        let row = FollowCdcRow {
+            follower_id,
+            followee_id,
+            created_at,
+            cdc_timestamp: Self::ts_ms_u64(msg.payload.ts_ms)?,
+            is_deleted: if is_deleted { 1 } else { 0 },
+        };
+
+        self.ch_client.insert_row("follows_cdc", &row).await?;
 
         debug!(
             "Inserted follows CDC: follower={}, followee={}, op={:?}",
@@ -394,30 +396,33 @@ impl CdcConsumer {
             AppError::Validation(format!("Invalid user UUID '{}': {}", user_raw, e))
         })?;
         let content: String = Self::extract_field(data, "content")?;
-        let created_at: String = Self::extract_field(data, "created_at")?;
+        let created_at_raw: String = Self::extract_field(data, "created_at")?;
+        let created_at = Self::parse_datetime_best_effort(&created_at_raw)?;
 
         let is_deleted = matches!(op, CdcOperation::Delete);
 
-        let query = format!(
-            r#"
-            INSERT INTO comments_cdc (
-                id, post_id, user_id, content, created_at,
-                cdc_timestamp, is_deleted
-            ) VALUES (
-                '{comment}', '{post}', '{user}', '{content}', parseDateTimeBestEffort('{created_at}'),
-                {ts}, {deleted}
-            )
-            "#,
-            comment = comment_id,
-            post = post_id,
-            user = user_id,
-            content = Self::escape_string(&content),
-            created_at = Self::escape_string(&created_at),
-            ts = msg.payload.ts_ms,
-            deleted = if is_deleted { 1 } else { 0 }
-        );
+        #[derive(serde::Serialize, clickhouse::Row)]
+        struct CommentCdcRow {
+            id: Uuid,
+            post_id: Uuid,
+            user_id: Uuid,
+            content: String,
+            created_at: DateTime<Utc>,
+            cdc_timestamp: u64,
+            is_deleted: u8,
+        }
 
-        self.ch_client.execute(&query).await?;
+        let row = CommentCdcRow {
+            id: comment_id,
+            post_id,
+            user_id,
+            content,
+            created_at,
+            cdc_timestamp: Self::ts_ms_u64(msg.payload.ts_ms)?,
+            is_deleted: if is_deleted { 1 } else { 0 },
+        };
+
+        self.ch_client.insert_row("comments_cdc", &row).await?;
 
         debug!(
             "Inserted comments CDC: id={}, post_id={}, op={:?}",
@@ -443,28 +448,29 @@ impl CdcConsumer {
         let post_id = Uuid::parse_str(&post_raw).map_err(|e| {
             AppError::Validation(format!("Invalid like post UUID '{}': {}", post_raw, e))
         })?;
-        let created_at: String = Self::extract_field(data, "created_at")?;
+        let created_at_raw: String = Self::extract_field(data, "created_at")?;
+        let created_at = Self::parse_datetime_best_effort(&created_at_raw)?;
 
         let is_deleted = matches!(op, CdcOperation::Delete);
 
-        let query = format!(
-            r#"
-            INSERT INTO likes_cdc (
-                user_id, post_id, created_at,
-                cdc_timestamp, is_deleted
-            ) VALUES (
-                '{user}', '{post}', parseDateTimeBestEffort('{created_at}'),
-                {ts}, {deleted}
-            )
-            "#,
-            user = user_id,
-            post = post_id,
-            created_at = Self::escape_string(&created_at),
-            ts = msg.payload.ts_ms,
-            deleted = if is_deleted { 1 } else { 0 }
-        );
+        #[derive(serde::Serialize, clickhouse::Row)]
+        struct LikeCdcRow {
+            user_id: Uuid,
+            post_id: Uuid,
+            created_at: DateTime<Utc>,
+            cdc_timestamp: u64,
+            is_deleted: u8,
+        }
 
-        self.ch_client.execute(&query).await?;
+        let row = LikeCdcRow {
+            user_id,
+            post_id,
+            created_at,
+            cdc_timestamp: Self::ts_ms_u64(msg.payload.ts_ms)?,
+            is_deleted: if is_deleted { 1 } else { 0 },
+        };
+
+        self.ch_client.insert_row("likes_cdc", &row).await?;
 
         debug!(
             "Inserted likes CDC: user_id={}, post_id={}, op={:?}",
@@ -496,13 +502,35 @@ impl CdcConsumer {
             .and_then(|v| serde_json::from_value(v.clone()).ok())
     }
 
-    /// Escape string for ClickHouse query (prevent SQL injection)
-    fn escape_string(s: &str) -> String {
-        s.replace('\\', "\\\\")
-            .replace('\'', "\\'")
-            .replace('\n', "\\n")
-            .replace('\r', "\\r")
-            .replace('\t', "\\t")
+    /// Convert Debezium ts_ms to u64
+    fn ts_ms_u64(ts: i64) -> Result<u64> {
+        if ts < 0 {
+            return Err(AppError::Validation(format!(
+                "Invalid negative timestamp: {}",
+                ts
+            )));
+        }
+        Ok(ts as u64)
+    }
+
+    /// Best-effort datetime parser to replace parseDateTimeBestEffort usage
+    fn parse_datetime_best_effort(s: &str) -> Result<DateTime<Utc>> {
+        if let Ok(dt) = DateTime::parse_from_rfc3339(s) {
+            return Ok(dt.with_timezone(&Utc));
+        }
+        if let Ok(dt) = DateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S%.f %z") {
+            return Ok(dt.with_timezone(&Utc));
+        }
+        if let Ok(ndt) = NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S%.f") {
+            return Ok(DateTime::<Utc>::from_utc(ndt, Utc));
+        }
+        if let Ok(ndt) = NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S") {
+            return Ok(DateTime::<Utc>::from_utc(ndt, Utc));
+        }
+        Err(AppError::Validation(format!(
+            "Unsupported datetime format: {}",
+            s
+        )))
     }
 }
 
@@ -512,10 +540,13 @@ mod tests {
     use serde_json::json;
 
     #[test]
-    fn test_escape_string() {
-        assert_eq!(CdcConsumer::escape_string("hello'world"), "hello\\'world");
-        assert_eq!(CdcConsumer::escape_string("line1\nline2"), "line1\\nline2");
-        assert_eq!(CdcConsumer::escape_string("tab\there"), "tab\\there");
+    fn test_parse_datetime_best_effort() {
+        let rfc = "2024-10-10T12:34:56Z";
+        assert!(CdcConsumer::parse_datetime_best_effort(rfc).is_ok());
+        let common = "2024-10-10 12:34:56";
+        assert!(CdcConsumer::parse_datetime_best_effort(common).is_ok());
+        let with_ms = "2024-10-10 12:34:56.123";
+        assert!(CdcConsumer::parse_datetime_best_effort(with_ms).is_ok());
     }
 
     #[test]
