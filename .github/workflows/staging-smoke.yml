@@ -110,13 +110,6 @@ jobs:
               echo "::error::no kubeconfig secret provided and AWS creds not available."; exit 1
             fi
           fi
-            if [ "${{ steps.aws-creds.outcome }}" = "success" ] && command -v aws >/dev/null 2>&1; then
-              echo "::notice::attempting AWS EKS kubeconfig fallback (cluster=${EKS_CLUSTER_NAME}, region=${AWS_REGION})"
-              aws eks update-kubeconfig --name "${EKS_CLUSTER_NAME}" --region "${AWS_REGION}" --alias nova-staging
-            else
-              echo "::error::no kubeconfig secret provided and AWS creds not available for fallback."; exit 1
-            fi
-          fi
 
           # Basic sanity check (loose): kubeconfig should contain 'apiVersion'
           if ! grep -q "apiVersion" ~/.kube/config; then
