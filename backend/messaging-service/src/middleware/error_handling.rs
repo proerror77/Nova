@@ -1,11 +1,10 @@
 use crate::error::AppError;
-use axum::{http::StatusCode, response::IntoResponse, Json};
+use actix_web::HttpResponse;
 use error_types::ErrorResponse;
 
-// TDD: map domain errors to HTTP responses
-pub fn map_error(err: &AppError) -> (StatusCode, ErrorResponse) {
-    let status =
-        StatusCode::from_u16(err.status_code()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+// Map domain errors to HTTP responses
+pub fn map_error(err: &AppError) -> (u16, ErrorResponse) {
+    let status = err.status_code();
     let (error_type, code) = match err {
         AppError::BadRequest(_) => ("validation_error", "INVALID_REQUEST"),
         AppError::Unauthorized => (
@@ -51,17 +50,17 @@ pub fn map_error(err: &AppError) -> (StatusCode, ErrorResponse) {
     let message = err.to_string();
     let response = ErrorResponse::new(
         &match status {
-            StatusCode::BAD_REQUEST => "Bad Request",
-            StatusCode::UNAUTHORIZED => "Unauthorized",
-            StatusCode::FORBIDDEN => "Forbidden",
-            StatusCode::NOT_FOUND => "Not Found",
-            StatusCode::CONFLICT => "Conflict",
-            StatusCode::GONE => "Gone",
-            StatusCode::INTERNAL_SERVER_ERROR => "Internal Server Error",
+            400 => "Bad Request",
+            401 => "Unauthorized",
+            403 => "Forbidden",
+            404 => "Not Found",
+            409 => "Conflict",
+            410 => "Gone",
+            500 => "Internal Server Error",
             _ => "Error",
         },
         &message,
-        status.as_u16(),
+        status,
         error_type,
         code,
     );
@@ -69,7 +68,7 @@ pub fn map_error(err: &AppError) -> (StatusCode, ErrorResponse) {
     (status, response)
 }
 
-pub fn into_response(err: AppError) -> impl IntoResponse {
+pub fn into_response(err: AppError) -> HttpResponse {
     let (status, response) = map_error(&err);
-    (status, Json(response))
+    HttpResponse::build(actix_web::http::StatusCode::from_u16(status).unwrap()).json(response)
 }

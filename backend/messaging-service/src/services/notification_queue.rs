@@ -77,6 +77,7 @@ pub struct PostgresNotificationQueue {
     db: Arc<PgPool>,
     apns_provider: Option<Arc<ApnsPush>>,
     fcm_provider: Option<Arc<FcmPush>>,
+    worker_id: String,
 }
 
 impl PostgresNotificationQueue {
@@ -90,6 +91,7 @@ impl PostgresNotificationQueue {
             db,
             apns_provider,
             fcm_provider,
+            worker_id: format!("worker-{}", Uuid::new_v4()),
         }
     }
 
@@ -138,7 +140,10 @@ impl PostgresNotificationQueue {
         sqlx::query(
             r#"
             UPDATE notification_jobs
-            SET status = 'sent', sent_at = NOW()
+            SET status = 'sent',
+                sent_at = NOW(),
+                claimed_at = NULL,
+                claimed_by = NULL
             WHERE id = $1
             "#,
         )
@@ -159,7 +164,9 @@ impl PostgresNotificationQueue {
                 status = CASE
                     WHEN retry_count + 1 >= max_retries THEN 'failed'
                     ELSE 'pending'
-                END
+                END,
+                claimed_at = NULL,
+                claimed_by = NULL
             WHERE id = $1
             "#,
         )
@@ -203,18 +210,29 @@ impl NotificationQueue for PostgresNotificationQueue {
     }
 
     async fn process_pending(&self) -> Result<usize, AppError> {
-        // Fetch pending jobs that haven't exceeded retry limit
+        // Atomically claim up to 100 pending jobs (safe for multiple workers)
         let jobs = sqlx::query_as::<_, NotificationJob>(
             r#"
-            SELECT id, device_token, platform, title, body, badge, status,
-                   retry_count, max_retries, created_at, sent_at, last_error
-            FROM notification_jobs
-            WHERE status = 'pending'
-              AND retry_count < max_retries
-            ORDER BY created_at ASC
-            LIMIT 100
+            WITH cte AS (
+                SELECT id
+                FROM notification_jobs
+                WHERE status = 'pending'
+                  AND retry_count < max_retries
+                  AND (claimed_at IS NULL OR claimed_at < NOW() - INTERVAL '5 minutes')
+                ORDER BY created_at ASC
+                FOR UPDATE SKIP LOCKED
+                LIMIT 100
+            )
+            UPDATE notification_jobs j
+            SET claimed_at = NOW(),
+                claimed_by = $1
+            FROM cte
+            WHERE j.id = cte.id
+            RETURNING j.id, j.device_token, j.platform, j.title, j.body, j.badge,
+                      j.status, j.retry_count, j.max_retries, j.created_at, j.sent_at, j.last_error
             "#,
         )
+        .bind(&self.worker_id)
         .fetch_all(&*self.db)
         .await?;
 
@@ -278,7 +296,10 @@ impl NotificationQueue for PostgresNotificationQueue {
         let result = sqlx::query(
             r#"
             UPDATE notification_jobs
-            SET status = 'failed', last_error = 'Cancelled by user'
+            SET status = 'failed',
+                last_error = 'Cancelled by user',
+                claimed_at = NULL,
+                claimed_by = NULL
             WHERE id = $1 AND status = 'pending'
             "#,
         )

@@ -12,8 +12,8 @@ use uuid::Uuid;
 #[derive(Debug, Deserialize)]
 pub struct CreatePostRequest {
     pub caption: Option<String>,
-    pub image_key: String,
-    pub content_type: String,
+    pub image_key: Option<String>,
+    pub content_type: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -34,12 +34,17 @@ pub async fn create_post(
     req: web::Json<CreatePostRequest>,
 ) -> Result<HttpResponse> {
     let service = PostService::with_cache((**pool).clone(), cache.get_ref().clone());
+
+    // Use default values for text-only posts
+    let image_key = req.image_key.as_deref().unwrap_or("text-only");
+    let content_type = req.content_type.as_deref().unwrap_or("text");
+
     let post = service
         .create_post(
             user_id.0,
             req.caption.as_deref(),
-            &req.image_key,
-            &req.content_type,
+            image_key,
+            content_type,
         )
         .await?;
 

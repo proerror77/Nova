@@ -1,0 +1,221 @@
+syntax = "proto3";
+package nova.messaging_service;
+
+// ============================================================================
+// Messaging Service gRPC API
+//
+// This service provides real-time messaging, conversations, and related
+// functionality for the Nova platform.
+//
+// Key responsibilities:
+//   - Message creation and retrieval
+//   - Conversation management
+//   - Unread message tracking
+//   - Message deletion and soft-deletes
+// ============================================================================
+
+// Message: Represents a single message in a conversation
+message Message {
+  string id = 1;                        // UUID of the message
+  string conversation_id = 2;           // UUID of parent conversation
+  string sender_id = 3;                 // UUID of sender (user)
+  string content = 4;                   // Message content (plaintext)
+  string encrypted_content = 5;         // Encrypted content (optional)
+  string nonce = 6;                     // Encryption nonce (optional)
+  int32 encryption_version = 7;         // Version of encryption used
+  string created_at = 8;                // ISO 8601 timestamp
+  string updated_at = 9;                // ISO 8601 timestamp
+  string deleted_at = 10;               // ISO 8601 timestamp (soft delete)
+  int32 version_number = 11;            // Optimistic locking version
+}
+
+// Message: Represents a conversation between users
+message Conversation {
+  string id = 1;                    // UUID of conversation
+  string type = 2;                  // "direct" or "group"
+  string name = 3;                  // Conversation name (group only)
+  repeated string member_ids = 4;   // List of member user IDs
+  string created_at = 5;            // ISO 8601 timestamp
+  string updated_at = 6;            // ISO 8601 timestamp
+}
+
+// ============================================================================
+// Get Messages in Conversation
+// ============================================================================
+
+message GetMessagesRequest {
+  string conversation_id = 1;
+  int32 limit = 2;     // Number of messages (default 50, max 100)
+  int32 offset = 3;    // Pagination offset
+  bool include_deleted = 4;  // Include soft-deleted messages
+}
+
+message GetMessagesResponse {
+  repeated Message messages = 1;
+  int32 total_count = 2;
+}
+
+// ============================================================================
+// Get Single Message by ID
+// ============================================================================
+
+message GetMessageRequest {
+  string message_id = 1;
+}
+
+message GetMessageResponse {
+  Message message = 1;
+}
+
+// ============================================================================
+// Get Conversation Details
+// ============================================================================
+
+message GetConversationRequest {
+  string conversation_id = 1;
+}
+
+message GetConversationResponse {
+  Conversation conversation = 1;
+  int32 unread_count = 2;
+  Message last_message = 3;  // Most recent message (optional)
+}
+
+// ============================================================================
+// Get Conversation Members
+// ============================================================================
+
+message GetConversationMembersRequest {
+  string conversation_id = 1;
+}
+
+message GetConversationMembersResponse {
+  repeated string member_ids = 1;  // List of user IDs in conversation
+  int32 total_members = 2;
+}
+
+// ============================================================================
+// Send Message
+// ============================================================================
+
+message SendMessageRequest {
+  string conversation_id = 1;
+  string sender_id = 2;
+  string plaintext = 3;         // Unencrypted message content
+  string encrypted_content = 4; // Encrypted content (optional)
+  string nonce = 5;             // Encryption nonce (optional)
+  int32 encryption_version = 6; // Version of encryption
+}
+
+message SendMessageResponse {
+  Message message = 1;
+}
+
+// ============================================================================
+// Update Message
+// ============================================================================
+
+message UpdateMessageRequest {
+  string message_id = 1;
+  string new_content = 2;
+  string new_encrypted_content = 3;  // If encryption enabled
+  string new_nonce = 4;              // If encryption enabled
+  int32 version_number = 5;          // For optimistic locking
+}
+
+message UpdateMessageResponse {
+  Message message = 1;
+}
+
+// ============================================================================
+// Delete Message (soft delete)
+// ============================================================================
+
+message DeleteMessageRequest {
+  string message_id = 1;
+  string deleted_by_id = 2;  // User performing the delete
+}
+
+message DeleteMessageResponse {
+  string message_id = 1;
+  string deleted_at = 2;  // ISO 8601 timestamp
+}
+
+// ============================================================================
+// Mark Message as Read
+// ============================================================================
+
+message MarkAsReadRequest {
+  string conversation_id = 1;
+  string user_id = 2;
+  string message_id = 3;  // Optional: mark single message read
+}
+
+message MarkAsReadResponse {
+  int32 unread_count = 1;  // Remaining unread messages
+}
+
+// ============================================================================
+// Get Unread Count
+// ============================================================================
+
+message GetUnreadCountRequest {
+  string conversation_id = 1;
+  string user_id = 2;
+}
+
+message GetUnreadCountResponse {
+  int32 unread_count = 1;
+}
+
+// ============================================================================
+// List User Conversations
+// ============================================================================
+
+message ListConversationsRequest {
+  string user_id = 1;
+  int32 limit = 2;   // Number of conversations (default 20, max 100)
+  int32 offset = 3;  // Pagination offset
+}
+
+message ListConversationsResponse {
+  repeated Conversation conversations = 1;
+  repeated int32 unread_counts = 2;  // Unread count for each conversation
+  int32 total_count = 3;
+}
+
+// ============================================================================
+// Messaging Service Definition
+// ============================================================================
+
+service MessagingService {
+  // Get messages in a conversation
+  rpc GetMessages(GetMessagesRequest) returns (GetMessagesResponse);
+
+  // Get a single message by ID
+  rpc GetMessage(GetMessageRequest) returns (GetMessageResponse);
+
+  // Get conversation details
+  rpc GetConversation(GetConversationRequest) returns (GetConversationResponse);
+
+  // Get list of user IDs in a conversation
+  rpc GetConversationMembers(GetConversationMembersRequest) returns (GetConversationMembersResponse);
+
+  // Send a new message
+  rpc SendMessage(SendMessageRequest) returns (SendMessageResponse);
+
+  // Update an existing message
+  rpc UpdateMessage(UpdateMessageRequest) returns (UpdateMessageResponse);
+
+  // Soft-delete a message
+  rpc DeleteMessage(DeleteMessageRequest) returns (DeleteMessageResponse);
+
+  // Mark message(s) as read
+  rpc MarkAsRead(MarkAsReadRequest) returns (MarkAsReadResponse);
+
+  // Get unread message count for a conversation
+  rpc GetUnreadCount(GetUnreadCountRequest) returns (GetUnreadCountResponse);
+
+  // List all conversations for a user
+  rpc ListConversations(ListConversationsRequest) returns (ListConversationsResponse);
+}

@@ -1,8 +1,8 @@
+use chrono::{DateTime, Utc};
 /// Token revocation model for blacklisted tokens
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
-use chrono::{DateTime, Utc};
 use sqlx::FromRow;
+use uuid::Uuid;
 
 /// Token revocation record
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
@@ -10,8 +10,8 @@ pub struct TokenRevocation {
     pub id: Uuid,
     pub user_id: Uuid,
     pub token_hash: String,
-    pub token_type: String, // 'access' or 'refresh'
-    pub jti: Option<String>, // JWT ID for correlation
+    pub token_type: String,     // 'access' or 'refresh'
+    pub jti: Option<String>,    // JWT ID for correlation
     pub reason: Option<String>, // 'logout', 'password_change', 'manual', '2fa_enabled'
     pub revoked_at: DateTime<Utc>,
     pub expires_at: DateTime<Utc>, // When token would naturally expire

@@ -215,18 +215,16 @@ pub async fn get_trending_videos(
         .await
     {
         Ok(response) => response,
-        Err(e) => {
-            match &e {
-                AppError::Internal(msg) if msg.contains("Circuit breaker is OPEN") => {
-                    warn!("ClickHouse circuit is OPEN for trending videos query, falling back to empty results");
-                    return Ok(HttpResponse::Ok().json(empty_trending_response()));
-                }
-                _ => {
-                    error!("Failed to get trending videos: {}", e);
-                    return Err(e);
-                }
+        Err(e) => match &e {
+            AppError::Internal(msg) if msg.contains("Circuit breaker is OPEN") => {
+                warn!("ClickHouse circuit is OPEN for trending videos query, falling back to empty results");
+                return Ok(HttpResponse::Ok().json(empty_trending_response()));
             }
-        }
+            _ => {
+                error!("Failed to get trending videos: {}", e);
+                return Err(e);
+            }
+        },
     };
 
     Ok(HttpResponse::Ok().json(response))
@@ -258,18 +256,16 @@ pub async fn get_trending_posts(
         .await
     {
         Ok(response) => response,
-        Err(e) => {
-            match &e {
-                AppError::Internal(msg) if msg.contains("Circuit breaker is OPEN") => {
-                    warn!("ClickHouse circuit is OPEN for trending posts query, falling back to empty results");
-                    return Ok(HttpResponse::Ok().json(empty_trending_response()));
-                }
-                _ => {
-                    error!("Failed to get trending posts: {}", e);
-                    return Err(e);
-                }
+        Err(e) => match &e {
+            AppError::Internal(msg) if msg.contains("Circuit breaker is OPEN") => {
+                warn!("ClickHouse circuit is OPEN for trending posts query, falling back to empty results");
+                return Ok(HttpResponse::Ok().json(empty_trending_response()));
             }
-        }
+            _ => {
+                error!("Failed to get trending posts: {}", e);
+                return Err(e);
+            }
+        },
     };
 
     Ok(HttpResponse::Ok().json(response))
@@ -301,18 +297,16 @@ pub async fn get_trending_streams(
         .await
     {
         Ok(response) => response,
-        Err(e) => {
-            match &e {
-                AppError::Internal(msg) if msg.contains("Circuit breaker is OPEN") => {
-                    warn!("ClickHouse circuit is OPEN for trending streams query, falling back to empty results");
-                    return Ok(HttpResponse::Ok().json(empty_trending_response()));
-                }
-                _ => {
-                    error!("Failed to get trending streams: {}", e);
-                    return Err(e);
-                }
+        Err(e) => match &e {
+            AppError::Internal(msg) if msg.contains("Circuit breaker is OPEN") => {
+                warn!("ClickHouse circuit is OPEN for trending streams query, falling back to empty results");
+                return Ok(HttpResponse::Ok().json(empty_trending_response()));
             }
-        }
+            _ => {
+                error!("Failed to get trending streams: {}", e);
+                return Err(e);
+            }
+        },
     };
 
     Ok(HttpResponse::Ok().json(response))
@@ -407,25 +401,23 @@ pub async fn record_engagement(
                 user_id, content_id
             );
         }
-        Err(e) => {
-            match &e {
-                AppError::Internal(msg) if msg.contains("Circuit breaker is OPEN") => {
-                    warn!(
+        Err(e) => match &e {
+            AppError::Internal(msg) if msg.contains("Circuit breaker is OPEN") => {
+                warn!(
                         "Redis circuit is OPEN for engagement recording (user={}), engagement accepted but cache not updated",
                         user_id
                     );
-                    return Ok(HttpResponse::Accepted().json(serde_json::json!({
-                        "success": true,
-                        "message": "Engagement recorded (cache pending)",
-                        "status": "queued"
-                    })));
-                }
-                _ => {
-                    error!("Failed to record engagement for user {}: {}", user_id, e);
-                    return Err(e);
-                }
+                return Ok(HttpResponse::Accepted().json(serde_json::json!({
+                    "success": true,
+                    "message": "Engagement recorded (cache pending)",
+                    "status": "queued"
+                })));
             }
-        }
+            _ => {
+                error!("Failed to record engagement for user {}: {}", user_id, e);
+                return Err(e);
+            }
+        },
     }
 
     Ok(HttpResponse::Ok().json(serde_json::json!({

@@ -9,17 +9,18 @@ RUN apt-get update && apt-get install -y \
     cmake \
     build-essential \
     protobuf-compiler \
+    librdkafka-dev \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Copy workspace files
+# Copy workspace files from repo root
 COPY Cargo.toml Cargo.lock ./
-COPY auth-service ./auth-service
-COPY libs ./libs
+# Copy full backend workspace to satisfy workspace members
+COPY backend ./backend
 
 # Build auth-service
-RUN cargo build --release --package auth-service
+RUN cargo build --release -p auth-service --bin auth-service
 
 # Runtime stage
 FROM debian:bookworm-slim AS runtime
@@ -27,6 +28,8 @@ FROM debian:bookworm-slim AS runtime
 RUN apt-get update && apt-get install -y \
     ca-certificates \
     libssl3 \
+    librdkafka1 \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user
@@ -36,7 +39,7 @@ WORKDIR /app
 
 # Copy binary and migrations
 COPY --from=builder /app/target/release/auth-service /app/auth-service
-COPY --chown=appuser:appuser auth-service/migrations /app/migrations
+COPY --from=builder --chown=appuser:appuser /app/backend/auth-service/migrations /app/migrations
 
 # Adjust ownership
 RUN chown -R appuser:appuser /app

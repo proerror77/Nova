@@ -1,11 +1,8 @@
+use crate::error::AppError;
 use crate::middleware::guards::User;
 use crate::services::call_service::CallService;
 use crate::state::AppState;
-use axum::{
-    extract::{Path, State},
-    http::StatusCode,
-    Json,
-};
+use actix_web::{web, HttpResponse};
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
 use uuid::Uuid;
@@ -127,11 +124,12 @@ pub struct CallHistoryItem {
 /// Initiate a new video call (1:1 or group)
 /// POST /conversations/:id/calls
 pub async fn initiate_call(
-    State(state): State<AppState>,
+    state: web::Data<AppState>,
     user: User,
-    Path(conversation_id): Path<Uuid>,
-    Json(body): Json<InitiateCallRequest>,
-) -> Result<(StatusCode, Json<CallResponse>), crate::error::AppError> {
+    conversation_id: web::Path<Uuid>,
+    body: web::Json<InitiateCallRequest>,
+) -> Result<HttpResponse, AppError> {
+    let conversation_id = conversation_id.into_inner();
     // Verify user is a member of the conversation
     let _member =
         crate::middleware::guards::ConversationMember::verify(&state.db, user.id, conversation_id)
@@ -149,21 +147,22 @@ pub async fn initiate_call(
     let max_participants = body.max_participants;
 
     if call_type != "direct" && call_type != "group" {
-        return Err(crate::error::AppError::Config(
-            "call_type must be 'direct' or 'group'".into(),
-        ));
+        return Err(
+            crate::error::AppError::Config("call_type must be 'direct' or 'group'".into()).into(),
+        );
     }
 
     if call_type == "group" && max_participants < 2 {
         return Err(crate::error::AppError::Config(
             "max_participants must be >= 2 for group calls".into(),
-        ));
+        )
+        .into());
     }
 
     if max_participants > 50 {
-        return Err(crate::error::AppError::Config(
-            "max_participants cannot exceed 50".into(),
-        ));
+        return Err(
+            crate::error::AppError::Config("max_participants cannot exceed 50".into()).into(),
+        );
     }
 
     // Create the call
@@ -201,26 +200,24 @@ pub async fn initiate_call(
         crate::error::AppError::Internal
     })?;
 
-    Ok((
-        StatusCode::CREATED,
-        Json(CallResponse {
-            id: call_id,
-            status: "ringing".to_string(),
-            created_at: chrono::Utc::now().to_rfc3339(),
-            call_type: Some(call_type.to_string()),
-            max_participants: Some(max_participants),
-        }),
-    ))
+    Ok(HttpResponse::Created().json(CallResponse {
+        id: call_id,
+        status: "ringing".to_string(),
+        created_at: chrono::Utc::now().to_rfc3339(),
+        call_type: Some(call_type.to_string()),
+        max_participants: Some(max_participants),
+    }))
 }
 
 /// Answer an incoming call
 /// POST /calls/:id/answer
 pub async fn answer_call(
-    State(state): State<AppState>,
+    state: web::Data<AppState>,
     user: User,
-    Path(call_id): Path<Uuid>,
-    Json(body): Json<AnswerCallRequest>,
-) -> Result<(StatusCode, Json<CallResponse>), crate::error::AppError> {
+    call_id: web::Path<Uuid>,
+    body: web::Json<AnswerCallRequest>,
+) -> Result<HttpResponse, AppError> {
+    let call_id = call_id.into_inner();
     // Get the call to verify it exists and get conversation_id
     let call_row =
         sqlx::query("SELECT id, conversation_id, status FROM call_sessions WHERE id = $1")
@@ -265,25 +262,23 @@ pub async fn answer_call(
         crate::error::AppError::Internal
     })?;
 
-    Ok((
-        StatusCode::OK,
-        Json(CallResponse {
-            id: call_id,
-            status: "connected".to_string(),
-            created_at: chrono::Utc::now().to_rfc3339(),
-            call_type: None,
-            max_participants: None,
-        }),
-    ))
+    Ok(HttpResponse::Ok().json(CallResponse {
+        id: call_id,
+        status: "connected".to_string(),
+        created_at: chrono::Utc::now().to_rfc3339(),
+        call_type: None,
+        max_participants: None,
+    }))
 }
 
 /// Reject/decline an incoming call
 /// POST /calls/:id/reject
 pub async fn reject_call(
-    State(state): State<AppState>,
+    state: web::Data<AppState>,
     user: User,
-    Path(call_id): Path<Uuid>,
-) -> Result<StatusCode, crate::error::AppError> {
+    call_id: web::Path<Uuid>,
+) -> Result<HttpResponse, AppError> {
+    let call_id = call_id.into_inner();
     // Get the call to verify it exists and get conversation_id
     let call_row = sqlx::query("SELECT conversation_id FROM call_sessions WHERE id = $1")
         .bind(call_id)
@@ -326,16 +321,17 @@ pub async fn reject_call(
         crate::error::AppError::Internal
     })?;
 
-    Ok(StatusCode::NO_CONTENT)
+    Ok(HttpResponse::NoContent().finish())
 }
 
 /// End an active call
 /// POST /calls/:id/end
 pub async fn end_call(
-    State(state): State<AppState>,
+    state: web::Data<AppState>,
     user: User,
-    Path(call_id): Path<Uuid>,
-) -> Result<StatusCode, crate::error::AppError> {
+    call_id: web::Path<Uuid>,
+) -> Result<HttpResponse, AppError> {
+    let call_id = call_id.into_inner();
     // Get the call to verify it exists and get conversation_id
     let call_row = sqlx::query("SELECT conversation_id FROM call_sessions WHERE id = $1")
         .bind(call_id)
@@ -378,17 +374,18 @@ pub async fn end_call(
         crate::error::AppError::Internal
     })?;
 
-    Ok(StatusCode::NO_CONTENT)
+    Ok(HttpResponse::NoContent().finish())
 }
 
 /// Join a group call (or answer a 1:1 call)
 /// POST /calls/:id/join
 pub async fn join_call(
-    State(state): State<AppState>,
+    state: web::Data<AppState>,
     user: User,
-    Path(call_id): Path<Uuid>,
-    Json(body): Json<JoinCallRequest>,
-) -> Result<(StatusCode, Json<JoinCallResponse>), crate::error::AppError> {
+    call_id: web::Path<Uuid>,
+    body: web::Json<JoinCallRequest>,
+) -> Result<HttpResponse, AppError> {
+    let call_id = call_id.into_inner();
     // Get call details
     let call_row = sqlx::query(
         "SELECT conversation_id, status, max_participants, call_type FROM call_sessions WHERE id = $1",
@@ -413,7 +410,7 @@ pub async fn join_call(
 
     // Verify call is in valid state
     if status != "ringing" && status != "connected" {
-        return Err(crate::error::AppError::Config("Call is not active".into()));
+        return Err(crate::error::AppError::Config("Call is not active".into()).into());
     }
 
     // Join the call (this checks for duplicate joins and capacity)
@@ -466,26 +463,24 @@ pub async fn join_call(
         .await;
     }
 
-    Ok((
-        StatusCode::OK,
-        Json(JoinCallResponse {
-            call_id,
-            conversation_id,
-            participant_id,
-            participants: existing_participants,
-            max_participants,
-            current_participant_count: participant_count,
-        }),
-    ))
+    Ok(HttpResponse::Ok().json(JoinCallResponse {
+        call_id,
+        conversation_id,
+        participant_id,
+        participants: existing_participants,
+        max_participants,
+        current_participant_count: participant_count,
+    }))
 }
 
 /// Leave a group call
 /// POST /calls/:id/leave
 pub async fn leave_call(
-    State(state): State<AppState>,
+    state: web::Data<AppState>,
     user: User,
-    Path(call_id): Path<Uuid>,
-) -> Result<StatusCode, crate::error::AppError> {
+    call_id: web::Path<Uuid>,
+) -> Result<HttpResponse, AppError> {
+    let call_id = call_id.into_inner();
     // Get call details
     let call_row = sqlx::query("SELECT conversation_id FROM call_sessions WHERE id = $1")
         .bind(call_id)
@@ -529,16 +524,17 @@ pub async fn leave_call(
         crate::error::AppError::Internal
     })?;
 
-    Ok(StatusCode::NO_CONTENT)
+    Ok(HttpResponse::NoContent().finish())
 }
 
 /// Get participants of a call
 /// GET /calls/:id/participants
 pub async fn get_participants(
-    State(state): State<AppState>,
+    state: web::Data<AppState>,
     user: User,
-    Path(call_id): Path<Uuid>,
-) -> Result<Json<ParticipantsResponse>, crate::error::AppError> {
+    call_id: web::Path<Uuid>,
+) -> Result<HttpResponse, AppError> {
+    let call_id = call_id.into_inner();
     // Get call details to verify conversation membership
     let call_row = sqlx::query("SELECT conversation_id FROM call_sessions WHERE id = $1")
         .bind(call_id)
@@ -559,7 +555,7 @@ pub async fn get_participants(
     // Get participants
     let participants = CallService::get_participants(&state.db, call_id).await?;
 
-    Ok(Json(ParticipantsResponse {
+    Ok(HttpResponse::Ok().json(ParticipantsResponse {
         call_id,
         participants,
     }))
@@ -568,15 +564,15 @@ pub async fn get_participants(
 /// Get call history for the current user
 /// GET /calls/history
 pub async fn get_call_history(
-    State(state): State<AppState>,
+    state: web::Data<AppState>,
     user: User,
-) -> Result<Json<Vec<CallHistoryItem>>, crate::error::AppError> {
+) -> Result<HttpResponse, AppError> {
     let limit = 50i64;
     let offset = 0i64;
 
     let history = CallService::get_call_history(&state.db, user.id, limit, offset).await?;
 
-    let items = history
+    let items: Vec<CallHistoryItem> = history
         .into_iter()
         .map(
             |(id, status, duration_ms, participant_count)| CallHistoryItem {
@@ -588,5 +584,5 @@ pub async fn get_call_history(
         )
         .collect();
 
-    Ok(Json(items))
+    Ok(HttpResponse::Ok().json(items))
 }

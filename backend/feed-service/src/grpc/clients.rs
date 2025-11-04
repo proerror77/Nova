@@ -24,7 +24,10 @@ impl ContentServiceClient {
     }
 
     /// Get feed for user
-    pub async fn get_feed(&self, request: GetFeedRequest) -> Result<GetFeedResponse, std::io::Error> {
+    pub async fn get_feed(
+        &self,
+        request: GetFeedRequest,
+    ) -> Result<GetFeedResponse, std::io::Error> {
         let mut client = self.client.clone();
         client.get_feed(request).await
     }

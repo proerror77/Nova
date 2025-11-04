@@ -1,0 +1,89 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: user-service
+  namespace: nova
+spec:
+  template:
+    spec:
+      containers:
+      - name: user-service
+        env:
+        - name: APP_PORT
+          value: "8083"
+        - name: CLOUDFRONT_URL
+          valueFrom:
+            configMapKeyRef:
+              name: nova-config
+              key: CLOUDFRONT_URL
+        - name: CORS_ALLOWED_ORIGINS
+          value: "https://staging.nova.example.com,https://nova.example.com"
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: nova-jwt-keys
+              key: JWT_SECRET
+        - name: S3_BUCKET_NAME
+          valueFrom:
+            secretKeyRef:
+              name: nova-s3-credentials
+              key: S3_BUCKET
+        - name: S3_REGION
+          valueFrom:
+            secretKeyRef:
+              name: nova-s3-credentials
+              key: AWS_REGION
+        - name: AWS_REGION
+          valueFrom:
+            secretKeyRef:
+              name: nova-s3-credentials
+              key: AWS_REGION
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: nova-s3-credentials
+              key: AWS_ACCESS_KEY_ID
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: nova-s3-credentials
+              key: AWS_SECRET_ACCESS_KEY
+        - name: AWS_SESSION_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: nova-s3-credentials
+              key: AWS_SESSION_TOKEN
+        - name: JWT_PRIVATE_KEY_PEM
+          valueFrom:
+            secretKeyRef:
+              name: nova-jwt-keys
+              key: JWT_PRIVATE_KEY_PEM
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: nova-db-credentials
+              key: user-db-url
+        - name: CLICKHOUSE_USER
+          valueFrom:
+            secretKeyRef:
+              name: nova-clickhouse-credentials
+              key: CLICKHOUSE_USERNAME
+        - name: CLICKHOUSE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: nova-clickhouse-credentials
+              key: CLICKHOUSE_PASSWORD
+        - name: CLICKHOUSE_DB
+          valueFrom:
+            configMapKeyRef:
+              name: nova-config
+              key: CLICKHOUSE_DATABASE
+        - name: CONTENT_SERVICE_GRPC_URL
+          value: http://content-service:9081
+        - name: MEDIA_SERVICE_GRPC_URL
+          value: http://media-service:9082
+        - name: KAFKA_EVENTS_TOPIC
+          valueFrom:
+            configMapKeyRef:
+              name: nova-config
+              key: KAFKA_EVENTS_TOPIC

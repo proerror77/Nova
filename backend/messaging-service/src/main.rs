@@ -1,6 +1,6 @@
-use axum::extract::Request;
-use axum::middleware;
+use actix_web::{web, App, HttpServer};
 use crypto_core::jwt as core_jwt;
+use messaging_service::openapi::ApiDoc;
 use messaging_service::{
     config, db, error, logging,
     redis_client::RedisClient,
@@ -8,14 +8,27 @@ use messaging_service::{
     services::{encryption::EncryptionService, key_exchange::KeyExchangeService, push::ApnsPush},
     state::AppState,
     websocket::streams::{start_streams_listener, StreamsConfig},
+    nova::messaging_service::messaging_service_server::MessagingServiceServer,
 };
 use redis_utils::{RedisPool, SentinelConfig};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::net::TcpListener;
+use tokio::task::JoinHandle;
+use tonic::transport::Server as GrpcServer;
+use utoipa::OpenApi;
+use utoipa_swagger_ui::SwaggerUi;
 
-#[tokio::main]
+async fn openapi_json(doc: web::Data<utoipa::openapi::OpenApi>) -> actix_web::HttpResponse {
+    let body = serde_json::to_string(&*doc)
+        .expect("Failed to serialize OpenAPI document for messaging-service");
+
+    actix_web::HttpResponse::Ok()
+        .content_type("application/json")
+        .body(body)
+}
+
+#[actix_web::main]
 async fn main() -> Result<(), error::AppError> {
     logging::init_tracing();
     let cfg = Arc::new(config::Config::from_env()?);
@@ -38,29 +51,19 @@ async fn main() -> Result<(), error::AppError> {
         .map_err(|e| error::AppError::StartServer(format!("redis: {e}")))?;
     let redis = RedisClient::new(redis_pool.manager());
     let registry = messaging_service::websocket::ConnectionRegistry::new();
-    // Run embedded migrations (idempotent)
-    if let Err(e) = messaging_service::migrations::run_all(&db).await {
-        tracing::warn!(error=%e, "failed to run migrations at startup");
-    }
-    // 初始化 JWT 驗證（支援從檔案讀取）
-    // debug: print whether file env exists
-    if let Ok(path) = std::env::var("JWT_PUBLIC_KEY_FILE") {
-        tracing::info!(jwt_public_key_file=%path, "JWT public key file env detected");
-    } else {
-        tracing::info!("JWT_PUBLIC_KEY_FILE not set");
-    }
 
-    let public_key = match std::env::var("JWT_PUBLIC_KEY_PEM") {
-        Ok(pem) => pem,
-        Err(_) => {
-            let path = std::env::var("JWT_PUBLIC_KEY_FILE")
-                .map_err(|_| error::AppError::StartServer("JWT_PUBLIC_KEY_PEM missing".into()))?;
-            std::fs::read_to_string(path)
-                .map_err(|e| error::AppError::StartServer(format!("read jwt pubkey file: {e}")))?
-        }
-    };
+    // Run embedded migrations (idempotent)
+    // Treat migration failures as fatal - the database schema must be in sync
+    messaging_service::migrations::run_all(&db).await
+        .map_err(|e| error::AppError::StartServer(format!("database migrations failed: {}", e)))?;
+
+    // Initialize JWT validation using unified crypto-core helpers
+    // Supports both JWT_PUBLIC_KEY_PEM and JWT_PUBLIC_KEY_FILE environment variables
+    let public_key = core_jwt::load_validation_key()
+        .map_err(|e| error::AppError::StartServer(format!("Failed to load JWT public key: {e}")))?;
+
     core_jwt::initialize_jwt_validation_only(&public_key)
-        .map_err(|e| error::AppError::StartServer(format!("init jwt: {e}")))?;
+        .map_err(|e| error::AppError::StartServer(format!("Failed to initialize JWT validation: {e}")))?;
 
     let apns_client = match cfg.apns.as_ref() {
         Some(apns_cfg) => match ApnsPush::new(apns_cfg) {
@@ -85,43 +88,115 @@ async fn main() -> Result<(), error::AppError> {
         encryption: encryption.clone(),
         key_exchange_service: Some(key_exchange_service),
     };
+
+    // Metrics updater (queue depth gauges)
+    messaging_service::metrics::spawn_metrics_updater(db.clone());
+
     // Start Redis Streams listener for cross-instance fanout
+    // Keep track of the listener task for graceful shutdown
     let redis_stream = redis.clone();
-    tokio::spawn(async move {
+    let _streams_listener: JoinHandle<()> = tokio::spawn(async move {
         let config = StreamsConfig::default();
         if let Err(e) = start_streams_listener(redis_stream, registry, config).await {
-            tracing::warn!(error=%e, "redis streams listener exited");
+            tracing::error!(error=%e, "redis streams listener failed");
         }
     });
 
-    // Wrap db in Arc for sharing across middleware
-    let db_arc = Arc::new(db);
+    let bind_addr = format!("0.0.0.0:{}", cfg.port);
+    tracing::info!(%bind_addr, "starting messaging-service (REST on port {})", cfg.port);
 
-    // Add DB pool to all request extensions via middleware
-    // and apply JWT authentication middleware
-    let app = routes::build_router()
-        .with_state(state)
-        .layer(middleware::from_fn(
-            messaging_service::metrics::track_http_metrics,
-        ))
-        .layer(middleware::from_fn(
-            move |mut req: Request, next: axum::middleware::Next| {
-                let db = db_arc.clone();
-                async move {
-                    req.extensions_mut().insert(db);
-                    next.run(req).await
+    // Build gRPC service
+    let grpc_service = messaging_service::grpc::MessagingServiceImpl::new(state.clone());
+    let grpc_server = MessagingServiceServer::new(grpc_service);
+
+    // Start both REST and gRPC servers
+    let rest_state = state.clone();
+    let rest_db = db.clone();
+
+    // REST API server on cfg.port
+    let rest_handle = tokio::spawn(async move {
+        let bind_addr_parsed: SocketAddr = bind_addr.parse()
+            .map_err(|e: std::net::AddrParseError| {
+                error::AppError::StartServer(format!("Invalid bind address: {}", e))
+            })?;
+
+        tracing::info!("REST API listening on {}", bind_addr_parsed);
+
+        let result = HttpServer::new(move || {
+            let openapi_doc = ApiDoc::openapi();
+
+            App::new()
+                .app_data(web::Data::new(openapi_doc.clone()))
+                .service(
+                    SwaggerUi::new("/swagger-ui/{_:.*}")
+                        .url("/api/v1/openapi.json", openapi_doc.clone()),
+                )
+                .route("/api/v1/openapi.json", web::get().to(openapi_json))
+                .app_data(web::Data::new(rest_state.clone()))
+                .app_data(web::Data::new(rest_db.clone()))
+                .configure(routes::configure_routes)
+                .wrap(actix_middleware::CorrelationIdMiddleware)
+                .wrap(actix_middleware::MetricsMiddleware)
+        })
+        .bind(&bind_addr_parsed)
+        .map_err(|e| error::AppError::StartServer(format!("Failed to bind REST server: {}", e)))?
+        .run()
+        .await
+        .map_err(|e| error::AppError::StartServer(format!("REST server error: {}", e)))?;
+
+        Ok::<(), error::AppError>(())
+    });
+
+    // gRPC server on cfg.port + 1000 (e.g., 8080 -> 9080)
+    let grpc_addr = format!("0.0.0.0:{}", cfg.port + 1000);
+    let grpc_handle = tokio::spawn(async move {
+        let grpc_addr_parsed: SocketAddr = grpc_addr.parse()
+            .map_err(|e: std::net::AddrParseError| {
+                tracing::error!("Invalid gRPC address: {}", e);
+            })?;
+
+        tracing::info!("gRPC server listening on {}", grpc_addr_parsed);
+
+        GrpcServer::builder()
+            .add_service(grpc_server)
+            .serve(grpc_addr_parsed)
+            .await
+            .map_err(|e| {
+                tracing::error!("gRPC server error: {}", e);
+            })
+    });
+
+    // Wait for either server to exit
+    tokio::select! {
+        result = rest_handle => {
+            match result {
+                Ok(Ok(())) => tracing::info!("REST server exited normally"),
+                Ok(Err(e)) => {
+                    tracing::error!("REST server error: {:?}", e);
+                    return Err(Box::new(e));
                 }
-            },
-        ));
+                Err(e) => {
+                    tracing::error!("REST server task error: {}", e);
+                    return Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, e)));
+                }
+            }
+        }
+        result = grpc_handle => {
+            match result {
+                Ok(Ok(())) => tracing::info!("gRPC server exited normally"),
+                Ok(Err(())) => tracing::error!("gRPC server exited with error"),
+                Err(e) => {
+                    tracing::error!("gRPC server task error: {}", e);
+                    return Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, e)));
+                }
+            }
+        }
+    }
 
-    let addr: SocketAddr = ([0, 0, 0, 0], cfg.port).into();
-    tracing::info!(%addr, "starting messaging-service");
-    let listener = TcpListener::bind(addr)
-        .await
-        .map_err(|e| error::AppError::StartServer(e.to_string()))?;
-    axum::serve(listener, app)
-        .await
-        .map_err(|e| error::AppError::StartServer(e.to_string()))?;
+    // Note: When server exits, the _streams_listener task is still running.
+    // In a production deployment with graceful shutdown handlers, you would
+    // implement a shutdown signal (e.g., Ctrl+C) to abort this task properly.
+    // For now, it will be implicitly dropped when main() exits.
 
     Ok(())
 }

@@ -56,9 +56,7 @@ pub mod content {
 
         impl ContentServiceClient<Channel> {
             pub fn new(_channel: Channel) -> Self {
-                Self {
-                    _inner: _channel,
-                }
+                Self { _inner: _channel }
             }
 
             pub async fn get_feed(

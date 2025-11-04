@@ -1,8 +1,3 @@
-use axum::{
-    extract::{Path, Query, State},
-    http::StatusCode,
-    Json,
-};
 use serde::Deserialize;
 use uuid::Uuid;
 
@@ -12,6 +7,7 @@ use crate::{
     services::notification_service::{CreateNotificationRequest, NotificationService},
     state::AppState,
 };
+use actix_web::{web, HttpResponse};
 
 #[derive(Debug, Deserialize)]
 pub struct GetNotificationsQuery {
@@ -70,16 +66,17 @@ fn default_platform() -> String {
 /// GET /api/notifications
 /// Get user's notifications with pagination
 pub async fn get_notifications(
-    State(state): State<AppState>,
-    Path(user_id): Path<Uuid>,
-    Query(params): Query<GetNotificationsQuery>,
-) -> Result<Json<serde_json::Value>, AppError> {
+    state: web::Data<AppState>,
+    user_id: web::Path<Uuid>,
+    params: web::Query<GetNotificationsQuery>,
+) -> Result<HttpResponse, AppError> {
+    let user_id = user_id.into_inner();
     let result =
         NotificationService::get_notifications(&state.db, user_id, params.limit, params.offset)
             .await
             .map_err(|e| AppError::BadRequest(e))?;
 
-    Ok(Json(serde_json::json!({
+    Ok(HttpResponse::Ok().json(serde_json::json!({
         "notifications": result.notifications,
         "total": result.total,
         "unread_count": result.unread_count,
@@ -91,14 +88,15 @@ pub async fn get_notifications(
 /// GET /api/notifications/unread
 /// Get only unread notifications for user
 pub async fn get_unread_notifications(
-    State(state): State<AppState>,
-    Path(user_id): Path<Uuid>,
-) -> Result<Json<serde_json::Value>, AppError> {
+    state: web::Data<AppState>,
+    user_id: web::Path<Uuid>,
+) -> Result<HttpResponse, AppError> {
+    let user_id = user_id.into_inner();
     let notifications = NotificationService::get_unread_notifications(&state.db, user_id, 50)
         .await
         .map_err(|e| AppError::BadRequest(e))?;
 
-    Ok(Json(serde_json::json!({
+    Ok(HttpResponse::Ok().json(serde_json::json!({
         "notifications": notifications,
         "count": notifications.len()
     })))
@@ -107,17 +105,17 @@ pub async fn get_unread_notifications(
 /// POST /api/notifications
 /// Create a new notification
 pub async fn create_notification(
-    State(state): State<AppState>,
-    Json(payload): Json<CreateNotificationPayload>,
-) -> Result<(StatusCode, Json<serde_json::Value>), AppError> {
+    state: web::Data<AppState>,
+    payload: web::Json<CreateNotificationPayload>,
+) -> Result<HttpResponse, AppError> {
     let request = CreateNotificationRequest {
         recipient_id: payload.recipient_id,
         actor_id: payload.actor_id,
-        notification_type: payload.notification_type,
-        action_type: payload.action_type,
-        target_type: payload.target_type,
+        notification_type: payload.notification_type.clone(),
+        action_type: payload.action_type.clone(),
+        target_type: payload.target_type.clone(),
         target_id: payload.target_id,
-        message: payload.message,
+        message: payload.message.clone(),
     };
 
     let notification = NotificationService::create_notification(&state.db, request)
@@ -136,30 +134,28 @@ pub async fn create_notification(
         });
     }
 
-    Ok((
-        StatusCode::CREATED,
-        Json(serde_json::json!({
-            "id": notification.id,
-            "recipient_id": notification.recipient_id,
-            "actor_id": notification.actor_id,
-            "notification_type": notification.notification_type,
-            "is_read": notification.is_read,
-            "created_at": notification.created_at
-        })),
-    ))
+    Ok(HttpResponse::Created().json(serde_json::json!({
+        "id": notification.id,
+        "recipient_id": notification.recipient_id,
+        "actor_id": notification.actor_id,
+        "notification_type": notification.notification_type,
+        "is_read": notification.is_read,
+        "created_at": notification.created_at
+    })))
 }
 
 /// PUT /api/notifications/:notification_id/read
 /// Mark a notification as read
 pub async fn mark_notification_read(
-    State(state): State<AppState>,
-    Path(notification_id): Path<Uuid>,
-) -> Result<Json<serde_json::Value>, AppError> {
+    state: web::Data<AppState>,
+    notification_id: web::Path<Uuid>,
+) -> Result<HttpResponse, AppError> {
+    let notification_id = notification_id.into_inner();
     NotificationService::mark_as_read(&state.db, notification_id)
         .await
         .map_err(|e| AppError::BadRequest(e))?;
 
-    Ok(Json(serde_json::json!({
+    Ok(HttpResponse::Ok().json(serde_json::json!({
         "message": "Notification marked as read"
     })))
 }
@@ -167,10 +163,10 @@ pub async fn mark_notification_read(
 /// POST /api/notifications/device-tokens
 /// Register or update a device token for push notifications
 pub async fn register_device_token(
-    State(state): State<AppState>,
+    state: web::Data<AppState>,
     user: User,
-    Json(payload): Json<RegisterDeviceTokenPayload>,
-) -> Result<StatusCode, AppError> {
+    payload: web::Json<RegisterDeviceTokenPayload>,
+) -> Result<HttpResponse, AppError> {
     NotificationService::register_device_token(
         &state.db,
         user.id,
@@ -182,34 +178,35 @@ pub async fn register_device_token(
     .await
     .map_err(AppError::BadRequest)?;
 
-    Ok(StatusCode::CREATED)
+    Ok(HttpResponse::Created().finish())
 }
 
 /// DELETE /api/notifications/device-tokens/:token
 /// Deactivate a device token
 pub async fn unregister_device_token(
-    State(state): State<AppState>,
+    state: web::Data<AppState>,
     user: User,
-    Path(device_token): Path<String>,
-) -> Result<StatusCode, AppError> {
+    device_token: web::Path<String>,
+) -> Result<HttpResponse, AppError> {
     NotificationService::unregister_device_token(&state.db, user.id, &device_token)
         .await
         .map_err(AppError::BadRequest)?;
 
-    Ok(StatusCode::NO_CONTENT)
+    Ok(HttpResponse::NoContent().finish())
 }
 
 /// PUT /api/notifications/mark-all-read
 /// Mark all notifications as read for user
 pub async fn mark_all_read(
-    State(state): State<AppState>,
-    Path(user_id): Path<Uuid>,
-) -> Result<Json<serde_json::Value>, AppError> {
+    state: web::Data<AppState>,
+    user_id: web::Path<Uuid>,
+) -> Result<HttpResponse, AppError> {
+    let user_id = user_id.into_inner();
     let count = NotificationService::mark_all_as_read(&state.db, user_id)
         .await
         .map_err(|e| AppError::BadRequest(e))?;
 
-    Ok(Json(serde_json::json!({
+    Ok(HttpResponse::Ok().json(serde_json::json!({
         "message": "All notifications marked as read",
         "count": count
     })))
@@ -218,27 +215,29 @@ pub async fn mark_all_read(
 /// DELETE /api/notifications/:notification_id
 /// Delete a notification
 pub async fn delete_notification(
-    State(state): State<AppState>,
-    Path(notification_id): Path<Uuid>,
-) -> Result<StatusCode, AppError> {
+    state: web::Data<AppState>,
+    notification_id: web::Path<Uuid>,
+) -> Result<HttpResponse, AppError> {
+    let notification_id = notification_id.into_inner();
     NotificationService::delete_notification(&state.db, notification_id)
         .await
         .map_err(|e| AppError::BadRequest(e))?;
 
-    Ok(StatusCode::NO_CONTENT)
+    Ok(HttpResponse::NoContent().finish())
 }
 
 /// GET /api/notifications/preferences
 /// Get notification preferences for user
 pub async fn get_preferences(
-    State(state): State<AppState>,
-    Path(user_id): Path<Uuid>,
-) -> Result<Json<serde_json::Value>, AppError> {
+    state: web::Data<AppState>,
+    user_id: web::Path<Uuid>,
+) -> Result<HttpResponse, AppError> {
+    let user_id = user_id.into_inner();
     let prefs = NotificationService::get_or_create_preferences(&state.db, user_id)
         .await
         .map_err(|e| AppError::BadRequest(e))?;
 
-    Ok(Json(serde_json::json!({
+    Ok(HttpResponse::Ok().json(serde_json::json!({
         "user_id": prefs.user_id,
         "enable_push_notifications": prefs.enable_push_notifications,
         "enable_email_notifications": prefs.enable_email_notifications,
@@ -252,10 +251,11 @@ pub async fn get_preferences(
 /// PUT /api/notifications/preferences
 /// Update notification preferences for user
 pub async fn update_preferences(
-    State(state): State<AppState>,
-    Path(user_id): Path<Uuid>,
-    Json(payload): Json<UpdatePreferencesPayload>,
-) -> Result<Json<serde_json::Value>, AppError> {
+    state: web::Data<AppState>,
+    user_id: web::Path<Uuid>,
+    payload: web::Json<UpdatePreferencesPayload>,
+) -> Result<HttpResponse, AppError> {
+    let user_id = user_id.into_inner();
     let mut prefs = NotificationService::get_or_create_preferences(&state.db, user_id)
         .await
         .map_err(|e| AppError::BadRequest(e))?;
@@ -269,13 +269,13 @@ pub async fn update_preferences(
     if let Some(sms) = payload.enable_sms_notifications {
         prefs.enable_sms_notifications = sms;
     }
-    if let Some(freq) = payload.notification_frequency {
+    if let Some(freq) = payload.notification_frequency.clone() {
         prefs.notification_frequency = freq;
     }
-    if let Some(start) = payload.quiet_hours_start {
+    if let Some(start) = payload.quiet_hours_start.clone() {
         prefs.quiet_hours_start = Some(start);
     }
-    if let Some(end) = payload.quiet_hours_end {
+    if let Some(end) = payload.quiet_hours_end.clone() {
         prefs.quiet_hours_end = Some(end);
     }
 
@@ -283,7 +283,7 @@ pub async fn update_preferences(
         .await
         .map_err(|e| AppError::BadRequest(e))?;
 
-    Ok(Json(serde_json::json!({
+    Ok(HttpResponse::Ok().json(serde_json::json!({
         "user_id": updated.user_id,
         "enable_push_notifications": updated.enable_push_notifications,
         "enable_email_notifications": updated.enable_email_notifications,
@@ -297,14 +297,15 @@ pub async fn update_preferences(
 /// POST /api/notifications/subscribe/:notification_type
 /// Subscribe to a notification type
 pub async fn subscribe(
-    State(state): State<AppState>,
-    Path((user_id, notification_type)): Path<(Uuid, String)>,
-) -> Result<Json<serde_json::Value>, AppError> {
+    state: web::Data<AppState>,
+    path: web::Path<(Uuid, String)>,
+) -> Result<HttpResponse, AppError> {
+    let (user_id, notification_type) = path.into_inner();
     NotificationService::subscribe_to_type(&state.db, user_id, &notification_type)
         .await
         .map_err(|e| AppError::BadRequest(e))?;
 
-    Ok(Json(serde_json::json!({
+    Ok(HttpResponse::Ok().json(serde_json::json!({
         "message": format!("Subscribed to {}", notification_type)
     })))
 }
@@ -312,14 +313,15 @@ pub async fn subscribe(
 /// POST /api/notifications/unsubscribe/:notification_type
 /// Unsubscribe from a notification type
 pub async fn unsubscribe(
-    State(state): State<AppState>,
-    Path((user_id, notification_type)): Path<(Uuid, String)>,
-) -> Result<Json<serde_json::Value>, AppError> {
+    state: web::Data<AppState>,
+    path: web::Path<(Uuid, String)>,
+) -> Result<HttpResponse, AppError> {
+    let (user_id, notification_type) = path.into_inner();
     NotificationService::unsubscribe_from_type(&state.db, user_id, &notification_type)
         .await
         .map_err(|e| AppError::BadRequest(e))?;
 
-    Ok(Json(serde_json::json!({
+    Ok(HttpResponse::Ok().json(serde_json::json!({
         "message": format!("Unsubscribed from {}", notification_type)
     })))
 }

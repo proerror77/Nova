@@ -1,94 +1,86 @@
-use std::time::Instant;
-
-use axum::{
-    body::Body,
-    extract::MatchedPath,
-    http::Request,
-    middleware::Next,
-    response::{IntoResponse, Response},
-};
+use actix_web::{HttpResponse, Responder};
 use once_cell::sync::Lazy;
-use prometheus::{
-    Encoder, HistogramOpts, HistogramVec, IntCounterVec, Opts, TextEncoder,
-};
-
-static HTTP_REQUESTS_TOTAL: Lazy<IntCounterVec> = Lazy::new(|| {
-    let counter = IntCounterVec::new(
-        Opts::new(
-            "auth_service_http_requests_total",
-            "Total number of HTTP requests handled by auth-service",
-        ),
-        &["method", "path", "status"],
-    )
-    .expect("failed to create auth_service_http_requests_total");
-    prometheus::default_registry()
-        .register(Box::new(counter.clone()))
-        .expect("failed to register auth_service_http_requests_total");
-    counter
-});
-
-static HTTP_REQUEST_DURATION_SECONDS: Lazy<HistogramVec> = Lazy::new(|| {
-    let histogram = HistogramVec::new(
-        HistogramOpts::new(
-            "auth_service_http_request_duration_seconds",
-            "HTTP request latencies for auth-service",
-        )
-        .buckets(vec![0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5]),
-        &["method", "path", "status"],
-    )
-    .expect("failed to create auth_service_http_request_duration_seconds");
-    prometheus::default_registry()
-        .register(Box::new(histogram.clone()))
-        .expect("failed to register auth_service_http_request_duration_seconds");
-    histogram
-});
-
-/// Axum middleware that records Prometheus HTTP metrics.
-pub async fn track_http_metrics(req: Request<Body>, next: Next) -> Response {
-    let method = req.method().as_str().to_string();
-    let path = req
-        .extensions()
-        .get::<MatchedPath>()
-        .map(|p| p.as_str().to_string())
-        .unwrap_or_else(|| req.uri().path().to_string());
-
-    let start = Instant::now();
-    let response = next.run(req).await;
-    let status = response.status().as_u16().to_string();
-    let elapsed = start.elapsed().as_secs_f64();
-
-    HTTP_REQUESTS_TOTAL
-        .with_label_values(&[&method, &path, &status])
-        .inc();
-    HTTP_REQUEST_DURATION_SECONDS
-        .with_label_values(&[&method, &path, &status])
-        .observe(elapsed);
-
-    response
-}
+use prometheus::{Encoder, IntGauge, TextEncoder};
+use sqlx::PgPool;
+use std::time::Duration;
 
 /// Handler that serialises Prometheus metrics in text format.
-pub async fn metrics_handler() -> impl IntoResponse {
+pub async fn metrics_handler() -> impl Responder {
     let encoder = TextEncoder::new();
     let metric_families = prometheus::gather();
 
     let mut buffer = Vec::new();
-    if let Err(err) = encoder.encode(&metric_families, &mut buffer) {
-        return (
-            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-            err.to_string(),
-        )
-            .into_response();
+    match encoder.encode(&metric_families, &mut buffer) {
+        Ok(_) => HttpResponse::Ok()
+            .content_type(encoder.format_type())
+            .body(buffer),
+        Err(err) => HttpResponse::InternalServerError().body(err.to_string()),
     }
+}
 
-    Response::builder()
-        .status(axum::http::StatusCode::OK)
-        .header(axum::http::header::CONTENT_TYPE, encoder.format_type())
-        .body(buffer.into())
-        .unwrap_or_else(|err| {
-            Response::builder()
-                .status(axum::http::StatusCode::INTERNAL_SERVER_ERROR)
-                .body(err.to_string().into())
-                .expect("failed to build metrics error response")
-        })
+// =========================
+// Outbox backlog gauge
+// =========================
+
+/// Initialize outbox metrics gauge (call from main() for better error handling)
+pub fn initialize_outbox_gauge() -> Result<(), Box<dyn std::error::Error>> {
+    let g = IntGauge::new(
+        "outbox_unpublished_events",
+        "Number of unpublished events in outbox table",
+    )?;
+    prometheus::default_registry()
+        .register(Box::new(g.clone()))?;
+
+    // Cache the gauge for later use
+    let _ = &*OUTBOX_UNPUBLISHED_EVENTS; // Force lazy init
+    Ok(())
+}
+
+static OUTBOX_UNPUBLISHED_EVENTS: Lazy<IntGauge> = Lazy::new(|| {
+    // This is called lazily only if the gauge is accessed
+    // For proper error handling, call initialize_outbox_gauge() from main()
+    match IntGauge::new(
+        "outbox_unpublished_events",
+        "Number of unpublished events in outbox table",
+    ) {
+        Ok(g) => {
+            // Try to register, but if it fails, we'll still return the gauge
+            // (it might have been registered by initialize_outbox_gauge already)
+            let _ = prometheus::default_registry().register(Box::new(g.clone()));
+            g
+        }
+        Err(e) => {
+            tracing::error!("failed to create outbox gauge: {}", e);
+            // Return a dummy gauge to avoid panicking in lazy_static context
+            IntGauge::new("dummy", "dummy").expect("dummy gauge")
+        }
+    }
+});
+
+pub fn spawn_metrics_updater(db: PgPool) {
+    tokio::spawn(async move {
+        let interval = Duration::from_secs(10);
+        loop {
+            if let Err(e) = update_outbox_gauge(&db).await {
+                tracing::debug!("outbox metrics updater failed: {}", e);
+            }
+            tokio::time::sleep(interval).await;
+        }
+    });
+}
+
+async fn update_outbox_gauge(db: &PgPool) -> Result<(), sqlx::Error> {
+    let count: i64 = sqlx::query_scalar(
+        r#"
+        SELECT COUNT(*)
+        FROM outbox_events
+        WHERE published_at IS NULL
+          AND retry_count < 3
+        "#,
+    )
+    .fetch_one(db)
+    .await?;
+
+    OUTBOX_UNPUBLISHED_EVENTS.set(count as i64);
+    Ok(())
 }
