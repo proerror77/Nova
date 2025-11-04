@@ -312,7 +312,8 @@ impl user_service_server::UserService for UserServiceImpl {
         }
     }
 
-    /// FollowUser - Create follow relationship
+    /// FollowUser - Create follow relationship with state machine protection
+    /// Fix P1-3: Prevent overwriting block relationship with follow
     async fn follow_user(
         &self,
         request: Request<FollowUserRequest>,
@@ -328,11 +329,17 @@ impl user_service_server::UserService for UserServiceImpl {
         let relationship_id = uuid::Uuid::new_v4().to_string();
         let now = chrono::Utc::now().to_rfc3339();
 
+        // Prevent follow relationship from overwriting block
+        // If block exists, keep it; otherwise, create/update to follow
         let result = sqlx::query(
             "INSERT INTO user_relationships
              (id, follower_id, followee_id, relationship_type, status, created_at, updated_at)
              VALUES ($1, $2, $3, 'follow', 'active', $4, $5)
-             ON CONFLICT (follower_id, followee_id) DO UPDATE SET status = 'active'
+             ON CONFLICT (follower_id, followee_id) DO UPDATE SET
+                 relationship_type = CASE WHEN relationship_type = 'block' THEN 'block' ELSE 'follow' END,
+                 status = 'active',
+                 updated_at = $5
+             WHERE relationship_type != 'block'
              RETURNING id, follower_id, followee_id, relationship_type, status, created_at, updated_at",
         )
         .bind(&relationship_id)
@@ -341,22 +348,23 @@ impl user_service_server::UserService for UserServiceImpl {
         .bind(&now)
         .bind(&now)
         .fetch_one(&**self.db)
-        .await;
+        .await
+        .map_err(|e| {
+            tracing::error!(error = %e, "Failed to follow user");
+            Status::internal("Failed to follow user")
+        })?;
 
-        match result {
-            Ok(row) => Ok(Response::new(FollowUserResponse {
-                relationship: Some(UserRelationship {
-                    id: row.get("id"),
-                    follower_id: row.get("follower_id"),
-                    followee_id: row.get("followee_id"),
-                    relationship_type: row.get("relationship_type"),
-                    status: row.get("status"),
-                    created_at: row.get("created_at"),
-                    updated_at: row.get("updated_at"),
-                }),
-            })),
-            Err(e) => Err(Status::internal(format!("Failed to follow user: {}", e))),
-        }
+        Ok(Response::new(FollowUserResponse {
+            relationship: Some(UserRelationship {
+                id: result.get("id"),
+                follower_id: result.get("follower_id"),
+                followee_id: result.get("followee_id"),
+                relationship_type: result.get("relationship_type"),
+                status: result.get("status"),
+                created_at: result.get("created_at"),
+                updated_at: result.get("updated_at"),
+            }),
+        }))
     }
 
     /// UnfollowUser - Remove follow relationship
@@ -388,7 +396,8 @@ impl user_service_server::UserService for UserServiceImpl {
         }))
     }
 
-    /// BlockUser - Create block relationship
+    /// BlockUser - Create block relationship with state machine protection
+    /// Fix P1-3: Ensure block always takes precedence; remove previous follow if exists
     async fn block_user(
         &self,
         request: Request<BlockUserRequest>,
@@ -402,11 +411,16 @@ impl user_service_server::UserService for UserServiceImpl {
         let relationship_id = uuid::Uuid::new_v4().to_string();
         let now = chrono::Utc::now().to_rfc3339();
 
+        // Block takes precedence over follow
+        // Always set to block regardless of previous state
         let result = sqlx::query(
             "INSERT INTO user_relationships
              (id, follower_id, followee_id, relationship_type, status, created_at, updated_at)
              VALUES ($1, $2, $3, 'block', 'active', $4, $5)
-             ON CONFLICT (follower_id, followee_id) DO UPDATE SET relationship_type = 'block'
+             ON CONFLICT (follower_id, followee_id) DO UPDATE SET
+                 relationship_type = 'block',
+                 status = 'active',
+                 updated_at = $5
              RETURNING id, follower_id, followee_id, relationship_type, status, created_at, updated_at",
         )
         .bind(&relationship_id)
@@ -415,22 +429,23 @@ impl user_service_server::UserService for UserServiceImpl {
         .bind(&now)
         .bind(&now)
         .fetch_one(&**self.db)
-        .await;
+        .await
+        .map_err(|e| {
+            tracing::error!(error = %e, "Failed to block user");
+            Status::internal("Failed to block user")
+        })?;
 
-        match result {
-            Ok(row) => Ok(Response::new(BlockUserResponse {
-                relationship: Some(UserRelationship {
-                    id: row.get("id"),
-                    follower_id: row.get("follower_id"),
-                    followee_id: row.get("followee_id"),
-                    relationship_type: row.get("relationship_type"),
-                    status: row.get("status"),
-                    created_at: row.get("created_at"),
-                    updated_at: row.get("updated_at"),
-                }),
-            })),
-            Err(e) => Err(Status::internal(format!("Failed to block user: {}", e))),
-        }
+        Ok(Response::new(BlockUserResponse {
+            relationship: Some(UserRelationship {
+                id: result.get("id"),
+                follower_id: result.get("follower_id"),
+                followee_id: result.get("followee_id"),
+                relationship_type: result.get("relationship_type"),
+                status: result.get("status"),
+                created_at: result.get("created_at"),
+                updated_at: result.get("updated_at"),
+            }),
+        }))
     }
 
     /// UnblockUser - Remove block relationship
