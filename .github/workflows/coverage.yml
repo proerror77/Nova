@@ -58,7 +58,7 @@ jobs:
       run: cargo tarpaulin --out Xml --timeout 300 --exclude-files tests/** --output-dir coverage
 
     - name: Upload to Codecov
-      uses: codecov/codecov-action@v3
+      uses: codecov/codecov-action@v5
       with:
         files: ./coverage/cobertura.xml
         flags: backend
