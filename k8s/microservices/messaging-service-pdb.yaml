@@ -1,18 +1,10 @@
----
-# Pod Disruption Budget for Messaging Service
-# Ensures minimum availability during voluntary disruptions (cluster upgrades, etc.)
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
-  name: messaging-service-pdb
+  name: messaging-service
   namespace: nova-messaging
-  labels:
-    app: nova
-    component: messaging-service
 spec:
-  minAvailable: 2  # Maintain at least 2 replicas during disruptions
+  minAvailable: 2
   selector:
     matchLabels:
-      app: nova
-      component: messaging-service
-  unhealthyPodEvictionPolicy: IfHealthyBudget
+      app: messaging-service

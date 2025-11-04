@@ -1,0 +1,336 @@
+syntax = "proto3";
+package nova.video_service;
+
+// ============================================================================
+// Video Service gRPC API
+//
+// This service manages video content, processing, and streaming.
+//
+// Key responsibilities:
+//   - Video upload and management
+//   - Video transcoding and optimization
+//   - Video metadata and thumbnails
+//   - Adaptive bitrate streaming (HLS/DASH)
+// ============================================================================
+
+// Message: Represents video metadata
+message Video {
+  string id = 1;                      // UUID of video
+  string owner_id = 2;                // UUID of user who uploaded
+  string title = 3;                   // Video title
+  string description = 4;             // Video description
+  string filename = 5;                // Original filename
+  int32 duration = 6;                 // Duration in seconds
+  int32 width = 7;                    // Video width in pixels
+  int32 height = 8;                   // Video height in pixels
+  int64 file_size = 9;                // Original file size in bytes
+  float frame_rate = 10;              // Frames per second
+  string codec_video = 11;            // Video codec (h264, vp9, etc.)
+  string codec_audio = 12;            // Audio codec (aac, opus, etc.)
+  int32 bitrate = 13;                 // Video bitrate in kbps
+  string thumbnail_url = 14;          // Thumbnail image URL
+  string status = 15;                 // "uploading", "processing", "ready", "failed"
+  string s3_key = 16;                 // S3 storage key
+  bool is_public = 17;                // Whether video is public
+  string visibility = 18;             // "public", "private", "unlisted"
+  string created_at = 19;             // ISO 8601 timestamp
+  string published_at = 20;           // ISO 8601 timestamp (when published)
+  string deleted_at = 21;             // ISO 8601 timestamp (soft delete)
+}
+
+// Message: Video processing status
+message VideoProcessing {
+  string id = 1;                      // UUID of processing job
+  string video_id = 2;                // UUID of video being processed
+  string status = 3;                  // "pending", "processing", "completed", "failed"
+  int32 progress_percent = 4;         // Progress 0-100
+  string current_step = 5;            // Current processing step
+  repeated string output_formats = 6; // Generated formats
+  string error_message = 7;           // Error if failed
+  string created_at = 8;              // ISO 8601 timestamp
+  string completed_at = 9;            // ISO 8601 timestamp (optional)
+}
+
+// Message: Video variant/rendition for adaptive streaming
+message VideoVariant {
+  string id = 1;                      // UUID of variant
+  string video_id = 2;                // UUID of original video
+  string variant_name = 3;            // "1080p", "720p", "480p", "360p", "240p"
+  int32 width = 4;                    // Width in pixels
+  int32 height = 5;                   // Height in pixels
+  int32 bitrate = 6;                  // Bitrate in kbps
+  string codec_video = 7;             // Video codec
+  string format = 8;                  // "mp4", "webm", "hls", "dash"
+  string s3_key = 9;                  // S3 storage key
+  string cdn_url = 10;                // CDN access URL
+  int64 file_size = 11;               // File size in bytes
+  string created_at = 12;             // ISO 8601 timestamp
+}
+
+// Message: HLS/DASH manifest
+message StreamingManifest {
+  string id = 1;                      // UUID of manifest
+  string video_id = 2;                // UUID of video
+  string manifest_type = 3;           // "hls" or "dash"
+  string manifest_url = 4;            // URL to m3u8 or mpd file
+  repeated string variant_urls = 5;   // URLs of video variants
+  string created_at = 6;              // ISO 8601 timestamp
+  string updated_at = 7;              // ISO 8601 timestamp
+}
+
+// Message: Video analytics
+message VideoAnalytics {
+  string video_id = 1;                // UUID of video
+  int32 view_count = 2;               // Total views
+  int32 completion_rate = 3;          // Percentage of viewers who finished
+  int32 average_watch_time = 4;       // In seconds
+  int32 unique_viewers = 5;           // Number of unique viewers
+  float engagement_score = 6;         // Engagement metric
+  string created_at = 7;              // ISO 8601 timestamp
+  string updated_at = 8;              // ISO 8601 timestamp
+}
+
+// ============================================================================
+// Upload Video (Initiate)
+// ============================================================================
+
+message InitiateVideoUploadRequest {
+  string owner_id = 1;
+  string title = 2;
+  string description = 3;             // Optional
+  string filename = 4;
+  int64 file_size = 5;
+  bool is_public = 6;
+  string visibility = 7;              // "public", "private", "unlisted"
+}
+
+message InitiateVideoUploadResponse {
+  string upload_id = 1;               // Upload session ID
+  string video_id = 2;                // Assigned video ID
+  string presigned_url = 3;           // Pre-signed S3 upload URL
+  string upload_expires_at = 4;       // URL expiration time
+}
+
+// ============================================================================
+// Complete Video Upload
+// ============================================================================
+
+message CompleteVideoUploadRequest {
+  string upload_id = 1;
+  string video_id = 2;
+  string s3_etag = 3;
+}
+
+message CompleteVideoUploadResponse {
+  Video video = 1;
+}
+
+// ============================================================================
+// Get Video by ID
+// ============================================================================
+
+message GetVideoRequest {
+  string video_id = 1;
+}
+
+message GetVideoResponse {
+  Video video = 1;
+}
+
+// ============================================================================
+// Get Videos by Owner
+// ============================================================================
+
+message GetVideosByOwnerRequest {
+  string owner_id = 1;
+  int32 limit = 2;
+  int32 offset = 3;
+}
+
+message GetVideosByOwnerResponse {
+  repeated Video videos = 1;
+  int32 total_count = 2;
+}
+
+// ============================================================================
+// Update Video Metadata
+// ============================================================================
+
+message UpdateVideoMetadataRequest {
+  string video_id = 1;
+  string title = 2;                   // Optional
+  string description = 3;             // Optional
+  bool is_public = 4;                 // Optional
+  string visibility = 5;              // Optional
+}
+
+message UpdateVideoMetadataResponse {
+  Video video = 1;
+}
+
+// ============================================================================
+// Process Video
+// ============================================================================
+
+message ProcessVideoRequest {
+  string video_id = 1;
+  repeated string output_formats = 2; // Formats to generate
+}
+
+message ProcessVideoResponse {
+  VideoProcessing processing = 1;
+}
+
+// ============================================================================
+// Get Processing Status
+// ============================================================================
+
+message GetVideoProcessingStatusRequest {
+  string video_id = 1;
+}
+
+message GetVideoProcessingStatusResponse {
+  VideoProcessing processing = 1;
+}
+
+// ============================================================================
+// Get Video Variants
+// ============================================================================
+
+message GetVideoVariantsRequest {
+  string video_id = 1;
+}
+
+message GetVideoVariantsResponse {
+  repeated VideoVariant variants = 1;
+}
+
+// ============================================================================
+// Get Streaming Manifest
+// ============================================================================
+
+message GetStreamingManifestRequest {
+  string video_id = 1;
+  string format = 2;                  // "hls" or "dash"
+}
+
+message GetStreamingManifestResponse {
+  StreamingManifest manifest = 1;
+}
+
+// ============================================================================
+// Get Video Analytics
+// ============================================================================
+
+message GetVideoAnalyticsRequest {
+  string video_id = 1;
+}
+
+message GetVideoAnalyticsResponse {
+  VideoAnalytics analytics = 1;
+}
+
+// ============================================================================
+// Record Video View
+// ============================================================================
+
+message RecordVideoViewRequest {
+  string video_id = 1;
+  string viewer_id = 2;               // Optional
+  int32 watch_time = 3;               // In seconds
+  float completion_percentage = 4;    // 0-100
+}
+
+message RecordVideoViewResponse {
+  bool success = 1;
+}
+
+// ============================================================================
+// Delete Video
+// ============================================================================
+
+message DeleteVideoRequest {
+  string video_id = 1;
+}
+
+message DeleteVideoResponse {
+  bool success = 1;
+}
+
+// ============================================================================
+// Search Videos
+// ============================================================================
+
+message SearchVideosRequest {
+  string query = 1;
+  int32 limit = 2;
+  int32 offset = 3;
+}
+
+message SearchVideosResponse {
+  repeated Video videos = 1;
+  int32 total_count = 2;
+}
+
+// ============================================================================
+// Get Trending Videos
+// ============================================================================
+
+message GetTrendingVideosRequest {
+  int32 limit = 1;
+  int32 offset = 2;
+  string time_window = 3;             // "24h", "7d", "30d"
+}
+
+message GetTrendingVideosResponse {
+  repeated Video videos = 1;
+  int32 total_count = 2;
+}
+
+// ============================================================================
+// Video Service Definition
+// ============================================================================
+
+service VideoService {
+  // Initiate video upload
+  rpc InitiateVideoUpload(InitiateVideoUploadRequest) returns (InitiateVideoUploadResponse);
+
+  // Complete video upload
+  rpc CompleteVideoUpload(CompleteVideoUploadRequest) returns (CompleteVideoUploadResponse);
+
+  // Get video by ID
+  rpc GetVideo(GetVideoRequest) returns (GetVideoResponse);
+
+  // Get all videos uploaded by user
+  rpc GetVideosByOwner(GetVideosByOwnerRequest) returns (GetVideosByOwnerResponse);
+
+  // Update video metadata
+  rpc UpdateVideoMetadata(UpdateVideoMetadataRequest) returns (UpdateVideoMetadataResponse);
+
+  // Start video processing (transcoding, etc.)
+  rpc ProcessVideo(ProcessVideoRequest) returns (ProcessVideoResponse);
+
+  // Get video processing status
+  rpc GetVideoProcessingStatus(GetVideoProcessingStatusRequest) returns (GetVideoProcessingStatusResponse);
+
+  // Get video variants/renditions
+  rpc GetVideoVariants(GetVideoVariantsRequest) returns (GetVideoVariantsResponse);
+
+  // Get streaming manifest (HLS/DASH)
+  rpc GetStreamingManifest(GetStreamingManifestRequest) returns (GetStreamingManifestResponse);
+
+  // Get video analytics
+  rpc GetVideoAnalytics(GetVideoAnalyticsRequest) returns (GetVideoAnalyticsResponse);
+
+  // Record video view/watch event
+  rpc RecordVideoView(RecordVideoViewRequest) returns (RecordVideoViewResponse);
+
+  // Delete video (soft delete)
+  rpc DeleteVideo(DeleteVideoRequest) returns (DeleteVideoResponse);
+
+  // Search videos by title/description
+  rpc SearchVideos(SearchVideosRequest) returns (SearchVideosResponse);
+
+  // Get trending videos
+  rpc GetTrendingVideos(GetTrendingVideosRequest) returns (GetTrendingVideosResponse);
+}

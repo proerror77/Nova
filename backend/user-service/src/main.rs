@@ -1,15 +1,17 @@
 use actix_cors::Cors;
 use actix_web::{middleware::Logger, web, App, HttpResponse, HttpServer};
 use std::io;
+use std::net::SocketAddr;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc,
 };
 use tokio::sync::Mutex;
+use tonic::transport::Server as GrpcServer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use user_service::grpc::{
-    AuthServiceClient, ContentServiceClient, GrpcClientConfig, HealthChecker,
+    AuthServiceClient, ContentServiceClient, GrpcClientConfig, HealthChecker, UserServiceImpl,
 };
 use user_service::{
     config::Config,
@@ -442,6 +444,35 @@ async fn main() -> io::Result<()> {
         None
     };
 
+    // ========================================
+    // Build gRPC server for UserService
+    // ========================================
+    let app_state = Arc::new(user_service::AppState {
+        db: db_pool.clone(),
+    });
+    let grpc_service = UserServiceImpl::new(app_state);
+    let grpc_server_svc = user_service::grpc::nova::user_service::user_service_server::UserServiceServer::new(grpc_service);
+
+    // Start gRPC server on port + 1000 (e.g., 8080 -> 9080)
+    let grpc_port = config.app.port + 1000;
+    let grpc_addr = format!("{}:{}", config.app.host, grpc_port);
+    let grpc_handle = tokio::spawn(async move {
+        let grpc_addr_parsed: SocketAddr = grpc_addr.parse()
+            .map_err(|e: std::net::AddrParseError| {
+                tracing::error!("Invalid gRPC address: {}", e);
+            })?;
+
+        tracing::info!("gRPC server listening on {}", grpc_addr_parsed);
+
+        GrpcServer::builder()
+            .add_service(grpc_server_svc)
+            .serve(grpc_addr_parsed)
+            .await
+            .map_err(|e| {
+                tracing::error!("gRPC server error: {}", e);
+            })
+    });
+
     // Create and run HTTP server
     let server = HttpServer::new(move || {
         let content_client_data = content_client_data.clone();
@@ -654,9 +685,22 @@ async fn main() -> io::Result<()> {
     .workers(4)
     .run();
 
-    // Gracefully shutdown worker on server exit
+    // Run both HTTP and gRPC servers concurrently
     // The server will run until Ctrl+C or other shutdown signal
-    let result = server.await;
+    let result = tokio::select! {
+        http_result = server => {
+            tracing::info!("HTTP server exited");
+            http_result
+        }
+        grpc_result = grpc_handle => {
+            tracing::info!("gRPC server exited");
+            match grpc_result {
+                Ok(Ok(())) => Ok(()),
+                Ok(Err(())) => Err(io::Error::new(io::ErrorKind::Other, "gRPC server error")),
+                Err(e) => Err(io::Error::new(io::ErrorKind::Other, e.to_string())),
+            }
+        }
+    };
 
     // ========================================
     // Cleanup: Graceful worker shutdown

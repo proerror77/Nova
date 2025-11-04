@@ -8,11 +8,14 @@ use messaging_service::{
     services::{encryption::EncryptionService, key_exchange::KeyExchangeService, push::ApnsPush},
     state::AppState,
     websocket::streams::{start_streams_listener, StreamsConfig},
+    nova::messaging_service::messaging_service_server::MessagingServiceServer,
 };
 use redis_utils::{RedisPool, SentinelConfig};
+use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::task::JoinHandle;
+use tonic::transport::Server as GrpcServer;
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
 
@@ -100,29 +103,95 @@ async fn main() -> Result<(), error::AppError> {
     });
 
     let bind_addr = format!("0.0.0.0:{}", cfg.port);
-    tracing::info!(%bind_addr, "starting messaging-service");
+    tracing::info!(%bind_addr, "starting messaging-service (REST on port {})", cfg.port);
 
-    let server = HttpServer::new(move || {
-        let openapi_doc = ApiDoc::openapi();
+    // Build gRPC service
+    let grpc_service = messaging_service::grpc::MessagingServiceImpl::new(state.clone());
+    let grpc_server = MessagingServiceServer::new(grpc_service);
 
-        App::new()
-            .app_data(web::Data::new(openapi_doc.clone()))
-            .service(
-                SwaggerUi::new("/swagger-ui/{_:.*}")
-                    .url("/api/v1/openapi.json", openapi_doc.clone()),
-            )
-            .route("/api/v1/openapi.json", web::get().to(openapi_json))
-            .app_data(web::Data::new(state.clone()))
-            .app_data(web::Data::new(db.clone()))
-            .configure(routes::configure_routes)
-            .wrap(actix_middleware::CorrelationIdMiddleware)
-            .wrap(actix_middleware::MetricsMiddleware)
-    })
-    .bind(&bind_addr)
-    .map_err(|e| error::AppError::StartServer(e.to_string()))?
-    .run()
-    .await
-    .map_err(|e| error::AppError::StartServer(e.to_string()))?;
+    // Start both REST and gRPC servers
+    let rest_state = state.clone();
+    let rest_db = db.clone();
+
+    // REST API server on cfg.port
+    let rest_handle = tokio::spawn(async move {
+        let bind_addr_parsed: SocketAddr = bind_addr.parse()
+            .map_err(|e: std::net::AddrParseError| {
+                error::AppError::StartServer(format!("Invalid bind address: {}", e))
+            })?;
+
+        tracing::info!("REST API listening on {}", bind_addr_parsed);
+
+        let result = HttpServer::new(move || {
+            let openapi_doc = ApiDoc::openapi();
+
+            App::new()
+                .app_data(web::Data::new(openapi_doc.clone()))
+                .service(
+                    SwaggerUi::new("/swagger-ui/{_:.*}")
+                        .url("/api/v1/openapi.json", openapi_doc.clone()),
+                )
+                .route("/api/v1/openapi.json", web::get().to(openapi_json))
+                .app_data(web::Data::new(rest_state.clone()))
+                .app_data(web::Data::new(rest_db.clone()))
+                .configure(routes::configure_routes)
+                .wrap(actix_middleware::CorrelationIdMiddleware)
+                .wrap(actix_middleware::MetricsMiddleware)
+        })
+        .bind(&bind_addr_parsed)
+        .map_err(|e| error::AppError::StartServer(format!("Failed to bind REST server: {}", e)))?
+        .run()
+        .await
+        .map_err(|e| error::AppError::StartServer(format!("REST server error: {}", e)))?;
+
+        Ok::<(), error::AppError>(())
+    });
+
+    // gRPC server on cfg.port + 1000 (e.g., 8080 -> 9080)
+    let grpc_addr = format!("0.0.0.0:{}", cfg.port + 1000);
+    let grpc_handle = tokio::spawn(async move {
+        let grpc_addr_parsed: SocketAddr = grpc_addr.parse()
+            .map_err(|e: std::net::AddrParseError| {
+                tracing::error!("Invalid gRPC address: {}", e);
+            })?;
+
+        tracing::info!("gRPC server listening on {}", grpc_addr_parsed);
+
+        GrpcServer::builder()
+            .add_service(grpc_server)
+            .serve(grpc_addr_parsed)
+            .await
+            .map_err(|e| {
+                tracing::error!("gRPC server error: {}", e);
+            })
+    });
+
+    // Wait for either server to exit
+    tokio::select! {
+        result = rest_handle => {
+            match result {
+                Ok(Ok(())) => tracing::info!("REST server exited normally"),
+                Ok(Err(e)) => {
+                    tracing::error!("REST server error: {:?}", e);
+                    return Err(Box::new(e));
+                }
+                Err(e) => {
+                    tracing::error!("REST server task error: {}", e);
+                    return Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, e)));
+                }
+            }
+        }
+        result = grpc_handle => {
+            match result {
+                Ok(Ok(())) => tracing::info!("gRPC server exited normally"),
+                Ok(Err(())) => tracing::error!("gRPC server exited with error"),
+                Err(e) => {
+                    tracing::error!("gRPC server task error: {}", e);
+                    return Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, e)));
+                }
+            }
+        }
+    }
 
     // Note: When server exits, the _streams_listener task is still running.
     // In a production deployment with graceful shutdown handlers, you would

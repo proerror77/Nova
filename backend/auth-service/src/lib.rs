@@ -40,11 +40,9 @@ pub struct AppState {
     pub kafka_producer: Option<KafkaEventProducer>,
 }
 
-// gRPC generated code
+// gRPC generated code (from Phase 0 proto definitions)
 pub mod nova {
-    pub mod auth {
-        pub mod v1 {
-            tonic::include_proto!("nova.auth.v1");
-        }
+    pub mod auth_service {
+        tonic::include_proto!("nova.auth_service");
     }
 }
