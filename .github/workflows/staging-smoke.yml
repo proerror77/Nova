@@ -106,7 +106,7 @@ jobs:
           fi
 
           # If config invalid, attempt AWS fallback using EKS
-          if ! grep -q "^apiVersion" ~/.kube/config 2>/dev/null; then
+          if ! grep -q "apiVersion" ~/.kube/config 2>/dev/null; then
             if [ "${{ steps.aws-creds.outcome }}" = "success" ] && command -v aws >/dev/null 2>&1; then
               echo "::notice::attempting AWS EKS kubeconfig fallback (cluster=${EKS_CLUSTER_NAME}, region=${AWS_REGION})"
               aws eks update-kubeconfig --name "${EKS_CLUSTER_NAME}" --region "${AWS_REGION}" --alias nova-staging
