@@ -79,7 +79,7 @@ mod tests {
     fn test_generate_secret_and_uri() {
         let result = TOTPGenerator::generate_secret_and_uri("test@example.com");
         assert!(result.is_ok());
-        let (secret, uri) = result.unwrap();
+        let (secret, uri) = result.expect("should generate secret and URI successfully");
         assert!(!secret.is_empty());
         assert!(uri.contains("otpauth://totp/Nova"));
     }
