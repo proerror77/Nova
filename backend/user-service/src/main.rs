@@ -113,15 +113,21 @@ async fn main() -> io::Result<()> {
         config.database.max_connections
     );
 
-    // Run migrations in non-production unless explicitly skipped
+    // Run migrations - Fix P0-5: Production failures must exit immediately
     let run_migrations_env = std::env::var("RUN_MIGRATIONS").unwrap_or_else(|_| "true".into());
-    if !config.is_production() && run_migrations_env != "false" {
+    if run_migrations_env != "false" {
         tracing::info!("Running database migrations...");
         match run_migrations(&db_pool).await {
             Ok(_) => tracing::info!("Database migrations completed"),
             Err(e) => {
-                // 容忍本地/历史迁移缺口（如 VersionMissing），避免开发环境崩溃
-                tracing::warn!("Skipping migrations due to error: {:#}", e);
+                if config.is_production() {
+                    // In production, migration failures are fatal - exit immediately with error
+                    tracing::error!("Database migration failed in production environment: {:#}", e);
+                    std::process::exit(1);
+                } else {
+                    // In development, tolerate migration errors (e.g., VersionMissing from old migrations)
+                    tracing::warn!("Database migration warning (non-production): {:#}", e);
+                }
             }
         }
     } else {
