@@ -8,6 +8,8 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::utils::redis_timeout::run_with_timeout;
+use rand::Rng;
+use tokio::time::Duration as TokioDuration;
 
 const USER_CACHE_TTL: usize = 3600; // 1 hour
 
@@ -153,10 +155,27 @@ pub async fn invalidate_search_cache(
     let mut redis = redis.clone();
 
     // Use SCAN instead of KEYS to avoid blocking Redis
+    const MAX_ITERATIONS: usize = 1000;
+    const MAX_KEYS: usize = 50_000;
     let mut cursor: u64 = 0;
     let mut all_keys: Vec<String> = Vec::new();
+    let mut iterations: usize = 0;
 
     loop {
+        iterations += 1;
+        if iterations > MAX_ITERATIONS || all_keys.len() >= MAX_KEYS {
+            tracing::warn!(
+                "SCAN aborted early: iterations={}, collected_keys={}, pattern={}",
+                iterations,
+                all_keys.len(),
+                pattern
+            );
+            break;
+        }
+
+        let mut rng = rand::thread_rng();
+        let count: u32 = rng.gen_range(100..=500);
+
         // SCAN with MATCH pattern and COUNT for batch size
         let (next_cursor, batch_keys): (u64, Vec<String>) = run_with_timeout(
             redis::cmd("SCAN")
@@ -164,18 +183,30 @@ pub async fn invalidate_search_cache(
                 .arg("MATCH")
                 .arg(&pattern)
                 .arg("COUNT")
-                .arg(100) // Process 100 keys at a time
+                .arg(count) // Jittered batch size to avoid sync thundering
                 .query_async::<_, (u64, Vec<String>)>(&mut redis),
         )
         .await?;
 
-        all_keys.extend(batch_keys);
+        if !batch_keys.is_empty() {
+            let room_left = MAX_KEYS.saturating_sub(all_keys.len());
+            if batch_keys.len() > room_left {
+                all_keys.extend(batch_keys.into_iter().take(room_left));
+            } else {
+                all_keys.extend(batch_keys);
+            }
+        }
 
         // Break when cursor returns to 0 (scan complete)
         if next_cursor == 0 {
             break;
         }
         cursor = next_cursor;
+
+        // Light backoff every ~10k keys to avoid starving the reactor
+        if all_keys.len() % 10_000 == 0 {
+            tokio::time::sleep(TokioDuration::from_millis(2)).await;
+        }
     }
 
     // Delete all collected keys in batches to avoid command size limits

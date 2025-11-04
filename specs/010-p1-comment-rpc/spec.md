@@ -24,15 +24,15 @@
 
 ### User Story 1 - Add comment to post (Priority: P1)
 
-As a user, I can POST a comment to any post and see it appear in the comment feed.
+As a service client, I can call content-service.CreateComment(post_id, content, user_id) gRPC RPC to add a comment to a post.
 
-**Independent Test**: CreateComment RPC with valid post_id + content → 200 + comment_id; empty content → 400.
+**Independent Test**: CreateComment gRPC RPC with valid post_id + content → Status::Ok with comment_id; invalid input → gRPC error (INVALID_ARGUMENT or NOT_FOUND).
 
 **Acceptance Scenarios**:
-1. Given valid post_id + content="Great post!", When CreateComment, Then response 200 with `{ comment_id, post_id, user_id, content, created_at }`.
-2. Given invalid post_id, Then 404 post_not_found.
-3. Given empty content, Then 400 invalid_comment.
-4. Given content > 5000 chars, Then 400 comment_too_long.
+1. Given valid post_id + content="Great post!", When calling CreateComment gRPC, Then response Status::Ok with `{ comment_id, post_id, user_id, content, created_at }`.
+2. Given invalid post_id, Then Status::NotFound (gRPC code 5) with message `post_not_found`.
+3. Given empty content, Then Status::InvalidArgument (gRPC code 3) with message `comment_empty`.
+4. Given content > 5000 chars, Then Status::InvalidArgument with message `comment_too_long`.
 
 ---
 
@@ -55,6 +55,33 @@ As a user, I can POST a comment to any post and see it appear in the comment fee
 - SC-002: E2E: CreateComment + GetComments shows new comment < 200ms latency
 - SC-003: Cache invalidation verified (comment list rebuilt on next read)
 - SC-004: Rate limiter blocks >10 comments/min per user
+
+---
+
+## Observability Requirements *(mandatory - per Constitution Principle VI)*
+
+### Prometheus Metrics
+
+- `create_comment_requests_total` — Counter for all CreateComment RPC calls
+- `create_comment_latency_seconds` — Histogram of latency (buckets: [0.01, 0.05, 0.1, 0.2, 0.5, 1.0])
+- `create_comment_errors_total` — Counter by error type (validation_failed, post_not_found, rate_limited)
+- `cache_invalidation_duration_seconds` — Histogram for cache invalidation latency
+
+### Distributed Tracing (OpenTelemetry)
+
+- Trace all CreateComment requests with spans for:
+  - `post_validation` — Check post exists
+  - `content_validation` — Validate comment content
+  - `db_insert` — Database persistence
+  - `cache_invalidation` — Redis cache invalidation
+  - `rate_limit_check` — Rate limiter verification
+
+### Logging
+
+- Structured logs for:
+  - Comment creation success (user_id, post_id, comment_id)
+  - Validation failures (reason, input details)
+  - Rate limit violations (user_id, attempt_timestamp)
 
 ---
 

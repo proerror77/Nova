@@ -23,40 +23,40 @@
 
 ### User Story 1 - Register new account (Priority: P0)
 
-As a user, I can create a new account via POST /auth/register with email + password.
+As a service client, I can call auth-service.Register(email, username, password) gRPC RPC to create a new account.
 
 **Why this priority**: Without registration, no user can log in or use the system.
 
-**Independent Test**: POST /register with valid email/strong password → 200 + JWT token; invalid credentials → 400.
+**Independent Test**: Call Register gRPC with valid email/strong password → OK response with JWT token; invalid credentials → gRPC error (INVALID_ARGUMENT or ALREADY_EXISTS).
 
 **Acceptance Scenarios**:
-1. Given valid `email=user@example.com, password=MySecurePass2025!`, When POST /auth/register, Then response 200 with `{ token: "jwt...", user_id: "uuid" }`.
-2. Given duplicate email, Then response 409 conflict.
-3. Given weak password `password123`, Then 400 `weak_password`.
-4. Given invalid email format `userexample.com`, Then 400 `invalid_email_format`.
+1. Given valid `email=user@example.com, username=john_doe, password=MySecurePass2025!`, When call Register RPC, Then response OK with `{ token: "jwt...", user_id: "uuid", expires_in: 3600 }`.
+2. Given duplicate email, Then response AlreadyExists (gRPC code 6).
+3. Given weak password `password123`, Then InvalidArgument (gRPC code 3) with message `weak_password`.
+4. Given invalid email format `userexample.com`, Then InvalidArgument with message `invalid_email_format`.
 
 ---
 
 ### User Story 2 - Login and get JWT (Priority: P0)
 
-As a user, I can log in with email + password to get a JWT access token.
+As a service client, I can call auth-service.Login(email, password) gRPC RPC to authenticate and get a JWT access token.
 
-**Independent Test**: POST /login with correct credentials → 200 + token; incorrect password → 401.
+**Independent Test**: Call Login gRPC with correct credentials → OK response + token; incorrect password → gRPC Unauthenticated error.
 
 **Acceptance Scenarios**:
-1. Given registered user with email/password, When POST /auth/login with correct creds, Then response 200 with `{ token: "jwt...", expires_in: 3600 }`.
-2. Given 5+ failed login attempts, Then account locked for 15 minutes (rate limiting).
-3. Given wrong password, Then 401 `invalid_credentials`.
+1. Given registered user with email/password, When call Login RPC with correct creds, Then response OK with `{ token: "jwt...", expires_in: 3600 }`.
+2. Given 5+ failed login attempts, Then account locked for 15 minutes (rate limiting); subsequent calls return PermissionDenied (gRPC code 7) with message `account_locked_until_<timestamp>`.
+3. Given wrong password, Then Unauthenticated (gRPC code 16) with message `invalid_credentials`.
 
 ---
 
 ### User Story 3 - JWT token refresh (Priority: P1, but implement with register/login)
 
-As a client, I can refresh an expiring JWT using a refresh token without re-entering credentials.
+As a client, I can call auth-service.Refresh(refresh_token) gRPC RPC to get a new access token without re-entering credentials.
 
 **Acceptance Scenarios**:
-1. Given valid refresh_token + JWT, When POST /auth/refresh, Then response 200 with new access token and refreshed refresh token.
-2. Given expired refresh token, Then 401.
+1. Given valid refresh_token, When call Refresh RPC, Then response OK with new access token and optionally rotated refresh token in `{ token: "jwt...", expires_in: 3600, refresh_token: "..." }`.
+2. Given expired refresh token, Then Unauthenticated (gRPC code 16).
 
 ---
 
@@ -69,7 +69,9 @@ As a client, I can refresh an expiring JWT using a refresh token without re-ente
 - FR-003: JWT encoding: `{ sub: user_id, email, username, iat, exp: +3600s, iss: "nova" }` signed with RS256.
 - FR-004: Implement POST `/auth/refresh` endpoint with refresh_token rotation.
 - FR-005: Rate limit login attempts: 5 failed → 15min account lock; clear on successful login.
-- FR-006: Both HTTP REST and gRPC endpoints (or gRPC only if API protocol chosen).
+- **FR-006: Implement gRPC endpoints ONLY** (Register, Login, Refresh as gRPC RPCs). HTTP REST wrappers are optional Phase 4.
+  - **RATIONALE**: Constitution (Principle I) mandates microservices with "well-defined APIs (REST/gRPC)"; gRPC is primary for inter-service communication; REST can be deferred for client-facing APIs if web/mobile clients use SDK.
+  - **Architecture Decision**: Core auth service uses gRPC + JWT; HTTP REST wrappers added in Phase 4 if web clients need browser-friendly endpoints.
 
 ### Key Entities
 

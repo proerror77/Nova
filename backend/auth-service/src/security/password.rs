@@ -40,20 +40,28 @@ pub fn verify_password(password: &str, hash: &str) -> AuthResult<()> {
 /// - At least one digit
 /// - At least one special character
 fn validate_password_strength(password: &str) -> AuthResult<()> {
+    // Baseline: minimum length
     if password.len() < 8 {
         return Err(AuthError::WeakPassword);
     }
 
+    // Heuristic composition check to quickly reject obviously weak inputs
     let has_uppercase = password.chars().any(|c| c.is_uppercase());
     let has_lowercase = password.chars().any(|c| c.is_lowercase());
     let has_digit = password.chars().any(|c| c.is_ascii_digit());
     let has_special = password.chars().any(|c| !c.is_alphanumeric());
-
-    if has_uppercase && has_lowercase && has_digit && has_special {
-        Ok(())
-    } else {
-        Err(AuthError::WeakPassword)
+    if !(has_uppercase && has_lowercase && has_digit && has_special) {
+        return Err(AuthError::WeakPassword);
     }
+
+    // Strength estimation with zxcvbn (score 0..=4); require >=3 by default
+    let estimate = zxcvbn::zxcvbn(password, &[]).map_err(|_| AuthError::WeakPassword)?;
+    if estimate.score() < 3 {
+        // 0 very weak .. 4 strong
+        return Err(AuthError::WeakPassword);
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]
@@ -63,16 +71,16 @@ mod tests {
     #[test]
     fn test_hash_and_verify() {
         let password = "SecurePass123!";
-        let hash = hash_password(password)
-            .expect("password hashing should succeed with valid input");
+        let hash =
+            hash_password(password).expect("password hashing should succeed with valid input");
         assert!(verify_password(password, &hash).is_ok());
     }
 
     #[test]
     fn test_wrong_password() {
         let password = "SecurePass123!";
-        let hash = hash_password(password)
-            .expect("password hashing should succeed with valid input");
+        let hash =
+            hash_password(password).expect("password hashing should succeed with valid input");
         assert!(verify_password("WrongPass123!", &hash).is_err());
     }
 

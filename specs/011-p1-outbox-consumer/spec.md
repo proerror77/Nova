@@ -50,6 +50,34 @@ As an operator, events written to the outbox table are published to Kafka with z
 
 ---
 
+## Observability Requirements *(mandatory - per Constitution Principle VI)*
+
+### Prometheus Metrics
+
+- `outbox_events_processed_total` — Counter of successfully published events
+- `outbox_events_failed_total` — Counter by failure reason (transient, poison)
+- `outbox_consumer_latency_seconds` — Histogram of time from outbox insert to Kafka publish
+- `outbox_retry_attempts_total` — Counter of retry attempts (by attempt number)
+- `outbox_dlq_messages_total` — Counter of messages moved to DLQ
+
+### Distributed Tracing (OpenTelemetry)
+
+- Trace all outbox consumption with spans for:
+  - `consumer_poll` — Poll outbox table
+  - `kafka_publish` — Publish to Kafka
+  - `retry_logic` — Exponential backoff handling
+  - `dlq_move` — Move to DLQ on 3 failures
+
+### Logging
+
+- Structured logs for:
+  - Event consumption start/end (event_id, timestamp)
+  - Kafka publish success/failure (topic, partition, offset)
+  - Retry attempts (attempt_number, backoff_delay)
+  - DLQ routing (reason, event_id)
+
+---
+
 ## Timeline Estimate
 
 - ~4 days (depends on testcontainers 006 for Kafka integration tests)

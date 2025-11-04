@@ -53,8 +53,8 @@ prost.workspace = true
 
 # Shared libraries
 error-types = { path = "../libs/error-types" }
-error-handling = { path = "../libs/error-handling" }
 db-pool = { path = "../libs/db-pool" }
+error-handling = { path = "../libs/error-handling" }
 
 [build-dependencies]
 tonic-build = "0.11"

@@ -48,6 +48,7 @@ bytes = "1.5"
 env_logger = "0.11"
 aws-sdk-s3 = "1.9"
 aws-config = "1.1"
+db-pool = { path = "../libs/db-pool" }
 
 [profile.release]
 codegen-units = 1

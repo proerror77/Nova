@@ -297,31 +297,28 @@ impl EventsConsumer {
             .await
             .map_err(|e| AppError::Internal(format!("Failed to acquire semaphore: {}", e)))?;
 
-        // Build batch insert query
-        let values: Vec<String> = batch
-            .iter()
-            .map(|event| {
-                format!(
-                    "('{}', '{}', {}, {}, '{}')",
-                    Self::escape_string(&event.event_id),
-                    Self::escape_string(&event.event_type),
-                    event.user_id,
-                    event.timestamp,
-                    Self::escape_string(&event.properties.to_string())
-                )
-            })
-            .collect();
+        // Prepare typed rows and use parameterized insert to avoid SQL injection
+        #[derive(serde::Serialize, clickhouse::Row)]
+        struct EventRow<'a> {
+            event_id: &'a str,
+            event_type: &'a str,
+            user_id: i64,
+            timestamp: i64,
+            properties: String,
+        }
 
-        let query = format!(
-            r#"
-            INSERT INTO events (
-                event_id, event_type, user_id, timestamp, properties
-            ) VALUES {}
-            "#,
-            values.join(", ")
-        );
+        let mut rows = Vec::with_capacity(batch.len());
+        for ev in batch.iter() {
+            rows.push(EventRow {
+                event_id: &ev.event_id,
+                event_type: &ev.event_type,
+                user_id: ev.user_id,
+                timestamp: ev.timestamp,
+                properties: ev.properties.to_string(),
+            });
+        }
 
-        self.ch_client.execute(&query).await?;
+        self.ch_client.insert_rows("events", &rows).await?;
 
         info!("Successfully flushed {} events", batch.len());
 
@@ -330,15 +327,6 @@ impl EventsConsumer {
             warn!("Event side-effects failed: {}", e);
         }
         Ok(())
-    }
-
-    /// Escape string for ClickHouse query
-    fn escape_string(s: &str) -> String {
-        s.replace('\\', "\\\\")
-            .replace('\'', "\\'")
-            .replace('\n', "\\n")
-            .replace('\r', "\\r")
-            .replace('\t', "\\t")
     }
 }
 

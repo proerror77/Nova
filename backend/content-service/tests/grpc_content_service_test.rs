@@ -120,9 +120,7 @@ mod content_service_grpc_tests {
         }
 
         // Test case 2: Empty request should return empty response
-        let empty_request = Request::new(GetPostsByIdsRequest {
-            post_ids: vec![],
-        });
+        let empty_request = Request::new(GetPostsByIdsRequest { post_ids: vec![] });
 
         match client.get_posts_by_ids(empty_request).await {
             Ok(response) => {
@@ -235,7 +233,10 @@ mod content_service_grpc_tests {
             }
             Err(e) => {
                 // Status filter may not exist in database, that's ok
-                println!("Note: Status filter query failed (expected if no posts with that status): {}", e);
+                println!(
+                    "Note: Status filter query failed (expected if no posts with that status): {}",
+                    e
+                );
             }
         }
     }
@@ -281,7 +282,7 @@ mod content_service_grpc_tests {
             post_id: post_id.clone(),
             title: new_title.clone(),
             content: String::new(), // Empty = don't update
-            privacy: String::new(),  // Empty = don't update
+            privacy: String::new(), // Empty = don't update
             status: new_status.clone(),
         });
 
@@ -303,7 +304,10 @@ mod content_service_grpc_tests {
             }
             Err(e) => {
                 // This is OK if the post doesn't exist in the database
-                println!("Note: UpdatePost call failed (expected if post doesn't exist): {}", e);
+                println!(
+                    "Note: UpdatePost call failed (expected if post doesn't exist): {}",
+                    e
+                );
             }
         }
     }
@@ -370,7 +374,10 @@ mod content_service_grpc_tests {
             }
             Err(e) => {
                 // This is OK if the post doesn't exist
-                println!("Note: DeletePost call failed (expected if post doesn't exist): {}", e);
+                println!(
+                    "Note: DeletePost call failed (expected if post doesn't exist): {}",
+                    e
+                );
             }
         }
     }
@@ -422,16 +429,16 @@ mod content_service_grpc_tests {
                 assert!(like_count >= 0, "Like count should be non-negative");
 
                 // Verify it's reasonable (< 10 million)
-                assert!(
-                    like_count < 10_000_000,
-                    "Like count should be reasonable"
-                );
+                assert!(like_count < 10_000_000, "Like count should be reasonable");
 
                 println!("✓ test_decrement_like_count_with_cache_sync passed");
             }
             Err(e) => {
                 // This is OK if the post doesn't exist
-                println!("Note: DecrementLikeCount call failed (expected if post doesn't exist): {}", e);
+                println!(
+                    "Note: DecrementLikeCount call failed (expected if post doesn't exist): {}",
+                    e
+                );
             }
         }
     }
@@ -511,13 +518,12 @@ mod content_service_grpc_tests {
 
         match client.check_post_exists(request3).await {
             Ok(_) => {
-                println!("Note: Invalid UUID didn't return error (implementation might be lenient)");
+                println!(
+                    "Note: Invalid UUID didn't return error (implementation might be lenient)"
+                );
             }
             Err(e) => {
-                println!(
-                    "✓ Invalid UUID properly rejected: {}",
-                    e
-                );
+                println!("✓ Invalid UUID properly rejected: {}", e);
             }
         }
     }
@@ -553,7 +559,10 @@ mod content_service_grpc_tests {
         // 6. DecrementLikeCount and verify count decremented
         // 7. GetPost and verify current count matches
 
-        assert!(true, "Test structure placeholder - awaiting gRPC client integration");
+        assert!(
+            true,
+            "Test structure placeholder - awaiting gRPC client integration"
+        );
     }
 
     // ============================================================================
@@ -586,7 +595,10 @@ mod content_service_grpc_tests {
         // 5. DecrementLikeCount with invalid post_id and verify error
         // 6. CheckPostExists with invalid post_id and verify error
 
-        assert!(true, "Test structure placeholder - awaiting gRPC client integration");
+        assert!(
+            true,
+            "Test structure placeholder - awaiting gRPC client integration"
+        );
     }
 
     // ============================================================================
@@ -618,7 +630,10 @@ mod content_service_grpc_tests {
         // 4. Verify database only executed 1 query (not N+1)
         // 5. GetPostsByIds with empty list and verify instant return
 
-        assert!(true, "Test structure placeholder - awaiting gRPC client integration");
+        assert!(
+            true,
+            "Test structure placeholder - awaiting gRPC client integration"
+        );
     }
 
     // ============================================================================
@@ -653,7 +668,10 @@ mod content_service_grpc_tests {
         // 7. Delete post
         // 8. All queries should exclude it
 
-        assert!(true, "Test structure placeholder - awaiting gRPC client integration");
+        assert!(
+            true,
+            "Test structure placeholder - awaiting gRPC client integration"
+        );
     }
 
     // ============================================================================
