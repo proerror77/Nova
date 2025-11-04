@@ -10,7 +10,7 @@ on:
   schedule:
     - cron: "0 7 * * *" # daily smoke run at 07:00 UTC
   workflow_run:
-    workflows: ["Deploy"]
+    workflows: ["Staging Deploy (Optimized)", "Stage Backend Code to Staging"]
     types:
       - completed
 
