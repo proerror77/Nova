@@ -208,7 +208,10 @@ spec:
     port: 9083
     targetPort: 9083
     protocol: TCP
-  sessionAffinity: None
+  sessionAffinity: ClientIP
+  sessionAffinityConfig:
+    clientIPConfig:
+      timeoutSeconds: 10800
 
 ---
 # ServiceAccount

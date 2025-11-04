@@ -2,6 +2,8 @@ use crate::error::AppError;
 use crate::messaging::*;
 use crate::state::AppState;
 use tonic::{Request, Response, Status};
+use crypto_core::grpc_correlation::extract_from_request;
+use crypto_core::correlation::CorrelationContext;
 
 /// gRPC service implementation for Nova Messaging Service
 pub struct MessagingGrpcService {
@@ -13,6 +15,13 @@ impl MessagingGrpcService {
     pub fn new(state: AppState) -> Self {
         Self { state }
     }
+}
+
+/// Helper to extract correlation-id from incoming tonic Request and attach to context
+fn attach_correlation_from<T>(req: &Request<T>) {
+    let ctx = CorrelationContext::generate();
+    extract_from_request(req, &ctx);
+    // Optionally bind to tracing span here if using per-request spans
 }
 
 // Convert AppError to tonic::Status for gRPC responses
@@ -96,6 +105,7 @@ impl MessagingGrpcService {
         &self,
         req: SendMessageRequest,
     ) -> Result<SendMessageResponse, AppError> {
+        // Correlation: in real server, call attach_correlation_from(&tonic::Request)
         // Integration point: call message_service.send_message()
         // This would convert between gRPC types and internal models
 
@@ -127,6 +137,7 @@ impl MessagingGrpcService {
         &self,
         req: CreateConversationRequest,
     ) -> Result<CreateConversationResponse, AppError> {
+        // Correlation: in real server, call attach_correlation_from(&tonic::Request)
         // Integration point: call conversation_service.create_conversation()
 
         // Placeholder response

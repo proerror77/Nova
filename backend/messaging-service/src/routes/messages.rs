@@ -9,6 +9,10 @@ use crate::services::message_service::MessageService;
 use crate::state::AppState;
 use crate::websocket::events::{broadcast_event, WebSocketEvent};
 use base64::{engine::general_purpose, Engine as _};
+use aws_sdk_s3::config::Region;
+use aws_sdk_s3::presigning::PresigningConfig;
+use aws_sdk_s3::Client as S3Client;
+use std::time::Duration;
 
 #[derive(Deserialize)]
 pub struct SendMessageRequest {
@@ -193,6 +197,75 @@ pub struct UpdateMessageRequest {
 /// - Version number must match current version (prevents lost updates)
 /// - On conflict: returns 409 with server version
 /// - Edit history is automatically recorded via database trigger
+// ============================================================================
+// Message Update Helpers
+// ============================================================================
+
+/// Encapsulates validation logic for message editing
+struct MessageEditValidator {
+    conversation_id: Uuid,
+    sender_id: Uuid,
+    current_version: i32,
+    created_at: chrono::DateTime<chrono::Utc>,
+    privacy_mode: crate::services::conversation_service::PrivacyMode,
+    old_content: String,
+}
+
+const MAX_EDIT_MINUTES: i64 = 1440; // 24 hours
+
+impl MessageEditValidator {
+    /// Validate ownership - only sender can edit their own messages
+    fn verify_ownership(&self, user_id: Uuid) -> Result<(), AppError> {
+        if self.sender_id != user_id {
+            return Err(AppError::Forbidden);
+        }
+        Ok(())
+    }
+
+    /// Validate edit window - must edit within 24 hours
+    fn verify_edit_window(&self) -> Result<(), AppError> {
+        let elapsed_minutes = (chrono::Utc::now() - self.created_at).num_minutes();
+        if elapsed_minutes > MAX_EDIT_MINUTES {
+            return Err(AppError::EditWindowExpired {
+                max_edit_minutes: MAX_EDIT_MINUTES,
+            });
+        }
+        Ok(())
+    }
+
+    /// Verify optimistic lock - client version must match server
+    fn verify_version(&self, client_version: i32) -> Result<(), AppError> {
+        if client_version != self.current_version {
+            return Err(AppError::VersionConflict {
+                current_version: self.current_version,
+                client_version,
+                server_content: self.old_content.clone(),
+            });
+        }
+        Ok(())
+    }
+}
+
+/// Prepare content for storage based on privacy mode
+async fn prepare_content_payload(
+    encryption_service: &crate::services::encryption::EncryptionService,
+    conversation_id: Uuid,
+    plaintext: &[u8],
+    privacy_mode: crate::services::conversation_service::PrivacyMode,
+) -> Result<(String, Option<Vec<u8>>, Option<Vec<u8>>, i32), AppError> {
+    if matches!(
+        privacy_mode,
+        crate::services::conversation_service::PrivacyMode::StrictE2e
+    ) {
+        let (ciphertext, nonce) = encryption_service.encrypt(conversation_id, plaintext)?;
+        Ok((String::new(), Some(ciphertext), Some(nonce.to_vec()), 1))
+    } else {
+        Ok((String::from_utf8_lossy(plaintext).to_string(), None, None, 0))
+    }
+}
+
+// ============================================================================
+
 pub async fn update_message(
     state: web::Data<AppState>,
     user: User,
@@ -200,8 +273,6 @@ pub async fn update_message(
     body: web::Json<UpdateMessageRequest>,
 ) -> Result<HttpResponse, AppError> {
     let message_id = message_id.into_inner();
-    // Edit window limit (24 hours)
-    const MAX_EDIT_MINUTES: i64 = 1440;
 
     // Start transaction for atomic operation
     let mut tx = state.db.begin().await?;
@@ -218,7 +289,7 @@ pub async fn update_message(
     .bind(message_id)
     .fetch_optional(&mut *tx)
     .await?
-    .ok_or(crate::error::AppError::NotFound)?;
+    .ok_or(AppError::NotFound)?;
 
     let conversation_id: Uuid = msg_row.get("conversation_id");
     let sender_id: Uuid = msg_row.get("sender_id");
@@ -233,63 +304,44 @@ pub async fn update_message(
     let mut old_content: String = msg_row.get("content");
     let ciphertext: Option<Vec<u8>> = msg_row
         .try_get::<Option<Vec<u8>>, _>("content_encrypted")
-        .unwrap_or(None);
-    if matches!(
-        privacy_mode,
-        crate::services::conversation_service::PrivacyMode::StrictE2e
-    ) {
+        .ok()
+        .flatten();
+
+    if matches!(privacy_mode, crate::services::conversation_service::PrivacyMode::StrictE2e) {
         old_content = ciphertext
             .as_ref()
             .map(|c| general_purpose::STANDARD.encode(c))
             .unwrap_or_else(|| "[Encrypted message unavailable]".to_string());
     }
 
-    // 2. Verify ownership (only sender can edit their own messages)
-    if sender_id != user.id {
-        return Err(crate::error::AppError::Forbidden);
-    }
+    let validator = MessageEditValidator {
+        conversation_id,
+        sender_id,
+        current_version,
+        created_at,
+        privacy_mode,
+        old_content,
+    };
+
+    // 2-5. Run all validations
+    validator.verify_ownership(user.id)?;
+    validator.verify_edit_window()?;
+    validator.verify_version(body.version_number)?;
 
     // 3. Verify user is member of conversation
     let _member = crate::middleware::guards::ConversationMember::verify(
-        &state.db, // Use main DB pool for member check (outside transaction)
+        &state.db,
         user.id,
         conversation_id,
     )
     .await?;
 
-    // 4. Check edit time window
-    let elapsed_minutes = (chrono::Utc::now() - created_at).num_minutes();
-    if elapsed_minutes > MAX_EDIT_MINUTES {
-        return Err(crate::error::AppError::EditWindowExpired {
-            max_edit_minutes: MAX_EDIT_MINUTES,
-        });
-    }
-
-    // 5. Optimistic locking check: version number must match
-    if body.version_number != current_version {
-        // Conflict: client version is stale
-        return Err(crate::error::AppError::VersionConflict {
-            current_version,
-            client_version: body.version_number,
-            server_content: old_content.clone(),
-        });
-    }
-
-    // 6. Prepare encrypted payload if needed (before CAS update)
-    let (new_content_value, encrypted_payload, nonce_payload, encryption_version) = if matches!(
-        privacy_mode,
-        crate::services::conversation_service::PrivacyMode::StrictE2e
-    ) {
-        let (ciphertext, nonce) = state
-            .encryption
-            .encrypt(conversation_id, body.plaintext.as_bytes())?;
-        (String::new(), Some(ciphertext), Some(nonce.to_vec()), 1)
-    } else {
-        (body.plaintext.clone(), None, None, 0)
-    };
+    // 6. Prepare encrypted payload
+    let (new_content_value, encrypted_payload, nonce_payload, encryption_version) =
+        prepare_content_payload(&state.encryption, conversation_id, body.plaintext.as_bytes(), privacy_mode).await?;
 
     // 7. Update message with version increment (CAS - Compare-And-Swap)
-    let update_result = sqlx::query(
+    let updated = sqlx::query(
         r#"
         UPDATE messages
         SET
@@ -300,7 +352,7 @@ pub async fn update_message(
             version_number = version_number + 1,
             updated_at = NOW()
         WHERE id = $5 AND version_number = $6
-        RETURNING id, conversation_id, version_number
+        RETURNING version_number
         "#,
     )
     .bind(&new_content_value)
@@ -308,26 +360,21 @@ pub async fn update_message(
     .bind(nonce_payload.as_ref().map(|v| v.as_slice()))
     .bind(encryption_version)
     .bind(message_id)
-    .bind(current_version) // CAS: only update if version matches
+    .bind(current_version)
     .fetch_optional(&mut *tx)
-    .await?;
-
-    // 8. Verify update succeeded (if None, version changed concurrently)
-    let updated = update_result.ok_or_else(|| {
-        // Concurrent update detected: re-fetch current state
-        crate::error::AppError::VersionConflict {
-            current_version: current_version + 1, // Version was incremented by concurrent update
-            client_version: body.version_number,
-            server_content: old_content.clone(),
-        }
+    .await?
+    .ok_or(AppError::VersionConflict {
+        current_version: current_version + 1,
+        client_version: body.version_number,
+        server_content: validator.old_content,
     })?;
 
     let new_version: i32 = updated.get("version_number");
 
-    // 9. Commit transaction (trigger will record version history)
+    // 8. Commit transaction
     tx.commit().await?;
 
-    // 10. Broadcast message.edited event using unified event system
+    // 9. Broadcast message.edited event
     let event = WebSocketEvent::MessageEdited {
         conversation_id,
         message_id,
@@ -820,31 +867,47 @@ pub async fn get_audio_presigned_url(
     let s3_key = format!("audio/{}/{}/{}", conversation_id, user.id, timestamp);
 
     // Expiration time: 1 hour from now (in seconds)
-    let expiration = 3600i64;
+    let expiration_secs = 3600u64;
 
-    // Build presigned URL based on S3 configuration
-    let presigned_url = if let Some(endpoint) = &state.config.s3.endpoint {
-        // Custom S3-compatible endpoint (e.g., MinIO, LocalStack)
-        format!("{}/{}/{}", endpoint, state.config.s3.bucket, s3_key)
-    } else {
-        // AWS S3 default endpoint
-        format!(
-            "https://{}.s3.{}.amazonaws.com/{}",
-            state.config.s3.bucket, state.config.s3.region, s3_key
-        )
-    };
+    // Build AWS SDK config (region + optional custom endpoint)
+    let sdk_cfg = aws_config::from_env()
+        .region(Region::new(state.config.s3.region.clone()))
+        .load()
+        .await;
+
+    let mut s3_conf_builder = aws_sdk_s3::config::Builder::from(&sdk_cfg);
+    if let Some(endpoint) = &state.config.s3.endpoint {
+        s3_conf_builder = s3_conf_builder.endpoint_url(endpoint);
+    }
+    let s3_client = S3Client::from_conf(s3_conf_builder.build());
+
+    let presign_cfg = PresigningConfig::builder()
+        .expires_in(Duration::from_secs(expiration_secs))
+        .build()
+        .map_err(|e| AppError::Internal(format!("Failed to create presign config: {e}")))?;
+
+    let presigned = s3_client
+        .put_object()
+        .bucket(&state.config.s3.bucket)
+        .key(&s3_key)
+        .content_type(&body.content_type)
+        .presigned(presign_cfg)
+        .await
+        .map_err(|e| AppError::Internal(format!("Failed to generate presigned URL: {e}")))?;
+
+    let presigned_url = presigned.uri().to_string();
 
     tracing::info!(
         conversation_id = %conversation_id,
         user_id = %user.id,
         s3_key = %s3_key,
-        expiration = expiration,
+        expiration = expiration_secs as i64,
         "Generated presigned URL for audio upload"
     );
 
     Ok(HttpResponse::Ok().json(AudioPresignedUrlResponse {
         presigned_url,
-        expiration,
+        expiration: expiration_secs as i64,
         s3_key,
     }))
 }

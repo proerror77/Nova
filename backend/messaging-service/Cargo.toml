@@ -46,6 +46,8 @@ prometheus = { workspace = true }
 actix-cors = "0.7"
 bytes = "1.5"
 env_logger = "0.11"
+aws-sdk-s3 = "1.9"
+aws-config = "1.1"
 
 [profile.release]
 codegen-units = 1

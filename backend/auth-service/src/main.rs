@@ -27,7 +27,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt::init();
 
     // Load configuration
-    let config = Config::from_env().expect("Failed to load configuration from environment");
+    let config = Config::from_env()?;
 
     tracing::info!(
         "Starting Nova Auth Service on {}:{}",
@@ -49,6 +49,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let redis_conn = ConnectionManager::new(redis_client).await?;
 
     tracing::info!("Redis connection initialized");
+
+    // Spawn metrics updater for outbox backlog gauge
+    crate::metrics::spawn_metrics_updater(db_pool.clone());
 
     // Initialize JWT keys from shared crypto-core library
     crypto_core::jwt::initialize_jwt_keys(&config.jwt_private_key_pem, &config.jwt_public_key_pem)
@@ -107,13 +110,16 @@ async fn readiness_check() -> impl Responder {
 }
 
 /// OpenAPI 規格輸出
-async fn openapi_json(doc: web::Data<utoipa::openapi::OpenApi>) -> impl Responder {
-    let body = serde_json::to_string(&*doc)
-        .expect("Failed to serialize OpenAPI document for auth-service");
-
-    HttpResponse::Ok()
-        .content_type("application/json")
-        .body(body)
+async fn openapi_json(doc: web::Data<utoipa::openapi::OpenApi>) -> HttpResponse {
+    match serde_json::to_string(&*doc) {
+        Ok(body) => HttpResponse::Ok()
+            .content_type("application/json")
+            .body(body),
+        Err(e) => {
+            tracing::error!("failed to serialize OpenAPI document: {}", e);
+            HttpResponse::InternalServerError().body("Failed to serialize OpenAPI specification")
+        }
+    }
 }
 
 /// Build gRPC service
@@ -179,17 +185,23 @@ async fn start_servers(
     let rest_handle = tokio::spawn(async move {
         tracing::info!("REST API listening on {}", addr);
 
-        HttpServer::new(move || {
+        let result = HttpServer::new(move || {
             App::new()
                 .app_data(web::Data::new(rest_state.clone()))
                 .wrap(MetricsMiddleware)
                 .configure(configure_routes)
         })
         .bind(addr)
-        .expect("Failed to bind REST server")
+        .map_err(|e| {
+            tracing::error!("failed to bind REST server on {}: {}", addr, e);
+            e
+        })?
         .run()
-        .await
-        .expect("REST server failed");
+        .await;
+
+        if let Err(e) = result {
+            tracing::error!("REST server error: {}", e);
+        }
     });
 
     // gRPC server on port `port + 1000`
@@ -197,11 +209,14 @@ async fn start_servers(
     tracing::info!("gRPC server listening on {}", grpc_addr);
 
     let grpc_handle = tokio::spawn(async move {
-        GrpcServer::builder()
+        match GrpcServer::builder()
             .add_service(grpc_service)
             .serve(grpc_addr)
             .await
-            .expect("gRPC server failed");
+        {
+            Ok(_) => tracing::info!("gRPC server exited normally"),
+            Err(e) => tracing::error!("gRPC server error: {}", e),
+        }
     });
 
     // Wait for both servers
