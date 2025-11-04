@@ -103,22 +103,26 @@ impl AuthService for AuthServiceImpl {
         request: Request<VerifyTokenRequest>,
     ) -> Result<Response<VerifyTokenResponse>, Status> {
         let req = request.into_inner();
-
         match crate::security::jwt::validate_token(&req.token) {
             Ok(token_data) => {
+                let claims = token_data.claims;
                 Ok(Response::new(VerifyTokenResponse {
-                    valid: true,
-                    user_id: Some(token_data.claims.sub.clone()),
-                    email: Some(token_data.claims.email.clone()),
-                    error: String::new(),
+                    is_valid: true,
+                    user_id: claims.sub,
+                    email: claims.email,
+                    username: claims.username,
+                    expires_at: claims.exp,
+                    is_revoked: false,
                 }))
             }
-            Err(e) => {
+            Err(_e) => {
                 Ok(Response::new(VerifyTokenResponse {
-                    valid: false,
-                    user_id: None,
-                    email: None,
-                    error: e.to_string(),
+                    is_valid: false,
+                    user_id: String::new(),
+                    email: String::new(),
+                    username: String::new(),
+                    expires_at: 0,
+                    is_revoked: false,
                 }))
             }
         }
@@ -166,7 +170,6 @@ impl AuthService for AuthServiceImpl {
         match query_result {
             Some((id, email, username, created_at, is_active, failed_login_attempts, locked_until)) => {
                 Ok(Response::new(GetUserByEmailResponse {
-                    found: true,
                     user: Some(User {
                         id,
                         email,
@@ -178,10 +181,7 @@ impl AuthService for AuthServiceImpl {
                     }),
                 }))
             }
-            None => Ok(Response::new(GetUserByEmailResponse {
-                found: false,
-                user: None,
-            })),
+            None => Ok(Response::new(GetUserByEmailResponse { user: None })),
         }
     }
 
@@ -276,7 +276,9 @@ impl AuthService for AuthServiceImpl {
         .await
         .map_err(|e| Status::internal(format!("Database error: {}", e)))?;
 
-        Ok(Response::new(GetUserPermissionsResponse { permissions }))
+        // TODO: fetch roles from user_roles table if present; fallback empty
+        let roles: Vec<String> = Vec::new();
+        Ok(Response::new(GetUserPermissionsResponse { permissions, roles }))
     }
 
     /// Record a failed login attempt (for rate limiting)
@@ -291,17 +293,33 @@ impl AuthService for AuthServiceImpl {
             return Err(Status::invalid_argument("user_id must not be empty"));
         }
 
-        // Increment failed login attempts
-        let result = sqlx::query(
-            "UPDATE users SET failed_login_attempts = failed_login_attempts + 1, locked_until = CASE WHEN failed_login_attempts >= 5 THEN NOW() + INTERVAL '15 minutes' ELSE locked_until END WHERE id = $1"
+        // Configurable max attempts and lock duration
+        let max_attempts: i32 = if req.max_attempts > 0 { req.max_attempts } else { 5 };
+        let lock_secs: i64 = if req.lock_duration_secs > 0 { req.lock_duration_secs as i64 } else { 900 };
+
+        let (failed_attempts, is_locked, locked_until): (i32, bool, String) = sqlx::query_as(
+            r#"
+            UPDATE users
+            SET failed_login_attempts = failed_login_attempts + 1,
+                locked_until = CASE
+                    WHEN $2 > 0 AND failed_login_attempts + 1 >= $2
+                    THEN CURRENT_TIMESTAMP + ($3 || ' seconds')::interval
+                    ELSE locked_until
+                END
+            WHERE id = $1
+            RETURNING 
+                failed_login_attempts,
+                (locked_until IS NOT NULL AND locked_until > CURRENT_TIMESTAMP) AS is_locked,
+                COALESCE(TO_CHAR(locked_until, 'YYYY-MM-DD"T"HH24:MI:SSOF')::text, '')
+            "#
         )
         .bind(&req.user_id)
-        .execute(&self.state.db)
+        .bind(max_attempts)
+        .bind(lock_secs.to_string())
+        .fetch_one(&self.state.db)
         .await
         .map_err(|e| Status::internal(format!("Database error: {}", e)))?;
 
-        Ok(Response::new(RecordFailedLoginResponse {
-            success: result.rows_affected() > 0,
-        }))
+        Ok(Response::new(RecordFailedLoginResponse { failed_attempts, is_locked, locked_until }))
     }
 }

@@ -6,7 +6,8 @@ use event_schema::{
 };
 use rdkafka::message::OwnedHeaders;
 use rdkafka::producer::{FutureProducer, FutureRecord};
-use crypto_core::kafka_correlation::inject_headers;
+// Use function exposed at crate root
+use crypto_core::inject_headers;
 use std::time::Duration;
 use tracing::warn;
 use uuid::Uuid;
