@@ -1,6 +1,6 @@
 use actix_web::{HttpResponse, Responder};
 use once_cell::sync::Lazy;
-use prometheus::{Encoder, IntGauge, TextEncoder};
+use prometheus::{Encoder, IntCounter, IntGauge, TextEncoder};
 use sqlx::PgPool;
 use std::time::Duration;
 
@@ -83,4 +83,109 @@ async fn update_outbox_gauge(db: &PgPool) -> Result<(), sqlx::Error> {
 
     OUTBOX_UNPUBLISHED_EVENTS.set(count as i64);
     Ok(())
+}
+
+// =========================
+// T050: Auth Service Metrics
+// =========================
+
+/// Initialize auth service metrics counters (call from main() for better error handling)
+#[allow(dead_code)]
+pub fn initialize_auth_metrics() -> Result<(), Box<dyn std::error::Error>> {
+    // Initialize all counters by forcing lazy evaluation
+    let _ = &*REGISTER_REQUESTS_TOTAL;
+    let _ = &*LOGIN_REQUESTS_TOTAL;
+    let _ = &*LOGIN_FAILURES_TOTAL;
+    let _ = &*ACCOUNT_LOCKOUTS_TOTAL;
+    Ok(())
+}
+
+/// Counter for total Register RPC calls (incremented for each register attempt)
+static REGISTER_REQUESTS_TOTAL: Lazy<IntCounter> = Lazy::new(|| {
+    IntCounter::new(
+        "register_requests_total",
+        "Total number of Register RPC requests",
+    )
+    .and_then(|c| {
+        prometheus::default_registry().register(Box::new(c.clone()))?;
+        Ok(c)
+    })
+    .unwrap_or_else(|e| {
+        tracing::error!("failed to create register_requests counter: {}", e);
+        IntCounter::new("dummy_register", "dummy").expect("dummy counter")
+    })
+});
+
+/// Counter for total Login RPC calls (incremented for each login attempt)
+static LOGIN_REQUESTS_TOTAL: Lazy<IntCounter> = Lazy::new(|| {
+    IntCounter::new(
+        "login_requests_total",
+        "Total number of Login RPC requests",
+    )
+    .and_then(|c| {
+        prometheus::default_registry().register(Box::new(c.clone()))?;
+        Ok(c)
+    })
+    .unwrap_or_else(|e| {
+        tracing::error!("failed to create login_requests counter: {}", e);
+        IntCounter::new("dummy_login", "dummy").expect("dummy counter")
+    })
+});
+
+/// Counter for total login failures (wrong password or user not found)
+static LOGIN_FAILURES_TOTAL: Lazy<IntCounter> = Lazy::new(|| {
+    IntCounter::new(
+        "login_failures_total",
+        "Total number of failed login attempts (wrong password or user not found)",
+    )
+    .and_then(|c| {
+        prometheus::default_registry().register(Box::new(c.clone()))?;
+        Ok(c)
+    })
+    .unwrap_or_else(|e| {
+        tracing::error!("failed to create login_failures counter: {}", e);
+        IntCounter::new("dummy_failures", "dummy").expect("dummy counter")
+    })
+});
+
+/// Counter for account lockouts (triggered after 5 failed login attempts)
+static ACCOUNT_LOCKOUTS_TOTAL: Lazy<IntCounter> = Lazy::new(|| {
+    IntCounter::new(
+        "account_lockouts_total",
+        "Total number of account lockouts triggered (5+ failed attempts)",
+    )
+    .and_then(|c| {
+        prometheus::default_registry().register(Box::new(c.clone()))?;
+        Ok(c)
+    })
+    .unwrap_or_else(|e| {
+        tracing::error!("failed to create account_lockouts counter: {}", e);
+        IntCounter::new("dummy_lockouts", "dummy").expect("dummy counter")
+    })
+});
+
+// Public functions to increment metrics from gRPC handlers (T050)
+
+/// Increment register requests counter
+#[inline]
+pub fn inc_register_requests() {
+    REGISTER_REQUESTS_TOTAL.inc();
+}
+
+/// Increment login requests counter
+#[inline]
+pub fn inc_login_requests() {
+    LOGIN_REQUESTS_TOTAL.inc();
+}
+
+/// Increment login failures counter
+#[inline]
+pub fn inc_login_failures() {
+    LOGIN_FAILURES_TOTAL.inc();
+}
+
+/// Increment account lockouts counter
+#[inline]
+pub fn inc_account_lockouts() {
+    ACCOUNT_LOCKOUTS_TOTAL.inc();
 }

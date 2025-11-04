@@ -6,7 +6,9 @@ use tonic::{Request, Response, Status};
 use crate::{
     nova::auth_service::auth_service_server::AuthService, nova::auth_service::*, AppState,
     security::{hash_password, verify_password, generate_token_pair},
+    metrics::{inc_register_requests, inc_login_requests, inc_login_failures, inc_account_lockouts},
 };
+use tracing::{info, warn};
 
 /// gRPC AuthService implementation
 /// Manages user authentication, identity, and token validation
@@ -28,21 +30,29 @@ impl AuthService for AuthServiceImpl {
         &self,
         request: Request<RegisterRequest>,
     ) -> Result<Response<RegisterResponse>, Status> {
+        // T050: Increment register requests counter
+        inc_register_requests();
+
         let req = request.into_inner();
 
         // Validate email format (basic check, full validation in 005-p1-input-validation)
         if req.email.is_empty() || !req.email.contains('@') {
+            warn!(event = "invalid_email_format", email = %req.email);
             return Err(Status::invalid_argument("invalid_email_format"));
         }
 
         // Validate username (3-32 chars)
         if req.username.len() < 3 || req.username.len() > 32 {
+            warn!(event = "invalid_username_length", username = %req.username);
             return Err(Status::invalid_argument("username_invalid_length"));
         }
 
         // Hash password (includes zxcvbn validation via 005)
         let password_hash = hash_password(&req.password)
-            .map_err(|_| Status::invalid_argument("weak_password"))?;
+            .map_err(|_| {
+                warn!(event = "weak_password", email = %req.email);
+                Status::invalid_argument("weak_password")
+            })?;
 
         // Check if email already exists
         let email_exists = crate::db::users::email_exists(&self.state.db, &req.email)
@@ -50,6 +60,7 @@ impl AuthService for AuthServiceImpl {
             .map_err(|_| Status::internal("Failed to check email"))?;
 
         if email_exists {
+            warn!(event = "duplicate_email_registration", email = %req.email);
             return Err(Status::already_exists("email_already_registered"));
         }
 
@@ -67,6 +78,8 @@ impl AuthService for AuthServiceImpl {
         let token_response = generate_token_pair(user.id, &user.email, &user.username)
             .map_err(|_| Status::internal("Failed to generate token"))?;
 
+        info!(event = "user_registration_success", user_id = %user.id, email = %user.email);
+
         Ok(Response::new(RegisterResponse {
             user_id: user.id.to_string(),
             token: token_response.access_token,
@@ -81,10 +94,14 @@ impl AuthService for AuthServiceImpl {
         &self,
         request: Request<LoginRequest>,
     ) -> Result<Response<LoginResponse>, Status> {
+        // T050: Increment login requests counter
+        inc_login_requests();
+
         let req = request.into_inner();
 
         // Validate email format
         if req.email.is_empty() || !req.email.contains('@') {
+            warn!(event = "invalid_email_format", email = %req.email);
             return Err(Status::invalid_argument("invalid_email_format"));
         }
 
@@ -92,7 +109,12 @@ impl AuthService for AuthServiceImpl {
         let user = crate::db::users::find_by_email(&self.state.db, &req.email)
             .await
             .map_err(|_| Status::internal("Failed to find user"))?
-            .ok_or_else(|| Status::unauthenticated("invalid_credentials"))?;
+            .ok_or_else(|| {
+                // T050: Increment login failures for missing user
+                inc_login_failures();
+                warn!(event = "login_failed_user_not_found", email = %req.email);
+                Status::unauthenticated("invalid_credentials")
+            })?;
 
         // Check if account is locked
         if user.is_locked() {
@@ -100,6 +122,7 @@ impl AuthService for AuthServiceImpl {
                 .locked_until
                 .map(|dt| dt.to_rfc3339())
                 .unwrap_or_default();
+            warn!(event = "login_failed_account_locked", user_id = %user.id, locked_until = %locked_until);
             return Err(Status::permission_denied(format!(
                 "account_locked_until_{}",
                 locked_until
@@ -109,11 +132,26 @@ impl AuthService for AuthServiceImpl {
         // Verify password
         verify_password(&req.password, &user.password_hash)
             .map_err(|_| {
-                // Record failed attempt (fire-and-forget, don't block on errors)
-                let db = self.state.db.clone();
+                // T050: Increment login failures counter
+                inc_login_failures();
+
                 let user_id = user.id;
+                let user_email = user.email.clone();
+                warn!(event = "login_failed_wrong_password", user_id = %user_id, email = %user_email);
+
+                // Record failed attempt (fire-and-forget, don't block on errors)
+                // This also triggers account lockout after 5 failed attempts
+                let db = self.state.db.clone();
                 tokio::spawn(async move {
                     let _ = crate::db::users::record_failed_login(&db, user_id, 5, 900).await;
+                    // Fetch updated user to check if account was just locked
+                    if let Ok(Some(updated_user)) = crate::db::users::find_by_id(&db, user_id).await {
+                        // T050: Increment account lockouts counter when account becomes locked
+                        if updated_user.failed_login_attempts >= 5 && updated_user.is_locked() {
+                            inc_account_lockouts();
+                            warn!(event = "account_locked_due_to_failed_attempts", user_id = %user_id, email = %user_email, attempts = updated_user.failed_login_attempts);
+                        }
+                    }
                 });
                 Status::unauthenticated("invalid_credentials")
             })?;
@@ -124,6 +162,8 @@ impl AuthService for AuthServiceImpl {
         // Generate JWT token pair
         let token_response = generate_token_pair(user.id, &user.email, &user.username)
             .map_err(|_| Status::internal("Failed to generate token"))?;
+
+        info!(event = "user_login_success", user_id = %user.id, email = %user.email);
 
         Ok(Response::new(LoginResponse {
             user_id: user.id.to_string(),
