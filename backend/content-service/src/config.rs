@@ -234,8 +234,8 @@ fn parse_sentinel_config() -> Option<CacheSentinelConfig> {
         return None;
     }
 
-    let master_name = std::env::var("REDIS_SENTINEL_MASTER_NAME")
-        .unwrap_or_else(|_| "mymaster".to_string());
+    let master_name =
+        std::env::var("REDIS_SENTINEL_MASTER_NAME").unwrap_or_else(|_| "mymaster".to_string());
     let poll_interval_ms = std::env::var("REDIS_SENTINEL_POLL_INTERVAL_MS")
         .ok()
         .and_then(|v| v.parse().ok())

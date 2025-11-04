@@ -8,6 +8,8 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::db::user_repo;
+use crate::grpc::nova::auth::v1::UserProfile as ProtoUserProfile;
+use crate::grpc::{AuthServiceClient, UserProfileUpdate};
 use crate::middleware::UserId;
 use crate::models::{UpdateUserProfileRequest, UserProfile};
 
@@ -126,7 +128,7 @@ pub struct UpsertPublicKeyRequest {
 
 /// PUT /api/v1/users/me/public-key
 pub async fn upsert_my_public_key(
-    pool: web::Data<PgPool>,
+    auth_client: web::Data<AuthServiceClient>,
     user: UserId,
     body: web::Json<UpsertPublicKeyRequest>,
 ) -> impl Responder {
@@ -144,12 +146,18 @@ pub async fn upsert_my_public_key(
         }
     }
 
-    match user_repo::update_public_key(pool.get_ref(), user.0, &body.public_key).await {
+    match auth_client
+        .upsert_public_key(user.0, &body.public_key)
+        .await
+    {
         Ok(_) => HttpResponse::NoContent().finish(),
-        Err(e) => HttpResponse::InternalServerError().json(serde_json::json!({
-            "error": "Database error",
-            "details": e.to_string()
-        })),
+        Err(e) => {
+            tracing::error!(user_id=%user.0, error=%e, "Failed to upsert public key via auth-service");
+            HttpResponse::BadGateway().json(serde_json::json!({
+                "error": "Failed to persist public key",
+                "details": e.message().to_string()
+            }))
+        }
     }
 }
 
@@ -161,7 +169,7 @@ pub struct PublicKeyResponse {
 /// GET /api/v1/users/{id}/public-key
 pub async fn get_user_public_key(
     path: web::Path<String>,
-    pool: web::Data<PgPool>,
+    auth_client: web::Data<AuthServiceClient>,
 ) -> impl Responder {
     let id = match Uuid::parse_str(&path.into_inner()) {
         Ok(id) => id,
@@ -173,20 +181,23 @@ pub async fn get_user_public_key(
         }
     };
 
-    match user_repo::get_public_key(pool.get_ref(), id).await {
+    match auth_client.get_public_key(id).await {
         Ok(Some(pk)) => HttpResponse::Ok().json(PublicKeyResponse { public_key: pk }),
         Ok(None) => HttpResponse::NotFound().finish(),
-        Err(e) => HttpResponse::InternalServerError().json(serde_json::json!({
-            "error": "Database error",
-            "details": e.to_string()
-        })),
+        Err(e) => {
+            tracing::error!(user_id=%id, error=%e, "Failed to fetch public key from auth-service");
+            HttpResponse::BadGateway().json(serde_json::json!({
+                "error": "Failed to fetch public key",
+                "details": e.message().to_string()
+            }))
+        }
     }
 }
 
 /// PATCH /api/v1/users/me
 pub async fn update_profile(
     http_req: HttpRequest,
-    pool: web::Data<PgPool>,
+    auth_client: web::Data<AuthServiceClient>,
     req: web::Json<UpdateUserProfileRequest>,
     redis: Option<web::Data<ConnectionManager>>,
 ) -> impl Responder {
@@ -225,41 +236,27 @@ pub async fn update_profile(
         }
     }
 
-    match user_repo::update_profile(
-        pool.get_ref(),
-        user_id,
-        req.display_name.as_deref(),
-        req.bio.as_deref(),
-        req.avatar_url.as_deref(),
-        req.cover_photo_url.as_deref(),
-        req.location.as_deref(),
-        req.private_account,
-    )
-    .await
-    {
-        Ok(user) => {
-            // Invalidate user cache after profile update
+    let payload = UserProfileUpdate {
+        display_name: req.display_name.as_deref(),
+        bio: req.bio.as_deref(),
+        avatar_url: req.avatar_url.as_deref(),
+        cover_photo_url: req.cover_photo_url.as_deref(),
+        location: req.location.as_deref(),
+        private_account: req.private_account,
+    };
+
+    match auth_client.update_user_profile(user_id, payload).await {
+        Ok(profile) => {
             if let Some(redis_mgr) = redis.as_ref() {
                 let _ = invalidate_user_cache(redis_mgr.get_ref(), user_id).await;
             }
-            HttpResponse::Ok().json(UserProfile {
-                id: user.id.to_string(),
-                username: user.username,
-                email: Some(user.email),
-                display_name: user.display_name,
-                bio: user.bio,
-                avatar_url: user.avatar_url,
-                cover_photo_url: user.cover_photo_url,
-                location: user.location,
-                private_account: user.private_account,
-                created_at: user.created_at.to_rfc3339(),
-            })
+            HttpResponse::Ok().json(map_proto_profile(&profile))
         }
         Err(e) => {
-            tracing::error!("Failed to update user profile: {}", e);
-            HttpResponse::InternalServerError().json(serde_json::json!({
+            tracing::error!(user_id=%user_id, error=%e, "Auth-service failed to update profile");
+            HttpResponse::BadGateway().json(serde_json::json!({
                 "error": "Failed to update profile",
-                "details": e.to_string()
+                "details": e.message().to_string()
             }))
         }
     }
@@ -299,5 +296,28 @@ pub async fn get_current_user(http_req: HttpRequest, pool: web::Data<PgPool>) ->
                 "details": e.to_string()
             }))
         }
+    }
+}
+
+fn map_proto_profile(profile: &ProtoUserProfile) -> UserProfile {
+    UserProfile {
+        id: profile.user_id.clone(),
+        username: profile.username.clone(),
+        email: profile.email.clone(),
+        display_name: profile.display_name.clone(),
+        bio: profile.bio.clone(),
+        avatar_url: profile.avatar_url.clone(),
+        cover_photo_url: profile.cover_photo_url.clone(),
+        location: profile.location.clone(),
+        private_account: profile.private_account,
+        created_at: to_rfc3339(profile.created_at),
+    }
+}
+
+fn to_rfc3339(ts: i64) -> String {
+    if let Some(naive) = chrono::NaiveDateTime::from_timestamp_opt(ts, 0) {
+        chrono::DateTime::<chrono::Utc>::from_utc(naive, chrono::Utc).to_rfc3339()
+    } else {
+        chrono::Utc::now().to_rfc3339()
     }
 }

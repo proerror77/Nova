@@ -67,11 +67,11 @@ impl ApnsPush {
     /// # Returns
     /// `Ok(ApnsPush)` if initialization succeeds, `Err(ApnsError)` if certificate loading fails
     pub fn new(cfg: &ApnsConfig) -> Result<Self, ApnsError> {
-        let mut client = ApnsSync::with_certificate(
-            &cfg.certificate_path,
-            cfg.certificate_passphrase.clone(),
-        )
-        .map_err(|e| ApnsError::StartServer(format!("failed to initialize APNs client: {e}")))?;
+        let mut client =
+            ApnsSync::with_certificate(&cfg.certificate_path, cfg.certificate_passphrase.clone())
+                .map_err(|e| {
+                ApnsError::StartServer(format!("failed to initialize APNs client: {e}"))
+            })?;
 
         client.set_production(cfg.is_production);
 

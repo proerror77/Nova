@@ -6,21 +6,19 @@ RUN apt-get update && apt-get install -y \
     ca-certificates \
     cmake \
     build-essential \
+    protobuf-compiler \
     librdkafka-dev \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Copy workspace files
-COPY Cargo.toml ../
-COPY Cargo.lock ../
-COPY backend/recommendation-service ./recommendation-service
-COPY backend/libs ./libs
+# Copy workspace files from repo root
+COPY Cargo.toml Cargo.lock ./
+# Copy full backend workspace to satisfy workspace members
+COPY backend ./backend
 
-WORKDIR /app/recommendation-service
-
-# Build recommendation-service
-RUN cargo build --release
+# Build feed-service
+RUN cargo build --release -p feed-service --bin feed-service
 
 FROM debian:bookworm-slim AS runtime
 
@@ -35,7 +33,7 @@ RUN useradd -m -u 1001 -s /bin/bash appuser
 
 WORKDIR /app
 
-COPY --from=builder /app/recommendation-service/target/release/recommendation-service /app/recommendation-service
+COPY --from=builder /app/target/release/feed-service /app/feed-service
 
 # Adjust ownership and drop privileges
 RUN chown -R appuser:appuser /app
@@ -51,4 +49,4 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 
-CMD ["/app/recommendation-service"]
+CMD ["/app/feed-service"]

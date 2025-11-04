@@ -1,22 +1,22 @@
 /// Authentication handlers
-use axum::{
-    extract::{State, Json},
-    http::StatusCode,
-};
-use axum::http::request::Parts;
-use serde::{Deserialize, Serialize};
+use actix_web::{web, HttpResponse};
+use serde::Serialize;
+use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::{
     error::AuthError,
-    middleware::jwt_auth::UserId,
-    models::user::{RegisterRequest, LoginRequest, ChangePasswordRequest},
-    security::{password, jwt},
+    models::user::{
+        ChangePasswordRequest, LoginRequest, RefreshTokenRequest, RegisterRequest,
+        RequestPasswordResetRequest,
+    },
+    security::{jwt, password},
     AppState,
 };
+use actix_middleware::UserId;
 
 /// Register response with tokens
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct RegisterResponse {
     pub user_id: Uuid,
     pub email: String,
@@ -26,7 +26,7 @@ pub struct RegisterResponse {
 }
 
 /// Login response with tokens
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct LoginResponse {
     pub user_id: Uuid,
     pub email: String,
@@ -35,30 +35,41 @@ pub struct LoginResponse {
     pub refresh_token: String,
 }
 
-/// Refresh token request
-#[derive(Debug, Deserialize)]
-pub struct RefreshTokenRequest {
-    pub refresh_token: String,
-}
-
 /// Refresh token response
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct RefreshTokenResponse {
     pub access_token: String,
     pub refresh_token: String,
 }
 
 /// Logout response
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct LogoutResponse {
     pub message: String,
 }
 
+/// 通用錯誤回應（與 `AuthError` 對應）
+#[derive(Debug, Serialize, ToSchema)]
+pub struct ErrorResponse {
+    pub error: String,
+    pub code: u16,
+}
+
 /// Register endpoint handler
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/register",
+    tag = "Auth",
+    request_body = RegisterRequest,
+    responses(
+        (status = 201, description = "User registered", body = RegisterResponse),
+        (status = 400, description = "Invalid input", body = ErrorResponse)
+    )
+)]
 pub async fn register(
-    State(_state): State<AppState>,
-    Json(payload): Json<RegisterRequest>,
-) -> Result<(StatusCode, Json<RegisterResponse>), AuthError> {
+    _state: web::Data<AppState>,
+    payload: web::Json<RegisterRequest>,
+) -> Result<HttpResponse, AuthError> {
     // Validate input
     if payload.email.is_empty() || payload.username.is_empty() || payload.password.is_empty() {
         return Err(AuthError::InvalidCredentials);
@@ -72,29 +83,32 @@ pub async fn register(
     let user_id = Uuid::new_v4();
 
     // Generate token pair
-    let token_pair = jwt::generate_token_pair(
-        user_id,
-        &payload.email,
-        &payload.username,
-    )?;
+    let token_pair = jwt::generate_token_pair(user_id, &payload.email, &payload.username)?;
 
-    Ok((
-        StatusCode::CREATED,
-        Json(RegisterResponse {
-            user_id,
-            email: payload.email,
-            username: payload.username,
-            access_token: token_pair.access_token,
-            refresh_token: token_pair.refresh_token,
-        }),
-    ))
+    Ok(HttpResponse::Created().json(RegisterResponse {
+        user_id,
+        email: payload.email.clone(),
+        username: payload.username.clone(),
+        access_token: token_pair.access_token,
+        refresh_token: token_pair.refresh_token,
+    }))
 }
 
 /// Login endpoint handler
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/login",
+    tag = "Auth",
+    request_body = LoginRequest,
+    responses(
+        (status = 200, description = "User logged in", body = LoginResponse),
+        (status = 401, description = "Invalid credentials", body = ErrorResponse)
+    )
+)]
 pub async fn login(
-    State(_state): State<AppState>,
-    Json(payload): Json<LoginRequest>,
-) -> Result<Json<LoginResponse>, AuthError> {
+    _state: web::Data<AppState>,
+    payload: web::Json<LoginRequest>,
+) -> Result<HttpResponse, AuthError> {
     // Validate input
     if payload.email.is_empty() || payload.password.is_empty() {
         return Err(AuthError::InvalidCredentials);
@@ -106,27 +120,46 @@ pub async fn login(
 }
 
 /// Logout endpoint handler
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/logout",
+    tag = "Auth",
+    responses(
+        (status = 200, description = "User logged out", body = LogoutResponse),
+        (status = 401, description = "Unauthorized", body = ErrorResponse)
+    )
+)]
 pub async fn logout(
-    State(_state): State<AppState>,
-    parts: Parts,
-) -> Result<Json<LogoutResponse>, AuthError> {
-    // Extract user ID from JWT
-    let UserId(_user_id) = UserId::from_parts(&parts)?;
+    _state: web::Data<AppState>,
+    user_id: UserId,
+) -> Result<HttpResponse, AuthError> {
+    // user_id is extracted by JwtAuthMiddleware
+    let _user_id = user_id.0;
 
     // Revoke token (optional - can be stateless)
     // In a stateless JWT system, logout is handled client-side by discarding the token
     // But we can add to blacklist for extra security
 
-    Ok(Json(LogoutResponse {
+    Ok(HttpResponse::Ok().json(LogoutResponse {
         message: "Logged out successfully".to_string(),
     }))
 }
 
 /// Refresh token endpoint handler
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/refresh",
+    tag = "Auth",
+    request_body = RefreshTokenRequest,
+    responses(
+        (status = 200, description = "Token refreshed", body = RefreshTokenResponse),
+        (status = 400, description = "Invalid token", body = ErrorResponse)
+    )
+)]
 pub async fn refresh_token(
-    State(_state): State<AppState>,
-    Json(payload): Json<RefreshTokenRequest>,
-) -> Result<Json<RefreshTokenResponse>, AuthError> {
+    _state: web::Data<AppState>,
+    payload: web::Json<RefreshTokenRequest>,
+) -> Result<HttpResponse, AuthError> {
     // Validate refresh token
     let token_data = jwt::validate_token(&payload.refresh_token)?;
 
@@ -136,8 +169,7 @@ pub async fn refresh_token(
     }
 
     // Generate new token pair
-    let user_id = Uuid::parse_str(&token_data.claims.sub)
-        .map_err(|_| AuthError::InvalidToken)?;
+    let user_id = Uuid::parse_str(&token_data.claims.sub).map_err(|_| AuthError::InvalidToken)?;
 
     let new_pair = jwt::generate_token_pair(
         user_id,
@@ -145,43 +177,57 @@ pub async fn refresh_token(
         &token_data.claims.username,
     )?;
 
-    Ok(Json(RefreshTokenResponse {
+    Ok(HttpResponse::Ok().json(RefreshTokenResponse {
         access_token: new_pair.access_token,
         refresh_token: new_pair.refresh_token,
     }))
 }
 
 /// Change password endpoint handler
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/change-password",
+    tag = "Auth",
+    request_body = ChangePasswordRequest,
+    responses(
+        (status = 204, description = "Password changed"),
+        (status = 401, description = "Unauthorized", body = ErrorResponse)
+    )
+)]
 pub async fn change_password(
-    State(_state): State<AppState>,
-    parts: Parts,
-    Json(_payload): Json<ChangePasswordRequest>,
-) -> Result<StatusCode, AuthError> {
-    // Extract user ID from JWT
-    let UserId(_user_id) = UserId::from_parts(&parts)?;
+    _state: web::Data<AppState>,
+    user_id: UserId,
+    _payload: web::Json<ChangePasswordRequest>,
+) -> Result<HttpResponse, AuthError> {
+    // user_id is extracted by JwtAuthMiddleware
+    let _user_id = user_id.0;
 
     // Verify old password (will need database implementation)
     // Update password (will need database implementation)
     // Revoke all existing tokens for security
 
-    Ok(StatusCode::NO_CONTENT)
+    Ok(HttpResponse::NoContent().finish())
 }
 
 /// Request password reset endpoint handler
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/password-reset/request",
+    tag = "Auth",
+    request_body = RequestPasswordResetRequest,
+    responses(
+        (status = 202, description = "Password reset requested"),
+        (status = 404, description = "User not found", body = ErrorResponse)
+    )
+)]
 pub async fn request_password_reset(
-    State(_state): State<AppState>,
-    Json(_payload): Json<RequestPasswordResetRequest>,
-) -> Result<StatusCode, AuthError> {
+    _state: web::Data<AppState>,
+    _payload: web::Json<RequestPasswordResetRequest>,
+) -> Result<HttpResponse, AuthError> {
     // Find user by email
     // Generate password reset token
     // Send email with reset link
     // Return 202 Accepted
 
-    Ok(StatusCode::ACCEPTED)
-}
-
-/// Request password reset payload
-#[derive(Debug, Deserialize)]
-pub struct RequestPasswordResetRequest {
-    pub email: String,
+    Ok(HttpResponse::Accepted().finish())
 }

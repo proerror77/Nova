@@ -1,17 +1,10 @@
 fn main() {
-    // Compile proto files using tonic-build for gRPC client generation
-    tonic_build::compile_protos("../protos/content_service.proto")
-        .expect("Failed to compile content_service.proto");
-
-    tonic_build::compile_protos("../protos/media_service.proto")
-        .expect("Failed to compile media_service.proto");
-
-    // Compile new service proto files for microservices architecture
-    tonic_build::compile_protos("../protos/recommendation.proto")
-        .expect("Failed to compile recommendation.proto");
-
-    tonic_build::compile_protos("../protos/video.proto").expect("Failed to compile video.proto");
-
-    tonic_build::compile_protos("../protos/streaming.proto")
-        .expect("Failed to compile streaming.proto");
+    // Compile proto files for gRPC server generation
+    // user-service PROVIDES UserService (server implementation)
+    // Uses Phase 0 proto definitions from nova/backend/proto/services/
+    tonic_build::configure()
+        .build_server(true)
+        .build_client(false)
+        .compile(&["../proto/services/user_service.proto"], &["../proto/services/"])
+        .expect("Failed to compile user_service.proto");
 }

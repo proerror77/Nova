@@ -1,9 +1,5 @@
-use crate::state::AppState;
-use axum::middleware;
-use axum::{
-    routing::{delete, get, post, put},
-    Json, Router,
-};
+use actix_web::{web, HttpResponse};
+
 pub mod calls;
 use calls::{
     answer_call, end_call, get_call_history, get_participants, initiate_call, join_call,
@@ -47,14 +43,15 @@ use key_exchange::{
 };
 
 // OpenAPI endpoint handler
-async fn openapi_json() -> Json<serde_json::Value> {
+async fn openapi_json() -> HttpResponse {
     use utoipa::OpenApi;
-    Json(serde_json::to_value(&crate::openapi::ApiDoc::openapi()).unwrap())
+    let api_doc = crate::openapi::ApiDoc::openapi();
+    HttpResponse::Ok().json(serde_json::to_value(&api_doc).unwrap())
 }
 
 // Swagger UI handler
-async fn swagger_ui() -> axum::response::Html<&'static str> {
-    axum::response::Html(
+async fn swagger_ui() -> HttpResponse {
+    HttpResponse::Ok().content_type("text/html").body(
         r#"<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -89,8 +86,8 @@ async fn swagger_ui() -> axum::response::Html<&'static str> {
 }
 
 // Documentation entry point
-async fn docs() -> axum::response::Html<&'static str> {
-    axum::response::Html(
+async fn docs() -> HttpResponse {
+    HttpResponse::Ok().content_type("text/html").body(
         r#"<!DOCTYPE html>
 <html>
 <head>
@@ -115,166 +112,200 @@ async fn docs() -> axum::response::Html<&'static str> {
     )
 }
 
-pub fn build_router() -> Router<AppState> {
+// Health check handler
+async fn health_check() -> HttpResponse {
+    HttpResponse::Ok().body("OK")
+}
+
+pub fn configure_routes(cfg: &mut web::ServiceConfig) {
     // Service introspection endpoints (no API version prefix)
-    let introspection = Router::new()
-        .route("/health", get(|| async { "OK" }))
-        .route("/metrics", get(crate::metrics::metrics_handler))
-        .route("/openapi.json", get(openapi_json))
-        .route("/swagger-ui", get(swagger_ui))
-        .route("/docs", get(docs));
+    cfg.service(
+        web::scope("")
+            .route("/health", web::get().to(health_check))
+            .route("/metrics", web::get().to(crate::metrics::metrics_handler))
+            .route("/openapi.json", web::get().to(openapi_json))
+            .route("/swagger-ui", web::get().to(swagger_ui))
+            .route("/docs", web::get().to(docs)),
+    );
 
     // API v1 endpoints (all business logic routes with /api/v1 prefix)
-    let api_v1 = Router::new()
-        // Video calls
-        .route("/conversations/:id/calls", post(initiate_call))
-        .route("/calls/:id/answer", post(answer_call))
-        .route("/calls/:id/join", post(join_call))
-        .route("/calls/:id/leave", post(leave_call))
-        .route("/calls/:id/participants", get(get_participants))
-        .route("/calls/:id/reject", post(reject_call))
-        .route("/calls/:id/end", post(end_call))
-        .route("/calls/history", get(get_call_history))
-        // RTC configuration
-        .route("/rtc/ice-config", get(get_ice_config))
-        // Location sharing
-        .route("/conversations/:id/location", post(share_location))
-        .route(
-            "/conversations/:id/locations",
-            get(get_conversation_locations),
-        )
-        .route(
-            "/conversations/:id/location/:user_id",
-            get(get_user_location),
-        )
-        .route(
-            "/conversations/:id/location/stop",
-            post(stop_sharing_location),
-        )
-        .route("/conversations/:id/location/stats", get(get_location_stats))
-        .route("/location/permissions", get(get_location_permissions))
-        .route("/location/permissions", put(update_location_permissions))
-        // Conversations
-        .route("/conversations", post(create_conversation))
-        .route("/conversations/groups", post(create_group_conversation))
-        .route(
-            "/conversations/:id",
-            get(get_conversation).delete(delete_group),
-        )
-        .route(
-            "/conversations/:id/encryption-key",
-            get(get_conversation_key),
-        )
-        .route("/conversations/:id/leave", post(leave_group))
-        .route("/conversations/:id/messages", post(send_message))
-        .route(
-            "/conversations/:id/messages/audio",
-            post(send_audio_message),
-        )
-        .route(
-            "/conversations/:id/messages/audio/presigned-url",
-            post(get_audio_presigned_url),
-        )
-        .route("/conversations/:id/messages", get(get_message_history))
-        .route("/conversations/:id/messages/search", get(search_messages))
-        .route(
-            "/conversations/:id/messages/:message_id/recall",
-            post(recall_message),
-        )
-        .route(
-            "/conversations/:id/messages/:message_id/forward",
-            post(forward_message),
-        )
-        .route("/conversations/:id/read", post(mark_as_read))
-        // Group management routes
-        .route("/conversations/:id/members", post(add_member))
-        .route("/conversations/:id/members", get(list_members))
-        .route("/conversations/:id/members/:user_id", delete(remove_member))
-        .route(
-            "/conversations/:id/members/:user_id",
-            put(update_member_role),
-        )
-        .route("/conversations/:id/settings", put(update_group_settings))
-        // Message reactions routes
-        .route("/messages/:id/reactions", post(add_reaction))
-        .route("/messages/:id/reactions", get(get_reactions))
-        .route("/messages/:id/reactions/:user_id", delete(remove_reaction))
-        // File attachments routes
-        .route(
-            "/conversations/:id/messages/:message_id/attachments",
-            post(upload_attachment),
-        )
-        .route("/messages/:id/attachments", get(get_attachments))
-        .route(
-            "/messages/:id/attachments/:attachment_id",
-            delete(delete_attachment),
-        )
-        .route("/messages/:id", put(update_message))
-        .route("/messages/:id", delete(delete_message))
-        // Notifications routes (reworked paths to avoid dynamic conflicts)
-        .route("/notifications", post(create_notification))
-        .route("/notifications/device-tokens", post(register_device_token))
-        .route(
-            "/notifications/device-tokens/:device_token",
-            delete(unregister_device_token),
-        )
-        .route("/notifications/users/:user_id", get(get_notifications))
-        .route(
-            "/notifications/users/:user_id/unread",
-            get(get_unread_notifications),
-        )
-        .route(
-            "/notifications/by-id/:notification_id/read",
-            put(mark_notification_read),
-        )
-        .route(
-            "/notifications/users/:user_id/mark-all-read",
-            put(mark_all_read),
-        )
-        .route(
-            "/notifications/by-id/:notification_id",
-            delete(delete_notification),
-        )
-        .route(
-            "/notifications/users/:user_id/preferences",
-            get(get_preferences),
-        )
-        .route(
-            "/notifications/users/:user_id/preferences",
-            put(update_preferences),
-        )
-        .route(
-            "/notifications/users/:user_id/subscribe/:notification_type",
-            post(subscribe),
-        )
-        .route(
-            "/notifications/users/:user_id/unsubscribe/:notification_type",
-            post(unsubscribe),
-        )
-        // ECDH Key Exchange routes
-        .route("/keys/device", post(store_device_public_key))
-        .route(
-            "/conversations/:conversation_id/keys/:peer_user_id/:peer_device_id",
-            get(get_peer_public_key),
-        )
-        .route(
-            "/conversations/:conversation_id/complete-key-exchange",
-            post(complete_key_exchange),
-        )
-        .route(
-            "/conversations/:conversation_id/key-exchanges",
-            get(list_conversation_key_exchanges),
-        )
-        // WebSocket endpoint (with API version prefix for consistency)
-        .route("/ws", get(ws_handler));
-
-    // Apply auth middleware only to API v1 (introspection stays public for healthchecks)
-    let secured_api_v1 = api_v1.layer(middleware::from_fn(
-        crate::middleware::auth::auth_middleware,
-    ));
-
-    // Combine introspection and API v1 routes
-    let router = introspection.merge(axum::Router::new().nest("/api/v1", secured_api_v1));
-
-    crate::middleware::with_defaults(router)
+    cfg.service(
+        web::scope("/api/v1")
+            .wrap(actix_middleware::jwt_auth::JwtAuthMiddleware)
+            // Video calls
+            .route("/conversations/{id}/calls", web::post().to(initiate_call))
+            .route("/calls/{id}/answer", web::post().to(answer_call))
+            .route("/calls/{id}/join", web::post().to(join_call))
+            .route("/calls/{id}/leave", web::post().to(leave_call))
+            .route("/calls/{id}/participants", web::get().to(get_participants))
+            .route("/calls/{id}/reject", web::post().to(reject_call))
+            .route("/calls/{id}/end", web::post().to(end_call))
+            .route("/calls/history", web::get().to(get_call_history))
+            // RTC configuration
+            .route("/rtc/ice-config", web::get().to(get_ice_config))
+            // Location sharing
+            .route(
+                "/conversations/{id}/location",
+                web::post().to(share_location),
+            )
+            .route(
+                "/conversations/{id}/locations",
+                web::get().to(get_conversation_locations),
+            )
+            .route(
+                "/conversations/{id}/location/{user_id}",
+                web::get().to(get_user_location),
+            )
+            .route(
+                "/conversations/{id}/location/stop",
+                web::post().to(stop_sharing_location),
+            )
+            .route(
+                "/conversations/{id}/location/stats",
+                web::get().to(get_location_stats),
+            )
+            .route(
+                "/location/permissions",
+                web::get().to(get_location_permissions),
+            )
+            .route(
+                "/location/permissions",
+                web::put().to(update_location_permissions),
+            )
+            // Conversations
+            .route("/conversations", web::post().to(create_conversation))
+            .route(
+                "/conversations/groups",
+                web::post().to(create_group_conversation),
+            )
+            .route("/conversations/{id}", web::get().to(get_conversation))
+            .route("/conversations/{id}", web::delete().to(delete_group))
+            .route(
+                "/conversations/{id}/encryption-key",
+                web::get().to(get_conversation_key),
+            )
+            .route("/conversations/{id}/leave", web::post().to(leave_group))
+            .route("/conversations/{id}/messages", web::post().to(send_message))
+            .route(
+                "/conversations/{id}/messages/audio",
+                web::post().to(send_audio_message),
+            )
+            .route(
+                "/conversations/{id}/messages/audio/presigned-url",
+                web::post().to(get_audio_presigned_url),
+            )
+            .route(
+                "/conversations/{id}/messages",
+                web::get().to(get_message_history),
+            )
+            .route(
+                "/conversations/{id}/messages/search",
+                web::get().to(search_messages),
+            )
+            .route(
+                "/conversations/{id}/messages/{message_id}/recall",
+                web::post().to(recall_message),
+            )
+            .route(
+                "/conversations/{id}/messages/{message_id}/forward",
+                web::post().to(forward_message),
+            )
+            .route("/conversations/{id}/read", web::post().to(mark_as_read))
+            // Group management routes
+            .route("/conversations/{id}/members", web::post().to(add_member))
+            .route("/conversations/{id}/members", web::get().to(list_members))
+            .route(
+                "/conversations/{id}/members/{user_id}",
+                web::delete().to(remove_member),
+            )
+            .route(
+                "/conversations/{id}/members/{user_id}",
+                web::put().to(update_member_role),
+            )
+            .route(
+                "/conversations/{id}/settings",
+                web::put().to(update_group_settings),
+            )
+            // Message reactions routes
+            .route("/messages/{id}/reactions", web::post().to(add_reaction))
+            .route("/messages/{id}/reactions", web::get().to(get_reactions))
+            .route(
+                "/messages/{id}/reactions/{user_id}",
+                web::delete().to(remove_reaction),
+            )
+            // File attachments routes
+            .route(
+                "/conversations/{id}/messages/{message_id}/attachments",
+                web::post().to(upload_attachment),
+            )
+            .route("/messages/{id}/attachments", web::get().to(get_attachments))
+            .route(
+                "/messages/{id}/attachments/{attachment_id}",
+                web::delete().to(delete_attachment),
+            )
+            .route("/messages/{id}", web::put().to(update_message))
+            .route("/messages/{id}", web::delete().to(delete_message))
+            // Notifications routes
+            .route("/notifications", web::post().to(create_notification))
+            .route(
+                "/notifications/device-tokens",
+                web::post().to(register_device_token),
+            )
+            .route(
+                "/notifications/device-tokens/{device_token}",
+                web::delete().to(unregister_device_token),
+            )
+            .route(
+                "/notifications/users/{user_id}",
+                web::get().to(get_notifications),
+            )
+            .route(
+                "/notifications/users/{user_id}/unread",
+                web::get().to(get_unread_notifications),
+            )
+            .route(
+                "/notifications/by-id/{notification_id}/read",
+                web::put().to(mark_notification_read),
+            )
+            .route(
+                "/notifications/users/{user_id}/mark-all-read",
+                web::put().to(mark_all_read),
+            )
+            .route(
+                "/notifications/by-id/{notification_id}",
+                web::delete().to(delete_notification),
+            )
+            .route(
+                "/notifications/users/{user_id}/preferences",
+                web::get().to(get_preferences),
+            )
+            .route(
+                "/notifications/users/{user_id}/preferences",
+                web::put().to(update_preferences),
+            )
+            .route(
+                "/notifications/users/{user_id}/subscribe/{notification_type}",
+                web::post().to(subscribe),
+            )
+            .route(
+                "/notifications/users/{user_id}/unsubscribe/{notification_type}",
+                web::post().to(unsubscribe),
+            )
+            // ECDH Key Exchange routes
+            .route("/keys/device", web::post().to(store_device_public_key))
+            .route(
+                "/conversations/{conversation_id}/keys/{peer_user_id}/{peer_device_id}",
+                web::get().to(get_peer_public_key),
+            )
+            .route(
+                "/conversations/{conversation_id}/complete-key-exchange",
+                web::post().to(complete_key_exchange),
+            )
+            .route(
+                "/conversations/{conversation_id}/key-exchanges",
+                web::get().to(list_conversation_key_exchanges),
+            )
+            // WebSocket endpoint (with API version prefix for consistency)
+            .route("/ws", web::get().to(ws_handler)),
+    );
 }

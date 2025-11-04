@@ -92,24 +92,20 @@ pub async fn get_user_bookmarks(
 
 /// Count total bookmarks for a user
 pub async fn count_user_bookmarks(pool: &PgPool, user_id: Uuid) -> Result<i64, sqlx::Error> {
-    let row = sqlx::query(
-        "SELECT COUNT(*) as count FROM bookmarks WHERE user_id = $1",
-    )
-    .bind(user_id)
-    .fetch_one(pool)
-    .await?;
+    let row = sqlx::query("SELECT COUNT(*) as count FROM bookmarks WHERE user_id = $1")
+        .bind(user_id)
+        .fetch_one(pool)
+        .await?;
 
     Ok(row.get::<i64, _>("count"))
 }
 
 /// Get count of bookmarks for a post
 pub async fn count_post_bookmarks(pool: &PgPool, post_id: Uuid) -> Result<i64, sqlx::Error> {
-    let row = sqlx::query(
-        "SELECT COUNT(*) as count FROM bookmarks WHERE post_id = $1",
-    )
-    .bind(post_id)
-    .fetch_one(pool)
-    .await?;
+    let row = sqlx::query("SELECT COUNT(*) as count FROM bookmarks WHERE post_id = $1")
+        .bind(post_id)
+        .fetch_one(pool)
+        .await?;
 
     Ok(row.get::<i64, _>("count"))
 }

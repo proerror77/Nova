@@ -1,57 +1,42 @@
----
-# Kubernetes Service for Nova Messaging Service
 apiVersion: v1
 kind: Service
 metadata:
   name: messaging-service
   namespace: nova-messaging
   labels:
-    app: nova
-    component: messaging-service
-    version: v1
-  annotations:
-    description: "Service for messaging API and WebSocket access"
+    app: messaging-service
 spec:
-  type: ClusterIP
-  ports:
-    - name: http
-      port: 3000
-      targetPort: http
-      protocol: TCP
-    - name: metrics
-      port: 9090
-      targetPort: metrics
-      protocol: TCP
   selector:
-    app: nova
-    component: messaging-service
-  sessionAffinity: ClientIP
-  sessionAffinityConfig:
-    clientIP:
-      timeoutSeconds: 10800
-
+    app: messaging-service
+  type: ClusterIP
+  clusterIP: None
+  ports:
+    - name: grpc
+      port: 9085
+      targetPort: 9085
+      protocol: TCP
+    - name: http
+      port: 8085
+      targetPort: 8085
+      protocol: TCP
 ---
-# External Load Balancer Service for WebSocket clients
 apiVersion: v1
 kind: Service
 metadata:
-  name: messaging-service-external
+  name: messaging-service-lb
   namespace: nova-messaging
   labels:
-    app: nova
-    component: messaging-service
-    external: "true"
+    app: messaging-service
 spec:
+  selector:
+    app: messaging-service
   type: LoadBalancer
   ports:
-    - name: http
-      port: 3000
-      targetPort: http
+    - name: grpc
+      port: 9085
+      targetPort: 9085
       protocol: TCP
-  selector:
-    app: nova
-    component: messaging-service
-  sessionAffinity: ClientIP
-  sessionAffinityConfig:
-    clientIP:
-      timeoutSeconds: 10800
+    - name: http
+      port: 8085
+      targetPort: 8085
+      protocol: TCP

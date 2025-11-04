@@ -1,0 +1,131 @@
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-pvc
+  namespace: nova
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init
+  namespace: nova
+data:
+  01-init-databases.sql: |
+    -- Create all required databases for Nova microservices
+    SELECT 'CREATE DATABASE nova_content' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'nova_content')\gexec
+    SELECT 'CREATE DATABASE nova_feed' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'nova_feed')\gexec
+    SELECT 'CREATE DATABASE nova_media' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'nova_media')\gexec
+    SELECT 'CREATE DATABASE nova_messaging' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'nova_messaging')\gexec
+    SELECT 'CREATE DATABASE nova_search' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'nova_search')\gexec
+    SELECT 'CREATE DATABASE nova_streaming' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'nova_streaming')\gexec
+    SELECT 'CREATE DATABASE nova_user' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'nova_user')\gexec
+
+  02-init-extensions.sql: |
+    -- Connect to each database and install required extensions
+    \c nova_auth
+    CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+    CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+    \c nova_content
+    CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+    CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+    \c nova_feed
+    CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+    CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+    \c nova_media
+    CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+    CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+    CREATE EXTENSION IF NOT EXISTS "vector";
+
+    \c nova_messaging
+    CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+    CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+    \c nova_search
+    CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+    CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+    \c nova_streaming
+    CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+    CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+    \c nova_user
+    CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+    CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: nova
+spec:
+  type: ClusterIP
+  ports:
+  - port: 5432
+    targetPort: 5432
+    protocol: TCP
+    name: postgres
+  selector:
+    app: postgres
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  namespace: nova
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:15-alpine
+        ports:
+        - containerPort: 5432
+          name: postgres
+        env:
+        - name: POSTGRES_USER
+          value: "nova"
+        - name: POSTGRES_PASSWORD
+          value: "nova123"
+        - name: POSTGRES_DB
+          value: "nova_auth"
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        volumeMounts:
+        - name: postgres-data
+          mountPath: /var/lib/postgresql/data
+        - name: init-scripts
+          mountPath: /docker-entrypoint-initdb.d
+      volumes:
+      - name: postgres-data
+        persistentVolumeClaim:
+          claimName: postgres-pvc
+      - name: init-scripts
+        configMap:
+          name: postgres-init

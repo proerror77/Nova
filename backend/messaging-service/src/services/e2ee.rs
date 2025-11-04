@@ -199,7 +199,7 @@ impl E2eeService {
         .bind(secret_key_b64)
         .execute(pool)
         .await
-        .map_err(|e| AppError::Database(e))?;
+        .map_err(|e| AppError::Database(e.to_string()))?;
 
         if result.rows_affected() == 0 {
             return Err(AppError::Encryption(
@@ -223,7 +223,7 @@ impl E2eeService {
                 .bind(device_id)
                 .fetch_optional(pool)
                 .await
-                .map_err(|e| AppError::Database(e))?;
+                .map_err(|e| AppError::Database(e.to_string()))?;
 
         match row {
             Some(row) => {
@@ -251,7 +251,7 @@ impl E2eeService {
         .bind(device_id)
         .fetch_optional(pool)
         .await
-        .map_err(|e| AppError::Database(e))?;
+        .map_err(|e| AppError::Database(e.to_string()))?;
 
         match row {
             Some(row) => {
@@ -308,7 +308,7 @@ impl E2eeService {
         .bind(&shared_secret_hash[..])
         .execute(pool)
         .await
-        .map_err(|e| AppError::Database(e))?;
+        .map_err(|e| AppError::Database(e.to_string()))?;
 
         Ok(())
     }

@@ -4,10 +4,9 @@ pub mod oauth;
 
 // Re-export handlers for easy access
 pub use auth::{
-    register, login, logout, refresh_token, change_password, request_password_reset,
-    RegisterResponse, LoginResponse, RefreshTokenResponse, LogoutResponse,
+    change_password, login, logout, refresh_token, register, request_password_reset, LoginResponse,
+    LogoutResponse, RefreshTokenResponse, RegisterResponse,
 };
 pub use oauth::{
-    start_oauth_flow, complete_oauth_flow,
-    StartOAuthFlowResponse, OAuthLoginResponse,
+    complete_oauth_flow, start_oauth_flow, OAuthLoginResponse, StartOAuthFlowResponse,
 };

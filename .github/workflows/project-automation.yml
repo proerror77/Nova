@@ -1,10 +1,8 @@
 name: Project Automation
 
 on:
-  issues:
-    types: [opened, reopened]
-  pull_request:
-    types: [opened, reopened, ready_for_review]
+  # 临时禁用 - GitHub Actions 运行器分配失败
+  workflow_dispatch:
 
 jobs:
   add-to-project:

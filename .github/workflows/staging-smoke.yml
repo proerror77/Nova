@@ -10,12 +10,13 @@ on:
   schedule:
     - cron: "0 7 * * *" # daily smoke run at 07:00 UTC
   workflow_run:
-    workflows: ["Deploy"]
+    workflows: ["Staging Deploy (Optimized)", "Stage Backend Code to Staging"]
     types:
       - completed
 
 permissions:
   contents: read
+  id-token: write
 
 jobs:
   smoke-test:
@@ -25,34 +26,100 @@ jobs:
       (github.event_name != 'workflow_run') ||
       (github.event.workflow_run.conclusion == 'success')
     environment: staging
+    env:
+      AWS_REGION: ap-northeast-1
+      EKS_CLUSTER_NAME: nova-eks
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
 
-      - name: Ensure kubeconfig secret is present
+      - name: Ensure kubeconfig secret is present (informative)
         shell: bash
         env:
           KUBECONFIG_B64: ${{ secrets.STAGING_KUBE_CONFIG }}
+          KUBECONFIG_RAW: ${{ secrets.STAGING_KUBE_CONFIG_RAW }}
         run: |
-          if [[ -z "$KUBECONFIG_B64" ]]; then
-            echo "::error::STAGING_KUBE_CONFIG secret is not configured."
-            exit 1
+          if [[ -z "$KUBECONFIG_B64" && -z "$KUBECONFIG_RAW" ]]; then
+            echo "::notice::No kubeconfig secrets provided; will rely on AWS OIDC if available."
           fi
+          if [[ -n "$KUBECONFIG_RAW" ]]; then
+            echo "::notice::kubeconfig source = RAW"
+          else
+            echo "::notice::kubeconfig source = BASE64"
+          fi
+
+      - name: Print context
+        shell: bash
+        env:
+          KUBECONFIG_SET: ${{ secrets.STAGING_KUBE_CONFIG }}
+        run: |
+          echo "branch=${GITHUB_REF_NAME} sha=${GITHUB_SHA}"
+          if [[ -n "$KUBECONFIG_SET" ]]; then echo "has_KUBECONFIG=yes"; else echo "has_KUBECONFIG=no"; fi
 
       - name: Install kubectl
         uses: azure/setup-kubectl@v4
         with:
           version: "latest"
 
-      - name: Configure kubeconfig
+      - name: Configure AWS credentials (OIDC)
+        id: aws-creds
+        continue-on-error: true
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::025434362120:role/github-actions-role
+          aws-region: ${{ env.AWS_REGION }}
+          audience: sts.amazonaws.com
+          role-session-name: gha-smoke-${{ github.run_id }}
+          role-skip-session-tagging: true
+
+      - name: Configure kubeconfig (prefer AWS, fallback to secrets)
         shell: bash
         env:
           KUBECONFIG_B64: ${{ secrets.STAGING_KUBE_CONFIG }}
+          KUBECONFIG_RAW: ${{ secrets.STAGING_KUBE_CONFIG_RAW }}
+          AWS_REGION: ${{ env.AWS_REGION }}
+          EKS_CLUSTER_NAME: ${{ env.EKS_CLUSTER_NAME }}
         run: |
           set -euo pipefail
           mkdir -p ~/.kube
-          echo "$KUBECONFIG_B64" | base64 --decode > ~/.kube/config
+          if [ "${{ steps.aws-creds.outcome }}" = "success" ] && command -v aws >/dev/null 2>&1; then
+            echo "::notice::using AWS OIDC to generate kubeconfig"
+            rm -f ~/.kube/config || true
+            aws eks update-kubeconfig --name "${EKS_CLUSTER_NAME}" --region "${AWS_REGION}" --alias nova-staging
+          else
+            echo "::notice::AWS OIDC unavailable; falling back to secrets"
+            configured=""
+            if [ -n "${KUBECONFIG_RAW:-}" ]; then
+              echo "::notice::decoder=raw v3"
+              printf "%s" "$KUBECONFIG_RAW" > ~/.kube/config
+              configured="raw"
+            elif [ -n "${KUBECONFIG_B64:-}" ]; then
+              echo "::notice::decoder=robust v3 (openssl-fallback)"
+              CLEAN=$(printf "%s" "$KUBECONFIG_B64" | tr -d '\r\n\t ')
+              if [ -z "$CLEAN" ]; then echo "::warning::Empty after normalization"; fi
+              if command -v openssl >/dev/null 2>&1; then
+                if ! printf "%s" "$CLEAN" | openssl base64 -d -A > ~/.kube/config 2>/dev/null; then
+                  echo "::warning::openssl -d failed; trying coreutils base64 -d";
+                  printf "%s" "$CLEAN" | base64 -d > ~/.kube/config || true
+                fi
+              else
+                printf "%s" "$CLEAN" | base64 -d > ~/.kube/config || true
+              fi
+              configured="base64"
+            else
+              echo "::error::no kubeconfig secret provided and AWS creds not available."; exit 1
+            fi
+          fi
+
+          # Basic sanity check (loose): kubeconfig should contain 'apiVersion'
+          if ! grep -q "apiVersion" ~/.kube/config; then
+            echo "::warning::kubeconfig missing 'apiVersion' marker; may be malformed."
+          fi
+
           chmod 600 ~/.kube/config
+          echo "::notice::kubeconfig_size_bytes=$(wc -c < ~/.kube/config)"
+          kubectl version --client=true
+          kubectl config get-contexts || true
 
       - name: Run staging smoke script
         shell: bash

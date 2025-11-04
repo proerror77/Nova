@@ -2,7 +2,6 @@
 ///
 /// Consumes follow/unfollow events from Kafka and syncs to Neo4j.
 /// Implements retry logic and dead-letter queue for failed events.
-
 use anyhow::{anyhow, Result};
 use rdkafka::consumer::{CommitMode, Consumer, StreamConsumer};
 use rdkafka::message::Message;
@@ -50,8 +49,8 @@ struct SocialEvent {
 
 impl SocialEvent {
     fn from_payload(payload: &str) -> Result<Self> {
-        let json: Value = serde_json::from_str(payload)
-            .map_err(|e| anyhow!("Failed to parse JSON: {}", e))?;
+        let json: Value =
+            serde_json::from_str(payload).map_err(|e| anyhow!("Failed to parse JSON: {}", e))?;
 
         let event_type_str = json
             .get("event_type")
@@ -73,34 +72,29 @@ impl SocialEvent {
             .unwrap_or_else(|| chrono::Utc::now().timestamp_millis());
 
         // Handle both direct fields and nested properties
-        let (follower_id, followee_id) = if let Some(props) = json.get("properties").and_then(|v| v.as_object()) {
-            let follower = props
-                .get("follower_id")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow!("Missing follower_id in properties"))?;
-            let followee = props
-                .get("followee_id")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow!("Missing followee_id in properties"))?;
-            (
-                Uuid::parse_str(follower)?,
-                Uuid::parse_str(followee)?,
-            )
-        } else {
-            // Fallback to direct fields
-            let follower = json
-                .get("follower_id")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow!("Missing follower_id"))?;
-            let followee = json
-                .get("followee_id")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow!("Missing followee_id"))?;
-            (
-                Uuid::parse_str(follower)?,
-                Uuid::parse_str(followee)?,
-            )
-        };
+        let (follower_id, followee_id) =
+            if let Some(props) = json.get("properties").and_then(|v| v.as_object()) {
+                let follower = props
+                    .get("follower_id")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| anyhow!("Missing follower_id in properties"))?;
+                let followee = props
+                    .get("followee_id")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| anyhow!("Missing followee_id in properties"))?;
+                (Uuid::parse_str(follower)?, Uuid::parse_str(followee)?)
+            } else {
+                // Fallback to direct fields
+                let follower = json
+                    .get("follower_id")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| anyhow!("Missing follower_id"))?;
+                let followee = json
+                    .get("followee_id")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| anyhow!("Missing followee_id"))?;
+                (Uuid::parse_str(follower)?, Uuid::parse_str(followee)?)
+            };
 
         Ok(SocialEvent {
             event_id,
@@ -168,12 +162,7 @@ impl SocialGraphSyncConsumer {
         info!("Starting social graph sync consumer");
 
         loop {
-            match tokio::time::timeout(
-                Duration::from_secs(30),
-                self.consumer.recv(),
-            )
-            .await
-            {
+            match tokio::time::timeout(Duration::from_secs(30), self.consumer.recv()).await {
                 Ok(Ok(msg)) => {
                     let payload = match msg.payload_view::<str>() {
                         Some(Ok(p)) => p,

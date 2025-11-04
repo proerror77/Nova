@@ -143,6 +143,12 @@ spec:
           periodSeconds: 5
           failureThreshold: 30
 
+        # 优雅终止：给连接清理预留时间
+        lifecycle:
+          preStop:
+            exec:
+              command: ["/bin/sh","-c","sleep 10"]
+
         # 安全上下文
         securityContext:
           allowPrivilegeEscalation: false
@@ -208,7 +214,10 @@ spec:
     port: 9084
     targetPort: 9084
     protocol: TCP
-  sessionAffinity: None
+  sessionAffinity: ClientIP
+  sessionAffinityConfig:
+    clientIPConfig:
+      timeoutSeconds: 10800
 
 ---
 # ServiceAccount

@@ -4,10 +4,14 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-axum = { version = "0.8", features = ["macros", "ws"] }
+actix-web = { workspace = true }
+actix-rt = { workspace = true }
+actix-web-actors = "4.3"
+actix = { workspace = true }
 tokio = { version = "1", features = ["full"] }
 tokio-tungstenite = "0.28"
 futures-util = "0.3"
+futures = "0.3"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 apns2 = "0.1"
@@ -24,11 +28,12 @@ thiserror = "1"
 crypto-core = { path = "../libs/crypto-core" }
 redis-utils = { path = "../libs/redis-utils" }
 nova-apns-shared = { path = "../libs/nova-apns-shared" }
+actix-middleware = { path = "../libs/actix-middleware" }
 chrono = { workspace = true }
 once_cell = "1.19"
 base64 = { workspace = true }
-tower-http = { version = "0.5", features = ["trace"] }
 utoipa = { workspace = true }
+utoipa-swagger-ui = { version = "5", features = ["actix-web"] }
 hmac = { workspace = true }
 sha2 = { workspace = true }
 hkdf = { workspace = true }
@@ -38,6 +43,11 @@ tonic = "0.11"
 prost = "0.12"
 error-types = { path = "../libs/error-types" }
 prometheus = { workspace = true }
+actix-cors = "0.7"
+bytes = "1.5"
+env_logger = "0.11"
+aws-sdk-s3 = "1.9"
+aws-config = "1.1"
 
 [profile.release]
 codegen-units = 1

@@ -270,9 +270,7 @@ impl RecommendationServiceV2 {
         if let Some(ref vector_search) = self.vector_search {
             vector_search.batch_index_embeddings(embeddings).await
         } else {
-            warn!(
-                "Vector search service not available, skipping batch embedding index"
-            );
+            warn!("Vector search service not available, skipping batch embedding index");
             Ok(0)
         }
     }

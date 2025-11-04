@@ -4,12 +4,14 @@ pub mod recommendation;
 pub mod trending;
 
 // Re-export handlers for convenience
-pub use discover::{get_suggested_users, DiscoverHandlerState, SuggestedUsersResponse, UserWithScore};
+pub use discover::{
+    get_suggested_users, DiscoverHandlerState, SuggestedUsersResponse, UserWithScore,
+};
 pub use feed::{get_feed, invalidate_feed_cache, FeedHandlerState, FeedQueryParams};
 pub use recommendation::{
-    get_recommendations, get_model_info, rank_candidates, semantic_search, RecommendationHandlerState,
-    RecommendationQuery, RankingRequest, RecommendationResponse, ModelInfoResponse,
-    RankingResponse, RankedPostResponse, SemanticSearchRequest, SemanticSearchResponse,
+    get_model_info, get_recommendations, rank_candidates, semantic_search, ModelInfoResponse,
+    RankedPostResponse, RankingRequest, RankingResponse, RecommendationHandlerState,
+    RecommendationQuery, RecommendationResponse, SemanticSearchRequest, SemanticSearchResponse,
     SemanticSearchResult,
 };
 pub use trending::{

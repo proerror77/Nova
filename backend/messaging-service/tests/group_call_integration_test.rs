@@ -9,11 +9,11 @@
 //!
 //! Run with: cargo test --test group_call_integration_test -- --nocapture
 
-use axum::Router;
+use actix_web::{web, App, HttpServer};
 use messaging_service::{
-    config::Config, db, routes, state::AppState, websocket::ConnectionRegistry,
+    config::Config, db, redis_client::RedisClient, routes, services::encryption::EncryptionService,
+    state::AppState, websocket::ConnectionRegistry,
 };
-use redis::Client as RedisClient;
 use serde_json::json;
 use sqlx::{Pool, Postgres};
 use std::sync::Arc;
@@ -79,45 +79,54 @@ async fn setup() -> TestSetup {
     // Run migrations
     db::MIGRATOR.run(&test_pool).await.unwrap();
 
-    // Setup Redis
-    let redis = RedisClient::open("redis://127.0.0.1:6379").unwrap();
+    // Setup Redis wrapper
+    let redis = RedisClient::from_url("redis://127.0.0.1:6379")
+        .await
+        .expect("Failed to create Redis client");
 
-    // Build app
+    // Build app state
     let registry = ConnectionRegistry::new();
+    let cfg = Config::test_defaults();
     let state = AppState {
         db: test_pool.clone(),
         registry: registry.clone(),
         redis: redis.clone(),
-        config: Arc::new(Config::test_defaults()),
+        config: Arc::new(cfg.clone()),
         apns: None,
+        encryption: Arc::new(EncryptionService::new(cfg.encryption_master_key)),
+        key_exchange_service: None,
     };
 
-    let app: Router = routes::build_router().with_state(state);
+    // Start streams listener
+    let registry_clone = registry.clone();
+    let redis_clone = redis.clone();
+    tokio::spawn(async move {
+        let config = messaging_service::websocket::streams::StreamsConfig::default();
+        let _ = messaging_service::websocket::streams::start_streams_listener(
+            redis_clone,
+            registry_clone,
+            config,
+        )
+        .await;
+    });
 
-    // Start server
-    let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
-        .await
-        .unwrap();
+    // Start Actix server
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let addr = listener.local_addr().unwrap();
     let app_url = format!("http://{}", addr);
 
-    // Start streams listener
-    tokio::spawn({
-        let registry = registry.clone();
-        let redis = redis.clone();
-        async move {
-            let config = messaging_service::websocket::streams::StreamsConfig::default();
-            let _ = messaging_service::websocket::streams::start_streams_listener(
-                redis, registry, config,
-            )
-            .await;
-        }
-    });
-
-    // Start server
     tokio::spawn(async move {
-        let make_svc = app.into_make_service();
-        axum::serve(listener, make_svc).await.ok();
+        let state_data = web::Data::new(state);
+        let server = HttpServer::new(move || {
+            App::new()
+                .app_data(state_data.clone())
+                .configure(routes::configure_routes)
+        })
+        .listen(listener)
+        .expect("Failed to bind server")
+        .run();
+
+        let _ = server.await;
     });
 
     // Wait for server to start

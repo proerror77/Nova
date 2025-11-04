@@ -34,6 +34,8 @@ anyhow.workspace = true
 async-trait.workspace = true
 reqwest.workspace = true
 prometheus.workspace = true
+utoipa = { version = "4", features = ["chrono", "uuid"] }
+utoipa-swagger-ui = { version = "5", features = ["actix-web"] }
 
 # Recommendation-specific
 ndarray = "0.16"

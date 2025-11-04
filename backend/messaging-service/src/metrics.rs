@@ -1,14 +1,8 @@
-use std::time::Instant;
-
-use axum::{
-    body::Body,
-    extract::MatchedPath,
-    http::{Request, StatusCode},
-    middleware::Next,
-    response::{IntoResponse, Response},
-};
+use actix_web::HttpResponse;
 use once_cell::sync::Lazy;
-use prometheus::{Encoder, HistogramOpts, HistogramVec, IntCounterVec, Opts, TextEncoder};
+use prometheus::{Encoder, HistogramOpts, HistogramVec, IntCounterVec, IntGauge, Opts, TextEncoder};
+use sqlx::{PgPool};
+use std::time::Duration;
 
 static HTTP_REQUESTS_TOTAL: Lazy<IntCounterVec> = Lazy::new(|| {
     let counter = IntCounterVec::new(
@@ -43,44 +37,82 @@ static HTTP_REQUEST_DURATION_SECONDS: Lazy<HistogramVec> = Lazy::new(|| {
     histogram
 });
 
-pub async fn track_http_metrics(req: Request<Body>, next: Next) -> Response {
-    let method = req.method().as_str().to_string();
-    let path = req
-        .extensions()
-        .get::<MatchedPath>()
-        .map(|p| p.as_str().to_string())
-        .unwrap_or_else(|| req.uri().path().to_string());
-    let start = Instant::now();
-
-    let response = next.run(req).await;
-    let status = response.status().as_u16().to_string();
-    HTTP_REQUESTS_TOTAL
-        .with_label_values(&[&method, &path, &status])
-        .inc();
-    HTTP_REQUEST_DURATION_SECONDS
-        .with_label_values(&[&method, &path, &status])
-        .observe(start.elapsed().as_secs_f64());
-
-    response
-}
-
-pub async fn metrics_handler() -> impl IntoResponse {
+pub async fn metrics_handler() -> HttpResponse {
     let encoder = TextEncoder::new();
     let metric_families = prometheus::gather();
 
     let mut buffer = Vec::new();
     if let Err(err) = encoder.encode(&metric_families, &mut buffer) {
-        return (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()).into_response();
+        return HttpResponse::InternalServerError().body(err.to_string());
     }
 
-    Response::builder()
-        .status(StatusCode::OK)
-        .header(axum::http::header::CONTENT_TYPE, encoder.format_type())
-        .body(buffer.into())
-        .unwrap_or_else(|err| {
-            Response::builder()
-                .status(StatusCode::INTERNAL_SERVER_ERROR)
-                .body(err.to_string().into())
-                .expect("failed to build metrics error response")
-        })
+    HttpResponse::Ok()
+        .content_type(encoder.format_type())
+        .body(buffer)
+}
+
+// =========================
+// Queue depth gauges
+// =========================
+
+static NOTIFICATION_JOBS_PENDING: Lazy<IntGauge> = Lazy::new(|| {
+    let g = IntGauge::new(
+        "notification_jobs_pending",
+        "Number of pending notification jobs (unclaimed or stale claims)",
+    )
+    .expect("create notification_jobs_pending gauge");
+    prometheus::default_registry()
+        .register(Box::new(g.clone()))
+        .expect("register notification_jobs_pending");
+    g
+});
+
+static NOTIFICATION_JOBS_FAILED: Lazy<IntGauge> = Lazy::new(|| {
+    let g = IntGauge::new(
+        "notification_jobs_failed",
+        "Number of failed notification jobs",
+    )
+    .expect("create notification_jobs_failed gauge");
+    prometheus::default_registry()
+        .register(Box::new(g.clone()))
+        .expect("register notification_jobs_failed");
+    g
+});
+
+/// Spawn a background task that periodically updates queue depth gauges
+pub fn spawn_metrics_updater(db: PgPool) {
+    tokio::spawn(async move {
+        let interval = Duration::from_secs(10);
+        loop {
+            if let Err(e) = update_gauges(&db).await {
+                tracing::debug!("metrics updater failed: {}", e);
+            }
+            tokio::time::sleep(interval).await;
+        }
+    });
+}
+
+async fn update_gauges(db: &PgPool) -> Result<(), sqlx::Error> {
+    // pending = status='pending' and (unclaimed or stale claim)
+    let pending: i64 = sqlx::query_scalar(
+        r#"
+        SELECT COUNT(*)
+        FROM notification_jobs
+        WHERE status = 'pending'
+          AND (claimed_at IS NULL OR claimed_at < NOW() - INTERVAL '5 minutes')
+        "#,
+    )
+    .fetch_one(db)
+    .await?;
+
+    let failed: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM notification_jobs WHERE status = 'failed'",
+    )
+    .fetch_one(db)
+    .await?;
+
+    NOTIFICATION_JOBS_PENDING.set(pending as i64);
+    NOTIFICATION_JOBS_FAILED.set(failed as i64);
+
+    Ok(())
 }

@@ -16,13 +16,11 @@
 /// - Redis for sessions and caching
 /// - Argon2id for password hashing
 /// - RS256 for JWT signing with key rotation
-
 pub mod config;
 pub mod db;
 pub mod error;
 pub mod grpc;
 pub mod handlers;
-pub mod middleware;
 pub mod models;
 pub mod security;
 pub mod services;
@@ -31,8 +29,8 @@ pub mod validators;
 
 pub use error::{AuthError, AuthResult};
 use redis::aio::ConnectionManager;
-use sqlx::PgPool;
 use services::KafkaEventProducer;
+use sqlx::PgPool;
 
 /// Application state shared across all handlers
 #[derive(Clone)]
@@ -42,11 +40,9 @@ pub struct AppState {
     pub kafka_producer: Option<KafkaEventProducer>,
 }
 
-// gRPC generated code
+// gRPC generated code (from Phase 0 proto definitions)
 pub mod nova {
-    pub mod auth {
-        pub mod v1 {
-            tonic::include_proto!("nova.auth.v1");
-        }
+    pub mod auth_service {
+        tonic::include_proto!("nova.auth_service");
     }
 }

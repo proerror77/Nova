@@ -7,6 +7,7 @@ use crypto_core::jwt;
 use media_service::cache::MediaCache;
 use media_service::handlers;
 use media_service::middleware;
+use media_service::openapi::ApiDoc;
 use media_service::services::ReelTranscodePipeline;
 use media_service::Config;
 use redis_utils::{RedisPool, SentinelConfig};
@@ -19,6 +20,8 @@ use tokio::sync::broadcast;
 use tokio::task::JoinSet;
 use tracing::info;
 use tracing_subscriber;
+use utoipa::OpenApi;
+use utoipa_swagger_ui::SwaggerUi;
 
 async fn shutdown_signal() {
     #[cfg(unix)]
@@ -40,6 +43,15 @@ async fn shutdown_signal() {
             .await
             .expect("Failed to install Ctrl+C handler");
     }
+}
+
+async fn openapi_json(doc: web::Data<utoipa::openapi::OpenApi>) -> HttpResponse {
+    let body = serde_json::to_string(&*doc)
+        .expect("Failed to serialize OpenAPI document for media-service");
+
+    HttpResponse::Ok()
+        .content_type("application/json")
+        .body(body)
 }
 
 #[actix_web::main]
@@ -120,12 +132,21 @@ async fn main() -> io::Result<()> {
 
     // Create HTTP server
     let server = HttpServer::new(move || {
+        let openapi_doc = ApiDoc::openapi();
+
         App::new()
+            .app_data(web::Data::new(openapi_doc.clone()))
+            .service(
+                SwaggerUi::new("/swagger-ui/{_:.*}")
+                    .url("/api/v1/openapi.json", openapi_doc.clone()),
+            )
+            .route("/api/v1/openapi.json", web::get().to(openapi_json))
             .app_data(web::Data::new(config.clone()))
             .app_data(web::Data::new(db_pool_http.clone()))
             .app_data(web::Data::new(reel_pipeline.clone()))
             .app_data(web::Data::new(media_cache_http.clone()))
             .wrap(actix_middleware::Logger::default())
+            .wrap(actix_middleware::CorrelationIdMiddleware)
             .route(
                 "/metrics",
                 web::get().to(media_service::metrics::serve_metrics),
@@ -142,15 +163,6 @@ async fn main() -> io::Result<()> {
             .route(
                 "/api/v1/health/live",
                 web::get().to(|| async { HttpResponse::Ok().finish() }),
-            )
-            .route(
-                "/api/v1/openapi.json",
-                web::get().to(|| async {
-                    use utoipa::OpenApi;
-                    HttpResponse::Ok()
-                        .content_type("application/json")
-                        .json(media_service::openapi::ApiDoc::openapi())
-                }),
             )
             .service(
                 web::scope("/api/v1")

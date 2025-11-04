@@ -1,7 +1,7 @@
 pub mod config;
 pub mod db;
 pub mod error;
-pub mod grpc_service;
+pub mod grpc;
 pub mod logging;
 pub mod metrics;
 pub mod middleware;
@@ -15,13 +15,11 @@ pub mod services;
 pub mod state;
 pub mod websocket;
 
-// gRPC service module - generated from protos
-pub mod grpc {
-    pub mod nova {
-        pub mod messaging {
-            include!(concat!(env!("OUT_DIR"), "/nova.messaging.rs"));
-        }
+// gRPC service module - generated from protos (Phase 0 proto definitions)
+pub mod nova {
+    pub mod messaging_service {
+        tonic::include_proto!("nova.messaging_service");
     }
 }
 
-pub use grpc::nova::messaging;
+pub use nova::messaging_service;

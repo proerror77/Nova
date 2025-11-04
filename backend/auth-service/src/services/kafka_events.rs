@@ -2,10 +2,11 @@
 use crate::error::{AuthError, AuthResult};
 use chrono::Utc;
 use event_schema::{
-    EventEnvelope, UserCreatedEvent, UserDeletedEvent,
-    PasswordChangedEvent, TwoFAEnabledEvent,
+    EventEnvelope, PasswordChangedEvent, TwoFAEnabledEvent, UserCreatedEvent, UserDeletedEvent,
 };
+use rdkafka::message::OwnedHeaders;
 use rdkafka::producer::{FutureProducer, FutureRecord};
+use crypto_core::kafka_correlation::inject_headers;
 use std::time::Duration;
 use tracing::warn;
 use uuid::Uuid;
@@ -46,8 +47,8 @@ impl KafkaEventProducer {
             created_at: Utc::now(),
         };
 
-        let envelope = EventEnvelope::new("auth-service", event)
-            .with_correlation_id(Uuid::new_v4());
+        let envelope =
+            EventEnvelope::new("auth-service", event).with_correlation_id(Uuid::new_v4());
 
         self.publish_event(&envelope, user_id).await
     }
@@ -60,8 +61,8 @@ impl KafkaEventProducer {
             invalidate_all_sessions: true,
         };
 
-        let envelope = EventEnvelope::new("auth-service", event)
-            .with_correlation_id(Uuid::new_v4());
+        let envelope =
+            EventEnvelope::new("auth-service", event).with_correlation_id(Uuid::new_v4());
 
         self.publish_event(&envelope, user_id).await
     }
@@ -74,8 +75,8 @@ impl KafkaEventProducer {
             method: "totp".to_string(),
         };
 
-        let envelope = EventEnvelope::new("auth-service", event)
-            .with_correlation_id(Uuid::new_v4());
+        let envelope =
+            EventEnvelope::new("auth-service", event).with_correlation_id(Uuid::new_v4());
 
         self.publish_event(&envelope, user_id).await
     }
@@ -88,8 +89,8 @@ impl KafkaEventProducer {
             soft_delete: true,
         };
 
-        let envelope = EventEnvelope::new("auth-service", event)
-            .with_correlation_id(Uuid::new_v4());
+        let envelope =
+            EventEnvelope::new("auth-service", event).with_correlation_id(Uuid::new_v4());
 
         self.publish_event(&envelope, user_id).await
     }
@@ -104,9 +105,12 @@ impl KafkaEventProducer {
             .map_err(|e| AuthError::Internal(format!("Failed to serialize envelope: {}", e)))?;
 
         let partition_key = partition_key_id.to_string();
+        let correlation_id = envelope.correlation_id.to_string();
+        let headers = inject_headers(OwnedHeaders::new(), &correlation_id);
         let record = FutureRecord::to(&self.topic)
             .key(&partition_key)
-            .payload(&payload);
+            .payload(&payload)
+            .headers(headers);
 
         self.producer
             .send(record, Duration::from_secs(30))

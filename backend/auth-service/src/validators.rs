@@ -1,14 +1,19 @@
+use once_cell::sync::Lazy;
 /// Input validation utilities
 use regex::Regex;
-use once_cell::sync::Lazy;
 
 // Compile regex patterns once at startup
+// These patterns are hardcoded and always valid, so we use expect() with explicit reasoning
 static EMAIL_REGEX: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$").unwrap()
+    // This regex is hardcoded and validated - it is a compile-time constant in practice
+    Regex::new(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$")
+        .expect("hardcoded email regex is invalid - fix source code")
 });
 
 static USERNAME_REGEX: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"^[a-zA-Z0-9_-]{3,32}$").unwrap()
+    // This regex is hardcoded and validated - it is a compile-time constant in practice
+    Regex::new(r"^[a-zA-Z0-9_-]{3,32}$")
+        .expect("hardcoded username regex is invalid - fix source code")
 });
 
 /// Validate email format
