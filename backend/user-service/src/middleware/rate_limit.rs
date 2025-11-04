@@ -19,6 +19,17 @@ impl Default for RateLimitConfig {
     }
 }
 
+/// Rate limit check result with observability data
+#[derive(Debug, Clone)]
+pub struct RateLimitResult {
+    /// Current request count
+    pub count: u32,
+    /// Time-to-live remaining on the key in seconds (0 if key doesn't exist)
+    pub ttl_remaining: i64,
+    /// Whether this client is rate limited
+    pub is_limited: bool,
+}
+
 /// Rate limiter utility for checking if a request should be rate limited
 pub struct RateLimiter {
     redis: ConnectionManager,
@@ -30,26 +41,27 @@ impl RateLimiter {
         Self { redis, config }
     }
 
-    /// Check if client has exceeded rate limit
-    /// Returns true if rate limit is exceeded, false otherwise
-    pub async fn is_rate_limited(
+    /// Check if client has exceeded rate limit and return observability data
+    /// Returns RateLimitResult with count, TTL, and is_limited flag
+    pub async fn check_rate_limit(
         &self,
         client_id: &str,
-    ) -> Result<bool, Box<dyn std::error::Error>> {
+    ) -> Result<RateLimitResult, Box<dyn std::error::Error>> {
         let rate_limit_key = format!("rate_limit:{}", client_id);
         let mut conn = self.redis.clone();
 
-        // Atomic INCR + set TTL once using Lua script
-        // Returns the new count after increment
+        // Atomic INCR + set TTL once, return both count and TTL
+        // Lua script: increment counter, set TTL on first increment, return both values
         const LUA: &str = r#"
             local current = redis.call('INCR', KEYS[1])
             if current == 1 then
                 redis.call('EXPIRE', KEYS[1], ARGV[1])
             end
-            return current
+            local ttl = redis.call('TTL', KEYS[1])
+            return {current, ttl}
         "#;
 
-        let count: i64 = redis::cmd("EVAL")
+        let result: (i64, i64) = redis::cmd("EVAL")
             .arg(LUA)
             .arg(1)
             .arg(&rate_limit_key)
@@ -57,7 +69,25 @@ impl RateLimiter {
             .query_async(&mut conn)
             .await?;
 
-        Ok(count as u32 > self.config.max_requests)
+        let count = result.0 as u32;
+        let ttl = result.1;
+        let is_limited = count > self.config.max_requests;
+
+        Ok(RateLimitResult {
+            count,
+            ttl_remaining: ttl,
+            is_limited,
+        })
+    }
+
+    /// Check if client has exceeded rate limit (backward compatible)
+    /// Returns true if rate limit is exceeded, false otherwise
+    pub async fn is_rate_limited(
+        &self,
+        client_id: &str,
+    ) -> Result<bool, Box<dyn std::error::Error>> {
+        let result = self.check_rate_limit(client_id).await?;
+        Ok(result.is_limited)
     }
 
     /// Get current request count for a client

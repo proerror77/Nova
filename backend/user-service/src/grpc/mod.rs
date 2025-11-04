@@ -21,30 +21,22 @@ pub mod nova {
     pub mod user_service {
         tonic::include_proto!("nova.user_service");
     }
-    pub mod content {
-        tonic::include_proto!("nova.content");
-    }
-    pub mod media {
-        tonic::include_proto!("nova.media");
-    }
-    pub mod auth {
-        pub mod v1 {
-            tonic::include_proto!("nova.auth.v1");
-        }
-    }
-    pub mod recommendation {
-        pub mod v1 {
-            tonic::include_proto!("nova.recommendation.v1");
-        }
-    }
-    pub mod video {
-        pub mod v1 {
-            tonic::include_proto!("nova.video.v1");
-        }
-    }
-    pub mod streaming {
-        pub mod v1 {
-            tonic::include_proto!("nova.streaming.v1");
-        }
-    }
+    // pub mod content {
+    //     tonic::include_proto!("nova.content");
+    // }
+    // pub mod media {
+    //     tonic::include_proto!("nova.media");
+    // }
+    // pub mod auth {
+    //     pub mod v1 {
+    //         tonic::include_proto!("nova.auth.v1");
+    //     }
+    // }
+    // pub mod video {
+    //     pub mod v1 {
+    //         tonic::include_proto!("nova.video.v1");
+    //     }
+    // }
+    // TODO: All other service protos deferred (Phase 7A - inter-service communication)
+    // This will be properly configured when we implement the full gRPC client infrastructure
 }
