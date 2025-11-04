@@ -139,29 +139,48 @@ ROI:
 
 ---
 
+## ⚠️ 重要更新：基于实际经验的修订策略
+
+你之前已经尝试过直接分离数据库，但因为 56+ 外键约束而失败。现在我们有了**更现实的方案**：
+
+```
+❌ 旧方案: 直接分离数据库 (已失败)
+   └─ 外键约束问题无法轻易解决
+
+✅ 新方案: 先应用层改造，再数据库分离
+   ├─ Phase 1: gRPC + 事件驱动 (保留单数据库)
+   │   └─ 结果: 逻辑上的微服务
+   └─ Phase 2-3: 数据库分离 (现在变得可行)
+       └─ 结果: 物理上的微服务
+```
+
+**详见**: `ARCHITECTURE_REVISED_STRATEGY.md`
+
+---
+
 ## 🚀 Ready to Proceed?
 
-### Step 1: Decision (Today - 2025-11-04)
-- [ ] CTO reads `ARCHITECTURE_DECISION_FRAMEWORK.md` (30 min)
-- [ ] Decision: Path A (recommended) ✅
-- [ ] Budget approval: $100k-$130k ✅
+### Step 1: Review Revised Strategy (Today - 2025-11-04)
+- [ ] Read `ARCHITECTURE_REVISED_STRATEGY.md` (这是新的正确方向)
+- [ ] 确认这个方向符合你的想法
+- [ ] 决定是否采纳这个修订版方案
 
-### Step 2: Preparation (Tomorrow - 2025-11-05)
-- [ ] Create `feature/architecture-phase-0` branch
+### Step 2: Phase 0 Preparation (If approved)
+- [ ] Create `feature/architecture-phase-0-revised` branch
 - [ ] Assign 2-3 engineers to Phase 0
-- [ ] Schedule kickoff meeting
+- [ ] Schedule Phase 0 kickoff
 
 ### Step 3: Phase 0 Execution (Week 1: Nov 5-11)
-- [ ] Data ownership analysis (0.5 day)
-- [ ] gRPC API specification (1.5 days)
-- [ ] Database migration strategy (1.5 days)
-- [ ] Rollback plan (1 day)
+- [ ] gRPC 服务合约设计
+- [ ] 服务数据所有权清单
+- [ ] Kafka 事件定义
+- [ ] Phase 1 详细实施计划
 
-### Step 4: Phase 1 Execution (Weeks 2-13: Nov 12 - Jan 20)
-- [ ] Database infrastructure
-- [ ] gRPC implementation
-- [ ] Canary deployment
-- [ ] Production launch
+### Step 4: Phase 1 Execution (Weeks 2-17: Nov 12 - Jan 20)
+- [ ] gRPC 基础设施 (2 周)
+- [ ] 核心服务 gRPC 实现 (6 周)
+- [ ] 缓存层实现 (4 周)
+- [ ] 测试和灰度发布 (4 周)
 
 ---
 
