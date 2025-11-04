@@ -1,0 +1,273 @@
+syntax = "proto3";
+package nova.cdn_service;
+
+// ============================================================================
+// CDN Service gRPC API
+//
+// This service manages content delivery, caching, and URL generation.
+//
+// Key responsibilities:
+//   - CDN URL generation and validation
+//   - Cache invalidation
+//   - Edge location management
+//   - Content distribution tracking
+// ============================================================================
+
+// Message: CDN configuration for asset
+message CdnAsset {
+  string id = 1;                      // UUID of CDN asset
+  string s3_key = 2;                  // Original S3 key
+  string cdn_url = 3;                 // CDN-served URL
+  string content_type = 4;            // MIME type
+  int64 file_size = 5;                // File size in bytes
+  string cache_control = 6;           // Cache-Control header value
+  int32 ttl_seconds = 7;              // Time-to-live in seconds
+  bool gzip_enabled = 8;              // Whether gzip compression is enabled
+  bool brotli_enabled = 9;            // Whether Brotli compression is enabled
+  repeated string edge_locations = 10; // Deployed edge locations
+  string created_at = 11;             // ISO 8601 timestamp
+  string last_accessed_at = 12;       // ISO 8601 timestamp
+}
+
+// Message: Cache invalidation request
+message CacheInvalidation {
+  string id = 1;                      // UUID of invalidation request
+  string asset_id = 2;                // UUID of asset being invalidated
+  string pattern = 3;                 // URL pattern to invalidate
+  int32 affected_edges = 4;           // Number of edge locations affected
+  string status = 5;                  // "pending", "in_progress", "completed", "failed"
+  string created_at = 6;              // ISO 8601 timestamp
+  string completed_at = 7;            // ISO 8601 timestamp (optional)
+}
+
+// Message: Edge location information
+message EdgeLocation {
+  string id = 1;                      // UUID of edge location
+  string region = 2;                  // Geographic region (e.g., "us-west", "eu-central")
+  string city = 3;                    // City/location name
+  bool is_active = 4;                 // Whether location is active
+  int32 bandwidth_capacity = 5;       // Capacity in Mbps
+  int32 current_load = 6;             // Current bandwidth usage percentage
+  string created_at = 7;              // ISO 8601 timestamp
+}
+
+// Message: CDN usage statistics
+message CdnUsageStats {
+  string asset_id = 1;                // UUID of asset
+  int64 total_bandwidth = 2;          // Total bandwidth served in bytes
+  int32 request_count = 3;            // Total requests served
+  float cache_hit_rate = 4;           // Cache hit rate percentage
+  int32 unique_ips = 5;               // Number of unique client IPs
+  string created_at = 6;              // ISO 8601 timestamp
+}
+
+// ============================================================================
+// Generate CDN URL
+// ============================================================================
+
+message GenerateCdnUrlRequest {
+  string s3_key = 1;                  // S3 key of asset
+  int32 ttl_seconds = 2;              // Time-to-live (optional, default 86400)
+  bool include_auth = 3;              // Whether to include authentication token
+}
+
+message GenerateCdnUrlResponse {
+  string cdn_url = 1;
+  string expires_at = 2;              // ISO 8601 timestamp when URL expires
+}
+
+// ============================================================================
+// Get CDN Asset
+// ============================================================================
+
+message GetCdnAssetRequest {
+  string asset_id = 1;
+}
+
+message GetCdnAssetResponse {
+  CdnAsset asset = 1;
+}
+
+// ============================================================================
+// Register CDN Asset
+// ============================================================================
+
+message RegisterCdnAssetRequest {
+  string s3_key = 1;
+  string content_type = 2;
+  int64 file_size = 3;
+  int32 ttl_seconds = 4;              // Optional, default 86400
+  bool gzip_enabled = 5;              // Optional, default true
+  bool brotli_enabled = 6;            // Optional, default true
+}
+
+message RegisterCdnAssetResponse {
+  CdnAsset asset = 1;
+}
+
+// ============================================================================
+// Update CDN Asset Configuration
+// ============================================================================
+
+message UpdateCdnAssetRequest {
+  string asset_id = 1;
+  int32 ttl_seconds = 2;              // Optional
+  string cache_control = 3;           // Optional
+  bool gzip_enabled = 4;              // Optional
+  bool brotli_enabled = 5;            // Optional
+}
+
+message UpdateCdnAssetResponse {
+  CdnAsset asset = 1;
+}
+
+// ============================================================================
+// Invalidate Cache
+// ============================================================================
+
+message InvalidateCacheRequest {
+  string asset_id = 1;
+}
+
+message InvalidateCacheResponse {
+  CacheInvalidation invalidation = 1;
+}
+
+// ============================================================================
+// Invalidate Cache Pattern
+// ============================================================================
+
+message InvalidateCachePatternRequest {
+  string pattern = 1;                 // URL pattern to invalidate (supports wildcards)
+}
+
+message InvalidateCachePatternResponse {
+  CacheInvalidation invalidation = 1;
+}
+
+// ============================================================================
+// Get Cache Invalidation Status
+// ============================================================================
+
+message GetCacheInvalidationStatusRequest {
+  string invalidation_id = 1;
+}
+
+message GetCacheInvalidationStatusResponse {
+  CacheInvalidation invalidation = 1;
+}
+
+// ============================================================================
+// Get CDN Usage Stats
+// ============================================================================
+
+message GetCdnUsageStatsRequest {
+  string asset_id = 1;
+  string time_period = 2;             // "1h", "24h", "7d", "30d"
+}
+
+message GetCdnUsageStatsResponse {
+  CdnUsageStats stats = 1;
+}
+
+// ============================================================================
+// Get Edge Locations
+// ============================================================================
+
+message GetEdgeLocationsRequest {
+  bool active_only = 1;               // Only return active locations
+}
+
+message GetEdgeLocationsResponse {
+  repeated EdgeLocation locations = 1;
+}
+
+// ============================================================================
+// Pre-warm Cache
+// ============================================================================
+
+message PrewarmCacheRequest {
+  string asset_id = 1;
+  repeated string edge_locations = 2; // Specific edge locations to warm
+}
+
+message PrewarmCacheResponse {
+  repeated string affected_locations = 1;
+}
+
+// ============================================================================
+// Get Asset Deployment Status
+// ============================================================================
+
+message GetDeploymentStatusRequest {
+  string asset_id = 1;
+}
+
+message GetDeploymentStatusResponse {
+  message LocationStatus {
+    string location_id = 1;
+    string region = 2;
+    string status = 3;                // "pending", "deployed", "failed"
+  }
+  repeated LocationStatus locations = 1;
+  string overall_status = 2;          // "pending", "deployed", "partial", "failed"
+}
+
+// ============================================================================
+// Get CDN Metrics
+// ============================================================================
+
+message GetCdnMetricsRequest {
+  string asset_id = 1;
+}
+
+message GetCdnMetricsResponse {
+  float avg_latency_ms = 1;           // Average latency in milliseconds
+  float p95_latency_ms = 2;           // 95th percentile latency
+  float p99_latency_ms = 3;           // 99th percentile latency
+  float cache_hit_rate = 4;           // Cache hit rate percentage
+  int64 total_bytes_served = 5;       // Total bytes served
+  int32 total_requests = 6;           // Total requests
+}
+
+// ============================================================================
+// CDN Service Definition
+// ============================================================================
+
+service CdnService {
+  // Generate CDN URL for S3 asset
+  rpc GenerateCdnUrl(GenerateCdnUrlRequest) returns (GenerateCdnUrlResponse);
+
+  // Get CDN asset configuration
+  rpc GetCdnAsset(GetCdnAssetRequest) returns (GetCdnAssetResponse);
+
+  // Register new asset with CDN
+  rpc RegisterCdnAsset(RegisterCdnAssetRequest) returns (RegisterCdnAssetResponse);
+
+  // Update CDN asset configuration
+  rpc UpdateCdnAsset(UpdateCdnAssetRequest) returns (UpdateCdnAssetResponse);
+
+  // Invalidate asset cache on all edges
+  rpc InvalidateCache(InvalidateCacheRequest) returns (InvalidateCacheResponse);
+
+  // Invalidate cache by URL pattern
+  rpc InvalidateCachePattern(InvalidateCachePatternRequest) returns (InvalidateCachePatternResponse);
+
+  // Get status of cache invalidation
+  rpc GetCacheInvalidationStatus(GetCacheInvalidationStatusRequest) returns (GetCacheInvalidationStatusResponse);
+
+  // Get CDN usage statistics for asset
+  rpc GetCdnUsageStats(GetCdnUsageStatsRequest) returns (GetCdnUsageStatsResponse);
+
+  // Get all edge locations
+  rpc GetEdgeLocations(GetEdgeLocationsRequest) returns (GetEdgeLocationsResponse);
+
+  // Pre-warm cache on edge locations
+  rpc PrewarmCache(PrewarmCacheRequest) returns (PrewarmCacheResponse);
+
+  // Get deployment status of asset across edges
+  rpc GetDeploymentStatus(GetDeploymentStatusRequest) returns (GetDeploymentStatusResponse);
+
+  // Get detailed CDN metrics for asset
+  rpc GetCdnMetrics(GetCdnMetricsRequest) returns (GetCdnMetricsResponse);
+}

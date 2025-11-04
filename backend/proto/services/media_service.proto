@@ -1,0 +1,249 @@
+syntax = "proto3";
+package nova.media_service;
+
+// ============================================================================
+// Media Service gRPC API
+//
+// This service manages media assets, uploads, and transformations.
+//
+// Key responsibilities:
+//   - Media file upload and storage
+//   - Media metadata management
+//   - Image and video processing
+//   - CDN integration for media delivery
+// ============================================================================
+
+// Message: Represents media metadata
+message Media {
+  string id = 1;                      // UUID of media item
+  string owner_id = 2;                // UUID of user who uploaded
+  string filename = 3;                // Original filename
+  string media_type = 4;              // "image", "video", "audio", "document"
+  string mime_type = 5;               // MIME type (image/jpeg, video/mp4, etc.)
+  int64 file_size = 6;                // File size in bytes
+  int32 width = 7;                    // Image width (if applicable)
+  int32 height = 8;                   // Image height (if applicable)
+  int32 duration = 9;                 // Duration in seconds (if video/audio)
+  string s3_key = 10;                 // S3 storage key
+  string cdn_url = 11;                // CDN access URL
+  string thumbnail_url = 12;          // Thumbnail URL (for images/videos)
+  string status = 13;                 // "uploading", "processing", "ready", "failed"
+  bool is_public = 14;                // Whether publicly accessible
+  string created_at = 15;             // ISO 8601 timestamp
+  string updated_at = 16;             // ISO 8601 timestamp
+  string deleted_at = 17;             // ISO 8601 timestamp (soft delete)
+}
+
+// Message: Media processing metadata
+message MediaProcessing {
+  string media_id = 1;                // UUID of media being processed
+  string status = 2;                  // "pending", "processing", "completed", "failed"
+  string process_type = 3;            // "thumbnail", "transcode", "optimize"
+  int32 progress_percent = 4;         // Processing progress (0-100)
+  string error_message = 5;           // Error message if failed
+  string created_at = 6;              // ISO 8601 timestamp
+  string completed_at = 7;            // ISO 8601 timestamp (optional)
+}
+
+// Message: Media variant (different resolutions/formats)
+message MediaVariant {
+  string id = 1;                      // UUID of variant
+  string media_id = 2;                // UUID of original media
+  string variant_name = 3;            // "thumbnail", "small", "medium", "large"
+  string mime_type = 4;               // Variant MIME type
+  int32 width = 5;                    // Width in pixels
+  int32 height = 6;                   // Height in pixels
+  int64 file_size = 7;                // File size in bytes
+  string s3_key = 8;                  // S3 storage key for variant
+  string cdn_url = 9;                 // CDN access URL
+  string created_at = 10;             // ISO 8601 timestamp
+}
+
+// ============================================================================
+// Upload Media (Initiate)
+// ============================================================================
+
+message InitiateMediaUploadRequest {
+  string owner_id = 1;                // UUID of uploader
+  string filename = 2;                // Original filename
+  string mime_type = 3;               // MIME type
+  int64 file_size = 4;                // File size in bytes
+  bool is_public = 5;                 // Whether to make public
+}
+
+message InitiateMediaUploadResponse {
+  string upload_id = 1;               // Upload session ID
+  string media_id = 2;                // Assigned media ID
+  string presigned_url = 3;           // Pre-signed S3 upload URL
+  string upload_expires_at = 4;       // Expiration time for presigned URL
+}
+
+// ============================================================================
+// Complete Media Upload
+// ============================================================================
+
+message CompleteMediaUploadRequest {
+  string upload_id = 1;               // Upload session ID
+  string media_id = 2;                // Media ID to complete
+  string s3_etag = 3;                 // S3 ETag for integrity verification
+}
+
+message CompleteMediaUploadResponse {
+  Media media = 1;
+}
+
+// ============================================================================
+// Get Media by ID
+// ============================================================================
+
+message GetMediaRequest {
+  string media_id = 1;
+}
+
+message GetMediaResponse {
+  Media media = 1;
+}
+
+// ============================================================================
+// Get Multiple Media Items
+// ============================================================================
+
+message GetMediaByIdsRequest {
+  repeated string media_ids = 1;
+}
+
+message GetMediaByIdsResponse {
+  repeated Media media = 1;
+}
+
+// ============================================================================
+// Get Media by Owner
+// ============================================================================
+
+message GetMediaByOwnerRequest {
+  string owner_id = 1;
+  int32 limit = 2;                    // Number of results
+  int32 offset = 3;                   // Pagination offset
+  string media_type = 4;              // Optional: filter by type
+}
+
+message GetMediaByOwnerResponse {
+  repeated Media media = 1;
+  int32 total_count = 2;
+}
+
+// ============================================================================
+// Delete Media
+// ============================================================================
+
+message DeleteMediaRequest {
+  string media_id = 1;
+}
+
+message DeleteMediaResponse {
+  bool success = 1;
+}
+
+// ============================================================================
+// Get Media Variants
+// ============================================================================
+
+message GetMediaVariantsRequest {
+  string media_id = 1;
+}
+
+message GetMediaVariantsResponse {
+  repeated MediaVariant variants = 1;
+}
+
+// ============================================================================
+// Process Media
+// ============================================================================
+
+message ProcessMediaRequest {
+  string media_id = 1;
+  repeated string operations = 2;    // "thumbnail", "transcode", "optimize"
+}
+
+message ProcessMediaResponse {
+  MediaProcessing processing = 1;
+}
+
+// ============================================================================
+// Get Processing Status
+// ============================================================================
+
+message GetProcessingStatusRequest {
+  string media_id = 1;
+}
+
+message GetProcessingStatusResponse {
+  MediaProcessing processing = 1;
+}
+
+// ============================================================================
+// Update Media Metadata
+// ============================================================================
+
+message UpdateMediaMetadataRequest {
+  string media_id = 1;
+  string filename = 2;                // Optional
+  bool is_public = 3;                 // Optional
+}
+
+message UpdateMediaMetadataResponse {
+  Media media = 1;
+}
+
+// ============================================================================
+// Get Media CDN URL
+// ============================================================================
+
+message GetMediaCdnUrlRequest {
+  string media_id = 1;
+  string variant_name = 2;            // Optional: "thumbnail", "small", etc.
+}
+
+message GetMediaCdnUrlResponse {
+  string cdn_url = 1;
+  string expires_at = 2;              // URL expiration time (if applicable)
+}
+
+// ============================================================================
+// Media Service Definition
+// ============================================================================
+
+service MediaService {
+  // Initiate media upload (get presigned S3 URL)
+  rpc InitiateMediaUpload(InitiateMediaUploadRequest) returns (InitiateMediaUploadResponse);
+
+  // Complete media upload after S3 upload finishes
+  rpc CompleteMediaUpload(CompleteMediaUploadRequest) returns (CompleteMediaUploadResponse);
+
+  // Get media by ID
+  rpc GetMedia(GetMediaRequest) returns (GetMediaResponse);
+
+  // Get multiple media items in batch
+  rpc GetMediaByIds(GetMediaByIdsRequest) returns (GetMediaByIdsResponse);
+
+  // Get all media uploaded by a user
+  rpc GetMediaByOwner(GetMediaByOwnerRequest) returns (GetMediaByOwnerResponse);
+
+  // Delete media (soft delete)
+  rpc DeleteMedia(DeleteMediaRequest) returns (DeleteMediaResponse);
+
+  // Get all variants of a media item
+  rpc GetMediaVariants(GetMediaVariantsRequest) returns (GetMediaVariantsResponse);
+
+  // Start media processing (thumbnails, transcoding, etc.)
+  rpc ProcessMedia(ProcessMediaRequest) returns (ProcessMediaResponse);
+
+  // Get processing status
+  rpc GetProcessingStatus(GetProcessingStatusRequest) returns (GetProcessingStatusResponse);
+
+  // Update media metadata
+  rpc UpdateMediaMetadata(UpdateMediaMetadataRequest) returns (UpdateMediaMetadataResponse);
+
+  // Get CDN URL for media
+  rpc GetMediaCdnUrl(GetMediaCdnUrlRequest) returns (GetMediaCdnUrlResponse);
+}

@@ -130,13 +130,13 @@ async fn openapi_json(doc: web::Data<utoipa::openapi::OpenApi>) -> HttpResponse 
 fn build_grpc_service(
     app_state: AppState,
 ) -> Result<
-    auth_service::nova::auth::v1::auth_service_server::AuthServiceServer<
+    auth_service::nova::auth_service::auth_service_server::AuthServiceServer<
         auth_service::grpc::AuthServiceImpl,
     >,
     Box<dyn std::error::Error>,
 > {
     let auth_service = auth_service::grpc::AuthServiceImpl::new(app_state);
-    Ok(auth_service::nova::auth::v1::auth_service_server::AuthServiceServer::new(auth_service))
+    Ok(auth_service::nova::auth_service::auth_service_server::AuthServiceServer::new(auth_service))
 }
 
 /// Configure REST API routes
@@ -174,7 +174,7 @@ fn configure_routes(cfg: &mut web::ServiceConfig) {
 /// Start both REST and gRPC servers
 async fn start_servers(
     app_state: AppState,
-    grpc_service: auth_service::nova::auth::v1::auth_service_server::AuthServiceServer<
+    grpc_service: auth_service::nova::auth_service::auth_service_server::AuthServiceServer<
         auth_service::grpc::AuthServiceImpl,
     >,
     host: &str,

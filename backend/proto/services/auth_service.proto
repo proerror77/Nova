@@ -1,0 +1,181 @@
+syntax = "proto3";
+package nova.auth_service;
+
+// ============================================================================
+// Auth Service gRPC API
+//
+// This service provides user authentication, authorization, and identity
+// management for all other services in Nova backend.
+//
+// Key responsibilities:
+//   - User registration and login
+//   - Token validation and verification
+//   - User information retrieval
+//   - Permission and role checking
+// ============================================================================
+
+// Message: Represents a basic user
+message User {
+  string id = 1;                    // UUID of the user
+  string email = 2;                 // User's email address
+  string username = 3;              // User's username (unique)
+  string created_at = 4;            // ISO 8601 timestamp
+  bool is_active = 5;               // Whether user account is active
+  int32 failed_login_attempts = 6;  // Current failed login count
+  string locked_until = 7;          // ISO 8601 timestamp when lockout expires (optional)
+}
+
+// ============================================================================
+// Get User by ID
+// ============================================================================
+
+message GetUserRequest {
+  string user_id = 1;  // UUID of the user to retrieve
+}
+
+message GetUserResponse {
+  User user = 1;
+}
+
+// ============================================================================
+// Get Multiple Users by IDs (batch operation)
+// ============================================================================
+
+message GetUsersByIdsRequest {
+  repeated string user_ids = 1;  // List of user UUIDs
+}
+
+message GetUsersByIdsResponse {
+  repeated User users = 1;
+}
+
+// ============================================================================
+// Verify Token Validity
+// ============================================================================
+
+message VerifyTokenRequest {
+  string token = 1;  // JWT token to verify
+}
+
+message VerifyTokenResponse {
+  bool is_valid = 1;           // Whether token is valid
+  string user_id = 2;          // UUID of token owner (if valid)
+  string email = 3;            // Email of token owner (if valid)
+  string username = 4;         // Username of token owner (if valid)
+  int64 expires_at = 5;        // Unix timestamp when token expires
+  bool is_revoked = 6;         // Whether token has been revoked
+}
+
+// ============================================================================
+// Check User Exists
+// ============================================================================
+
+message CheckUserExistsRequest {
+  string user_id = 1;  // UUID to check
+}
+
+message CheckUserExistsResponse {
+  bool exists = 1;
+}
+
+// ============================================================================
+// Get User by Email
+// ============================================================================
+
+message GetUserByEmailRequest {
+  string email = 1;  // Email address to look up
+}
+
+message GetUserByEmailResponse {
+  User user = 1;
+}
+
+// ============================================================================
+// List Users (with pagination)
+// ============================================================================
+
+message ListUsersRequest {
+  int32 limit = 1;    // Number of results (max 100)
+  int32 offset = 2;   // Pagination offset
+  string search = 3;  // Optional search term (email or username)
+}
+
+message ListUsersResponse {
+  repeated User users = 1;
+  int32 total_count = 2;
+}
+
+// ============================================================================
+// Check User Has Permission
+// ============================================================================
+
+message CheckPermissionRequest {
+  string user_id = 1;
+  string permission = 2;  // e.g., "posts:create", "users:delete"
+}
+
+message CheckPermissionResponse {
+  bool has_permission = 1;
+}
+
+// ============================================================================
+// Get User Permissions
+// ============================================================================
+
+message GetUserPermissionsRequest {
+  string user_id = 1;
+}
+
+message GetUserPermissionsResponse {
+  repeated string permissions = 1;
+  repeated string roles = 2;
+}
+
+// ============================================================================
+// Record Failed Login Attempt
+// ============================================================================
+
+message RecordFailedLoginRequest {
+  string user_id = 1;
+  int32 max_attempts = 2;         // Maximum failed attempts before lockout
+  int32 lock_duration_secs = 3;   // Duration of lockout in seconds
+}
+
+message RecordFailedLoginResponse {
+  int32 failed_attempts = 1;
+  bool is_locked = 2;
+  string locked_until = 3;  // ISO 8601 timestamp (if locked)
+}
+
+// ============================================================================
+// Auth Service Definition
+// ============================================================================
+
+service AuthService {
+  // Get single user by ID
+  rpc GetUser(GetUserRequest) returns (GetUserResponse);
+
+  // Get multiple users in a single batch request
+  rpc GetUsersByIds(GetUsersByIdsRequest) returns (GetUsersByIdsResponse);
+
+  // Verify JWT token validity
+  rpc VerifyToken(VerifyTokenRequest) returns (VerifyTokenResponse);
+
+  // Check if user exists
+  rpc CheckUserExists(CheckUserExistsRequest) returns (CheckUserExistsResponse);
+
+  // Get user by email address
+  rpc GetUserByEmail(GetUserByEmailRequest) returns (GetUserByEmailResponse);
+
+  // List users with pagination and search
+  rpc ListUsers(ListUsersRequest) returns (ListUsersResponse);
+
+  // Check if user has specific permission
+  rpc CheckPermission(CheckPermissionRequest) returns (CheckPermissionResponse);
+
+  // Get all permissions for a user
+  rpc GetUserPermissions(GetUserPermissionsRequest) returns (GetUserPermissionsResponse);
+
+  // Record a failed login attempt (for rate limiting)
+  rpc RecordFailedLogin(RecordFailedLoginRequest) returns (RecordFailedLoginResponse);
+}

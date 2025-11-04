@@ -1,0 +1,292 @@
+syntax = "proto3";
+package nova.user_service;
+
+// ============================================================================
+// User Service gRPC API
+//
+// This service manages user profiles, relationships, and user-related metadata.
+//
+// Key responsibilities:
+//   - User profile management
+//   - User preferences and settings
+//   - User relationships (follow, block)
+//   - User activity tracking
+// ============================================================================
+
+// Message: Represents a user profile
+message UserProfile {
+  string id = 1;                      // UUID of the user
+  string username = 2;                // Username (unique)
+  string email = 3;                   // Email address
+  string display_name = 4;            // Display name (optional)
+  string bio = 5;                     // User bio (optional)
+  string avatar_url = 6;              // Avatar image URL (optional)
+  string cover_url = 7;               // Cover image URL (optional)
+  string website = 8;                 // Personal website (optional)
+  string location = 9;                // Geographic location (optional)
+  bool is_verified = 10;              // Whether user is verified
+  bool is_private = 11;               // Whether profile is private
+  int32 follower_count = 12;          // Number of followers
+  int32 following_count = 13;         // Number of users being followed
+  int32 post_count = 14;              // Number of posts created
+  string created_at = 15;             // ISO 8601 timestamp
+  string updated_at = 16;             // ISO 8601 timestamp
+  string deleted_at = 17;             // ISO 8601 timestamp (soft delete)
+}
+
+// Message: User settings and preferences
+message UserSettings {
+  string user_id = 1;                 // UUID of the user
+  bool email_notifications = 2;       // Email notification preference
+  bool push_notifications = 3;        // Push notification preference
+  bool marketing_emails = 4;          // Marketing email preference
+  string timezone = 5;                // User's timezone (IANA format)
+  string language = 6;                // Preferred language (ISO 639-1)
+  bool dark_mode = 7;                 // Dark mode preference
+  string privacy_level = 8;           // "public", "private", "friends"
+  bool allow_messages = 9;            // Allow direct messages
+  string created_at = 10;             // ISO 8601 timestamp
+  string updated_at = 11;             // ISO 8601 timestamp
+}
+
+// Message: User relationship (follow/block)
+message UserRelationship {
+  string id = 1;                      // UUID of relationship
+  string follower_id = 2;             // User who is following/blocking
+  string followee_id = 3;             // User being followed/blocked
+  string relationship_type = 4;       // "follow" or "block"
+  string status = 5;                  // "active", "pending", "rejected"
+  string created_at = 6;              // ISO 8601 timestamp
+  string updated_at = 7;              // ISO 8601 timestamp
+}
+
+// ============================================================================
+// Get User Profile by ID
+// ============================================================================
+
+message GetUserProfileRequest {
+  string user_id = 1;
+}
+
+message GetUserProfileResponse {
+  UserProfile profile = 1;
+}
+
+// ============================================================================
+// Get Multiple User Profiles by IDs (batch operation)
+// ============================================================================
+
+message GetUserProfilesByIdsRequest {
+  repeated string user_ids = 1;
+}
+
+message GetUserProfilesByIdsResponse {
+  repeated UserProfile profiles = 1;
+}
+
+// ============================================================================
+// Update User Profile
+// ============================================================================
+
+message UpdateUserProfileRequest {
+  string user_id = 1;
+  string display_name = 2;            // Optional
+  string bio = 3;                     // Optional
+  string avatar_url = 4;              // Optional
+  string cover_url = 5;               // Optional
+  string website = 6;                 // Optional
+  string location = 7;                // Optional
+  bool is_private = 8;                // Optional
+}
+
+message UpdateUserProfileResponse {
+  UserProfile profile = 1;
+}
+
+// ============================================================================
+// Get User Settings
+// ============================================================================
+
+message GetUserSettingsRequest {
+  string user_id = 1;
+}
+
+message GetUserSettingsResponse {
+  UserSettings settings = 1;
+}
+
+// ============================================================================
+// Update User Settings
+// ============================================================================
+
+message UpdateUserSettingsRequest {
+  string user_id = 1;
+  bool email_notifications = 2;       // Optional
+  bool push_notifications = 3;        // Optional
+  bool marketing_emails = 4;          // Optional
+  string timezone = 5;                // Optional
+  string language = 6;                // Optional
+  bool dark_mode = 7;                 // Optional
+  string privacy_level = 8;           // Optional
+  bool allow_messages = 9;            // Optional
+}
+
+message UpdateUserSettingsResponse {
+  UserSettings settings = 1;
+}
+
+// ============================================================================
+// Follow User
+// ============================================================================
+
+message FollowUserRequest {
+  string follower_id = 1;
+  string followee_id = 2;
+}
+
+message FollowUserResponse {
+  UserRelationship relationship = 1;
+}
+
+// ============================================================================
+// Unfollow User
+// ============================================================================
+
+message UnfollowUserRequest {
+  string follower_id = 1;
+  string followee_id = 2;
+}
+
+message UnfollowUserResponse {
+  bool success = 1;
+}
+
+// ============================================================================
+// Block User
+// ============================================================================
+
+message BlockUserRequest {
+  string blocker_id = 1;
+  string blocked_id = 2;
+}
+
+message BlockUserResponse {
+  UserRelationship relationship = 1;
+}
+
+// ============================================================================
+// Unblock User
+// ============================================================================
+
+message UnblockUserRequest {
+  string blocker_id = 1;
+  string blocked_id = 2;
+}
+
+message UnblockUserResponse {
+  bool success = 1;
+}
+
+// ============================================================================
+// Get User Followers
+// ============================================================================
+
+message GetUserFollowersRequest {
+  string user_id = 1;
+  int32 limit = 2;    // Number of results
+  int32 offset = 3;   // Pagination offset
+}
+
+message GetUserFollowersResponse {
+  repeated UserProfile profiles = 1;
+  int32 total_count = 2;
+}
+
+// ============================================================================
+// Get Users Being Followed
+// ============================================================================
+
+message GetUserFollowingRequest {
+  string user_id = 1;
+  int32 limit = 2;    // Number of results
+  int32 offset = 3;   // Pagination offset
+}
+
+message GetUserFollowingResponse {
+  repeated UserProfile profiles = 1;
+  int32 total_count = 2;
+}
+
+// ============================================================================
+// Check User Relationship
+// ============================================================================
+
+message CheckUserRelationshipRequest {
+  string follower_id = 1;
+  string followee_id = 2;
+}
+
+message CheckUserRelationshipResponse {
+  string relationship_type = 1;       // "follow", "block", "none"
+  string status = 2;                  // "active", "pending", "rejected"
+}
+
+// ============================================================================
+// Search Users
+// ============================================================================
+
+message SearchUsersRequest {
+  string query = 1;                   // Search term (username or display name)
+  int32 limit = 2;                    // Number of results
+  int32 offset = 3;                   // Pagination offset
+}
+
+message SearchUsersResponse {
+  repeated UserProfile profiles = 1;
+  int32 total_count = 2;
+}
+
+// ============================================================================
+// User Service Definition
+// ============================================================================
+
+service UserService {
+  // Get user profile by ID
+  rpc GetUserProfile(GetUserProfileRequest) returns (GetUserProfileResponse);
+
+  // Get multiple user profiles in batch
+  rpc GetUserProfilesByIds(GetUserProfilesByIdsRequest) returns (GetUserProfilesByIdsResponse);
+
+  // Update user profile
+  rpc UpdateUserProfile(UpdateUserProfileRequest) returns (UpdateUserProfileResponse);
+
+  // Get user settings
+  rpc GetUserSettings(GetUserSettingsRequest) returns (GetUserSettingsResponse);
+
+  // Update user settings
+  rpc UpdateUserSettings(UpdateUserSettingsRequest) returns (UpdateUserSettingsResponse);
+
+  // Follow a user
+  rpc FollowUser(FollowUserRequest) returns (FollowUserResponse);
+
+  // Unfollow a user
+  rpc UnfollowUser(UnfollowUserRequest) returns (UnfollowUserResponse);
+
+  // Block a user
+  rpc BlockUser(BlockUserRequest) returns (BlockUserResponse);
+
+  // Unblock a user
+  rpc UnblockUser(UnblockUserRequest) returns (UnblockUserResponse);
+
+  // Get user's followers
+  rpc GetUserFollowers(GetUserFollowersRequest) returns (GetUserFollowersResponse);
+
+  // Get users this user is following
+  rpc GetUserFollowing(GetUserFollowingRequest) returns (GetUserFollowingResponse);
+
+  // Check relationship between two users
+  rpc CheckUserRelationship(CheckUserRelationshipRequest) returns (CheckUserRelationshipResponse);
+
+  // Search users by username or display name
+  rpc SearchUsers(SearchUsersRequest) returns (SearchUsersResponse);
+}

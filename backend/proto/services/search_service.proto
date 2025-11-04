@@ -1,0 +1,273 @@
+syntax = "proto3";
+package nova.search_service;
+
+// ============================================================================
+// Search Service gRPC API
+//
+// This service provides full-text search, filtering, and content discovery.
+//
+// Key responsibilities:
+//   - Full-text search across posts and users
+//   - Advanced filtering and sorting
+//   - Search result ranking and pagination
+//   - Search analytics and suggestions
+// ============================================================================
+
+// Message: Search result entry
+message SearchResult {
+  string id = 1;                      // UUID of search result
+  string type = 2;                    // "post", "user", "hashtag"
+  string title = 3;                   // Title or username
+  string description = 4;             // Preview or bio (optional)
+  string thumbnail_url = 5;           // Image thumbnail (optional)
+  float relevance_score = 6;          // Relevance ranking score
+  string created_at = 7;              // ISO 8601 timestamp
+  string url_slug = 8;                // URL-friendly slug
+}
+
+// Message: Post search result with details
+message PostSearchResult {
+  string id = 1;                      // UUID of post
+  string author_id = 2;               // UUID of author
+  string title = 3;                   // Post title
+  string content = 4;                 // Post content preview
+  string image_key = 5;               // Featured image key (optional)
+  int32 like_count = 6;               // Number of likes
+  int32 comment_count = 7;            // Number of comments
+  float relevance_score = 8;          // Search relevance score
+  string created_at = 9;              // ISO 8601 timestamp
+}
+
+// Message: User search result
+message UserSearchResult {
+  string user_id = 1;                 // UUID of user
+  string username = 2;                // Username
+  string display_name = 3;            // Display name
+  string bio = 4;                     // User bio
+  string avatar_url = 5;              // Avatar image URL
+  bool is_verified = 6;               // Whether user is verified
+  int32 follower_count = 7;           // Number of followers
+  float relevance_score = 8;          // Search relevance score
+}
+
+// Message: Hashtag search result
+message HashtagSearchResult {
+  string id = 1;                      // UUID of hashtag entry
+  string tag = 2;                     // Hashtag text (without #)
+  int32 post_count = 3;               // Number of posts with this tag
+  int32 usage_count = 4;              // Total times used
+  string trending_status = 5;         // "trending", "rising", "stable"
+  string created_at = 6;              // ISO 8601 timestamp
+}
+
+// Message: Search filters
+message SearchFilters {
+  string content_type = 1;            // "text", "image", "mixed"
+  string date_from = 2;               // ISO 8601 timestamp
+  string date_to = 3;                 // ISO 8601 timestamp
+  repeated string hashtags = 4;       // Filter by hashtags
+  string language = 5;                // Filter by language
+  bool verified_only = 6;             // Only verified users (for user search)
+  string sort_by = 7;                 // "relevance", "recent", "popular"
+}
+
+// ============================================================================
+// Full-Text Search
+// ============================================================================
+
+message FullTextSearchRequest {
+  string query = 1;                   // Search query
+  int32 limit = 2;                    // Number of results (max 100)
+  int32 offset = 3;                   // Pagination offset
+  SearchFilters filters = 4;          // Optional filters
+}
+
+message FullTextSearchResponse {
+  repeated SearchResult results = 1;
+  int32 total_count = 2;
+  string search_time_ms = 3;          // Search execution time
+}
+
+// ============================================================================
+// Search Posts
+// ============================================================================
+
+message SearchPostsRequest {
+  string query = 1;                   // Search query
+  int32 limit = 2;                    // Number of results
+  int32 offset = 3;                   // Pagination offset
+  SearchFilters filters = 4;          // Optional filters
+}
+
+message SearchPostsResponse {
+  repeated PostSearchResult posts = 1;
+  int32 total_count = 2;
+}
+
+// ============================================================================
+// Search Users
+// ============================================================================
+
+message SearchUsersRequest {
+  string query = 1;                   // Search query (username or display name)
+  int32 limit = 2;                    // Number of results
+  int32 offset = 3;                   // Pagination offset
+  bool verified_only = 4;             // Only verified users
+}
+
+message SearchUsersResponse {
+  repeated UserSearchResult users = 1;
+  int32 total_count = 2;
+}
+
+// ============================================================================
+// Search Hashtags
+// ============================================================================
+
+message SearchHashtagsRequest {
+  string query = 1;                   // Hashtag search (without #)
+  int32 limit = 2;                    // Number of results
+  int32 offset = 3;                   // Pagination offset
+}
+
+message SearchHashtagsResponse {
+  repeated HashtagSearchResult hashtags = 1;
+  int32 total_count = 2;
+}
+
+// ============================================================================
+// Get Posts by Hashtag
+// ============================================================================
+
+message GetPostsByHashtagRequest {
+  string hashtag = 1;                 // Hashtag (without #)
+  int32 limit = 2;                    // Number of posts
+  int32 offset = 3;                   // Pagination offset
+  string sort_by = 4;                 // "recent", "popular"
+}
+
+message GetPostsByHashtagResponse {
+  repeated PostSearchResult posts = 1;
+  int32 total_count = 2;
+}
+
+// ============================================================================
+// Get Search Suggestions
+// ============================================================================
+
+message GetSearchSuggestionsRequest {
+  string partial_query = 1;           // Partial search query for autocomplete
+  int32 limit = 2;                    // Number of suggestions (default 10)
+}
+
+message GetSearchSuggestionsResponse {
+  message Suggestion {
+    string text = 1;                  // Suggestion text
+    string type = 2;                  // "query", "user", "hashtag"
+    int32 popularity = 3;             // Popularity score
+  }
+  repeated Suggestion suggestions = 1;
+}
+
+// ============================================================================
+// Advanced Search
+// ============================================================================
+
+message AdvancedSearchRequest {
+  string query = 1;                   // Main search query
+  string author_id = 2;               // Optional: filter by author
+  string from_date = 3;               // Optional: ISO 8601 timestamp (from)
+  string to_date = 4;                 // Optional: ISO 8601 timestamp (to)
+  repeated string hashtags = 5;       // Optional: include specific hashtags
+  string content_type = 6;            // Optional: "text", "image", "mixed"
+  int32 limit = 7;                    // Number of results
+  int32 offset = 8;                   // Pagination offset
+}
+
+message AdvancedSearchResponse {
+  repeated PostSearchResult posts = 1;
+  int32 total_count = 2;
+}
+
+// ============================================================================
+// Record Search Query
+// ============================================================================
+
+message RecordSearchQueryRequest {
+  string user_id = 1;                 // UUID of user performing search
+  string query = 2;                   // The search query
+  int32 result_count = 3;             // Number of results returned
+}
+
+message RecordSearchQueryResponse {
+  bool success = 1;
+}
+
+// ============================================================================
+// Get Trending Searches
+// ============================================================================
+
+message GetTrendingSearchesRequest {
+  int32 limit = 1;                    // Number of trending searches
+  string time_window = 2;             // "1h", "24h", "7d"
+}
+
+message GetTrendingSearchesResponse {
+  message TrendingSearch {
+    string query = 1;
+    int32 search_count = 2;           // Number of times searched
+    float trend_score = 3;            // Trending score
+  }
+  repeated TrendingSearch searches = 1;
+}
+
+// ============================================================================
+// Get Search Analytics
+// ============================================================================
+
+message GetSearchAnalyticsRequest {
+  string query = 1;                   // Search query to analyze
+}
+
+message GetSearchAnalyticsResponse {
+  int32 total_searches = 1;           // Total times searched
+  int32 avg_results = 2;              // Average number of results
+  int32 click_through_rate = 3;       // CTR percentage
+  repeated string popular_filters = 4; // Most used filters
+}
+
+// ============================================================================
+// Search Service Definition
+// ============================================================================
+
+service SearchService {
+  // Full-text search across all content
+  rpc FullTextSearch(FullTextSearchRequest) returns (FullTextSearchResponse);
+
+  // Search posts only
+  rpc SearchPosts(SearchPostsRequest) returns (SearchPostsResponse);
+
+  // Search users only
+  rpc SearchUsers(SearchUsersRequest) returns (SearchUsersResponse);
+
+  // Search hashtags
+  rpc SearchHashtags(SearchHashtagsRequest) returns (SearchHashtagsResponse);
+
+  // Get all posts with specific hashtag
+  rpc GetPostsByHashtag(GetPostsByHashtagRequest) returns (GetPostsByHashtagResponse);
+
+  // Get search suggestions for autocomplete
+  rpc GetSearchSuggestions(GetSearchSuggestionsRequest) returns (GetSearchSuggestionsResponse);
+
+  // Advanced search with multiple filters
+  rpc AdvancedSearch(AdvancedSearchRequest) returns (AdvancedSearchResponse);
+
+  // Record search query for analytics
+  rpc RecordSearchQuery(RecordSearchQueryRequest) returns (RecordSearchQueryResponse);
+
+  // Get trending search queries
+  rpc GetTrendingSearches(GetTrendingSearchesRequest) returns (GetTrendingSearchesResponse);
+
+  // Get analytics for specific search query
+  rpc GetSearchAnalytics(GetSearchAnalyticsRequest) returns (GetSearchAnalyticsResponse);
+}

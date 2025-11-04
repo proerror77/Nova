@@ -1,0 +1,326 @@
+syntax = "proto3";
+package nova.streaming_service;
+
+// ============================================================================
+// Streaming Service gRPC API
+//
+// This service manages real-time streaming, live broadcasts, and WebSocket connections.
+//
+// Key responsibilities:
+//   - Live stream creation and management
+//   - Real-time data streaming (SSE, WebSocket)
+//   - Live chat and viewer management
+//   - Stream metadata and analytics
+// ============================================================================
+
+// Message: Represents a live stream
+message LiveStream {
+  string id = 1;                      // UUID of stream
+  string creator_id = 2;              // UUID of stream creator
+  string title = 3;                   // Stream title
+  string description = 4;             // Stream description
+  string status = 5;                  // "live", "paused", "ended"
+  string stream_key = 6;              // RTMP stream key (sensitive)
+  string stream_url = 7;              // RTMP ingest URL
+  int32 current_viewers = 8;          // Current viewer count
+  int32 total_viewers = 9;            // Total viewers over lifetime
+  string thumbnail_url = 10;          // Stream thumbnail
+  string category = 11;               // Stream category/tag
+  bool is_public = 12;                // Public or private stream
+  string created_at = 13;             // ISO 8601 timestamp
+  string started_at = 14;             // ISO 8601 timestamp (when stream started)
+  string ended_at = 15;               // ISO 8601 timestamp (when stream ended)
+}
+
+// Message: Stream viewer information
+message StreamViewer {
+  string id = 1;                      // UUID of viewer session
+  string stream_id = 2;               // UUID of stream
+  string user_id = 3;                 // UUID of viewer
+  string joined_at = 4;               // ISO 8601 timestamp
+  string left_at = 5;                 // ISO 8601 timestamp (optional)
+  int32 watch_duration_seconds = 6;   // How long they watched
+}
+
+// Message: Stream chat message
+message StreamChatMessage {
+  string id = 1;                      // UUID of message
+  string stream_id = 2;               // UUID of stream
+  string user_id = 3;                 // UUID of sender
+  string content = 4;                 // Message content
+  bool is_moderator = 5;              // Whether sender is moderator
+  bool is_highlighted = 6;            // Whether message is highlighted/pinned
+  string created_at = 7;              // ISO 8601 timestamp
+  string deleted_at = 8;              // ISO 8601 timestamp (soft delete)
+}
+
+// Message: Stream event (follow, tip, etc.)
+message StreamEvent {
+  string id = 1;                      // UUID of event
+  string stream_id = 2;               // UUID of stream
+  string user_id = 3;                 // UUID of user performing action
+  string event_type = 4;              // "follow", "tip", "subscribe", "join"
+  string data = 5;                    // Optional JSON event data
+  string created_at = 6;              // ISO 8601 timestamp
+}
+
+// ============================================================================
+// Create Live Stream
+// ============================================================================
+
+message CreateLiveStreamRequest {
+  string creator_id = 1;
+  string title = 2;
+  string description = 3;             // Optional
+  string category = 4;                // Optional
+  bool is_public = 5;
+}
+
+message CreateLiveStreamResponse {
+  LiveStream stream = 1;
+  string stream_key = 2;              // RTMP stream key (sensitive)
+}
+
+// ============================================================================
+// Get Live Stream by ID
+// ============================================================================
+
+message GetLiveStreamRequest {
+  string stream_id = 1;
+}
+
+message GetLiveStreamResponse {
+  LiveStream stream = 1;
+}
+
+// ============================================================================
+// Update Live Stream
+// ============================================================================
+
+message UpdateLiveStreamRequest {
+  string stream_id = 1;
+  string title = 2;                   // Optional
+  string description = 3;             // Optional
+  string category = 4;                // Optional
+  bool is_public = 5;                 // Optional
+}
+
+message UpdateLiveStreamResponse {
+  LiveStream stream = 1;
+}
+
+// ============================================================================
+// Start/End Live Stream
+// ============================================================================
+
+message StartStreamRequest {
+  string stream_id = 1;
+}
+
+message StartStreamResponse {
+  LiveStream stream = 1;
+}
+
+message EndStreamRequest {
+  string stream_id = 1;
+}
+
+message EndStreamResponse {
+  LiveStream stream = 1;
+}
+
+// ============================================================================
+// Get Active Streams
+// ============================================================================
+
+message GetActiveStreamsRequest {
+  int32 limit = 1;                    // Number of results
+  int32 offset = 2;                   // Pagination offset
+  string category = 3;                // Optional: filter by category
+}
+
+message GetActiveStreamsResponse {
+  repeated LiveStream streams = 1;
+  int32 total_count = 2;
+}
+
+// ============================================================================
+// Get Stream Viewers
+// ============================================================================
+
+message GetStreamViewersRequest {
+  string stream_id = 1;
+  int32 limit = 2;                    // Number of results
+  int32 offset = 3;                   // Pagination offset
+}
+
+message GetStreamViewersResponse {
+  repeated StreamViewer viewers = 1;
+  int32 current_count = 2;            // Current viewer count
+}
+
+// ============================================================================
+// Send Chat Message
+// ============================================================================
+
+message SendChatMessageRequest {
+  string stream_id = 1;
+  string user_id = 2;
+  string content = 3;
+}
+
+message SendChatMessageResponse {
+  StreamChatMessage message = 1;
+}
+
+// ============================================================================
+// Get Chat Messages
+// ============================================================================
+
+message GetChatMessagesRequest {
+  string stream_id = 1;
+  int32 limit = 2;                    // Number of results
+  int32 offset = 3;                   // Pagination offset
+}
+
+message GetChatMessagesResponse {
+  repeated StreamChatMessage messages = 1;
+}
+
+// ============================================================================
+// Delete Chat Message
+// ============================================================================
+
+message DeleteChatMessageRequest {
+  string message_id = 1;
+}
+
+message DeleteChatMessageResponse {
+  bool success = 1;
+}
+
+// ============================================================================
+// Record Stream View
+// ============================================================================
+
+message RecordStreamViewRequest {
+  string stream_id = 1;
+  string user_id = 2;
+}
+
+message RecordStreamViewResponse {
+  StreamViewer viewer = 1;
+}
+
+// ============================================================================
+// Record Stream Event
+// ============================================================================
+
+message RecordStreamEventRequest {
+  string stream_id = 1;
+  string user_id = 2;
+  string event_type = 3;              // "follow", "tip", "subscribe", etc.
+  string data = 4;                    // Optional JSON data
+}
+
+message RecordStreamEventResponse {
+  StreamEvent event = 1;
+}
+
+// ============================================================================
+// Get Stream Analytics
+// ============================================================================
+
+message GetStreamAnalyticsRequest {
+  string stream_id = 1;
+}
+
+message GetStreamAnalyticsResponse {
+  int32 total_viewers = 1;
+  int32 peak_concurrent = 2;
+  int32 avg_watch_time = 3;           // In seconds
+  int32 chat_message_count = 4;
+  int32 event_count = 5;
+  string stream_duration = 6;         // In seconds
+}
+
+// ============================================================================
+// Get Creator's Streams
+// ============================================================================
+
+message GetCreatorStreamsRequest {
+  string creator_id = 1;
+  int32 limit = 2;                    // Number of results
+  int32 offset = 3;                   // Pagination offset
+  string status = 4;                  // Optional: "live", "ended", "all"
+}
+
+message GetCreatorStreamsResponse {
+  repeated LiveStream streams = 1;
+  int32 total_count = 2;
+}
+
+// ============================================================================
+// Register for Stream Updates (SSE/WebSocket)
+// ============================================================================
+
+message RegisterStreamListenerRequest {
+  string stream_id = 1;
+  string user_id = 2;
+  string connection_type = 3;         // "sse", "websocket"
+}
+
+message RegisterStreamListenerResponse {
+  string listener_id = 1;
+}
+
+// ============================================================================
+// Streaming Service Definition
+// ============================================================================
+
+service StreamingService {
+  // Create new live stream
+  rpc CreateLiveStream(CreateLiveStreamRequest) returns (CreateLiveStreamResponse);
+
+  // Get stream by ID
+  rpc GetLiveStream(GetLiveStreamRequest) returns (GetLiveStreamResponse);
+
+  // Update stream metadata
+  rpc UpdateLiveStream(UpdateLiveStreamRequest) returns (UpdateLiveStreamResponse);
+
+  // Start broadcasting stream
+  rpc StartStream(StartStreamRequest) returns (StartStreamResponse);
+
+  // End stream
+  rpc EndStream(EndStreamRequest) returns (EndStreamResponse);
+
+  // Get currently active streams
+  rpc GetActiveStreams(GetActiveStreamsRequest) returns (GetActiveStreamsResponse);
+
+  // Get current viewers of stream
+  rpc GetStreamViewers(GetStreamViewersRequest) returns (GetStreamViewersResponse);
+
+  // Send message to stream chat
+  rpc SendChatMessage(SendChatMessageRequest) returns (SendChatMessageResponse);
+
+  // Get chat messages for stream
+  rpc GetChatMessages(GetChatMessagesRequest) returns (GetChatMessagesResponse);
+
+  // Delete chat message
+  rpc DeleteChatMessage(DeleteChatMessageRequest) returns (DeleteChatMessageResponse);
+
+  // Record viewer watching stream
+  rpc RecordStreamView(RecordStreamViewRequest) returns (RecordStreamViewResponse);
+
+  // Record event on stream (follow, tip, etc.)
+  rpc RecordStreamEvent(RecordStreamEventRequest) returns (RecordStreamEventResponse);
+
+  // Get stream analytics
+  rpc GetStreamAnalytics(GetStreamAnalyticsRequest) returns (GetStreamAnalyticsResponse);
+
+  // Get all streams by creator
+  rpc GetCreatorStreams(GetCreatorStreamsRequest) returns (GetCreatorStreamsResponse);
+
+  // Register for real-time stream updates
+  rpc RegisterStreamListener(RegisterStreamListenerRequest) returns (RegisterStreamListenerResponse);
+}

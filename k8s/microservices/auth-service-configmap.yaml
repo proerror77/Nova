@@ -1,0 +1,51 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: auth-service-configmap
+  namespace: nova-auth
+  labels:
+    app: auth-service
+data:
+  # Redis configuration (internal cluster service)
+  redis-url: "redis://redis-cluster:6379"
+
+  # Kafka brokers for event streaming
+  kafka-brokers: "kafka-broker-0.kafka-headless.kafka:9092,kafka-broker-1.kafka-headless.kafka:9092,kafka-broker-2.kafka-headless.kafka:9092"
+
+  # Logging level
+  log-level: "info"
+
+  # gRPC configuration
+  grpc-port: "9080"
+  grpc-max-concurrent-streams: "1000"
+  grpc-keepalive-interval: "30s"
+  grpc-keepalive-timeout: "10s"
+
+  # Database connection pool settings
+  db-pool-min: "5"
+  db-pool-max: "20"
+
+  # JWT configuration
+  jwt-algorithm: "RS256"
+  jwt-access-token-expiry: "900"    # 15 minutes
+  jwt-refresh-token-expiry: "604800" # 7 days
+
+  # Rate limiting configuration
+  rate-limit-window: "1m"
+  rate-limit-max-requests: "1000"
+
+  # Session configuration
+  session-timeout: "2592000" # 30 days
+  session-cleanup-interval: "3600"
+
+  # 2FA configuration
+  totp-window-size: "1"
+  totp-time-step: "30"
+
+  # OAuth configuration
+  oauth-state-expiry: "600" # 10 minutes
+
+  # Outbox pattern configuration (Phase 2)
+  outbox-poll-interval: "5000" # milliseconds
+  outbox-batch-size: "100"
+  outbox-max-retries: "3"

@@ -1,0 +1,311 @@
+syntax = "proto3";
+package nova.notification_service;
+
+// ============================================================================
+// Notification Service gRPC API
+//
+// This service manages user notifications across multiple channels.
+//
+// Key responsibilities:
+//   - Push notifications (mobile/web)
+//   - Email notifications
+//   - In-app notifications
+//   - Notification preferences and delivery
+// ============================================================================
+
+// Message: Represents a notification
+message Notification {
+  string id = 1;                      // UUID of notification
+  string user_id = 2;                 // UUID of recipient
+  string notification_type = 3;       // "like", "comment", "follow", "mention", "message"
+  string title = 4;                   // Notification title
+  string body = 5;                    // Notification body/description
+  string data = 6;                    // Optional JSON data
+  string related_user_id = 7;         // UUID of user who triggered (optional)
+  string related_post_id = 8;         // UUID of related post (optional)
+  string related_message_id = 9;      // UUID of related message (optional)
+  bool is_read = 10;                  // Whether notification has been read
+  string channel = 11;                // "push", "email", "in_app"
+  string status = 12;                 // "pending", "sent", "failed", "delivered"
+  string created_at = 13;             // ISO 8601 timestamp
+  string sent_at = 14;                // ISO 8601 timestamp (when sent)
+  string read_at = 15;                // ISO 8601 timestamp (when read)
+  string deleted_at = 16;             // ISO 8601 timestamp (soft delete)
+}
+
+// Message: Notification preference for a user
+message NotificationPreference {
+  string user_id = 1;                 // UUID of user
+  bool email_on_like = 2;             // Email notification on like
+  bool email_on_comment = 3;          // Email notification on comment
+  bool email_on_follow = 4;           // Email notification on follow
+  bool email_on_mention = 5;          // Email notification on mention
+  bool push_on_like = 6;              // Push notification on like
+  bool push_on_comment = 7;           // Push notification on comment
+  bool push_on_follow = 8;            // Push notification on follow
+  bool push_on_mention = 9;           // Push notification on mention
+  bool push_on_message = 10;          // Push notification on direct message
+  string quiet_hours_start = 11;      // Time to start quiet hours (HH:MM)
+  string quiet_hours_end = 12;        // Time to end quiet hours (HH:MM)
+  bool disable_all = 13;              // Disable all notifications
+  string created_at = 14;             // ISO 8601 timestamp
+  string updated_at = 15;             // ISO 8601 timestamp
+}
+
+// Message: Push notification token (device registration)
+message PushToken {
+  string id = 1;                      // UUID of token entry
+  string user_id = 2;                 // UUID of user
+  string device_id = 3;               // Device identifier
+  string token = 4;                   // FCM/APNs token
+  string platform = 5;                // "ios", "android", "web"
+  string app_version = 6;             // App version string
+  bool is_active = 7;                 // Whether token is active
+  string created_at = 8;              // ISO 8601 timestamp
+  string last_used_at = 9;            // ISO 8601 timestamp
+}
+
+// ============================================================================
+// Get User Notifications
+// ============================================================================
+
+message GetNotificationsRequest {
+  string user_id = 1;
+  int32 limit = 2;                    // Number of results
+  int32 offset = 3;                   // Pagination offset
+  bool unread_only = 4;               // Only unread notifications
+}
+
+message GetNotificationsResponse {
+  repeated Notification notifications = 1;
+  int32 total_count = 2;
+  int32 unread_count = 3;
+}
+
+// ============================================================================
+// Get Single Notification
+// ============================================================================
+
+message GetNotificationRequest {
+  string notification_id = 1;
+}
+
+message GetNotificationResponse {
+  Notification notification = 1;
+}
+
+// ============================================================================
+// Create Notification
+// ============================================================================
+
+message CreateNotificationRequest {
+  string user_id = 1;
+  string notification_type = 2;       // "like", "comment", "follow", etc.
+  string title = 3;
+  string body = 4;
+  string data = 5;                    // Optional JSON data
+  string related_user_id = 6;         // Optional
+  string related_post_id = 7;         // Optional
+  string related_message_id = 8;      // Optional
+  repeated string channels = 9;       // ["push", "email", "in_app"]
+}
+
+message CreateNotificationResponse {
+  Notification notification = 1;
+}
+
+// ============================================================================
+// Mark Notification as Read
+// ============================================================================
+
+message MarkNotificationAsReadRequest {
+  string notification_id = 1;
+}
+
+message MarkNotificationAsReadResponse {
+  Notification notification = 1;
+}
+
+// ============================================================================
+// Mark All Notifications as Read
+// ============================================================================
+
+message MarkAllNotificationsAsReadRequest {
+  string user_id = 1;
+}
+
+message MarkAllNotificationsAsReadResponse {
+  int32 marked_count = 1;
+}
+
+// ============================================================================
+// Delete Notification
+// ============================================================================
+
+message DeleteNotificationRequest {
+  string notification_id = 1;
+}
+
+message DeleteNotificationResponse {
+  bool success = 1;
+}
+
+// ============================================================================
+// Get Notification Preferences
+// ============================================================================
+
+message GetNotificationPreferencesRequest {
+  string user_id = 1;
+}
+
+message GetNotificationPreferencesResponse {
+  NotificationPreference preferences = 1;
+}
+
+// ============================================================================
+// Update Notification Preferences
+// ============================================================================
+
+message UpdateNotificationPreferencesRequest {
+  string user_id = 1;
+  bool email_on_like = 2;             // Optional
+  bool email_on_comment = 3;          // Optional
+  bool email_on_follow = 4;           // Optional
+  bool email_on_mention = 5;          // Optional
+  bool push_on_like = 6;              // Optional
+  bool push_on_comment = 7;           // Optional
+  bool push_on_follow = 8;            // Optional
+  bool push_on_mention = 9;           // Optional
+  bool push_on_message = 10;          // Optional
+  string quiet_hours_start = 11;      // Optional
+  string quiet_hours_end = 12;        // Optional
+  bool disable_all = 13;              // Optional
+}
+
+message UpdateNotificationPreferencesResponse {
+  NotificationPreference preferences = 1;
+}
+
+// ============================================================================
+// Register Push Token
+// ============================================================================
+
+message RegisterPushTokenRequest {
+  string user_id = 1;
+  string device_id = 2;
+  string token = 3;
+  string platform = 4;                // "ios", "android", "web"
+  string app_version = 5;
+}
+
+message RegisterPushTokenResponse {
+  PushToken push_token = 1;
+}
+
+// ============================================================================
+// Unregister Push Token
+// ============================================================================
+
+message UnregisterPushTokenRequest {
+  string token = 1;
+}
+
+message UnregisterPushTokenResponse {
+  bool success = 1;
+}
+
+// ============================================================================
+// Get Unread Count
+// ============================================================================
+
+message GetUnreadCountRequest {
+  string user_id = 1;
+}
+
+message GetUnreadCountResponse {
+  int32 unread_count = 1;
+}
+
+// ============================================================================
+// Batch Create Notifications
+// ============================================================================
+
+message BatchCreateNotificationsRequest {
+  message NotificationData {
+    string user_id = 1;
+    string notification_type = 2;
+    string title = 3;
+    string body = 4;
+    string data = 5;
+    string related_user_id = 6;
+    string related_post_id = 7;
+    repeated string channels = 8;
+  }
+  repeated NotificationData notifications = 1;
+}
+
+message BatchCreateNotificationsResponse {
+  repeated Notification created = 1;
+  int32 success_count = 2;
+  int32 failed_count = 3;
+}
+
+// ============================================================================
+// Get Notification Statistics
+// ============================================================================
+
+message GetNotificationStatsRequest {
+  string user_id = 1;
+}
+
+message GetNotificationStatsResponse {
+  int32 total_count = 1;
+  int32 unread_count = 2;
+  int32 today_count = 3;
+  int32 this_week_count = 4;
+}
+
+// ============================================================================
+// Notification Service Definition
+// ============================================================================
+
+service NotificationService {
+  // Get user's notifications
+  rpc GetNotifications(GetNotificationsRequest) returns (GetNotificationsResponse);
+
+  // Get single notification by ID
+  rpc GetNotification(GetNotificationRequest) returns (GetNotificationResponse);
+
+  // Create a new notification
+  rpc CreateNotification(CreateNotificationRequest) returns (CreateNotificationResponse);
+
+  // Mark single notification as read
+  rpc MarkNotificationAsRead(MarkNotificationAsReadRequest) returns (MarkNotificationAsReadResponse);
+
+  // Mark all notifications as read
+  rpc MarkAllNotificationsAsRead(MarkAllNotificationsAsReadRequest) returns (MarkAllNotificationsAsReadResponse);
+
+  // Delete notification (soft delete)
+  rpc DeleteNotification(DeleteNotificationRequest) returns (DeleteNotificationResponse);
+
+  // Get user's notification preferences
+  rpc GetNotificationPreferences(GetNotificationPreferencesRequest) returns (GetNotificationPreferencesResponse);
+
+  // Update user's notification preferences
+  rpc UpdateNotificationPreferences(UpdateNotificationPreferencesRequest) returns (UpdateNotificationPreferencesResponse);
+
+  // Register device for push notifications
+  rpc RegisterPushToken(RegisterPushTokenRequest) returns (RegisterPushTokenResponse);
+
+  // Unregister device from push notifications
+  rpc UnregisterPushToken(UnregisterPushTokenRequest) returns (UnregisterPushTokenResponse);
+
+  // Get count of unread notifications
+  rpc GetUnreadCount(GetUnreadCountRequest) returns (GetUnreadCountResponse);
+
+  // Create multiple notifications in batch
+  rpc BatchCreateNotifications(BatchCreateNotificationsRequest) returns (BatchCreateNotificationsResponse);
+
+  // Get notification statistics
+  rpc GetNotificationStats(GetNotificationStatsRequest) returns (GetNotificationStatsResponse);
+}
