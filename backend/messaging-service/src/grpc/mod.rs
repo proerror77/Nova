@@ -277,7 +277,8 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
         }
     }
 
-    /// SendMessage - Create a new message
+    /// SendMessage - Create a new message with transaction
+    /// Fix P1-1: Use transaction to ensure message + conversation update consistency
     async fn send_message(
         &self,
         request: Request<SendMessageRequest>,
@@ -297,10 +298,17 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
             ));
         }
 
+        // Start transaction for atomic message creation + conversation update
+        let mut tx = self.state.db.begin().await.map_err(|e| {
+            tracing::error!(error = %e, "Failed to begin transaction");
+            Status::internal("Database error")
+        })?;
+
         let message_id = uuid::Uuid::new_v4().to_string();
         let now = chrono::Utc::now().to_rfc3339();
 
-        let result = sqlx::query(
+        // Insert message in transaction
+        let row = sqlx::query(
             "INSERT INTO messages
              (id, conversation_id, sender_id, content, encrypted_content, nonce,
               encryption_version, created_at, updated_at, deleted_at, version_number)
@@ -317,30 +325,49 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
         .bind(req.encryption_version)
         .bind(&now)
         .bind(&now)
-        .fetch_one(&self.state.db)
-        .await;
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(|e| {
+            tracing::error!(error = %e, "Failed to insert message");
+            Status::internal("Failed to send message")
+        })?;
 
-        match result {
-            Ok(row) => Ok(Response::new(SendMessageResponse {
-                message: Some(Message {
-                    id: row.get("id"),
-                    conversation_id: row.get("conversation_id"),
-                    sender_id: row.get("sender_id"),
-                    content: row.get("content"),
-                    encrypted_content: row.get("encrypted_content"),
-                    nonce: row.get("nonce"),
-                    encryption_version: row.get("encryption_version"),
-                    created_at: row.get("created_at"),
-                    updated_at: row.get("updated_at"),
-                    deleted_at: row.get("deleted_at"),
-                    version_number: row.get("version_number"),
-                }),
-            })),
-            Err(e) => Err(Status::internal(format!("Failed to send message: {}", e))),
-        }
+        // Update conversation updated_at in same transaction
+        sqlx::query("UPDATE conversations SET updated_at = $1 WHERE id = $2")
+            .bind(&now)
+            .bind(&req.conversation_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| {
+                tracing::error!(error = %e, "Failed to update conversation");
+                Status::internal("Failed to update conversation")
+            })?;
+
+        // Commit transaction atomically
+        tx.commit().await.map_err(|e| {
+            tracing::error!(error = %e, "Failed to commit transaction");
+            Status::internal("Database error")
+        })?;
+
+        Ok(Response::new(SendMessageResponse {
+            message: Some(Message {
+                id: row.get("id"),
+                conversation_id: row.get("conversation_id"),
+                sender_id: row.get("sender_id"),
+                content: row.get("content"),
+                encrypted_content: row.get("encrypted_content"),
+                nonce: row.get("nonce"),
+                encryption_version: row.get("encryption_version"),
+                created_at: row.get("created_at"),
+                updated_at: row.get("updated_at"),
+                deleted_at: row.get("deleted_at"),
+                version_number: row.get("version_number"),
+            }),
+        }))
     }
 
-    /// UpdateMessage - Update message content with optimistic locking
+    /// UpdateMessage - Update message content with optimistic locking and transaction
+    /// Fix P1-1: Use transaction to ensure message + conversation update consistency
     async fn update_message(
         &self,
         request: Request<UpdateMessageRequest>,
@@ -356,9 +383,16 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
             ));
         }
 
+        // Start transaction for atomic message update + conversation update
+        let mut tx = self.state.db.begin().await.map_err(|e| {
+            tracing::error!(error = %e, "Failed to begin transaction");
+            Status::internal("Database error")
+        })?;
+
         let now = chrono::Utc::now().to_rfc3339();
 
-        let result = sqlx::query(
+        // Update message with optimistic locking in transaction
+        let row = sqlx::query(
             "UPDATE messages
              SET content = $1, encrypted_content = $2, nonce = $3,
                  updated_at = $4, version_number = version_number + 1
@@ -372,30 +406,57 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
         .bind(&now)
         .bind(&req.message_id)
         .bind(req.version_number as i32)
-        .fetch_optional(&self.state.db)
+        .fetch_optional(&mut *tx)
         .await
-        .map_err(|e| Status::internal(format!("Database error: {}", e)))?;
+        .map_err(|e| {
+            tracing::error!(error = %e, "Failed to update message");
+            Status::internal("Database error")
+        })?;
 
-        match result {
-            Some(row) => Ok(Response::new(UpdateMessageResponse {
-                message: Some(Message {
-                    id: row.get("id"),
-                    conversation_id: row.get("conversation_id"),
-                    sender_id: row.get("sender_id"),
-                    content: row.get("content"),
-                    encrypted_content: row.get("encrypted_content"),
-                    nonce: row.get("nonce"),
-                    encryption_version: row.get("encryption_version"),
-                    created_at: row.get("created_at"),
-                    updated_at: row.get("updated_at"),
-                    deleted_at: row.get("deleted_at"),
-                    version_number: row.get("version_number"),
-                }),
-            })),
-            None => Err(Status::not_found(
-                "Message not found or version mismatch (optimistic lock conflict)",
-            )),
-        }
+        let updated_row = match row {
+            Some(r) => r,
+            None => {
+                // Rollback will happen automatically when tx is dropped
+                return Err(Status::not_found(
+                    "Message not found or version mismatch (optimistic lock conflict)",
+                ));
+            }
+        };
+
+        let conversation_id: String = updated_row.get("conversation_id");
+
+        // Update conversation updated_at in same transaction
+        sqlx::query("UPDATE conversations SET updated_at = $1 WHERE id = $2")
+            .bind(&now)
+            .bind(&conversation_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| {
+                tracing::error!(error = %e, "Failed to update conversation");
+                Status::internal("Failed to update conversation")
+            })?;
+
+        // Commit transaction atomically
+        tx.commit().await.map_err(|e| {
+            tracing::error!(error = %e, "Failed to commit transaction");
+            Status::internal("Database error")
+        })?;
+
+        Ok(Response::new(UpdateMessageResponse {
+            message: Some(Message {
+                id: updated_row.get("id"),
+                conversation_id: updated_row.get("conversation_id"),
+                sender_id: updated_row.get("sender_id"),
+                content: updated_row.get("content"),
+                encrypted_content: updated_row.get("encrypted_content"),
+                nonce: updated_row.get("nonce"),
+                encryption_version: updated_row.get("encryption_version"),
+                created_at: updated_row.get("created_at"),
+                updated_at: updated_row.get("updated_at"),
+                deleted_at: updated_row.get("deleted_at"),
+                version_number: updated_row.get("version_number"),
+            }),
+        }))
     }
 
     /// DeleteMessage - Soft delete a message
