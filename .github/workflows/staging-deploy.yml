@@ -94,7 +94,7 @@ jobs:
 
       - name: Build and push ${{ matrix.service }}
         if: ${{ steps.aws-creds.outcome == 'success' }}
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: ${{ env.CONTEXT }}
           file: ./backend/${{ matrix.service }}/Dockerfile
@@ -108,7 +108,7 @@ jobs:
 
       - name: Local build without push (no AWS credentials)
         if: ${{ steps.aws-creds.outcome != 'success' }}
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: ${{ env.CONTEXT }}
           file: ./backend/${{ matrix.service }}/Dockerfile
