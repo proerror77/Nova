@@ -23,13 +23,13 @@ pub async fn metrics_handler() -> impl Responder {
 // =========================
 
 /// Initialize outbox metrics gauge (call from main() for better error handling)
+#[allow(dead_code)]
 pub fn initialize_outbox_gauge() -> Result<(), Box<dyn std::error::Error>> {
     let g = IntGauge::new(
         "outbox_unpublished_events",
         "Number of unpublished events in outbox table",
     )?;
-    prometheus::default_registry()
-        .register(Box::new(g.clone()))?;
+    prometheus::default_registry().register(Box::new(g.clone()))?;
 
     // Cache the gauge for later use
     let _ = &*OUTBOX_UNPUBLISHED_EVENTS; // Force lazy init

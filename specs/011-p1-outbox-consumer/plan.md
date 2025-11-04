@@ -2,7 +2,7 @@
 
 **Branch**: `[011-p1-outbox-consumer]` | **Date**: 2025-11-05 | **Spec**: specs/011-p1-outbox-consumer/spec.md
 **Priority**: P1 (Event reliability)
-**Dependency**: 006-p0-testcontainers (need Kafka test containers)
+**Dependencies**: 006-p0-testcontainers (need Kafka test containers) AND 010-p1-comment-rpc (comments trigger outbox events)
 
 ## Summary
 
@@ -27,5 +27,6 @@ backend/user-service/src/services/
 
 ## Parallel Work
 
-Can run after: 006 (testcontainers)
+Can run after: 006 (testcontainers) + 010 (comment-rpc must complete first, as comments trigger outbox events)
 Blocker for: none (optional event publishing)
+Note: 010 comment creation populates outbox table; 011 consumer processes those events

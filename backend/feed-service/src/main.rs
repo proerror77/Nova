@@ -122,10 +122,13 @@ async fn main() -> io::Result<()> {
     );
     tracing::info!("Environment: {}", config.app.env);
 
-    // Initialize database
-    let db_pool = sqlx::postgres::PgPoolOptions::new()
-        .max_connections(config.database.max_connections)
-        .connect(&config.database.url)
+    // Initialize database (standardized pool)
+    let mut db_cfg = db_pool::DbConfig::from_env().unwrap_or_default();
+    if db_cfg.database_url.is_empty() {
+        db_cfg.database_url = config.database.url.clone();
+    }
+    db_cfg.max_connections = std::cmp::max(db_cfg.max_connections, config.database.max_connections);
+    let db_pool = db_pool::create_pool(db_cfg)
         .await
         .expect("Failed to create database pool");
 

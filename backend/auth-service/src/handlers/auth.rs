@@ -3,6 +3,7 @@ use actix_web::{web, HttpResponse};
 use serde::Serialize;
 use utoipa::ToSchema;
 use uuid::Uuid;
+use validator::Validate;
 
 use crate::{
     error::AuthError,
@@ -70,25 +71,37 @@ pub async fn register(
     _state: web::Data<AppState>,
     payload: web::Json<RegisterRequest>,
 ) -> Result<HttpResponse, AuthError> {
-    // Validate input
-    if payload.email.is_empty() || payload.username.is_empty() || payload.password.is_empty() {
+    // Trim inputs and validate with validator crate
+    let req = RegisterRequest {
+        email: payload.email.trim().to_string(),
+        username: payload.username.trim().to_string(),
+        password: payload.password.clone(),
+    };
+    if let Err(e) = req.validate() {
+        let fields = e.field_errors();
+        if fields.contains_key("email") {
+            return Err(AuthError::InvalidEmailFormat);
+        }
+        if fields.contains_key("password") {
+            return Err(AuthError::WeakPassword);
+        }
         return Err(AuthError::InvalidCredentials);
     }
 
-    // Hash password
-    let _password_hash = password::hash_password(&payload.password)?;
+    // Strength check + hash password (validate before hashing inside)
+    let _password_hash = password::hash_password(&req.password)?;
 
     // Create user (will need database implementation)
     // For now, return a stub response
     let user_id = Uuid::new_v4();
 
     // Generate token pair
-    let token_pair = jwt::generate_token_pair(user_id, &payload.email, &payload.username)?;
+    let token_pair = jwt::generate_token_pair(user_id, &req.email, &req.username)?;
 
     Ok(HttpResponse::Created().json(RegisterResponse {
         user_id,
-        email: payload.email.clone(),
-        username: payload.username.clone(),
+        email: req.email,
+        username: req.username,
         access_token: token_pair.access_token,
         refresh_token: token_pair.refresh_token,
     }))
@@ -109,13 +122,18 @@ pub async fn login(
     _state: web::Data<AppState>,
     payload: web::Json<LoginRequest>,
 ) -> Result<HttpResponse, AuthError> {
-    // Validate input
-    if payload.email.is_empty() || payload.password.is_empty() {
+    let req = LoginRequest {
+        email: payload.email.trim().to_string(),
+        password: payload.password.clone(),
+    };
+    if let Err(e) = req.validate() {
+        if e.field_errors().contains_key("email") {
+            return Err(AuthError::InvalidEmailFormat);
+        }
         return Err(AuthError::InvalidCredentials);
     }
 
-    // Find user by email (will need database implementation)
-    // For now, return an error
+    // TODO: Find user by email and verify password
     Err(AuthError::UserNotFound)
 }
 

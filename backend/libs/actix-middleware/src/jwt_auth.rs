@@ -1,3 +1,4 @@
+use crate::metrics::{JWT_CACHE_HIT, JWT_CACHE_MISS, JWT_REVOKED};
 use actix_web::{
     dev::{forward_ready, Service, ServiceRequest, ServiceResponse, Transform},
     Error, HttpMessage,
@@ -11,7 +12,6 @@ use std::rc::Rc;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use uuid::Uuid;
-use crate::metrics::{JWT_CACHE_HIT, JWT_CACHE_MISS, JWT_REVOKED};
 
 /// User ID extracted from JWT
 #[derive(Debug, Clone, Copy)]
@@ -138,7 +138,13 @@ where
                                     tracing::warn!("Token is revoked; bypassing cache");
                                     JWT_REVOKED.inc();
                                     // Validate fresh token (will fail due to revocation)
-                                    validate_and_cache_token(token, redis_conn, &cache_key, cache_ttl_secs).await?
+                                    validate_and_cache_token(
+                                        token,
+                                        redis_conn,
+                                        &cache_key,
+                                        cache_ttl_secs,
+                                    )
+                                    .await?
                                 } else {
                                     // Double-verify: re-validate JWT signature to ensure cache hasn't been tampered with
                                     // This is a defense-in-depth measure for high-security scenarios
@@ -149,9 +155,18 @@ where
                                             cached_claims
                                         }
                                         Err(e) => {
-                                            tracing::warn!("Cached JWT failed re-validation: {}", e);
+                                            tracing::warn!(
+                                                "Cached JWT failed re-validation: {}",
+                                                e
+                                            );
                                             // Cache is invalid, fall through to fresh validation
-                                            validate_and_cache_token(token, redis_conn, &cache_key, cache_ttl_secs).await?
+                                            validate_and_cache_token(
+                                                token,
+                                                redis_conn,
+                                                &cache_key,
+                                                cache_ttl_secs,
+                                            )
+                                            .await?
                                         }
                                     }
                                 }
@@ -159,7 +174,13 @@ where
                             Err(e) => {
                                 tracing::warn!("Failed to deserialize cached claims: {}", e);
                                 // Fall through to fresh validation
-                                validate_and_cache_token(token, redis_conn, &cache_key, cache_ttl_secs).await?
+                                validate_and_cache_token(
+                                    token,
+                                    redis_conn,
+                                    &cache_key,
+                                    cache_ttl_secs,
+                                )
+                                .await?
                             }
                         }
                     }
@@ -167,7 +188,8 @@ where
                         // Cache miss - validate and store
                         tracing::debug!("JWT validation cache miss");
                         JWT_CACHE_MISS.inc();
-                        validate_and_cache_token(token, redis_conn, &cache_key, cache_ttl_secs).await?
+                        validate_and_cache_token(token, redis_conn, &cache_key, cache_ttl_secs)
+                            .await?
                     }
                 }
             } else {
@@ -255,8 +277,9 @@ async fn validate_and_cache_token(
     let cache_key = cache_key.to_string();
     tokio::spawn(async move {
         let mut conn = redis_clone.lock().await.clone();
-        let _result: Result<(), redis::RedisError> =
-            conn.set_ex(&cache_key, cached_json, cache_ttl_secs as u64).await;
+        let _result: Result<(), redis::RedisError> = conn
+            .set_ex(&cache_key, cached_json, cache_ttl_secs as u64)
+            .await;
         if let Err(e) = _result {
             tracing::warn!("Failed to cache JWT validation: {}", e);
         }
@@ -266,7 +289,10 @@ async fn validate_and_cache_token(
 }
 
 /// Check whether token is revoked via revocation store (Redis or DB-backed cache)
-async fn is_token_revoked(redis: &Arc<Mutex<ConnectionManager>>, token: &str) -> Result<bool, actix_web::Error> {
+async fn is_token_revoked(
+    redis: &Arc<Mutex<ConnectionManager>>,
+    token: &str,
+) -> Result<bool, actix_web::Error> {
     // Compute jti hash key when available; fallback to token hash
     let token_hash = crypto_core::hash::sha256(token.as_bytes());
     let key = format!("jwt:revoked:{}", hex::encode(token_hash));

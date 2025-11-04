@@ -122,7 +122,10 @@ async fn main() -> io::Result<()> {
             Err(e) => {
                 if config.is_production() {
                     // In production, migration failures are fatal - exit immediately with error
-                    tracing::error!("Database migration failed in production environment: {:#}", e);
+                    tracing::error!(
+                        "Database migration failed in production environment: {:#}",
+                        e
+                    );
                     std::process::exit(1);
                 } else {
                     // In development, tolerate migration errors (e.g., VersionMissing from old migrations)
@@ -457,14 +460,17 @@ async fn main() -> io::Result<()> {
         db: db_pool.clone(),
     });
     let grpc_service = UserServiceImpl::new(app_state);
-    let grpc_server_svc = user_service::grpc::nova::user_service::user_service_server::UserServiceServer::new(grpc_service);
+    let grpc_server_svc =
+        user_service::grpc::nova::user_service::user_service_server::UserServiceServer::new(
+            grpc_service,
+        );
 
     // Start gRPC server on port + 1000 (e.g., 8080 -> 9080)
     let grpc_port = config.app.port + 1000;
     let grpc_addr = format!("{}:{}", config.app.host, grpc_port);
     let grpc_handle = tokio::spawn(async move {
-        let grpc_addr_parsed: SocketAddr = grpc_addr.parse()
-            .map_err(|e: std::net::AddrParseError| {
+        let grpc_addr_parsed: SocketAddr =
+            grpc_addr.parse().map_err(|e: std::net::AddrParseError| {
                 tracing::error!("Invalid gRPC address: {}", e);
             })?;
 

@@ -15,6 +15,7 @@ use redis::RedisError;
 use redis_utils::{RedisPool, SentinelConfig};
 use serde::Serialize;
 use sqlx::postgres::PgPoolOptions;
+use db_pool::{create_pool as create_pg_pool, DbConfig as DbPoolConfig};
 use std::collections::HashMap;
 use std::io;
 use std::net::SocketAddr;
@@ -318,20 +319,22 @@ async fn main() -> io::Result<()> {
         }
     }
 
-    // Initialize database connection pool
-    let db_url = config.database.url.clone();
+    // Initialize database connection pool (standardized)
+    let mut db_cfg = DbPoolConfig::from_env().unwrap_or_default();
+    if db_cfg.database_url.is_empty() {
+        db_cfg.database_url = config.database.url.clone();
+    }
+    // Enforce sane minimums; allow env to override upwards
+    if db_cfg.max_connections < 20 {
+        db_cfg.max_connections = std::cmp::max(20, config.database.max_connections);
+    }
 
-    let db_pool = PgPoolOptions::new()
-        .max_connections(config.database.max_connections)
-        .connect(&db_url)
+    let db_pool = create_pg_pool(db_cfg)
         .await
-        .expect("Failed to connect to database");
+        .expect("Failed to create standardized database pool");
     let db_pool_http = db_pool.clone();
 
-    tracing::info!(
-        "Connected to database (max_connections={})",
-        config.database.max_connections
-    );
+    tracing::info!("Connected to database via db-pool crate");
 
     let http_bind_address = format!("{}:{}", config.app.host, 8081);
     let grpc_bind_address = format!("{}:9081", config.app.host);

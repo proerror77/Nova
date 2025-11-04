@@ -6,13 +6,12 @@
 /// - FollowUser, UnfollowUser, BlockUser, UnblockUser
 /// - GetUserFollowers, GetUserFollowing, CheckUserRelationship
 /// - SearchUsers
-
 use super::nova::user_service::*;
 use crate::db::Pool;
 use crate::AppState;
 use sqlx::Row;
-use tonic::{Request, Response, Status};
 use std::sync::Arc;
+use tonic::{Request, Response, Status};
 
 /// UserServiceImpl - gRPC server implementation
 #[derive(Clone)]
@@ -405,7 +404,9 @@ impl user_service_server::UserService for UserServiceImpl {
         let req = request.into_inner();
 
         if req.blocker_id.is_empty() || req.blocked_id.is_empty() {
-            return Err(Status::invalid_argument("blocker_id and blocked_id are required"));
+            return Err(Status::invalid_argument(
+                "blocker_id and blocked_id are required",
+            ));
         }
 
         let relationship_id = uuid::Uuid::new_v4().to_string();
@@ -456,7 +457,9 @@ impl user_service_server::UserService for UserServiceImpl {
         let req = request.into_inner();
 
         if req.blocker_id.is_empty() || req.blocked_id.is_empty() {
-            return Err(Status::invalid_argument("blocker_id and blocked_id are required"));
+            return Err(Status::invalid_argument(
+                "blocker_id and blocked_id are required",
+            ));
         }
 
         let result = sqlx::query_scalar::<_, i64>(

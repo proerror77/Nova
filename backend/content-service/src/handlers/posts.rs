@@ -40,12 +40,7 @@ pub async fn create_post(
     let content_type = req.content_type.as_deref().unwrap_or("text");
 
     let post = service
-        .create_post(
-            user_id.0,
-            req.caption.as_deref(),
-            image_key,
-            content_type,
-        )
+        .create_post(user_id.0, req.caption.as_deref(), image_key, content_type)
         .await?;
 
     Ok(HttpResponse::Created().json(post))

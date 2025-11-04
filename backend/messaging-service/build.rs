@@ -5,6 +5,9 @@ fn main() {
     tonic_build::configure()
         .build_server(true)
         .build_client(false)
-        .compile(&["../proto/services/messaging_service.proto"], &["../proto/services/"])
+        .compile(
+            &["../proto/services/messaging_service.proto"],
+            &["../proto/services/"],
+        )
         .expect("Failed to compile messaging_service.proto");
 }

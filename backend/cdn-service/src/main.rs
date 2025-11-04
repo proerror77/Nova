@@ -1,5 +1,6 @@
 use actix_web::{web, App, HttpServer};
 use std::io;
+use db_pool::{create_pool as create_pg_pool, DbConfig as DbPoolConfig};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[actix_web::main]
@@ -15,12 +16,13 @@ async fn main() -> io::Result<()> {
 
     tracing::info!("Starting service");
 
-    // Initialize database
-    let db_pool = sqlx::postgres::PgPoolOptions::new()
-        .max_connections(10)
-        .connect(&std::env::var("DATABASE_URL").unwrap_or_default())
-        .await
-        .ok();
+    // Initialize database (standardized pool)
+    let mut cfg = DbPoolConfig::from_env().unwrap_or_default();
+    if cfg.database_url.is_empty() {
+        cfg.database_url = std::env::var("DATABASE_URL").unwrap_or_default();
+    }
+    if cfg.max_connections < 20 { cfg.max_connections = 20; }
+    let db_pool = create_pg_pool(cfg).await.ok();
 
     // Start HTTP server
     HttpServer::new(move || App::new().route("/health", web::get().to(|| async { "OK" })))

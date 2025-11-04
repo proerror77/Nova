@@ -64,6 +64,7 @@ image = "0.24"
 # Validation
 validator = { version = "0.18", features = ["derive"] }
 regex = "1.10"
+zxcvbn = "2"
 
 # Async traits
 async-trait = "0.1"
@@ -77,6 +78,7 @@ event-schema = { path = "../libs/event-schema" }
 crypto-core = { path = "../libs/crypto-core" }
 redis-utils = { path = "../libs/redis-utils" }
 actix-middleware = { path = "../libs/actix-middleware" }
+db-pool = { path = "../libs/db-pool" }
 
 # API documentation
 utoipa = { version = "4", features = ["chrono", "uuid"] }
@@ -87,3 +89,4 @@ tonic-build = "0.11"
 
 [dev-dependencies]
 tokio-test = "0.4"
+testcontainers = "0.16"

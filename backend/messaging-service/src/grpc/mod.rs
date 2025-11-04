@@ -4,11 +4,10 @@
 /// - GetMessages, GetMessage, GetConversation, GetConversationMembers
 /// - SendMessage, UpdateMessage, DeleteMessage
 /// - MarkAsRead, GetUnreadCount, ListConversations
-
 use crate::nova::messaging_service::*;
 use crate::state::AppState;
-use tonic::{Request, Response, Status};
 use sqlx::Row;
+use tonic::{Request, Response, Status};
 
 /// MessagingServiceImpl - gRPC service implementation
 #[derive(Clone)]
@@ -45,12 +44,10 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
 
         // Get total count - fix: separate SQL statements instead of string concatenation
         let total_count: i64 = if req.include_deleted {
-            sqlx::query_scalar(
-                "SELECT COUNT(*) FROM messages WHERE conversation_id = $1"
-            )
+            sqlx::query_scalar("SELECT COUNT(*) FROM messages WHERE conversation_id = $1")
         } else {
             sqlx::query_scalar(
-                "SELECT COUNT(*) FROM messages WHERE conversation_id = $1 AND deleted_at IS NULL"
+                "SELECT COUNT(*) FROM messages WHERE conversation_id = $1 AND deleted_at IS NULL",
             )
         }
         .bind(&req.conversation_id)
@@ -73,7 +70,7 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
                  FROM messages
                  WHERE conversation_id = $1
                  ORDER BY created_at DESC
-                 LIMIT $2 OFFSET $3"
+                 LIMIT $2 OFFSET $3",
             )
         } else {
             sqlx::query(
@@ -82,7 +79,7 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
                  FROM messages
                  WHERE conversation_id = $1 AND deleted_at IS NULL
                  ORDER BY created_at DESC
-                 LIMIT $2 OFFSET $3"
+                 LIMIT $2 OFFSET $3",
             )
         }
         .bind(&req.conversation_id)
@@ -257,13 +254,11 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
             return Err(Status::invalid_argument("conversation_id is required"));
         }
 
-        let row = sqlx::query(
-            "SELECT member_ids FROM conversations WHERE id = $1",
-        )
-        .bind(&req.conversation_id)
-        .fetch_optional(&self.state.db)
-        .await
-        .map_err(|e| Status::internal(format!("Database error: {}", e)))?;
+        let row = sqlx::query("SELECT member_ids FROM conversations WHERE id = $1")
+            .bind(&req.conversation_id)
+            .fetch_optional(&self.state.db)
+            .await
+            .map_err(|e| Status::internal(format!("Database error: {}", e)))?;
 
         match row {
             Some(row) => {
@@ -630,20 +625,19 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
         let offset = if req.offset < 0 { 0 } else { req.offset as i64 };
 
         // Get total count of conversations containing this user
-        let total_count: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM conversations WHERE $1 = ANY(member_ids)",
-        )
-        .bind(&req.user_id)
-        .fetch_one(&self.state.db)
-        .await
-        .map_err(|e| {
-            tracing::error!(
-                error = %e,
-                user_id = %req.user_id,
-                "Failed to count conversations"
-            );
-            Status::internal("Failed to count conversations")
-        })?;
+        let total_count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM conversations WHERE $1 = ANY(member_ids)")
+                .bind(&req.user_id)
+                .fetch_one(&self.state.db)
+                .await
+                .map_err(|e| {
+                    tracing::error!(
+                        error = %e,
+                        user_id = %req.user_id,
+                        "Failed to count conversations"
+                    );
+                    Status::internal("Failed to count conversations")
+                })?;
 
         // Fix P0-3: Use single query with LEFT JOIN instead of N+1 queries
         // Get conversations with unread counts in a single query

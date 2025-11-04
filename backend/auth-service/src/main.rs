@@ -5,8 +5,8 @@ mod openapi;
 
 use actix_middleware::MetricsMiddleware;
 use actix_web::{web, App, HttpResponse, HttpServer, Responder};
+use db_pool::{create_pool as create_pg_pool, DbConfig as DbPoolConfig};
 use redis::aio::ConnectionManager;
-use sqlx::postgres::PgPoolOptions;
 use std::net::SocketAddr;
 use tonic::transport::Server as GrpcServer;
 use tracing_subscriber;
@@ -36,11 +36,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     // Initialize database connection pool
-    let database_url = config.database_url.clone();
-    let db_pool = PgPoolOptions::new()
-        .max_connections(5)
-        .connect(&database_url)
-        .await?;
+    let mut pool_cfg = DbPoolConfig::from_env().unwrap_or_default();
+    if pool_cfg.database_url.is_empty() {
+        pool_cfg.database_url = config.database_url.clone();
+    }
+    let db_pool = create_pg_pool(pool_cfg).await?;
 
     tracing::info!("Database connection pool initialized");
 
@@ -189,21 +189,22 @@ async fn start_servers(
     let rest_handle = tokio::spawn(async move {
         tracing::info!("REST API listening on {}", addr);
 
-        let result = HttpServer::new(move || {
+        let server = match HttpServer::new(move || {
             App::new()
                 .app_data(web::Data::new(rest_state.clone()))
                 .wrap(MetricsMiddleware)
                 .configure(configure_routes)
         })
         .bind(addr)
-        .map_err(|e| {
-            tracing::error!("failed to bind REST server on {}: {}", addr, e);
-            e
-        })?
-        .run()
-        .await;
+        {
+            Ok(server) => server,
+            Err(e) => {
+                tracing::error!("failed to bind REST server on {}: {}", addr, e);
+                return;
+            }
+        };
 
-        if let Err(e) = result {
+        if let Err(e) = server.run().await {
             tracing::error!("REST server error: {}", e);
         }
     });

@@ -1,6 +1,7 @@
 use once_cell::sync::Lazy;
 /// Input validation utilities
 use regex::Regex;
+use validator::ValidationError;
 
 // Compile regex patterns once at startup
 // These patterns are hardcoded and always valid, so we use expect() with explicit reasoning
@@ -24,6 +25,15 @@ pub fn validate_email(email: &str) -> bool {
 /// Validate username format (3-32 characters, alphanumeric with - and _)
 pub fn validate_username(username: &str) -> bool {
     USERNAME_REGEX.is_match(username)
+}
+
+/// validator crate compatible custom validator for username shape
+pub fn validate_username_shape_validator(username: &str) -> Result<(), ValidationError> {
+    if validate_username(username) {
+        Ok(())
+    } else {
+        Err(ValidationError::new("invalid_username"))
+    }
 }
 
 /// Validate password strength requirements
@@ -72,7 +82,7 @@ mod tests {
     #[test]
     fn test_invalid_username() {
         assert!(!validate_username("ab")); // Too short
-        assert!(!validate_username("a".repeat(33))); // Too long
+        assert!(!validate_username(&"a".repeat(33))); // Too long
         assert!(!validate_username("user@name")); // Invalid character
     }
 

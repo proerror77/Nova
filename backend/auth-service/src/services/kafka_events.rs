@@ -6,8 +6,7 @@ use event_schema::{
 };
 use rdkafka::message::OwnedHeaders;
 use rdkafka::producer::{FutureProducer, FutureRecord};
-// Use function exposed at crate root
-use crypto_core::inject_headers;
+use crypto_core::kafka_correlation::inject_headers;
 use std::time::Duration;
 use tracing::warn;
 use uuid::Uuid;
@@ -106,7 +105,10 @@ impl KafkaEventProducer {
             .map_err(|e| AuthError::Internal(format!("Failed to serialize envelope: {}", e)))?;
 
         let partition_key = partition_key_id.to_string();
-        let correlation_id = envelope.correlation_id.to_string();
+        let correlation_id = envelope
+            .correlation_id
+            .unwrap_or(envelope.event_id)
+            .to_string();
         let headers = inject_headers(OwnedHeaders::new(), &correlation_id);
         let record = FutureRecord::to(&self.topic)
             .key(&partition_key)

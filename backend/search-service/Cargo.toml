@@ -44,6 +44,7 @@ elasticsearch = "8.19.0-alpha.1"
 url = "2"
 error-types = { path = "../libs/error-types" }
 actix-middleware = { path = "../libs/actix-middleware" }
+db-pool = { path = "../libs/db-pool" }
 
 [profile.release]
 codegen-units = 1

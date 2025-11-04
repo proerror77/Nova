@@ -695,10 +695,14 @@ async fn docs() -> impl Responder {
 }
 
 async fn init_db_pool(database_url: &str) -> Result<PgPool, sqlx::Error> {
-    PgPoolOptions::new()
-        .max_connections(10)
-        .connect(database_url)
-        .await
+    let mut cfg = db_pool::DbConfig::from_env().unwrap_or_default();
+    if cfg.database_url.is_empty() {
+        cfg.database_url = database_url.to_string();
+    }
+    if cfg.max_connections < 20 {
+        cfg.max_connections = 20;
+    }
+    db_pool::create_pool(cfg).await
 }
 
 async fn init_redis_connection(redis_url: &str) -> Result<ConnectionManager, redis::RedisError> {

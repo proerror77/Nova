@@ -1,5 +1,6 @@
 use actix_web::{web, App, HttpServer};
 use std::io;
+use db_pool::{create_pool as create_pg_pool, DbConfig as DbPoolConfig};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use video_service::config::Config;
@@ -21,11 +22,10 @@ async fn main() -> io::Result<()> {
     tracing::info!("Starting video-service v{}", env!("CARGO_PKG_VERSION"));
     tracing::info!("Environment: {}", config.app.env);
 
-    let db_pool = sqlx::postgres::PgPoolOptions::new()
-        .max_connections(config.database.max_connections)
-        .connect(&config.database.url)
-        .await
-        .expect("Failed to create database pool");
+    let mut cfg = DbPoolConfig::from_env().unwrap_or_default();
+    if cfg.database_url.is_empty() { cfg.database_url = config.database.url.clone(); }
+    cfg.max_connections = std::cmp::max(cfg.max_connections, config.database.max_connections);
+    let db_pool = create_pg_pool(cfg).await.expect("Failed to create database pool");
     let db_pool = web::Data::new(db_pool);
 
     // TODO: Start gRPC server for VideoService in addition to HTTP server

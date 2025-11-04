@@ -3,12 +3,12 @@ use crypto_core::jwt as core_jwt;
 use messaging_service::openapi::ApiDoc;
 use messaging_service::{
     config, db, error, logging,
+    nova::messaging_service::messaging_service_server::MessagingServiceServer,
     redis_client::RedisClient,
     routes,
     services::{encryption::EncryptionService, key_exchange::KeyExchangeService, push::ApnsPush},
     state::AppState,
     websocket::streams::{start_streams_listener, StreamsConfig},
-    nova::messaging_service::messaging_service_server::MessagingServiceServer,
 };
 use redis_utils::{RedisPool, SentinelConfig};
 use std::net::SocketAddr;
@@ -54,7 +54,8 @@ async fn main() -> Result<(), error::AppError> {
 
     // Run embedded migrations (idempotent)
     // Treat migration failures as fatal - the database schema must be in sync
-    messaging_service::migrations::run_all(&db).await
+    messaging_service::migrations::run_all(&db)
+        .await
         .map_err(|e| error::AppError::StartServer(format!("database migrations failed: {}", e)))?;
 
     // Initialize JWT validation using unified crypto-core helpers
@@ -62,8 +63,9 @@ async fn main() -> Result<(), error::AppError> {
     let public_key = core_jwt::load_validation_key()
         .map_err(|e| error::AppError::StartServer(format!("Failed to load JWT public key: {e}")))?;
 
-    core_jwt::initialize_jwt_validation_only(&public_key)
-        .map_err(|e| error::AppError::StartServer(format!("Failed to initialize JWT validation: {e}")))?;
+    core_jwt::initialize_jwt_validation_only(&public_key).map_err(|e| {
+        error::AppError::StartServer(format!("Failed to initialize JWT validation: {e}"))
+    })?;
 
     let apns_client = match cfg.apns.as_ref() {
         Some(apns_cfg) => match ApnsPush::new(apns_cfg) {
@@ -115,8 +117,8 @@ async fn main() -> Result<(), error::AppError> {
 
     // REST API server on cfg.port
     let rest_handle = tokio::spawn(async move {
-        let bind_addr_parsed: SocketAddr = bind_addr.parse()
-            .map_err(|e: std::net::AddrParseError| {
+        let bind_addr_parsed: SocketAddr =
+            bind_addr.parse().map_err(|e: std::net::AddrParseError| {
                 error::AppError::StartServer(format!("Invalid bind address: {}", e))
             })?;
 
@@ -150,8 +152,8 @@ async fn main() -> Result<(), error::AppError> {
     // gRPC server on cfg.port + 1000 (e.g., 8080 -> 9080)
     let grpc_addr = format!("0.0.0.0:{}", cfg.port + 1000);
     let grpc_handle = tokio::spawn(async move {
-        let grpc_addr_parsed: SocketAddr = grpc_addr.parse()
-            .map_err(|e: std::net::AddrParseError| {
+        let grpc_addr_parsed: SocketAddr =
+            grpc_addr.parse().map_err(|e: std::net::AddrParseError| {
                 tracing::error!("Invalid gRPC address: {}", e);
             })?;
 

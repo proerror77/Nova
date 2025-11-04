@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use utoipa::ToSchema;
 use uuid::Uuid;
+use validator::Validate;
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
 pub struct User {
@@ -53,16 +54,24 @@ impl User {
     }
 }
 
-#[derive(Debug, Deserialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, Validate, ToSchema)]
 pub struct RegisterRequest {
+    #[validate(email)]
     pub email: String,
+    #[validate(
+        length(min = 3, max = 32),
+        custom(function = "crate::validators::validate_username_shape_validator")
+    )]
     pub username: String,
+    #[validate(length(min = 8, max = 128))]
     pub password: String,
 }
 
-#[derive(Debug, Deserialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, Validate, ToSchema)]
 pub struct LoginRequest {
+    #[validate(email)]
     pub email: String,
+    #[validate(length(min = 1, max = 256))]
     pub password: String,
 }
 
