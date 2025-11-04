@@ -2,8 +2,7 @@ import Foundation
 import MapKit
 
 /// User location data
-@Codable
-struct UserLocation: Identifiable, Sendable, Hashable {
+struct UserLocation: Identifiable, Codable, Sendable, Hashable {
     let id: UUID
     let userId: UUID
     let latitude: Double

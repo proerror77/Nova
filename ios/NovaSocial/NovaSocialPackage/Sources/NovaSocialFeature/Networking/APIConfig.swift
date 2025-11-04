@@ -38,9 +38,8 @@ enum APIEnvironment: Sendable {
         case .stagingAWS:
             // AWS backend via port-forward
             // You need to run: kubectl port-forward -n nova svc/content-service 8081:8081
-            // For complete functionality, you may also need:
-            //   - kubectl port-forward -n nova svc/user-service 8083:8083 (for feed/users endpoints)
             // Note: kubectl port-forward binds to localhost, so both simulator and device use localhost
+            // Using content-service for posts/feed data
             return "http://localhost:8081"
         case .production:
             return "https://api.nova.app"
@@ -110,9 +109,9 @@ enum APIConfig {
         if let token = ProcessInfo.processInfo.environment["API_TOKEN"] {
             return token
         }
-        // Real JWT token from auth-service (registered user: testios@nova.app)
-        // Expires: ~1 hour after generation (2025-11-03)
-        return "eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJzdWIiOiIxYzBkNWM4ZC02NmEwLTRjNTItYWEyZS05ODJlNWUxZDA4NWUiLCJpYXQiOjE3NjIxNTAwODgsImV4cCI6MTc2MjE1MzY4OCwidG9rZW5fdHlwZSI6ImFjY2VzcyIsImVtYWlsIjoidGVzdGlvc0Bub3ZhLmFwcCIsInVzZXJuYW1lIjoidGVzdGlvcyJ9.KhH5JCCYzXMZSZk7k5XNF4k6zYmyjcgxh_wvbS2u-qmN85QrUnv1cyoLsbuEohsHICRWvtKVNkYuv8jLS2HycE3AJ5XUjrJPT1lvEUI35GLIf6iZz7a2m-puGv0l9PSI_pjXcPCIGHV6O9xooowUXSq2lP79B1wuglR0uQ8O-y-116208ij_P21_22WF7yPeogDY7U-T-nMTPcjOt7W3WGmum4WRS-VdhXtKWET-WgCdVF324f79i_k8vGC8xyl7tplhUsRjJtTxm9Owh_EreRRi-0lDJmWKn0kXjm2GFDZNmoh2KC9Cf6Di3Lj34QeOTQXyJjRUAre-NMH7hYO_QA"
+        // Real JWT token from auth-service (registered user: iostest@nova.app)
+        // Expires: ~1 hour after generation (2025-11-03 21:33:03 UTC)
+        return "eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJzdWIiOiI0ZjI4YTQ3OC05ODUzLTRkZDgtYTE2Yy0xNDU4NjUwNGYwZTYiLCJpYXQiOjE3NjIyMTc5ODMsImV4cCI6MTc2MjIyMTU4MywidG9rZW5fdHlwZSI6ImFjY2VzcyIsImVtYWlsIjoiaW9zdGVzdEBub3ZhLmFwcCIsInVzZXJuYW1lIjoiaW9zdGVzdCJ9.evJyrE3mPg8RdhaK_RbVI6ftVWT6bYoL6-yjn8vWqbVkZtanBAsgszT4YtTjMlOZFsiCfeHeyrZvFlyCMSHjKFR3fblboxM_dRdFTBT1TwVAAVcprhAx7JLm00528JkWfwa_IbOjwoWNrJ0NFk8Y7Jly8qDB23sF-FMAE4MM4mVQQVSlbbxRnR43C5UTFz27ADxoi3Yrx6aB_oDUiR9qRZrCGlupA0-u-V8r6-BYuP9eeskj_gtxxFrXFpx2WtyiINOymenJCG6YVYGRFI9QpxWO_nThg6vAnIwS9g4WK6khnLRwETNzxaqL3Y-IxCoVIERnafxfsoATQ7_FE4qtcw"
     }()
 
     static let requestTimeout: TimeInterval = 10.0
