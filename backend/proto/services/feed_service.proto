@@ -1,0 +1,248 @@
+syntax = "proto3";
+package nova.feed_service;
+
+// ============================================================================
+// Feed Service gRPC API
+//
+// This service manages feed generation, aggregation, and personalization.
+//
+// Key responsibilities:
+//   - Generate personalized user feeds
+//   - Aggregate content from followed users
+//   - Feed caching and optimization
+//   - Trending content calculation
+// ============================================================================
+
+// Message: Represents a feed entry (post with metadata)
+message FeedEntry {
+  string id = 1;                      // UUID of feed entry
+  string post_id = 2;                 // UUID of original post
+  string author_id = 3;               // UUID of post author
+  string title = 4;                   // Post title (optional)
+  string content = 5;                 // Post preview/content
+  string encrypted_content = 6;       // Encrypted content (optional)
+  string image_key = 7;               // Featured image key (optional)
+  string content_type = 8;            // "text", "image", "mixed"
+  int32 like_count = 9;               // Number of likes
+  int32 comment_count = 10;           // Number of comments
+  int32 share_count = 11;             // Number of shares
+  bool is_liked_by_viewer = 12;       // Whether viewer liked this post
+  bool is_followed_by_viewer = 13;    // Whether viewer follows author
+  string created_at = 14;             // ISO 8601 timestamp
+  string published_at = 15;           // ISO 8601 timestamp (when published)
+  string engagement_score = 16;       // Engagement metric for ranking
+}
+
+// Message: Trending content information
+message TrendingContent {
+  string id = 1;                      // UUID of trending content entry
+  string post_id = 2;                 // UUID of post
+  string title = 3;                   // Post title
+  int32 engagement_score = 4;         // Current engagement score
+  int32 like_count = 5;               // Current like count
+  int32 share_count = 6;              // Current share count
+  int32 comment_count = 7;            // Current comment count
+  string trend_category = 8;          // Category (hashtag, topic, etc.)
+  int32 trend_rank = 9;               // Rank in trending list
+  string created_at = 10;             // ISO 8601 timestamp
+  string updated_at = 11;             // ISO 8601 timestamp
+}
+
+// Message: Feed generation metadata
+message FeedMetadata {
+  string user_id = 1;                 // UUID of feed viewer
+  int32 total_entries = 2;            // Total posts available in feed
+  int32 unread_count = 3;             // Number of new posts since last view
+  string last_fetched_at = 4;         // ISO 8601 timestamp
+  string generated_at = 5;            // When feed was generated
+  string cache_ttl = 6;               // Cache time-to-live in seconds
+}
+
+// ============================================================================
+// Get Personalized Feed
+// ============================================================================
+
+message GetPersonalizedFeedRequest {
+  string user_id = 1;
+  int32 limit = 2;                    // Number of posts (default 20, max 100)
+  int32 offset = 3;                   // Pagination offset
+  string sort_by = 4;                 // "recent", "trending", "engagement"
+}
+
+message GetPersonalizedFeedResponse {
+  repeated FeedEntry entries = 1;
+  FeedMetadata metadata = 2;
+  string next_cursor = 3;             // Pagination cursor for next page
+}
+
+// ============================================================================
+// Get Following Feed
+// ============================================================================
+
+message GetFollowingFeedRequest {
+  string user_id = 1;
+  int32 limit = 2;                    // Number of posts
+  int32 offset = 3;                   // Pagination offset
+}
+
+message GetFollowingFeedResponse {
+  repeated FeedEntry entries = 1;
+  FeedMetadata metadata = 2;
+}
+
+// ============================================================================
+// Get Trending Feed
+// ============================================================================
+
+message GetTrendingFeedRequest {
+  int32 limit = 1;                    // Number of trending posts
+  int32 offset = 2;                   // Pagination offset
+  string category = 3;                // Optional: filter by category
+}
+
+message GetTrendingFeedResponse {
+  repeated TrendingContent trending = 1;
+  int32 total_count = 2;
+}
+
+// ============================================================================
+// Get Trending by Category
+// ============================================================================
+
+message GetTrendingByCategoryRequest {
+  string category = 1;                // Category name or hashtag
+  int32 limit = 2;                    // Number of results
+  int32 offset = 3;                   // Pagination offset
+}
+
+message GetTrendingByCategoryResponse {
+  repeated TrendingContent trending = 1;
+  string category = 2;
+  int32 total_count = 3;
+}
+
+// ============================================================================
+// Get Suggested Users
+// ============================================================================
+
+message GetSuggestedUsersRequest {
+  string user_id = 1;
+  int32 limit = 2;                    // Number of suggestions
+}
+
+message GetSuggestedUsersResponse {
+  message SuggestedUser {
+    string user_id = 1;
+    string username = 2;
+    string display_name = 3;
+    string avatar_url = 4;
+    string reason = 5;                // Why suggested (e.g., "popular", "mutual_follow")
+  }
+  repeated SuggestedUser users = 1;
+}
+
+// ============================================================================
+// Get Popular Posts
+// ============================================================================
+
+message GetPopularPostsRequest {
+  int32 limit = 1;                    // Number of posts
+  int32 offset = 2;                   // Pagination offset
+  string time_window = 3;             // "1h", "24h", "7d", "30d"
+}
+
+message GetPopularPostsResponse {
+  repeated FeedEntry entries = 1;
+  int32 total_count = 2;
+}
+
+// ============================================================================
+// Get User Feed
+// ============================================================================
+
+message GetUserFeedRequest {
+  string user_id = 1;                 // User whose feed to retrieve
+  string viewer_id = 2;               // User viewing the feed (for engagement tracking)
+  int32 limit = 3;                    // Number of posts
+  int32 offset = 4;                   // Pagination offset
+}
+
+message GetUserFeedResponse {
+  repeated FeedEntry entries = 1;
+  int32 total_count = 2;
+}
+
+// ============================================================================
+// Invalidate Feed Cache
+// ============================================================================
+
+message InvalidateFeedCacheRequest {
+  string user_id = 1;
+}
+
+message InvalidateFeedCacheResponse {
+  bool success = 1;
+}
+
+// ============================================================================
+// Update Engagement Score
+// ============================================================================
+
+message UpdateEngagementScoreRequest {
+  string post_id = 1;
+  int32 like_count = 2;
+  int32 comment_count = 3;
+  int32 share_count = 4;
+}
+
+message UpdateEngagementScoreResponse {
+  string engagement_score = 1;
+}
+
+// ============================================================================
+// Get Feed Metadata
+// ============================================================================
+
+message GetFeedMetadataRequest {
+  string user_id = 1;
+}
+
+message GetFeedMetadataResponse {
+  FeedMetadata metadata = 1;
+}
+
+// ============================================================================
+// Feed Service Definition
+// ============================================================================
+
+service FeedService {
+  // Get personalized feed for user
+  rpc GetPersonalizedFeed(GetPersonalizedFeedRequest) returns (GetPersonalizedFeedResponse);
+
+  // Get feed of posts from users being followed
+  rpc GetFollowingFeed(GetFollowingFeedRequest) returns (GetFollowingFeedResponse);
+
+  // Get trending posts
+  rpc GetTrendingFeed(GetTrendingFeedRequest) returns (GetTrendingFeedResponse);
+
+  // Get trending posts in specific category
+  rpc GetTrendingByCategory(GetTrendingByCategoryRequest) returns (GetTrendingByCategoryResponse);
+
+  // Get suggested users to follow
+  rpc GetSuggestedUsers(GetSuggestedUsersRequest) returns (GetSuggestedUsersResponse);
+
+  // Get popular posts in time window
+  rpc GetPopularPosts(GetPopularPostsRequest) returns (GetPopularPostsResponse);
+
+  // Get public feed for a specific user
+  rpc GetUserFeed(GetUserFeedRequest) returns (GetUserFeedResponse);
+
+  // Invalidate cached feed for user
+  rpc InvalidateFeedCache(InvalidateFeedCacheRequest) returns (InvalidateFeedCacheResponse);
+
+  // Update engagement score for post
+  rpc UpdateEngagementScore(UpdateEngagementScoreRequest) returns (UpdateEngagementScoreResponse);
+
+  // Get feed metadata (cache info, update status)
+  rpc GetFeedMetadata(GetFeedMetadataRequest) returns (GetFeedMetadataResponse);
+}

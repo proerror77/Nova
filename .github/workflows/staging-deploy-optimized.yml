@@ -218,27 +218,56 @@ jobs:
     runs-on: ubuntu-22.04
 
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Ensure kubeconfig secret is present
+        shell: bash
+        env:
+          KUBECONFIG_B64: ${{ secrets.STAGING_KUBE_CONFIG }}
+        run: |
+          if [[ -z "$KUBECONFIG_B64" ]]; then
+            echo "::warning::No STAGING_KUBE_CONFIG provided; skipping kubectl-based checks."
+          fi
+
+      - name: Install kubectl
+        if: ${{ env.KUBECONFIG_B64 != '' }}
+        uses: azure/setup-kubectl@v4
+        with:
+          version: "latest"
       - name: Wait for ArgoCD sync
         run: |
           echo "⏱️  Waiting 2 minutes for ArgoCD to sync..."
           sleep 120
 
       # 如果有 kubeconfig,可以检查 Pod 状态
+      - name: Configure kubeconfig
+        if: ${{ env.KUBECONFIG_B64 != '' }}
+        shell: bash
+        env:
+          KUBECONFIG_B64: ${{ secrets.STAGING_KUBE_CONFIG }}
+        run: |
+          mkdir -p ~/.kube
+          echo "$KUBECONFIG_B64" | base64 --decode > ~/.kube/config
+          chmod 600 ~/.kube/config
+          kubectl get ns | head -n 5 || true
+
       - name: Verify deployments
+        shell: bash
         run: |
           echo "🧪 Smoke Test Checklist:"
-          echo ""
-          echo "1. Verify all pods are running:"
-          echo "   kubectl get pods -n nova -l app=nova"
-          echo ""
-          echo "2. Check deployment rollout:"
-          echo "   kubectl rollout status deployment/auth-service -n nova"
-          echo ""
-          echo "3. Test health endpoints:"
-          echo "   kubectl port-forward svc/auth-service 8080:8080 -n nova"
-          echo "   curl http://localhost:8080/health"
-          echo ""
-          echo "✅ Manual verification required (no kubeconfig configured)"
+          if [[ -f ~/.kube/config ]]; then
+            set -e
+            echo "1. Verify pods"
+            kubectl get pods -n nova -o wide || true
+            echo "2. Rollout status"
+            kubectl rollout status deployment/auth-service -n nova --timeout=120s || true
+            echo "3. Health check"
+            kubectl run tmp-curl --rm -i --tty --image=curlimages/curl:8.10.1 -n nova --restart=Never -- sh -lc 'curl -sS http://auth-service.nova.svc.cluster.local:8080/health' || true
+            echo "✅ kubectl-based checks completed"
+          else
+            echo "⚠️  No kubeconfig; manual verification only"
+          fi
 
   # 优化: 失败通知
   notify-on-failure:

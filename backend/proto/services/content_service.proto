@@ -1,0 +1,215 @@
+syntax = "proto3";
+package nova.content_service;
+
+// ============================================================================
+// Content Service gRPC API
+//
+// This service manages user-generated content including posts, articles,
+// and related metadata.
+//
+// Key responsibilities:
+//   - Post creation and retrieval
+//   - Content management
+//   - Post metadata (likes, comments count)
+//   - Post visibility and privacy settings
+// ============================================================================
+
+// Message: Represents a post
+message Post {
+  string id = 1;                      // UUID of the post
+  string author_id = 2;               // UUID of post author
+  string title = 3;                   // Post title (optional)
+  string content = 4;                 // Post content (plaintext)
+  string encrypted_content = 5;       // Encrypted content (optional)
+  string nonce = 6;                   // Encryption nonce (optional)
+  int32 encryption_version = 7;       // Version of encryption used
+  string image_key = 8;               // S3 key for featured image (optional)
+  string content_type = 9;            // "text", "image", "mixed" (optional)
+  string status = 10;                 // "draft", "published", "archived"
+  string privacy = 11;                // "public", "private", "friends"
+  int32 like_count = 12;              // Number of likes
+  int32 comment_count = 13;           // Number of comments
+  int32 share_count = 14;             // Number of shares
+  string created_at = 15;             // ISO 8601 timestamp
+  string updated_at = 16;             // ISO 8601 timestamp
+  string published_at = 17;           // ISO 8601 timestamp (when published)
+  string deleted_at = 18;             // ISO 8601 timestamp (soft delete)
+}
+
+// ============================================================================
+// Get Post by ID
+// ============================================================================
+
+message GetPostRequest {
+  string post_id = 1;
+}
+
+message GetPostResponse {
+  Post post = 1;
+}
+
+// ============================================================================
+// Get Multiple Posts by IDs (batch operation)
+// ============================================================================
+
+message GetPostsByIdsRequest {
+  repeated string post_ids = 1;
+}
+
+message GetPostsByIdsResponse {
+  repeated Post posts = 1;
+}
+
+// ============================================================================
+// Get Posts by Author
+// ============================================================================
+
+message GetPostsByAuthorRequest {
+  string author_id = 1;
+  string status = 2;              // Filter by status ("published", etc.)
+  int32 limit = 3;                // Number of results
+  int32 offset = 4;               // Pagination offset
+}
+
+message GetPostsByAuthorResponse {
+  repeated Post posts = 1;
+  int32 total_count = 2;
+}
+
+// ============================================================================
+// Create Post
+// ============================================================================
+
+message CreatePostRequest {
+  string author_id = 1;
+  string title = 2;
+  string plaintext = 3;           // Unencrypted content
+  string encrypted_content = 4;   // Encrypted content (optional)
+  string nonce = 5;               // Encryption nonce (optional)
+  int32 encryption_version = 6;   // Version of encryption
+  string image_key = 7;           // S3 key for image (optional)
+  string content_type = 8;        // "text", "image", "mixed"
+  string status = 9;              // "draft" or "published"
+  string privacy = 10;            // "public", "private", "friends"
+}
+
+message CreatePostResponse {
+  Post post = 1;
+}
+
+// ============================================================================
+// Update Post
+// ============================================================================
+
+message UpdatePostRequest {
+  string post_id = 1;
+  string title = 2;
+  string content = 3;
+  string privacy = 4;
+  string status = 5;
+}
+
+message UpdatePostResponse {
+  Post post = 1;
+}
+
+// ============================================================================
+// Delete Post (soft delete)
+// ============================================================================
+
+message DeletePostRequest {
+  string post_id = 1;
+  string deleted_by_id = 2;  // User performing the delete
+}
+
+message DeletePostResponse {
+  string post_id = 1;
+  string deleted_at = 2;  // ISO 8601 timestamp
+}
+
+// ============================================================================
+// Increment Like Count
+// ============================================================================
+
+message IncrementLikeCountRequest {
+  string post_id = 1;
+}
+
+message IncrementLikeCountResponse {
+  int32 like_count = 1;
+}
+
+// ============================================================================
+// Decrement Like Count
+// ============================================================================
+
+message DecrementLikeCountRequest {
+  string post_id = 1;
+}
+
+message DecrementLikeCountResponse {
+  int32 like_count = 1;
+}
+
+// ============================================================================
+// Get Posts in Feed (recent, public posts)
+// ============================================================================
+
+message GetFeedPostsRequest {
+  int32 limit = 1;    // Number of posts
+  int32 offset = 2;   // Pagination offset
+  string sort_by = 3; // "recent", "popular"
+}
+
+message GetFeedPostsResponse {
+  repeated Post posts = 1;
+  int32 total_count = 2;
+}
+
+// ============================================================================
+// Check Post Exists
+// ============================================================================
+
+message CheckPostExistsRequest {
+  string post_id = 1;
+}
+
+message CheckPostExistsResponse {
+  bool exists = 1;
+}
+
+// ============================================================================
+// Content Service Definition
+// ============================================================================
+
+service ContentService {
+  // Get a single post by ID
+  rpc GetPost(GetPostRequest) returns (GetPostResponse);
+
+  // Get multiple posts in batch
+  rpc GetPostsByIds(GetPostsByIdsRequest) returns (GetPostsByIdsResponse);
+
+  // Get all posts by an author
+  rpc GetPostsByAuthor(GetPostsByAuthorRequest) returns (GetPostsByAuthorResponse);
+
+  // Create a new post
+  rpc CreatePost(CreatePostRequest) returns (CreatePostResponse);
+
+  // Update an existing post
+  rpc UpdatePost(UpdatePostRequest) returns (UpdatePostResponse);
+
+  // Soft-delete a post
+  rpc DeletePost(DeletePostRequest) returns (DeletePostResponse);
+
+  // Increment like count
+  rpc IncrementLikeCount(IncrementLikeCountRequest) returns (IncrementLikeCountResponse);
+
+  // Decrement like count
+  rpc DecrementLikeCount(DecrementLikeCountRequest) returns (DecrementLikeCountResponse);
+
+  // Get feed of recent posts
+  rpc GetFeedPosts(GetFeedPostsRequest) returns (GetFeedPostsResponse);
+
+  // Check if post exists
+  rpc CheckPostExists(CheckPostExistsRequest) returns (CheckPostExistsResponse);
+}
