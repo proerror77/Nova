@@ -85,3 +85,26 @@ where
         })
     }
 }
+use once_cell::sync::Lazy;
+use prometheus::{register_int_counter, IntCounter};
+
+pub static JWT_CACHE_HIT: Lazy<IntCounter> = Lazy::new(|| {
+    register_int_counter!(
+        "jwt_cache_hit_total",
+        "Total number of JWT cache hits"
+    ).unwrap()
+});
+
+pub static JWT_CACHE_MISS: Lazy<IntCounter> = Lazy::new(|| {
+    register_int_counter!(
+        "jwt_cache_miss_total",
+        "Total number of JWT cache misses"
+    ).unwrap()
+});
+
+pub static JWT_REVOKED: Lazy<IntCounter> = Lazy::new(|| {
+    register_int_counter!(
+        "jwt_revoked_total",
+        "Total number of requests with revoked JWT"
+    ).unwrap()
+});

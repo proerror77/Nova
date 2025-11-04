@@ -115,6 +115,38 @@ spec:
                   name: messaging-service-secret
                   key: KAFKA_BROKERS
 
+            # S3 (audio upload presigned URL)
+            - name: S3_BUCKET
+              valueFrom:
+                secretKeyRef:
+                  name: messaging-service-secret
+                  key: S3_BUCKET
+            - name: AWS_REGION
+              valueFrom:
+                secretKeyRef:
+                  name: messaging-service-secret
+                  key: AWS_REGION
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: messaging-service-secret
+                  key: AWS_ACCESS_KEY_ID
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: messaging-service-secret
+                  key: AWS_SECRET_ACCESS_KEY
+            - name: AWS_SESSION_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: messaging-service-secret
+                  key: AWS_SESSION_TOKEN
+            - name: S3_ENDPOINT
+              valueFrom:
+                secretKeyRef:
+                  name: messaging-service-secret
+                  key: S3_ENDPOINT
+
             # JWT
             - name: JWT_PUBLIC_KEY_PEM
               valueFrom:

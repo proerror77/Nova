@@ -1,6 +1,8 @@
 use actix_web::HttpResponse;
 use once_cell::sync::Lazy;
-use prometheus::{Encoder, HistogramOpts, HistogramVec, IntCounterVec, Opts, TextEncoder};
+use prometheus::{Encoder, HistogramOpts, HistogramVec, IntCounterVec, IntGauge, Opts, TextEncoder};
+use sqlx::{PgPool};
+use std::time::Duration;
 
 static HTTP_REQUESTS_TOTAL: Lazy<IntCounterVec> = Lazy::new(|| {
     let counter = IntCounterVec::new(
@@ -47,4 +49,70 @@ pub async fn metrics_handler() -> HttpResponse {
     HttpResponse::Ok()
         .content_type(encoder.format_type())
         .body(buffer)
+}
+
+// =========================
+// Queue depth gauges
+// =========================
+
+static NOTIFICATION_JOBS_PENDING: Lazy<IntGauge> = Lazy::new(|| {
+    let g = IntGauge::new(
+        "notification_jobs_pending",
+        "Number of pending notification jobs (unclaimed or stale claims)",
+    )
+    .expect("create notification_jobs_pending gauge");
+    prometheus::default_registry()
+        .register(Box::new(g.clone()))
+        .expect("register notification_jobs_pending");
+    g
+});
+
+static NOTIFICATION_JOBS_FAILED: Lazy<IntGauge> = Lazy::new(|| {
+    let g = IntGauge::new(
+        "notification_jobs_failed",
+        "Number of failed notification jobs",
+    )
+    .expect("create notification_jobs_failed gauge");
+    prometheus::default_registry()
+        .register(Box::new(g.clone()))
+        .expect("register notification_jobs_failed");
+    g
+});
+
+/// Spawn a background task that periodically updates queue depth gauges
+pub fn spawn_metrics_updater(db: PgPool) {
+    tokio::spawn(async move {
+        let interval = Duration::from_secs(10);
+        loop {
+            if let Err(e) = update_gauges(&db).await {
+                tracing::debug!("metrics updater failed: {}", e);
+            }
+            tokio::time::sleep(interval).await;
+        }
+    });
+}
+
+async fn update_gauges(db: &PgPool) -> Result<(), sqlx::Error> {
+    // pending = status='pending' and (unclaimed or stale claim)
+    let pending: i64 = sqlx::query_scalar(
+        r#"
+        SELECT COUNT(*)
+        FROM notification_jobs
+        WHERE status = 'pending'
+          AND (claimed_at IS NULL OR claimed_at < NOW() - INTERVAL '5 minutes')
+        "#,
+    )
+    .fetch_one(db)
+    .await?;
+
+    let failed: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM notification_jobs WHERE status = 'failed'",
+    )
+    .fetch_one(db)
+    .await?;
+
+    NOTIFICATION_JOBS_PENDING.set(pending as i64);
+    NOTIFICATION_JOBS_FAILED.set(failed as i64);
+
+    Ok(())
 }

@@ -212,8 +212,8 @@ P1 fixes enable distributed debugging, zero-downtime deployments, and proto safe
 **Implementation**:
 - ✅ `CorrelationIdMiddleware` for HTTP (extracts/generates ID)
 - ✅ `CorrelationContext` struct in crypto-core library
-- ✅ Ready for gRPC interceptor (TBD in rollout)
-- ✅ Ready for Kafka producer wrapper (TBD in rollout)
+- ✅ gRPC interceptor implemented (`backend/libs/crypto-core/src/grpc_correlation.rs`)
+- ✅ Kafka correlation helpers implemented (`backend/libs/crypto-core/src/kafka_correlation.rs`)
 
 **Code Complete**:
 ```rust
@@ -232,14 +232,14 @@ pub const KAFKA_CORRELATION_ID_HEADER: &str = "correlation-id"
 **Documentation**: `/backend/docs/P1_REQUEST_CORRELATION_ID.md`
 - Architecture diagram (3-boundary model)
 - HTTP ↔ Service (CorrelationIdMiddleware)
-- Service ↔ gRPC (GrpcCorrelationInterceptor - TBD)
-- Service ↔ Kafka (KafkaCorrelationInterceptor - TBD)
+- Service ↔ gRPC (GrpcCorrelationInterceptor - implemented)
+- Service ↔ Kafka (KafkaCorrelation helpers - implemented)
 - Structured logging with tracing
 - Grafana Loki query patterns
 - 4-phase implementation (2 weeks):
   * Week 1: HTTP layer (CorrelationIdMiddleware)
-  * Week 2: gRPC layer (GrpcCorrelationInterceptor)
-  * Week 3: Kafka layer (KafkaCorrelationInterceptor)
+  * Week 2: gRPC layer (GrpcCorrelationInterceptor) — Completed
+  * Week 3: Kafka layer (KafkaCorrelation helpers) — Completed
   * Week 4: Monitoring setup
 - Testing scenarios
 - Troubleshooting
@@ -258,6 +258,20 @@ pub const KAFKA_CORRELATION_ID_HEADER: &str = "correlation-id"
 - Distributed tracing: enabled
 - Debugging: 10x faster (can trace requests end-to-end)
 - Monitoring: per-request latency breakdown
+
+---
+
+### Acceptance Checklist (P1.1 Correlation ID)
+- HTTP response contains `x-correlation-id`
+- gRPC requests include `correlation-id` metadata
+- Kafka messages include `correlation-id` header
+- Logs show consistent `correlation_id` end-to-end
+
+### Acceptance Checklist (P0.1 JWT Caching)
+- Cache hit/miss counters exported: `jwt_cache_hit_total`, `jwt_cache_miss_total`
+- Revoked token counter exported: `jwt_revoked_total`
+- Revoked token requests are rejected despite cache
+- Redis keyspace includes `jwt:validation:*` and `jwt:revoked:*`
 - Deployment time: 2 weeks (all phases)
 
 ---

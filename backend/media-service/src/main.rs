@@ -146,6 +146,7 @@ async fn main() -> io::Result<()> {
             .app_data(web::Data::new(reel_pipeline.clone()))
             .app_data(web::Data::new(media_cache_http.clone()))
             .wrap(actix_middleware::Logger::default())
+            .wrap(actix_middleware::CorrelationIdMiddleware)
             .route(
                 "/metrics",
                 web::get().to(media_service::metrics::serve_metrics),

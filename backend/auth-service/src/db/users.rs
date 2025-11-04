@@ -35,24 +35,20 @@ pub struct UpdateUserProfileFields {
 
 /// Find user by email (excluding soft-deleted users)
 pub async fn find_by_email(pool: &PgPool, email: &str) -> AuthResult<Option<User>> {
-    let user =
-        sqlx::query_as::<_, User>("SELECT * FROM users WHERE email = $1 AND deleted_at IS NULL")
-            .bind(email)
-            .fetch_optional(pool)
-            .await
-            .map_err(|e| crate::error::AuthError::Database(e.to_string()))?;
+    let user = sqlx::query_as::<_, User>("SELECT * FROM users WHERE email = $1 AND deleted_at IS NULL")
+        .bind(email)
+        .fetch_optional(pool)
+        .await?;
 
     Ok(user)
 }
 
 /// Find user by ID (excluding soft-deleted users)
 pub async fn find_by_id(pool: &PgPool, user_id: Uuid) -> AuthResult<Option<User>> {
-    let user =
-        sqlx::query_as::<_, User>("SELECT * FROM users WHERE id = $1 AND deleted_at IS NULL")
-            .bind(user_id)
-            .fetch_optional(pool)
-            .await
-            .map_err(|e| crate::error::AuthError::Database(e.to_string()))?;
+    let user = sqlx::query_as::<_, User>("SELECT * FROM users WHERE id = $1 AND deleted_at IS NULL")
+        .bind(user_id)
+        .fetch_optional(pool)
+        .await?;
 
     Ok(user)
 }
@@ -75,8 +71,7 @@ pub async fn create_user(
     .bind(username)
     .bind(password_hash)
     .fetch_one(pool)
-    .await
-    .map_err(|e| crate::error::AuthError::Database(e.to_string()))?;
+    .await?;
 
     Ok(user)
 }
@@ -106,8 +101,7 @@ pub async fn get_user_profile(
     )
     .bind(user_id)
     .fetch_optional(pool)
-    .await
-    .map_err(|e| AuthError::Database(e.to_string()))?;
+    .await?;
 
     Ok(profile)
 }
@@ -158,7 +152,7 @@ pub async fn update_user_profile(
     .await
     .map_err(|e| {
         tracing::error!(user_id=%user_id, error=%e, "Failed to update user profile");
-        AuthError::Database(e.to_string())
+        e.into()
     })?;
 
     Ok(profile)
@@ -180,8 +174,7 @@ pub async fn upsert_user_public_key(
     .bind(user_id)
     .bind(public_key_b64)
     .execute(pool)
-    .await
-    .map_err(|e| AuthError::Database(e.to_string()))?;
+    .await?;
 
     Ok(())
 }
@@ -193,8 +186,7 @@ pub async fn get_user_public_key(pool: &PgPool, user_id: Uuid) -> AuthResult<Opt
     )
     .bind(user_id)
     .fetch_one(pool)
-    .await
-    .map_err(|e| AuthError::Database(e.to_string()))?;
+    .await?;
 
     Ok(public_key)
 }
@@ -222,8 +214,7 @@ async fn insert_outbox_event(
     .bind("UserDeleted")
     .bind(payload)
     .execute(tx.as_mut())
-    .await
-    .map_err(|e| AuthError::Database(e.to_string()))?;
+    .await?;
 
     Ok(())
 }
@@ -235,52 +226,35 @@ pub async fn soft_delete_user(
     deleted_by: Option<Uuid>,
 ) -> AuthResult<DateTime<Utc>> {
     let deleted_at = Utc::now();
-    let mut tx = pool
-        .begin()
-        .await
-        .map_err(|e| AuthError::Database(e.to_string()))?;
+    let mut tx = pool.begin().await?;
 
     let result = sqlx::query(
         r#"
         UPDATE users
-        SET deleted_at = $2, is_active = FALSE, updated_at = $2
+        SET deleted_at = $2,
+            deleted_by = $3,
+            is_active = FALSE,
+            updated_at = $2
         WHERE id = $1 AND (deleted_at IS NULL OR deleted_at > $2)
-        "#,
-    )
-    .bind(user_id)
-    .bind(deleted_at)
-    .execute(tx.as_mut())
-    .await
-    .map_err(|e| AuthError::Database(e.to_string()))?;
-
-    if result.rows_affected() == 0 {
-        tx.rollback()
-            .await
-            .map_err(|e| AuthError::Database(e.to_string()))?;
-        return Err(AuthError::UserNotFound);
-    }
-
-    // Emit outbox event for messaging-service / downstream consumers
-    insert_outbox_event(&mut tx, user_id, deleted_at, deleted_by).await?;
-
-    // Immediate soft-delete of user messages to satisfy GDPR even if consumer lags
-    sqlx::query(
-        r#"
-        UPDATE messages
-        SET deleted_at = $2, deleted_by = $3
-        WHERE sender_id = $1 AND deleted_at IS NULL
         "#,
     )
     .bind(user_id)
     .bind(deleted_at)
     .bind(deleted_by)
     .execute(tx.as_mut())
-    .await
-    .map_err(|e| AuthError::Database(e.to_string()))?;
+    .await?;
+
+    if result.rows_affected() == 0 {
+        tx.rollback().await?;
+        return Err(AuthError::UserNotFound);
+    }
+
+    // Emit outbox event for messaging-service to handle message deletion asynchronously
+    // This maintains service boundary: auth-service only manages users, messaging-service manages messages
+    insert_outbox_event(&mut tx, user_id, deleted_at, deleted_by).await?;
 
     tx.commit()
-        .await
-        .map_err(|e| AuthError::Database(e.to_string()))?;
+        .await?;
 
     Ok(deleted_at)
 }
@@ -292,8 +266,7 @@ pub async fn email_exists(pool: &PgPool, email: &str) -> AuthResult<bool> {
     )
     .bind(email)
     .fetch_one(pool)
-    .await
-    .map_err(|e| crate::error::AuthError::Database(e.to_string()))?;
+    .await?;
 
     Ok(exists)
 }
@@ -305,8 +278,7 @@ pub async fn username_exists(pool: &PgPool, username: &str) -> AuthResult<bool> 
     )
     .bind(username)
     .fetch_one(pool)
-    .await
-    .map_err(|e| crate::error::AuthError::Database(e.to_string()))?;
+    .await?;
 
     Ok(exists)
 }
@@ -318,8 +290,7 @@ pub async fn verify_email(pool: &PgPool, user_id: Uuid) -> AuthResult<()> {
     )
     .bind(user_id)
     .execute(pool)
-    .await
-    .map_err(|e| crate::error::AuthError::Database(e.to_string()))?;
+    .await?;
 
     Ok(())
 }
@@ -331,8 +302,7 @@ pub async fn record_successful_login(pool: &PgPool, user_id: Uuid) -> AuthResult
     )
     .bind(user_id)
     .execute(pool)
-    .await
-    .map_err(|e| crate::error::AuthError::Database(e.to_string()))?;
+    .await?;
 
     Ok(())
 }
@@ -344,34 +314,25 @@ pub async fn record_failed_login(
     max_attempts: i32,
     lock_duration_secs: i64,
 ) -> AuthResult<()> {
-    let lock_until = if max_attempts > 0 {
-        format!(
-            "CURRENT_TIMESTAMP + INTERVAL '{} seconds'",
-            lock_duration_secs
-        )
-    } else {
-        "NULL".to_string()
-    };
-
-    let query = format!(
+    // Use parameterized query to prevent SQL injection
+    // The lock_until is calculated using PostgreSQL interval arithmetic
+    sqlx::query(
         r#"
         UPDATE users
         SET failed_login_attempts = failed_login_attempts + 1,
             locked_until = CASE
-                WHEN failed_login_attempts + 1 >= $2 THEN {}
+                WHEN $2 > 0 AND failed_login_attempts + 1 >= $2
+                THEN CURRENT_TIMESTAMP + ($3 || ' seconds')::interval
                 ELSE locked_until
             END
         WHERE id = $1
         "#,
-        lock_until
-    );
-
-    sqlx::query(&query)
-        .bind(user_id)
-        .bind(max_attempts)
-        .execute(pool)
-        .await
-        .map_err(|e| crate::error::AuthError::Database(e.to_string()))?;
+    )
+    .bind(user_id)
+    .bind(max_attempts)
+    .bind(lock_duration_secs.to_string())
+    .execute(pool)
+    .await?;
 
     Ok(())
 }
@@ -382,8 +343,7 @@ pub async fn enable_totp(pool: &PgPool, user_id: Uuid, secret: &str) -> AuthResu
         .bind(secret)
         .bind(user_id)
         .execute(pool)
-        .await
-        .map_err(|e| crate::error::AuthError::Database(e.to_string()))?;
+        .await?;
 
     Ok(())
 }
@@ -393,8 +353,7 @@ pub async fn verify_totp(pool: &PgPool, user_id: Uuid) -> AuthResult<()> {
     sqlx::query("UPDATE users SET totp_verified = true WHERE id = $1")
         .bind(user_id)
         .execute(pool)
-        .await
-        .map_err(|e| crate::error::AuthError::Database(e.to_string()))?;
+        .await?;
 
     Ok(())
 }
@@ -414,8 +373,7 @@ pub async fn update_password(pool: &PgPool, user_id: Uuid, password_hash: &str) 
     .bind(password_hash)
     .bind(user_id)
     .execute(pool)
-    .await
-    .map_err(|e| crate::error::AuthError::Database(e.to_string()))?;
+    .await?;
 
     Ok(())
 }

@@ -452,8 +452,8 @@ services:
       PORT: 3000
       RUST_LOG: messaging_service=debug,axum=debug,tower_http=debug
 
-      # Database (shared with user-service to match schema for conversations/messages)
-      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-nova_auth}
+      # Database (dedicated for messaging-service)
+      DATABASE_URL: postgresql://${MSG_POSTGRES_USER:-postgres}:${MSG_POSTGRES_PASSWORD:-postgres}@postgres-messaging:5432/${MSG_POSTGRES_DB:-nova_messaging}
 
       # Redis (separate DB index for messaging)
       REDIS_URL: redis://:${REDIS_PASSWORD:-redis123}@redis:6379/1
@@ -491,6 +491,8 @@ services:
     # ports:
     #   - "8085:3000"
     depends_on:
+      postgres-messaging:
+        condition: service_healthy
       postgres:
         condition: service_healthy
       redis:
