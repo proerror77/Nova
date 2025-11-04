@@ -4,7 +4,9 @@ use chrono::Utc;
 use event_schema::{
     EventEnvelope, PasswordChangedEvent, TwoFAEnabledEvent, UserCreatedEvent, UserDeletedEvent,
 };
+use rdkafka::message::OwnedHeaders;
 use rdkafka::producer::{FutureProducer, FutureRecord};
+use crypto_core::kafka_correlation::inject_headers;
 use std::time::Duration;
 use tracing::warn;
 use uuid::Uuid;
@@ -103,9 +105,12 @@ impl KafkaEventProducer {
             .map_err(|e| AuthError::Internal(format!("Failed to serialize envelope: {}", e)))?;
 
         let partition_key = partition_key_id.to_string();
+        let correlation_id = envelope.correlation_id.to_string();
+        let headers = inject_headers(OwnedHeaders::new(), &correlation_id);
         let record = FutureRecord::to(&self.topic)
             .key(&partition_key)
-            .payload(&payload);
+            .payload(&payload)
+            .headers(headers);
 
         self.producer
             .send(record, Duration::from_secs(30))

@@ -354,3 +354,92 @@ COMMENT ON TABLE outbox_events IS
 -- ✅ Eventual Consistency: Outbox pattern ensures Kafka delivery
 -- ✅ No Cascading Failures: RESTRICT FK constraints force proper flow
 -- ✅ Audit Trail: All deletions are timestamped and attributed
+
+-- ===========================================
+-- Add deletion triggers for remaining tables
+-- ===========================================
+
+-- Messages deletion trigger
+CREATE OR REPLACE FUNCTION emit_message_deletion_event()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.deleted_at IS NOT NULL AND OLD.deleted_at IS NULL THEN
+        INSERT INTO outbox_events (aggregate_type, aggregate_id, event_type, payload)
+        VALUES (
+            'Message',
+            NEW.id,
+            'MessageDeleted',
+            jsonb_build_object(
+                'message_id', NEW.id,
+                'conversation_id', NEW.conversation_id,
+                'sender_id', NEW.sender_id,
+                'deleted_at', NEW.deleted_at,
+                'deleted_by', NEW.deleted_by
+            )
+        );
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_message_deletion ON messages;
+CREATE TRIGGER trg_message_deletion
+AFTER UPDATE OF deleted_at ON messages
+FOR EACH ROW
+EXECUTE FUNCTION emit_message_deletion_event();
+
+-- Blocks deletion trigger
+CREATE OR REPLACE FUNCTION emit_block_deletion_event()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.deleted_at IS NOT NULL AND OLD.deleted_at IS NULL THEN
+        INSERT INTO outbox_events (aggregate_type, aggregate_id, event_type, payload)
+        VALUES (
+            'Block',
+            NEW.id,
+            'BlockDeleted',
+            jsonb_build_object(
+                'blocker_id', NEW.blocker_id,
+                'blocked_id', NEW.blocked_id,
+                'deleted_at', NEW.deleted_at,
+                'deleted_by', NEW.deleted_by
+            )
+        );
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_block_deletion ON blocks;
+CREATE TRIGGER trg_block_deletion
+AFTER UPDATE OF deleted_at ON blocks
+FOR EACH ROW
+EXECUTE FUNCTION emit_block_deletion_event();
+
+-- Media deletion trigger
+CREATE OR REPLACE FUNCTION emit_media_deletion_event()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.deleted_at IS NOT NULL AND OLD.deleted_at IS NULL THEN
+        INSERT INTO outbox_events (aggregate_type, aggregate_id, event_type, payload)
+        VALUES (
+            'Media',
+            NEW.id,
+            'MediaDeleted',
+            jsonb_build_object(
+                'media_id', NEW.id,
+                'owner_id', NEW.owner_id,
+                'deleted_at', NEW.deleted_at,
+                'deleted_by', NEW.deleted_by
+            )
+        );
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_media_deletion ON media;
+CREATE TRIGGER trg_media_deletion
+AFTER UPDATE OF deleted_at ON media
+FOR EACH ROW
+EXECUTE FUNCTION emit_media_deletion_event();

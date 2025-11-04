@@ -12,6 +12,7 @@ use messaging_service::{
 use redis_utils::{RedisPool, SentinelConfig};
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::task::JoinHandle;
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
 
@@ -49,9 +50,9 @@ async fn main() -> Result<(), error::AppError> {
     let registry = messaging_service::websocket::ConnectionRegistry::new();
 
     // Run embedded migrations (idempotent)
-    if let Err(e) = messaging_service::migrations::run_all(&db).await {
-        tracing::warn!(error=%e, "failed to run migrations at startup");
-    }
+    // Treat migration failures as fatal - the database schema must be in sync
+    messaging_service::migrations::run_all(&db).await
+        .map_err(|e| error::AppError::StartServer(format!("database migrations failed: {}", e)))?;
 
     // Initialize JWT validation (support reading from file)
     if let Ok(path) = std::env::var("JWT_PUBLIC_KEY_FILE") {
@@ -96,19 +97,23 @@ async fn main() -> Result<(), error::AppError> {
         key_exchange_service: Some(key_exchange_service),
     };
 
+    // Metrics updater (queue depth gauges)
+    messaging_service::metrics::spawn_metrics_updater(db.clone());
+
     // Start Redis Streams listener for cross-instance fanout
+    // Keep track of the listener task for graceful shutdown
     let redis_stream = redis.clone();
-    tokio::spawn(async move {
+    let _streams_listener: JoinHandle<()> = tokio::spawn(async move {
         let config = StreamsConfig::default();
         if let Err(e) = start_streams_listener(redis_stream, registry, config).await {
-            tracing::warn!(error=%e, "redis streams listener exited");
+            tracing::error!(error=%e, "redis streams listener failed");
         }
     });
 
     let bind_addr = format!("0.0.0.0:{}", cfg.port);
     tracing::info!(%bind_addr, "starting messaging-service");
 
-    HttpServer::new(move || {
+    let server = HttpServer::new(move || {
         let openapi_doc = ApiDoc::openapi();
 
         App::new()
@@ -121,6 +126,7 @@ async fn main() -> Result<(), error::AppError> {
             .app_data(web::Data::new(state.clone()))
             .app_data(web::Data::new(db.clone()))
             .configure(routes::configure_routes)
+            .wrap(actix_middleware::CorrelationIdMiddleware)
             .wrap(actix_middleware::MetricsMiddleware)
     })
     .bind(&bind_addr)
@@ -128,6 +134,11 @@ async fn main() -> Result<(), error::AppError> {
     .run()
     .await
     .map_err(|e| error::AppError::StartServer(e.to_string()))?;
+
+    // Note: When server exits, the _streams_listener task is still running.
+    // In a production deployment with graceful shutdown handlers, you would
+    // implement a shutdown signal (e.g., Ctrl+C) to abort this task properly.
+    // For now, it will be implicitly dropped when main() exits.
 
     Ok(())
 }

@@ -10,6 +10,7 @@ use std::pin::Pin;
 use std::rc::Rc;
 use std::sync::Arc;
 use uuid::Uuid;
+use crate::metrics::{JWT_CACHE_HIT, JWT_CACHE_MISS, JWT_REVOKED};
 
 /// User ID extracted from JWT
 #[derive(Debug, Clone, Copy)]
@@ -122,14 +123,35 @@ where
             let token_hash = crypto_core::hash::sha256(token.as_bytes());
             let cache_key = format!("jwt:validation:{}", hex::encode(&token_hash));
 
-            // Try to get cached claims from Redis
+            // Try to get cached claims from Redis (with double-check verification)
             let claims = if let Some(redis_conn) = &redis {
                 match redis_conn.get::<_, String>(&cache_key).await {
                     Ok(cached_json) => {
                         match serde_json::from_str::<CachedClaims>(&cached_json) {
                             Ok(cached_claims) => {
-                                tracing::debug!("JWT validation cache hit");
-                                cached_claims
+                                // Double-check: verify token is not revoked before using cache (TOCTOU mitigation)
+                                // This prevents a race condition where token is revoked between check and use
+                                if is_token_revoked(redis_conn, token).await? {
+                                    tracing::warn!("Token is revoked; bypassing cache");
+                                    JWT_REVOKED.inc();
+                                    // Validate fresh token (will fail due to revocation)
+                                    validate_and_cache_token(token, redis_conn, &cache_key, cache_ttl_secs).await?
+                                } else {
+                                    // Double-verify: re-validate JWT signature to ensure cache hasn't been tampered with
+                                    // This is a defense-in-depth measure for high-security scenarios
+                                    match validate_token_directly(token).await {
+                                        Ok(_) => {
+                                            tracing::debug!("JWT validation cache hit");
+                                            JWT_CACHE_HIT.inc();
+                                            cached_claims
+                                        }
+                                        Err(e) => {
+                                            tracing::warn!("Cached JWT failed re-validation: {}", e);
+                                            // Cache is invalid, fall through to fresh validation
+                                            validate_and_cache_token(token, redis_conn, &cache_key, cache_ttl_secs).await?
+                                        }
+                                    }
+                                }
                             }
                             Err(e) => {
                                 tracing::warn!("Failed to deserialize cached claims: {}", e);
@@ -141,6 +163,7 @@ where
                     Err(_) => {
                         // Cache miss - validate and store
                         tracing::debug!("JWT validation cache miss");
+                        JWT_CACHE_MISS.inc();
                         validate_and_cache_token(token, redis_conn, &cache_key, cache_ttl_secs).await?
                     }
                 }
@@ -236,4 +259,18 @@ async fn validate_and_cache_token(
     });
 
     Ok(claims)
+}
+
+/// Check whether token is revoked via revocation store (Redis or DB-backed cache)
+async fn is_token_revoked(redis: &ConnectionManager, token: &str) -> Result<bool, actix_web::Error> {
+    // Compute jti hash key when available; fallback to token hash
+    let token_hash = crypto_core::hash::sha256(token.as_bytes());
+    let key = format!("jwt:revoked:{}", hex::encode(token_hash));
+    match redis.exists::<_, bool>(&key).await {
+        Ok(exists) => Ok(exists),
+        Err(e) => {
+            tracing::warn!("revocation check failed: {}", e);
+            Ok(false)
+        }
+    }
 }

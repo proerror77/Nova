@@ -120,6 +120,27 @@ groups:
           description: "{{ $value | humanize }} messages in failed queue"
           action: "Investigate failed message root cause immediately"
 
+      # Notification jobs backlog (from messaging-service metrics)
+      - alert: NotificationJobsBacklogHigh
+        expr: notification_jobs_pending > 1000
+        for: 5m
+        labels:
+          severity: warning
+          component: messaging
+        annotations:
+          summary: "High notification jobs backlog (>1000)"
+          description: "{{ $value | humanize }} pending notification jobs"
+
+      - alert: NotificationJobsFailedHigh
+        expr: notification_jobs_failed > 500
+        for: 2m
+        labels:
+          severity: critical
+          component: messaging
+        annotations:
+          summary: "High failed notification jobs (>500)"
+          description: "{{ $value | humanize }} failed notification jobs"
+
       - alert: HighMessageSearchLatency
         expr: |
           histogram_quantile(0.95, rate(message_search_latency_seconds_bucket[5m])) > 2
@@ -217,6 +238,29 @@ groups:
         annotations:
           summary: "High percentage of idle conversations"
           description: "{{ $value | humanizePercentage }} of conversations are idle"
+
+  - name: outbox.rules
+    interval: 30s
+    rules:
+      - alert: OutboxBacklogWarning
+        expr: outbox_unpublished_events > 100
+        for: 5m
+        labels:
+          severity: warning
+          component: outbox
+        annotations:
+          summary: "Outbox backlog over 100"
+          description: "Unpublished outbox events: {{ $value | humanize }}"
+
+      - alert: OutboxBacklogCritical
+        expr: outbox_unpublished_events > 1000
+        for: 2m
+        labels:
+          severity: critical
+          component: outbox
+        annotations:
+          summary: "Outbox backlog over 1000"
+          description: "Unpublished outbox events: {{ $value | humanize }}"
 
   - name: system.rules
     interval: 30s
