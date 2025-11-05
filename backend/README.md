@@ -198,6 +198,53 @@ cargo doc --open
 cargo build --release
 ```
 
+## Centralized gRPC 客户端与 mTLS 配置
+
+本仓库提供统一的 gRPC 客户端库 `backend/libs/grpc-clients`，集中管理连接、TLS/重试/超时与连接池。服务可通过 `GrpcConfig::from_env()` 与 `GrpcClientPool::new(&config).await` 初始化并注入使用。
+
+环境变量（按服务 URL 与连接参数）：
+
+- `GRPC_AUTH_SERVICE_URL`（默认 `http://auth-service:9080`）
+- `GRPC_USER_SERVICE_URL`（默认 `http://user-service:9080`）
+- `GRPC_MESSAGING_SERVICE_URL`（默认 `http://messaging-service:9080`）
+- `GRPC_CONTENT_SERVICE_URL`（默认 `http://content-service:9080`）
+- `GRPC_FEED_SERVICE_URL`（默认 `http://feed-service:9080`）
+- `GRPC_SEARCH_SERVICE_URL`（默认 `http://search-service:9080`）
+- `GRPC_MEDIA_SERVICE_URL`（默认 `http://media-service:9080`）
+- `GRPC_NOTIFICATION_SERVICE_URL`（默认 `http://notification-service:9080`）
+- `GRPC_STREAMING_SERVICE_URL`（默认 `http://streaming-service:9080`）
+- `GRPC_CDN_SERVICE_URL`（默认 `http://cdn-service:9080`）
+- `GRPC_EVENTS_SERVICE_URL`（默认 `http://events-service:9080`）
+- `GRPC_VIDEO_SERVICE_URL`（默认 `http://video-service:9080`）
+
+连接与 Keep-Alive：
+
+- `GRPC_CONNECTION_TIMEOUT_SECS`（默认 10）
+- `GRPC_REQUEST_TIMEOUT_SECS`（默认 30）
+- `GRPC_MAX_CONCURRENT_STREAMS`（默认 1000）
+- `GRPC_KEEPALIVE_INTERVAL_SECS`（默认 30）
+- `GRPC_KEEPALIVE_TIMEOUT_SECS`（默认 10）
+- `GRPC_ENABLE_CONNECTION_POOLING`（默认 true）
+- `GRPC_CONNECTION_POOL_SIZE`（默认 10）
+
+TLS/mTLS（可选，启用后将为所有客户端应用 TLS/mTLS）：
+
+- `GRPC_TLS_ENABLED` = `true|1` 启用 TLS/mTLS（默认 false）
+- `GRPC_TLS_DOMAIN_NAME` 覆盖 SNI/验证域名（可选）
+- `GRPC_TLS_CA_CERT_PATH` CA 证书 PEM 路径（启用 TLS 建议设置）
+- `GRPC_TLS_CLIENT_CERT_PATH` 客户端证书 PEM 路径（启用 mTLS 时必填）
+- `GRPC_TLS_CLIENT_KEY_PATH` 客户端私钥 PEM 路径（启用 mTLS 时必填）
+
+示例（本地开发 + mTLS）：
+
+```bash
+export GRPC_TLS_ENABLED=true
+export GRPC_TLS_DOMAIN_NAME=internal.nova
+export GRPC_TLS_CA_CERT_PATH=/etc/certs/ca.pem
+export GRPC_TLS_CLIENT_CERT_PATH=/etc/certs/client.pem
+export GRPC_TLS_CLIENT_KEY_PATH=/etc/certs/client.key
+```
+
 ### 数据库管理
 
 ```bash
