@@ -60,6 +60,7 @@ error-handling = { path = "../libs/error-handling" }
 video-core = { path = "../libs/video-core" }
 db-pool = { path = "../libs/db-pool" }
 crypto-core = { path = "../libs/crypto-core" }
+grpc-clients = { path = "../libs/grpc-clients" }
 
 [build-dependencies]
 tonic-build = "0.11"

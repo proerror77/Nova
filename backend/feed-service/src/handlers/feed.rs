@@ -7,7 +7,7 @@ use uuid::Uuid;
 
 use crate::error::{AppError, Result};
 use crate::grpc::clients::ContentServiceClient;
-use crate::grpc::nova::content::{GetFeedRequest, InvalidateFeedEventRequest};
+use grpc_clients::nova::content_service::v1::{GetFeedRequest, InvalidateFeedEventRequest};
 use crate::middleware::jwt_auth::UserId;
 use crate::models::FeedResponse;
 

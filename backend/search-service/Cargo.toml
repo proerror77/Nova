@@ -46,6 +46,13 @@ error-types = { path = "../libs/error-types" }
 actix-middleware = { path = "../libs/actix-middleware" }
 db-pool = { path = "../libs/db-pool" }
 
+# gRPC
+tonic = { workspace = true }
+prost = { workspace = true }
+
+[build-dependencies]
+tonic-build = "0.11"
+
 [profile.release]
 codegen-units = 1
 lto = true
