@@ -1,26 +1,23 @@
-/// gRPC clients for calling other services
-use tonic::transport::{Channel, Endpoint};
-use tonic::{Request, Status};
-
-use super::nova::content::{
-    content_service_client::ContentServiceClient as GrpcContentClient, GetFeedRequest,
-    GetFeedResponse, InvalidateFeedEventRequest, InvalidateFeedEventResponse,
+/// gRPC clients for calling other services (centralized)
+use grpc_clients::{config::GrpcConfig, GrpcClientPool};
+use grpc_clients::nova::content_service::v1::{
+    GetFeedRequest, GetFeedResponse, InvalidateFeedEventRequest, InvalidateFeedResponse,
 };
+use std::sync::Arc;
 
 /// Content Service gRPC Client
 #[derive(Clone)]
 pub struct ContentServiceClient {
-    client: GrpcContentClient<Channel>,
+    pool: Arc<GrpcClientPool>,
 }
 
 impl ContentServiceClient {
     /// Create new ContentServiceClient
-    pub async fn new(addr: String) -> Result<Self, Box<dyn std::error::Error>> {
-        let endpoint = Endpoint::from_shared(addr)?;
-        let channel = endpoint.connect().await?;
-        let client = GrpcContentClient::new(channel);
-
-        Ok(Self { client })
+    pub async fn new(_addr: String) -> Result<Self, Box<dyn std::error::Error>> {
+        // Prefer centralized config from env; ignore addr once centralized pool is used
+        let cfg = GrpcConfig::from_env()?;
+        let pool = GrpcClientPool::new(&cfg).await?;
+        Ok(Self { pool: Arc::new(pool) })
     }
 
     /// Get feed for user
@@ -28,17 +25,25 @@ impl ContentServiceClient {
         &self,
         request: GetFeedRequest,
     ) -> Result<GetFeedResponse, std::io::Error> {
-        let mut client = self.client.clone();
-        client.get_feed(request).await
+        let mut client = self.pool.content();
+        client
+            .get_feed(request)
+            .await
+            .map(|resp| resp.into_inner())
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))
     }
 
     /// Invalidate feed event
     pub async fn invalidate_feed_event(
         &self,
         request: InvalidateFeedEventRequest,
-    ) -> Result<InvalidateFeedEventResponse, std::io::Error> {
-        let mut client = self.client.clone();
-        client.invalidate_feed_event(request).await
+    ) -> Result<InvalidateFeedResponse, std::io::Error> {
+        let mut client = self.pool.content();
+        client
+            .invalidate_feed_event(request)
+            .await
+            .map(|resp| resp.into_inner())
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))
     }
 }
 
