@@ -18,10 +18,21 @@
   - Service ownership matrix
   - Solution approaches for each category
 
-## Phase 1: Users Canonicalization
+## Phase 1: Users Canonicalization ⏳
 
-- [ ] T010 Identify and remove shadow `users` tables in `auth/user/messaging` services
+- [X] T010 Implement auth-service gRPC client in messaging-service ✅
+  - Created `backend/messaging-service/src/services/auth_client.rs` with gRPC bindings
+  - Modified build.rs to generate AuthServiceClient from proto
+  - Updated config.rs to accept AUTH_SERVICE_URL environment variable
+  - Integrated auth-client into AppState initialization
+  - Updated `routes/groups.rs` add_member() to use auth-service instead of shadow users table
+  - Replaced direct SQL queries with gRPC calls:
+    * `SELECT EXISTS(SELECT 1 FROM users WHERE id = $1)` → `auth_client.user_exists()`
+    * `SELECT username FROM users WHERE id = $1` → `auth_client.get_user()`
+  - Benefits: Eliminates shadow users table dependency, centralizes user source of truth
+
 - [ ] T011 Add foreign keys to canonical `auth.users` where needed (or service API if cross-db not allowed)
+  - TODO: Add FK constraints from messaging_service.conversation_members.user_id → auth.users.id
 
 ## Phase 2: Soft Delete
 
