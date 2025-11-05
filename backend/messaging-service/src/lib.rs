@@ -15,11 +15,15 @@ pub mod services;
 pub mod state;
 pub mod websocket;
 
-// gRPC service module - generated from protos (Phase 0 proto definitions)
+// gRPC service modules - generated from protos
 pub mod nova {
     pub mod messaging_service {
         tonic::include_proto!("nova.messaging_service");
     }
+    pub mod auth_service {
+        tonic::include_proto!("nova.auth_service");
+    }
 }
 
 pub use nova::messaging_service;
+pub use nova::auth_service;

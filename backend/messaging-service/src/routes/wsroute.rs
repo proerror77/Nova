@@ -337,6 +337,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsSession {
                             apns: None,
                             encryption: todo!(),
                             key_exchange_service: None,
+                            auth_client: todo!(), // Phase 1: Will be fixed in handler
                         };
 
                         actix::spawn(async move {
