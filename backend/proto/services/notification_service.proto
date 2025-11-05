@@ -1,5 +1,8 @@
 syntax = "proto3";
-package nova.notification_service;
+
+package nova.notification_service.v1;
+
+import "common.proto";
 
 // ============================================================================
 // Notification Service gRPC API
@@ -27,10 +30,10 @@ message Notification {
   bool is_read = 10;                  // Whether notification has been read
   string channel = 11;                // "push", "email", "in_app"
   string status = 12;                 // "pending", "sent", "failed", "delivered"
-  string created_at = 13;             // ISO 8601 timestamp
-  string sent_at = 14;                // ISO 8601 timestamp (when sent)
-  string read_at = 15;                // ISO 8601 timestamp (when read)
-  string deleted_at = 16;             // ISO 8601 timestamp (soft delete)
+  int64 created_at = 13;             // Unix timestamp (seconds)
+  int64 sent_at = 14;                // Unix timestamp (seconds) (when sent)
+  int64 read_at = 15;                // Unix timestamp (seconds) (when read)
+  int64 deleted_at = 16;             // Unix timestamp (seconds) (soft delete)
 }
 
 // Message: Notification preference for a user
@@ -48,8 +51,8 @@ message NotificationPreference {
   string quiet_hours_start = 11;      // Time to start quiet hours (HH:MM)
   string quiet_hours_end = 12;        // Time to end quiet hours (HH:MM)
   bool disable_all = 13;              // Disable all notifications
-  string created_at = 14;             // ISO 8601 timestamp
-  string updated_at = 15;             // ISO 8601 timestamp
+  int64 created_at = 14;             // Unix timestamp (seconds)
+  int64 updated_at = 15;             // Unix timestamp (seconds)
 }
 
 // Message: Push notification token (device registration)
@@ -61,8 +64,8 @@ message PushToken {
   string platform = 5;                // "ios", "android", "web"
   string app_version = 6;             // App version string
   bool is_active = 7;                 // Whether token is active
-  string created_at = 8;              // ISO 8601 timestamp
-  string last_used_at = 9;            // ISO 8601 timestamp
+  int64 created_at = 8;              // Unix timestamp (seconds)
+  int64 last_used_at = 9;            // Unix timestamp (seconds)
 }
 
 // ============================================================================

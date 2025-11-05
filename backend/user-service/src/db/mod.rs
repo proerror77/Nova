@@ -1,5 +1,5 @@
-use sqlx::postgres::PgPool;
 use db_pool::{create_pool as create_pg_pool, DbConfig as DbPoolConfig};
+use sqlx::postgres::PgPool;
 
 pub mod bookmark_repo;
 pub mod ch_client;

@@ -95,6 +95,10 @@ pub struct RateLimitConfig {
     /// If not set, uses global max_requests and window_secs
     #[serde(default)]
     pub endpoint_overrides: String,
+
+    /// Trusted proxy IPs (comma-separated via env)
+    #[serde(default)]
+    pub trusted_proxies: Vec<String>,
 }
 
 /// Per-endpoint rate limit configuration
@@ -112,7 +116,9 @@ impl RateLimitConfig {
     /// Parse endpoint overrides from string format
     /// Format: "pattern1:max_requests:window_secs,pattern2:max_requests:window_secs"
     /// Returns a map of pattern -> EndpointRateLimitOverride
-    pub fn parse_endpoint_overrides(&self) -> std::collections::HashMap<String, EndpointRateLimitOverride> {
+    pub fn parse_endpoint_overrides(
+        &self,
+    ) -> std::collections::HashMap<String, EndpointRateLimitOverride> {
         let mut overrides = std::collections::HashMap::new();
 
         if self.endpoint_overrides.is_empty() {
@@ -174,6 +180,8 @@ pub struct S3Config {
     pub aws_access_key_id: String,
     pub aws_secret_access_key: String,
     pub cloudfront_url: String,
+    #[serde(default)]
+    pub endpoint: Option<String>,
 
     #[serde(default = "default_s3_presigned_url_expiry_secs")]
     pub presigned_url_expiry_secs: u64,
@@ -412,7 +420,22 @@ impl Config {
                 .unwrap_or_else(|_| default_rate_limit_window_secs().to_string())
                 .parse()
                 .unwrap_or(default_rate_limit_window_secs()),
+            endpoint_overrides: env::var("RATE_LIMIT_ENDPOINT_OVERRIDES").unwrap_or_default(),
+            trusted_proxies: env::var("RATE_LIMIT_TRUSTED_PROXIES")
+                .unwrap_or_default()
+                .split(',')
+                .filter_map(|s| {
+                    let trimmed = s.trim();
+                    if trimmed.is_empty() {
+                        None
+                    } else {
+                        Some(trimmed.to_string())
+                    }
+                })
+                .collect(),
         };
+
+        let s3_endpoint = env::var("S3_ENDPOINT").ok();
 
         let s3 = S3Config {
             bucket_name: env::var("S3_BUCKET_NAME").expect("S3_BUCKET_NAME must be set"),
@@ -422,6 +445,7 @@ impl Config {
             aws_secret_access_key: env::var("AWS_SECRET_ACCESS_KEY")
                 .expect("AWS_SECRET_ACCESS_KEY must be set"),
             cloudfront_url: env::var("CLOUDFRONT_URL").expect("CLOUDFRONT_URL must be set"),
+            endpoint: s3_endpoint,
             presigned_url_expiry_secs: env::var("S3_PRESIGNED_URL_EXPIRY_SECS")
                 .unwrap_or_else(|_| default_s3_presigned_url_expiry_secs().to_string())
                 .parse()
@@ -539,6 +563,7 @@ mod tests {
             max_requests: 100,
             window_secs: 60,
             endpoint_overrides: String::new(),
+            trusted_proxies: Vec::new(),
         };
 
         let overrides = config.parse_endpoint_overrides();
@@ -551,14 +576,12 @@ mod tests {
             max_requests: 100,
             window_secs: 60,
             endpoint_overrides: "auth/register:30:60".to_string(),
+            trusted_proxies: Vec::new(),
         };
 
         let overrides = config.parse_endpoint_overrides();
         assert_eq!(overrides.len(), 1);
-        assert_eq!(
-            overrides.get("auth/register").unwrap().max_requests,
-            30
-        );
+        assert_eq!(overrides.get("auth/register").unwrap().max_requests, 30);
         assert_eq!(overrides.get("auth/register").unwrap().window_secs, 60);
     }
 
@@ -569,15 +592,13 @@ mod tests {
             window_secs: 60,
             endpoint_overrides: "auth/register:30:60,auth/login:20:30,user/posts:50:120"
                 .to_string(),
+            trusted_proxies: Vec::new(),
         };
 
         let overrides = config.parse_endpoint_overrides();
         assert_eq!(overrides.len(), 3);
 
-        assert_eq!(
-            overrides.get("auth/register").unwrap().max_requests,
-            30
-        );
+        assert_eq!(overrides.get("auth/register").unwrap().max_requests, 30);
         assert_eq!(overrides.get("auth/login").unwrap().max_requests, 20);
         assert_eq!(overrides.get("user/posts").unwrap().max_requests, 50);
     }
@@ -588,14 +609,12 @@ mod tests {
             max_requests: 100,
             window_secs: 60,
             endpoint_overrides: " auth/register : 30 : 60 , auth/login : 20 : 30 ".to_string(),
+            trusted_proxies: Vec::new(),
         };
 
         let overrides = config.parse_endpoint_overrides();
         assert_eq!(overrides.len(), 2);
-        assert_eq!(
-            overrides.get("auth/register").unwrap().max_requests,
-            30
-        );
+        assert_eq!(overrides.get("auth/register").unwrap().max_requests, 30);
         assert_eq!(overrides.get("auth/login").unwrap().max_requests, 20);
     }
 
@@ -605,6 +624,7 @@ mod tests {
             max_requests: 100,
             window_secs: 60,
             endpoint_overrides: "auth/register:30,invalid_entry".to_string(),
+            trusted_proxies: Vec::new(),
         };
 
         let overrides = config.parse_endpoint_overrides();
@@ -618,6 +638,7 @@ mod tests {
             max_requests: 100,
             window_secs: 60,
             endpoint_overrides: "auth/register:30:60".to_string(),
+            trusted_proxies: Vec::new(),
         };
 
         let (max_req, window) = config.get_endpoint_config("auth/register");
@@ -631,6 +652,7 @@ mod tests {
             max_requests: 100,
             window_secs: 60,
             endpoint_overrides: "auth/register:30:60".to_string(),
+            trusted_proxies: Vec::new(),
         };
 
         let (max_req, window) = config.get_endpoint_config("user/posts");
@@ -644,6 +666,7 @@ mod tests {
             max_requests: 100,
             window_secs: 60,
             endpoint_overrides: "auth/*:30:60".to_string(),
+            trusted_proxies: Vec::new(),
         };
 
         let (max_req, window) = config.get_endpoint_config("auth/register");

@@ -8,10 +8,10 @@
 
 #[cfg(test)]
 mod jwt_performance_tests {
-    use std::time::Instant;
-    use std::sync::Once;
-    use uuid::Uuid;
     use crypto_core::jwt;
+    use std::sync::Once;
+    use std::time::Instant;
+    use uuid::Uuid;
 
     // Test RSA key pair - FOR TESTING ONLY
     // NEVER use these keys in production
@@ -152,12 +152,36 @@ JwIDAQAB
         // Log statistics
         println!("\n=== JWT Token Generation Latency (μs) ===");
         println!("Iterations: {}", iterations);
-        println!("P50:  {} μs ({:.2} ms)", stats.p50(), stats.p50() as f64 / 1000.0);
-        println!("P95:  {} μs ({:.2} ms)", stats.p95(), stats.p95() as f64 / 1000.0);
-        println!("P99:  {} μs ({:.2} ms)", stats.p99(), stats.p99() as f64 / 1000.0);
-        println!("AVG:  {} μs ({:.2} ms)", stats.avg(), stats.avg() as f64 / 1000.0);
-        println!("MIN:  {} μs ({:.2} ms)", stats.min(), stats.min() as f64 / 1000.0);
-        println!("MAX:  {} μs ({:.2} ms)", stats.max(), stats.max() as f64 / 1000.0);
+        println!(
+            "P50:  {} μs ({:.2} ms)",
+            stats.p50(),
+            stats.p50() as f64 / 1000.0
+        );
+        println!(
+            "P95:  {} μs ({:.2} ms)",
+            stats.p95(),
+            stats.p95() as f64 / 1000.0
+        );
+        println!(
+            "P99:  {} μs ({:.2} ms)",
+            stats.p99(),
+            stats.p99() as f64 / 1000.0
+        );
+        println!(
+            "AVG:  {} μs ({:.2} ms)",
+            stats.avg(),
+            stats.avg() as f64 / 1000.0
+        );
+        println!(
+            "MIN:  {} μs ({:.2} ms)",
+            stats.min(),
+            stats.min() as f64 / 1000.0
+        );
+        println!(
+            "MAX:  {} μs ({:.2} ms)",
+            stats.max(),
+            stats.max() as f64 / 1000.0
+        );
 
         // T052: Assert P50 < 50ms (50000 μs)
         assert!(
@@ -205,12 +229,36 @@ JwIDAQAB
         // Log statistics
         println!("\n=== JWT Token Validation Latency (μs) ===");
         println!("Iterations: {}", iterations);
-        println!("P50:  {} μs ({:.2} ms)", stats.p50(), stats.p50() as f64 / 1000.0);
-        println!("P95:  {} μs ({:.2} ms)", stats.p95(), stats.p95() as f64 / 1000.0);
-        println!("P99:  {} μs ({:.2} ms)", stats.p99(), stats.p99() as f64 / 1000.0);
-        println!("AVG:  {} μs ({:.2} ms)", stats.avg(), stats.avg() as f64 / 1000.0);
-        println!("MIN:  {} μs ({:.2} ms)", stats.min(), stats.min() as f64 / 1000.0);
-        println!("MAX:  {} μs ({:.2} ms)", stats.max(), stats.max() as f64 / 1000.0);
+        println!(
+            "P50:  {} μs ({:.2} ms)",
+            stats.p50(),
+            stats.p50() as f64 / 1000.0
+        );
+        println!(
+            "P95:  {} μs ({:.2} ms)",
+            stats.p95(),
+            stats.p95() as f64 / 1000.0
+        );
+        println!(
+            "P99:  {} μs ({:.2} ms)",
+            stats.p99(),
+            stats.p99() as f64 / 1000.0
+        );
+        println!(
+            "AVG:  {} μs ({:.2} ms)",
+            stats.avg(),
+            stats.avg() as f64 / 1000.0
+        );
+        println!(
+            "MIN:  {} μs ({:.2} ms)",
+            stats.min(),
+            stats.min() as f64 / 1000.0
+        );
+        println!(
+            "MAX:  {} μs ({:.2} ms)",
+            stats.max(),
+            stats.max() as f64 / 1000.0
+        );
 
         // T052: Assert P50 < 50ms (50000 μs)
         assert!(
@@ -256,12 +304,36 @@ JwIDAQAB
         // Log statistics
         println!("\n=== Full Auth Cycle Latency (μs) ===");
         println!("Iterations: {}", iterations);
-        println!("P50:  {} μs ({:.2} ms)", stats.p50(), stats.p50() as f64 / 1000.0);
-        println!("P95:  {} μs ({:.2} ms)", stats.p95(), stats.p95() as f64 / 1000.0);
-        println!("P99:  {} μs ({:.2} ms)", stats.p99(), stats.p99() as f64 / 1000.0);
-        println!("AVG:  {} μs ({:.2} ms)", stats.avg(), stats.avg() as f64 / 1000.0);
-        println!("MIN:  {} μs ({:.2} ms)", stats.min(), stats.min() as f64 / 1000.0);
-        println!("MAX:  {} μs ({:.2} ms)", stats.max(), stats.max() as f64 / 1000.0);
+        println!(
+            "P50:  {} μs ({:.2} ms)",
+            stats.p50(),
+            stats.p50() as f64 / 1000.0
+        );
+        println!(
+            "P95:  {} μs ({:.2} ms)",
+            stats.p95(),
+            stats.p95() as f64 / 1000.0
+        );
+        println!(
+            "P99:  {} μs ({:.2} ms)",
+            stats.p99(),
+            stats.p99() as f64 / 1000.0
+        );
+        println!(
+            "AVG:  {} μs ({:.2} ms)",
+            stats.avg(),
+            stats.avg() as f64 / 1000.0
+        );
+        println!(
+            "MIN:  {} μs ({:.2} ms)",
+            stats.min(),
+            stats.min() as f64 / 1000.0
+        );
+        println!(
+            "MAX:  {} μs ({:.2} ms)",
+            stats.max(),
+            stats.max() as f64 / 1000.0
+        );
 
         // T054: Assert P95 < 200ms (200000 μs) for full auth cycle
         assert!(
@@ -271,6 +343,10 @@ JwIDAQAB
         );
 
         // Additional assertion for P99 < 300ms (conservative)
-        println!("\nP99 latency: {} μs ({:.2} ms)", stats.p99(), stats.p99() as f64 / 1000.0);
+        println!(
+            "\nP99 latency: {} μs ({:.2} ms)",
+            stats.p99(),
+            stats.p99() as f64 / 1000.0
+        );
     }
 }

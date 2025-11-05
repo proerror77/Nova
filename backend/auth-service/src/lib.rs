@@ -29,21 +29,30 @@ pub mod utils;
 pub mod validators;
 
 pub use error::{AuthError, AuthResult};
-use redis::aio::ConnectionManager;
-use services::KafkaEventProducer;
+use redis_utils::SharedConnectionManager;
+use services::{
+    email::EmailService, oauth::OAuthService, two_fa::TwoFaService, KafkaEventProducer,
+};
 use sqlx::PgPool;
+use std::sync::Arc;
 
 /// Application state shared across all handlers
 #[derive(Clone)]
 pub struct AppState {
     pub db: PgPool,
-    pub redis: ConnectionManager,
+    pub redis: SharedConnectionManager,
     pub kafka_producer: Option<KafkaEventProducer>,
+    pub email_service: EmailService,
+    pub oauth_service: Arc<OAuthService>,
+    pub two_fa_service: TwoFaService,
 }
 
 // gRPC generated code (from Phase 0 proto definitions)
 pub mod nova {
     pub mod auth_service {
-        tonic::include_proto!("nova.auth_service");
+        pub mod v1 {
+            tonic::include_proto!("nova.auth_service.v1");
+        }
+        pub use v1::*;
     }
 }

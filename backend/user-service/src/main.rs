@@ -1,17 +1,18 @@
 use actix_cors::Cors;
 use actix_web::{middleware::Logger, web, App, HttpResponse, HttpServer};
+use redis_utils::RedisPool;
 use std::io;
 use std::net::SocketAddr;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc,
 };
-use tokio::sync::Mutex;
 use tonic::transport::Server as GrpcServer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use user_service::grpc::{
-    AuthServiceClient, ContentServiceClient, GrpcClientConfig, HealthChecker, UserServiceImpl,
+    AuthServiceClient, ContentServiceClient, GrpcClientConfig, HealthChecker, MediaServiceClient,
+    UserServiceImpl,
 };
 use user_service::{
     config::Config,
@@ -140,14 +141,11 @@ async fn main() -> io::Result<()> {
         );
     }
 
-    // Create Redis connection manager
-    let redis_client =
-        redis::Client::open(config.redis.url.as_str()).expect("Failed to create Redis client");
-
-    let redis_manager = redis_client
-        .get_connection_manager()
+    // Create Redis connection pool
+    let redis_pool = RedisPool::connect(&config.redis.url, None)
         .await
-        .expect("Failed to create Redis connection manager");
+        .expect("Failed to initialize Redis pool");
+    let redis_manager = redis_pool.manager();
 
     tracing::info!("Redis connection established");
 
@@ -158,7 +156,8 @@ async fn main() -> io::Result<()> {
         window_seconds: 900, // 15 minutes
     };
     let rate_limiter = RateLimiter::new(redis_manager.clone(), rate_limit_config);
-    let global_rate_limit = GlobalRateLimitMiddleware::new(rate_limiter);
+    let global_rate_limit =
+        GlobalRateLimitMiddleware::new(rate_limiter, config.rate_limit.trusted_proxies.clone());
     tracing::info!("Global rate limiter initialized: 100 requests per 15 minutes");
 
     // ========================================
@@ -248,6 +247,12 @@ async fn main() -> io::Result<()> {
             .expect("Failed to initialize auth-service gRPC client"),
     );
 
+    let media_client = Arc::new(
+        MediaServiceClient::new(&grpc_config, health_checker.clone())
+            .await
+            .expect("Failed to initialize media-service gRPC client"),
+    );
+
     // Feed state moved to feed-service (port 8089)
     let content_client_data = web::Data::new(content_client.clone());
     let auth_client_data = web::Data::new(auth_client.clone());
@@ -296,7 +301,7 @@ async fn main() -> io::Result<()> {
 
     let health_state = web::Data::new(HealthCheckState::new(
         db_pool.clone(),
-        redis_client.clone(),
+        redis_manager.clone(),
         clickhouse_client.clone(),
         Some(event_producer.clone()),
         health_checker.clone(),
@@ -346,7 +351,7 @@ async fn main() -> io::Result<()> {
         tracing::info!("CDC consumer spawned");
 
         // Events consumer: Kafka → ClickHouse
-        let event_deduplicator = EventDeduplicator::new(redis_client.clone(), 3600);
+        let event_deduplicator = EventDeduplicator::new(redis_manager.clone(), 3600);
 
         let events_config = EventsConsumerConfig {
             brokers: config.kafka.brokers.clone(),
@@ -458,6 +463,7 @@ async fn main() -> io::Result<()> {
     // ========================================
     let app_state = Arc::new(user_service::AppState {
         db: db_pool.clone(),
+        redis: redis_manager.clone(),
     });
     let grpc_service = UserServiceImpl::new(app_state);
     let grpc_server_svc =
@@ -465,9 +471,30 @@ async fn main() -> io::Result<()> {
             grpc_service,
         );
 
+    let s3_client = Arc::new(
+        user_service::services::storage::build_s3_client(&config.s3)
+            .await
+            .map_err(|e| {
+                tracing::error!(error = %e, "Failed to initialise S3 client for gRPC video server");
+                io::Error::new(io::ErrorKind::Other, format!("S3 client init failed: {e}"))
+            })?,
+    );
+    let s3_config = Arc::new(config.s3.clone());
+
+    let video_grpc_svc =
+        user_service::grpc::nova::video::v1::video_service_server::VideoServiceServer::new(
+            user_service::grpc::servers::VideoServer::new(
+                media_client.clone(),
+                s3_client.clone(),
+                s3_config.clone(),
+            ),
+        );
+
     // Start gRPC server on port + 1000 (e.g., 8080 -> 9080)
     let grpc_port = config.app.port + 1000;
     let grpc_addr = format!("{}:{}", config.app.host, grpc_port);
+    let (grpc_shutdown_tx, grpc_shutdown_rx) = tokio::sync::oneshot::channel();
+
     let grpc_handle = tokio::spawn(async move {
         let grpc_addr_parsed: SocketAddr =
             grpc_addr.parse().map_err(|e: std::net::AddrParseError| {
@@ -478,7 +505,10 @@ async fn main() -> io::Result<()> {
 
         GrpcServer::builder()
             .add_service(grpc_server_svc)
-            .serve(grpc_addr_parsed)
+            .add_service(video_grpc_svc)
+            .serve_with_shutdown(grpc_addr_parsed, async {
+                let _ = grpc_shutdown_rx.await;
+            })
             .await
             .map_err(|e| {
                 tracing::error!("gRPC server error: {}", e);
@@ -697,22 +727,116 @@ async fn main() -> io::Result<()> {
     .workers(4)
     .run();
 
-    // Run both HTTP and gRPC servers concurrently
-    // The server will run until Ctrl+C or other shutdown signal
-    let result = tokio::select! {
-        http_result = server => {
-            tracing::info!("HTTP server exited");
-            http_result
-        }
-        grpc_result = grpc_handle => {
-            tracing::info!("gRPC server exited");
-            match grpc_result {
-                Ok(Ok(())) => Ok(()),
-                Ok(Err(())) => Err(io::Error::new(io::ErrorKind::Other, "gRPC server error")),
-                Err(e) => Err(io::Error::new(io::ErrorKind::Other, e.to_string())),
+    let server_handle = server.handle();
+    let mut http_handle = Some(tokio::spawn(server));
+    let mut grpc_handle = Some(grpc_handle);
+
+    // Run both HTTP and gRPC servers concurrently with graceful shutdown support
+    let mut grpc_shutdown_tx = Some(grpc_shutdown_tx);
+    let mut shutdown_signal = Box::pin(async {
+        tokio::signal::ctrl_c()
+            .await
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))
+    });
+
+    let mut shutdown_initiated = false;
+    let result: Result<(), io::Error>;
+
+    let result_loop = loop {
+        tokio::select! {
+            http_res = async {
+                if let Some(handle) = &mut http_handle {
+                    Some(handle.await)
+                } else {
+                    None
+                }
+            }, if http_handle.is_some() => {
+                let join_res = http_res.expect("HTTP join handle result");
+                http_handle = None;
+                tracing::info!("HTTP server exited");
+                let http_result = match join_res {
+                    Ok(inner) => inner,
+                    Err(e) => Err(io::Error::new(io::ErrorKind::Other, e.to_string())),
+                };
+                break http_result;
+            }
+            grpc_res = async {
+                if let Some(handle) = &mut grpc_handle {
+                    Some(handle.await)
+                } else {
+                    None
+                }
+            }, if grpc_handle.is_some() => {
+                let join_res = grpc_res.expect("gRPC join handle result");
+                grpc_handle = None;
+                tracing::info!("gRPC server exited");
+                let grpc_result = match join_res {
+                    Ok(Ok(())) => Ok(()),
+                    Ok(Err(())) => Err(io::Error::new(io::ErrorKind::Other, "gRPC server error")),
+                    Err(e) => Err(io::Error::new(io::ErrorKind::Other, e.to_string())),
+                };
+                break grpc_result;
+            }
+            sig = &mut shutdown_signal => {
+                match sig {
+                    Ok(()) => {
+                        tracing::info!("Shutdown signal received; initiating graceful shutdown");
+                    }
+                    Err(e) => {
+                        tracing::error!("Failed to listen for shutdown signal: {}", e);
+                        break Err(io::Error::new(e.kind(), e.to_string()));
+                    }
+                }
+
+                if !shutdown_initiated {
+                    shutdown_initiated = true;
+                    server_handle.stop(true).await;
+                    if let Some(tx) = grpc_shutdown_tx.take() {
+                        let _ = tx.send(());
+                    }
+                }
             }
         }
     };
+
+    result = result_loop;
+
+    if !shutdown_initiated {
+        server_handle.stop(true).await;
+        if let Some(tx) = grpc_shutdown_tx.take() {
+            let _ = tx.send(());
+        }
+    }
+
+    if let Some(handle) = http_handle {
+        match tokio::time::timeout(std::time::Duration::from_secs(5), handle).await {
+            Ok(join_res) => {
+                if let Err(e) = join_res {
+                    tracing::warn!("HTTP server join error after shutdown: {}", e);
+                }
+            }
+            Err(_) => {
+                tracing::warn!("HTTP server did not shut down within timeout; aborting task");
+            }
+        }
+    }
+
+    if let Some(handle) = grpc_handle {
+        match tokio::time::timeout(std::time::Duration::from_secs(5), handle).await {
+            Ok(join_res) => match join_res {
+                Ok(Ok(())) => {}
+                Ok(Err(())) => {
+                    tracing::warn!("gRPC server reported error during shutdown");
+                }
+                Err(e) => {
+                    tracing::warn!("gRPC server join error after shutdown: {}", e);
+                }
+            },
+            Err(_) => {
+                tracing::warn!("gRPC server did not shut down within timeout; aborting task");
+            }
+        }
+    }
 
     // ========================================
     // Cleanup: Graceful worker shutdown

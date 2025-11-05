@@ -2,7 +2,8 @@
 ///
 /// Handles video uploads, processing, and streaming.
 /// Extracted from user-service as part of P1.2 service splitting.
-use actix_web::{middleware as actix_middleware, web, App, HttpResponse, HttpServer};
+use actix_middleware::CorrelationIdMiddleware;
+use actix_web::{middleware::Logger, web, App, HttpResponse, HttpServer};
 use crypto_core::jwt;
 use db_pool::{create_pool as create_pg_pool, DbConfig as DbPoolConfig};
 use media_service::cache::MediaCache;
@@ -148,8 +149,8 @@ async fn main() -> io::Result<()> {
             .app_data(web::Data::new(db_pool_http.clone()))
             .app_data(web::Data::new(reel_pipeline.clone()))
             .app_data(web::Data::new(media_cache_http.clone()))
-            .wrap(actix_middleware::Logger::default())
-            .wrap(actix_middleware::CorrelationIdMiddleware)
+            .wrap(Logger::default())
+            .wrap(CorrelationIdMiddleware)
             .route(
                 "/metrics",
                 web::get().to(media_service::metrics::serve_metrics),

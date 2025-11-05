@@ -56,7 +56,7 @@ pub async fn create_connection(
         INSERT INTO oauth_connections
         (id, user_id, provider, provider_user_id, email, name, picture_url,
          access_token_encrypted, refresh_token_encrypted, token_type, expires_at, scopes, created_at, updated_at)
-        VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        VALUES (uuid_generate_v4(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         RETURNING *
         "#
     )

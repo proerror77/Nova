@@ -26,4 +26,5 @@ fn main() {
     }
 
     println!("cargo:rerun-if-changed=../../../proto/services/");
+    println!("cargo:rerun-if-changed=../../../proto/services/common.proto");
 }

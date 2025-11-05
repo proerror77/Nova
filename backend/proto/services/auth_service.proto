@@ -1,5 +1,8 @@
 syntax = "proto3";
-package nova.auth_service;
+package nova.auth_service.v1;
+
+import "common.proto";
+import "google/protobuf/wrappers.proto";
 
 // ============================================================================
 // Auth Service gRPC API

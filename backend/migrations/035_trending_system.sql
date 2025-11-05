@@ -9,7 +9,7 @@
 -- Purpose: Record all user engagement events for trending calculation
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS engagement_events (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     content_id UUID NOT NULL,
     content_type VARCHAR(20) NOT NULL CHECK (content_type IN ('video', 'post', 'stream')),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -44,7 +44,7 @@ CREATE INDEX idx_engagement_events_user_id
 -- Purpose: Materialized view of trending content scores
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS trending_scores (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     content_id UUID NOT NULL,
     content_type VARCHAR(20) NOT NULL CHECK (content_type IN ('video', 'post', 'stream')),
     category VARCHAR(50),  -- 'entertainment', 'news', 'sports', etc.
@@ -83,7 +83,7 @@ CREATE INDEX idx_trending_scores_computed_at
 -- Purpose: Track trending computation metadata and cache
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS trending_metadata (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     content_type VARCHAR(20) NOT NULL CHECK (content_type IN ('video', 'post', 'stream')),
     category VARCHAR(50),
     time_window VARCHAR(10) NOT NULL CHECK (time_window IN ('1h', '24h', '7d', 'all')),

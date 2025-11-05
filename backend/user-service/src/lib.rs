@@ -17,4 +17,13 @@ pub mod validators;
 pub use config::Config;
 pub use error::{AppError, Result};
 
+use redis_utils::SharedConnectionManager;
+use sqlx::PgPool;
+
+#[derive(Clone)]
+pub struct AppState {
+    pub db: PgPool,
+    pub redis: SharedConnectionManager,
+}
+
 // image_processing re-export removed - moved to media-service (port 8082)

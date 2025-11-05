@@ -4,7 +4,7 @@
 
 -- Create notifications table
 CREATE TABLE IF NOT EXISTS notifications (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     recipient_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     actor_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     notification_type VARCHAR(50) NOT NULL, -- 'message', 'reaction', 'mention', 'follow', 'comment', 'like'
@@ -35,7 +35,7 @@ ON notifications(recipient_id, notification_type, created_at DESC);
 
 -- Create notification subscriptions table (for opt-in/opt-out)
 CREATE TABLE IF NOT EXISTS notification_subscriptions (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     notification_type VARCHAR(50) NOT NULL, -- 'message', 'reaction', 'mention', 'follow', 'comment', 'like'
     is_enabled BOOLEAN DEFAULT TRUE,
@@ -46,7 +46,7 @@ CREATE TABLE IF NOT EXISTS notification_subscriptions (
 
 -- Create notification preferences table
 CREATE TABLE IF NOT EXISTS notification_preferences (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
     enable_push_notifications BOOLEAN DEFAULT TRUE,
     enable_email_notifications BOOLEAN DEFAULT FALSE,
@@ -60,7 +60,7 @@ CREATE TABLE IF NOT EXISTS notification_preferences (
 
 -- Create notification_read_receipts for tracking read status
 CREATE TABLE IF NOT EXISTS notification_read_receipts (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     last_read_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     unread_count INT DEFAULT 0,
@@ -73,7 +73,7 @@ ON notification_read_receipts(user_id);
 
 -- Create notification delivery log (for Firebase Cloud Messaging/APNs)
 CREATE TABLE IF NOT EXISTS notification_delivery_logs (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     notification_id UUID NOT NULL REFERENCES notifications(id) ON DELETE CASCADE,
     delivery_method VARCHAR(50), -- 'fcm', 'apns', 'websocket'
     device_token TEXT,

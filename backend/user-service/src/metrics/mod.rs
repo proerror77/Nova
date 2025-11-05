@@ -4,6 +4,7 @@ use prometheus::{
     register_counter_vec, register_gauge, register_histogram_vec, CounterVec, Encoder, Gauge,
     HistogramVec, Registry, TextEncoder,
 };
+use std::sync::Once;
 
 // Export Phase 3 metrics modules
 pub mod cache_metrics;
@@ -189,88 +190,92 @@ lazy_static! {
     .unwrap();
 }
 
+static METRICS_INIT: Once = Once::new();
+
 /// Initialize all metrics (register to global registry)
 pub fn init_metrics() {
-    REGISTRY
-        .register(Box::new(LOGIN_ATTEMPTS_TOTAL.clone()))
-        .expect("Failed to register LOGIN_ATTEMPTS_TOTAL");
+    METRICS_INIT.call_once(|| {
+        REGISTRY
+            .register(Box::new(LOGIN_ATTEMPTS_TOTAL.clone()))
+            .expect("Failed to register LOGIN_ATTEMPTS_TOTAL");
 
-    REGISTRY
-        .register(Box::new(REGISTRATION_TOTAL.clone()))
-        .expect("Failed to register REGISTRATION_TOTAL");
+        REGISTRY
+            .register(Box::new(REGISTRATION_TOTAL.clone()))
+            .expect("Failed to register REGISTRATION_TOTAL");
 
-    REGISTRY
-        .register(Box::new(PASSWORD_RESET_TOTAL.clone()))
-        .expect("Failed to register PASSWORD_RESET_TOTAL");
+        REGISTRY
+            .register(Box::new(PASSWORD_RESET_TOTAL.clone()))
+            .expect("Failed to register PASSWORD_RESET_TOTAL");
 
-    REGISTRY
-        .register(Box::new(OAUTH_LOGINS_TOTAL.clone()))
-        .expect("Failed to register OAUTH_LOGINS_TOTAL");
+        REGISTRY
+            .register(Box::new(OAUTH_LOGINS_TOTAL.clone()))
+            .expect("Failed to register OAUTH_LOGINS_TOTAL");
 
-    REGISTRY
-        .register(Box::new(TWOFA_ATTEMPTS_TOTAL.clone()))
-        .expect("Failed to register TWOFA_ATTEMPTS_TOTAL");
+        REGISTRY
+            .register(Box::new(TWOFA_ATTEMPTS_TOTAL.clone()))
+            .expect("Failed to register TWOFA_ATTEMPTS_TOTAL");
 
-    REGISTRY
-        .register(Box::new(EMAIL_VERIFICATION_ERRORS.clone()))
-        .expect("Failed to register EMAIL_VERIFICATION_ERRORS");
+        REGISTRY
+            .register(Box::new(EMAIL_VERIFICATION_ERRORS.clone()))
+            .expect("Failed to register EMAIL_VERIFICATION_ERRORS");
 
-    REGISTRY
-        .register(Box::new(OAUTH_ERRORS.clone()))
-        .expect("Failed to register OAUTH_ERRORS");
+        REGISTRY
+            .register(Box::new(OAUTH_ERRORS.clone()))
+            .expect("Failed to register OAUTH_ERRORS");
 
-    REGISTRY
-        .register(Box::new(RATE_LIMIT_HITS.clone()))
-        .expect("Failed to register RATE_LIMIT_HITS");
+        REGISTRY
+            .register(Box::new(RATE_LIMIT_HITS.clone()))
+            .expect("Failed to register RATE_LIMIT_HITS");
 
-    REGISTRY
-        .register(Box::new(TOKEN_REFRESH_TOTAL.clone()))
-        .expect("Failed to register TOKEN_REFRESH_TOTAL");
+        REGISTRY
+            .register(Box::new(TOKEN_REFRESH_TOTAL.clone()))
+            .expect("Failed to register TOKEN_REFRESH_TOTAL");
 
-    REGISTRY
-        .register(Box::new(TWOFA_SETUP_TOTAL.clone()))
-        .expect("Failed to register TWOFA_SETUP_TOTAL");
+        REGISTRY
+            .register(Box::new(TWOFA_SETUP_TOTAL.clone()))
+            .expect("Failed to register TWOFA_SETUP_TOTAL");
 
-    REGISTRY
-        .register(Box::new(LOGIN_DURATION_SECONDS.clone()))
-        .expect("Failed to register LOGIN_DURATION_SECONDS");
+        REGISTRY
+            .register(Box::new(LOGIN_DURATION_SECONDS.clone()))
+            .expect("Failed to register LOGIN_DURATION_SECONDS");
 
-    REGISTRY
-        .register(Box::new(PASSWORD_HASH_DURATION_SECONDS.clone()))
-        .expect("Failed to register PASSWORD_HASH_DURATION_SECONDS");
+        REGISTRY
+            .register(Box::new(PASSWORD_HASH_DURATION_SECONDS.clone()))
+            .expect("Failed to register PASSWORD_HASH_DURATION_SECONDS");
 
-    REGISTRY
-        .register(Box::new(TOKEN_GENERATION_DURATION_SECONDS.clone()))
-        .expect("Failed to register TOKEN_GENERATION_DURATION_SECONDS");
+        REGISTRY
+            .register(Box::new(TOKEN_GENERATION_DURATION_SECONDS.clone()))
+            .expect("Failed to register TOKEN_GENERATION_DURATION_SECONDS");
 
-    REGISTRY
-        .register(Box::new(OAUTH_DURATION_SECONDS.clone()))
-        .expect("Failed to register OAUTH_DURATION_SECONDS");
+        REGISTRY
+            .register(Box::new(OAUTH_DURATION_SECONDS.clone()))
+            .expect("Failed to register OAUTH_DURATION_SECONDS");
 
-    REGISTRY
-        .register(Box::new(TWOFA_SETUP_DURATION_SECONDS.clone()))
-        .expect("Failed to register TWOFA_SETUP_DURATION_SECONDS");
+        REGISTRY
+            .register(Box::new(TWOFA_SETUP_DURATION_SECONDS.clone()))
+            .expect("Failed to register TWOFA_SETUP_DURATION_SECONDS");
 
-    REGISTRY
-        .register(Box::new(ACTIVE_SESSIONS_GAUGE.clone()))
-        .expect("Failed to register ACTIVE_SESSIONS_GAUGE");
+        REGISTRY
+            .register(Box::new(ACTIVE_SESSIONS_GAUGE.clone()))
+            .expect("Failed to register ACTIVE_SESSIONS_GAUGE");
 
-    REGISTRY
-        .register(Box::new(RATE_LIMITED_IPS_GAUGE.clone()))
-        .expect("Failed to register RATE_LIMITED_IPS_GAUGE");
+        REGISTRY
+            .register(Box::new(RATE_LIMITED_IPS_GAUGE.clone()))
+            .expect("Failed to register RATE_LIMITED_IPS_GAUGE");
 
-    REGISTRY
-        .register(Box::new(FAILED_LOGIN_ATTEMPTS_GAUGE.clone()))
-        .expect("Failed to register FAILED_LOGIN_ATTEMPTS_GAUGE");
+        REGISTRY
+            .register(Box::new(FAILED_LOGIN_ATTEMPTS_GAUGE.clone()))
+            .expect("Failed to register FAILED_LOGIN_ATTEMPTS_GAUGE");
 
-    REGISTRY
-        .register(Box::new(SOCIAL_FOLLOW_EVENTS_TOTAL.clone()))
-        .expect("Failed to register SOCIAL_FOLLOW_EVENTS_TOTAL");
+        REGISTRY
+            .register(Box::new(SOCIAL_FOLLOW_EVENTS_TOTAL.clone()))
+            .expect("Failed to register SOCIAL_FOLLOW_EVENTS_TOTAL");
 
-    // Initialize messaging metrics
-    messaging_metrics::init_messaging_metrics();
+        // Initialize messaging metrics
+        messaging_metrics::init_messaging_metrics();
 
-    tracing::info!("Prometheus metrics initialized");
+        tracing::info!("Prometheus metrics initialized");
+    });
 }
 
 /// Gather all metrics in Prometheus text format

@@ -1,10 +1,13 @@
 //! Kafka correlation ID helpers for rdkafka
+use crate::correlation::{CorrelationContext, KAFKA_CORRELATION_ID_HEADER};
 use rdkafka::message::{BorrowedMessage, Header, Headers, OwnedHeaders};
 use rdkafka::Message;
-use crate::correlation::{KAFKA_CORRELATION_ID_HEADER, CorrelationContext};
 
 pub fn inject_headers(mut headers: OwnedHeaders, correlation_id: &str) -> OwnedHeaders {
-    headers = headers.insert(Header { key: KAFKA_CORRELATION_ID_HEADER, value: Some(correlation_id.as_bytes()) });
+    headers = headers.insert(Header {
+        key: KAFKA_CORRELATION_ID_HEADER,
+        value: Some(correlation_id.as_bytes()),
+    });
     headers
 }
 

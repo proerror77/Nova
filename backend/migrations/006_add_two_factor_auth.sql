@@ -8,7 +8,7 @@ ALTER TABLE users ADD COLUMN two_fa_enabled_at TIMESTAMP WITH TIME ZONE NULL;
 
 -- 2. 创建备用码独立表 (Linus 正确方案)
 CREATE TABLE two_fa_backup_codes (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     code_hash VARCHAR(64) NOT NULL UNIQUE,  -- SHA256 哈希
     is_used BOOLEAN NOT NULL DEFAULT FALSE,

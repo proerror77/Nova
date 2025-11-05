@@ -53,7 +53,7 @@ $$;
 
 -- ------------------------------------------------------------------
 -- Ensure columns use Postgres-native defaults even if the table
--- existed previously with gen_random_uuid() defaults.
+-- existed previously with uuid_generate_v4() defaults.
 -- ------------------------------------------------------------------
 ALTER TABLE IF EXISTS videos
     ALTER COLUMN id SET DEFAULT uuid_generate_v4();

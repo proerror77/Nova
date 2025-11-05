@@ -1,5 +1,8 @@
 syntax = "proto3";
-package nova.events_service;
+
+package nova.events_service.v1;
+
+import "common.proto";
 
 // ============================================================================
 // Events Service gRPC API
@@ -24,7 +27,7 @@ message DomainEvent {
   string metadata = 7;                // JSON event metadata
   string correlation_id = 8;          // For tracing related events
   string causation_id = 9;            // ID of event that caused this one
-  string created_at = 10;             // ISO 8601 timestamp
+  int64 created_at = 10;             // Unix timestamp (seconds)
   string created_by = 11;             // User who triggered event (optional)
 }
 
@@ -37,9 +40,9 @@ message OutboxEvent {
   string data = 5;                    // JSON event data
   string status = 6;                  // "pending", "published", "failed"
   int32 retry_count = 7;              // Number of publication attempts
-  string error_message = 8;           // Error message if failed
-  string created_at = 9;              // ISO 8601 timestamp
-  string published_at = 10;           // ISO 8601 timestamp (when published)
+  .nova.common.v1.ErrorStatus error = 8;           // Error message if failed
+  int64 created_at = 9;              // Unix timestamp (seconds)
+  int64 published_at = 10;           // Unix timestamp (seconds) (when published)
 }
 
 // Message: Event subscription
@@ -49,7 +52,7 @@ message EventSubscription {
   repeated string event_types = 3;    // Event types to subscribe to
   string endpoint = 4;                // gRPC endpoint or Kafka topic
   bool is_active = 5;                 // Whether subscription is active
-  string created_at = 6;              // ISO 8601 timestamp
+  int64 created_at = 6;              // Unix timestamp (seconds)
 }
 
 // Message: Event schema definition
@@ -59,7 +62,7 @@ message EventSchema {
   int32 version = 3;                  // Schema version
   string schema_json = 4;             // JSON schema definition
   bool is_active = 5;                 // Whether this is the active version
-  string created_at = 6;              // ISO 8601 timestamp
+  int64 created_at = 6;              // Unix timestamp (seconds)
 }
 
 // ============================================================================

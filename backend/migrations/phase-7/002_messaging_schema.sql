@@ -2,7 +2,7 @@
 -- Conversations and messages schema with full history and search support
 
 CREATE TABLE IF NOT EXISTS conversations (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     conversation_type VARCHAR(20) NOT NULL, -- 'direct', 'group'
     name VARCHAR(255), -- Only for group conversations
     created_by UUID NOT NULL,
@@ -17,7 +17,7 @@ CREATE INDEX idx_conversations_archived_at ON conversations(archived_at) WHERE a
 
 -- Conversation members with metadata
 CREATE TABLE IF NOT EXISTS conversation_members (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     conversation_id UUID NOT NULL,
     user_id UUID NOT NULL,
     joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -36,7 +36,7 @@ CREATE INDEX idx_conversation_members_joined_at ON conversation_members(joined_a
 
 -- Messages with partitioning by month for scalability
 CREATE TABLE IF NOT EXISTS messages (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     conversation_id UUID NOT NULL,
     sender_id UUID NOT NULL,
     content TEXT NOT NULL,
@@ -62,7 +62,7 @@ CREATE INDEX idx_messages_sender_id ON messages(sender_id);
 
 -- Message read receipts
 CREATE TABLE IF NOT EXISTS message_read_receipts (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     message_id UUID NOT NULL,
     user_id UUID NOT NULL,
     read_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -76,7 +76,7 @@ CREATE INDEX idx_read_receipts_user_id ON message_read_receipts(user_id);
 
 -- Message search index (denormalized for Elasticsearch sync)
 CREATE TABLE IF NOT EXISTS message_search_index (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     message_id UUID NOT NULL,
     conversation_id UUID NOT NULL,
     sender_id UUID NOT NULL,
@@ -89,7 +89,7 @@ CREATE INDEX idx_search_conversation ON message_search_index(conversation_id);
 
 -- Blocked users
 CREATE TABLE IF NOT EXISTS blocked_users (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     blocker_id UUID NOT NULL,
     blocked_user_id UUID NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

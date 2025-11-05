@@ -88,7 +88,7 @@
 
 ```sql
 CREATE TABLE device_keys (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID NOT NULL,           -- 用户ID
     device_id TEXT NOT NULL,          -- 设备标识 (e.g., "iPhone-123")
     public_key TEXT NOT NULL,         -- Base64编码的X25519公钥 (32字节)
@@ -104,7 +104,7 @@ CREATE TABLE device_keys (
 
 ```sql
 CREATE TABLE key_exchanges (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     conversation_id UUID NOT NULL,
     initiator_id UUID NOT NULL,       -- 发起密钥交换的用户
     peer_id UUID NOT NULL,            -- 对等用户

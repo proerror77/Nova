@@ -295,12 +295,21 @@ async fn is_token_revoked(
 ) -> Result<bool, actix_web::Error> {
     // Compute jti hash key when available; fallback to token hash
     let token_hash = crypto_core::hash::sha256(token.as_bytes());
-    let key = format!("jwt:revoked:{}", hex::encode(token_hash));
+    let hash_hex = hex::encode(token_hash);
+    let key_new = format!("nova:revoked:token:{}", hash_hex);
+    let key_legacy = format!("jwt:revoked:{}", hash_hex);
 
-    match redis.lock().await.exists::<_, bool>(&key).await {
+    let mut conn = redis.lock().await;
+    match conn.exists::<_, bool>(&key_new).await {
+        Ok(true) => return Ok(true),
+        Ok(false) => {}
+        Err(e) => tracing::warn!("revocation check failed (nova namespace): {}", e),
+    }
+
+    match conn.exists::<_, bool>(&key_legacy).await {
         Ok(exists) => Ok(exists),
         Err(e) => {
-            tracing::warn!("revocation check failed: {}", e);
+            tracing::warn!("revocation check failed (legacy namespace): {}", e);
             Ok(false)
         }
     }

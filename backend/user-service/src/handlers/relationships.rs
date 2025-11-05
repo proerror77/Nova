@@ -12,6 +12,7 @@ use crate::metrics::helpers::record_social_follow_event;
 use crate::middleware::{jwt_auth::UserId, CircuitBreaker};
 use crate::services::graph::GraphService;
 use crate::services::kafka_producer::EventProducer;
+use redis_utils::SharedConnectionManager;
 use std::sync::Arc;
 
 // ============================================
@@ -33,7 +34,7 @@ pub async fn follow_user(
     pool: web::Data<PgPool>,
     graph: web::Data<GraphService>,
     event_producer: web::Data<Arc<EventProducer>>,
-    redis_manager: Option<web::Data<redis::aio::ConnectionManager>>,
+    redis_manager: Option<web::Data<SharedConnectionManager>>,
     content_client: web::Data<Arc<ContentServiceClient>>,
     user: UserId,
 ) -> HttpResponse {
@@ -171,7 +172,7 @@ pub async fn unfollow_user(
     pool: web::Data<PgPool>,
     graph: web::Data<GraphService>,
     event_producer: web::Data<Arc<EventProducer>>,
-    redis_manager: Option<web::Data<redis::aio::ConnectionManager>>,
+    redis_manager: Option<web::Data<SharedConnectionManager>>,
     content_client: web::Data<Arc<ContentServiceClient>>,
     user: UserId,
 ) -> HttpResponse {
@@ -459,7 +460,7 @@ pub async fn block_user(
     path: web::Path<String>,
     pool: web::Data<PgPool>,
     user: UserId,
-    redis_manager: Option<web::Data<redis::aio::ConnectionManager>>,
+    redis_manager: Option<web::Data<SharedConnectionManager>>,
 ) -> HttpResponse {
     let target_id = match Uuid::parse_str(&path.into_inner()) {
         Ok(id) => id,
@@ -514,7 +515,7 @@ pub async fn unblock_user(
     path: web::Path<String>,
     pool: web::Data<PgPool>,
     user: UserId,
-    redis_manager: Option<web::Data<redis::aio::ConnectionManager>>,
+    redis_manager: Option<web::Data<SharedConnectionManager>>,
 ) -> HttpResponse {
     let target_id = match Uuid::parse_str(&path.into_inner()) {
         Ok(id) => id,

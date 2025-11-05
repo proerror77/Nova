@@ -4,11 +4,15 @@
 use tonic::{Request, Response, Status};
 
 use crate::{
-    nova::auth_service::auth_service_server::AuthService, nova::auth_service::*, AppState,
-    security::{hash_password, verify_password, generate_token_pair},
-    metrics::{inc_register_requests, inc_login_requests, inc_login_failures, inc_account_lockouts},
+    metrics::{
+        inc_account_lockouts, inc_login_failures, inc_login_requests, inc_register_requests,
+    },
+    nova::auth_service::auth_service_server::AuthService,
+    nova::auth_service::*,
+    security::{generate_token_pair, hash_password, token_revocation, verify_password},
+    AppState,
 };
-use tracing::{info, warn};
+use tracing::{error, info, warn};
 
 /// gRPC AuthService implementation
 /// Manages user authentication, identity, and token validation
@@ -48,11 +52,10 @@ impl AuthService for AuthServiceImpl {
         }
 
         // Hash password (includes zxcvbn validation via 005)
-        let password_hash = hash_password(&req.password)
-            .map_err(|_| {
-                warn!(event = "weak_password", email = %req.email);
-                Status::invalid_argument("weak_password")
-            })?;
+        let password_hash = hash_password(&req.password).map_err(|_| {
+            warn!(event = "weak_password", email = %req.email);
+            Status::invalid_argument("weak_password")
+        })?;
 
         // Check if email already exists
         let email_exists = crate::db::users::email_exists(&self.state.db, &req.email)
@@ -191,9 +194,71 @@ impl AuthService for AuthServiceImpl {
 
         let claims = token_data.claims;
 
+        if claims.token_type != "refresh" {
+            return Err(Status::unauthenticated("refresh_token_invalid_or_expired"));
+        }
+
+        let redis_revoked =
+            token_revocation::is_token_revoked(&self.state.redis, &req.refresh_token)
+                .await
+                .map_err(|e| {
+                    error!(
+                        error = %e,
+                        "Failed to check refresh token revocation in redis"
+                    );
+                    Status::internal("token_revocation_check_failed")
+                })?;
+        if redis_revoked {
+            return Err(Status::unauthenticated("refresh_token_revoked"));
+        }
+
+        let token_hash = token_revocation::hash_token(&req.refresh_token);
+        let db_revoked = crate::db::token_revocation::is_token_revoked(&self.state.db, &token_hash)
+            .await
+            .map_err(|e| {
+                error!(
+                    error = %e,
+                    "Failed to check refresh token revocation in database"
+                );
+                Status::internal("token_revocation_check_failed")
+            })?;
+        if db_revoked {
+            return Err(Status::unauthenticated("refresh_token_revoked"));
+        }
+
+        if let Some(jti) = &claims.jti {
+            let jti_revoked = crate::db::token_revocation::is_jti_revoked(&self.state.db, jti)
+                .await
+                .map_err(|e| {
+                    error!(
+                        error = %e,
+                        "Failed to check refresh token jti revocation in database"
+                    );
+                    Status::internal("token_revocation_check_failed")
+                })?;
+            if jti_revoked {
+                return Err(Status::unauthenticated("refresh_token_revoked"));
+            }
+        }
+
         // Parse user_id UUID from claims.sub
         let user_id = uuid::Uuid::parse_str(&claims.sub)
             .map_err(|_| Status::internal("Invalid user_id in token"))?;
+
+        let user_revoked =
+            token_revocation::check_user_token_revocation(&self.state.redis, user_id, claims.iat)
+                .await
+                .map_err(|e| {
+                    error!(
+                        error = %e,
+                        "Failed to check user-wide token revocation in redis"
+                    );
+                    Status::internal("token_revocation_check_failed")
+                })?;
+
+        if user_revoked {
+            return Err(Status::unauthenticated("refresh_token_revoked"));
+        }
 
         // Generate new access token with updated expiration
         let token_response = generate_token_pair(user_id, &claims.email, &claims.username)
@@ -300,27 +365,86 @@ impl AuthService for AuthServiceImpl {
         request: Request<VerifyTokenRequest>,
     ) -> Result<Response<VerifyTokenResponse>, Status> {
         let req = request.into_inner();
-        match crate::security::jwt::validate_token(&req.token) {
-            Ok(token_data) => {
-                let claims = token_data.claims;
-                Ok(Response::new(VerifyTokenResponse {
-                    is_valid: true,
-                    user_id: claims.sub,
-                    email: claims.email,
-                    username: claims.username,
-                    expires_at: claims.exp,
+        let token_data = match crate::security::jwt::validate_token(&req.token) {
+            Ok(data) => data,
+            Err(_e) => {
+                return Ok(Response::new(VerifyTokenResponse {
+                    is_valid: false,
+                    user_id: String::new(),
+                    email: String::new(),
+                    username: String::new(),
+                    expires_at: 0,
                     is_revoked: false,
                 }))
             }
-            Err(_e) => Ok(Response::new(VerifyTokenResponse {
-                is_valid: false,
-                user_id: String::new(),
-                email: String::new(),
-                username: String::new(),
-                expires_at: 0,
-                is_revoked: false,
-            })),
+        };
+
+        let claims = token_data.claims.clone();
+
+        let redis_revoked = token_revocation::is_token_revoked(&self.state.redis, &req.token)
+            .await
+            .map_err(|e| {
+                error!(
+                    error = %e,
+                    "Failed to check token revocation in redis during verify_token"
+                );
+                Status::internal("token_revocation_check_failed")
+            })?;
+
+        let token_hash = token_revocation::hash_token(&req.token);
+        let db_revoked = crate::db::token_revocation::is_token_revoked(&self.state.db, &token_hash)
+            .await
+            .map_err(|e| {
+                error!(
+                    error = %e,
+                    "Failed to check token revocation in database during verify_token"
+                );
+                Status::internal("token_revocation_check_failed")
+            })?;
+
+        let mut is_revoked = redis_revoked || db_revoked;
+
+        if let Some(jti) = &claims.jti {
+            let jti_revoked = crate::db::token_revocation::is_jti_revoked(&self.state.db, jti)
+                .await
+                .map_err(|e| {
+                    error!(
+                        error = %e,
+                        "Failed to check token jti revocation in database during verify_token"
+                    );
+                    Status::internal("token_revocation_check_failed")
+                })?;
+            is_revoked |= jti_revoked;
         }
+
+        if let Ok(user_uuid) = uuid::Uuid::parse_str(&claims.sub) {
+            let user_revoked = token_revocation::check_user_token_revocation(
+                &self.state.redis,
+                user_uuid,
+                claims.iat,
+            )
+            .await
+            .map_err(|e| {
+                error!(
+                    error = %e,
+                    "Failed to check user token revocation window during verify_token"
+                );
+                Status::internal("token_revocation_check_failed")
+            })?;
+
+            if user_revoked {
+                is_revoked = true;
+            }
+        }
+
+        Ok(Response::new(VerifyTokenResponse {
+            is_valid: !is_revoked,
+            user_id: claims.sub,
+            email: claims.email,
+            username: claims.username,
+            expires_at: claims.exp,
+            is_revoked,
+        }))
     }
 
     /// Check if user exists
@@ -548,5 +672,108 @@ impl AuthService for AuthServiceImpl {
             is_locked,
             locked_until,
         }))
+    }
+
+    /// Update mutable profile fields (single writer semantics)
+    async fn update_user_profile(
+        &self,
+        request: Request<UpdateUserProfileRequest>,
+    ) -> Result<Response<UpdateUserProfileResponse>, Status> {
+        let req = request.into_inner();
+        let UpdateUserProfileRequest {
+            user_id,
+            display_name,
+            bio,
+            avatar_url,
+            cover_photo_url,
+            location,
+            private_account,
+        } = req;
+
+        let user_id = uuid::Uuid::parse_str(&user_id)
+            .map_err(|_| Status::invalid_argument("invalid_user_id"))?;
+
+        let fields = crate::db::users::UpdateUserProfileFields {
+            display_name,
+            bio,
+            avatar_url,
+            cover_photo_url,
+            location,
+            private_account,
+        };
+
+        let profile = crate::db::users::update_user_profile(&self.state.db, user_id, fields)
+            .await
+            .map_err(|e| {
+                tracing::error!(error = %e, user_id = %user_id, "Failed to update user profile");
+                Status::internal("failed_to_update_profile")
+            })?;
+
+        let response = UpdateUserProfileResponse {
+            profile: Some(UserProfile {
+                user_id: profile.id.to_string(),
+                username: profile.username.clone(),
+                email: Some(profile.email.clone()),
+                display_name: profile.display_name.clone(),
+                bio: profile.bio.clone(),
+                avatar_url: profile.avatar_url.clone(),
+                cover_photo_url: profile.cover_photo_url.clone(),
+                location: profile.location.clone(),
+                private_account: profile.private_account,
+                created_at: profile.created_at.timestamp(),
+                updated_at: profile.updated_at.timestamp(),
+            }),
+        };
+
+        Ok(Response::new(response))
+    }
+
+    /// Upsert a user's public key for E2EE messaging flows
+    async fn upsert_user_public_key(
+        &self,
+        request: Request<UpsertUserPublicKeyRequest>,
+    ) -> Result<Response<UpsertUserPublicKeyResponse>, Status> {
+        let req = request.into_inner();
+
+        let user_id = uuid::Uuid::parse_str(&req.user_id)
+            .map_err(|_| Status::invalid_argument("invalid_user_id"))?;
+
+        if req.public_key.trim().is_empty() {
+            return Err(Status::invalid_argument("public_key_required"));
+        }
+
+        crate::db::users::upsert_user_public_key(&self.state.db, user_id, &req.public_key)
+            .await
+            .map_err(|e| {
+                tracing::error!(error = %e, user_id = %user_id, "Failed to upsert public key");
+                Status::internal("failed_to_upsert_public_key")
+            })?;
+
+        Ok(Response::new(UpsertUserPublicKeyResponse { success: true }))
+    }
+
+    /// Fetch a user's stored public key if one exists
+    async fn get_user_public_key(
+        &self,
+        request: Request<GetUserPublicKeyRequest>,
+    ) -> Result<Response<GetUserPublicKeyResponse>, Status> {
+        let req = request.into_inner();
+
+        let user_id = uuid::Uuid::parse_str(&req.user_id)
+            .map_err(|_| Status::invalid_argument("invalid_user_id"))?;
+
+        let public_key = crate::db::users::get_user_public_key(&self.state.db, user_id)
+            .await
+            .map_err(|e| {
+                tracing::error!(error = %e, user_id = %user_id, "Failed to fetch public key");
+                Status::internal("failed_to_fetch_public_key")
+            })?;
+
+        let response = GetUserPublicKeyResponse {
+            found: public_key.is_some(),
+            public_key,
+        };
+
+        Ok(Response::new(response))
     }
 }

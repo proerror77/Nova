@@ -3,7 +3,7 @@
 
 -- Create message_forwards table to track forwarded messages
 CREATE TABLE IF NOT EXISTS message_forwards (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     original_message_id UUID NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
     forwarded_by_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     target_conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,

@@ -23,6 +23,7 @@ data:
   # ClickHouse
   CLICKHOUSE_URL: http://clickhouse:8123
   CLICKHOUSE_DATABASE: nova
+  ELASTICSEARCH_URL: http://elasticsearch:9200
 
   # Jaeger 追踪
   JAEGER_AGENT_HOST: jaeger-agent

@@ -1,5 +1,5 @@
-use redis::aio::ConnectionManager;
 use redis::AsyncCommands;
+use redis_utils::SharedConnectionManager;
 
 /// Rate limiting configuration
 #[derive(Clone)]
@@ -32,12 +32,12 @@ pub struct RateLimitResult {
 
 /// Rate limiter utility for checking if a request should be rate limited
 pub struct RateLimiter {
-    redis: ConnectionManager,
+    redis: SharedConnectionManager,
     config: RateLimitConfig,
 }
 
 impl RateLimiter {
-    pub fn new(redis: ConnectionManager, config: RateLimitConfig) -> Self {
+    pub fn new(redis: SharedConnectionManager, config: RateLimitConfig) -> Self {
         Self { redis, config }
     }
 
@@ -48,7 +48,7 @@ impl RateLimiter {
         client_id: &str,
     ) -> Result<RateLimitResult, Box<dyn std::error::Error>> {
         let rate_limit_key = format!("rate_limit:{}", client_id);
-        let mut conn = self.redis.clone();
+        let mut conn = self.redis.lock().await;
 
         // Atomic INCR + set TTL once, return both count and TTL
         // Lua script: increment counter, set TTL on first increment, return both values
@@ -66,7 +66,7 @@ impl RateLimiter {
             .arg(1)
             .arg(&rate_limit_key)
             .arg(self.config.window_seconds as i64)
-            .query_async(&mut conn)
+            .query_async(&mut *conn)
             .await?;
 
         let count = result.0 as u32;
@@ -96,7 +96,7 @@ impl RateLimiter {
         client_id: &str,
     ) -> Result<u32, Box<dyn std::error::Error>> {
         let rate_limit_key = format!("rate_limit:{}", client_id);
-        let mut conn = self.redis.clone();
+        let mut conn = self.redis.lock().await;
         let count: u32 = conn.get(&rate_limit_key).await.unwrap_or(0);
         Ok(count)
     }
@@ -107,7 +107,7 @@ impl RateLimiter {
         client_id: &str,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let rate_limit_key = format!("rate_limit:{}", client_id);
-        let mut conn = self.redis.clone();
+        let mut conn = self.redis.lock().await;
         let _: () = conn
             .del(&rate_limit_key)
             .await

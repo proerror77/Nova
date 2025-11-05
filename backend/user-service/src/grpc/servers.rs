@@ -9,72 +9,41 @@
 //! - VideoService: Wraps video processing and transcoding logic
 //! - StreamingService: Wraps live streaming functionality
 
+use std::sync::Arc;
 use tonic::{Response, Status};
 use uuid::Uuid;
 
-// TODO: Recommendation and Streaming services (Phase 7A)
-// use crate::grpc::nova::recommendation::v1::{
-//     recommendation_service_server::RecommendationService as RecommendationServiceTrait, *,
-// };
-// use crate::grpc::nova::streaming::v1::{
-//     streaming_service_server::StreamingService as StreamingServiceTrait, *,
-// };
-use crate::grpc::nova::video::v1::{video_service_server::VideoService as VideoServiceTrait, *};
+use crate::grpc::clients::MediaServiceClient;
+use crate::grpc::nova::media::Video as MediaVideo;
+use crate::grpc::nova::video::v1::{
+    video_service_server::VideoService as VideoServiceTrait, DeleteVideoRequest,
+    DeleteVideoResponse, GetTranscodingProgressRequest, GetVideoMetadataRequest, ListVideosRequest,
+    ListVideosResponse, TranscodeVideoRequest, TranscodeVideoResponse, TranscodingProgress,
+    UploadVideoRequest, UploadVideoResponse, VideoMetadata, VideoSummary,
+};
 
-// TODO: RecommendationServer implementation (Phase 7A)
-// /// RecommendationServer implements the gRPC RecommendationService
-// /// This is a proxy/adapter that wraps the existing recommendation_v2 logic
-// pub struct RecommendationServer;
-//
-// #[tonic::async_trait]
-// impl RecommendationServiceTrait for RecommendationServer {
-//     async fn get_feed(
-//         &self,
-//         request: tonic::Request<GetFeedRequest>,
-//     ) -> Result<Response<GetFeedResponse>, Status> {
-//         let req = request.into_inner();
-//
-//         // TODO: Wire this to the existing get_feed handler from handlers/feed.rs
-//         // For now, return a placeholder implementation
-//         let response = GetFeedResponse {
-//             posts: vec![],
-//             next_cursor: String::new(),
-//             has_more: false,
-//         };
-//
-//         Ok(Response::new(response))
-//     }
-//
-//     async fn rank_posts(
-//         &self,
-//         request: tonic::Request<RankPostsRequest>,
-//     ) -> Result<Response<RankPostsResponse>, Status> {
-//         let req = request.into_inner();
-//
-//         // TODO: Wire this to the existing ranking logic from services/experiments/
-//         let response = RankPostsResponse {
-//             ranked_posts: vec![],
-//         };
-//
-//         Ok(Response::new(response))
-//     }
-//
-//     async fn get_recommended_creators(
-//         &self,
-//         request: tonic::Request<GetRecommendedCreatorsRequest>,
-//     ) -> Result<Response<GetRecommendedCreatorsResponse>, Status> {
-//         let req = request.into_inner();
-//
-//         // TODO: Wire this to the existing creator recommendation logic
-//         let response = GetRecommendedCreatorsResponse { creators: vec![] };
-//
-//         Ok(Response::new(response))
-//     }
-// }
+/// VideoServer implements the gRPC VideoService.
+/// It proxies calls to media-service, which owns video storage and processing.
+#[derive(Clone)]
+pub struct VideoServer {
+    media_client: Arc<MediaServiceClient>,
+    s3_client: Arc<aws_sdk_s3::Client>,
+    s3_config: Arc<crate::config::S3Config>,
+}
 
-/// VideoServer implements the gRPC VideoService
-/// This is a proxy/adapter that wraps the existing video processing logic
-pub struct VideoServer;
+impl VideoServer {
+    pub fn new(
+        media_client: Arc<MediaServiceClient>,
+        s3_client: Arc<aws_sdk_s3::Client>,
+        s3_config: Arc<crate::config::S3Config>,
+    ) -> Self {
+        Self {
+            media_client,
+            s3_client,
+            s3_config,
+        }
+    }
+}
 
 #[tonic::async_trait]
 impl VideoServiceTrait for VideoServer {
@@ -84,17 +53,52 @@ impl VideoServiceTrait for VideoServer {
     ) -> Result<Response<UploadVideoResponse>, Status> {
         let req = request.into_inner();
 
-        // TODO: Wire this to the existing video upload handler
-        let video_id = Uuid::new_v4().to_string();
-        let upload_session_id = Uuid::new_v4().to_string();
-
-        let response = UploadVideoResponse {
-            video_id: video_id.clone(),
-            upload_url: format!("https://s3.example.com/{}", video_id),
-            upload_session_id,
+        let file_name = sanitize_file_name(&req.file_name);
+        let content_type = if req.mime_type.trim().is_empty() {
+            "application/octet-stream".to_string()
+        } else {
+            req.mime_type.clone()
         };
 
-        Ok(Response::new(response))
+        let start_response = self
+            .media_client
+            .start_upload(
+                req.user_id.clone(),
+                file_name.clone(),
+                req.file_size,
+                content_type.clone(),
+            )
+            .await
+            .map_err(|e| map_media_status("start_upload", e))?;
+
+        let upload = start_response
+            .upload
+            .ok_or_else(|| Status::internal("media-service returned no upload payload"))?;
+
+        let upload_uuid = Uuid::parse_str(&upload.id).unwrap_or_else(|_| Uuid::new_v4());
+        let s3_key = format!("uploads/{}/{}", upload_uuid, file_name);
+
+        let presigned_url = crate::services::storage::generate_presigned_put_url(
+            &self.s3_client,
+            &self.s3_config,
+            &s3_key,
+            &content_type,
+            std::time::Duration::from_secs(self.s3_config.presigned_url_expiry_secs),
+        )
+        .await
+        .map_err(|e| Status::internal(format!("failed_to_generate_presigned_url: {}", e)))?;
+
+        let video_id = if upload.video_id.is_empty() {
+            upload.id.clone()
+        } else {
+            upload.video_id.clone()
+        };
+
+        Ok(Response::new(UploadVideoResponse {
+            video_id,
+            upload_url: presigned_url,
+            upload_session_id: upload.id,
+        }))
     }
 
     async fn get_video_metadata(
@@ -102,62 +106,39 @@ impl VideoServiceTrait for VideoServer {
         request: tonic::Request<GetVideoMetadataRequest>,
     ) -> Result<Response<VideoMetadata>, Status> {
         let req = request.into_inner();
+        let response = self
+            .media_client
+            .get_video(req.video_id.clone())
+            .await
+            .map_err(|e| map_media_status("get_video", e))?;
 
-        // TODO: Wire this to the existing get_video_metadata handler
-        let response = VideoMetadata {
-            id: req.video_id,
-            user_id: String::new(),
-            title: String::new(),
-            description: String::new(),
-            duration: 0,
-            width: 0,
-            height: 0,
-            mime_type: String::new(),
-            created_at: 0,
-            updated_at: 0,
-            thumbnail_url: String::new(),
-            status: "unknown".to_string(),
-            quality: None,
-        };
+        if !response.found {
+            return Err(Status::not_found("video not found"));
+        }
 
-        Ok(Response::new(response))
+        let media_video = response
+            .video
+            .ok_or_else(|| Status::internal("media-service returned empty video payload"))?;
+
+        Ok(Response::new(convert_media_video_to_metadata(media_video)))
     }
 
     async fn transcode_video(
         &self,
-        request: tonic::Request<TranscodeVideoRequest>,
+        _request: tonic::Request<TranscodeVideoRequest>,
     ) -> Result<Response<TranscodeVideoResponse>, Status> {
-        let req = request.into_inner();
-
-        // TODO: Wire this to the existing video transcoding logic
-        let job_id = Uuid::new_v4().to_string();
-
-        let response = TranscodeVideoResponse {
-            job_id,
-            video_id: req.video_id,
-            status: "queued".to_string(),
-        };
-
-        Ok(Response::new(response))
+        Err(Status::unimplemented(
+            "Transcoding is handled by media-service's dedicated API",
+        ))
     }
 
     async fn get_transcoding_progress(
         &self,
-        request: tonic::Request<GetTranscodingProgressRequest>,
+        _request: tonic::Request<GetTranscodingProgressRequest>,
     ) -> Result<Response<TranscodingProgress>, Status> {
-        let req = request.into_inner();
-
-        // TODO: Wire this to check job queue status
-        let response = TranscodingProgress {
-            job_id: req.job_id,
-            status: "processing".to_string(),
-            progress_percent: 50,
-            current_resolution: "720p".to_string(),
-            estimated_time_remaining: "PT5M".to_string(),
-            error_message: String::new(),
-        };
-
-        Ok(Response::new(response))
+        Err(Status::unimplemented(
+            "Transcoding progress is handled by media-service",
+        ))
     }
 
     async fn list_videos(
@@ -165,45 +146,81 @@ impl VideoServiceTrait for VideoServer {
         request: tonic::Request<ListVideosRequest>,
     ) -> Result<Response<ListVideosResponse>, Status> {
         let req = request.into_inner();
+        let response = self
+            .media_client
+            .get_user_videos(req.user_id.clone(), req.limit as i32)
+            .await
+            .map_err(|e| map_media_status("get_user_videos", e))?;
 
-        // TODO: Wire this to list videos for user
-        let response = ListVideosResponse {
-            videos: vec![],
+        let videos = response
+            .videos
+            .into_iter()
+            .map(convert_media_video_to_summary)
+            .collect();
+
+        Ok(Response::new(ListVideosResponse {
+            videos,
             next_cursor: String::new(),
             has_more: false,
-        };
-
-        Ok(Response::new(response))
+        }))
     }
 
     async fn delete_video(
         &self,
-        request: tonic::Request<DeleteVideoRequest>,
+        _request: tonic::Request<DeleteVideoRequest>,
     ) -> Result<Response<DeleteVideoResponse>, Status> {
-        let req = request.into_inner();
-
-        // TODO: Wire this to delete video handler
-        let response = DeleteVideoResponse {
-            video_id: req.video_id,
-            success: true,
-        };
-
-        Ok(Response::new(response))
+        Err(Status::unimplemented(
+            "Video deletion must be routed to media-service",
+        ))
     }
 }
 
-// TODO: StreamingServer implementation (Phase 7A)
-// /// StreamingServer implements the gRPC StreamingService
-// /// This is a proxy/adapter that wraps the existing live streaming logic
-// pub struct StreamingServer;
-//
-// #[tonic::async_trait]
-// impl StreamingServiceTrait for StreamingServer {
-//     async fn start_stream(...) { ... }
-//     async fn stop_stream(...) { ... }
-//     async fn get_stream_status(...) { ... }
-//     async fn get_streaming_manifest(...) { ... }
-//     async fn update_streaming_profile(...) { ... }
-//     async fn get_stream_analytics(...) { ... }
-//     async fn broadcast_chat_message(...) { ... }
-// }
+fn convert_media_video_to_metadata(video: MediaVideo) -> VideoMetadata {
+    VideoMetadata {
+        id: video.id,
+        user_id: video.creator_id,
+        title: video.title,
+        description: video.description,
+        duration: video.duration_seconds,
+        width: 0,
+        height: 0,
+        mime_type: "video/mp4".to_string(),
+        created_at: video.created_at,
+        updated_at: video.created_at,
+        thumbnail_url: video.thumbnail_url,
+        status: video.status,
+        quality: None,
+    }
+}
+
+fn convert_media_video_to_summary(video: MediaVideo) -> VideoSummary {
+    VideoSummary {
+        id: video.id,
+        title: video.title,
+        thumbnail_url: video.thumbnail_url,
+        duration: video.duration_seconds,
+        created_at: video.created_at,
+        status: video.status,
+    }
+}
+
+fn map_media_status(operation: &str, status: tonic::Status) -> Status {
+    let message = format!("media-service {operation} failed: {}", status.message());
+    Status::new(status.code(), message)
+}
+
+fn sanitize_file_name(name: &str) -> String {
+    let sanitized: String = name
+        .chars()
+        .map(|c| match c {
+            'a'..='z' | 'A'..='Z' | '0'..='9' | '.' | '-' | '_' => c,
+            _ => '_',
+        })
+        .collect();
+
+    if sanitized.trim_matches('_').is_empty() {
+        format!("upload-{}", Uuid::new_v4())
+    } else {
+        sanitized
+    }
+}

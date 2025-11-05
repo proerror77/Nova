@@ -12,7 +12,7 @@
   - auth-service: `backend/auth-service/migrations/001_create_users_table.sql` defines `users`.
   - messaging-service: `backend/messaging-service/migrations/0001_create_users.sql` defines a shadow `users`.
 - Soft-delete normalization work observed (migrations 066, 070), but duplicates remain.
-  - References: `backend/migrations/066_unify_soft_delete_v2.sql`, `backend/migrations/070_unify_soft_delete_complete.sql`.
+  - References: `backend/migrations/082_unify_soft_delete_v2.sql`, `backend/migrations/070_unify_soft_delete_complete.sql`.
 
 Action:
 - Freeze new migrations; plan strangler migrations to consolidate on auth-service `users` as the single source of truth and drop shadows.

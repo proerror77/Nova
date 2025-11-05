@@ -101,21 +101,15 @@ fn bench_rank_candidates_naive(c: &mut Criterion) {
 fn bench_uuid_parsing(c: &mut Criterion) {
     let mut group = c.benchmark_group("uuid_parsing");
 
-    let uuid_strs: Vec<String> = (0..1000)
-        .map(|_| Uuid::new_v4().to_string())
-        .collect();
+    let uuid_strs: Vec<String> = (0..1000).map(|_| Uuid::new_v4().to_string()).collect();
 
-    group.bench_with_input(
-        "parse_1000_uuids",
-        &uuid_strs,
-        |b, strs| {
-            b.iter(|| {
-                strs.iter()
-                    .filter_map(|s| Uuid::parse_str(s).ok())
-                    .collect::<Vec<_>>()
-            });
-        },
-    );
+    group.bench_with_input("parse_1000_uuids", &uuid_strs, |b, strs| {
+        b.iter(|| {
+            strs.iter()
+                .filter_map(|s| Uuid::parse_str(s).ok())
+                .collect::<Vec<_>>()
+        });
+    });
 
     group.finish();
 }

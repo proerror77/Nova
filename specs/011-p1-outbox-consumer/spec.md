@@ -12,7 +12,7 @@ Implement Outbox pattern consumer worker to publish PostgreSQL outbox table even
 
 ## Verification (code audit) — 2025-11-05
 
-- Outbox table exists: migrations/067_outbox_pattern_v2.sql
+- Outbox table exists: migrations/083_outbox_pattern_v2.sql
 - Consumer NOT implemented: no worker loop exists
 - Status: Infrastructure ready, business logic needed
 

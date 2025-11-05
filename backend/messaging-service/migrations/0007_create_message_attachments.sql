@@ -3,7 +3,7 @@
 
 -- Up
 CREATE TABLE IF NOT EXISTS message_attachments (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   message_id UUID NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
   file_url TEXT NOT NULL,
   file_type VARCHAR(255) NOT NULL,
