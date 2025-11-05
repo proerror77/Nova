@@ -9,7 +9,9 @@
 // - CheckPostExists (existence check)
 //
 // To run these tests with actual gRPC services:
-//   SERVICES_RUNNING=true cargo test --test grpc_content_service_test -- --ignored --nocapture
+//   docker-compose -f docker-compose.dev.yml up -d
+//   cargo test --test grpc_content_service_test -- --nocapture
+//   docker-compose -f docker-compose.dev.yml down
 
 #[cfg(test)]
 mod content_service_grpc_tests {
@@ -63,13 +65,7 @@ mod content_service_grpc_tests {
     // Returns all non-deleted posts matching the requested IDs
     //
     #[tokio::test]
-    #[ignore]
     async fn test_get_posts_by_ids_batch_retrieval() {
-        if std::env::var("SERVICES_RUNNING").is_err() {
-            println!("Skipping test: SERVICES_RUNNING not set");
-            return;
-        }
-
         // Create gRPC client
         let endpoints = ServiceEndpoints::new();
         let mut client = match ContentServiceClient::connect(endpoints.content_service).await {
@@ -151,14 +147,7 @@ mod content_service_grpc_tests {
     // Returns paginated posts from author with correct total count
     //
     #[tokio::test]
-    #[ignore]
-    async fn test_get_posts_by_author_with_pagination() {
-        if std::env::var("SERVICES_RUNNING").is_err() {
-            println!("Skipping test: SERVICES_RUNNING not set");
-            return;
-        }
-
-        let endpoints = ServiceEndpoints::new();
+    async fn test_get_posts_by_author_with_pagination() {        let endpoints = ServiceEndpoints::new();
         let mut client = match ContentServiceClient::connect(endpoints.content_service).await {
             Ok(c) => c,
             Err(e) => {
@@ -257,14 +246,7 @@ mod content_service_grpc_tests {
     // Post is updated atomically and cache is invalidated
     //
     #[tokio::test]
-    #[ignore]
-    async fn test_update_post_selective_fields() {
-        if std::env::var("SERVICES_RUNNING").is_err() {
-            println!("Skipping test: SERVICES_RUNNING not set");
-            return;
-        }
-
-        let endpoints = ServiceEndpoints::new();
+    async fn test_update_post_selective_fields() {        let endpoints = ServiceEndpoints::new();
         let mut client = match ContentServiceClient::connect(endpoints.content_service).await {
             Ok(c) => c,
             Err(e) => {
@@ -328,14 +310,7 @@ mod content_service_grpc_tests {
     // Post is soft-deleted and becomes invisible in all queries
     //
     #[tokio::test]
-    #[ignore]
-    async fn test_delete_post_soft_delete_operation() {
-        if std::env::var("SERVICES_RUNNING").is_err() {
-            println!("Skipping test: SERVICES_RUNNING not set");
-            return;
-        }
-
-        let endpoints = ServiceEndpoints::new();
+    async fn test_delete_post_soft_delete_operation() {        let endpoints = ServiceEndpoints::new();
         let mut client = match ContentServiceClient::connect(endpoints.content_service).await {
             Ok(c) => c,
             Err(e) => {
@@ -397,14 +372,7 @@ mod content_service_grpc_tests {
     // Returns current like count and invalidates cache
     //
     #[tokio::test]
-    #[ignore]
-    async fn test_decrement_like_count_with_cache_sync() {
-        if std::env::var("SERVICES_RUNNING").is_err() {
-            println!("Skipping test: SERVICES_RUNNING not set");
-            return;
-        }
-
-        let endpoints = ServiceEndpoints::new();
+    async fn test_decrement_like_count_with_cache_sync() {        let endpoints = ServiceEndpoints::new();
         let mut client = match ContentServiceClient::connect(endpoints.content_service).await {
             Ok(c) => c,
             Err(e) => {
@@ -458,14 +426,7 @@ mod content_service_grpc_tests {
     // Returns accurate existence status for posts
     //
     #[tokio::test]
-    #[ignore]
-    async fn test_check_post_exists_verification() {
-        if std::env::var("SERVICES_RUNNING").is_err() {
-            println!("Skipping test: SERVICES_RUNNING not set");
-            return;
-        }
-
-        let endpoints = ServiceEndpoints::new();
+    async fn test_check_post_exists_verification() {        let endpoints = ServiceEndpoints::new();
         let mut client = match ContentServiceClient::connect(endpoints.content_service).await {
             Ok(c) => c,
             Err(e) => {
@@ -542,14 +503,7 @@ mod content_service_grpc_tests {
     // All mutation operations maintain cache consistency
     //
     #[test]
-    #[ignore]
-    fn test_cache_invalidation_consistency_chain() {
-        if std::env::var("SERVICES_RUNNING").is_err() {
-            println!("Skipping test: SERVICES_RUNNING not set");
-            return;
-        }
-
-        // TODO: Implementation with gRPC client
+    fn test_cache_invalidation_consistency_chain() {        // TODO: Implementation with gRPC client
         // Steps:
         // 1. GetPost to populate cache
         // 2. UpdatePost (change title)
@@ -579,14 +533,7 @@ mod content_service_grpc_tests {
     // All error paths handled correctly with proper gRPC status codes
     //
     #[test]
-    #[ignore]
-    fn test_error_handling_all_methods() {
-        if std::env::var("SERVICES_RUNNING").is_err() {
-            println!("Skipping test: SERVICES_RUNNING not set");
-            return;
-        }
-
-        // TODO: Implementation with gRPC client
+    fn test_error_handling_all_methods() {        // TODO: Implementation with gRPC client
         // Steps:
         // 1. GetPostsByIds with invalid UUID format and verify error
         // 2. GetPostsByAuthor with invalid author_id and verify error
@@ -615,14 +562,7 @@ mod content_service_grpc_tests {
     // Batch retrieval performs efficiently regardless of batch size
     //
     #[test]
-    #[ignore]
-    fn test_batch_operation_performance() {
-        if std::env::var("SERVICES_RUNNING").is_err() {
-            println!("Skipping test: SERVICES_RUNNING not set");
-            return;
-        }
-
-        // TODO: Implementation with gRPC client
+    fn test_batch_operation_performance() {        // TODO: Implementation with gRPC client
         // Steps:
         // 1. Create 100 posts
         // 2. GetPostsByIds with 50 IDs and measure response time (should be < 100ms)
@@ -650,14 +590,7 @@ mod content_service_grpc_tests {
     // All service boundaries maintain data consistency
     //
     #[test]
-    #[ignore]
-    fn test_data_consistency_service_boundaries() {
-        if std::env::var("SERVICES_RUNNING").is_err() {
-            println!("Skipping test: SERVICES_RUNNING not set");
-            return;
-        }
-
-        // TODO: Implementation with gRPC client
+    fn test_data_consistency_service_boundaries() {        // TODO: Implementation with gRPC client
         // Steps:
         // 1. Create post via CreatePost RPC
         // 2. Immediately query via GetPost and verify found

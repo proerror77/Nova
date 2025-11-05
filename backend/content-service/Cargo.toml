@@ -78,15 +78,4 @@ tokio-test = "0.4"
 mockall = "0.12"
 actix-http = "3.9"
 tempfile = "3.8"
-
-[[test]]
-name = "posts_test"
-path = "tests/posts_test.rs"
-
-[[test]]
-name = "comments_test"
-path = "tests/comments_test.rs"
-
-[[test]]
-name = "stories_test"
-path = "tests/stories_test.rs"
+testcontainers.workspace = true

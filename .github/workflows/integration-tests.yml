@@ -1,0 +1,111 @@
+name: Integration Tests with Docker Compose
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  schedule:
+    # Run nightly to catch integration issues
+    - cron: '0 2 * * *'
+
+jobs:
+  integration-tests:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: nova
+          POSTGRES_PASSWORD: nova_password
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.75
+
+      - name: Cache cargo registry
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo index
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-git-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo build
+        uses: actions/cache@v3
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Wait for Postgres to be ready
+        run: |
+          until pg_isready -h localhost -p 5432; do
+            echo 'waiting for postgres...'
+            sleep 1
+          done
+        env:
+          PGPASSWORD: nova_password
+
+      - name: Wait for Redis to be ready
+        run: |
+          until redis-cli -h localhost ping; do
+            echo 'waiting for redis...'
+            sleep 1
+          done
+
+      - name: Run integration tests for auth-service
+        run: cargo test --manifest-path backend/auth-service/Cargo.toml --test grpc_integration_tests -- --nocapture --test-threads=1
+        env:
+          DATABASE_URL: postgresql://nova:nova_password@localhost:5432/postgres
+          REDIS_URL: redis://localhost:6379
+
+      - name: Run integration tests for user-service
+        run: cargo test --manifest-path backend/user-service/Cargo.toml --test neo4j_suggest_tests -- --nocapture --test-threads=1
+        env:
+          DATABASE_URL: postgresql://nova:nova_password@localhost:5432/postgres
+          REDIS_URL: redis://localhost:6379
+
+      - name: Run content-service gRPC tests (requires running services - skipped in CI)
+        run: echo "Note: content-service gRPC tests require running services. Use docker-compose.dev.yml locally."
+
+      - name: Generate coverage report
+        run: |
+          cargo tarpaulin --manifest-path backend/Cargo.toml \
+            --timeout 300 \
+            --out Xml \
+            --exclude-files backend/*/tests/* \
+            2>&1 | tee coverage.txt || true
+        continue-on-error: true
+
+      - name: Upload coverage reports
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./coverage.xml
+          fail_ci_if_error: false
+        continue-on-error: true
