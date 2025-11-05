@@ -127,37 +127,39 @@ async fn main() -> Result<(), error::AppError> {
     let rest_db = db.clone();
 
     // REST API server on cfg.port
+    // CRITICAL: HttpServer must be created outside tokio::spawn to avoid Send issues
+    // Only the .run() future (which is Send) goes into spawn
+    let bind_addr_parsed: SocketAddr = bind_addr.parse()
+        .map_err(|e: std::net::AddrParseError| {
+            error::AppError::StartServer(format!("Invalid bind address: {}", e))
+        })?;
+
+    tracing::info!("REST API listening on {}", bind_addr_parsed);
+
+    let rest_server = HttpServer::new(move || {
+        let openapi_doc = ApiDoc::openapi();
+
+        App::new()
+            .app_data(web::Data::new(openapi_doc.clone()))
+            .service(
+                SwaggerUi::new("/swagger-ui/{_:.*}")
+                    .url("/api/v1/openapi.json", openapi_doc.clone()),
+            )
+            .route("/api/v1/openapi.json", web::get().to(openapi_json))
+            .app_data(web::Data::new(rest_state.clone()))
+            .app_data(web::Data::new(rest_db.clone()))
+            .configure(routes::configure_routes)
+            .wrap(actix_middleware::CorrelationIdMiddleware)
+            .wrap(actix_middleware::MetricsMiddleware)
+    })
+    .bind(&bind_addr_parsed)
+    .map_err(|e| error::AppError::StartServer(format!("Failed to bind REST server: {}", e)))?
+    .run();
+
+    // Now spawn only the Server future (which IS Send)
     let rest_handle = tokio::spawn(async move {
-        let bind_addr_parsed: SocketAddr =
-            bind_addr.parse().map_err(|e: std::net::AddrParseError| {
-                error::AppError::StartServer(format!("Invalid bind address: {}", e))
-            })?;
-
-        tracing::info!("REST API listening on {}", bind_addr_parsed);
-
-        let result = HttpServer::new(move || {
-            let openapi_doc = ApiDoc::openapi();
-
-            App::new()
-                .app_data(web::Data::new(openapi_doc.clone()))
-                .service(
-                    SwaggerUi::new("/swagger-ui/{_:.*}")
-                        .url("/api/v1/openapi.json", openapi_doc.clone()),
-                )
-                .route("/api/v1/openapi.json", web::get().to(openapi_json))
-                .app_data(web::Data::new(rest_state.clone()))
-                .app_data(web::Data::new(rest_db.clone()))
-                .configure(routes::configure_routes)
-                .wrap(actix_middleware::CorrelationIdMiddleware)
-                .wrap(actix_middleware::MetricsMiddleware)
-        })
-        .bind(&bind_addr_parsed)
-        .map_err(|e| error::AppError::StartServer(format!("Failed to bind REST server: {}", e)))?
-        .run()
-        .await
-        .map_err(|e| error::AppError::StartServer(format!("REST server error: {}", e)))?;
-
-        Ok::<(), error::AppError>(())
+        rest_server.await
+            .map_err(|e| error::AppError::StartServer(format!("REST server error: {}", e)))
     });
 
     // gRPC server on cfg.port + 1000 (e.g., 8080 -> 9080)
@@ -186,11 +188,11 @@ async fn main() -> Result<(), error::AppError> {
                 Ok(Ok(())) => tracing::info!("REST server exited normally"),
                 Ok(Err(e)) => {
                     tracing::error!("REST server error: {:?}", e);
-                    return Err(Box::new(e));
+                    return Err(e);
                 }
                 Err(e) => {
                     tracing::error!("REST server task error: {}", e);
-                    return Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, e)));
+                    return Err(error::AppError::StartServer(format!("REST server task error: {}", e)));
                 }
             }
         }
@@ -200,7 +202,7 @@ async fn main() -> Result<(), error::AppError> {
                 Ok(Err(())) => tracing::error!("gRPC server exited with error"),
                 Err(e) => {
                     tracing::error!("gRPC server task error: {}", e);
-                    return Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, e)));
+                    return Err(error::AppError::StartServer(format!("gRPC server task error: {}", e)));
                 }
             }
         }
