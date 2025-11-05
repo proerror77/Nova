@@ -5,6 +5,10 @@
 
 use serde::{Deserialize, Serialize};
 use std::env;
+use std::fs;
+use std::time::Duration;
+
+use tonic::transport::{Certificate, Channel, ClientTlsConfig, Endpoint, Identity};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GrpcConfig {
@@ -64,6 +68,17 @@ pub struct GrpcConfig {
 
     /// Connection pool size
     pub connection_pool_size: usize,
+
+    /// Enable TLS/mTLS for gRPC clients
+    pub tls_enabled: bool,
+    /// Optional custom domain name for TLS SNI/verification
+    pub tls_domain_name: Option<String>,
+    /// Path to CA certificate (PEM)
+    pub tls_ca_cert_path: Option<String>,
+    /// Path to client certificate (PEM) for mTLS
+    pub tls_client_cert_path: Option<String>,
+    /// Path to client private key (PEM) for mTLS
+    pub tls_client_key_path: Option<String>,
 }
 
 impl GrpcConfig {
@@ -123,6 +138,15 @@ impl GrpcConfig {
                 .ok()
                 .and_then(|s| s.parse().ok())
                 .unwrap_or(10),
+
+            // TLS/mTLS
+            tls_enabled: env::var("GRPC_TLS_ENABLED")
+                .map(|v| matches!(v.as_str(), "1" | "true" | "TRUE"))
+                .unwrap_or(false),
+            tls_domain_name: env::var("GRPC_TLS_DOMAIN_NAME").ok(),
+            tls_ca_cert_path: env::var("GRPC_TLS_CA_CERT_PATH").ok(),
+            tls_client_cert_path: env::var("GRPC_TLS_CLIENT_CERT_PATH").ok(),
+            tls_client_key_path: env::var("GRPC_TLS_CLIENT_KEY_PATH").ok(),
         };
 
         Ok(config)
@@ -150,6 +174,60 @@ impl GrpcConfig {
             keepalive_timeout_secs: 10,
             enable_connection_pooling: true,
             connection_pool_size: 10,
+
+            tls_enabled: false,
+            tls_domain_name: None,
+            tls_ca_cert_path: None,
+            tls_client_cert_path: None,
+            tls_client_key_path: None,
         }
+    }
+
+    /// Build a tonic Endpoint from URL with timeouts/keepalive and optional TLS/mTLS
+    pub fn make_endpoint(&self, url: &str) -> Result<Endpoint, Box<dyn std::error::Error>> {
+        let mut ep = Endpoint::from_shared(url.to_string())?
+            .connect_timeout(Duration::from_secs(self.connection_timeout_secs))
+            .timeout(Duration::from_secs(self.request_timeout_secs))
+            .http2_keep_alive_interval(Duration::from_secs(self.keepalive_interval_secs))
+            .keep_alive_timeout(Duration::from_secs(self.keepalive_timeout_secs))
+            .tcp_nodelay(true)
+            .concurrency_limit(self.max_concurrent_streams as usize);
+
+        if self.tls_enabled {
+            // CA certificate (server verification)
+            let mut tls = ClientTlsConfig::new();
+
+            if let Some(ca_path) = &self.tls_ca_cert_path {
+                let ca_pem = fs::read(ca_path)?;
+                tls = tls.ca_certificate(Certificate::from_pem(ca_pem));
+            }
+
+            // Domain override if provided
+            if let Some(domain) = &self.tls_domain_name {
+                tls = tls.domain_name(domain);
+            }
+
+            // Client identity for mTLS if provided
+            if let (Some(cert_path), Some(key_path)) =
+                (&self.tls_client_cert_path, &self.tls_client_key_path)
+            {
+                let cert_pem = fs::read(cert_path)?;
+                let key_pem = fs::read(key_path)?;
+                let identity = Identity::from_pem(cert_pem, key_pem);
+                tls = tls.identity(identity);
+            }
+
+            ep = ep.tls_config(tls)?;
+        }
+
+        Ok(ep)
+    }
+
+    /// Connect to a Channel using this configuration
+    pub async fn connect_channel(
+        &self,
+        url: &str,
+    ) -> Result<Channel, Box<dyn std::error::Error>> {
+        Ok(self.make_endpoint(url)?.connect().await?)
     }
 }

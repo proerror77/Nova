@@ -18,6 +18,7 @@ members = [
     "backend/libs/event-schema",
     "backend/libs/nova-apns-shared",
     "backend/libs/nova-fcm-shared",
+    "backend/libs/grpc-clients",
     "backend/libs/redis-utils",
     "backend/libs/video-core"
 ]
