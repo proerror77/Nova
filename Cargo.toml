@@ -135,7 +135,7 @@ utoipa = "4.2"
 utoipa-swagger-ui = "6.0"
 
 # Testing: Container fixtures for integration tests
-testcontainers = { version = "0.17", features = ["postgres", "redis"] }
+testcontainers = "0.17"
 
 [package]
 name = "nova"
