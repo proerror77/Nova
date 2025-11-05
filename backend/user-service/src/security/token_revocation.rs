@@ -2,7 +2,7 @@
 ///
 /// CRITICAL FIX: Implement token revocation to prevent stolen tokens from being used
 /// After logout or password change, tokens must be blacklisted immediately.
-use redis::aio::ConnectionManager;
+use redis_utils::SharedConnectionManager;
 use std::fmt;
 use tracing::error;
 
@@ -41,7 +41,7 @@ const DEFAULT_TOKEN_TTL_SECS: u64 = 3600;
 /// This adds the token to a blacklist in Redis, preventing it from being used
 /// even though it may not be naturally expired yet.
 pub async fn revoke_token(
-    redis: &ConnectionManager,
+    redis: &SharedConnectionManager,
     token: &str,
     expires_at_secs: Option<i64>,
 ) -> Result<(), RevocationError> {
@@ -67,14 +67,14 @@ pub async fn revoke_token(
         DEFAULT_TOKEN_TTL_SECS
     };
 
-    let mut redis = redis.clone();
+    let mut redis = redis.lock().await;
     run_with_timeout(
         redis::cmd("SET")
             .arg(&key)
             .arg("1") // Just store a marker value
             .arg("EX")
             .arg(remaining_ttl)
-            .query_async::<_, ()>(&mut redis),
+            .query_async::<_, ()>(&mut *redis),
     )
     .await?;
 
@@ -88,7 +88,7 @@ pub async fn revoke_token(
 /// Revoke all tokens for a specific user
 /// Useful for account lockdown after compromise
 pub async fn revoke_all_user_tokens(
-    redis: &ConnectionManager,
+    redis: &SharedConnectionManager,
     user_id: uuid::Uuid,
 ) -> Result<(), RevocationError> {
     // Create a user token revocation marker
@@ -96,7 +96,7 @@ pub async fn revoke_all_user_tokens(
     let key = format!("nova:revoked:user:{}:ts", user_id);
     let now_secs = chrono::Utc::now().timestamp();
 
-    let mut redis = redis.clone();
+    let mut redis = redis.lock().await;
     run_with_timeout(
         redis::cmd("SET")
             .arg(&key)
@@ -104,7 +104,7 @@ pub async fn revoke_all_user_tokens(
             // Keep this for 7 days (after which old tokens will be naturally expired anyway)
             .arg("EX")
             .arg(7 * 24 * 60 * 60)
-            .query_async::<_, ()>(&mut redis),
+            .query_async::<_, ()>(&mut *redis),
     )
     .await?;
 
@@ -116,17 +116,17 @@ pub async fn revoke_all_user_tokens(
 ///
 /// Returns true if token is revoked, false if it's still valid
 pub async fn is_token_revoked(
-    redis: &ConnectionManager,
+    redis: &SharedConnectionManager,
     token: &str,
 ) -> Result<bool, RevocationError> {
     let token_hash = sha256_hash(token);
     let key = format!("nova:revoked:token:{}", token_hash);
 
-    let mut redis = redis.clone();
+    let mut redis = redis.lock().await;
     let exists: bool = run_with_timeout(
         redis::cmd("EXISTS")
             .arg(&key)
-            .query_async::<_, bool>(&mut redis),
+            .query_async::<_, bool>(&mut *redis),
     )
     .await?;
 
@@ -138,17 +138,17 @@ pub async fn is_token_revoked(
 /// This is used when verifying JWT claims - if the token's issued_at is before
 /// the revocation timestamp, the token is considered revoked
 pub async fn check_user_token_revocation(
-    redis: &ConnectionManager,
+    redis: &SharedConnectionManager,
     user_id: uuid::Uuid,
     token_issued_at_secs: i64,
 ) -> Result<bool, RevocationError> {
     let key = format!("nova:revoked:user:{}:ts", user_id);
 
-    let mut redis = redis.clone();
+    let mut redis = redis.lock().await;
     let revocation_ts: Option<String> = run_with_timeout(
         redis::cmd("GET")
             .arg(&key)
-            .query_async::<_, Option<String>>(&mut redis),
+            .query_async::<_, Option<String>>(&mut *redis),
     )
     .await?;
 

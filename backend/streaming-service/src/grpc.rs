@@ -14,14 +14,14 @@ use tracing::{debug, info};
 
 // Generated protobuf types and service traits
 pub mod proto {
-    pub mod streaming {
+    pub mod streaming_service {
         pub mod v1 {
-            tonic::include_proto!("nova.streaming.v1");
+            tonic::include_proto!("nova.streaming_service.v1");
         }
     }
 }
 
-pub use proto::streaming::v1::{
+pub use proto::streaming_service::v1::{
     streaming_service_server, BroadcastChatMessageRequest, BroadcastChatMessageResponse,
     GetStreamAnalyticsRequest, GetStreamAnalyticsResponse, GetStreamStatusRequest,
     GetStreamingManifestRequest, GetStreamingManifestResponse, StartStreamRequest,

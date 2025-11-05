@@ -2,7 +2,7 @@
 -- Allows users to share their location with conversations (1:1 or groups)
 
 CREATE TABLE IF NOT EXISTS user_locations (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
 
@@ -56,7 +56,7 @@ CREATE INDEX IF NOT EXISTS idx_user_locations_active
 
 -- Location sharing audit log
 CREATE TABLE IF NOT EXISTS location_share_events (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
 
@@ -88,7 +88,7 @@ CREATE INDEX IF NOT EXISTS idx_location_share_events_conversation
 
 -- Table for location access permissions (future: fine-grained controls)
 CREATE TABLE IF NOT EXISTS location_permissions (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
 
     -- Who can see this user's location

@@ -13,6 +13,7 @@
 use anyhow::Result;
 use async_trait::async_trait;
 use redis::AsyncCommands;
+use redis_utils::SharedConnectionManager;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Semaphore;
@@ -29,13 +30,13 @@ pub mod suggested_users_generator;
 /// Job 执行上下文,持有共享的数据库连接
 #[derive(Clone)]
 pub struct JobContext {
-    pub redis_pool: redis::aio::ConnectionManager,
+    pub redis_pool: SharedConnectionManager,
     pub ch_client: clickhouse::Client,
     pub correlation_id: String,
 }
 
 impl JobContext {
-    pub fn new(redis_pool: redis::aio::ConnectionManager, ch_client: clickhouse::Client) -> Self {
+    pub fn new(redis_pool: SharedConnectionManager, ch_client: clickhouse::Client) -> Self {
         Self {
             redis_pool,
             ch_client,
@@ -120,7 +121,7 @@ pub trait CacheRefreshJob: Send + Sync {
 
         // 写入 Redis (带 TTL)
         let ttl = self.ttl_sec();
-        let mut conn = ctx.redis_pool.clone();
+        let mut conn = ctx.redis_pool.lock().await.clone();
 
         conn.set_ex::<_, _, ()>(key, data, ttl).await.map_err(|e| {
             error!(

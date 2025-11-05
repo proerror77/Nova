@@ -3,11 +3,12 @@ use super::versioning::{
 };
 use crate::models::User;
 /// User profile caching utilities
-use redis::aio::ConnectionManager;
+use redis_utils::SharedConnectionManager;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::utils::redis_timeout::run_with_timeout;
+use chrono::{DateTime, Utc};
 use rand::Rng;
 use tokio::time::Duration as TokioDuration;
 
@@ -22,6 +23,7 @@ pub struct CachedUser {
     pub avatar_url: Option<String>,
     pub email_verified: bool,
     pub private_account: bool,
+    pub created_at: DateTime<Utc>,
 }
 
 impl From<User> for CachedUser {
@@ -34,25 +36,33 @@ impl From<User> for CachedUser {
             avatar_url: user.avatar_url,
             email_verified: user.email_verified,
             private_account: user.private_account,
+            created_at: user.created_at,
         }
     }
 }
 
+const USER_CACHE_MISS_SENTINEL: &str = "__nova_cache_miss__";
+const NEGATIVE_CACHE_TTL_SECONDS: usize = 300;
+
 /// Get user from cache by ID
 pub async fn get_cached_user(
-    redis: &ConnectionManager,
+    redis: &SharedConnectionManager,
     user_id: Uuid,
 ) -> Result<Option<CachedUser>, redis::RedisError> {
     let key = format!("nova:cache:user:{}", user_id);
-    let mut redis = redis.clone();
+    let mut redis = redis.lock().await;
     let cached: Option<String> = run_with_timeout(
         redis::cmd("GET")
             .arg(&key)
-            .query_async::<_, Option<String>>(&mut redis),
+            .query_async::<_, Option<String>>(&mut *redis),
     )
     .await?;
 
     if let Some(json_str) = cached {
+        if json_str == USER_CACHE_MISS_SENTINEL {
+            return Ok(None);
+        }
+
         if let Ok(user) = serde_json::from_str::<CachedUser>(&json_str) {
             return Ok(Some(user));
         }
@@ -63,7 +73,7 @@ pub async fn get_cached_user(
 
 /// Set user in cache
 pub async fn set_cached_user(
-    redis: &ConnectionManager,
+    redis: &SharedConnectionManager,
     user: &CachedUser,
 ) -> Result<(), redis::RedisError> {
     let key = format!("nova:cache:user:{}", user.id);
@@ -73,35 +83,59 @@ pub async fn set_cached_user(
         redis::RedisError::from((redis::ErrorKind::TypeError, "user serialization failed"))
     })?;
 
-    let mut redis = redis.clone();
+    let mut redis = redis.lock().await;
     run_with_timeout(
         redis::cmd("SET")
             .arg(&key)
             .arg(&json)
             .arg("EX")
             .arg(USER_CACHE_TTL)
-            .query_async::<_, ()>(&mut redis),
+            .query_async::<_, ()>(&mut *redis),
     )
     .await?;
 
     Ok(())
 }
 
-/// Invalidate user cache
-pub async fn invalidate_user_cache(
-    redis: &ConnectionManager,
+/// Cache a negative lookup for a user (prevents cache penetration)
+pub async fn cache_user_miss(
+    redis: &SharedConnectionManager,
     user_id: Uuid,
 ) -> Result<(), redis::RedisError> {
     let key = format!("nova:cache:user:{}", user_id);
-    let mut redis = redis.clone();
-    run_with_timeout(redis::cmd("DEL").arg(&key).query_async::<_, ()>(&mut redis)).await?;
+    let mut redis = redis.lock().await;
+    run_with_timeout(
+        redis::cmd("SET")
+            .arg(&key)
+            .arg(USER_CACHE_MISS_SENTINEL)
+            .arg("EX")
+            .arg(NEGATIVE_CACHE_TTL_SECONDS)
+            .query_async::<_, ()>(&mut *redis),
+    )
+    .await?;
+    Ok(())
+}
+
+/// Invalidate user cache
+pub async fn invalidate_user_cache(
+    redis: &SharedConnectionManager,
+    user_id: Uuid,
+) -> Result<(), redis::RedisError> {
+    let key = format!("nova:cache:user:{}", user_id);
+    let mut redis = redis.lock().await;
+    run_with_timeout(
+        redis::cmd("DEL")
+            .arg(&key)
+            .query_async::<_, ()>(&mut *redis),
+    )
+    .await?;
 
     Ok(())
 }
 
 /// Cache search results
 pub async fn cache_search_results(
-    redis: &ConnectionManager,
+    redis: &SharedConnectionManager,
     query: &str,
     limit: i64,
     offset: i64,
@@ -109,14 +143,14 @@ pub async fn cache_search_results(
 ) -> Result<(), redis::RedisError> {
     let key = format!("nova:cache:search:users:{}:{}:{}", query, limit, offset);
 
-    let mut redis = redis.clone();
+    let mut redis = redis.lock().await;
     run_with_timeout(
         redis::cmd("SET")
             .arg(&key)
             .arg(results)
             .arg("EX")
             .arg(1800) // 30 minutes TTL for search results
-            .query_async::<_, ()>(&mut redis),
+            .query_async::<_, ()>(&mut *redis),
     )
     .await?;
 
@@ -125,17 +159,17 @@ pub async fn cache_search_results(
 
 /// Get cached search results
 pub async fn get_cached_search_results(
-    redis: &ConnectionManager,
+    redis: &SharedConnectionManager,
     query: &str,
     limit: i64,
     offset: i64,
 ) -> Result<Option<String>, redis::RedisError> {
     let key = format!("nova:cache:search:users:{}:{}:{}", query, limit, offset);
-    let mut redis = redis.clone();
+    let mut redis = redis.lock().await;
     let cached: Option<String> = run_with_timeout(
         redis::cmd("GET")
             .arg(&key)
-            .query_async::<_, Option<String>>(&mut redis),
+            .query_async::<_, Option<String>>(&mut *redis),
     )
     .await?;
 
@@ -148,11 +182,11 @@ pub async fn get_cached_search_results(
 /// KEYS command blocks entire Redis instance and causes system failures under load.
 /// SCAN is O(1) average case and never blocks Redis.
 pub async fn invalidate_search_cache(
-    redis: &ConnectionManager,
+    redis: &SharedConnectionManager,
     query_pattern: &str,
 ) -> Result<(), redis::RedisError> {
     let pattern = format!("nova:cache:search:users:{}:*", query_pattern);
-    let mut redis = redis.clone();
+    let mut redis = redis.lock().await;
 
     // Use SCAN instead of KEYS to avoid blocking Redis
     const MAX_ITERATIONS: usize = 1000;
@@ -184,7 +218,7 @@ pub async fn invalidate_search_cache(
                 .arg(&pattern)
                 .arg("COUNT")
                 .arg(count) // Jittered batch size to avoid sync thundering
-                .query_async::<_, (u64, Vec<String>)>(&mut redis),
+                .query_async::<_, (u64, Vec<String>)>(&mut *redis),
         )
         .await?;
 
@@ -211,14 +245,11 @@ pub async fn invalidate_search_cache(
 
     // Delete all collected keys in batches to avoid command size limits
     if !all_keys.is_empty() {
-        let mut redis = redis.clone();
-
-        // Delete in batches of 1000 to avoid protocol limits
         for chunk in all_keys.chunks(1000) {
             run_with_timeout(
                 redis::cmd("DEL")
                     .arg(chunk)
-                    .query_async::<_, ()>(&mut redis),
+                    .query_async::<_, ()>(&mut *redis),
             )
             .await?;
         }
@@ -242,7 +273,7 @@ pub async fn invalidate_search_cache(
 ///
 /// Uses Redis WATCH/MULTI/EXEC for atomic operation
 pub async fn get_cached_user_versioned(
-    redis: &ConnectionManager,
+    redis: &SharedConnectionManager,
     user_id: Uuid,
     compute_fn: impl Fn() -> std::pin::Pin<
         Box<
@@ -275,7 +306,7 @@ pub async fn get_cached_user_versioned(
 ///
 /// Atomically invalidates cache and increments version
 pub async fn invalidate_user_cache_versioned(
-    redis: &ConnectionManager,
+    redis: &SharedConnectionManager,
     user_id: Uuid,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let key = format!("nova:cache:user:{}:v2", user_id);

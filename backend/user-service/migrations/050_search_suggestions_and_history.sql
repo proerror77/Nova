@@ -6,7 +6,7 @@
 
 -- Track search queries for autocomplete and trending
 CREATE TABLE IF NOT EXISTS search_history (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     query_type VARCHAR(50) NOT NULL, -- 'user', 'post', 'hashtag', 'video', 'stream'
     query_text VARCHAR(500) NOT NULL,
@@ -27,7 +27,7 @@ WHERE searched_at > NOW() - INTERVAL '30 days';
 
 -- Popular/trending searches
 CREATE TABLE IF NOT EXISTS trending_searches (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     query_type VARCHAR(50) NOT NULL,
     query_text VARCHAR(500) NOT NULL,
     search_count INT NOT NULL DEFAULT 1,
@@ -44,7 +44,7 @@ ON trending_searches(query_type, trending_score DESC, last_updated_at DESC);
 -- Search suggestions (pre-computed for fast autocomplete)
 -- Generated from trending_searches + user's own history
 CREATE TABLE IF NOT EXISTS search_suggestions (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID REFERENCES users(id) ON DELETE CASCADE, -- NULL = global suggestions
     query_type VARCHAR(50) NOT NULL,
     suggestion_text VARCHAR(500) NOT NULL,
@@ -68,7 +68,7 @@ WHERE user_id IS NULL AND expires_at > NOW();
 
 -- Table to track popular search results (for relevance ranking)
 CREATE TABLE IF NOT EXISTS popular_search_results (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     query_type VARCHAR(50) NOT NULL,
     query_hash VARCHAR(64) NOT NULL, -- Hash of query_text
     result_id UUID NOT NULL, -- ID of the result (user_id, post_id, etc)

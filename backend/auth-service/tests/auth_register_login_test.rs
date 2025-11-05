@@ -12,15 +12,14 @@
 
 #[cfg(test)]
 mod auth_register_login_tests {
-    use tonic::Code;
     use std::time::Duration;
     use tokio::time::sleep;
+    use tonic::Code;
 
     // Helper: Start auth service and return child process
     async fn start_service() -> Result<std::process::Child, Box<dyn std::error::Error>> {
         // Mock implementation - will be replaced with actual service startup
-        Ok(std::process::Command::new("echo")
-            .spawn()?)
+        Ok(std::process::Command::new("echo").spawn()?)
     }
 
     // Helper: Wait for gRPC service to be ready

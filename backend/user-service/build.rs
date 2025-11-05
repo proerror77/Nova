@@ -1,17 +1,31 @@
-fn main() {
-    // Compile proto files for gRPC server generation
-    // user-service PROVIDES UserService (server implementation)
-    // Uses Phase 0 proto definitions from nova/backend/proto/services/
-    //
-    // NOTE: Inter-service communication (clients to other services) will be configured
-    // in Phase 7A when all service proto files are available
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let services_dir = "../proto/services";
+
+    for proto in [
+        "user_service.proto",
+        "auth_service.proto",
+        "content_service.proto",
+        "media_service.proto",
+        "video_service.proto",
+        "common.proto",
+    ] {
+        println!("cargo:rerun-if-changed={}/{}", services_dir, proto);
+    }
 
     tonic_build::configure()
         .build_server(true)
-        .build_client(false)
+        .build_client(true)
         .compile(
-            &["../proto/services/user_service.proto"],
-            &["../proto/services/"],
-        )
-        .expect("Failed to compile user_service.proto");
+            &[
+                format!("{services_dir}/user_service.proto"),
+                format!("{services_dir}/auth_service.proto"),
+                format!("{services_dir}/content_service.proto"),
+                format!("{services_dir}/media_service.proto"),
+                format!("{services_dir}/video_service.proto"),
+                format!("{services_dir}/common.proto"),
+            ],
+            &[services_dir],
+        )?;
+
+    Ok(())
 }

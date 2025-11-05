@@ -7,7 +7,7 @@
 -- ============================================
 -- Stores conversation metadata (1:1 and group)
 CREATE TABLE IF NOT EXISTS conversations (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     conversation_type VARCHAR(20) NOT NULL CHECK (conversation_type IN ('direct', 'group')),
     name VARCHAR(255),  -- Only for group conversations
     created_by UUID NOT NULL REFERENCES users(id),
@@ -34,7 +34,7 @@ COMMENT ON COLUMN conversations.name IS 'Group chat name (NULL for direct conver
 -- ============================================
 -- Stores conversation participants and their metadata
 CREATE TABLE IF NOT EXISTS conversation_members (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     role VARCHAR(20) NOT NULL DEFAULT 'member' CHECK (role IN ('owner', 'admin', 'member')),
@@ -72,7 +72,7 @@ COMMENT ON COLUMN conversation_members.is_archived IS 'Whether user has archived
 -- Stores encrypted messages
 -- NOTE: No partitioning in Phase 1 (optimize later when > 10M rows)
 CREATE TABLE IF NOT EXISTS messages (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
     sender_id UUID NOT NULL REFERENCES users(id),
 

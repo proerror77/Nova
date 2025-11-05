@@ -2,7 +2,7 @@
 -- ML model metadata, feature engineering, and inference tracking
 
 CREATE TABLE IF NOT EXISTS ml_models (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     model_name VARCHAR(255) NOT NULL,
     version VARCHAR(20) NOT NULL,
     model_type VARCHAR(50) NOT NULL, -- 'collaborative_filtering', 'deep_learning', 'ensemble'
@@ -21,7 +21,7 @@ CREATE INDEX idx_models_deployed_at ON ml_models(deployed_at DESC);
 
 -- Model performance tracking
 CREATE TABLE IF NOT EXISTS model_performance (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     model_id UUID NOT NULL,
     metric_name VARCHAR(100) NOT NULL,
     metric_value FLOAT NOT NULL,
@@ -35,7 +35,7 @@ CREATE INDEX idx_performance_metric_name ON model_performance(metric_name);
 
 -- User embeddings (256-dimensional vectors)
 CREATE TABLE IF NOT EXISTS user_embeddings (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID NOT NULL UNIQUE,
     model_id UUID NOT NULL,
     embedding VECTOR(256) NOT NULL,
@@ -50,7 +50,7 @@ CREATE INDEX idx_user_embeddings_created_at ON user_embeddings(created_at DESC);
 
 -- Video embeddings (256-dimensional vectors)
 CREATE TABLE IF NOT EXISTS video_embeddings (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     video_id UUID NOT NULL UNIQUE,
     model_id UUID NOT NULL,
     embedding VECTOR(256) NOT NULL,
@@ -66,7 +66,7 @@ CREATE INDEX idx_video_embeddings_created_at ON video_embeddings(created_at DESC
 
 -- User-item interaction history for training
 CREATE TABLE IF NOT EXISTS user_item_interactions (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID NOT NULL,
     video_id UUID NOT NULL,
     interaction_type VARCHAR(20) NOT NULL, -- 'view', 'like', 'comment', 'share', 'complete'
@@ -86,7 +86,7 @@ CREATE INDEX idx_interactions_timestamp ON user_item_interactions(interaction_ti
 
 -- Collaborative filtering similarity matrix (pre-computed)
 CREATE TABLE IF NOT EXISTS cf_similarity_matrix (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     model_id UUID NOT NULL,
     user_id_1 UUID NOT NULL,
     user_id_2 UUID NOT NULL,
@@ -102,7 +102,7 @@ CREATE INDEX idx_cf_similarity_score ON cf_similarity_matrix(similarity_score DE
 
 -- Model predictions/recommendations cache
 CREATE TABLE IF NOT EXISTS recommendation_cache (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID NOT NULL,
     model_id UUID NOT NULL,
     recommended_videos UUID[] NOT NULL, -- Array of video IDs ranked
@@ -118,7 +118,7 @@ CREATE INDEX idx_cache_expires_at ON recommendation_cache(expires_at);
 
 -- A/B test configuration
 CREATE TABLE IF NOT EXISTS ab_tests (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     test_name VARCHAR(255) NOT NULL UNIQUE,
     control_model_id UUID,
     treatment_model_id UUID,
@@ -136,7 +136,7 @@ CREATE INDEX idx_ab_tests_status ON ab_tests(status);
 
 -- A/B test metrics
 CREATE TABLE IF NOT EXISTS ab_test_metrics (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     test_id UUID NOT NULL,
     variant VARCHAR(20) NOT NULL, -- 'control' or 'treatment'
     metric_name VARCHAR(100) NOT NULL,
@@ -149,7 +149,7 @@ CREATE INDEX idx_ab_metric_test_variant ON ab_test_metrics(test_id, variant);
 
 -- Inference log for monitoring and debugging
 CREATE TABLE IF NOT EXISTS inference_logs (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     model_id UUID NOT NULL,
     user_id UUID,
     request_id VARCHAR(255),

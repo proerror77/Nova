@@ -13,7 +13,7 @@ pub async fn create_share(
     let share = sqlx::query_as::<_, PostShare>(
         r#"
         INSERT INTO post_shares (id, post_id, user_id, share_via, shared_with_user_id, shared_at)
-        VALUES (gen_random_uuid(), $1, $2, $3, $4, CURRENT_TIMESTAMP)
+        VALUES (uuid_generate_v4(), $1, $2, $3, $4, CURRENT_TIMESTAMP)
         RETURNING id, post_id, user_id, share_via, shared_with_user_id, shared_at
         "#,
     )

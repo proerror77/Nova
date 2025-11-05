@@ -85,12 +85,63 @@ spec:
               name: nova-config
               key: KAFKA_BROKERS
 
+        # S3 (media attachments)
+        - name: S3_BUCKET
+          valueFrom:
+            secretKeyRef:
+              name: nova-s3-credentials
+              key: S3_BUCKET
+        - name: AWS_REGION
+          valueFrom:
+            secretKeyRef:
+              name: nova-s3-credentials
+              key: AWS_REGION
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: nova-s3-credentials
+              key: AWS_ACCESS_KEY_ID
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: nova-s3-credentials
+              key: AWS_SECRET_ACCESS_KEY
+        - name: AWS_SESSION_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: nova-s3-credentials
+              key: AWS_SESSION_TOKEN
+
         # JWT
         - name: JWT_PUBLIC_KEY_PEM
           valueFrom:
             secretKeyRef:
               name: nova-jwt-keys
               key: JWT_PUBLIC_KEY_PEM
+
+        # Push credentials (APNs / FCM)
+        - name: APNS_CERTIFICATE_PATH
+          value: /var/run/secrets/push/apns-cert.p8
+        - name: APNS_CERTIFICATE_PASSPHRASE
+          valueFrom:
+            secretKeyRef:
+              name: nova-push-credentials
+              key: APNS_CERTIFICATE_PASSPHRASE
+        - name: APNS_BUNDLE_ID
+          valueFrom:
+            secretKeyRef:
+              name: nova-push-credentials
+              key: APNS_BUNDLE_ID
+        - name: APNS_IS_PRODUCTION
+          valueFrom:
+            secretKeyRef:
+              name: nova-push-credentials
+              key: APNS_IS_PRODUCTION
+        - name: FCM_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: nova-push-credentials
+              key: FCM_API_KEY
 
         # ClickHouse
         - name: CLICKHOUSE_URL
@@ -165,6 +216,9 @@ spec:
           mountPath: /tmp
         - name: cache
           mountPath: /app/cache
+        - name: push-credentials
+          mountPath: /var/run/secrets/push
+          readOnly: true
 
       # 卷定义
       volumes:
@@ -172,6 +226,10 @@ spec:
         emptyDir: {}
       - name: cache
         emptyDir: {}
+      - name: push-credentials
+        secret:
+          secretName: nova-push-credentials
+          optional: true
 
       # 优雅关闭配置
       terminationGracePeriodSeconds: 30

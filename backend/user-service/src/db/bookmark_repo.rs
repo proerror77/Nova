@@ -11,7 +11,7 @@ pub async fn create_bookmark(
     let bookmark = sqlx::query_as::<_, Bookmark>(
         r#"
         INSERT INTO bookmarks (id, user_id, post_id, bookmarked_at)
-        VALUES (gen_random_uuid(), $1, $2, CURRENT_TIMESTAMP)
+        VALUES (uuid_generate_v4(), $1, $2, CURRENT_TIMESTAMP)
         ON CONFLICT (user_id, post_id) DO NOTHING
         RETURNING id, user_id, post_id, bookmarked_at
         "#,

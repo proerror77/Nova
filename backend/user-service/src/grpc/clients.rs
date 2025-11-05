@@ -2,8 +2,8 @@
 
 use crate::grpc::config::GrpcClientConfig;
 use crate::grpc::health::{HealthChecker, HealthStatus};
-use crate::grpc::nova::auth::v1::auth_service_client::AuthServiceClient as TonicAuthServiceClient;
-use crate::grpc::nova::auth::v1::*;
+use crate::grpc::nova::auth_service::auth_service_client::AuthServiceClient as TonicAuthServiceClient;
+use crate::grpc::nova::auth_service::*;
 use crate::grpc::nova::content::content_service_client::ContentServiceClient as TonicContentServiceClient;
 use crate::grpc::nova::content::*;
 use crate::grpc::nova::media::media_service_client::MediaServiceClient as TonicMediaServiceClient;
@@ -151,7 +151,8 @@ impl ContentServiceClient {
         );
 
         let pool_size = config.pool_size();
-        let endpoint = Endpoint::from_shared(config.content_service_url.clone())?
+        let endpoint_url = config.endpoint_url(&config.content_service_url)?;
+        let base_endpoint = Endpoint::from_shared(endpoint_url)?
             .connect_timeout(config.connection_timeout())
             .timeout(config.connection_timeout())
             .http2_keep_alive_interval(config.http2_keep_alive_interval())
@@ -160,6 +161,11 @@ impl ContentServiceClient {
             .keep_alive_timeout(config.connection_timeout())
             .tcp_nodelay(true)
             .concurrency_limit(config.max_concurrent_streams as usize);
+        let endpoint = if let Some(tls) = config.tls_config_for(&config.content_service_url)? {
+            base_endpoint.tls_config(tls)?
+        } else {
+            base_endpoint
+        };
 
         let mut clients = Vec::with_capacity(pool_size);
         for _ in 0..pool_size {
@@ -527,7 +533,8 @@ impl MediaServiceClient {
         );
 
         let pool_size = config.pool_size();
-        let endpoint = Endpoint::from_shared(config.media_service_url.clone())?
+        let endpoint_url = config.endpoint_url(&config.media_service_url)?;
+        let base_endpoint = Endpoint::from_shared(endpoint_url)?
             .connect_timeout(config.connection_timeout())
             .timeout(config.connection_timeout())
             .http2_keep_alive_interval(config.http2_keep_alive_interval())
@@ -536,6 +543,11 @@ impl MediaServiceClient {
             .keep_alive_timeout(config.connection_timeout())
             .tcp_nodelay(true)
             .concurrency_limit(config.max_concurrent_streams as usize);
+        let endpoint = if let Some(tls) = config.tls_config_for(&config.media_service_url)? {
+            base_endpoint.tls_config(tls)?
+        } else {
+            base_endpoint
+        };
 
         let mut clients = Vec::with_capacity(pool_size);
         for _ in 0..pool_size {
@@ -756,7 +768,8 @@ impl AuthServiceClient {
         );
 
         let pool_size = config.pool_size();
-        let endpoint = Endpoint::from_shared(config.auth_service_url.clone())?
+        let endpoint_url = config.endpoint_url(&config.auth_service_url)?;
+        let base_endpoint = Endpoint::from_shared(endpoint_url)?
             .connect_timeout(config.connection_timeout())
             .timeout(config.connection_timeout())
             .http2_keep_alive_interval(config.http2_keep_alive_interval())
@@ -765,6 +778,11 @@ impl AuthServiceClient {
             .keep_alive_timeout(config.connection_timeout())
             .tcp_nodelay(true)
             .concurrency_limit(config.max_concurrent_streams as usize);
+        let endpoint = if let Some(tls) = config.tls_config_for(&config.auth_service_url)? {
+            base_endpoint.tls_config(tls)?
+        } else {
+            base_endpoint
+        };
 
         let mut clients = Vec::with_capacity(pool_size);
         for _ in 0..pool_size {
@@ -903,6 +921,9 @@ impl AuthServiceClient {
                     .set_auth_service_health(HealthStatus::Healthy)
                     .await;
                 let body = resp.into_inner();
+                if !body.found {
+                    return Ok(None);
+                }
                 Ok(body.public_key)
             }
             Err(err) => {

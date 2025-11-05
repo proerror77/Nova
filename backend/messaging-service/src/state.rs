@@ -1,7 +1,10 @@
 use crate::{
     config::Config,
     redis_client::RedisClient,
-    services::{auth_client::AuthClient, encryption::EncryptionService, key_exchange::KeyExchangeService, push::ApnsPush},
+    services::{
+        auth_client::AuthClient, encryption::EncryptionService, key_exchange::KeyExchangeService,
+        push::ApnsPush,
+    },
     websocket::ConnectionRegistry,
 };
 use sqlx::{Pool, Postgres};

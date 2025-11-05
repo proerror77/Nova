@@ -11,6 +11,7 @@ use crate::db::ch_client::ClickHouseClient;
 use crate::grpc::health::{HealthChecker, HealthStatus};
 use crate::services::kafka_producer::EventProducer;
 use crate::utils::redis_timeout::run_with_timeout;
+use redis_utils::SharedConnectionManager;
 
 #[derive(Serialize)]
 struct HealthResponse {
@@ -47,7 +48,7 @@ struct ReadinessResponse {
 #[derive(Clone)]
 pub struct HealthCheckState {
     pub db_pool: PgPool,
-    pub redis_client: redis::Client,
+    pub redis: SharedConnectionManager,
     pub clickhouse_client: Option<Arc<ClickHouseClient>>,
     pub kafka_producer: Option<Arc<EventProducer>>,
     pub health_checker: Arc<HealthChecker>,
@@ -59,7 +60,7 @@ pub struct HealthCheckState {
 impl HealthCheckState {
     pub fn new(
         db_pool: PgPool,
-        redis_client: redis::Client,
+        redis: SharedConnectionManager,
         clickhouse_client: Option<Arc<ClickHouseClient>>,
         kafka_producer: Option<Arc<EventProducer>>,
         health_checker: Arc<HealthChecker>,
@@ -69,7 +70,7 @@ impl HealthCheckState {
     ) -> Self {
         Self {
             db_pool,
-            redis_client,
+            redis,
             clickhouse_client,
             kafka_producer,
             health_checker,
@@ -87,7 +88,7 @@ impl HealthCheckState {
     }
 
     async fn check_redis(&self) -> Result<(), redis::RedisError> {
-        let mut conn = self.redis_client.get_multiplexed_async_connection().await?;
+        let mut conn = self.redis.lock().await.clone();
         let response: String = run_with_timeout(redis::cmd("PING").query_async(&mut conn)).await?;
         if response == "PONG" {
             Ok(())

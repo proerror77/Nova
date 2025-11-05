@@ -152,8 +152,8 @@ impl Config {
             endpoint: env::var("S3_ENDPOINT").ok(),
         };
 
-        let auth_service_url = env::var("AUTH_SERVICE_URL")
-            .unwrap_or_else(|_| "http://auth-service:9001".to_string());
+        let auth_service_url =
+            env::var("AUTH_SERVICE_URL").unwrap_or_else(|_| "http://auth-service:9001".to_string());
 
         Ok(Self {
             database_url,

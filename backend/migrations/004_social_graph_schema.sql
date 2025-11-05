@@ -13,7 +13,7 @@ WHERE follower_count IS NULL;
 
 -- 用户关系表 (Follows)
 CREATE TABLE follows (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   follower_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   following_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -27,7 +27,7 @@ CREATE INDEX idx_follows_created_at ON follows(created_at DESC);
 
 -- 点赞表 (Likes)
 CREATE TABLE likes (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   post_id UUID NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -40,7 +40,7 @@ CREATE INDEX idx_likes_created_at ON likes(created_at DESC);
 
 -- 评论表 (Comments) - 支持回复
 CREATE TABLE comments (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   post_id UUID NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   content TEXT NOT NULL,

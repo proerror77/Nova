@@ -8,6 +8,9 @@ use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+const DEFAULT_VALIDATION_LEEWAY: u64 = 30;
+const MAX_IAT_FUTURE_SKEW_SECS: i64 = 300;
+
 /// JWT Claims structure
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Claims {
@@ -17,12 +20,18 @@ pub struct Claims {
     pub iat: i64,
     /// Expiration time (Unix timestamp)
     pub exp: i64,
+    /// Not before timestamp
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub nbf: Option<i64>,
     /// Token type: "access" or "refresh"
     pub token_type: String,
     /// Email address
     pub email: String,
     /// Username
     pub username: String,
+    /// Unique token identifier
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub jti: Option<String>,
 }
 
 use std::sync::RwLock;
@@ -63,12 +72,30 @@ fn get_decoding_key() -> Result<DecodingKey> {
 /// Validate and decode a token
 pub fn validate_token(token: &str) -> Result<TokenData<Claims>> {
     let decoding_key = get_decoding_key()?;
-    decode::<Claims>(
-        token,
-        &decoding_key,
-        &Validation::new(jsonwebtoken::Algorithm::RS256),
-    )
-    .map_err(|e| anyhow!("Token validation failed: {}", e))
+    let mut validation = Validation::new(jsonwebtoken::Algorithm::RS256);
+    validation.validate_exp = true;
+    validation.validate_nbf = true;
+    validation.leeway = DEFAULT_VALIDATION_LEEWAY;
+
+    let token_data = decode::<Claims>(token, &decoding_key, &validation)
+        .map_err(|e| anyhow!("Token validation failed: {}", e))?;
+
+    if token_data
+        .claims
+        .jti
+        .as_ref()
+        .map(|jti| jti.trim().is_empty())
+        .unwrap_or(true)
+    {
+        return Err(anyhow!("Token validation failed: missing jti claim"));
+    }
+
+    let now = Utc::now().timestamp();
+    if token_data.claims.iat > now + MAX_IAT_FUTURE_SKEW_SECS {
+        return Err(anyhow!("Token validation failed: iat in future"));
+    }
+
+    Ok(token_data)
 }
 
 /// Check if a token is expired
@@ -152,9 +179,11 @@ JwIDAQAB
             sub: user_id.to_string(),
             iat: now.timestamp(),
             exp: (now + expiry_offset).timestamp(),
+            nbf: Some(now.timestamp()),
             token_type: token_type.to_string(),
             email: email.to_string(),
             username: username.to_string(),
+            jti: Some(Uuid::new_v4().to_string()),
         };
 
         encode(

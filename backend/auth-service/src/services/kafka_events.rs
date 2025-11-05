@@ -1,12 +1,12 @@
 /// Kafka event producer for auth service
 use crate::error::{AuthError, AuthResult};
-use chrono::Utc;
+use chrono::{DateTime, Utc};
+use crypto_core::kafka_correlation::inject_headers;
 use event_schema::{
     EventEnvelope, PasswordChangedEvent, TwoFAEnabledEvent, UserCreatedEvent, UserDeletedEvent,
 };
 use rdkafka::message::OwnedHeaders;
 use rdkafka::producer::{FutureProducer, FutureRecord};
-use crypto_core::kafka_correlation::inject_headers;
 use std::time::Duration;
 use tracing::warn;
 use uuid::Uuid;
@@ -82,17 +82,45 @@ impl KafkaEventProducer {
     }
 
     /// Publish user deleted event
-    pub async fn publish_user_deleted(&self, user_id: Uuid) -> AuthResult<()> {
+    pub async fn publish_user_deleted(
+        &self,
+        user_id: Uuid,
+        deleted_at: DateTime<Utc>,
+        soft_delete: bool,
+    ) -> AuthResult<()> {
         let event = UserDeletedEvent {
             user_id,
-            deleted_at: Utc::now(),
-            soft_delete: true,
+            deleted_at,
+            soft_delete,
         };
 
         let envelope =
             EventEnvelope::new("auth-service", event).with_correlation_id(Uuid::new_v4());
 
         self.publish_event(&envelope, user_id).await
+    }
+
+    /// Publish raw JSON payload to an arbitrary topic (e.g., DLQ)
+    pub async fn publish_raw_to_topic(
+        &self,
+        topic: &str,
+        partition_key: &str,
+        payload: &str,
+    ) -> AuthResult<()> {
+        let record = FutureRecord::to(topic).key(partition_key).payload(payload);
+
+        self.producer
+            .send(record, Duration::from_secs(30))
+            .await
+            .map_err(|(error, _)| {
+                warn!("Failed to send Kafka event to topic {}: {:?}", topic, error);
+                AuthError::Internal(format!(
+                    "Failed to publish event to Kafka topic {}: {}",
+                    topic, error
+                ))
+            })?;
+
+        Ok(())
     }
 
     /// Generic event publishing method
