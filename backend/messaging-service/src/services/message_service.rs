@@ -1,3 +1,4 @@
+use crate::models::message::Message as MessageRow;
 use crate::services::conversation_service::PrivacyMode;
 use crate::services::encryption::EncryptionService;
 use base64::{engine::general_purpose, Engine as _};
@@ -43,7 +44,7 @@ impl MessageService {
         sender_id: Uuid,
         plaintext: &[u8],
         idempotency_key: Option<&str>,
-    ) -> Result<(Uuid, i64), crate::error::AppError> {
+    ) -> Result<MessageRow, crate::error::AppError> {
         let id = Uuid::new_v4();
         let privacy_mode = Self::fetch_conversation_privacy(db, conversation_id).await?;
 
@@ -61,7 +62,7 @@ impl MessageService {
         let encrypted_slice = content_encrypted.as_ref().map(|v| v.as_slice());
         let nonce_slice = content_nonce.as_ref().map(|v| v.as_slice());
 
-        let seq: i64 = sqlx::query_scalar(
+        let row = sqlx::query_as::<_, (Uuid, Uuid, Uuid, String, Option<Vec<u8>>, Option<Vec<u8>>, i32, i64, Option<String>, chrono::DateTime<Utc>)>(
             r#"
             WITH next AS (
                 INSERT INTO conversation_counters (conversation_id, last_seq)
@@ -92,7 +93,7 @@ impl MessageService {
                 $8,
                 next.last_seq
             FROM next
-            RETURNING sequence_number
+            RETURNING id, conversation_id, sender_id, content, content_encrypted, content_nonce, encryption_version, sequence_number, idempotency_key, created_at
             "#,
         )
         .bind(id)
@@ -107,7 +108,22 @@ impl MessageService {
         .await
         .map_err(|e| crate::error::AppError::StartServer(format!("insert msg: {e}")))?;
 
-        Ok((id, seq))
+        Ok(MessageRow {
+            id: row.0,
+            conversation_id: row.1,
+            sender_id: row.2,
+            content: row.3,
+            content_encrypted: row.4,
+            content_nonce: row.5,
+            encryption_version: row.6,
+            sequence_number: row.7,
+            idempotency_key: row.8,
+            created_at: row.9,
+            updated_at: None,
+            edited_at: None,
+            deleted_at: None,
+            reaction_count: 0,
+        })
     }
     /// Send a message to a conversation (wrapper for send_message_db)
     /// Note: This is a simplified version. Use send_message_db directly for full control.
@@ -141,11 +157,10 @@ impl MessageService {
         }
 
         // Send message without idempotency key (for simple use cases)
-        let (message_id, _sequence_number) =
-            Self::send_message_db(db, encryption, conversation_id, sender_id, plaintext, None)
-                .await?;
+        let message = Self::send_message_db(db, encryption, conversation_id, sender_id, plaintext, None)
+            .await?;
 
-        Ok(message_id)
+        Ok(message.id)
     }
 
     /// Send an audio message to a conversation

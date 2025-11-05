@@ -41,7 +41,7 @@ pub async fn send_message(
 
     member.can_send()?;
 
-    let (msg_id, seq) = MessageService::send_message_db(
+    let message = MessageService::send_message_db(
         &state.db,
         &state.encryption,
         conversation_id,
@@ -53,9 +53,9 @@ pub async fn send_message(
 
     // Broadcast message.new event using unified event system
     let event = WebSocketEvent::MessageNew {
-        id: msg_id,
+        id: message.id,
         sender_id: user.id,
-        sequence_number: seq,
+        sequence_number: message.sequence_number,
         conversation_id,
     };
 
@@ -69,8 +69,8 @@ pub async fn send_message(
     .await;
 
     Ok(HttpResponse::Ok().json(SendMessageResponse {
-        id: msg_id,
-        sequence_number: seq,
+        id: message.id,
+        sequence_number: message.sequence_number,
     }))
 }
 
@@ -710,7 +710,7 @@ pub async fn forward_message(
     .ok_or(crate::error::AppError::NotFound)?;
 
     // 4) Create new message in target conversation with same content
-    let (new_message_id, _seq) = crate::services::message_service::MessageService::send_message_db(
+    let new_message = crate::services::message_service::MessageService::send_message_db(
         &state.db,
         &state.encryption,
         body.target_conversation_id,
@@ -734,11 +734,10 @@ pub async fn forward_message(
     }
 
     // 6) Broadcast message.new for forwarded message
-    let now = chrono::Utc::now();
     let event = WebSocketEvent::MessageNew {
-        id: new_message_id,
+        id: new_message.id,
         sender_id: user.id,
-        sequence_number: 0, // unknown here; clients can refresh
+        sequence_number: new_message.sequence_number,
         conversation_id: body.target_conversation_id,
     };
     let _ = broadcast_event(
@@ -751,9 +750,9 @@ pub async fn forward_message(
     .await;
 
     Ok(HttpResponse::Ok().json(ForwardMessageResponse {
-        forwarded_message_id: new_message_id,
+        forwarded_message_id: new_message.id,
         target_conversation_id: body.target_conversation_id,
-        forwarded_at: now.to_rfc3339(),
+        forwarded_at: new_message.created_at.to_rfc3339(),
     }))
 }
 
