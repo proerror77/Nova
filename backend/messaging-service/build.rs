@@ -4,23 +4,23 @@ fn main() {
     // messaging-service now acts as AUTH-SERVICE CLIENT to query users via gRPC
     // instead of directly querying the shadow users table
 
-    // Build server for MessagingService (this service provides)
-    tonic_build::configure()
-        .build_server(true)
-        .build_client(false)
-        .compile(
-            &["../proto/services/messaging_service.proto"],
-            &["../proto/services/"],
-        )
-        .expect("Failed to compile messaging_service.proto");
+    println!("cargo:rerun-if-changed=../proto/services/messaging_service.proto");
+    println!("cargo:rerun-if-changed=../proto/services/auth_service.proto");
+    println!("cargo:rerun-if-changed=../proto/services/common.proto");
 
-    // Build client for AuthService (to call into auth-service)
+    // CRITICAL: Must compile all protos in a SINGLE call to share common.proto module
+    // If split into separate compile() calls, each generates isolated module trees
+    // and common::v1::ErrorStatus won't be accessible across them
     tonic_build::configure()
-        .build_server(false)
-        .build_client(true)
+        .build_server(true)  // MessagingService server
+        .build_client(true)  // AuthService client
         .compile(
-            &["../proto/services/auth_service.proto"],
+            &[
+                "../proto/services/messaging_service.proto",
+                "../proto/services/auth_service.proto",
+                "../proto/services/common.proto",
+            ],
             &["../proto/services/"],
         )
-        .expect("Failed to compile auth_service.proto");
+        .expect("Failed to compile proto files");
 }

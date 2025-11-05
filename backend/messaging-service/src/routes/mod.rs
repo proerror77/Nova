@@ -131,7 +131,7 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig) {
     // API v1 endpoints (all business logic routes with /api/v1 prefix)
     cfg.service(
         web::scope("/api/v1")
-            .wrap(actix_middleware::jwt_auth::JwtAuthMiddleware)
+            .wrap(actix_middleware::jwt_auth::JwtAuthMiddleware::new())
             // Video calls
             .route("/conversations/{id}/calls", web::post().to(initiate_call))
             .route("/calls/{id}/answer", web::post().to(answer_call))

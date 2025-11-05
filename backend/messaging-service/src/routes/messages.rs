@@ -350,7 +350,7 @@ pub async fn update_message(
         sender_id,
         current_version,
         created_at,
-        privacy_mode,
+        privacy_mode: privacy_mode.clone(),
         old_content,
     };
 
@@ -370,7 +370,7 @@ pub async fn update_message(
             &state.encryption,
             conversation_id,
             body.plaintext.as_bytes(),
-            privacy_mode,
+            privacy_mode.clone(),
         )
         .await?;
 
@@ -775,7 +775,7 @@ pub async fn send_audio_message(
     member.can_send()?;
 
     // Validate audio parameters (duration and codec)
-    validate_audio_message(body.duration_ms, &body.audio_codec)?;
+    validate_audio_message(body.duration_ms as i64, &body.audio_codec)?;
 
     // Store the audio message
     let (msg_id, seq) = MessageService::send_audio_message_db(
@@ -905,7 +905,7 @@ pub async fn get_audio_presigned_url(
     let presign_cfg = PresigningConfig::builder()
         .expires_in(Duration::from_secs(expiration_secs))
         .build()
-        .map_err(|e| AppError::Internal(format!("Failed to create presign config: {e}")))?;
+        .map_err(|e| AppError::Config(format!("Failed to create presign config: {e}")))?;
 
     let presigned = s3_client
         .put_object()
@@ -914,7 +914,7 @@ pub async fn get_audio_presigned_url(
         .content_type(&body.content_type)
         .presigned(presign_cfg)
         .await
-        .map_err(|e| AppError::Internal(format!("Failed to generate presigned URL: {e}")))?;
+        .map_err(|e| AppError::Config(format!("Failed to generate presigned URL: {e}")))?;
 
     let presigned_url = presigned.uri().to_string();
 
