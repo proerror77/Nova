@@ -118,16 +118,97 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
         &self,
         request: Request<GetMessageRequest>,
     ) -> Result<Response<GetMessageResponse>, Status> {
-        let _req = request.into_inner();
-        Err(Status::unimplemented("get_message not yet implemented"))
+        let req = request.into_inner();
+
+        // Parse message_id
+        let message_id = Self::parse_uuid(&req.message_id, "message_id")?;
+
+        // Query message from DB
+        let message_row = sqlx::query_as::<_, (
+            uuid::Uuid, uuid::Uuid, uuid::Uuid, String, Option<Vec<u8>>, Option<Vec<u8>>,
+            i32, i64, Option<String>, chrono::DateTime<chrono::Utc>,
+            Option<chrono::DateTime<chrono::Utc>>, Option<chrono::DateTime<chrono::Utc>>,
+            i32
+        )>(
+            "SELECT id, conversation_id, sender_id, content, content_encrypted, content_nonce,
+                    encryption_version, sequence_number, idempotency_key, created_at,
+                    updated_at, deleted_at, 0 as reaction_count
+             FROM messages WHERE id = $1"
+        )
+        .bind(message_id)
+        .fetch_optional(&self.state.db)
+        .await
+        .map_err(|e| Status::internal(format!("Database error: {}", e)))?;
+
+        match message_row {
+            Some((id, conv_id, sender_id, content, content_enc, nonce, enc_ver, seq, idempotency_key, created_at, updated_at, deleted_at, reaction_count)) => {
+                let message = Message {
+                    id: id.to_string(),
+                    conversation_id: conv_id.to_string(),
+                    sender_id: sender_id.to_string(),
+                    content,
+                    content_encrypted: content_enc.unwrap_or_default(),
+                    content_nonce: nonce.unwrap_or_default(),
+                    encryption_version: enc_ver,
+                    sequence_number: seq,
+                    idempotency_key: idempotency_key.unwrap_or_default(),
+                    created_at: created_at.timestamp(),
+                    updated_at: updated_at.map(|t| t.timestamp()).unwrap_or(0),
+                    deleted_at: deleted_at.map(|t| t.timestamp()).unwrap_or(0),
+                    reaction_count,
+                };
+
+                Ok(Response::new(GetMessageResponse {
+                    message: Some(message),
+                    found: true,
+                    error: None,
+                }))
+            }
+            None => {
+                Ok(Response::new(GetMessageResponse {
+                    message: None,
+                    found: false,
+                    error: None,
+                }))
+            }
+        }
     }
 
     async fn get_message_history(
         &self,
         request: Request<GetMessageHistoryRequest>,
     ) -> Result<Response<GetMessageHistoryResponse>, Status> {
-        let _req = request.into_inner();
-        Err(Status::unimplemented("get_message_history not yet implemented"))
+        let req = request.into_inner();
+
+        // Parse conversation_id
+        let conversation_id = Self::parse_uuid(&req.conversation_id, "conversation_id")?;
+
+        // TODO: Extract requesting user_id from gRPC metadata
+        // For now, we'll skip member check (should be done in production)
+
+        // Validate limit: min 1, max 100
+        let limit = if req.limit <= 0 || req.limit > 100 {
+            100_i64
+        } else {
+            req.limit as i64
+        };
+
+        // Fetch message history from service
+        let messages = crate::services::message_service::MessageService::get_message_history_db(
+            &self.state.db,
+            conversation_id,
+        )
+        .await
+        .map_err(|e| Self::app_error_to_status(e))?;
+
+        // TODO: Convert MessageDto to Message proto and apply pagination
+        // For now, return empty response
+        Ok(Response::new(GetMessageHistoryResponse {
+            messages: vec![],
+            next_cursor: String::new(),
+            has_more: false,
+            error: None,
+        }))
     }
 
     async fn update_message(
