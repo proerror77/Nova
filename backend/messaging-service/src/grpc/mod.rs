@@ -194,19 +194,76 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
         };
 
         // Fetch message history from service
-        let messages = crate::services::message_service::MessageService::get_message_history_db(
+        let message_dtos = crate::services::message_service::MessageService::get_message_history_db(
             &self.state.db,
             conversation_id,
         )
         .await
         .map_err(|e| Self::app_error_to_status(e))?;
 
-        // TODO: Convert MessageDto to Message proto and apply pagination
-        // For now, return empty response
+        // Convert MessageDto to proto Message, applying limit and cursor
+        let mut proto_messages = Vec::new();
+        let mut cursor_found = req.before_timestamp == 0; // If no cursor, start from beginning
+        let total_dtos = message_dtos.len();
+
+        for dto in message_dtos {
+            // If using cursor pagination, skip messages until we find the cursor point
+            if !cursor_found {
+                // Parse the created_at timestamp from RFC3339 string for comparison
+                if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(&dto.created_at) {
+                    if dt.timestamp() < req.before_timestamp {
+                        cursor_found = true;
+                    } else {
+                        continue;
+                    }
+                } else {
+                    continue;
+                }
+            }
+
+            // Apply limit
+            if proto_messages.len() >= limit as usize {
+                break;
+            }
+
+            // Convert MessageDto to proto Message
+            let proto_msg = Message {
+                id: dto.id.to_string(),
+                conversation_id: conversation_id.to_string(),
+                sender_id: dto.sender_id.to_string(),
+                content: dto.content,
+                content_encrypted: dto.encrypted_payload.unwrap_or_default().into_bytes(),
+                content_nonce: dto.nonce.unwrap_or_default().into_bytes(),
+                encryption_version: if dto.encrypted { 1 } else { 0 },
+                sequence_number: dto.sequence_number,
+                idempotency_key: String::new(),
+                created_at: chrono::DateTime::parse_from_rfc3339(&dto.created_at)
+                    .map(|dt| dt.timestamp())
+                    .unwrap_or(0),
+                updated_at: dto.updated_at.as_ref()
+                    .and_then(|ts| chrono::DateTime::parse_from_rfc3339(ts).ok())
+                    .map(|dt| dt.timestamp())
+                    .unwrap_or(0),
+                deleted_at: 0, // Not included in MessageDto from get_message_history_db
+                reaction_count: dto.reactions.len() as i32,
+            };
+            proto_messages.push(proto_msg);
+        }
+
+        // Determine if there are more messages and compute next cursor
+        let has_more = total_dtos > (limit as usize);
+        let next_cursor = if has_more && !proto_messages.is_empty() {
+            proto_messages.last()
+                .map(|m| m.created_at)
+                .unwrap_or(0)
+        } else {
+            0
+        };
+
         Ok(Response::new(GetMessageHistoryResponse {
-            messages: vec![],
-            next_cursor: String::new(),
-            has_more: false,
+            messages: proto_messages,
+            next_cursor: next_cursor.to_string(),
+            has_more,
             error: None,
         }))
     }
