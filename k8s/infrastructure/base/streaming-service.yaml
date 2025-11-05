@@ -9,9 +9,6 @@ metadata:
 spec:
   type: ClusterIP
   sessionAffinity: ClientIP
-  sessionAffinityConfig:
-    clientIPConfig:
-      timeoutSeconds: 10800
   ports:
     - name: http
       port: 8080
