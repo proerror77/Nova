@@ -50,7 +50,15 @@ impl FeedCandidate {
 pub struct RankedPost {
     pub post_id: Uuid,
     pub combined_score: f64,
-    pub reason: String,
+    #[serde(serialize_with = "serialize_reason")]
+    pub reason: &'static str,
+}
+
+fn serialize_reason<S>(reason: &&'static str, serializer: S) -> std::result::Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    serializer.serialize_str(reason)
 }
 
 pub struct FeedRankingService {
@@ -304,14 +312,14 @@ impl FeedRankingService {
         candidates: Vec<FeedCandidate>,
         max_items: usize,
     ) -> Result<Vec<RankedPost>> {
-        let mut ranked = Vec::new();
+        let mut ranked = Vec::with_capacity(candidates.len());
         for candidate in candidates {
             let post_id = candidate.post_id_uuid()?;
             let combined_score = self.compute_score(&candidate);
             ranked.push(RankedPost {
                 post_id,
                 combined_score,
-                reason: "combined_score".to_string(),
+                reason: "combined_score",
             });
         }
 
