@@ -1,6 +1,7 @@
 mod openapi;
 
 use actix_web::{dev::Service, web, App, HttpServer};
+use tonic::transport::Server as GrpcServer;
 use std::io;
 use std::sync::Arc;
 use std::time::Instant;
@@ -174,7 +175,24 @@ async fn main() -> io::Result<()> {
     });
     info!("Kafka consumer task spawned");
 
-    // TODO: Start gRPC server for RecommendationService in addition to HTTP server
+    // Start gRPC server for RecommendationService in addition to HTTP server
+    let grpc_addr: std::net::SocketAddr = format!("0.0.0.0:{}", config.app.port + 1000)
+        .parse()
+        .expect("Invalid gRPC bind address");
+    let grpc_pool = db_pool.get_ref().clone();
+    tokio::spawn(async move {
+        let svc = recommendation_service::grpc::RecommendationServiceImpl::new(grpc_pool);
+        tracing::info!("gRPC server listening on {}", grpc_addr);
+        if let Err(e) = GrpcServer::builder()
+            .add_service(
+                recommendation_service::grpc::recommendation_service_server::RecommendationServiceServer::new(svc),
+            )
+            .serve(grpc_addr)
+            .await
+        {
+            tracing::error!("gRPC server error: {}", e);
+        }
+    });
 
     // Start HTTP server
     let http_server = HttpServer::new(move || {

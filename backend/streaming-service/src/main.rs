@@ -11,6 +11,7 @@ mod openapi;
 use actix_web::{dev::Service, middleware as actix_middleware, web, App, HttpServer};
 use db_pool::{create_pool as create_pg_pool, DbConfig as DbPoolConfig};
 use std::io;
+use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::Mutex;
@@ -113,6 +114,27 @@ async fn main() -> io::Result<()> {
     });
 
     tracing::info!("Listening on 0.0.0.0:{}", port);
+
+    // gRPC server (spawned in background) on PORT+1000
+    let grpc_addr: SocketAddr = format!("0.0.0.0:{}", port + 1000)
+        .parse()
+        .expect("Invalid gRPC address");
+    let db_pool_grpc = db_pool.clone();
+    tokio::spawn(async move {
+        let svc = streaming_service::grpc::StreamingServiceImpl::new(db_pool_grpc);
+        tracing::info!("gRPC server listening on {}", grpc_addr);
+        if let Err(e) = tonic::transport::Server::builder()
+            .add_service(
+                streaming_service::grpc::streaming_service_server::StreamingServiceServer::new(
+                    svc,
+                ),
+            )
+            .serve(grpc_addr)
+            .await
+        {
+            tracing::error!("gRPC server error: {}", e);
+        }
+    });
 
     // Start HTTP server
     HttpServer::new(move || {

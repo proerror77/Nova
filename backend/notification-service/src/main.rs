@@ -1,4 +1,5 @@
 use actix_web::{middleware, web, App, HttpServer};
+use tonic::transport::Server as GrpcServer;
 use std::io;
 use db_pool::{create_pool as create_pg_pool, DbConfig as DbPoolConfig};
 use std::sync::Arc;
@@ -65,6 +66,29 @@ async fn main() -> io::Result<()> {
     let addr = format!("0.0.0.0:{}", port);
 
     tracing::info!("Starting HTTP server on {}", addr);
+
+    // Start gRPC server in background on port +1000
+    let grpc_addr: std::net::SocketAddr = format!(
+        "0.0.0.0:{}",
+        port.parse::<u16>().unwrap_or(8000) + 1000
+    )
+    .parse()
+    .expect("Invalid gRPC address");
+    tokio::spawn(async move {
+        let svc = notification_service::grpc::NotificationServiceImpl::default();
+        tracing::info!("gRPC server listening on {}", grpc_addr);
+        if let Err(e) = GrpcServer::builder()
+            .add_service(
+                notification_service::grpc::nova::notification_service::v1::notification_service_server::NotificationServiceServer::new(
+                    svc,
+                ),
+            )
+            .serve(grpc_addr)
+            .await
+        {
+            tracing::error!("gRPC server error: {}", e);
+        }
+    });
 
     // Start HTTP server
     HttpServer::new(move || {

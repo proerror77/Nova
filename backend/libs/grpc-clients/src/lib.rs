@@ -131,42 +131,42 @@ pub struct GrpcClientPool {
 impl GrpcClientPool {
     /// Create a new gRPC client pool from configuration
     pub async fn new(config: &config::GrpcConfig) -> Result<Self, Box<dyn std::error::Error>> {
-        let auth_client = Arc::new(
-            AuthServiceClient::connect(config.auth_service_url.clone()).await?
-        );
-        let user_client = Arc::new(
-            UserServiceClient::connect(config.user_service_url.clone()).await?
-        );
-        let messaging_client = Arc::new(
-            MessagingServiceClient::connect(config.messaging_service_url.clone()).await?
-        );
-        let content_client = Arc::new(
-            ContentServiceClient::connect(config.content_service_url.clone()).await?
-        );
-        let feed_client = Arc::new(
-            FeedServiceClient::connect(config.feed_service_url.clone()).await?
-        );
-        let search_client = Arc::new(
-            SearchServiceClient::connect(config.search_service_url.clone()).await?
-        );
-        let media_client = Arc::new(
-            MediaServiceClient::connect(config.media_service_url.clone()).await?
-        );
-        let notification_client = Arc::new(
-            NotificationServiceClient::connect(config.notification_service_url.clone()).await?
-        );
-        let streaming_client = Arc::new(
-            StreamingServiceClient::connect(config.streaming_service_url.clone()).await?
-        );
-        let cdn_client = Arc::new(
-            CdnServiceClient::connect(config.cdn_service_url.clone()).await?
-        );
-        let events_client = Arc::new(
-            EventsServiceClient::connect(config.events_service_url.clone()).await?
-        );
-        let video_client = Arc::new(
-            VideoServiceClient::connect(config.video_service_url.clone()).await?
-        );
+        let auth_client = Arc::new(AuthServiceClient::new(
+            config.connect_channel(&config.auth_service_url).await?,
+        ));
+        let user_client = Arc::new(UserServiceClient::new(
+            config.connect_channel(&config.user_service_url).await?,
+        ));
+        let messaging_client = Arc::new(MessagingServiceClient::new(
+            config.connect_channel(&config.messaging_service_url).await?,
+        ));
+        let content_client = Arc::new(ContentServiceClient::new(
+            config.connect_channel(&config.content_service_url).await?,
+        ));
+        let feed_client = Arc::new(FeedServiceClient::new(
+            config.connect_channel(&config.feed_service_url).await?,
+        ));
+        let search_client = Arc::new(SearchServiceClient::new(
+            config.connect_channel(&config.search_service_url).await?,
+        ));
+        let media_client = Arc::new(MediaServiceClient::new(
+            config.connect_channel(&config.media_service_url).await?,
+        ));
+        let notification_client = Arc::new(NotificationServiceClient::new(
+            config.connect_channel(&config.notification_service_url).await?,
+        ));
+        let streaming_client = Arc::new(StreamingServiceClient::new(
+            config.connect_channel(&config.streaming_service_url).await?,
+        ));
+        let cdn_client = Arc::new(CdnServiceClient::new(
+            config.connect_channel(&config.cdn_service_url).await?,
+        ));
+        let events_client = Arc::new(EventsServiceClient::new(
+            config.connect_channel(&config.events_service_url).await?,
+        ));
+        let video_client = Arc::new(VideoServiceClient::new(
+            config.connect_channel(&config.video_service_url).await?,
+        ));
 
         Ok(Self {
             auth_client,

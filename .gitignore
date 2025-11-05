@@ -10,6 +10,7 @@
 # Rust
 # Temporary
 # Test coverage
+# Swift/iOS
 *.db
 *.iml
 *.log
@@ -56,3 +57,7 @@ temp/
 terraform/.terraform/
 tmp/
 vendor/
+**/.build/
+**/*.xcarchive/
+**/*.xcodeproj/xcshareddata/xcschemes/
+.backup/

@@ -425,7 +425,7 @@ Feed Service:     string (ISO 8601)
 - [x] 删除 `/backend/protos/` 中的重复定义
 - [x] 保留 `/backend/proto/services/` 作为单一来源
 - [ ] 统一所有 Proto 包名和版本号
-- [x] 生成新的 Rust 代码
+ - [ ] 生成新的 Rust 代码（阻塞：video-service 包名不一致）
 
 **Day 3-4 (16 小时)**
 - [ ] 修复迁移版本号冲突 (5 处)
@@ -434,9 +434,9 @@ Feed Service:     string (ISO 8601)
 - [ ] 恢复 conversation_members FK 约束
 
 **Day 5 (8 小时)**
-- [x] 修复速率限制竞态条件
-- [x] 启用 gRPC mTLS
-- [x] 实现优雅关闭机制
+ - [ ] 修复速率限制竞态条件
+ - [ ] 启用 gRPC mTLS
+ - [ ] 实现优雅关闭机制（部分完成：auth/content/media/user 已完成；messaging 未完成）
 
 **成果**: 33 个问题 → 15 个 (减少 55%)
 
@@ -446,7 +446,7 @@ Feed Service:     string (ISO 8601)
 
 **Week 2 重点**:
 - [x] 修复 JWT (添加 nbf/jti/iat)
-- [ ] 修复 IDOR 漏洞 (User Service)
+ - [x] 修复 IDOR 漏洞 (User Service)
 - [ ] 脱敏日志敏感信息
 - [x] 修复缓存穿透 (负值缓存)
 
