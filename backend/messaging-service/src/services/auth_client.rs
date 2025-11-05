@@ -4,41 +4,38 @@
 //! Consolidates user lookups to go through canonical auth-service instead of
 //! the shadow users table in messaging-service.
 
-use crate::auth_service::auth_service_client::AuthServiceClient;
-use crate::auth_service::{CheckUserExistsRequest, GetUserRequest};
+use grpc_clients::nova::auth_service::v1::{CheckUserExistsRequest, GetUserRequest};
+use grpc_clients::{config::GrpcConfig, GrpcClientPool};
 use crate::error::AppError;
 use std::sync::Arc;
-use tonic::transport::Channel;
+use tonic::Request;
 use uuid::Uuid;
 
 /// Cached gRPC client for auth-service
 /// Implements connection pooling and reuse via tonic channel
 #[derive(Clone)]
-pub struct AuthClient {
-    client: Arc<tokio::sync::Mutex<AuthServiceClient<Channel>>>,
-}
+pub struct AuthClient { pool: Arc<GrpcClientPool> }
 
 impl AuthClient {
     /// Create a new auth client
-    pub async fn new(auth_service_url: &str) -> Result<Self, AppError> {
-        let channel = Channel::from_shared(auth_service_url.to_string())
-            .map_err(|e| AppError::StartServer(format!("Invalid auth service URL: {}", e)))?
-            .connect()
-            .await
-            .map_err(|e| {
-                AppError::StartServer(format!("Failed to connect to auth-service: {}", e))
-            })?;
+    pub async fn new(_auth_service_url: &str) -> Result<Self, AppError> {
+        // Prefer centralized gRPC config from env (URL is ignored once centralized pool is used)
+        let cfg = GrpcConfig::from_env().map_err(|e| {
+            AppError::StartServer(format!("Failed to load gRPC config: {}", e))
+        })?;
 
-        Ok(Self {
-            client: Arc::new(tokio::sync::Mutex::new(AuthServiceClient::new(channel))),
-        })
+        let pool = GrpcClientPool::new(&cfg)
+            .await
+            .map_err(|e| AppError::StartServer(format!("Failed to init gRPC pool: {}", e)))?;
+
+        Ok(Self { pool: Arc::new(pool) })
     }
 
     /// Check if a user exists by ID
     /// Replaces: SELECT EXISTS(SELECT 1 FROM users WHERE id = $1)
     pub async fn user_exists(&self, user_id: Uuid) -> Result<bool, AppError> {
-        let mut client = self.client.lock().await;
-        let request = tonic::Request::new(CheckUserExistsRequest {
+        let mut client = self.pool.auth();
+        let request = Request::new(CheckUserExistsRequest {
             user_id: user_id.to_string(),
         });
 
@@ -63,8 +60,8 @@ impl AuthClient {
     /// Get user by ID
     /// Replaces: SELECT username FROM users WHERE id = $1
     pub async fn get_user(&self, user_id: Uuid) -> Result<Option<String>, AppError> {
-        let mut client = self.client.lock().await;
-        let request = tonic::Request::new(GetUserRequest {
+        let mut client = self.pool.auth();
+        let request = Request::new(GetUserRequest {
             user_id: user_id.to_string(),
         });
 
