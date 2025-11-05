@@ -40,6 +40,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if pool_cfg.database_url.is_empty() {
         pool_cfg.database_url = config.database_url.clone();
     }
+    pool_cfg.log_config();
     let db_pool = create_pg_pool(pool_cfg).await?;
 
     tracing::info!("Database connection pool initialized");

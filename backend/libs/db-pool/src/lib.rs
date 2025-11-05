@@ -66,6 +66,20 @@ impl DbConfig {
                 .unwrap_or(1800),
         })
     }
+
+    /// Log pool configuration details
+    pub fn log_config(&self) {
+        info!(
+            "Database Pool Configuration: \
+             max_connections={}, min_connections={}, \
+             connect_timeout={}s, idle_timeout={}s, max_lifetime={}s",
+            self.max_connections,
+            self.min_connections,
+            self.connect_timeout_secs,
+            self.idle_timeout_secs,
+            self.max_lifetime_secs
+        );
+    }
 }
 
 /// Create a PostgreSQL connection pool

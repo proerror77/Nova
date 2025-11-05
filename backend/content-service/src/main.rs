@@ -329,6 +329,7 @@ async fn main() -> io::Result<()> {
         db_cfg.max_connections = std::cmp::max(20, config.database.max_connections);
     }
 
+    db_cfg.log_config();
     let db_pool = create_pg_pool(db_cfg)
         .await
         .expect("Failed to create standardized database pool");

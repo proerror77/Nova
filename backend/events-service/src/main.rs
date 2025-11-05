@@ -22,6 +22,7 @@ async fn main() -> io::Result<()> {
         cfg.database_url = std::env::var("DATABASE_URL").unwrap_or_default();
     }
     if cfg.max_connections < 20 { cfg.max_connections = 20; }
+    cfg.log_config();
     let db_pool = create_pg_pool(cfg).await.ok();
 
     // Start HTTP server
