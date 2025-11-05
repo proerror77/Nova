@@ -81,6 +81,16 @@ async fn main() -> Result<(), error::AppError> {
     let encryption = Arc::new(EncryptionService::new(cfg.encryption_master_key));
     let key_exchange_service = Arc::new(KeyExchangeService::new(Arc::new(db.clone())));
 
+    // Phase 1: Spec 007 - Initialize auth-service gRPC client for users consolidation
+    let auth_client = Arc::new(
+        messaging_service::services::auth_client::AuthClient::new(&cfg.auth_service_url)
+            .await
+            .map_err(|e| {
+                tracing::warn!(error=%e, "Failed to initialize auth-service client; some operations may fail");
+                e
+            })?,
+    );
+
     let state = AppState {
         db: db.clone(),
         registry: registry.clone(),
@@ -89,6 +99,7 @@ async fn main() -> Result<(), error::AppError> {
         apns: apns_client.clone(),
         encryption: encryption.clone(),
         key_exchange_service: Some(key_exchange_service),
+        auth_client,
     };
 
     // Metrics updater (queue depth gauges)

@@ -1,3 +1,4 @@
+pub mod auth_client;
 pub mod call_service;
 pub mod conversation_service;
 pub mod e2ee;

@@ -97,12 +97,15 @@ pub async fn add_member(
         return Err(crate::error::AppError::Forbidden);
     }
 
-    // Check if user being added exists
-    let user_exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM users WHERE id = $1)")
-        .bind(body.user_id)
-        .fetch_one(&state.db)
+    // Phase 1: Spec 007 - Check user via auth-service gRPC instead of shadow users table
+    let user_exists = state
+        .auth_client
+        .user_exists(body.user_id)
         .await
-        .map_err(|e| crate::error::AppError::StartServer(format!("check user exists: {e}")))?;
+        .map_err(|e| {
+            tracing::error!(user_id = %body.user_id, error = %e, "auth-service check_user_exists failed");
+            crate::error::AppError::StartServer(format!("check user exists: {e}"))
+        })?;
 
     if !user_exists {
         return Err(crate::error::AppError::NotFound);
@@ -121,12 +124,16 @@ pub async fn add_member(
     .await
     .map_err(|e| crate::error::AppError::StartServer(format!("add member: {e}")))?;
 
-    // Fetch username for event broadcast
-    let username: String = sqlx::query_scalar("SELECT username FROM users WHERE id = $1")
-        .bind(body.user_id)
-        .fetch_one(&state.db)
+    // Phase 1: Spec 007 - Fetch username via auth-service gRPC instead of shadow users table
+    let username = state
+        .auth_client
+        .get_user(body.user_id)
         .await
-        .map_err(|e| crate::error::AppError::StartServer(format!("fetch username: {e}")))?;
+        .map_err(|e| {
+            tracing::error!(user_id = %body.user_id, error = %e, "auth-service get_user failed");
+            crate::error::AppError::StartServer(format!("fetch username: {e}"))
+        })?
+        .ok_or_else(|| crate::error::AppError::NotFound)?;
 
     // Broadcast member.joined event using unified event system
     let event = WebSocketEvent::MemberJoined {
