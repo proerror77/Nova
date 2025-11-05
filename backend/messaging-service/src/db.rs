@@ -9,6 +9,7 @@ pub async fn init_pool(database_url: &str) -> Result<Pool<Postgres>, sqlx::Error
     if cfg.database_url.is_empty() {
         cfg.database_url = database_url.to_string();
     }
+    cfg.log_config();
     let pool = create_pg_pool(cfg).await?;
     Ok(pool)
 }

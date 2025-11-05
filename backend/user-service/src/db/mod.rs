@@ -1,5 +1,5 @@
-use sqlx::postgres::{PgPool, PgPoolOptions};
-use std::time::Duration;
+use sqlx::postgres::PgPool;
+use db_pool::{create_pool as create_pg_pool, DbConfig as DbPoolConfig};
 
 pub mod bookmark_repo;
 pub mod ch_client;
@@ -21,13 +21,14 @@ pub mod webhook_repo;
 // All messaging operations moved to messaging-service crate
 
 pub async fn create_pool(database_url: &str, max_connections: u32) -> Result<PgPool, sqlx::Error> {
-    PgPoolOptions::new()
-        .max_connections(max_connections)
-        .acquire_timeout(Duration::from_secs(10))
-        .idle_timeout(Duration::from_secs(300))
-        .max_lifetime(Duration::from_secs(1800))
-        .connect(database_url)
-        .await
+    let mut cfg = DbPoolConfig::from_env().unwrap_or_default();
+    if cfg.database_url.is_empty() {
+        cfg.database_url = database_url.to_string();
+    }
+    // Respect env overrides but enforce minimum
+    cfg.max_connections = std::cmp::max(cfg.max_connections, max_connections);
+    cfg.log_config();
+    create_pg_pool(cfg).await
 }
 
 pub async fn run_migrations(pool: &PgPool) -> Result<(), sqlx::migrate::MigrateError> {

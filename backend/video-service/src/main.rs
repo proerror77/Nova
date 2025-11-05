@@ -25,6 +25,7 @@ async fn main() -> io::Result<()> {
     let mut cfg = DbPoolConfig::from_env().unwrap_or_default();
     if cfg.database_url.is_empty() { cfg.database_url = config.database.url.clone(); }
     cfg.max_connections = std::cmp::max(cfg.max_connections, config.database.max_connections);
+    cfg.log_config();
     let db_pool = create_pg_pool(cfg).await.expect("Failed to create database pool");
     let db_pool = web::Data::new(db_pool);
 
