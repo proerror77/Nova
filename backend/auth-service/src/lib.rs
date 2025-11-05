@@ -49,6 +49,12 @@ pub struct AppState {
 
 // gRPC generated code (from Phase 0 proto definitions)
 pub mod nova {
+    pub mod common {
+        pub mod v1 {
+            tonic::include_proto!("nova.common.v1");
+        }
+        pub use v1::*;
+    }
     pub mod auth_service {
         pub mod v1 {
             tonic::include_proto!("nova.auth_service.v1");

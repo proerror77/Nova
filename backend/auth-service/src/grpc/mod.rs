@@ -7,11 +7,15 @@ use crate::{
     metrics::{
         inc_account_lockouts, inc_login_failures, inc_login_requests, inc_register_requests,
     },
-    nova::auth_service::auth_service_server::AuthService,
-    nova::auth_service::*,
+    nova::{
+        auth_service::auth_service_server::AuthService,
+        auth_service::*,
+        common::v1::ErrorStatus,
+    },
     security::{generate_token_pair, hash_password, token_revocation, verify_password},
     AppState,
 };
+use chrono::{DateTime, Utc};
 use tracing::{error, info, warn};
 
 /// gRPC AuthService implementation
@@ -24,6 +28,30 @@ impl AuthServiceImpl {
     pub fn new(state: AppState) -> Self {
         Self { state }
     }
+}
+
+#[inline]
+fn ok_error() -> Option<ErrorStatus> {
+    None
+}
+
+#[inline]
+fn make_error(code: &'static str, message: impl Into<String>) -> Option<ErrorStatus> {
+    Some(ErrorStatus {
+        code: code.to_string(),
+        message: message.into(),
+        metadata: Default::default(),
+    })
+}
+
+#[inline]
+fn ts(value: DateTime<Utc>) -> i64 {
+    value.timestamp()
+}
+
+#[inline]
+fn ts_opt(value: Option<DateTime<Utc>>) -> Option<i64> {
+    value.map(|dt| dt.timestamp())
 }
 
 #[tonic::async_trait]
@@ -279,7 +307,15 @@ impl AuthService for AuthServiceImpl {
         let req = request.into_inner();
 
         // Query user from database
-        let query_result = sqlx::query_as::<_, (String, String, String, String, bool, i32, Option<String>)>(
+        let query_result = sqlx::query_as::<_, (
+            String,
+            String,
+            String,
+            DateTime<Utc>,
+            bool,
+            i32,
+            Option<DateTime<Utc>>,
+        )>(
             "SELECT id, email, username, created_at, is_active, failed_login_attempts, locked_until FROM users WHERE id = $1 AND deleted_at IS NULL"
         )
         .bind(req.user_id)
@@ -301,11 +337,12 @@ impl AuthService for AuthServiceImpl {
                     id,
                     email,
                     username,
-                    created_at,
+                    created_at: ts(created_at),
                     is_active,
                     failed_login_attempts,
-                    locked_until: locked_until.unwrap_or_default(),
+                    locked_until: ts_opt(locked_until),
                 }),
+                error: ok_error(),
             })),
             None => Err(Status::not_found("User not found")),
         }
@@ -324,7 +361,15 @@ impl AuthService for AuthServiceImpl {
         }
 
         // Query users by IDs
-        let query_result = sqlx::query_as::<_, (String, String, String, String, bool, i32, Option<String>)>(
+        let query_result = sqlx::query_as::<_, (
+            String,
+            String,
+            String,
+            DateTime<Utc>,
+            bool,
+            i32,
+            Option<DateTime<Utc>>,
+        )>(
             "SELECT id, email, username, created_at, is_active, failed_login_attempts, locked_until FROM users WHERE id = ANY($1) AND deleted_at IS NULL"
         )
         .bind(&req.user_ids)
@@ -347,15 +392,18 @@ impl AuthService for AuthServiceImpl {
                     id,
                     email,
                     username,
-                    created_at,
+                    created_at: ts(created_at),
                     is_active,
                     failed_login_attempts,
-                    locked_until: locked_until.unwrap_or_default(),
+                    locked_until: ts_opt(locked_until),
                 },
             )
             .collect();
 
-        Ok(Response::new(GetUsersByIdsResponse { users }))
+        Ok(Response::new(GetUsersByIdsResponse {
+            users,
+            error: ok_error(),
+        }))
     }
 
     /// Verify JWT token validity
@@ -375,6 +423,7 @@ impl AuthService for AuthServiceImpl {
                     username: String::new(),
                     expires_at: 0,
                     is_revoked: false,
+                    error: make_error("TOKEN_INVALID", "Invalid or expired token"),
                 }))
             }
         };
@@ -437,6 +486,12 @@ impl AuthService for AuthServiceImpl {
             }
         }
 
+        let error = if is_revoked {
+            make_error("TOKEN_REVOKED", "Token has been revoked")
+        } else {
+            ok_error()
+        };
+
         Ok(Response::new(VerifyTokenResponse {
             is_valid: !is_revoked,
             user_id: claims.sub,
@@ -444,6 +499,7 @@ impl AuthService for AuthServiceImpl {
             username: claims.username,
             expires_at: claims.exp,
             is_revoked,
+            error,
         }))
     }
 
@@ -478,7 +534,15 @@ impl AuthService for AuthServiceImpl {
             return Err(Status::invalid_argument("email must not be empty"));
         }
 
-        let query_result = sqlx::query_as::<_, (String, String, String, String, bool, i32, Option<String>)>(
+        let query_result = sqlx::query_as::<_, (
+            String,
+            String,
+            String,
+            DateTime<Utc>,
+            bool,
+            i32,
+            Option<DateTime<Utc>>,
+        )>(
             "SELECT id, email, username, created_at, is_active, failed_login_attempts, locked_until FROM users WHERE email = $1 AND deleted_at IS NULL"
         )
         .bind(req.email)
@@ -500,13 +564,17 @@ impl AuthService for AuthServiceImpl {
                     id,
                     email,
                     username,
-                    created_at,
+                    created_at: ts(created_at),
                     is_active,
                     failed_login_attempts,
-                    locked_until: locked_until.unwrap_or_default(),
+                    locked_until: ts_opt(locked_until),
                 }),
+                error: ok_error(),
             })),
-            None => Ok(Response::new(GetUserByEmailResponse { user: None })),
+            None => Ok(Response::new(GetUserByEmailResponse {
+                user: None,
+                error: make_error("NOT_FOUND", "User not found"),
+            })),
         }
     }
 
@@ -527,7 +595,15 @@ impl AuthService for AuthServiceImpl {
                 .await
                 .map_err(|e| Status::internal(format!("Database error: {}", e)))?;
 
-        let query_result = sqlx::query_as::<_, (String, String, String, String, bool, i32, Option<String>)>(
+        let query_result = sqlx::query_as::<_, (
+            String,
+            String,
+            String,
+            DateTime<Utc>,
+            bool,
+            i32,
+            Option<DateTime<Utc>>,
+        )>(
             "SELECT id, email, username, created_at, is_active, failed_login_attempts, locked_until FROM users WHERE deleted_at IS NULL ORDER BY created_at DESC LIMIT $1 OFFSET $2"
         )
         .bind(limit)
@@ -551,10 +627,10 @@ impl AuthService for AuthServiceImpl {
                     id,
                     email,
                     username,
-                    created_at,
+                    created_at: ts(created_at),
                     is_active,
                     failed_login_attempts,
-                    locked_until: locked_until.unwrap_or_default(),
+                    locked_until: ts_opt(locked_until),
                 },
             )
             .collect();
@@ -562,6 +638,7 @@ impl AuthService for AuthServiceImpl {
         Ok(Response::new(ListUsersResponse {
             users,
             total_count: total as i32,
+            error: ok_error(),
         }))
     }
 
@@ -589,7 +666,10 @@ impl AuthService for AuthServiceImpl {
         .await
         .map_err(|e| Status::internal(format!("Database error: {}", e)))?;
 
-        Ok(Response::new(CheckPermissionResponse { has_permission }))
+        Ok(Response::new(CheckPermissionResponse {
+            has_permission,
+            error: ok_error(),
+        }))
     }
 
     /// Get all permissions for a user
@@ -617,6 +697,7 @@ impl AuthService for AuthServiceImpl {
         Ok(Response::new(GetUserPermissionsResponse {
             permissions,
             roles,
+            error: ok_error(),
         }))
     }
 
@@ -644,7 +725,7 @@ impl AuthService for AuthServiceImpl {
             900
         };
 
-        let (failed_attempts, is_locked, locked_until): (i32, bool, String) = sqlx::query_as(
+        let (failed_attempts, is_locked, locked_until): (i32, bool, Option<DateTime<Utc>>) = sqlx::query_as(
             r#"
             UPDATE users
             SET failed_login_attempts = failed_login_attempts + 1,
@@ -657,7 +738,7 @@ impl AuthService for AuthServiceImpl {
             RETURNING 
                 failed_login_attempts,
                 (locked_until IS NOT NULL AND locked_until > CURRENT_TIMESTAMP) AS is_locked,
-                COALESCE(TO_CHAR(locked_until, 'YYYY-MM-DD"T"HH24:MI:SSOF')::text, '')
+                locked_until
             "#,
         )
         .bind(&req.user_id)
@@ -670,7 +751,8 @@ impl AuthService for AuthServiceImpl {
         Ok(Response::new(RecordFailedLoginResponse {
             failed_attempts,
             is_locked,
-            locked_until,
+            locked_until: ts_opt(locked_until),
+            error: ok_error(),
         }))
     }
 
@@ -723,6 +805,7 @@ impl AuthService for AuthServiceImpl {
                 created_at: profile.created_at.timestamp(),
                 updated_at: profile.updated_at.timestamp(),
             }),
+            error: ok_error(),
         };
 
         Ok(Response::new(response))
@@ -749,7 +832,10 @@ impl AuthService for AuthServiceImpl {
                 Status::internal("failed_to_upsert_public_key")
             })?;
 
-        Ok(Response::new(UpsertUserPublicKeyResponse { success: true }))
+        Ok(Response::new(UpsertUserPublicKeyResponse {
+            success: true,
+            error: ok_error(),
+        }))
     }
 
     /// Fetch a user's stored public key if one exists
@@ -769,9 +855,16 @@ impl AuthService for AuthServiceImpl {
                 Status::internal("failed_to_fetch_public_key")
             })?;
 
+        let error = if public_key.is_some() {
+            ok_error()
+        } else {
+            make_error("NOT_FOUND", "Public key not found")
+        };
+
         let response = GetUserPublicKeyResponse {
             found: public_key.is_some(),
             public_key,
+            error,
         };
 
         Ok(Response::new(response))

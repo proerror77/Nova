@@ -22,10 +22,10 @@ message User {
   string id = 1;                    // UUID of the user
   string email = 2;                 // User's email address
   string username = 3;              // User's username (unique)
-  string created_at = 4;            // ISO 8601 timestamp
+  int64 created_at = 4;            // Unix timestamp (seconds)
   bool is_active = 5;               // Whether user account is active
   int32 failed_login_attempts = 6;  // Current failed login count
-  string locked_until = 7;          // ISO 8601 timestamp when lockout expires (optional)
+  optional int64 locked_until = 7;  // Unix timestamp (seconds) when lockout expires
 }
 
 // ============================================================================
@@ -38,6 +38,7 @@ message GetUserRequest {
 
 message GetUserResponse {
   User user = 1;
+  optional .nova.common.v1.ErrorStatus error = 2;
 }
 
 // ============================================================================
@@ -50,6 +51,7 @@ message GetUsersByIdsRequest {
 
 message GetUsersByIdsResponse {
   repeated User users = 1;
+  optional .nova.common.v1.ErrorStatus error = 2;
 }
 
 // ============================================================================
@@ -67,6 +69,7 @@ message VerifyTokenResponse {
   string username = 4;         // Username of token owner (if valid)
   int64 expires_at = 5;        // Unix timestamp when token expires
   bool is_revoked = 6;         // Whether token has been revoked
+  optional .nova.common.v1.ErrorStatus error = 7;
 }
 
 // ============================================================================
@@ -91,6 +94,7 @@ message GetUserByEmailRequest {
 
 message GetUserByEmailResponse {
   User user = 1;
+  optional .nova.common.v1.ErrorStatus error = 2;
 }
 
 // ============================================================================
@@ -106,6 +110,7 @@ message ListUsersRequest {
 message ListUsersResponse {
   repeated User users = 1;
   int32 total_count = 2;
+  optional .nova.common.v1.ErrorStatus error = 3;
 }
 
 // ============================================================================
@@ -119,6 +124,7 @@ message CheckPermissionRequest {
 
 message CheckPermissionResponse {
   bool has_permission = 1;
+  optional .nova.common.v1.ErrorStatus error = 2;
 }
 
 // ============================================================================
@@ -132,6 +138,7 @@ message GetUserPermissionsRequest {
 message GetUserPermissionsResponse {
   repeated string permissions = 1;
   repeated string roles = 2;
+  optional .nova.common.v1.ErrorStatus error = 3;
 }
 
 // ============================================================================
@@ -147,7 +154,65 @@ message RecordFailedLoginRequest {
 message RecordFailedLoginResponse {
   int32 failed_attempts = 1;
   bool is_locked = 2;
-  string locked_until = 3;  // ISO 8601 timestamp (if locked)
+  optional int64 locked_until = 3;  // Unix timestamp (seconds) if locked
+  optional .nova.common.v1.ErrorStatus error = 4;
+}
+
+// ============================================================================
+// User Profile Management (single-writer via auth-service)
+// ============================================================================
+
+message UpdateUserProfileRequest {
+  string user_id = 1;
+  optional string display_name = 2;
+  optional string bio = 3;
+  optional string avatar_url = 4;
+  optional string cover_photo_url = 5;
+  optional string location = 6;
+  optional bool private_account = 7;
+}
+
+message UserProfile {
+  string user_id = 1;
+  string username = 2;
+  optional string email = 3;
+  optional string display_name = 4;
+  optional string bio = 5;
+  optional string avatar_url = 6;
+  optional string cover_photo_url = 7;
+  optional string location = 8;
+  bool private_account = 9;
+  int64 created_at = 10;
+  int64 updated_at = 11;
+}
+
+message UpdateUserProfileResponse {
+  optional UserProfile profile = 1;
+  optional .nova.common.v1.ErrorStatus error = 2;
+}
+
+// ============================================================================
+// Public Key Management (E2EE messaging support)
+// ============================================================================
+
+message UpsertUserPublicKeyRequest {
+  string user_id = 1;
+  string public_key = 2;
+}
+
+message UpsertUserPublicKeyResponse {
+  bool success = 1;
+  optional .nova.common.v1.ErrorStatus error = 2;
+}
+
+message GetUserPublicKeyRequest {
+  string user_id = 1;
+}
+
+message GetUserPublicKeyResponse {
+  bool found = 1;
+  optional string public_key = 2;
+  optional .nova.common.v1.ErrorStatus error = 3;
 }
 
 // ============================================================================
@@ -245,4 +310,11 @@ service AuthService {
 
   // Record a failed login attempt (for rate limiting)
   rpc RecordFailedLogin(RecordFailedLoginRequest) returns (RecordFailedLoginResponse);
+
+  // Update mutable user profile fields (single-writer semantics)
+  rpc UpdateUserProfile(UpdateUserProfileRequest) returns (UpdateUserProfileResponse);
+
+  // Manage user public keys for end-to-end encryption
+  rpc UpsertUserPublicKey(UpsertUserPublicKeyRequest) returns (UpsertUserPublicKeyResponse);
+  rpc GetUserPublicKey(GetUserPublicKeyRequest) returns (GetUserPublicKeyResponse);
 }
