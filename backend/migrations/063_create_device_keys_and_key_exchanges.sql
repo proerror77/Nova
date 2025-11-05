@@ -1,6 +1,6 @@
 -- Device key management table for ECDH key exchange
 CREATE TABLE device_keys (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID NOT NULL,
     device_id TEXT NOT NULL,
     -- Base64 encoded X25519 public key (32 bytes)
@@ -23,7 +23,7 @@ CREATE INDEX idx_device_keys_user_device ON device_keys(user_id, device_id);
 
 -- Key exchange audit trail table
 CREATE TABLE key_exchanges (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     conversation_id UUID NOT NULL,
     initiator_id UUID NOT NULL,
     peer_id UUID NOT NULL,

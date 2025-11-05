@@ -240,20 +240,20 @@ ALTER TABLE messages
   - 概览所有改变
 
 ### 修订版迁移 (v2)
-- ✅ **065_merge_post_metadata_v2.sql** (修订)
+- ✅ **081_merge_post_metadata_v2.sql** (修订)
   - 移除 post_metadata 视图
   - 更简洁的设计
 
-- ✅ **066_unify_soft_delete_v2.sql** (修订)
+- ✅ **082_unify_soft_delete_v2.sql** (修订)
   - 添加 deleted_by 审计列
   - 使用部分索引代替视图
 
-- ✅ **067_outbox_pattern_v2.sql** (完全新增)
+- ✅ **083_outbox_pattern_v2.sql** (完全新增)
   - 不再使用 CASCADE
   - 实现 Outbox 模式（最重要）
   - 事件驱动级联删除
 
-- ✅ **068_encryption_versioning_v2.sql** (修订)
+- ✅ **084_encryption_versioning_v2.sql** (修订)
   - 使用 ENUM 而非 VARCHAR（节省 96% 空间）
   - 创建 encryption_keys 配置表
   - 密钥轮换跟踪

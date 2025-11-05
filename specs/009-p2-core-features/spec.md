@@ -31,7 +31,7 @@ This spec has been reorganized into 4 independent, prioritized specs per Linus T
 - Auth register/login: HTTP routes stubbed in auth-service with validation and token generation; persistence not wired yet.
   - References: `backend/auth-service/src/handlers/auth.rs:62-106,113-144` (register/login handlers), DTO validations present.
 - CreateComment: No implemented RPC in content-service yet; only read/list paths exist.
-- Outbox consumer: Outbox pattern migrations present (`067_outbox_pattern_v2.sql`), consumer worker not implemented.
+- Outbox consumer: Outbox pattern migrations present (`083_outbox_pattern_v2.sql`), consumer worker not implemented.
 - Circuit breaker: Implemented and used in user-service and content-service for downstreams; verify per-service coverage.
 
 Action:

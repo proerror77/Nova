@@ -15,11 +15,21 @@ use uuid::Uuid;
 
 // Import generated proto code
 pub mod nova {
+    pub mod common {
+        pub mod v1 {
+            tonic::include_proto!("nova.common.v1");
+        }
+        pub use v1::*;
+    }
     pub mod content {
-        tonic::include_proto!("nova.content");
+        pub mod v1 {
+            tonic::include_proto!("nova.content_service.v1");
+        }
+        pub use v1::*;
     }
 }
 
+use nova::common::ErrorStatus;
 use nova::content::content_service_server::ContentService;
 use nova::content::*;
 
@@ -51,6 +61,20 @@ fn convert_comment_to_proto(comment: &Comment) -> crate::grpc::nova::content::Co
     }
 }
 
+#[inline]
+fn ok_error() -> Option<ErrorStatus> {
+    None
+}
+
+#[inline]
+fn make_error(code: &'static str, message: impl Into<String>) -> Option<ErrorStatus> {
+    Some(ErrorStatus {
+        code: code.to_string(),
+        message: message.into(),
+        metadata: Default::default(),
+    })
+}
+
 #[tonic::async_trait]
 impl ContentService for ContentServiceImpl {
     /// Get a post by ID
@@ -73,7 +97,7 @@ impl ContentService for ContentServiceImpl {
                 let response = GetPostResponse {
                     post: Some(convert_post_to_proto(&post)),
                     found: true,
-                    error: String::new(),
+                    error: ok_error(),
                 };
                 Ok(Response::new(response))
             }
@@ -81,7 +105,7 @@ impl ContentService for ContentServiceImpl {
                 let response = GetPostResponse {
                     post: None,
                     found: false,
-                    error: "Post not found".to_string(),
+                    error: make_error("NOT_FOUND", "Post not found"),
                 };
                 Ok(Response::new(response))
             }
@@ -116,7 +140,7 @@ impl ContentService for ContentServiceImpl {
             Ok(post) => {
                 let response = CreatePostResponse {
                     post: Some(convert_post_to_proto(&post)),
-                    error: String::new(),
+                    error: ok_error(),
                 };
                 Ok(Response::new(response))
             }
@@ -161,7 +185,7 @@ impl ContentService for ContentServiceImpl {
                 let response = GetCommentsResponse {
                     comments: comment_list,
                     total,
-                    error: String::new(),
+                    error: ok_error(),
                 };
                 Ok(Response::new(response))
             }
@@ -226,7 +250,7 @@ impl ContentService for ContentServiceImpl {
 
                 Ok(Response::new(LikePostResponse {
                     success: true,
-                    error: String::new(),
+                    error: ok_error(),
                 }))
             }
             Err(err) => {
@@ -505,8 +529,8 @@ impl ContentService for ContentServiceImpl {
             .map_err(|_| Status::invalid_argument("Invalid deleted_by_id format"))?;
 
         // Soft delete the post (set deleted_at timestamp)
-        let result = sqlx::query_scalar::<_, String>(
-            "UPDATE posts SET deleted_at = NOW() WHERE id = $1 AND deleted_at IS NULL RETURNING deleted_at::text",
+        let result = sqlx::query_scalar::<_, chrono::DateTime<chrono::Utc>>(
+            "UPDATE posts SET deleted_at = NOW() WHERE id = $1 AND deleted_at IS NULL RETURNING deleted_at",
         )
         .bind(post_id)
         .fetch_optional(&self.db_pool)
@@ -524,7 +548,7 @@ impl ContentService for ContentServiceImpl {
 
                 Ok(Response::new(DeletePostResponse {
                     post_id: post_id.to_string(),
-                    deleted_at,
+                    deleted_at: deleted_at.timestamp(),
                 }))
             }
             None => {
@@ -679,7 +703,7 @@ impl ContentService for ContentServiceImpl {
         let response = GetUserBookmarksResponse {
             posts: bookmark_posts,
             total: total_i32,
-            error: String::new(),
+            error: ok_error(),
         };
 
         Ok(Response::new(response))
@@ -749,7 +773,7 @@ impl ContentService for ContentServiceImpl {
             cursor: cursor.unwrap_or_default(),
             has_more,
             total_count: total_count as u32,
-            error: String::new(),
+            error: ok_error(),
         };
 
         Ok(Response::new(response))
@@ -779,7 +803,7 @@ impl ContentService for ContentServiceImpl {
 
         Ok(Response::new(InvalidateFeedResponse {
             success: true,
-            error: String::new(),
+            error: ok_error(),
         }))
     }
 
@@ -802,7 +826,7 @@ impl ContentService for ContentServiceImpl {
 
         Ok(Response::new(InvalidateFeedResponse {
             success: true,
-            error: String::new(),
+            error: ok_error(),
         }))
     }
 
@@ -828,7 +852,7 @@ impl ContentService for ContentServiceImpl {
 
         Ok(Response::new(InvalidateFeedResponse {
             success: true,
-            error: String::new(),
+            error: ok_error(),
         }))
     }
 }

@@ -3,7 +3,7 @@
 -- Created: 2025-10-26
 
 CREATE TABLE IF NOT EXISTS notification_device_tokens (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     device_token TEXT NOT NULL,
     device_platform VARCHAR(32) NOT NULL DEFAULT 'ios',

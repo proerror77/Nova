@@ -45,6 +45,8 @@ use uuid::Uuid;
 
 const ACCESS_TOKEN_EXPIRY_HOURS: i64 = 1;
 const REFRESH_TOKEN_EXPIRY_DAYS: i64 = 30;
+const MAX_IAT_FUTURE_SKEW_SECS: i64 = 300;
+const DEFAULT_VALIDATION_LEEWAY: u64 = 30;
 
 /// JWT algorithm - MUST be RS256 for all Nova services
 const JWT_ALGORITHM: Algorithm = Algorithm::RS256;
@@ -62,12 +64,18 @@ pub struct Claims {
     pub iat: i64,
     /// Expiration time (Unix timestamp)
     pub exp: i64,
+    /// Not before (Unix timestamp)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub nbf: Option<i64>,
     /// Token type: "access" or "refresh"
     pub token_type: String,
     /// Email address
     pub email: String,
     /// Username
     pub username: String,
+    /// Unique token identifier (UUID)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub jti: Option<String>,
 }
 
 /// Token pair response structure
@@ -262,14 +270,17 @@ fn get_decoding_key() -> Result<&'static DecodingKey> {
 pub fn generate_access_token(user_id: Uuid, email: &str, username: &str) -> Result<String> {
     let now = Utc::now();
     let expiry = now + Duration::hours(ACCESS_TOKEN_EXPIRY_HOURS);
+    let jti = Uuid::new_v4();
 
     let claims = Claims {
         sub: user_id.to_string(),
         iat: now.timestamp(),
         exp: expiry.timestamp(),
+        nbf: Some(now.timestamp()),
         token_type: "access".to_string(),
         email: email.to_string(),
         username: username.to_string(),
+        jti: Some(jti.to_string()),
     };
 
     let encoding_key = get_encoding_key()?;
@@ -289,14 +300,17 @@ pub fn generate_access_token(user_id: Uuid, email: &str, username: &str) -> Resu
 pub fn generate_refresh_token(user_id: Uuid, email: &str, username: &str) -> Result<String> {
     let now = Utc::now();
     let expiry = now + Duration::days(REFRESH_TOKEN_EXPIRY_DAYS);
+    let jti = Uuid::new_v4();
 
     let claims = Claims {
         sub: user_id.to_string(),
         iat: now.timestamp(),
         exp: expiry.timestamp(),
+        nbf: Some(now.timestamp()),
         token_type: "refresh".to_string(),
         email: email.to_string(),
         username: username.to_string(),
+        jti: Some(jti.to_string()),
     };
 
     let encoding_key = get_encoding_key()?;
@@ -355,9 +369,30 @@ pub fn validate_token(token: &str) -> Result<TokenData<Claims>> {
     // Create validation with strict RS256 requirement
     let mut validation = Validation::new(JWT_ALGORITHM);
     validation.validate_exp = true;
+    validation.validate_nbf = true;
+    validation.leeway = DEFAULT_VALIDATION_LEEWAY;
 
-    decode::<Claims>(token, decoding_key, &validation)
-        .map_err(|e| anyhow!("Token validation failed: {e}"))
+    let token_data = decode::<Claims>(token, decoding_key, &validation)
+        .map_err(|e| anyhow!("Token validation failed: {e}"))?;
+
+    // Ensure JTI is present for replay protection
+    if token_data
+        .claims
+        .jti
+        .as_ref()
+        .map(|jti| jti.trim().is_empty())
+        .unwrap_or(true)
+    {
+        return Err(anyhow!("Token validation failed: missing jti claim"));
+    }
+
+    // Additional issued-at sanity check (iat should not be excessively in the future)
+    let now = Utc::now().timestamp();
+    if token_data.claims.iat > now + MAX_IAT_FUTURE_SKEW_SECS {
+        return Err(anyhow!("Token validation failed: iat in future"));
+    }
+
+    Ok(token_data)
 }
 
 /// Check if a token is expired

@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+package nova.common.v1;
+
+// Shared error representation across Nova gRPC APIs.
+// Code should be CamelCase machine-readable identifier (e.g. USER_NOT_FOUND),
+// message is end-user safe text, and metadata carries structured context.
+message ErrorStatus {
+  string code = 1;
+  string message = 2;
+  map<string, string> metadata = 3;
+}

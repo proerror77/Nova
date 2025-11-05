@@ -6,23 +6,33 @@ use uuid::Uuid;
 
 use crate::cache::MediaCache;
 use crate::error::AppError;
-use crate::models::{CreateReelRequest as CreateReelPayload, Upload, Video};
+use crate::models::{CreateReelRequest as CreateReelPayload, Upload as DbUpload, Video as DbVideo};
 use crate::services::{ReelService, ReelTranscodePipeline, VideoService};
+use nova::common::v1::ErrorStatus;
 use tokio::sync::broadcast;
 
 // Import generated proto code
 pub mod nova {
-    pub mod media {
-        tonic::include_proto!("nova.media");
+    pub mod common {
+        pub mod v1 {
+            tonic::include_proto!("nova.common.v1");
+        }
+        pub use v1::*;
+    }
+    pub mod media_service {
+        pub mod v1 {
+            tonic::include_proto!("nova.media_service.v1");
+        }
+        pub use v1::*;
     }
 }
 
-use nova::media::media_service_server::MediaService;
-use nova::media::*;
+use nova::media_service::v1::media_service_server::MediaService;
+use nova::media_service::v1::*;
 
 /// Convert database `Video` model to gRPC proto message.
-fn video_to_proto(video: Video) -> nova::media::Video {
-    nova::media::Video {
+fn video_to_proto(video: DbVideo) -> Video {
+    Video {
         id: video.id.to_string(),
         creator_id: video.creator_id.to_string(),
         title: video.title,
@@ -37,8 +47,8 @@ fn video_to_proto(video: Video) -> nova::media::Video {
 }
 
 /// Convert database `Upload` model to gRPC proto message.
-fn upload_to_proto(upload: Upload) -> nova::media::Upload {
-    nova::media::Upload {
+fn upload_to_proto(upload: DbUpload) -> Upload {
+    Upload {
         id: upload.id.to_string(),
         user_id: upload.user_id.to_string(),
         video_id: upload.video_id.map(|id| id.to_string()).unwrap_or_default(),
@@ -50,9 +60,18 @@ fn upload_to_proto(upload: Upload) -> nova::media::Upload {
     }
 }
 
+#[inline]
+fn make_error(code: &'static str, message: impl Into<String>) -> ErrorStatus {
+    ErrorStatus {
+        code: code.to_string(),
+        message: message.into(),
+        metadata: Default::default(),
+    }
+}
+
 /// Convert a `ReelResponse` DTO to proto representation.
-fn reel_response_to_proto(reel: crate::models::ReelResponse) -> nova::media::Reel {
-    nova::media::Reel {
+fn reel_response_to_proto(reel: crate::models::ReelResponse) -> Reel {
+    Reel {
         id: reel.id,
         creator_id: reel.creator_id,
         upload_id: reel.upload_id.unwrap_or_default(),
@@ -75,7 +94,7 @@ fn reel_response_to_proto(reel: crate::models::ReelResponse) -> nova::media::Ree
         variants: reel
             .variants
             .into_iter()
-            .map(|variant| nova::media::ReelVariant {
+            .map(|variant| ReelVariant {
                 quality: variant.quality,
                 codec: variant.codec,
                 bitrate_kbps: variant.bitrate_kbps,
@@ -90,13 +109,15 @@ fn reel_response_to_proto(reel: crate::models::ReelResponse) -> nova::media::Ree
         transcode_jobs: reel
             .transcode_jobs
             .into_iter()
-            .map(|job| nova::media::ReelTranscodeJob {
+            .map(|job| ReelTranscodeJob {
                 target_quality: job.target_quality,
                 status: job.status,
                 stage: job.stage,
                 progress: i32::from(job.progress),
                 updated_at: job.updated_at,
-                error_message: job.error_message.unwrap_or_default(),
+                error: job
+                    .error_message
+                    .map(|msg| make_error("TRANSCODE_JOB_ERROR", msg)),
             })
             .collect(),
     }
@@ -182,12 +203,12 @@ impl MediaService for MediaServiceImpl {
             Some(video) => GetVideoResponse {
                 video: Some(video_to_proto(video)),
                 found: true,
-                error: String::new(),
+                error: None,
             },
             None => GetVideoResponse {
                 video: None,
                 found: false,
-                error: "Video not found".to_string(),
+                error: Some(make_error("NOT_FOUND", "Video not found")),
             },
         };
 
@@ -211,7 +232,7 @@ impl MediaService for MediaServiceImpl {
             limit
         );
 
-        let videos = sqlx::query_as::<_, Video>(
+        let videos = sqlx::query_as::<_, DbVideo>(
             "SELECT id, creator_id, title, description, duration_seconds, cdn_url, \
              thumbnail_url, status, visibility, created_at, updated_at \
              FROM videos WHERE creator_id = $1 AND deleted_at IS NULL \
@@ -225,7 +246,7 @@ impl MediaService for MediaServiceImpl {
 
         let response = GetUserVideosResponse {
             videos: videos.into_iter().map(video_to_proto).collect(),
-            error: String::new(),
+            error: None,
         };
 
         Ok(Response::new(response))
@@ -270,7 +291,7 @@ impl MediaService for MediaServiceImpl {
             visibility
         );
 
-        let video = sqlx::query_as::<_, Video>(
+        let video = sqlx::query_as::<_, DbVideo>(
             "INSERT INTO videos (id, creator_id, title, description, duration_seconds, \
              cdn_url, thumbnail_url, status, visibility, created_at, updated_at) \
              VALUES ($1, $2, $3, $4, 0, NULL, NULL, $5, $6, NOW(), NOW()) \
@@ -289,7 +310,7 @@ impl MediaService for MediaServiceImpl {
 
         let response = CreateVideoResponse {
             video: Some(video_to_proto(video)),
-            error: String::new(),
+            error: None,
         };
 
         Ok(Response::new(response))
@@ -311,7 +332,7 @@ impl MediaService for MediaServiceImpl {
 
         let response = ListReelsResponse {
             reels: reels.into_iter().map(reel_response_to_proto).collect(),
-            error: String::new(),
+            error: None,
         };
 
         Ok(Response::new(response))
@@ -332,12 +353,12 @@ impl MediaService for MediaServiceImpl {
             Ok(reel) => Ok(Response::new(GetReelResponse {
                 reel: Some(reel_response_to_proto(reel)),
                 found: true,
-                error: String::new(),
+                error: None,
             })),
             Err(AppError::NotFound(msg)) => Ok(Response::new(GetReelResponse {
                 reel: None,
                 found: false,
-                error: msg,
+                error: Some(make_error("NOT_FOUND", msg)),
             })),
             Err(err) => Err(map_app_error(err, "get_reel")),
         }
@@ -401,7 +422,7 @@ impl MediaService for MediaServiceImpl {
 
         let response = CreateReelResponse {
             reel: Some(reel_response_to_proto(reel)),
-            error: String::new(),
+            error: None,
         };
 
         Ok(Response::new(response))
@@ -419,7 +440,7 @@ impl MediaService for MediaServiceImpl {
 
         tracing::info!("gRPC: Getting upload with ID: {}", upload_id);
 
-        let upload = sqlx::query_as::<_, Upload>(
+        let upload = sqlx::query_as::<_, DbUpload>(
             "SELECT id, user_id, video_id, file_name, file_size, uploaded_size, status, created_at, updated_at \
              FROM uploads WHERE id = $1",
         )
@@ -432,12 +453,12 @@ impl MediaService for MediaServiceImpl {
             Some(upload) => GetUploadResponse {
                 upload: Some(upload_to_proto(upload)),
                 found: true,
-                error: String::new(),
+                error: None,
             },
             None => GetUploadResponse {
                 upload: None,
                 found: false,
-                error: "Upload not found".to_string(),
+                error: Some(make_error("NOT_FOUND", "Upload not found")),
             },
         };
 
@@ -466,7 +487,7 @@ impl MediaService for MediaServiceImpl {
             req.uploaded_size
         );
 
-        let upload = sqlx::query_as::<_, Upload>(
+        let upload = sqlx::query_as::<_, DbUpload>(
             "UPDATE uploads SET uploaded_size = $2, updated_at = NOW() WHERE id = $1 \
              RETURNING id, user_id, video_id, file_name, file_size, uploaded_size, status, created_at, updated_at",
         )
@@ -480,7 +501,7 @@ impl MediaService for MediaServiceImpl {
 
         let response = UpdateUploadProgressResponse {
             upload: Some(upload_to_proto(upload)),
-            error: String::new(),
+            error: None,
         };
 
         Ok(Response::new(response))
@@ -518,7 +539,7 @@ impl MediaService for MediaServiceImpl {
             req.content_type
         );
 
-        let upload = sqlx::query_as::<_, Upload>(
+        let upload = sqlx::query_as::<_, DbUpload>(
             "INSERT INTO uploads (id, user_id, video_id, file_name, file_size, uploaded_size, status, created_at, updated_at) \
              VALUES ($1, $2, NULL, $3, $4, 0, $5, NOW(), NOW()) \
              RETURNING id, user_id, video_id, file_name, file_size, uploaded_size, status, created_at, updated_at",
@@ -534,7 +555,7 @@ impl MediaService for MediaServiceImpl {
 
         let response = StartUploadResponse {
             upload: Some(upload_to_proto(upload)),
-            error: String::new(),
+            error: None,
         };
 
         Ok(Response::new(response))
@@ -552,7 +573,7 @@ impl MediaService for MediaServiceImpl {
 
         tracing::info!("gRPC: Completing upload {}", upload_id);
 
-        let upload = sqlx::query_as::<_, Upload>(
+        let upload = sqlx::query_as::<_, DbUpload>(
             "UPDATE uploads SET status = 'completed', updated_at = NOW() WHERE id = $1 \
              RETURNING id, user_id, video_id, file_name, file_size, uploaded_size, status, created_at, updated_at",
         )
@@ -565,7 +586,7 @@ impl MediaService for MediaServiceImpl {
 
         let response = CompleteUploadResponse {
             upload: Some(upload_to_proto(upload)),
-            error: String::new(),
+            error: None,
         };
 
         Ok(Response::new(response))
@@ -579,7 +600,7 @@ pub async fn start_grpc_server(
     cache: Arc<MediaCache>,
     mut shutdown: broadcast::Receiver<()>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    use nova::media::media_service_server::MediaServiceServer;
+    use media_service_server::MediaServiceServer;
     use tonic::transport::Server;
 
     tracing::info!("Starting gRPC server at {}", addr);

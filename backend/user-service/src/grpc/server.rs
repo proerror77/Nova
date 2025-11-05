@@ -7,16 +7,15 @@
 /// - GetUserFollowers, GetUserFollowing, CheckUserRelationship
 /// - SearchUsers
 use super::nova::user_service::*;
-use crate::db::Pool;
 use crate::AppState;
-use sqlx::Row;
+use sqlx::{PgPool, Row};
 use std::sync::Arc;
 use tonic::{Request, Response, Status};
 
 /// UserServiceImpl - gRPC server implementation
 #[derive(Clone)]
 pub struct UserServiceImpl {
-    db: Arc<Pool>,
+    db: Arc<PgPool>,
 }
 
 impl UserServiceImpl {
@@ -47,7 +46,7 @@ impl user_service_server::UserService for UserServiceImpl {
              FROM user_profiles WHERE id = $1 AND deleted_at IS NULL",
         )
         .bind(&req.user_id)
-        .fetch_optional(&**self.db)
+        .fetch_optional(self.db.as_ref())
         .await
         .map_err(|e| Status::internal(format!("Database error: {}", e)))?;
 
@@ -95,7 +94,7 @@ impl user_service_server::UserService for UserServiceImpl {
              FROM user_profiles WHERE id = ANY($1) AND deleted_at IS NULL",
         )
         .bind(&req.user_ids)
-        .fetch_all(&**self.db)
+        .fetch_all(self.db.as_ref())
         .await
         .unwrap_or_default();
 
@@ -161,7 +160,7 @@ impl user_service_server::UserService for UserServiceImpl {
         .bind(&req.website)
         .bind(&req.location)
         .bind(&now)
-        .fetch_optional(&**self.db)
+        .fetch_optional(self.db.as_ref())
         .await
         .map_err(|e| {
             tracing::error!(
@@ -216,7 +215,7 @@ impl user_service_server::UserService for UserServiceImpl {
              FROM user_settings WHERE user_id = $1",
         )
         .bind(&req.user_id)
-        .fetch_optional(&**self.db)
+        .fetch_optional(self.db.as_ref())
         .await
         .map_err(|e| Status::internal(format!("Database error: {}", e)))?;
 
@@ -280,7 +279,7 @@ impl user_service_server::UserService for UserServiceImpl {
         .bind(&req.privacy_level)
         .bind(req.allow_messages.to_string())
         .bind(&now)
-        .fetch_optional(&**self.db)
+        .fetch_optional(self.db.as_ref())
         .await
         .map_err(|e| {
             tracing::error!(
@@ -346,7 +345,7 @@ impl user_service_server::UserService for UserServiceImpl {
         .bind(&req.followee_id)
         .bind(&now)
         .bind(&now)
-        .fetch_one(&**self.db)
+        .fetch_one(self.db.as_ref())
         .await
         .map_err(|e| {
             tracing::error!(error = %e, "Failed to follow user");
@@ -386,7 +385,7 @@ impl user_service_server::UserService for UserServiceImpl {
         )
         .bind(&req.follower_id)
         .bind(&req.followee_id)
-        .fetch_optional(&**self.db)
+        .fetch_optional(self.db.as_ref())
         .await
         .map_err(|e| Status::internal(format!("Database error: {}", e)))?;
 
@@ -429,7 +428,7 @@ impl user_service_server::UserService for UserServiceImpl {
         .bind(&req.blocked_id)
         .bind(&now)
         .bind(&now)
-        .fetch_one(&**self.db)
+        .fetch_one(self.db.as_ref())
         .await
         .map_err(|e| {
             tracing::error!(error = %e, "Failed to block user");
@@ -469,7 +468,7 @@ impl user_service_server::UserService for UserServiceImpl {
         )
         .bind(&req.blocker_id)
         .bind(&req.blocked_id)
-        .fetch_optional(&**self.db)
+        .fetch_optional(self.db.as_ref())
         .await
         .map_err(|e| Status::internal(format!("Database error: {}", e)))?;
 
@@ -501,7 +500,7 @@ impl user_service_server::UserService for UserServiceImpl {
              WHERE followee_id = $1 AND relationship_type = 'follow' AND status = 'active'",
         )
         .bind(&req.user_id)
-        .fetch_one(&**self.db)
+        .fetch_one(self.db.as_ref())
         .await
         .unwrap_or(0);
 
@@ -519,7 +518,7 @@ impl user_service_server::UserService for UserServiceImpl {
         .bind(&req.user_id)
         .bind(limit)
         .bind(offset)
-        .fetch_all(&**self.db)
+        .fetch_all(self.db.as_ref())
         .await
         .unwrap_or_default();
 
@@ -575,7 +574,7 @@ impl user_service_server::UserService for UserServiceImpl {
              WHERE follower_id = $1 AND relationship_type = 'follow' AND status = 'active'",
         )
         .bind(&req.user_id)
-        .fetch_one(&**self.db)
+        .fetch_one(self.db.as_ref())
         .await
         .unwrap_or(0);
 
@@ -593,7 +592,7 @@ impl user_service_server::UserService for UserServiceImpl {
         .bind(&req.user_id)
         .bind(limit)
         .bind(offset)
-        .fetch_all(&**self.db)
+        .fetch_all(self.db.as_ref())
         .await
         .unwrap_or_default();
 
@@ -646,7 +645,7 @@ impl user_service_server::UserService for UserServiceImpl {
         )
         .bind(&req.follower_id)
         .bind(&req.followee_id)
-        .fetch_optional(&**self.db)
+        .fetch_optional(self.db.as_ref())
         .await
         .map_err(|e| Status::internal(format!("Database error: {}", e)))?;
 
@@ -687,7 +686,7 @@ impl user_service_server::UserService for UserServiceImpl {
              WHERE deleted_at IS NULL AND (username ILIKE $1 OR display_name ILIKE $1)",
         )
         .bind(&search_pattern)
-        .fetch_one(&**self.db)
+        .fetch_one(self.db.as_ref())
         .await
         .unwrap_or(0);
 
@@ -703,7 +702,7 @@ impl user_service_server::UserService for UserServiceImpl {
         .bind(&search_pattern)
         .bind(limit)
         .bind(offset)
-        .fetch_all(&**self.db)
+        .fetch_all(self.db.as_ref())
         .await
         .unwrap_or_default();
 

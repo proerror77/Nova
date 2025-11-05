@@ -3,7 +3,7 @@
 
 -- Create post_shares table
 CREATE TABLE IF NOT EXISTS post_shares (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     post_id UUID NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     shared_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
@@ -19,7 +19,7 @@ CREATE INDEX IF NOT EXISTS idx_post_shares_shared_with ON post_shares(shared_wit
 
 -- Create bookmarks table
 CREATE TABLE IF NOT EXISTS bookmarks (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     post_id UUID NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
     bookmarked_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
@@ -34,7 +34,7 @@ CREATE INDEX IF NOT EXISTS idx_bookmarks_collection ON bookmarks(collection_id);
 
 -- Create bookmark_collections table (for organizing bookmarks into folders)
 CREATE TABLE IF NOT EXISTS bookmark_collections (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     name VARCHAR(255) NOT NULL,
     description TEXT,

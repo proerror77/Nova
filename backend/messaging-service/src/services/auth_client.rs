@@ -25,7 +25,9 @@ impl AuthClient {
             .map_err(|e| AppError::StartServer(format!("Invalid auth service URL: {}", e)))?
             .connect()
             .await
-            .map_err(|e| AppError::StartServer(format!("Failed to connect to auth-service: {}", e)))?;
+            .map_err(|e| {
+                AppError::StartServer(format!("Failed to connect to auth-service: {}", e))
+            })?;
 
         Ok(Self {
             client: Arc::new(tokio::sync::Mutex::new(AuthServiceClient::new(channel))),

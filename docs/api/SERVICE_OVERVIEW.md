@@ -8,14 +8,14 @@
 
 | 服務 | 主要職責 | REST Base Path | Swagger UI | OpenAPI JSON | gRPC Port / Proto |
 |------|----------|----------------|------------|--------------|-------------------|
-| **auth-service** | 登入、註冊、OAuth、JWT | `/api/v1/auth/*` | `https://{ENV}-api.nova.example.com/auth/swagger-ui/` | `https://{ENV}-api.nova.example.com/auth/api/v1/openapi.json` | 依預設 `server_port + 1000`；定義於 `backend/protos/auth.proto` |
+| **auth-service** | 登入、註冊、OAuth、JWT | `/api/v1/auth/*` | `https://{ENV}-api.nova.example.com/auth/swagger-ui/` | `https://{ENV}-api.nova.example.com/auth/api/v1/openapi.json` | 依預設 `server_port + 1000`；定義於 `backend/proto/services/auth_service.proto` |
 | **user-service** | 使用者 Profile、關係、偏好 | `/api/v1/users/*` | `https://{ENV}-api.nova.example.com/users/swagger-ui/` | `https://{ENV}-api.nova.example.com/users/api/v1/openapi.json` | 透過 gRPC 讀寫 auth/content/media 服務 |
-| **content-service** | 貼文、留言、Stories | `/api/v1/posts/*` 、 `/api/v1/stories/*` | `https://{ENV}-api.nova.example.com/content/swagger-ui/` | `https://{ENV}-api.nova.example.com/content/api/v1/openapi.json` | 相關定義規劃在 `backend/protos/content_service.proto` |
-| **feed-service** | 動態牆、推薦 | `/api/v1/feed/*` | `https://{ENV}-api.nova.example.com/feed/swagger-ui/` | `https://{ENV}-api.nova.example.com/feed/api/v1/openapi.json` | `backend/protos/content_service.proto` / 其他 feed proto |
-| **messaging-service** | 私訊、群組、WebSocket | `/api/v1/messaging/*` | `https://{ENV}-api.nova.example.com/messaging/swagger-ui/` | `https://{ENV}-api.nova.example.com/messaging/api/v1/openapi.json` | 核心 gRPC 介面在 `backend/protos/messaging_service.proto` |
-| **media-service** | 媒體上傳、轉檔 | `/api/v1/media/*` | `https://{ENV}-api.nova.example.com/media/swagger-ui/` | `https://{ENV}-api.nova.example.com/media/api/v1/openapi.json` | 介面定義於 `backend/protos/media_service.proto` |
+| **content-service** | 貼文、留言、Stories | `/api/v1/posts/*` 、 `/api/v1/stories/*` | `https://{ENV}-api.nova.example.com/content/swagger-ui/` | `https://{ENV}-api.nova.example.com/content/api/v1/openapi.json` | 相關定義規劃在 `backend/proto/services/content_service.proto` |
+| **feed-service** | 動態牆、推薦 | `/api/v1/feed/*` | `https://{ENV}-api.nova.example.com/feed/swagger-ui/` | `https://{ENV}-api.nova.example.com/feed/api/v1/openapi.json` | `backend/proto/services/feed_service.proto` |
+| **messaging-service** | 私訊、群組、WebSocket | `/api/v1/messaging/*` | `https://{ENV}-api.nova.example.com/messaging/swagger-ui/` | `https://{ENV}-api.nova.example.com/messaging/api/v1/openapi.json` | 核心 gRPC 介面在 `backend/proto/services/messaging_service.proto` |
+| **media-service** | 媒體上傳、轉檔 | `/api/v1/media/*` | `https://{ENV}-api.nova.example.com/media/swagger-ui/` | `https://{ENV}-api.nova.example.com/media/api/v1/openapi.json` | 介面定義於 `backend/proto/services/media_service.proto` |
 | **search-service** | 搜尋、索引 | `/api/v1/search/*` | `https://{ENV}-api.nova.example.com/search/swagger-ui/` | `https://{ENV}-api.nova.example.com/search/api/v1/openapi.json` | 後端透過 gRPC 暴露查詢能力 |
-| **streaming-service** | 影音串流、實況 | `/api/v1/streaming/*` | `https://{ENV}-api.nova.example.com/streaming/swagger-ui/` | `https://{ENV}-api.nova.example.com/streaming/api/v1/openapi.json` | 介面定義於 `backend/protos/streaming.proto` |
+| **streaming-service** | 影音串流、實況 | `/api/v1/streaming/*` | `https://{ENV}-api.nova.example.com/streaming/swagger-ui/` | `https://{ENV}-api.nova.example.com/streaming/api/v1/openapi.json` | 介面定義於 `backend/proto/services/streaming_service.proto` |
 
 目前 8 個核心服務均已提供 OpenAPI / Swagger。若新增服務，可依照下述步驟快速掛載對應路由。
 

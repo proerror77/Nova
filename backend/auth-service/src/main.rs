@@ -3,11 +3,13 @@
 mod metrics;
 mod openapi;
 
-use actix_middleware::MetricsMiddleware;
+use actix_middleware::{JwtAuthMiddleware, MetricsMiddleware};
 use actix_web::{web, App, HttpResponse, HttpServer, Responder};
 use db_pool::{create_pool as create_pg_pool, DbConfig as DbPoolConfig};
-use redis::aio::ConnectionManager;
+use redis_utils::{RedisPool, SharedConnectionManager};
+use std::io;
 use std::net::SocketAddr;
+use std::sync::Arc;
 use tonic::transport::Server as GrpcServer;
 use tracing_subscriber;
 use utoipa::OpenApi;
@@ -17,7 +19,13 @@ use auth_service::{
     config::Config,
     handlers::{change_password, login, logout, refresh_token, register, request_password_reset},
     handlers::{complete_oauth_flow, start_oauth_flow},
-    services::KafkaEventProducer,
+    services::{
+        email::EmailService,
+        oauth::OAuthService,
+        outbox::{spawn_outbox_consumer, OutboxConsumerConfig},
+        two_fa::TwoFaService,
+        KafkaEventProducer,
+    },
     AppState,
 };
 
@@ -45,9 +53,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     tracing::info!("Database connection pool initialized");
 
-    // Initialize Redis connection
-    let redis_client = redis::Client::open(config.redis_url.clone())?;
-    let redis_conn = ConnectionManager::new(redis_client).await?;
+    // Run database migrations unless explicitly disabled
+    let run_migrations = std::env::var("RUN_MIGRATIONS").unwrap_or_else(|_| "true".into());
+    if run_migrations != "false" {
+        tracing::info!("Running database migrations...");
+        if let Err(err) = sqlx::migrate!("../migrations").run(&db_pool).await {
+            tracing::error!("Database migration failed: {:#}", err);
+            return Err(err.into());
+        }
+        tracing::info!("Database migrations completed");
+    } else {
+        tracing::info!("Skipping database migrations (RUN_MIGRATIONS=false)");
+    }
+
+    // Initialize Redis connection pool
+    let redis_pool = RedisPool::connect(&config.redis_url, None)
+        .await
+        .map_err(|e| format!("Failed to initialize Redis pool: {:#}", e))?;
+    let redis_manager = redis_pool.manager();
 
     tracing::info!("Redis connection initialized");
 
@@ -82,11 +105,38 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
+    let email_service = EmailService::new(&config.email).map_err(|e| {
+        tracing::error!("Failed to initialize email service: {}", e);
+        Box::new(e) as Box<dyn std::error::Error>
+    })?;
+
+    let two_fa_service = TwoFaService::new(
+        db_pool.clone(),
+        redis_manager.clone(),
+        kafka_producer.clone(),
+    );
+
+    let oauth_service = Arc::new(OAuthService::new(
+        config.oauth.clone(),
+        db_pool.clone(),
+        redis_manager.clone(),
+        kafka_producer.clone(),
+    ));
+
+    let _outbox_handle = spawn_outbox_consumer(
+        db_pool.clone(),
+        kafka_producer.clone(),
+        OutboxConsumerConfig::default(),
+    );
+
     // Create shared application state
     let app_state = AppState {
         db: db_pool.clone(),
-        redis: redis_conn,
+        redis: redis_manager.clone(),
         kafka_producer,
+        email_service: email_service.clone(),
+        oauth_service: oauth_service.clone(),
+        two_fa_service: two_fa_service.clone(),
     };
 
     // Build gRPC service
@@ -141,7 +191,7 @@ fn build_grpc_service(
 }
 
 /// Configure REST API routes
-fn configure_routes(cfg: &mut web::ServiceConfig) {
+fn configure_routes(cfg: &mut web::ServiceConfig, redis: SharedConnectionManager) {
     let openapi = openapi::ApiDoc::openapi();
 
     cfg.app_data(web::Data::new(openapi.clone()))
@@ -153,12 +203,16 @@ fn configure_routes(cfg: &mut web::ServiceConfig) {
                     web::scope("/auth")
                         .route("/register", web::post().to(register))
                         .route("/login", web::post().to(login))
-                        .route("/logout", web::post().to(logout))
                         .route("/refresh", web::post().to(refresh_token))
-                        .route("/change-password", web::post().to(change_password))
                         .route(
                             "/password-reset/request",
                             web::post().to(request_password_reset),
+                        )
+                        .service(
+                            web::scope("")
+                                .wrap(JwtAuthMiddleware::with_cache(redis.clone(), 600))
+                                .route("/logout", web::post().to(logout))
+                                .route("/change-password", web::post().to(change_password)),
                         ),
                 )
                 .service(
@@ -186,54 +240,136 @@ async fn start_servers(
     // Clone state for REST server
     let rest_state = app_state.clone();
 
-    // REST API server on port `port`
-    let rest_handle = tokio::spawn(async move {
-        tracing::info!("REST API listening on {}", addr);
+    let rest_server_state = rest_state.clone();
+    let rest_server = HttpServer::new(move || {
+        let state = rest_server_state.clone();
+        let redis_for_routes = state.redis.clone();
+        App::new()
+            .app_data(web::Data::new(state))
+            .wrap(MetricsMiddleware)
+            .configure(move |cfg| configure_routes(cfg, redis_for_routes.clone()))
+    })
+    .bind(addr)?
+    .run();
 
-        let server = match HttpServer::new(move || {
-            App::new()
-                .app_data(web::Data::new(rest_state.clone()))
-                .wrap(MetricsMiddleware)
-                .configure(configure_routes)
-        })
-        .bind(addr)
-        {
-            Ok(server) => server,
-            Err(e) => {
-                tracing::error!("failed to bind REST server on {}: {}", addr, e);
-                return;
-            }
-        };
+    tracing::info!("REST API listening on {}", addr);
 
-        if let Err(e) = server.run().await {
-            tracing::error!("REST server error: {}", e);
-        }
-    });
+    let rest_handle = rest_server.handle();
+    let mut http_handle = Some(tokio::spawn(rest_server));
 
     // gRPC server on port `port + 1000`
     let grpc_addr = format!("{}:{}", host, port + 1000).parse()?;
     tracing::info!("gRPC server listening on {}", grpc_addr);
 
-    let grpc_handle = tokio::spawn(async move {
+    let (grpc_shutdown_tx, grpc_shutdown_rx) = tokio::sync::oneshot::channel();
+
+    let mut grpc_handle = Some(tokio::spawn(async move {
         match GrpcServer::builder()
             .add_service(grpc_service)
-            .serve(grpc_addr)
+            .serve_with_shutdown(grpc_addr, async {
+                let _ = grpc_shutdown_rx.await;
+            })
             .await
         {
-            Ok(_) => tracing::info!("gRPC server exited normally"),
-            Err(e) => tracing::error!("gRPC server error: {}", e),
+            Ok(_) => {
+                tracing::info!("gRPC server exited normally");
+                Ok(())
+            }
+            Err(e) => {
+                tracing::error!("gRPC server error: {}", e);
+                Err(())
+            }
         }
+    }));
+
+    let mut grpc_shutdown_tx = Some(grpc_shutdown_tx);
+    let mut shutdown_signal = Box::pin(async {
+        tokio::signal::ctrl_c()
+            .await
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))
     });
 
-    // Wait for both servers
-    tokio::select! {
-        _ = rest_handle => {
-            tracing::error!("REST server stopped");
+    let mut shutdown_initiated = false;
+    let result = loop {
+        tokio::select! {
+            http_res = async {
+                if let Some(handle) = &mut http_handle {
+                    Some(handle.await)
+                } else {
+                    None
+                }
+            }, if http_handle.is_some() => {
+                let join_res = http_res.expect("HTTP join result");
+                http_handle = None;
+                tracing::info!("REST server exited");
+                let http_result = match join_res {
+                    Ok(inner) => inner,
+                    Err(e) => Err(io::Error::new(io::ErrorKind::Other, e.to_string())),
+                };
+                break http_result;
+            }
+            grpc_res = async {
+                if let Some(handle) = &mut grpc_handle {
+                    Some(handle.await)
+                } else {
+                    None
+                }
+            }, if grpc_handle.is_some() => {
+                let join_res = grpc_res.expect("gRPC join result");
+                grpc_handle = None;
+                tracing::info!("gRPC server exited");
+                let grpc_result = match join_res {
+                    Ok(Ok(())) => Ok(()),
+                    Ok(Err(())) => Err(io::Error::new(io::ErrorKind::Other, "gRPC server error")),
+                    Err(e) => Err(io::Error::new(io::ErrorKind::Other, e.to_string())),
+                };
+                break grpc_result;
+            }
+            sig = &mut shutdown_signal => {
+                match sig {
+                    Ok(()) => tracing::info!("Shutdown signal received; stopping auth service"),
+                    Err(e) => {
+                        tracing::error!("Failed to listen for shutdown signal: {}", e);
+                        break Err(io::Error::new(e.kind(), e.to_string()));
+                    }
+                }
+
+                if !shutdown_initiated {
+                    shutdown_initiated = true;
+                    rest_handle.stop(true).await;
+                    if let Some(tx) = grpc_shutdown_tx.take() {
+                        let _ = tx.send(());
+                    }
+                }
+            }
         }
-        _ = grpc_handle => {
-            tracing::error!("gRPC server stopped");
+    };
+
+    if !shutdown_initiated {
+        rest_handle.stop(true).await;
+        if let Some(tx) = grpc_shutdown_tx.take() {
+            let _ = tx.send(());
         }
     }
 
-    Ok(())
+    if let Some(handle) = http_handle {
+        if let Err(e) = tokio::time::timeout(std::time::Duration::from_secs(5), handle).await {
+            tracing::warn!("REST server did not shut down within timeout: {}", e);
+        }
+    }
+
+    if let Some(handle) = grpc_handle {
+        match tokio::time::timeout(std::time::Duration::from_secs(5), handle).await {
+            Ok(join_res) => {
+                if let Err(e) = join_res {
+                    tracing::warn!("gRPC server join error after shutdown: {}", e);
+                }
+            }
+            Err(_) => {
+                tracing::warn!("gRPC server did not shut down within timeout");
+            }
+        }
+    }
+
+    result.map_err(|e| e.into())
 }

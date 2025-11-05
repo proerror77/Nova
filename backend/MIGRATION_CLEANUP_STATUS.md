@@ -14,7 +14,7 @@ These migrations manage core user account and relationship data:
 - `026_graph_optimizations.sql` - Performance optimizations
 - `028_add_user_profile_fields.sql` - User profile enhancements
 - `030_database_optimization.sql` - General DB optimization
-- `060_performance_optimization_p0.sql` - Performance tuning
+- `080_performance_optimization_p0.sql` - Performance tuning
 
 ### ⚠️  MOVED TO AUTH-SERVICE (Port 8084)
 These migrations handle authentication - now managed by auth-service:

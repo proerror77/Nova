@@ -1,9 +1,18 @@
 use actix_web::{test, web, App};
 use redis::aio::ConnectionManager;
 use sqlx::postgres::PgPoolOptions;
+use std::sync::Arc;
 use testcontainers::{core::WaitFor, runners::AsyncRunner, ContainerAsync, GenericImage};
+use tokio::sync::Mutex;
 
-use auth_service::{handlers::auth::{login, register}, models::user::{LoginRequest, RegisterRequest}, AppState};
+use auth_service::{
+    config::{EmailConfig, OAuthConfig},
+    handlers::auth::{login, register},
+    models::user::{LoginRequest, RegisterRequest},
+    services::{email::EmailService, oauth::OAuthService, two_fa::TwoFaService},
+    AppState,
+};
+use redis_utils::SharedConnectionManager;
 
 async fn build_state(pg_url: &str, redis_url: &str) -> AppState {
     let pool = PgPoolOptions::new()
@@ -12,7 +21,7 @@ async fn build_state(pg_url: &str, redis_url: &str) -> AppState {
         .await
         .expect("connect postgres");
 
-    sqlx::migrate!("./migrations")
+    sqlx::migrate!("../migrations")
         .run(&pool)
         .await
         .expect("run migrations");
@@ -21,11 +30,24 @@ async fn build_state(pg_url: &str, redis_url: &str) -> AppState {
     let redis_conn = ConnectionManager::new(redis_client)
         .await
         .expect("redis connection");
+    let redis_manager: SharedConnectionManager = Arc::new(Mutex::new(redis_conn));
+
+    let email_service = EmailService::new(&EmailConfig::default()).expect("email service");
+    let oauth_service = Arc::new(OAuthService::new(
+        OAuthConfig::default(),
+        pool.clone(),
+        redis_manager.clone(),
+        None,
+    ));
+    let two_fa_service = TwoFaService::new(pool.clone(), redis_manager.clone(), None);
 
     AppState {
         db: pool,
-        redis: redis_conn,
+        redis: redis_manager,
         kafka_producer: None,
+        email_service,
+        oauth_service,
+        two_fa_service,
     }
 }
 
@@ -80,7 +102,10 @@ async fn register_invalid_email_returns_400() {
 
     let resp = test::call_service(
         &app,
-        test::TestRequest::post().uri("/register").set_json(&req).to_request(),
+        test::TestRequest::post()
+            .uri("/register")
+            .set_json(&req)
+            .to_request(),
     )
     .await;
 
@@ -108,7 +133,10 @@ async fn register_weak_password_returns_400() {
 
     let resp = test::call_service(
         &app,
-        test::TestRequest::post().uri("/register").set_json(&req).to_request(),
+        test::TestRequest::post()
+            .uri("/register")
+            .set_json(&req)
+            .to_request(),
     )
     .await;
 
@@ -135,7 +163,10 @@ async fn login_invalid_email_returns_400() {
 
     let resp = test::call_service(
         &app,
-        test::TestRequest::post().uri("/login").set_json(&req).to_request(),
+        test::TestRequest::post()
+            .uri("/login")
+            .set_json(&req)
+            .to_request(),
     )
     .await;
 

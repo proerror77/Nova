@@ -1,6 +1,18 @@
-fn main() {
-    // Compile proto files using tonic-build
-    // This generates both the message types and the gRPC service traits
-    tonic_build::compile_protos("../protos/media_service.proto")
-        .expect("Failed to compile media_service.proto");
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let services_dir = "../proto/services";
+
+    for proto in ["media_service.proto", "common.proto"] {
+        println!("cargo:rerun-if-changed={}/{}", services_dir, proto);
+    }
+
+    tonic_build::configure()
+        .compile(
+            &[
+                format!("{services_dir}/media_service.proto"),
+                format!("{services_dir}/common.proto"),
+            ],
+            &[services_dir],
+        )?;
+
+    Ok(())
 }

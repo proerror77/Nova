@@ -8,7 +8,7 @@ CREATE TYPE experiment_status AS ENUM ('draft', 'running', 'completed', 'cancell
 
 -- Main experiments table
 CREATE TABLE experiments (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     name VARCHAR(255) NOT NULL UNIQUE,
     description TEXT,
     status experiment_status NOT NULL DEFAULT 'draft',
@@ -26,7 +26,7 @@ CREATE TABLE experiments (
 
 -- Experiment variants (control, treatment groups)
 CREATE TABLE experiment_variants (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     experiment_id UUID NOT NULL REFERENCES experiments(id) ON DELETE CASCADE,
     variant_name VARCHAR(100) NOT NULL, -- 'control', 'treatment_a', etc.
     variant_config JSONB NOT NULL DEFAULT '{}', -- feature flags/parameters
@@ -39,7 +39,7 @@ CREATE TABLE experiment_variants (
 
 -- User variant assignments (deterministic, cached)
 CREATE TABLE experiment_assignments (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     experiment_id UUID NOT NULL REFERENCES experiments(id) ON DELETE CASCADE,
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     variant_id UUID NOT NULL REFERENCES experiment_variants(id) ON DELETE CASCADE,
@@ -51,7 +51,7 @@ CREATE TABLE experiment_assignments (
 
 -- Metric events (high-volume, append-only)
 CREATE TABLE experiment_metrics (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     experiment_id UUID NOT NULL REFERENCES experiments(id) ON DELETE CASCADE,
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     variant_id UUID REFERENCES experiment_variants(id) ON DELETE SET NULL,
@@ -62,7 +62,7 @@ CREATE TABLE experiment_metrics (
 
 -- Aggregated results cache (materialized for performance)
 CREATE TABLE experiment_results_cache (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     experiment_id UUID NOT NULL REFERENCES experiments(id) ON DELETE CASCADE,
     variant_id UUID NOT NULL REFERENCES experiment_variants(id) ON DELETE CASCADE,
     metric_name VARCHAR(100) NOT NULL,
@@ -116,7 +116,7 @@ DECLARE
 BEGIN
     SELECT COALESCE(SUM(traffic_allocation), 0) INTO total_allocation
     FROM experiment_variants
-    WHERE experiment_id = NEW.experiment_id AND id != COALESCE(NEW.id, gen_random_uuid());
+    WHERE experiment_id = NEW.experiment_id AND id != COALESCE(NEW.id, uuid_generate_v4());
 
     IF (total_allocation + NEW.traffic_allocation) > 100 THEN
         RAISE EXCEPTION 'Total traffic allocation exceeds 100%% for experiment %', NEW.experiment_id;

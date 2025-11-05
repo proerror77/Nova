@@ -2,7 +2,7 @@
 ///
 /// CRITICAL FIX: Ensures cache invalidation completes with automatic retries
 /// instead of silently failing, which would lead to stale cache data.
-use redis::aio::ConnectionManager;
+use redis_utils::SharedConnectionManager;
 use std::time::Duration;
 use tokio::time::sleep;
 use tracing::{error, warn};
@@ -20,13 +20,13 @@ const INITIAL_BACKOFF_MS: u64 = 500;
 /// This ensures that cache invalidation completes even if Redis
 /// experiences temporary connectivity issues.
 pub async fn invalidate_user_cache_with_retry(
-    redis: &ConnectionManager,
+    redis: &SharedConnectionManager,
     user_id: Uuid,
 ) -> Result<(), String> {
     let key = format!("nova:cache:user:{}", user_id);
 
     for attempt in 1..=MAX_RETRIES {
-        let mut conn = redis.clone();
+        let mut conn = redis.lock().await.clone();
         match run_with_timeout(redis::cmd("DEL").arg(&key).query_async::<_, ()>(&mut conn)).await {
             Ok(_) => {
                 if attempt > 1 {
@@ -63,7 +63,7 @@ pub async fn invalidate_user_cache_with_retry(
 
 /// Invalidate search cache with automatic retry
 pub async fn invalidate_search_cache_with_retry(
-    redis: &ConnectionManager,
+    redis: &SharedConnectionManager,
     query_pattern: &str,
 ) -> Result<(), String> {
     let pattern = format!("nova:cache:search:users:{}:*", query_pattern);
@@ -111,10 +111,10 @@ pub async fn invalidate_search_cache_with_retry(
 
 /// Internal function to scan and delete search cache keys
 async fn invalidate_search_cache_internal(
-    redis: &ConnectionManager,
+    redis: &SharedConnectionManager,
     pattern: &str,
 ) -> Result<usize, String> {
-    let mut redis = redis.clone();
+    let mut redis_conn = redis.lock().await.clone();
     let mut cursor: u64 = 0;
     let mut all_keys: Vec<String> = Vec::new();
 
@@ -127,7 +127,7 @@ async fn invalidate_search_cache_internal(
                 .arg(pattern)
                 .arg("COUNT")
                 .arg(100)
-                .query_async::<_, (u64, Vec<String>)>(&mut redis),
+                .query_async::<_, (u64, Vec<String>)>(&mut redis_conn),
         )
         .await
         .map_err(|e| e.to_string())?;
@@ -142,14 +142,13 @@ async fn invalidate_search_cache_internal(
 
     // Delete collected keys in batches
     if !all_keys.is_empty() {
-        let mut redis = redis.clone();
         let count = all_keys.len();
 
         for chunk in all_keys.chunks(1000) {
             run_with_timeout(
                 redis::cmd("DEL")
                     .arg(chunk)
-                    .query_async::<_, ()>(&mut redis),
+                    .query_async::<_, ()>(&mut redis_conn),
             )
             .await
             .map_err(|e| e.to_string())?;
@@ -163,14 +162,14 @@ async fn invalidate_search_cache_internal(
 
 /// Feed cache invalidation with retry
 pub async fn invalidate_feed_cache_with_retry(
-    redis: &ConnectionManager,
+    redis: &SharedConnectionManager,
     user_id: Uuid,
 ) -> Result<(), String> {
     // Feed cache key format: nova:cache:feed:{user_id}
     let key = format!("nova:cache:feed:{}", user_id);
 
     for attempt in 1..=MAX_RETRIES {
-        let mut conn = redis.clone();
+        let mut conn = redis.lock().await.clone();
         match run_with_timeout(redis::cmd("DEL").arg(&key).query_async::<_, ()>(&mut conn)).await {
             Ok(_) => {
                 if attempt > 1 {

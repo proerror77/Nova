@@ -14,7 +14,7 @@
 -- Real-time state (viewer counts) lives in Redis
 CREATE TABLE IF NOT EXISTS live_streams (
     -- Identity
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     creator_id UUID NOT NULL,
     stream_key VARCHAR(255) UNIQUE NOT NULL,  -- UUID for RTMP auth (never exposed in public APIs)
 
@@ -93,7 +93,7 @@ CREATE TABLE IF NOT EXISTS stream_metadata (
 -- Lightweight table for permanent bans
 -- Temporary bans (<24h) stored in Redis only for performance
 CREATE TABLE IF NOT EXISTS stream_chat_bans (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     stream_id UUID NOT NULL,
     user_id UUID NOT NULL,
     banned_by UUID NOT NULL,  -- Creator or moderator
@@ -116,7 +116,7 @@ CREATE INDEX idx_bans_stream_user ON stream_chat_bans(stream_id, user_id) WHERE 
 -- -----------------------------------------------------------------------------
 -- Created after stream ends (if auto_archive enabled)
 CREATE TABLE IF NOT EXISTS stream_vods (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     stream_id UUID UNIQUE NOT NULL,  -- One VOD per stream
 
     -- VOD files (uploaded to S3)

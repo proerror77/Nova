@@ -4,12 +4,14 @@ use chrono::{DateTime, Utc};
 use sqlx::PgPool;
 use uuid::Uuid;
 
-/// Record a revoked token in the blacklist
+/// Record a revoked token in the blacklist (persistent store)
 pub async fn revoke_token(
     pool: &PgPool,
+    user_id: Uuid,
     token_hash: &str,
-    jti: &str,
-    revocation_reason: &str,
+    token_type: &str,
+    jti: Option<&str>,
+    reason: Option<&str>,
     expires_at: DateTime<Utc>,
 ) -> AuthResult<()> {
     let now = Utc::now();
@@ -17,18 +19,22 @@ pub async fn revoke_token(
 
     sqlx::query(
         r#"
-        INSERT INTO token_revocations (id, token_hash, jti, revocation_reason, expires_at, created_at)
-        VALUES ($1, $2, $3, $4, $5, $6)
+        INSERT INTO token_revocation (id, user_id, token_hash, token_type, jti, reason, expires_at, revoked_at, created_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8)
         ON CONFLICT (token_hash) DO UPDATE SET
-            revocation_reason = $4,
-            expires_at = $5,
-            created_at = $6
+            token_type = EXCLUDED.token_type,
+            jti = EXCLUDED.jti,
+            reason = EXCLUDED.reason,
+            expires_at = EXCLUDED.expires_at,
+            revoked_at = EXCLUDED.revoked_at
         "#,
     )
     .bind(revocation_id)
+    .bind(user_id)
     .bind(token_hash)
+    .bind(token_type)
     .bind(jti)
-    .bind(revocation_reason)
+    .bind(reason)
     .bind(expires_at)
     .bind(now)
     .execute(pool)
@@ -42,7 +48,7 @@ pub async fn revoke_token(
 pub async fn is_token_revoked(pool: &PgPool, token_hash: &str) -> AuthResult<bool> {
     let result = sqlx::query_scalar::<_, i64>(
         r#"
-        SELECT COUNT(*) FROM token_revocations
+        SELECT COUNT(*) FROM token_revocation
         WHERE token_hash = $1 AND expires_at > NOW()
         "#,
     )
@@ -58,7 +64,7 @@ pub async fn is_token_revoked(pool: &PgPool, token_hash: &str) -> AuthResult<boo
 pub async fn is_jti_revoked(pool: &PgPool, jti: &str) -> AuthResult<bool> {
     let result = sqlx::query_scalar::<_, i64>(
         r#"
-        SELECT COUNT(*) FROM token_revocations
+        SELECT COUNT(*) FROM token_revocation
         WHERE jti = $1 AND expires_at > NOW()
         "#,
     )
@@ -74,7 +80,7 @@ pub async fn is_jti_revoked(pool: &PgPool, jti: &str) -> AuthResult<bool> {
 pub async fn cleanup_expired_revocations(pool: &PgPool) -> AuthResult<u64> {
     let result = sqlx::query(
         r#"
-        DELETE FROM token_revocations
+        DELETE FROM token_revocation
         WHERE expires_at < NOW()
         "#,
     )
@@ -89,7 +95,7 @@ pub async fn cleanup_expired_revocations(pool: &PgPool) -> AuthResult<u64> {
 pub async fn count_active_revocations(pool: &PgPool) -> AuthResult<i64> {
     let count = sqlx::query_scalar::<_, i64>(
         r#"
-        SELECT COUNT(*) FROM token_revocations
+        SELECT COUNT(*) FROM token_revocation
         WHERE expires_at > NOW()
         "#,
     )

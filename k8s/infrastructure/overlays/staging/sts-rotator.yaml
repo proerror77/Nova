@@ -39,6 +39,10 @@ metadata:
   namespace: nova
 spec:
   schedule: "0 */4 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 1
+  startingDeadlineSeconds: 1200
   jobTemplate:
     spec:
       template:

@@ -21,7 +21,10 @@ mod content_service_grpc_tests {
     // Include proto definitions to get generated client code
     pub mod nova {
         pub mod content {
-            tonic::include_proto!("nova.content");
+            pub mod v1 {
+                tonic::include_proto!("nova.content_service.v1");
+            }
+            pub use v1::*;
         }
     }
 
@@ -147,7 +150,8 @@ mod content_service_grpc_tests {
     // Returns paginated posts from author with correct total count
     //
     #[tokio::test]
-    async fn test_get_posts_by_author_with_pagination() {        let endpoints = ServiceEndpoints::new();
+    async fn test_get_posts_by_author_with_pagination() {
+        let endpoints = ServiceEndpoints::new();
         let mut client = match ContentServiceClient::connect(endpoints.content_service).await {
             Ok(c) => c,
             Err(e) => {
@@ -246,7 +250,8 @@ mod content_service_grpc_tests {
     // Post is updated atomically and cache is invalidated
     //
     #[tokio::test]
-    async fn test_update_post_selective_fields() {        let endpoints = ServiceEndpoints::new();
+    async fn test_update_post_selective_fields() {
+        let endpoints = ServiceEndpoints::new();
         let mut client = match ContentServiceClient::connect(endpoints.content_service).await {
             Ok(c) => c,
             Err(e) => {
@@ -310,7 +315,8 @@ mod content_service_grpc_tests {
     // Post is soft-deleted and becomes invisible in all queries
     //
     #[tokio::test]
-    async fn test_delete_post_soft_delete_operation() {        let endpoints = ServiceEndpoints::new();
+    async fn test_delete_post_soft_delete_operation() {
+        let endpoints = ServiceEndpoints::new();
         let mut client = match ContentServiceClient::connect(endpoints.content_service).await {
             Ok(c) => c,
             Err(e) => {
@@ -372,7 +378,8 @@ mod content_service_grpc_tests {
     // Returns current like count and invalidates cache
     //
     #[tokio::test]
-    async fn test_decrement_like_count_with_cache_sync() {        let endpoints = ServiceEndpoints::new();
+    async fn test_decrement_like_count_with_cache_sync() {
+        let endpoints = ServiceEndpoints::new();
         let mut client = match ContentServiceClient::connect(endpoints.content_service).await {
             Ok(c) => c,
             Err(e) => {
@@ -426,7 +433,8 @@ mod content_service_grpc_tests {
     // Returns accurate existence status for posts
     //
     #[tokio::test]
-    async fn test_check_post_exists_verification() {        let endpoints = ServiceEndpoints::new();
+    async fn test_check_post_exists_verification() {
+        let endpoints = ServiceEndpoints::new();
         let mut client = match ContentServiceClient::connect(endpoints.content_service).await {
             Ok(c) => c,
             Err(e) => {
@@ -503,7 +511,8 @@ mod content_service_grpc_tests {
     // All mutation operations maintain cache consistency
     //
     #[test]
-    fn test_cache_invalidation_consistency_chain() {        // TODO: Implementation with gRPC client
+    fn test_cache_invalidation_consistency_chain() {
+        // TODO: Implementation with gRPC client
         // Steps:
         // 1. GetPost to populate cache
         // 2. UpdatePost (change title)
@@ -533,7 +542,8 @@ mod content_service_grpc_tests {
     // All error paths handled correctly with proper gRPC status codes
     //
     #[test]
-    fn test_error_handling_all_methods() {        // TODO: Implementation with gRPC client
+    fn test_error_handling_all_methods() {
+        // TODO: Implementation with gRPC client
         // Steps:
         // 1. GetPostsByIds with invalid UUID format and verify error
         // 2. GetPostsByAuthor with invalid author_id and verify error
@@ -562,7 +572,8 @@ mod content_service_grpc_tests {
     // Batch retrieval performs efficiently regardless of batch size
     //
     #[test]
-    fn test_batch_operation_performance() {        // TODO: Implementation with gRPC client
+    fn test_batch_operation_performance() {
+        // TODO: Implementation with gRPC client
         // Steps:
         // 1. Create 100 posts
         // 2. GetPostsByIds with 50 IDs and measure response time (should be < 100ms)
@@ -590,7 +601,8 @@ mod content_service_grpc_tests {
     // All service boundaries maintain data consistency
     //
     #[test]
-    fn test_data_consistency_service_boundaries() {        // TODO: Implementation with gRPC client
+    fn test_data_consistency_service_boundaries() {
+        // TODO: Implementation with gRPC client
         // Steps:
         // 1. Create post via CreatePost RPC
         // 2. Immediately query via GetPost and verify found

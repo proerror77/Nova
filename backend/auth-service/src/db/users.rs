@@ -65,7 +65,7 @@ pub async fn create_user(
     let user = sqlx::query_as::<_, User>(
         r#"
         INSERT INTO users (id, email, username, password_hash, email_verified, totp_enabled, totp_verified, created_at, updated_at)
-        VALUES (gen_random_uuid(), $1, $2, $3, false, false, false, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        VALUES (uuid_generate_v4(), $1, $2, $3, false, false, false, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         RETURNING *
         "#
     )
@@ -340,11 +340,13 @@ pub async fn record_failed_login(
 
 /// Enable TOTP 2FA
 pub async fn enable_totp(pool: &PgPool, user_id: Uuid, secret: &str) -> AuthResult<()> {
-    sqlx::query("UPDATE users SET totp_enabled = true, totp_secret = $1 WHERE id = $2")
-        .bind(secret)
-        .bind(user_id)
-        .execute(pool)
-        .await?;
+    sqlx::query(
+        "UPDATE users SET totp_enabled = true, totp_verified = false, totp_secret = $1 WHERE id = $2",
+    )
+    .bind(secret)
+    .bind(user_id)
+    .execute(pool)
+    .await?;
 
     Ok(())
 }
@@ -355,6 +357,18 @@ pub async fn verify_totp(pool: &PgPool, user_id: Uuid) -> AuthResult<()> {
         .bind(user_id)
         .execute(pool)
         .await?;
+
+    Ok(())
+}
+
+/// Disable TOTP and clear stored secret
+pub async fn disable_totp(pool: &PgPool, user_id: Uuid) -> AuthResult<()> {
+    sqlx::query(
+        "UPDATE users SET totp_enabled = false, totp_verified = false, totp_secret = NULL WHERE id = $1",
+    )
+    .bind(user_id)
+    .execute(pool)
+    .await?;
 
     Ok(())
 }

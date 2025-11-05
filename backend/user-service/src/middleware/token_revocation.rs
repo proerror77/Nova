@@ -7,17 +7,17 @@ use actix_web::{
     Error, HttpMessage,
 };
 use futures::future::LocalBoxFuture;
-use redis::aio::ConnectionManager;
+use redis_utils::SharedConnectionManager;
 use std::rc::Rc;
 use tracing::warn;
 
 /// Middleware that checks JWT token revocation
 pub struct TokenRevocationMiddleware {
-    redis: Option<Rc<ConnectionManager>>,
+    redis: Option<Rc<SharedConnectionManager>>,
 }
 
 impl TokenRevocationMiddleware {
-    pub fn new(redis: Option<Rc<ConnectionManager>>) -> Self {
+    pub fn new(redis: Option<Rc<SharedConnectionManager>>) -> Self {
         TokenRevocationMiddleware { redis }
     }
 }
@@ -44,7 +44,7 @@ where
 
 pub struct TokenRevocationMiddlewareService<S> {
     service: Rc<S>,
-    redis: Option<Rc<ConnectionManager>>,
+    redis: Option<Rc<SharedConnectionManager>>,
 }
 
 impl<S, B> Service<ServiceRequest> for TokenRevocationMiddlewareService<S>

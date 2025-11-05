@@ -3,7 +3,7 @@
 
 -- Up
 CREATE TABLE IF NOT EXISTS message_recalls (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   message_id UUID NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
   recalled_by UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   recall_reason TEXT,

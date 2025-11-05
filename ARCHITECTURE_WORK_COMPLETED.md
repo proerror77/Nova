@@ -258,10 +258,10 @@ nova/
 ├── PHASE_0_MEASUREMENT_GUIDE.md        → 然后这个 (基准线)
 ├── REVISION_SUMMARY.md                 → 理解改变
 ├── backend/migrations/
-│   ├── 065_merge_post_metadata_v2.sql
-│   ├── 066_unify_soft_delete_v2.sql
-│   ├── 067_outbox_pattern_v2.sql       ⭐ 最重要
-│   └── 068_encryption_versioning_v2.sql
+│   ├── 081_merge_post_metadata_v2.sql
+│   ├── 082_unify_soft_delete_v2.sql
+│   ├── 083_outbox_pattern_v2.sql       ⭐ 最重要
+│   └── 084_encryption_versioning_v2.sql
 └── (旧版本供参考)
     ├── ARCHITECTURE_REVIEW.md          (v1)
     ├── ARCHITECTURE_REVIEW_SUMMARY.md  (v1)

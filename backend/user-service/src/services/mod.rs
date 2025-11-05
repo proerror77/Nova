@@ -25,6 +25,7 @@ pub mod query_profiler;
 // pub mod ranking_engine; // REMOVED - moved to feed-service (port 8089) [DELETED]
 pub mod redis_job;
 pub mod social_graph_sync;
+pub mod storage;
 // pub mod resumable_upload_service; // REMOVED - moved to media-service (port 8082) [DELETED]
 // pub mod s3_service; // REMOVED - moved to media-service (port 8082) [DELETED]
 // pub mod stories; // REMOVED - moved to content-service (port 8081) [DELETED]

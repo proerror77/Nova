@@ -1,6 +1,6 @@
 -- Create oauth_connections table for storing provider account links
 CREATE TABLE IF NOT EXISTS oauth_connections (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     provider VARCHAR(50) NOT NULL, -- 'google', 'apple', 'facebook', 'wechat'
     provider_user_id VARCHAR(255) NOT NULL,

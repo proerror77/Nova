@@ -1,4 +1,5 @@
-use redis::{AsyncCommands, Client as RedisClient};
+use redis::AsyncCommands;
+use redis_utils::SharedConnectionManager;
 use std::convert::TryFrom;
 use std::time::Duration;
 use tracing::{debug, error, warn};
@@ -21,7 +22,7 @@ use crate::utils::redis_timeout::run_with_timeout;
 /// - Key format: `events:dedup:{event_id}`
 #[derive(Clone)]
 pub struct EventDeduplicator {
-    redis_client: RedisClient,
+    redis: SharedConnectionManager,
     ttl_seconds: u64,
 }
 
@@ -29,13 +30,10 @@ impl EventDeduplicator {
     /// Create a new event deduplicator
     ///
     /// # Arguments
-    /// * `redis_client` - Redis client connection
+    /// * `redis` - Shared Redis connection manager
     /// * `ttl_seconds` - TTL for dedup keys (default: 3600 = 1 hour)
-    pub fn new(redis_client: RedisClient, ttl_seconds: u64) -> Self {
-        Self {
-            redis_client,
-            ttl_seconds,
-        }
+    pub fn new(redis: SharedConnectionManager, ttl_seconds: u64) -> Self {
+        Self { redis, ttl_seconds }
     }
 
     /// Check if an event has already been processed
@@ -51,14 +49,7 @@ impl EventDeduplicator {
     pub async fn is_duplicate(&self, event_id: &str) -> Result<bool> {
         let key = format!("events:dedup:{}", event_id);
 
-        let mut conn = self
-            .redis_client
-            .get_multiplexed_async_connection()
-            .await
-            .map_err(|e| {
-                error!("Failed to get Redis connection: {}", e);
-                AppError::Redis(e)
-            })?;
+        let mut conn = self.redis.lock().await.clone();
 
         // Check if key exists
         let exists: bool = conn.exists(&key).await.map_err(|e| {
@@ -90,14 +81,7 @@ impl EventDeduplicator {
     pub async fn mark_processed(&self, event_id: &str) -> Result<bool> {
         let key = format!("events:dedup:{}", event_id);
 
-        let mut conn = self
-            .redis_client
-            .get_multiplexed_async_connection()
-            .await
-            .map_err(|e| {
-                error!("Failed to get Redis connection: {}", e);
-                AppError::Redis(e)
-            })?;
+        let mut conn = self.redis.lock().await.clone();
 
         // SET key value NX EX ttl
         // Returns true if key was set, false if already exists
@@ -161,14 +145,7 @@ impl EventDeduplicator {
     pub async fn remove(&self, event_id: &str) -> Result<()> {
         let key = format!("events:dedup:{}", event_id);
 
-        let mut conn = self
-            .redis_client
-            .get_multiplexed_async_connection()
-            .await
-            .map_err(|e| {
-                error!("Failed to get Redis connection: {}", e);
-                AppError::Redis(e)
-            })?;
+        let mut conn = self.redis.lock().await.clone();
 
         let deleted: u32 = conn.del(&key).await.map_err(|e| {
             error!("Failed to delete dedup key {}: {}", key, e);
@@ -191,14 +168,7 @@ impl EventDeduplicator {
     pub async fn get_ttl(&self, event_id: &str) -> Result<Option<Duration>> {
         let key = format!("events:dedup:{}", event_id);
 
-        let mut conn = self
-            .redis_client
-            .get_multiplexed_async_connection()
-            .await
-            .map_err(|e| {
-                error!("Failed to get Redis connection: {}", e);
-                AppError::Redis(e)
-            })?;
+        let mut conn = self.redis.lock().await.clone();
 
         let ttl_seconds: i64 = conn.ttl(&key).await.map_err(|e| {
             error!("Failed to get TTL for {}: {}", key, e);
@@ -219,14 +189,7 @@ impl EventDeduplicator {
     /// This will remove ALL event dedup keys. Only use in testing.
     #[cfg(test)]
     pub async fn clear_all(&self) -> Result<()> {
-        let mut conn = self
-            .redis_client
-            .get_multiplexed_async_connection()
-            .await
-            .map_err(|e| {
-                error!("Failed to get Redis connection: {}", e);
-                AppError::Redis(e)
-            })?;
+        let mut conn = self.redis.lock().await.clone();
 
         // Scan for all dedup keys
         let keys: Vec<String> = run_with_timeout(
@@ -258,14 +221,21 @@ impl EventDeduplicator {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use redis_utils::RedisPool;
 
-    async fn create_test_dedup() -> EventDeduplicator {
+    async fn create_test_dedup_with_ttl(ttl: u64) -> EventDeduplicator {
         let redis_url =
             std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://localhost:6379".to_string());
 
-        let client = RedisClient::open(redis_url).expect("Failed to create Redis client");
+        let pool = RedisPool::connect(&redis_url, None)
+            .await
+            .expect("Failed to create Redis pool");
 
-        EventDeduplicator::new(client, 3600)
+        EventDeduplicator::new(pool.manager(), ttl)
+    }
+
+    async fn create_test_dedup() -> EventDeduplicator {
+        create_test_dedup_with_ttl(3600).await
     }
 
     #[tokio::test]
@@ -317,10 +287,7 @@ mod tests {
     #[tokio::test]
     #[ignore] // Requires Redis
     async fn test_ttl() {
-        let dedup = EventDeduplicator::new(
-            RedisClient::open("redis://localhost:6379").unwrap(),
-            10, // 10 second TTL for testing
-        );
+        let dedup = create_test_dedup_with_ttl(10).await;
         dedup.clear_all().await.unwrap();
 
         let event_id = "test_ttl_789";
