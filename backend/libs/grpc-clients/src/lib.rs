@@ -103,7 +103,7 @@ pub use nova::auth_service::auth_service_client::AuthServiceClient;
 pub use nova::user_service::user_service_client::UserServiceClient;
 pub use nova::messaging_service::messaging_service_client::MessagingServiceClient;
 pub use nova::content_service::content_service_client::ContentServiceClient;
-pub use nova::feed_service::feed_service_client::FeedServiceClient;
+pub use nova::feed_service::recommendation_service_client::RecommendationServiceClient;
 pub use nova::search_service::search_service_client::SearchServiceClient;
 pub use nova::media_service::media_service_client::MediaServiceClient;
 pub use nova::notification_service::notification_service_client::NotificationServiceClient;
@@ -118,7 +118,7 @@ pub struct GrpcClientPool {
     user_client: Arc<UserServiceClient<Channel>>,
     messaging_client: Arc<MessagingServiceClient<Channel>>,
     content_client: Arc<ContentServiceClient<Channel>>,
-    feed_client: Arc<FeedServiceClient<Channel>>,
+    feed_client: Arc<RecommendationServiceClient<Channel>>,
     search_client: Arc<SearchServiceClient<Channel>>,
     media_client: Arc<MediaServiceClient<Channel>>,
     notification_client: Arc<NotificationServiceClient<Channel>>,
@@ -143,7 +143,7 @@ impl GrpcClientPool {
         let content_client = Arc::new(ContentServiceClient::new(
             config.connect_channel(&config.content_service_url).await?,
         ));
-        let feed_client = Arc::new(FeedServiceClient::new(
+        let feed_client = Arc::new(RecommendationServiceClient::new(
             config.connect_channel(&config.feed_service_url).await?,
         ));
         let search_client = Arc::new(SearchServiceClient::new(
@@ -201,7 +201,7 @@ impl GrpcClientPool {
         (*self.content_client).clone()
     }
 
-    pub fn feed(&self) -> FeedServiceClient<Channel> {
+    pub fn feed(&self) -> RecommendationServiceClient<Channel> {
         (*self.feed_client).clone()
     }
 

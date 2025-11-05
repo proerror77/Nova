@@ -3,7 +3,7 @@
 /// Manages gRPC connection pooling and lifecycle for efficient inter-service communication.
 
 use std::sync::Arc;
-use tonic::transport::Channel;
+use tonic::transport::{Channel, Endpoint};
 use std::time::Duration;
 
 /// gRPC Connection Pool
@@ -24,7 +24,7 @@ impl ConnectionPool {
         let mut channels = Vec::new();
 
         for _ in 0..pool_size {
-            let channel = Channel::from_static(endpoint)
+            let channel = Endpoint::from_shared(endpoint.to_string())?
                 .connect_timeout(Duration::from_secs(timeout_secs))
                 .connect()
                 .await?;
