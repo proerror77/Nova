@@ -170,11 +170,75 @@ message CheckPostExistsResponse {
     bool exists = 1;
 }
 
+// Comment CRUD operations
+message CreateCommentRequest {
+    string post_id = 1;
+    string user_id = 2;
+    string content = 3;
+    string parent_comment_id = 4;  // optional, for nested replies
+}
+
+message CreateCommentResponse {
+    Comment comment = 1;
+    .nova.common.v1.ErrorStatus error = 2;
+}
+
+message UpdateCommentRequest {
+    string comment_id = 1;
+    string user_id = 2;  // for authorization check
+    string content = 3;
+}
+
+message UpdateCommentResponse {
+    Comment comment = 1;
+    .nova.common.v1.ErrorStatus error = 2;
+}
+
+message DeleteCommentRequest {
+    string comment_id = 1;
+    string user_id = 2;  // for authorization check
+}
+
+message DeleteCommentResponse {
+    string comment_id = 1;
+    int64 deleted_at = 2;
+}
+
+// Like operations
+message UnlikePostRequest {
+    string post_id = 1;
+    string user_id = 2;
+}
+
+message UnlikePostResponse {
+    bool success = 1;
+    .nova.common.v1.ErrorStatus error = 2;
+}
+
+message GetPostLikesRequest {
+    string post_id = 1;
+    int32 limit = 2;
+    int32 offset = 3;
+}
+
+message PostLike {
+    string user_id = 1;
+    int64 liked_at = 2;
+}
+
+message GetPostLikesResponse {
+    repeated PostLike likes = 1;
+    int32 total_count = 2;
+    .nova.common.v1.ErrorStatus error = 3;
+}
+
 service ContentService {
     rpc GetPost(GetPostRequest) returns (GetPostResponse) {}
     rpc CreatePost(CreatePostRequest) returns (CreatePostResponse) {}
     rpc GetComments(GetCommentsRequest) returns (GetCommentsResponse) {}
     rpc LikePost(LikePostRequest) returns (LikePostResponse) {}
+    rpc UnlikePost(UnlikePostRequest) returns (UnlikePostResponse) {}
+    rpc GetPostLikes(GetPostLikesRequest) returns (GetPostLikesResponse) {}
     rpc GetUserBookmarks(GetUserBookmarksRequest) returns (GetUserBookmarksResponse) {}
     rpc GetFeed(GetFeedRequest) returns (GetFeedResponse) {}
     rpc InvalidateFeedEvent(InvalidateFeedEventRequest) returns (InvalidateFeedResponse) {}
@@ -186,4 +250,7 @@ service ContentService {
     rpc DeletePost(DeletePostRequest) returns (DeletePostResponse) {}
     rpc DecrementLikeCount(DecrementLikeCountRequest) returns (DecrementLikeCountResponse) {}
     rpc CheckPostExists(CheckPostExistsRequest) returns (CheckPostExistsResponse) {}
+    rpc CreateComment(CreateCommentRequest) returns (CreateCommentResponse) {}
+    rpc UpdateComment(UpdateCommentRequest) returns (UpdateCommentResponse) {}
+    rpc DeleteComment(DeleteCommentRequest) returns (DeleteCommentResponse) {}
 }

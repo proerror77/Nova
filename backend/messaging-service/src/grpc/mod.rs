@@ -12,6 +12,8 @@
 use crate::nova::messaging_service::*;
 use crate::state::AppState;
 use tonic::{Request, Response, Status};
+use uuid::Uuid;
+use std::str::FromStr;
 
 /// MessagingServiceImpl - gRPC service implementation
 #[derive(Clone)]
@@ -23,6 +25,23 @@ impl MessagingServiceImpl {
     pub fn new(state: AppState) -> Self {
         Self { state }
     }
+
+    /// Helper: Parse UUID from string with error handling
+    fn parse_uuid(uuid_str: &str, field_name: &str) -> Result<Uuid, Status> {
+        Uuid::from_str(uuid_str).map_err(|_| {
+            Status::invalid_argument(format!("Invalid {}: {}", field_name, uuid_str))
+        })
+    }
+
+    /// Helper: Convert AppError to tonic Status
+    fn app_error_to_status(err: crate::error::AppError) -> Status {
+        match err {
+            crate::error::AppError::NotFound => Status::not_found("Resource not found"),
+            crate::error::AppError::Config(msg) => Status::invalid_argument(msg),
+            crate::error::AppError::StartServer(msg) => Status::internal(msg),
+            _ => Status::internal("Internal server error"),
+        }
+    }
 }
 
 #[tonic::async_trait]
@@ -33,8 +52,61 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
         &self,
         request: Request<SendMessageRequest>,
     ) -> Result<Response<SendMessageResponse>, Status> {
-        let _req = request.into_inner();
-        Err(Status::unimplemented("send_message not yet implemented"))
+        let req = request.into_inner();
+
+        // Parse and validate request
+        let conversation_id = Self::parse_uuid(&req.conversation_id, "conversation_id")?;
+        let sender_id = Self::parse_uuid(&req.sender_id, "sender_id")?;
+
+        if req.content.is_empty() {
+            return Err(Status::invalid_argument("Message content cannot be empty"));
+        }
+
+        // Verify sender exists via auth-service
+        if !self.state.auth_client.user_exists(sender_id).await
+            .map_err(|e| Self::app_error_to_status(e))? {
+            return Err(Status::not_found("Sender user not found"));
+        }
+
+        // Send message using service layer
+        let idempotency_key_opt = if req.idempotency_key.is_empty() {
+            None
+        } else {
+            Some(req.idempotency_key.as_str())
+        };
+
+        let (message_id, sequence_number) = crate::services::message_service::MessageService::send_message_db(
+            &self.state.db,
+            &self.state.encryption,
+            conversation_id,
+            sender_id,
+            req.content.as_bytes(),
+            idempotency_key_opt,
+        )
+        .await
+        .map_err(|e| Self::app_error_to_status(e))?;
+
+        // Construct Message proto from returned data
+        let message = crate::messaging_service::Message {
+            id: message_id.to_string(),
+            conversation_id: conversation_id.to_string(),
+            sender_id: sender_id.to_string(),
+            content: req.content.clone(),
+            content_encrypted: vec![],
+            content_nonce: vec![],
+            encryption_version: 0,
+            sequence_number,
+            idempotency_key: req.idempotency_key.clone(),
+            created_at: chrono::Utc::now().timestamp(),
+            updated_at: 0,
+            deleted_at: 0,
+            reaction_count: 0,
+        };
+
+        Ok(Response::new(SendMessageResponse {
+            message: Some(message),
+            error: None,
+        }))
     }
 
     async fn get_message(

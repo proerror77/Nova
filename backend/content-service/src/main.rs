@@ -15,7 +15,6 @@ use redis::aio::ConnectionManager;
 use redis::RedisError;
 use redis_utils::{RedisPool, SentinelConfig};
 use serde::Serialize;
-use sqlx::postgres::PgPoolOptions;
 use std::collections::HashMap;
 use std::io;
 use std::net::SocketAddr;
