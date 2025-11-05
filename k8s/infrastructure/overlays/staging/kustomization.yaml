@@ -74,7 +74,6 @@ replicas:
 
 commonAnnotations:
   argocd.argoproj.io/compare-result: "false"
-  deployment.kubernetes.io/version: "1"
   environment: staging
 
 resources:
