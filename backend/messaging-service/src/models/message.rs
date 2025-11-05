@@ -15,6 +15,7 @@ pub struct Message {
     pub sequence_number: i64,
     pub idempotency_key: Option<String>,
     pub created_at: DateTime<Utc>,
+    pub updated_at: Option<DateTime<Utc>>,
     pub edited_at: Option<DateTime<Utc>>,
     pub deleted_at: Option<DateTime<Utc>>,
     pub reaction_count: i32,

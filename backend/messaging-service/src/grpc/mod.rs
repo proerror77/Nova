@@ -75,7 +75,7 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
             Some(req.idempotency_key.as_str())
         };
 
-        let (message_id, sequence_number) = crate::services::message_service::MessageService::send_message_db(
+        let message_row = crate::services::message_service::MessageService::send_message_db(
             &self.state.db,
             &self.state.encryption,
             conversation_id,
@@ -88,18 +88,18 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
 
         // Construct Message proto from returned data
         let message = crate::messaging_service::Message {
-            id: message_id.to_string(),
-            conversation_id: conversation_id.to_string(),
-            sender_id: sender_id.to_string(),
-            content: req.content.clone(),
-            content_encrypted: vec![],
-            content_nonce: vec![],
-            encryption_version: 0,
-            sequence_number,
-            idempotency_key: req.idempotency_key.clone(),
-            created_at: chrono::Utc::now().timestamp(),
-            updated_at: 0,
-            deleted_at: 0,
+            id: message_row.id.to_string(),
+            conversation_id: message_row.conversation_id.to_string(),
+            sender_id: message_row.sender_id.to_string(),
+            content: message_row.content.clone(),
+            content_encrypted: message_row.content_encrypted.unwrap_or_default(),
+            content_nonce: message_row.content_nonce.unwrap_or_default(),
+            encryption_version: message_row.encryption_version,
+            sequence_number: message_row.sequence_number,
+            idempotency_key: message_row.idempotency_key.clone().unwrap_or_default(),
+            created_at: message_row.created_at.timestamp(),
+            updated_at: message_row.updated_at.map(|t| t.timestamp()).unwrap_or(0),
+            deleted_at: message_row.deleted_at.map(|t| t.timestamp()).unwrap_or(0),
             reaction_count: 0,
         };
 

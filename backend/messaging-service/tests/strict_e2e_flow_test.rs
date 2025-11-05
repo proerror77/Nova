@@ -61,7 +61,7 @@ async fn strict_e2e_message_roundtrip() {
     let conversation_id = seed_strict_conversation(&pool, user_id).await;
 
     let plaintext = b"hello secure world";
-    let (message_id, _seq) = MessageService::send_message_db(
+    let message = MessageService::send_message_db(
         &pool,
         &encryption,
         conversation_id,
@@ -74,7 +74,7 @@ async fn strict_e2e_message_roundtrip() {
 
     let row =
         sqlx::query("SELECT content, content_encrypted, content_nonce FROM messages WHERE id = $1")
-            .bind(message_id)
+            .bind(message.id)
             .fetch_one(&pool)
             .await
             .expect("message fetch failed");
@@ -112,7 +112,7 @@ async fn strict_e2e_version_and_audio_flow() {
     let user_id = Uuid::new_v4();
     let conversation_id = seed_strict_conversation(&pool, user_id).await;
 
-    let (message_id, _) = MessageService::send_message_db(
+    let message = MessageService::send_message_db(
         &pool,
         &encryption,
         conversation_id,
@@ -123,7 +123,7 @@ async fn strict_e2e_version_and_audio_flow() {
     .await
     .expect("send_message_db failed");
 
-    MessageService::update_message_db(&pool, &encryption, message_id, b"updated")
+    MessageService::update_message_db(&pool, &encryption, message.id, b"updated")
         .await
         .expect("update_message_db failed");
 
