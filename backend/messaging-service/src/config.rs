@@ -37,6 +37,8 @@ pub struct Config {
     pub fcm: Option<FcmConfig>,
     pub encryption_master_key: [u8; 32],
     pub s3: S3Config,
+    // Phase 1: Spec 007 - Auth service for users consolidation
+    pub auth_service_url: String,
 }
 
 impl Config {
@@ -150,6 +152,9 @@ impl Config {
             endpoint: env::var("S3_ENDPOINT").ok(),
         };
 
+        let auth_service_url = env::var("AUTH_SERVICE_URL")
+            .unwrap_or_else(|_| "http://auth-service:9001".to_string());
+
         Ok(Self {
             database_url,
             redis_url,
@@ -162,6 +167,7 @@ impl Config {
             fcm,
             encryption_master_key,
             s3,
+            auth_service_url,
         })
     }
 
@@ -183,6 +189,7 @@ impl Config {
                 region: "us-east-1".into(),
                 endpoint: None,
             },
+            auth_service_url: "http://localhost:9001".into(),
         }
     }
 }

@@ -1,7 +1,7 @@
 use crate::{
     config::Config,
     redis_client::RedisClient,
-    services::{encryption::EncryptionService, key_exchange::KeyExchangeService, push::ApnsPush},
+    services::{auth_client::AuthClient, encryption::EncryptionService, key_exchange::KeyExchangeService, push::ApnsPush},
     websocket::ConnectionRegistry,
 };
 use sqlx::{Pool, Postgres};
@@ -16,4 +16,6 @@ pub struct AppState {
     pub apns: Option<Arc<ApnsPush>>,
     pub encryption: Arc<EncryptionService>,
     pub key_exchange_service: Option<Arc<KeyExchangeService>>,
+    // Phase 1: Spec 007 - Auth service client for user consolidation
+    pub auth_client: Arc<AuthClient>,
 }
