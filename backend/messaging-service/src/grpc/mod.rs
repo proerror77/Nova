@@ -42,6 +42,25 @@ impl MessagingServiceImpl {
             _ => Status::internal("Internal server error"),
         }
     }
+
+    /// Helper: Convert MessageRow (DB model) to Message (proto)
+    fn message_row_to_proto(row: crate::models::message::Message) -> Message {
+        Message {
+            id: row.id.to_string(),
+            conversation_id: row.conversation_id.to_string(),
+            sender_id: row.sender_id.to_string(),
+            content: row.content,
+            content_encrypted: row.content_encrypted.unwrap_or_default(),
+            content_nonce: row.content_nonce.unwrap_or_default(),
+            encryption_version: row.encryption_version,
+            sequence_number: row.sequence_number,
+            idempotency_key: row.idempotency_key.unwrap_or_default(),
+            created_at: row.created_at.timestamp(),
+            updated_at: row.updated_at.map(|t| t.timestamp()).unwrap_or(0),
+            deleted_at: row.deleted_at.map(|t| t.timestamp()).unwrap_or(0),
+            reaction_count: row.reaction_count,
+        }
+    }
 }
 
 #[tonic::async_trait]
@@ -86,22 +105,8 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
         .await
         .map_err(|e| Self::app_error_to_status(e))?;
 
-        // Construct Message proto from returned data
-        let message = crate::messaging_service::Message {
-            id: message_row.id.to_string(),
-            conversation_id: message_row.conversation_id.to_string(),
-            sender_id: message_row.sender_id.to_string(),
-            content: message_row.content.clone(),
-            content_encrypted: message_row.content_encrypted.unwrap_or_default(),
-            content_nonce: message_row.content_nonce.unwrap_or_default(),
-            encryption_version: message_row.encryption_version,
-            sequence_number: message_row.sequence_number,
-            idempotency_key: message_row.idempotency_key.clone().unwrap_or_default(),
-            created_at: message_row.created_at.timestamp(),
-            updated_at: message_row.updated_at.map(|t| t.timestamp()).unwrap_or(0),
-            deleted_at: message_row.deleted_at.map(|t| t.timestamp()).unwrap_or(0),
-            reaction_count: 0,
-        };
+        // Convert MessageRow to proto Message using helper function
+        let message = Self::message_row_to_proto(message_row);
 
         Ok(Response::new(SendMessageResponse {
             message: Some(message),
