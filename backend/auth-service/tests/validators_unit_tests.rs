@@ -5,7 +5,6 @@
 /// - Username format validation
 /// - Password strength requirements
 /// - Edge cases and boundary conditions
-
 use auth_service::validators::{validate_email, validate_password, validate_username};
 
 // ============================================================================
@@ -88,8 +87,8 @@ fn test_valid_username_formats() {
 #[test]
 fn test_invalid_username_too_short() {
     assert!(!validate_username("ab")); // 2 chars
-    assert!(!validate_username("a"));  // 1 char
-    assert!(!validate_username(""));   // 0 chars
+    assert!(!validate_username("a")); // 1 char
+    assert!(!validate_username("")); // 0 chars
 }
 
 #[test]

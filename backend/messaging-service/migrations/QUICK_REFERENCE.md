@@ -117,7 +117,7 @@ SQL
 ```sql
 -- Add test data
 INSERT INTO messages (id, conversation_id, sender_id, content, encryption_version, content_encrypted, content_nonce)
-VALUES (gen_random_uuid(), 'conv-id', 'user-id', 'Hello world', 1, E'\\x00', E'\\x00');
+VALUES (uuid_generate_v4(), 'conv-id', 'user-id', 'Hello world', 1, E'\\x00', E'\\x00');
 
 -- Search test
 SELECT id, content, ts_rank(to_tsvector('english', content), query) AS rank

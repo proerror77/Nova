@@ -28,45 +28,41 @@ pub struct OAuthLoginResponse {
 
 /// Start OAuth authorization flow
 pub async fn start_oauth_flow(
-    _state: web::Data<AppState>,
+    state: web::Data<AppState>,
     payload: web::Json<StartOAuthFlowRequest>,
 ) -> Result<HttpResponse, AuthError> {
-    // Parse provider
-    let _provider =
+    let provider =
         OAuthProvider::from_str(&payload.provider).ok_or(AuthError::InvalidOAuthProvider)?;
 
-    // Generate state token for CSRF protection
-    let state = uuid::Uuid::new_v4().to_string();
+    let (state_token, auth_url) = state
+        .oauth_service
+        .start_flow(provider, payload.redirect_uri.clone())
+        .await?;
 
-    // Build OAuth authorization URL
-    // This would connect to the actual provider (Google, Apple, etc.)
-    let auth_url = format!("https://oauth.example.com/authorize?state={}", state);
-
-    Ok(HttpResponse::Ok().json(StartOAuthFlowResponse { auth_url, state }))
+    Ok(HttpResponse::Ok().json(StartOAuthFlowResponse {
+        auth_url,
+        state: state_token,
+    }))
 }
 
 /// Complete OAuth authorization flow
 pub async fn complete_oauth_flow(
-    _state: web::Data<AppState>,
+    state: web::Data<AppState>,
     payload: web::Json<CompleteOAuthFlowRequest>,
 ) -> Result<HttpResponse, AuthError> {
-    // Parse provider
-    let _provider =
+    let provider =
         OAuthProvider::from_str(&payload.provider).ok_or(AuthError::InvalidOAuthProvider)?;
 
-    // Verify state token
-    // Exchange authorization code for tokens
-    // Get user info from provider
-    // Create or update user in database
-    // Generate our own JWT tokens
-
-    let user_id = Uuid::new_v4();
+    let login = state
+        .oauth_service
+        .complete_flow(provider, &payload.code, &payload.state)
+        .await?;
 
     Ok(HttpResponse::Ok().json(OAuthLoginResponse {
-        user_id,
-        email: "user@example.com".to_string(),
-        access_token: "stub_access_token".to_string(),
-        refresh_token: "stub_refresh_token".to_string(),
-        is_new_user: true,
+        user_id: login.user_id,
+        email: login.email,
+        access_token: login.access_token,
+        refresh_token: login.refresh_token,
+        is_new_user: login.is_new_user,
     }))
 }

@@ -101,11 +101,15 @@ pub async fn get_feed(
         }
     };
 
-    let posts: Vec<Uuid> = response
-        .post_ids
-        .into_iter()
-        .filter_map(|id| Uuid::parse_str(&id).ok())
-        .collect();
+    let posts: Vec<Uuid> = {
+        let mut posts = Vec::with_capacity(response.post_ids.len());
+        for id in response.post_ids {
+            if let Ok(uuid) = Uuid::parse_str(&id) {
+                posts.push(uuid);
+            }
+        }
+        posts
+    };
 
     let cursor = if response.cursor.is_empty() {
         None

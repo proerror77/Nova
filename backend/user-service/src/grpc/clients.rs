@@ -2,8 +2,8 @@
 
 use crate::grpc::config::GrpcClientConfig;
 use crate::grpc::health::{HealthChecker, HealthStatus};
-use crate::grpc::nova::auth::v1::auth_service_client::AuthServiceClient as TonicAuthServiceClient;
-use crate::grpc::nova::auth::v1::*;
+use crate::grpc::nova::auth_service::auth_service_client::AuthServiceClient as TonicAuthServiceClient;
+use crate::grpc::nova::auth_service::*;
 use crate::grpc::nova::content::content_service_client::ContentServiceClient as TonicContentServiceClient;
 use crate::grpc::nova::content::*;
 use crate::grpc::nova::media::media_service_client::MediaServiceClient as TonicMediaServiceClient;
@@ -151,7 +151,8 @@ impl ContentServiceClient {
         );
 
         let pool_size = config.pool_size();
-        let endpoint = Endpoint::from_shared(config.content_service_url.clone())?
+        let endpoint_url = config.endpoint_url(&config.content_service_url)?;
+        let base_endpoint = Endpoint::from_shared(endpoint_url)?
             .connect_timeout(config.connection_timeout())
             .timeout(config.connection_timeout())
             .http2_keep_alive_interval(config.http2_keep_alive_interval())
@@ -160,6 +161,11 @@ impl ContentServiceClient {
             .keep_alive_timeout(config.connection_timeout())
             .tcp_nodelay(true)
             .concurrency_limit(config.max_concurrent_streams as usize);
+        let endpoint = if let Some(tls) = config.tls_config_for(&config.content_service_url)? {
+            base_endpoint.tls_config(tls)?
+        } else {
+            base_endpoint
+        };
 
         let mut clients = Vec::with_capacity(pool_size);
         for _ in 0..pool_size {
@@ -527,7 +533,8 @@ impl MediaServiceClient {
         );
 
         let pool_size = config.pool_size();
-        let endpoint = Endpoint::from_shared(config.media_service_url.clone())?
+        let endpoint_url = config.endpoint_url(&config.media_service_url)?;
+        let base_endpoint = Endpoint::from_shared(endpoint_url)?
             .connect_timeout(config.connection_timeout())
             .timeout(config.connection_timeout())
             .http2_keep_alive_interval(config.http2_keep_alive_interval())
@@ -536,6 +543,11 @@ impl MediaServiceClient {
             .keep_alive_timeout(config.connection_timeout())
             .tcp_nodelay(true)
             .concurrency_limit(config.max_concurrent_streams as usize);
+        let endpoint = if let Some(tls) = config.tls_config_for(&config.media_service_url)? {
+            base_endpoint.tls_config(tls)?
+        } else {
+            base_endpoint
+        };
 
         let mut clients = Vec::with_capacity(pool_size);
         for _ in 0..pool_size {
@@ -756,7 +768,8 @@ impl AuthServiceClient {
         );
 
         let pool_size = config.pool_size();
-        let endpoint = Endpoint::from_shared(config.auth_service_url.clone())?
+        let endpoint_url = config.endpoint_url(&config.auth_service_url)?;
+        let base_endpoint = Endpoint::from_shared(endpoint_url)?
             .connect_timeout(config.connection_timeout())
             .timeout(config.connection_timeout())
             .http2_keep_alive_interval(config.http2_keep_alive_interval())
@@ -765,6 +778,11 @@ impl AuthServiceClient {
             .keep_alive_timeout(config.connection_timeout())
             .tcp_nodelay(true)
             .concurrency_limit(config.max_concurrent_streams as usize);
+        let endpoint = if let Some(tls) = config.tls_config_for(&config.auth_service_url)? {
+            base_endpoint.tls_config(tls)?
+        } else {
+            base_endpoint
+        };
 
         let mut clients = Vec::with_capacity(pool_size);
         for _ in 0..pool_size {
@@ -903,6 +921,9 @@ impl AuthServiceClient {
                     .set_auth_service_health(HealthStatus::Healthy)
                     .await;
                 let body = resp.into_inner();
+                if !body.found {
+                    return Ok(None);
+                }
                 Ok(body.public_key)
             }
             Err(err) => {
@@ -914,47 +935,4 @@ impl AuthServiceClient {
         }
     }
 
-    /// Soft delete user and return deleted_at timestamp (seconds)
-    pub async fn soft_delete_user(
-        &self,
-        user_id: Uuid,
-        deleted_by: Option<Uuid>,
-    ) -> Result<i64, tonic::Status> {
-        let attempts = self.retry_attempts.max(1);
-        let mut last_err: Option<tonic::Status> = None;
-
-        for attempt in 0..attempts {
-            let mut client = self.client_pool.acquire().await;
-            let mut request = tonic::Request::new(SoftDeleteUserRequest {
-                user_id: user_id.to_string(),
-                deleted_by: deleted_by.map(|v| v.to_string()),
-            });
-            request.set_timeout(self.request_timeout);
-
-            match client.soft_delete_user(request).await {
-                Ok(resp) => {
-                    self.health_checker
-                        .set_auth_service_health(HealthStatus::Healthy)
-                        .await;
-                    return Ok(resp.into_inner().deleted_at);
-                }
-                Err(err) => {
-                    self.health_checker
-                        .set_auth_service_health(HealthStatus::Unavailable)
-                        .await;
-                    last_err = Some(err);
-                    if attempt + 1 < attempts {
-                        let delay = self
-                            .retry_backoff
-                            .checked_mul((attempt + 1) as u32)
-                            .unwrap_or(self.retry_backoff);
-                        sleep(delay).await;
-                    }
-                }
-            }
-        }
-
-        Err(last_err
-            .unwrap_or_else(|| tonic::Status::internal("auth-service soft_delete_user failed")))
-    }
 }

@@ -2,8 +2,10 @@
 ///
 /// Handles video uploads, processing, and streaming.
 /// Extracted from user-service as part of P1.2 service splitting.
-use actix_web::{middleware as actix_middleware, web, App, HttpResponse, HttpServer};
+use actix_middleware::CorrelationIdMiddleware;
+use actix_web::{middleware::Logger, web, App, HttpResponse, HttpServer};
 use crypto_core::jwt;
+use db_pool::{create_pool as create_pg_pool, DbConfig as DbPoolConfig};
 use media_service::cache::MediaCache;
 use media_service::handlers;
 use media_service::middleware;
@@ -11,7 +13,6 @@ use media_service::openapi::ApiDoc;
 use media_service::services::ReelTranscodePipeline;
 use media_service::Config;
 use redis_utils::{RedisPool, SentinelConfig};
-use sqlx::postgres::PgPoolOptions;
 use std::io;
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -91,9 +92,12 @@ async fn main() -> io::Result<()> {
     }
 
     // Initialize database connection pool
-    let db_pool = PgPoolOptions::new()
-        .max_connections(config.database.max_connections)
-        .connect(&config.database.url)
+    let mut cfg = DbPoolConfig::from_env().unwrap_or_default();
+    if cfg.database_url.is_empty() {
+        cfg.database_url = config.database.url.clone();
+    }
+    cfg.max_connections = std::cmp::max(cfg.max_connections, config.database.max_connections);
+    let db_pool = create_pg_pool(cfg)
         .await
         .expect("Failed to connect to database");
 
@@ -145,8 +149,8 @@ async fn main() -> io::Result<()> {
             .app_data(web::Data::new(db_pool_http.clone()))
             .app_data(web::Data::new(reel_pipeline.clone()))
             .app_data(web::Data::new(media_cache_http.clone()))
-            .wrap(actix_middleware::Logger::default())
-            .wrap(actix_middleware::CorrelationIdMiddleware)
+            .wrap(Logger::default())
+            .wrap(CorrelationIdMiddleware)
             .route(
                 "/metrics",
                 web::get().to(media_service::metrics::serve_metrics),

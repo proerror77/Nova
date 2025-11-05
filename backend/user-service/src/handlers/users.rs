@@ -1,14 +1,16 @@
-use crate::cache::{get_cached_user, invalidate_user_cache, set_cached_user, CachedUser};
+use crate::cache::{
+    cache_user_miss, get_cached_user, invalidate_user_cache, set_cached_user, CachedUser,
+};
 use actix_web::{web, HttpMessage, HttpRequest, HttpResponse, Responder};
 use base64::engine::general_purpose;
 use base64::Engine;
-use redis::aio::ConnectionManager;
+use redis_utils::SharedConnectionManager;
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::db::user_repo;
-use crate::grpc::nova::auth::v1::UserProfile as ProtoUserProfile;
+use crate::grpc::nova::auth_service::UserProfile as ProtoUserProfile;
 use crate::grpc::{AuthServiceClient, UserProfileUpdate};
 use crate::middleware::UserId;
 use crate::models::{UpdateUserProfileRequest, UserProfile};
@@ -31,7 +33,7 @@ pub async fn get_user(
     path: web::Path<String>,
     pool: web::Data<PgPool>,
     req: HttpRequest,
-    redis: Option<web::Data<ConnectionManager>>,
+    redis: Option<web::Data<SharedConnectionManager>>,
 ) -> impl Responder {
     let id = match Uuid::parse_str(&path.into_inner()) {
         Ok(id) => id,
@@ -43,20 +45,23 @@ pub async fn get_user(
         }
     };
 
-    // Try to get user from cache first
+    let requester_id = req.extensions().get::<UserId>().map(|u| u.0);
+
+    // Try to get user from cache first (skip when requester == target so email remains accurate)
     if let Some(redis_mgr) = redis.as_ref() {
         if let Ok(Some(cached_user)) = get_cached_user(redis_mgr.get_ref(), id).await {
-            // Return cached user
-            return HttpResponse::Ok().json(PublicUser {
-                id: cached_user.id,
-                username: cached_user.username,
-                email: String::new(), // Cache doesn't store email
-                display_name: cached_user.display_name,
-                bio: cached_user.bio,
-                avatar_url: cached_user.avatar_url,
-                is_verified: cached_user.email_verified,
-                created_at: chrono::Utc::now(), // Approximate
-            });
+            if requester_id != Some(id) {
+                return HttpResponse::Ok().json(PublicUser {
+                    id: cached_user.id,
+                    username: cached_user.username,
+                    email: String::new(),
+                    display_name: cached_user.display_name,
+                    bio: cached_user.bio,
+                    avatar_url: cached_user.avatar_url,
+                    is_verified: cached_user.email_verified,
+                    created_at: cached_user.created_at,
+                });
+            }
         }
     }
 
@@ -68,9 +73,7 @@ pub async fn get_user(
                 let _ = set_cached_user(redis_mgr.get_ref(), &cached).await;
             }
             // Check if the requester is blocked by or has blocked the target user
-            if let Some(requester) = req.extensions().get::<UserId>() {
-                let requester_id = requester.0;
-
+            if let Some(requester_id) = requester_id {
                 // OPTIMIZED: Single query for bidirectional block check
                 let is_blocked = user_repo::are_blocked(pool.get_ref(), requester_id, id)
                     .await
@@ -98,10 +101,16 @@ pub async fn get_user(
                 }
             }
 
+            let include_email = requester_id.map_or(false, |rid| rid == id);
+
             HttpResponse::Ok().json(PublicUser {
                 id: u.id,
                 username: u.username,
-                email: u.email,
+                email: if include_email {
+                    u.email
+                } else {
+                    String::new()
+                },
                 display_name: u.display_name,
                 bio: u.bio,
                 avatar_url: u.avatar_url,
@@ -109,7 +118,18 @@ pub async fn get_user(
                 created_at: u.created_at,
             })
         }
-        Ok(None) => HttpResponse::NotFound().finish(),
+        Ok(None) => {
+            if let Some(redis_mgr) = redis.as_ref() {
+                if let Err(e) = cache_user_miss(redis_mgr.get_ref(), id).await {
+                    tracing::debug!(
+                        user_id = %id,
+                        error = %e,
+                        "Failed to cache user miss sentinel"
+                    );
+                }
+            }
+            HttpResponse::NotFound().finish()
+        }
         Err(e) => HttpResponse::InternalServerError().json(serde_json::json!({
             "error": "Database error",
             "details": e.to_string()
@@ -199,7 +219,7 @@ pub async fn update_profile(
     http_req: HttpRequest,
     auth_client: web::Data<AuthServiceClient>,
     req: web::Json<UpdateUserProfileRequest>,
-    redis: Option<web::Data<ConnectionManager>>,
+    redis: Option<web::Data<SharedConnectionManager>>,
 ) -> impl Responder {
     let user_id = match http_req.extensions().get::<UserId>() {
         Some(user_id_wrapper) => user_id_wrapper.0,

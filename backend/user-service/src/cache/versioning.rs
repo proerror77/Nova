@@ -8,7 +8,7 @@ use chrono::Utc;
 /// 3. Stale data consistency issues
 ///
 /// Solution: Version-tagged cache entries with atomic CAS operations
-use redis::aio::ConnectionManager;
+use redis_utils::SharedConnectionManager;
 use serde::{Deserialize, Serialize};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -79,7 +79,7 @@ pub struct CacheOpResult<T> {
 /// Prevents cache stampede by using Redis WATCH/MULTI/EXEC
 /// If multiple requests race, only one computes the value
 pub async fn get_or_compute<T, F>(
-    redis: &ConnectionManager,
+    redis: &SharedConnectionManager,
     key: &str,
     compute: &F,
     ttl_secs: usize,
@@ -90,7 +90,10 @@ where
         Box<dyn std::future::Future<Output = Result<T, Box<dyn std::error::Error>>> + Send>,
     >,
 {
-    let mut redis_conn = redis.clone();
+    let mut redis_conn = {
+        let guard = redis.lock().await;
+        guard.clone()
+    };
 
     // Try to read from cache
     loop {
@@ -169,10 +172,10 @@ where
 ///
 /// Ensures cache is properly cleared and version is incremented
 pub async fn invalidate_with_version(
-    redis: &ConnectionManager,
+    redis: &SharedConnectionManager,
     key: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let mut redis_conn = redis.clone();
+    let mut redis_conn = redis.lock().await.clone();
 
     // Use Lua script for atomic invalidation
     let script = r#"
@@ -199,10 +202,10 @@ pub async fn invalidate_with_version(
 ///
 /// Returns the time when cache was last invalidated
 pub async fn get_invalidation_timestamp(
-    redis: &ConnectionManager,
+    redis: &SharedConnectionManager,
     key: &str,
 ) -> Result<Option<i64>, Box<dyn std::error::Error>> {
-    let mut redis_conn = redis.clone();
+    let mut redis_conn = redis.lock().await.clone();
 
     let invalidated_at: Option<String> = run_with_timeout(
         redis::cmd("GET")

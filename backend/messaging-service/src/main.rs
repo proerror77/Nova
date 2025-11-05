@@ -3,12 +3,12 @@ use crypto_core::jwt as core_jwt;
 use messaging_service::openapi::ApiDoc;
 use messaging_service::{
     config, db, error, logging,
+    nova::messaging_service::messaging_service_server::MessagingServiceServer,
     redis_client::RedisClient,
     routes,
     services::{encryption::EncryptionService, key_exchange::KeyExchangeService, push::ApnsPush},
     state::AppState,
     websocket::streams::{start_streams_listener, StreamsConfig},
-    nova::messaging_service::messaging_service_server::MessagingServiceServer,
 };
 use redis_utils::{RedisPool, SentinelConfig};
 use std::net::SocketAddr;
@@ -54,7 +54,8 @@ async fn main() -> Result<(), error::AppError> {
 
     // Run embedded migrations (idempotent)
     // Treat migration failures as fatal - the database schema must be in sync
-    messaging_service::migrations::run_all(&db).await
+    messaging_service::migrations::run_all(&db)
+        .await
         .map_err(|e| error::AppError::StartServer(format!("database migrations failed: {}", e)))?;
 
     // Initialize JWT validation using unified crypto-core helpers
@@ -62,8 +63,9 @@ async fn main() -> Result<(), error::AppError> {
     let public_key = core_jwt::load_validation_key()
         .map_err(|e| error::AppError::StartServer(format!("Failed to load JWT public key: {e}")))?;
 
-    core_jwt::initialize_jwt_validation_only(&public_key)
-        .map_err(|e| error::AppError::StartServer(format!("Failed to initialize JWT validation: {e}")))?;
+    core_jwt::initialize_jwt_validation_only(&public_key).map_err(|e| {
+        error::AppError::StartServer(format!("Failed to initialize JWT validation: {e}"))
+    })?;
 
     let apns_client = match cfg.apns.as_ref() {
         Some(apns_cfg) => match ApnsPush::new(apns_cfg) {
@@ -79,6 +81,16 @@ async fn main() -> Result<(), error::AppError> {
     let encryption = Arc::new(EncryptionService::new(cfg.encryption_master_key));
     let key_exchange_service = Arc::new(KeyExchangeService::new(Arc::new(db.clone())));
 
+    // Phase 1: Spec 007 - Initialize auth-service gRPC client for users consolidation
+    let auth_client = Arc::new(
+        messaging_service::services::auth_client::AuthClient::new(&cfg.auth_service_url)
+            .await
+            .map_err(|e| {
+                tracing::warn!(error=%e, "Failed to initialize auth-service client; some operations may fail");
+                e
+            })?,
+    );
+
     let state = AppState {
         db: db.clone(),
         registry: registry.clone(),
@@ -87,6 +99,7 @@ async fn main() -> Result<(), error::AppError> {
         apns: apns_client.clone(),
         encryption: encryption.clone(),
         key_exchange_service: Some(key_exchange_service),
+        auth_client,
     };
 
     // Metrics updater (queue depth gauges)
@@ -114,44 +127,46 @@ async fn main() -> Result<(), error::AppError> {
     let rest_db = db.clone();
 
     // REST API server on cfg.port
+    // CRITICAL: HttpServer must be created outside tokio::spawn to avoid Send issues
+    // Only the .run() future (which is Send) goes into spawn
+    let bind_addr_parsed: SocketAddr = bind_addr.parse()
+        .map_err(|e: std::net::AddrParseError| {
+            error::AppError::StartServer(format!("Invalid bind address: {}", e))
+        })?;
+
+    tracing::info!("REST API listening on {}", bind_addr_parsed);
+
+    let rest_server = HttpServer::new(move || {
+        let openapi_doc = ApiDoc::openapi();
+
+        App::new()
+            .app_data(web::Data::new(openapi_doc.clone()))
+            .service(
+                SwaggerUi::new("/swagger-ui/{_:.*}")
+                    .url("/api/v1/openapi.json", openapi_doc.clone()),
+            )
+            .route("/api/v1/openapi.json", web::get().to(openapi_json))
+            .app_data(web::Data::new(rest_state.clone()))
+            .app_data(web::Data::new(rest_db.clone()))
+            .configure(routes::configure_routes)
+            .wrap(actix_middleware::CorrelationIdMiddleware)
+            .wrap(actix_middleware::MetricsMiddleware)
+    })
+    .bind(&bind_addr_parsed)
+    .map_err(|e| error::AppError::StartServer(format!("Failed to bind REST server: {}", e)))?
+    .run();
+
+    // Now spawn only the Server future (which IS Send)
     let rest_handle = tokio::spawn(async move {
-        let bind_addr_parsed: SocketAddr = bind_addr.parse()
-            .map_err(|e: std::net::AddrParseError| {
-                error::AppError::StartServer(format!("Invalid bind address: {}", e))
-            })?;
-
-        tracing::info!("REST API listening on {}", bind_addr_parsed);
-
-        let result = HttpServer::new(move || {
-            let openapi_doc = ApiDoc::openapi();
-
-            App::new()
-                .app_data(web::Data::new(openapi_doc.clone()))
-                .service(
-                    SwaggerUi::new("/swagger-ui/{_:.*}")
-                        .url("/api/v1/openapi.json", openapi_doc.clone()),
-                )
-                .route("/api/v1/openapi.json", web::get().to(openapi_json))
-                .app_data(web::Data::new(rest_state.clone()))
-                .app_data(web::Data::new(rest_db.clone()))
-                .configure(routes::configure_routes)
-                .wrap(actix_middleware::CorrelationIdMiddleware)
-                .wrap(actix_middleware::MetricsMiddleware)
-        })
-        .bind(&bind_addr_parsed)
-        .map_err(|e| error::AppError::StartServer(format!("Failed to bind REST server: {}", e)))?
-        .run()
-        .await
-        .map_err(|e| error::AppError::StartServer(format!("REST server error: {}", e)))?;
-
-        Ok::<(), error::AppError>(())
+        rest_server.await
+            .map_err(|e| error::AppError::StartServer(format!("REST server error: {}", e)))
     });
 
     // gRPC server on cfg.port + 1000 (e.g., 8080 -> 9080)
     let grpc_addr = format!("0.0.0.0:{}", cfg.port + 1000);
     let grpc_handle = tokio::spawn(async move {
-        let grpc_addr_parsed: SocketAddr = grpc_addr.parse()
-            .map_err(|e: std::net::AddrParseError| {
+        let grpc_addr_parsed: SocketAddr =
+            grpc_addr.parse().map_err(|e: std::net::AddrParseError| {
                 tracing::error!("Invalid gRPC address: {}", e);
             })?;
 
@@ -173,11 +188,11 @@ async fn main() -> Result<(), error::AppError> {
                 Ok(Ok(())) => tracing::info!("REST server exited normally"),
                 Ok(Err(e)) => {
                     tracing::error!("REST server error: {:?}", e);
-                    return Err(Box::new(e));
+                    return Err(e);
                 }
                 Err(e) => {
                     tracing::error!("REST server task error: {}", e);
-                    return Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, e)));
+                    return Err(error::AppError::StartServer(format!("REST server task error: {}", e)));
                 }
             }
         }
@@ -187,7 +202,7 @@ async fn main() -> Result<(), error::AppError> {
                 Ok(Err(())) => tracing::error!("gRPC server exited with error"),
                 Err(e) => {
                     tracing::error!("gRPC server task error: {}", e);
-                    return Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, e)));
+                    return Err(error::AppError::StartServer(format!("gRPC server task error: {}", e)));
                 }
             }
         }

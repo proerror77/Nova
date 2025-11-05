@@ -3,7 +3,7 @@
 
 -- 1. Webhook configurations for video transcoding notifications
 CREATE TABLE IF NOT EXISTS video_webhooks (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     video_id UUID NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
     webhook_url TEXT NOT NULL,
     webhook_secret TEXT,  -- Optional HMAC secret for signature verification
@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS video_webhooks (
 
 -- 2. Webhook delivery attempts tracking (for retry logic)
 CREATE TABLE IF NOT EXISTS webhook_deliveries (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     webhook_id UUID NOT NULL REFERENCES video_webhooks(id) ON DELETE CASCADE,
     video_id UUID NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
     event_type TEXT NOT NULL,  -- 'transcoding.progress', 'transcoding.completed', 'transcoding.failed'

@@ -107,6 +107,7 @@ pub mod hash;
 
 // Distributed tracing support
 pub mod correlation;
+pub mod kafka_correlation;
 
 // =============================
 // C FFI (for iOS xcframework)

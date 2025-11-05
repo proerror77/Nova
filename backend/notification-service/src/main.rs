@@ -1,5 +1,6 @@
 use actix_web::{middleware, web, App, HttpServer};
 use std::io;
+use db_pool::{create_pool as create_pg_pool, DbConfig as DbPoolConfig};
 use std::sync::Arc;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use notification_service::{
@@ -31,11 +32,10 @@ async fn main() -> io::Result<()> {
     let db_url = std::env::var("DATABASE_URL")
         .unwrap_or_else(|_| "postgres://user:password@localhost/nova".to_string());
 
-    let db_pool = match sqlx::postgres::PgPoolOptions::new()
-        .max_connections(10)
-        .connect(&db_url)
-        .await
-    {
+    let mut cfg = DbPoolConfig::from_env().unwrap_or_default();
+    if cfg.database_url.is_empty() { cfg.database_url = db_url.clone(); }
+    if cfg.max_connections < 20 { cfg.max_connections = 20; }
+    let db_pool = match create_pg_pool(cfg).await {
         Ok(pool) => {
             tracing::info!("Successfully connected to database");
             pool
@@ -43,8 +43,6 @@ async fn main() -> io::Result<()> {
         Err(e) => {
             tracing::warn!("Failed to connect to database: {}. Running in offline mode", e);
             tracing::info!("Some features will not work without database connection");
-            // In a real scenario, we might want to exit here
-            // For now, we'll create a dummy pool or handle it gracefully
             return Err(io::Error::new(io::ErrorKind::Other, "Database connection failed"));
         }
     };

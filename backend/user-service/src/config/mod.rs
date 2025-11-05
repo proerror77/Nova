@@ -88,6 +88,89 @@ pub struct RateLimitConfig {
 
     #[serde(default = "default_rate_limit_window_secs")]
     pub window_secs: u64,
+
+    /// Per-endpoint rate limit overrides
+    /// Format: "endpoint_pattern:max_requests:window_secs"
+    /// Example: "auth/register:30:60,auth/login:20:60"
+    /// If not set, uses global max_requests and window_secs
+    #[serde(default)]
+    pub endpoint_overrides: String,
+
+    /// Trusted proxy IPs (comma-separated via env)
+    #[serde(default)]
+    pub trusted_proxies: Vec<String>,
+}
+
+/// Per-endpoint rate limit configuration
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct EndpointRateLimitOverride {
+    /// Endpoint pattern to match (e.g., "auth/register", "user/posts")
+    pub pattern: String,
+    /// Max requests for this endpoint
+    pub max_requests: u32,
+    /// Time window in seconds for this endpoint
+    pub window_secs: u64,
+}
+
+impl RateLimitConfig {
+    /// Parse endpoint overrides from string format
+    /// Format: "pattern1:max_requests:window_secs,pattern2:max_requests:window_secs"
+    /// Returns a map of pattern -> EndpointRateLimitOverride
+    pub fn parse_endpoint_overrides(
+        &self,
+    ) -> std::collections::HashMap<String, EndpointRateLimitOverride> {
+        let mut overrides = std::collections::HashMap::new();
+
+        if self.endpoint_overrides.is_empty() {
+            return overrides;
+        }
+
+        for override_str in self.endpoint_overrides.split(',') {
+            let parts: Vec<&str> = override_str.trim().split(':').collect();
+            if parts.len() == 3 {
+                if let (Ok(max_req), Ok(window)) = (
+                    parts[1].trim().parse::<u32>(),
+                    parts[2].trim().parse::<u64>(),
+                ) {
+                    let pattern = parts[0].trim().to_string();
+                    overrides.insert(
+                        pattern.clone(),
+                        EndpointRateLimitOverride {
+                            pattern,
+                            max_requests: max_req,
+                            window_secs: window,
+                        },
+                    );
+                }
+            }
+        }
+
+        overrides
+    }
+
+    /// Get rate limit config for a specific endpoint
+    /// Returns (max_requests, window_secs) - either override or global defaults
+    pub fn get_endpoint_config(&self, endpoint: &str) -> (u32, u64) {
+        let overrides = self.parse_endpoint_overrides();
+
+        // Exact match first
+        if let Some(override_cfg) = overrides.get(endpoint) {
+            return (override_cfg.max_requests, override_cfg.window_secs);
+        }
+
+        // Prefix match (e.g., "auth/*" matches "auth/register")
+        for (pattern, override_cfg) in &overrides {
+            if pattern.ends_with("/*") {
+                let prefix = &pattern[..pattern.len() - 2];
+                if endpoint.starts_with(prefix) && endpoint.chars().nth(prefix.len()) == Some('/') {
+                    return (override_cfg.max_requests, override_cfg.window_secs);
+                }
+            }
+        }
+
+        // Fall back to global config
+        (self.max_requests, self.window_secs)
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -97,6 +180,8 @@ pub struct S3Config {
     pub aws_access_key_id: String,
     pub aws_secret_access_key: String,
     pub cloudfront_url: String,
+    #[serde(default)]
+    pub endpoint: Option<String>,
 
     #[serde(default = "default_s3_presigned_url_expiry_secs")]
     pub presigned_url_expiry_secs: u64,
@@ -335,7 +420,22 @@ impl Config {
                 .unwrap_or_else(|_| default_rate_limit_window_secs().to_string())
                 .parse()
                 .unwrap_or(default_rate_limit_window_secs()),
+            endpoint_overrides: env::var("RATE_LIMIT_ENDPOINT_OVERRIDES").unwrap_or_default(),
+            trusted_proxies: env::var("RATE_LIMIT_TRUSTED_PROXIES")
+                .unwrap_or_default()
+                .split(',')
+                .filter_map(|s| {
+                    let trimmed = s.trim();
+                    if trimmed.is_empty() {
+                        None
+                    } else {
+                        Some(trimmed.to_string())
+                    }
+                })
+                .collect(),
         };
+
+        let s3_endpoint = env::var("S3_ENDPOINT").ok();
 
         let s3 = S3Config {
             bucket_name: env::var("S3_BUCKET_NAME").expect("S3_BUCKET_NAME must be set"),
@@ -345,6 +445,7 @@ impl Config {
             aws_secret_access_key: env::var("AWS_SECRET_ACCESS_KEY")
                 .expect("AWS_SECRET_ACCESS_KEY must be set"),
             cloudfront_url: env::var("CLOUDFRONT_URL").expect("CLOUDFRONT_URL must be set"),
+            endpoint: s3_endpoint,
             presigned_url_expiry_secs: env::var("S3_PRESIGNED_URL_EXPIRY_SECS")
                 .unwrap_or_else(|_| default_s3_presigned_url_expiry_secs().to_string())
                 .parse()
@@ -454,5 +555,164 @@ mod tests {
         assert_eq!(default_redis_pool_size(), 10);
         assert_eq!(default_jwt_access_ttl(), 900);
         assert_eq!(default_jwt_refresh_ttl(), 604800);
+    }
+
+    #[test]
+    fn test_parse_endpoint_overrides_empty() {
+        let config = RateLimitConfig {
+            max_requests: 100,
+            window_secs: 60,
+            endpoint_overrides: String::new(),
+            trusted_proxies: Vec::new(),
+        };
+
+        let overrides = config.parse_endpoint_overrides();
+        assert!(overrides.is_empty());
+    }
+
+    #[test]
+    fn test_parse_endpoint_overrides_single() {
+        let config = RateLimitConfig {
+            max_requests: 100,
+            window_secs: 60,
+            endpoint_overrides: "auth/register:30:60".to_string(),
+            trusted_proxies: Vec::new(),
+        };
+
+        let overrides = config.parse_endpoint_overrides();
+        assert_eq!(overrides.len(), 1);
+        assert_eq!(overrides.get("auth/register").unwrap().max_requests, 30);
+        assert_eq!(overrides.get("auth/register").unwrap().window_secs, 60);
+    }
+
+    #[test]
+    fn test_parse_endpoint_overrides_multiple() {
+        let config = RateLimitConfig {
+            max_requests: 100,
+            window_secs: 60,
+            endpoint_overrides: "auth/register:30:60,auth/login:20:30,user/posts:50:120"
+                .to_string(),
+            trusted_proxies: Vec::new(),
+        };
+
+        let overrides = config.parse_endpoint_overrides();
+        assert_eq!(overrides.len(), 3);
+
+        assert_eq!(overrides.get("auth/register").unwrap().max_requests, 30);
+        assert_eq!(overrides.get("auth/login").unwrap().max_requests, 20);
+        assert_eq!(overrides.get("user/posts").unwrap().max_requests, 50);
+    }
+
+    #[test]
+    fn test_parse_endpoint_overrides_with_whitespace() {
+        let config = RateLimitConfig {
+            max_requests: 100,
+            window_secs: 60,
+            endpoint_overrides: " auth/register : 30 : 60 , auth/login : 20 : 30 ".to_string(),
+            trusted_proxies: Vec::new(),
+        };
+
+        let overrides = config.parse_endpoint_overrides();
+        assert_eq!(overrides.len(), 2);
+        assert_eq!(overrides.get("auth/register").unwrap().max_requests, 30);
+        assert_eq!(overrides.get("auth/login").unwrap().max_requests, 20);
+    }
+
+    #[test]
+    fn test_parse_endpoint_overrides_invalid_format() {
+        let config = RateLimitConfig {
+            max_requests: 100,
+            window_secs: 60,
+            endpoint_overrides: "auth/register:30,invalid_entry".to_string(),
+            trusted_proxies: Vec::new(),
+        };
+
+        let overrides = config.parse_endpoint_overrides();
+        // Only valid entries should be parsed
+        assert_eq!(overrides.len(), 0);
+    }
+
+    #[test]
+    fn test_get_endpoint_config_exact_match() {
+        let config = RateLimitConfig {
+            max_requests: 100,
+            window_secs: 60,
+            endpoint_overrides: "auth/register:30:60".to_string(),
+            trusted_proxies: Vec::new(),
+        };
+
+        let (max_req, window) = config.get_endpoint_config("auth/register");
+        assert_eq!(max_req, 30);
+        assert_eq!(window, 60);
+    }
+
+    #[test]
+    fn test_get_endpoint_config_fallback_to_global() {
+        let config = RateLimitConfig {
+            max_requests: 100,
+            window_secs: 60,
+            endpoint_overrides: "auth/register:30:60".to_string(),
+            trusted_proxies: Vec::new(),
+        };
+
+        let (max_req, window) = config.get_endpoint_config("user/posts");
+        assert_eq!(max_req, 100);
+        assert_eq!(window, 60);
+    }
+
+    #[test]
+    fn test_get_endpoint_config_prefix_match() {
+        let config = RateLimitConfig {
+            max_requests: 100,
+            window_secs: 60,
+            endpoint_overrides: "auth/*:30:60".to_string(),
+            trusted_proxies: Vec::new(),
+        };
+
+        let (max_req, window) = config.get_endpoint_config("auth/register");
+        assert_eq!(max_req, 30);
+        assert_eq!(window, 60);
+
+        let (max_req, window) = config.get_endpoint_config("auth/login");
+        assert_eq!(max_req, 30);
+        assert_eq!(window, 60);
+
+        // Should fall back to global for non-matching prefix
+        let (max_req, window) = config.get_endpoint_config("user/posts");
+        assert_eq!(max_req, 100);
+        assert_eq!(window, 60);
+    }
+
+    #[test]
+    fn test_get_endpoint_config_prefix_match_no_false_positive() {
+        let config = RateLimitConfig {
+            max_requests: 100,
+            window_secs: 60,
+            endpoint_overrides: "auth/*:30:60".to_string(),
+        };
+
+        // "auth_other" should not match "auth/*" pattern
+        let (max_req, window) = config.get_endpoint_config("auth_other");
+        assert_eq!(max_req, 100); // Falls back to global
+        assert_eq!(window, 60);
+    }
+
+    #[test]
+    fn test_get_endpoint_config_exact_match_precedence_over_prefix() {
+        let config = RateLimitConfig {
+            max_requests: 100,
+            window_secs: 60,
+            endpoint_overrides: "auth/register:30:60,auth/*:40:90".to_string(),
+        };
+
+        // Exact match should take precedence
+        let (max_req, window) = config.get_endpoint_config("auth/register");
+        assert_eq!(max_req, 30);
+        assert_eq!(window, 60);
+
+        // Prefix match for others under auth
+        let (max_req, window) = config.get_endpoint_config("auth/login");
+        assert_eq!(max_req, 40);
+        assert_eq!(window, 90);
     }
 }

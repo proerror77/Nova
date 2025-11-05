@@ -201,7 +201,7 @@ impl SuggestedUsersJob {
             pipe.set_ex(&key, value, ttl);
         }
 
-        let mut conn = ctx.redis_pool.clone();
+        let mut conn = ctx.redis_pool.lock().await.clone();
         run_with_timeout(pipe.query_async::<_, ()>(&mut conn))
             .await
             .context("Failed to execute Redis pipeline")?;

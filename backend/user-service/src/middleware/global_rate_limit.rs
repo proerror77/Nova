@@ -4,6 +4,7 @@ use actix_web::{
     Error, HttpMessage, HttpResponse,
 };
 use futures::future::LocalBoxFuture;
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use crate::middleware::rate_limit::RateLimiter;
@@ -12,12 +13,26 @@ use crate::middleware::rate_limit::RateLimiter;
 #[derive(Clone)]
 pub struct GlobalRateLimitMiddleware {
     rate_limiter: Arc<RateLimiter>,
+    trusted_proxies: Arc<HashSet<String>>,
 }
 
 impl GlobalRateLimitMiddleware {
-    pub fn new(rate_limiter: RateLimiter) -> Self {
+    pub fn new(rate_limiter: RateLimiter, trusted_proxies: Vec<String>) -> Self {
+        let proxy_set: HashSet<String> = trusted_proxies
+            .into_iter()
+            .filter_map(|ip| {
+                let trimmed = ip.trim();
+                if trimmed.is_empty() {
+                    None
+                } else {
+                    Some(trimmed.to_string())
+                }
+            })
+            .collect();
+
         Self {
             rate_limiter: Arc::new(rate_limiter),
+            trusted_proxies: Arc::new(proxy_set),
         }
     }
 }
@@ -38,6 +53,7 @@ where
         std::future::ready(Ok(GlobalRateLimitMiddlewareService {
             service: Arc::new(service),
             rate_limiter: self.rate_limiter.clone(),
+            trusted_proxies: self.trusted_proxies.clone(),
         }))
     }
 }
@@ -45,6 +61,7 @@ where
 pub struct GlobalRateLimitMiddlewareService<S> {
     service: Arc<S>,
     rate_limiter: Arc<RateLimiter>,
+    trusted_proxies: Arc<HashSet<String>>,
 }
 
 impl<S, B> Service<ServiceRequest> for GlobalRateLimitMiddlewareService<S>
@@ -62,20 +79,56 @@ where
     fn call(&self, req: ServiceRequest) -> Self::Future {
         let service = self.service.clone();
         let rate_limiter = self.rate_limiter.clone();
+        let trusted_proxies = self.trusted_proxies.clone();
 
         // Extract client identifier early before moving req
         let client_id = if let Some(user_id) = req.extensions().get::<crate::middleware::UserId>() {
             format!("user:{}", user_id.0)
         } else {
-            // Get IP address from X-Forwarded-For header or connection
-            let ip = req
-                .headers()
-                .get("X-Forwarded-For")
-                .and_then(|h| h.to_str().ok())
-                .and_then(|s| s.split(',').next().map(|s| s.trim()))
-                .map(|s| s.to_string())
-                .or_else(|| req.connection_info().peer_addr().map(|s| s.to_string()))
-                .unwrap_or_else(|| "unknown".to_string());
+            // Determine client IP with trusted proxy awareness
+            let connection_ip = req
+                .connection_info()
+                .peer_addr()
+                .and_then(|addr| addr.split(':').next().map(|s| s.to_string()));
+
+            let client_ip = if let Some(ref proxy_ip) = connection_ip {
+                if trusted_proxies.contains(proxy_ip) {
+                    req.headers()
+                        .get("X-Forwarded-For")
+                        .and_then(|h| h.to_str().ok())
+                        .and_then(|header| {
+                            header
+                                .split(',')
+                                .map(|part| part.trim())
+                                .find(|part| !part.is_empty())
+                                .map(|part| part.to_string())
+                        })
+                        .unwrap_or_else(|| proxy_ip.clone())
+                } else {
+                    proxy_ip.clone()
+                }
+            } else {
+                req.connection_info()
+                    .peer_addr()
+                    .and_then(|addr| addr.split(':').next().map(|s| s.to_string()))
+                    .unwrap_or_else(|| "unknown".to_string())
+            };
+
+            let client_ip = if client_ip == "unknown" {
+                req.headers()
+                    .get("X-Real-IP")
+                    .and_then(|h| h.to_str().ok())
+                    .map(|s| s.to_string())
+                    .unwrap_or(client_ip)
+            } else {
+                client_ip
+            };
+
+            let ip = if client_ip.is_empty() {
+                "unknown".to_string()
+            } else {
+                client_ip
+            };
             format!("ip:{}", ip)
         };
 

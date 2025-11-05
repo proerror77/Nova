@@ -273,7 +273,10 @@ mod grpc_test_utils {
         conversation_id: &str,
         participants: Vec<String>,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        println!("Creating test conversation: {} with {:?}", conversation_id, participants);
+        println!(
+            "Creating test conversation: {} with {:?}",
+            conversation_id, participants
+        );
 
         // In real scenario:
         // let client = reqwest::Client::new();
@@ -356,15 +359,11 @@ mod full_integration_scenarios {
             "http://127.0.0.1:8085",
             "conv-1",
             vec!["user-1".to_string(), "user-2".to_string()],
-        ).await;
+        )
+        .await;
 
         // Step 3: Send message from user-1 to conversation
-        let _ = send_test_message(
-            "http://127.0.0.1:8085",
-            "conv-1",
-            "user-1",
-            "Hello, Bob!",
-        ).await;
+        let _ = send_test_message("http://127.0.0.1:8085", "conv-1", "user-1", "Hello, Bob!").await;
 
         // TODO: Step 4: Verify message was created and conversation was updated
         // let mut messaging_client = MessagingServiceClient::connect(&endpoints.messaging_service).await?;
@@ -480,6 +479,9 @@ mod full_integration_scenarios {
         // }
 
         println!("✓ Batch user lookup completed successfully");
-        println!("  - Queried {} users via gRPC batch endpoint", user_ids.len());
+        println!(
+            "  - Queried {} users via gRPC batch endpoint",
+            user_ids.len()
+        );
     }
 }

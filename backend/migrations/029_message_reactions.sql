@@ -1,6 +1,6 @@
 -- Message reactions (emoji reactions on messages)
 CREATE TABLE IF NOT EXISTS message_reactions (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     message_id UUID NOT NULL,
     user_id UUID NOT NULL,
     emoji VARCHAR(20) NOT NULL,  -- Unicode emoji or emoji code (😀, :smile:, etc)
@@ -16,7 +16,7 @@ CREATE INDEX idx_reactions_created_at ON message_reactions(created_at DESC);
 
 -- File attachments (for messages with files)
 CREATE TABLE IF NOT EXISTS message_attachments (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     message_id UUID NOT NULL,
     file_name VARCHAR(255) NOT NULL,
     file_type VARCHAR(100),  -- MIME type

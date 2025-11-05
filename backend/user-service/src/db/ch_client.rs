@@ -1,5 +1,6 @@
 use clickhouse::Client;
 use serde::de::DeserializeOwned;
+use serde::Serialize;
 use std::time::Duration;
 use tracing::{debug, error, warn};
 
@@ -182,6 +183,40 @@ impl ClickHouseClient {
             error!("ClickHouse execute failed: {}", e);
             AppError::Internal(format!("ClickHouse execute error: {}", e))
         })
+    }
+
+    /// Insert one or more typed rows using ClickHouse insert API (parameterized)
+    ///
+    /// Prefer this over raw string-concatenated INSERTs to avoid SQL injection and
+    /// to leverage proper type handling.
+    pub async fn insert_rows<T>(&self, table: &str, rows: &[T]) -> Result<()>
+    where
+        T: Serialize + clickhouse::Row,
+    {
+        let mut inserter = self
+            .client
+            .insert(table)
+            .map_err(|e| AppError::Internal(format!("ClickHouse insert init error: {}", e)))?;
+
+        for row in rows {
+            inserter
+                .write(row)
+                .await
+                .map_err(|e| AppError::Internal(format!("ClickHouse insert write error: {}", e)))?;
+        }
+
+        inserter
+            .end()
+            .await
+            .map_err(|e| AppError::Internal(format!("ClickHouse insert end error: {}", e)))
+    }
+
+    /// Convenience for inserting a single row
+    pub async fn insert_row<T>(&self, table: &str, row: &T) -> Result<()>
+    where
+        T: Serialize + clickhouse::Row,
+    {
+        self.insert_rows(table, std::slice::from_ref(row)).await
     }
 
     /// Health check - verifies ClickHouse connection is alive

@@ -4,7 +4,7 @@
 
 -- Create report reasons lookup table
 CREATE TABLE IF NOT EXISTS report_reasons (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     reason_code VARCHAR(50) NOT NULL UNIQUE, -- 'spam', 'harassment', 'hate_speech', 'nsfw', 'misinformation', 'copyright', 'other'
     reason_label VARCHAR(100) NOT NULL,
     description TEXT,
@@ -25,7 +25,7 @@ ON CONFLICT (reason_code) DO NOTHING;
 
 -- Create reports table
 CREATE TABLE IF NOT EXISTS reports (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     reporter_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     reported_user_id UUID REFERENCES users(id) ON DELETE CASCADE,
     reason_id UUID NOT NULL REFERENCES report_reasons(id),
@@ -60,7 +60,7 @@ ON reports(target_type, target_id, status);
 
 -- Create moderation actions table
 CREATE TABLE IF NOT EXISTS moderation_actions (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     report_id UUID REFERENCES reports(id) ON DELETE CASCADE,
     moderator_id UUID NOT NULL REFERENCES users(id),
     action_type VARCHAR(50) NOT NULL, -- 'warn', 'mute', 'suspend', 'ban', 'delete_content', 'resolve'
@@ -87,7 +87,7 @@ WHERE target_type = 'user' AND status = 'active';
 
 -- Create appeal table for action appeals
 CREATE TABLE IF NOT EXISTS moderation_appeals (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     action_id UUID NOT NULL REFERENCES moderation_actions(id) ON DELETE CASCADE,
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     reason TEXT NOT NULL,
@@ -106,7 +106,7 @@ WHERE status = 'pending';
 
 -- Create moderation queue table
 CREATE TABLE IF NOT EXISTS moderation_queue (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     report_id UUID NOT NULL REFERENCES reports(id) ON DELETE CASCADE,
     queue_status VARCHAR(50) DEFAULT 'pending', -- 'pending', 'assigned', 'completed'
     assigned_to UUID REFERENCES users(id),
@@ -122,7 +122,7 @@ ON moderation_queue(queue_status, priority DESC, created_at ASC);
 
 -- Create content filter table (for automatic flagging)
 CREATE TABLE IF NOT EXISTS content_filters (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     filter_type VARCHAR(50), -- 'keyword', 'pattern', 'ml_model'
     filter_value TEXT NOT NULL,
     severity VARCHAR(50) DEFAULT 'low',
@@ -133,7 +133,7 @@ CREATE TABLE IF NOT EXISTS content_filters (
 
 -- Create suspicious activity log
 CREATE TABLE IF NOT EXISTS activity_logs (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     activity_type VARCHAR(50), -- 'mass_report', 'spam_messages', 'rapid_follows'
     severity VARCHAR(50) DEFAULT 'low',

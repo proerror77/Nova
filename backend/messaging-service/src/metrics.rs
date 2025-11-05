@@ -1,7 +1,9 @@
 use actix_web::HttpResponse;
 use once_cell::sync::Lazy;
-use prometheus::{Encoder, HistogramOpts, HistogramVec, IntCounterVec, IntGauge, Opts, TextEncoder};
-use sqlx::{PgPool};
+use prometheus::{
+    Encoder, HistogramOpts, HistogramVec, IntCounterVec, IntGauge, Opts, TextEncoder,
+};
+use sqlx::PgPool;
 use std::time::Duration;
 
 static HTTP_REQUESTS_TOTAL: Lazy<IntCounterVec> = Lazy::new(|| {
@@ -105,11 +107,10 @@ async fn update_gauges(db: &PgPool) -> Result<(), sqlx::Error> {
     .fetch_one(db)
     .await?;
 
-    let failed: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM notification_jobs WHERE status = 'failed'",
-    )
-    .fetch_one(db)
-    .await?;
+    let failed: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM notification_jobs WHERE status = 'failed'")
+            .fetch_one(db)
+            .await?;
 
     NOTIFICATION_JOBS_PENDING.set(pending as i64);
     NOTIFICATION_JOBS_FAILED.set(failed as i64);

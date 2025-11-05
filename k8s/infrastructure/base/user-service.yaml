@@ -209,9 +209,6 @@ spec:
     targetPort: 9083
     protocol: TCP
   sessionAffinity: ClientIP
-  sessionAffinityConfig:
-    clientIPConfig:
-      timeoutSeconds: 10800
 
 ---
 # ServiceAccount

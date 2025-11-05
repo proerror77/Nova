@@ -1,249 +1,200 @@
 syntax = "proto3";
-package nova.media_service;
 
-// ============================================================================
-// Media Service gRPC API
-//
-// This service manages media assets, uploads, and transformations.
-//
-// Key responsibilities:
-//   - Media file upload and storage
-//   - Media metadata management
-//   - Image and video processing
-//   - CDN integration for media delivery
-// ============================================================================
+package nova.media_service.v1;
 
-// Message: Represents media metadata
-message Media {
-  string id = 1;                      // UUID of media item
-  string owner_id = 2;                // UUID of user who uploaded
-  string filename = 3;                // Original filename
-  string media_type = 4;              // "image", "video", "audio", "document"
-  string mime_type = 5;               // MIME type (image/jpeg, video/mp4, etc.)
-  int64 file_size = 6;                // File size in bytes
-  int32 width = 7;                    // Image width (if applicable)
-  int32 height = 8;                   // Image height (if applicable)
-  int32 duration = 9;                 // Duration in seconds (if video/audio)
-  string s3_key = 10;                 // S3 storage key
-  string cdn_url = 11;                // CDN access URL
-  string thumbnail_url = 12;          // Thumbnail URL (for images/videos)
-  string status = 13;                 // "uploading", "processing", "ready", "failed"
-  bool is_public = 14;                // Whether publicly accessible
-  string created_at = 15;             // ISO 8601 timestamp
-  string updated_at = 16;             // ISO 8601 timestamp
-  string deleted_at = 17;             // ISO 8601 timestamp (soft delete)
+import "common.proto";
+
+// Media Service - gRPC interface for video, reel, and upload operations
+// Serves media-service (port 8082)
+
+message Video {
+    string id = 1;
+    string creator_id = 2;
+    string title = 3;
+    string description = 4;
+    int32 duration_seconds = 5;
+    string cdn_url = 6;
+    string thumbnail_url = 7;
+    string status = 8;
+    string visibility = 9;
+    int64 created_at = 10;
 }
 
-// Message: Media processing metadata
-message MediaProcessing {
-  string media_id = 1;                // UUID of media being processed
-  string status = 2;                  // "pending", "processing", "completed", "failed"
-  string process_type = 3;            // "thumbnail", "transcode", "optimize"
-  int32 progress_percent = 4;         // Processing progress (0-100)
-  string error_message = 5;           // Error message if failed
-  string created_at = 6;              // ISO 8601 timestamp
-  string completed_at = 7;            // ISO 8601 timestamp (optional)
+message Upload {
+    string id = 1;
+    string user_id = 2;
+    string video_id = 3;
+    string file_name = 4;
+    int64 file_size = 5;
+    int64 uploaded_size = 6;
+    string status = 7;
+    int64 created_at = 8;
 }
 
-// Message: Media variant (different resolutions/formats)
-message MediaVariant {
-  string id = 1;                      // UUID of variant
-  string media_id = 2;                // UUID of original media
-  string variant_name = 3;            // "thumbnail", "small", "medium", "large"
-  string mime_type = 4;               // Variant MIME type
-  int32 width = 5;                    // Width in pixels
-  int32 height = 6;                   // Height in pixels
-  int64 file_size = 7;                // File size in bytes
-  string s3_key = 8;                  // S3 storage key for variant
-  string cdn_url = 9;                 // CDN access URL
-  string created_at = 10;             // ISO 8601 timestamp
+message ReelVariant {
+    string quality = 1;
+    string codec = 2;
+    int32 bitrate_kbps = 3;
+    int32 width = 4;
+    int32 height = 5;
+    float frame_rate = 6;
+    string cdn_url = 7;
+    int64 file_size_bytes = 8;
+    bool is_default = 9;
 }
 
-// ============================================================================
-// Upload Media (Initiate)
-// ============================================================================
-
-message InitiateMediaUploadRequest {
-  string owner_id = 1;                // UUID of uploader
-  string filename = 2;                // Original filename
-  string mime_type = 3;               // MIME type
-  int64 file_size = 4;                // File size in bytes
-  bool is_public = 5;                 // Whether to make public
+message ReelTranscodeJob {
+    string target_quality = 1;
+    string status = 2;
+    string stage = 3;
+    int32 progress = 4;
+    int64 updated_at = 5;
+    .nova.common.v1.ErrorStatus error = 6;
 }
 
-message InitiateMediaUploadResponse {
-  string upload_id = 1;               // Upload session ID
-  string media_id = 2;                // Assigned media ID
-  string presigned_url = 3;           // Pre-signed S3 upload URL
-  string upload_expires_at = 4;       // Expiration time for presigned URL
+message Reel {
+    string id = 1;
+    string creator_id = 2;
+    string upload_id = 3;
+    string caption = 4;
+    string music_title = 5;
+    string music_artist = 6;
+    int32 duration_seconds = 7;
+    string visibility = 8;
+    string status = 9;
+    string processing_stage = 10;
+    int32 processing_progress = 11;
+    bool allow_comments = 12;
+    bool allow_shares = 13;
+    string cover_image_url = 14;
+    string source_video_url = 15;
+    int64 published_at = 16;
+    int64 failed_at = 17;
+    int64 created_at = 18;
+    int64 updated_at = 19;
+    repeated ReelVariant variants = 20;
+    repeated ReelTranscodeJob transcode_jobs = 21;
 }
 
-// ============================================================================
-// Complete Media Upload
-// ============================================================================
-
-message CompleteMediaUploadRequest {
-  string upload_id = 1;               // Upload session ID
-  string media_id = 2;                // Media ID to complete
-  string s3_etag = 3;                 // S3 ETag for integrity verification
+message GetVideoRequest {
+    string video_id = 1;
 }
 
-message CompleteMediaUploadResponse {
-  Media media = 1;
+message GetVideoResponse {
+    Video video = 1;
+    bool found = 2;
+    .nova.common.v1.ErrorStatus error = 3;
 }
 
-// ============================================================================
-// Get Media by ID
-// ============================================================================
-
-message GetMediaRequest {
-  string media_id = 1;
+message GetUserVideosRequest {
+    string user_id = 1;
+    int32 limit = 2;
 }
 
-message GetMediaResponse {
-  Media media = 1;
+message GetUserVideosResponse {
+    repeated Video videos = 1;
+    .nova.common.v1.ErrorStatus error = 2;
 }
 
-// ============================================================================
-// Get Multiple Media Items
-// ============================================================================
-
-message GetMediaByIdsRequest {
-  repeated string media_ids = 1;
+message CreateVideoRequest {
+    string creator_id = 1;
+    string title = 2;
+    string description = 3;
+    string visibility = 4;
 }
 
-message GetMediaByIdsResponse {
-  repeated Media media = 1;
+message CreateVideoResponse {
+    Video video = 1;
+    .nova.common.v1.ErrorStatus error = 2;
 }
 
-// ============================================================================
-// Get Media by Owner
-// ============================================================================
-
-message GetMediaByOwnerRequest {
-  string owner_id = 1;
-  int32 limit = 2;                    // Number of results
-  int32 offset = 3;                   // Pagination offset
-  string media_type = 4;              // Optional: filter by type
+message ListReelsRequest {
+    int32 limit = 1;
 }
 
-message GetMediaByOwnerResponse {
-  repeated Media media = 1;
-  int32 total_count = 2;
+message ListReelsResponse {
+    repeated Reel reels = 1;
+    .nova.common.v1.ErrorStatus error = 2;
 }
 
-// ============================================================================
-// Delete Media
-// ============================================================================
-
-message DeleteMediaRequest {
-  string media_id = 1;
+message GetReelRequest {
+    string reel_id = 1;
 }
 
-message DeleteMediaResponse {
-  bool success = 1;
+message GetReelResponse {
+    Reel reel = 1;
+    bool found = 2;
+    .nova.common.v1.ErrorStatus error = 3;
 }
 
-// ============================================================================
-// Get Media Variants
-// ============================================================================
-
-message GetMediaVariantsRequest {
-  string media_id = 1;
+message CreateReelRequest {
+    string creator_id = 1;
+    string upload_id = 2;
+    string caption = 3;
+    string music_title = 4;
+    string music_artist = 5;
+    int32 duration_seconds = 6;
+    string visibility = 7;
+    bool allow_comments = 8;
+    bool allow_shares = 9;
+    string cover_image_url = 10;
 }
 
-message GetMediaVariantsResponse {
-  repeated MediaVariant variants = 1;
+message CreateReelResponse {
+    Reel reel = 1;
+    .nova.common.v1.ErrorStatus error = 2;
 }
 
-// ============================================================================
-// Process Media
-// ============================================================================
-
-message ProcessMediaRequest {
-  string media_id = 1;
-  repeated string operations = 2;    // "thumbnail", "transcode", "optimize"
+message GetUploadRequest {
+    string upload_id = 1;
 }
 
-message ProcessMediaResponse {
-  MediaProcessing processing = 1;
+message GetUploadResponse {
+    Upload upload = 1;
+    bool found = 2;
+    .nova.common.v1.ErrorStatus error = 3;
 }
 
-// ============================================================================
-// Get Processing Status
-// ============================================================================
-
-message GetProcessingStatusRequest {
-  string media_id = 1;
+message UpdateUploadProgressRequest {
+    string upload_id = 1;
+    int64 uploaded_size = 2;
 }
 
-message GetProcessingStatusResponse {
-  MediaProcessing processing = 1;
+message UpdateUploadProgressResponse {
+    Upload upload = 1;
+    .nova.common.v1.ErrorStatus error = 2;
 }
 
-// ============================================================================
-// Update Media Metadata
-// ============================================================================
-
-message UpdateMediaMetadataRequest {
-  string media_id = 1;
-  string filename = 2;                // Optional
-  bool is_public = 3;                 // Optional
+message StartUploadRequest {
+    string user_id = 1;
+    string file_name = 2;
+    int64 file_size = 3;
+    string content_type = 4;
 }
 
-message UpdateMediaMetadataResponse {
-  Media media = 1;
+message StartUploadResponse {
+    Upload upload = 1;
+    .nova.common.v1.ErrorStatus error = 2;
 }
 
-// ============================================================================
-// Get Media CDN URL
-// ============================================================================
-
-message GetMediaCdnUrlRequest {
-  string media_id = 1;
-  string variant_name = 2;            // Optional: "thumbnail", "small", etc.
+message CompleteUploadRequest {
+    string upload_id = 1;
 }
 
-message GetMediaCdnUrlResponse {
-  string cdn_url = 1;
-  string expires_at = 2;              // URL expiration time (if applicable)
+message CompleteUploadResponse {
+    Upload upload = 1;
+    .nova.common.v1.ErrorStatus error = 2;
 }
-
-// ============================================================================
-// Media Service Definition
-// ============================================================================
 
 service MediaService {
-  // Initiate media upload (get presigned S3 URL)
-  rpc InitiateMediaUpload(InitiateMediaUploadRequest) returns (InitiateMediaUploadResponse);
-
-  // Complete media upload after S3 upload finishes
-  rpc CompleteMediaUpload(CompleteMediaUploadRequest) returns (CompleteMediaUploadResponse);
-
-  // Get media by ID
-  rpc GetMedia(GetMediaRequest) returns (GetMediaResponse);
-
-  // Get multiple media items in batch
-  rpc GetMediaByIds(GetMediaByIdsRequest) returns (GetMediaByIdsResponse);
-
-  // Get all media uploaded by a user
-  rpc GetMediaByOwner(GetMediaByOwnerRequest) returns (GetMediaByOwnerResponse);
-
-  // Delete media (soft delete)
-  rpc DeleteMedia(DeleteMediaRequest) returns (DeleteMediaResponse);
-
-  // Get all variants of a media item
-  rpc GetMediaVariants(GetMediaVariantsRequest) returns (GetMediaVariantsResponse);
-
-  // Start media processing (thumbnails, transcoding, etc.)
-  rpc ProcessMedia(ProcessMediaRequest) returns (ProcessMediaResponse);
-
-  // Get processing status
-  rpc GetProcessingStatus(GetProcessingStatusRequest) returns (GetProcessingStatusResponse);
-
-  // Update media metadata
-  rpc UpdateMediaMetadata(UpdateMediaMetadataRequest) returns (UpdateMediaMetadataResponse);
-
-  // Get CDN URL for media
-  rpc GetMediaCdnUrl(GetMediaCdnUrlRequest) returns (GetMediaCdnUrlResponse);
+    rpc GetVideo(GetVideoRequest) returns (GetVideoResponse) {}
+    rpc GetUserVideos(GetUserVideosRequest) returns (GetUserVideosResponse) {}
+    rpc CreateVideo(CreateVideoRequest) returns (CreateVideoResponse) {}
+    rpc ListReels(ListReelsRequest) returns (ListReelsResponse) {}
+    rpc GetReel(GetReelRequest) returns (GetReelResponse) {}
+    rpc CreateReel(CreateReelRequest) returns (CreateReelResponse) {}
+    rpc GetUpload(GetUploadRequest) returns (GetUploadResponse) {}
+    rpc UpdateUploadProgress(UpdateUploadProgressRequest) returns (UpdateUploadProgressResponse) {}
+    rpc StartUpload(StartUploadRequest) returns (StartUploadResponse) {}
+    rpc CompleteUpload(CompleteUploadRequest) returns (CompleteUploadResponse) {}
 }

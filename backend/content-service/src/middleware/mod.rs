@@ -141,15 +141,24 @@ impl RateLimiter {
         let mut conn = self.redis.clone();
         let key = format!("rate_limit:{}", client_id);
 
-        let current: u32 = conn.get(&key).await.unwrap_or(0);
-        if current >= self.config.max_requests {
-            return Ok(true);
-        }
+        // Atomic INCR + set TTL once using Lua script (prevents TOCTOU)
+        const LUA: &str = r#"
+            local current = redis.call('INCR', KEYS[1])
+            if current == 1 then
+                redis.call('EXPIRE', KEYS[1], ARGV[1])
+            end
+            return current
+        "#;
 
-        let _: () = conn
-            .set_ex(&key, current + 1, self.config.window_seconds)
+        let count: i64 = redis::cmd("EVAL")
+            .arg(LUA)
+            .arg(1)
+            .arg(&key)
+            .arg(self.config.window_seconds as i64)
+            .query_async(&mut conn)
             .await?;
-        Ok(false)
+
+        Ok(count as u32 > self.config.max_requests)
     }
 }
 

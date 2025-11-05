@@ -42,7 +42,7 @@ ADD COLUMN IF NOT EXISTS idempotency_key VARCHAR(255);
 -- ============================================
 
 CREATE TABLE IF NOT EXISTS message_recalls (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     message_id UUID NOT NULL,
     recalled_by_user_id UUID NOT NULL,
     recall_reason TEXT,
@@ -81,7 +81,7 @@ CREATE INDEX IF NOT EXISTS idx_messages_id_version ON messages(id, version_numbe
 -- ============================================
 
 CREATE TABLE IF NOT EXISTS message_edit_history (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     message_id UUID NOT NULL,
     previous_content TEXT,
     previous_content_encrypted TEXT,
@@ -144,7 +144,7 @@ COMMENT ON FUNCTION record_message_edit_history() IS 'Auto-record message edit h
 -- ============================================
 
 CREATE TABLE IF NOT EXISTS message_search_index (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     message_id UUID NOT NULL UNIQUE,
     conversation_id UUID NOT NULL,
     sender_id UUID NOT NULL,

@@ -9,6 +9,7 @@
 mod openapi;
 
 use actix_web::{dev::Service, middleware as actix_middleware, web, App, HttpServer};
+use db_pool::{create_pool as create_pg_pool, DbConfig as DbPoolConfig};
 use std::io;
 use std::sync::Arc;
 use std::time::Instant;
@@ -56,9 +57,14 @@ async fn main() -> io::Result<()> {
         .expect("Invalid PORT");
 
     // Initialize database pool
-    let db_pool = sqlx::postgres::PgPoolOptions::new()
-        .max_connections(10)
-        .connect(&database_url)
+    let mut cfg = DbPoolConfig::from_env().unwrap_or_default();
+    if cfg.database_url.is_empty() {
+        cfg.database_url = database_url.clone();
+    }
+    if cfg.max_connections < 20 {
+        cfg.max_connections = 20;
+    }
+    let db_pool = create_pg_pool(cfg)
         .await
         .expect("Failed to create database pool");
 

@@ -15,11 +15,21 @@ use uuid::Uuid;
 
 // Import generated proto code
 pub mod nova {
+    pub mod common {
+        pub mod v1 {
+            tonic::include_proto!("nova.common.v1");
+        }
+        pub use v1::*;
+    }
     pub mod content {
-        tonic::include_proto!("nova.content");
+        pub mod v1 {
+            tonic::include_proto!("nova.content_service.v1");
+        }
+        pub use v1::*;
     }
 }
 
+use nova::common::ErrorStatus;
 use nova::content::content_service_server::ContentService;
 use nova::content::*;
 
@@ -51,6 +61,20 @@ fn convert_comment_to_proto(comment: &Comment) -> crate::grpc::nova::content::Co
     }
 }
 
+#[inline]
+fn ok_error() -> Option<ErrorStatus> {
+    None
+}
+
+#[inline]
+fn make_error(code: &'static str, message: impl Into<String>) -> Option<ErrorStatus> {
+    Some(ErrorStatus {
+        code: code.to_string(),
+        message: message.into(),
+        metadata: Default::default(),
+    })
+}
+
 #[tonic::async_trait]
 impl ContentService for ContentServiceImpl {
     /// Get a post by ID
@@ -73,7 +97,7 @@ impl ContentService for ContentServiceImpl {
                 let response = GetPostResponse {
                     post: Some(convert_post_to_proto(&post)),
                     found: true,
-                    error: String::new(),
+                    error: ok_error(),
                 };
                 Ok(Response::new(response))
             }
@@ -81,7 +105,7 @@ impl ContentService for ContentServiceImpl {
                 let response = GetPostResponse {
                     post: None,
                     found: false,
-                    error: "Post not found".to_string(),
+                    error: make_error("NOT_FOUND", "Post not found"),
                 };
                 Ok(Response::new(response))
             }
@@ -116,7 +140,7 @@ impl ContentService for ContentServiceImpl {
             Ok(post) => {
                 let response = CreatePostResponse {
                     post: Some(convert_post_to_proto(&post)),
-                    error: String::new(),
+                    error: ok_error(),
                 };
                 Ok(Response::new(response))
             }
@@ -161,7 +185,7 @@ impl ContentService for ContentServiceImpl {
                 let response = GetCommentsResponse {
                     comments: comment_list,
                     total,
-                    error: String::new(),
+                    error: ok_error(),
                 };
                 Ok(Response::new(response))
             }
@@ -226,7 +250,7 @@ impl ContentService for ContentServiceImpl {
 
                 Ok(Response::new(LikePostResponse {
                     success: true,
-                    error: String::new(),
+                    error: ok_error(),
                 }))
             }
             Err(err) => {
@@ -249,9 +273,7 @@ impl ContentService for ContentServiceImpl {
         let req = request.into_inner();
 
         if req.post_ids.is_empty() {
-            return Ok(Response::new(GetPostsByIdsResponse {
-                posts: vec![],
-            }));
+            return Ok(Response::new(GetPostsByIdsResponse { posts: vec![] }));
         }
 
         tracing::info!("gRPC: Getting {} posts by IDs", req.post_ids.len());
@@ -278,14 +300,9 @@ impl ContentService for ContentServiceImpl {
                 Status::internal("Failed to fetch posts")
             })?;
 
-        let proto_posts = posts
-            .iter()
-            .map(|p| convert_post_to_proto(p))
-            .collect();
+        let proto_posts = posts.iter().map(|p| convert_post_to_proto(p)).collect();
 
-        Ok(Response::new(GetPostsByIdsResponse {
-            posts: proto_posts,
-        }))
+        Ok(Response::new(GetPostsByIdsResponse { posts: proto_posts }))
     }
 
     /// Get posts by author with pagination
@@ -363,10 +380,7 @@ impl ContentService for ContentServiceImpl {
             Status::internal("Failed to count posts")
         })?;
 
-        let proto_posts = posts
-            .iter()
-            .map(|p| convert_post_to_proto(p))
-            .collect();
+        let proto_posts = posts.iter().map(|p| convert_post_to_proto(p)).collect();
 
         let total_count = i32::try_from(total).unwrap_or_else(|_| {
             tracing::warn!("Post count exceeded i32::MAX: {}", total);
@@ -399,7 +413,11 @@ impl ContentService for ContentServiceImpl {
         })?;
 
         // Update the post with only non-empty fields
-        let update_query = if req.title.is_empty() && req.content.is_empty() && req.privacy.is_empty() && req.status.is_empty() {
+        let update_query = if req.title.is_empty()
+            && req.content.is_empty()
+            && req.privacy.is_empty()
+            && req.status.is_empty()
+        {
             // No fields to update
             sqlx::query("SELECT id FROM posts WHERE id = $1 AND deleted_at IS NULL")
                 .bind(post_id)
@@ -440,8 +458,7 @@ impl ContentService for ContentServiceImpl {
                 update_clause
             );
 
-            let mut query = sqlx::query_as::<_, Post>(&query_str)
-                .bind(post_id);
+            let mut query = sqlx::query_as::<_, Post>(&query_str).bind(post_id);
 
             for binding in bindings {
                 query = query.bind(binding);
@@ -452,9 +469,7 @@ impl ContentService for ContentServiceImpl {
                 Status::internal("Failed to update post")
             })?;
 
-            sqlx::query("SELECT 1")
-                .execute(&mut *tx)
-                .await
+            sqlx::query("SELECT 1").execute(&mut *tx).await
         };
 
         match update_query {
@@ -470,13 +485,12 @@ impl ContentService for ContentServiceImpl {
                 tracing::debug!("Invalidated cache for post {} after update", post_id);
 
                 // Fetch the updated post
-                let post_service = PostService::with_cache(self.db_pool.clone(), self.cache.clone());
+                let post_service =
+                    PostService::with_cache(self.db_pool.clone(), self.cache.clone());
                 match post_service.get_post(post_id).await {
-                    Ok(Some(post)) => {
-                        Ok(Response::new(UpdatePostResponse {
-                            post: Some(convert_post_to_proto(&post)),
-                        }))
-                    }
+                    Ok(Some(post)) => Ok(Response::new(UpdatePostResponse {
+                        post: Some(convert_post_to_proto(&post)),
+                    })),
                     Ok(None) => {
                         tracing::warn!("Updated post {} not found", post_id);
                         Err(Status::not_found("Post not found after update"))
@@ -515,8 +529,8 @@ impl ContentService for ContentServiceImpl {
             .map_err(|_| Status::invalid_argument("Invalid deleted_by_id format"))?;
 
         // Soft delete the post (set deleted_at timestamp)
-        let result = sqlx::query_scalar::<_, String>(
-            "UPDATE posts SET deleted_at = NOW() WHERE id = $1 AND deleted_at IS NULL RETURNING deleted_at::text",
+        let result = sqlx::query_scalar::<_, chrono::DateTime<chrono::Utc>>(
+            "UPDATE posts SET deleted_at = NOW() WHERE id = $1 AND deleted_at IS NULL RETURNING deleted_at",
         )
         .bind(post_id)
         .fetch_optional(&self.db_pool)
@@ -534,7 +548,7 @@ impl ContentService for ContentServiceImpl {
 
                 Ok(Response::new(DeletePostResponse {
                     post_id: post_id.to_string(),
-                    deleted_at,
+                    deleted_at: deleted_at.timestamp(),
                 }))
             }
             None => {
@@ -558,23 +572,25 @@ impl ContentService for ContentServiceImpl {
             .map_err(|_| Status::invalid_argument("Invalid post ID format"))?;
 
         // Get the current like count from the likes table
-        let like_count: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM likes WHERE post_id = $1",
-        )
-        .bind(post_id)
-        .fetch_one(&self.db_pool)
-        .await
-        .map_err(|e| {
-            tracing::error!("Database error counting likes: {}", e);
-            Status::internal("Failed to decrement like count")
-        })?;
+        let like_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM likes WHERE post_id = $1")
+            .bind(post_id)
+            .fetch_one(&self.db_pool)
+            .await
+            .map_err(|e| {
+                tracing::error!("Database error counting likes: {}", e);
+                Status::internal("Failed to decrement like count")
+            })?;
 
         // Invalidate cache to force refresh
         let _ = self.cache.invalidate_post(post_id).await;
         tracing::debug!("Invalidated cache for post {} after decrement", post_id);
 
         let like_count_i32 = i32::try_from(like_count).unwrap_or_else(|_| {
-            tracing::warn!("Like count exceeded i32::MAX for post {}: {}", post_id, like_count);
+            tracing::warn!(
+                "Like count exceeded i32::MAX for post {}: {}",
+                post_id,
+                like_count
+            );
             i32::MAX
         });
 
@@ -687,7 +703,7 @@ impl ContentService for ContentServiceImpl {
         let response = GetUserBookmarksResponse {
             posts: bookmark_posts,
             total: total_i32,
-            error: String::new(),
+            error: ok_error(),
         };
 
         Ok(Response::new(response))
@@ -757,7 +773,7 @@ impl ContentService for ContentServiceImpl {
             cursor: cursor.unwrap_or_default(),
             has_more,
             total_count: total_count as u32,
-            error: String::new(),
+            error: ok_error(),
         };
 
         Ok(Response::new(response))
@@ -787,7 +803,7 @@ impl ContentService for ContentServiceImpl {
 
         Ok(Response::new(InvalidateFeedResponse {
             success: true,
-            error: String::new(),
+            error: ok_error(),
         }))
     }
 
@@ -810,7 +826,7 @@ impl ContentService for ContentServiceImpl {
 
         Ok(Response::new(InvalidateFeedResponse {
             success: true,
-            error: String::new(),
+            error: ok_error(),
         }))
     }
 
@@ -836,7 +852,7 @@ impl ContentService for ContentServiceImpl {
 
         Ok(Response::new(InvalidateFeedResponse {
             success: true,
-            error: String::new(),
+            error: ok_error(),
         }))
     }
 }

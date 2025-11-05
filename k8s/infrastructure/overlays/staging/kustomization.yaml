@@ -74,7 +74,6 @@ replicas:
 
 commonAnnotations:
   argocd.argoproj.io/compare-result: "false"
-  deployment.kubernetes.io/version: "1"
   environment: staging
 
 resources:
@@ -83,6 +82,7 @@ resources:
 - clickhouse-pvc.yaml
 - sts-rotator.yaml
 - secrets-sync.yaml
+- resource-optimization-info.configmap.yaml
 - nova-messaging-keys.yaml
 - nova-clickhouse-credentials.yaml
 - clickhouse-chi.yaml

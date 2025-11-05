@@ -9,7 +9,7 @@ CREATE TYPE upload_status AS ENUM ('uploading', 'completed', 'failed', 'cancelle
 
 -- Main uploads tracking table
 CREATE TABLE IF NOT EXISTS uploads (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     video_id UUID REFERENCES videos(id) ON DELETE SET NULL,  -- null until upload completes
     file_name VARCHAR(255) NOT NULL,
@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS uploads (
 
 -- Individual chunk tracking table
 CREATE TABLE IF NOT EXISTS upload_chunks (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     upload_id UUID NOT NULL REFERENCES uploads(id) ON DELETE CASCADE,
     chunk_index INT NOT NULL CHECK (chunk_index >= 0),
     chunk_size BIGINT NOT NULL CHECK (chunk_size > 0),

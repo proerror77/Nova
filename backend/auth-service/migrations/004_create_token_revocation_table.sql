@@ -1,6 +1,6 @@
 -- Create token_revocation table for blacklisting tokens
 CREATE TABLE IF NOT EXISTS token_revocation (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     token_hash VARCHAR(255) NOT NULL UNIQUE, -- SHA256 hash of the token
     token_type VARCHAR(20) NOT NULL, -- 'access' or 'refresh'

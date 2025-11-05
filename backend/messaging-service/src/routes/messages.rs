@@ -8,10 +8,10 @@ use crate::middleware::guards::User;
 use crate::services::message_service::MessageService;
 use crate::state::AppState;
 use crate::websocket::events::{broadcast_event, WebSocketEvent};
-use base64::{engine::general_purpose, Engine as _};
 use aws_sdk_s3::config::Region;
 use aws_sdk_s3::presigning::PresigningConfig;
 use aws_sdk_s3::Client as S3Client;
+use base64::{engine::general_purpose, Engine as _};
 use std::time::Duration;
 
 #[derive(Deserialize)]
@@ -260,7 +260,12 @@ async fn prepare_content_payload(
         let (ciphertext, nonce) = encryption_service.encrypt(conversation_id, plaintext)?;
         Ok((String::new(), Some(ciphertext), Some(nonce.to_vec()), 1))
     } else {
-        Ok((String::from_utf8_lossy(plaintext).to_string(), None, None, 0))
+        Ok((
+            String::from_utf8_lossy(plaintext).to_string(),
+            None,
+            None,
+            0,
+        ))
     }
 }
 
@@ -330,7 +335,10 @@ pub async fn update_message(
         .ok()
         .flatten();
 
-    if matches!(privacy_mode, crate::services::conversation_service::PrivacyMode::StrictE2e) {
+    if matches!(
+        privacy_mode,
+        crate::services::conversation_service::PrivacyMode::StrictE2e
+    ) {
         old_content = ciphertext
             .as_ref()
             .map(|c| general_purpose::STANDARD.encode(c))
@@ -342,7 +350,7 @@ pub async fn update_message(
         sender_id,
         current_version,
         created_at,
-        privacy_mode,
+        privacy_mode: privacy_mode.clone(),
         old_content,
     };
 
@@ -352,16 +360,19 @@ pub async fn update_message(
     validator.verify_version(body.version_number)?;
 
     // 3. Verify user is member of conversation
-    let _member = crate::middleware::guards::ConversationMember::verify(
-        &state.db,
-        user.id,
-        conversation_id,
-    )
-    .await?;
+    let _member =
+        crate::middleware::guards::ConversationMember::verify(&state.db, user.id, conversation_id)
+            .await?;
 
     // 6. Prepare encrypted payload
     let (new_content_value, encrypted_payload, nonce_payload, encryption_version) =
-        prepare_content_payload(&state.encryption, conversation_id, body.plaintext.as_bytes(), privacy_mode).await?;
+        prepare_content_payload(
+            &state.encryption,
+            conversation_id,
+            body.plaintext.as_bytes(),
+            privacy_mode.clone(),
+        )
+        .await?;
 
     // 7. Update message with version increment (CAS - Compare-And-Swap)
     let updated = sqlx::query(
@@ -764,7 +775,7 @@ pub async fn send_audio_message(
     member.can_send()?;
 
     // Validate audio parameters (duration and codec)
-    validate_audio_message(body.duration_ms, &body.audio_codec)?;
+    validate_audio_message(body.duration_ms as i64, &body.audio_codec)?;
 
     // Store the audio message
     let (msg_id, seq) = MessageService::send_audio_message_db(
@@ -894,7 +905,7 @@ pub async fn get_audio_presigned_url(
     let presign_cfg = PresigningConfig::builder()
         .expires_in(Duration::from_secs(expiration_secs))
         .build()
-        .map_err(|e| AppError::Internal(format!("Failed to create presign config: {e}")))?;
+        .map_err(|e| AppError::Config(format!("Failed to create presign config: {e}")))?;
 
     let presigned = s3_client
         .put_object()
@@ -903,7 +914,7 @@ pub async fn get_audio_presigned_url(
         .content_type(&body.content_type)
         .presigned(presign_cfg)
         .await
-        .map_err(|e| AppError::Internal(format!("Failed to generate presigned URL: {e}")))?;
+        .map_err(|e| AppError::Config(format!("Failed to generate presigned URL: {e}")))?;
 
     let presigned_url = presigned.uri().to_string();
 

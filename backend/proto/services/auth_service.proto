@@ -1,5 +1,8 @@
 syntax = "proto3";
-package nova.auth_service;
+package nova.auth_service.v1;
+
+import "common.proto";
+import "google/protobuf/wrappers.proto";
 
 // ============================================================================
 // Auth Service gRPC API
@@ -19,10 +22,10 @@ message User {
   string id = 1;                    // UUID of the user
   string email = 2;                 // User's email address
   string username = 3;              // User's username (unique)
-  string created_at = 4;            // ISO 8601 timestamp
+  int64 created_at = 4;            // Unix timestamp (seconds)
   bool is_active = 5;               // Whether user account is active
   int32 failed_login_attempts = 6;  // Current failed login count
-  string locked_until = 7;          // ISO 8601 timestamp when lockout expires (optional)
+  optional int64 locked_until = 7;  // Unix timestamp (seconds) when lockout expires
 }
 
 // ============================================================================
@@ -35,6 +38,7 @@ message GetUserRequest {
 
 message GetUserResponse {
   User user = 1;
+  optional .nova.common.v1.ErrorStatus error = 2;
 }
 
 // ============================================================================
@@ -47,6 +51,7 @@ message GetUsersByIdsRequest {
 
 message GetUsersByIdsResponse {
   repeated User users = 1;
+  optional .nova.common.v1.ErrorStatus error = 2;
 }
 
 // ============================================================================
@@ -64,6 +69,7 @@ message VerifyTokenResponse {
   string username = 4;         // Username of token owner (if valid)
   int64 expires_at = 5;        // Unix timestamp when token expires
   bool is_revoked = 6;         // Whether token has been revoked
+  optional .nova.common.v1.ErrorStatus error = 7;
 }
 
 // ============================================================================
@@ -88,6 +94,7 @@ message GetUserByEmailRequest {
 
 message GetUserByEmailResponse {
   User user = 1;
+  optional .nova.common.v1.ErrorStatus error = 2;
 }
 
 // ============================================================================
@@ -103,6 +110,7 @@ message ListUsersRequest {
 message ListUsersResponse {
   repeated User users = 1;
   int32 total_count = 2;
+  optional .nova.common.v1.ErrorStatus error = 3;
 }
 
 // ============================================================================
@@ -116,6 +124,7 @@ message CheckPermissionRequest {
 
 message CheckPermissionResponse {
   bool has_permission = 1;
+  optional .nova.common.v1.ErrorStatus error = 2;
 }
 
 // ============================================================================
@@ -129,6 +138,7 @@ message GetUserPermissionsRequest {
 message GetUserPermissionsResponse {
   repeated string permissions = 1;
   repeated string roles = 2;
+  optional .nova.common.v1.ErrorStatus error = 3;
 }
 
 // ============================================================================
@@ -144,7 +154,111 @@ message RecordFailedLoginRequest {
 message RecordFailedLoginResponse {
   int32 failed_attempts = 1;
   bool is_locked = 2;
-  string locked_until = 3;  // ISO 8601 timestamp (if locked)
+  optional int64 locked_until = 3;  // Unix timestamp (seconds) if locked
+  optional .nova.common.v1.ErrorStatus error = 4;
+}
+
+// ============================================================================
+// User Profile Management (single-writer via auth-service)
+// ============================================================================
+
+message UpdateUserProfileRequest {
+  string user_id = 1;
+  optional string display_name = 2;
+  optional string bio = 3;
+  optional string avatar_url = 4;
+  optional string cover_photo_url = 5;
+  optional string location = 6;
+  optional bool private_account = 7;
+}
+
+message UserProfile {
+  string user_id = 1;
+  string username = 2;
+  optional string email = 3;
+  optional string display_name = 4;
+  optional string bio = 5;
+  optional string avatar_url = 6;
+  optional string cover_photo_url = 7;
+  optional string location = 8;
+  bool private_account = 9;
+  int64 created_at = 10;
+  int64 updated_at = 11;
+}
+
+message UpdateUserProfileResponse {
+  optional UserProfile profile = 1;
+  optional .nova.common.v1.ErrorStatus error = 2;
+}
+
+// ============================================================================
+// Public Key Management (E2EE messaging support)
+// ============================================================================
+
+message UpsertUserPublicKeyRequest {
+  string user_id = 1;
+  string public_key = 2;
+}
+
+message UpsertUserPublicKeyResponse {
+  bool success = 1;
+  optional .nova.common.v1.ErrorStatus error = 2;
+}
+
+message GetUserPublicKeyRequest {
+  string user_id = 1;
+}
+
+message GetUserPublicKeyResponse {
+  bool found = 1;
+  optional string public_key = 2;
+  optional .nova.common.v1.ErrorStatus error = 3;
+}
+
+// ============================================================================
+// User Registration (Phase 0 - 009-A: auth-register-login)
+// ============================================================================
+
+message RegisterRequest {
+  string email = 1;        // User email address (must be valid format)
+  string username = 2;     // User username (3-32 chars, alphanumeric + underscore)
+  string password = 3;     // User password (validated by zxcvbn score >= 3)
+}
+
+message RegisterResponse {
+  string user_id = 1;         // UUID of newly created user
+  string token = 2;           // JWT access token (RS256 signed, expires_in=3600s)
+  string refresh_token = 3;   // Refresh token (stateless or stored in sessions table)
+  int64 expires_in = 4;       // Seconds until access_token expires
+}
+
+// ============================================================================
+// User Login (Phase 0 - 009-A: auth-register-login)
+// ============================================================================
+
+message LoginRequest {
+  string email = 1;      // User email address
+  string password = 2;   // User password (plain text - validated against hash)
+}
+
+message LoginResponse {
+  string user_id = 1;         // UUID of authenticated user
+  string token = 2;           // JWT access token (RS256 signed, expires_in=3600s)
+  string refresh_token = 3;   // Refresh token
+  int64 expires_in = 4;       // Seconds until access_token expires
+}
+
+// ============================================================================
+// Token Refresh (Phase 0 - 009-A: auth-register-login)
+// ============================================================================
+
+message RefreshTokenRequest {
+  string refresh_token = 1;   // Refresh token (from previous login/register)
+}
+
+message RefreshTokenResponse {
+  string token = 1;           // New JWT access token (RS256 signed, expires_in=3600s)
+  int64 expires_in = 2;       // Seconds until new access_token expires
 }
 
 // ============================================================================
@@ -152,6 +266,24 @@ message RecordFailedLoginResponse {
 // ============================================================================
 
 service AuthService {
+  // User Registration: Create new account with email, username, password
+  // Returns: Status::Ok with token + user_id + expires_in
+  //          Status::InvalidArgument if email invalid or password weak
+  //          Status::AlreadyExists if email already registered
+  rpc Register(RegisterRequest) returns (RegisterResponse);
+
+  // User Login: Authenticate with email and password
+  // Returns: Status::Ok with token + user_id + expires_in
+  //          Status::InvalidArgument if email invalid
+  //          Status::Unauthenticated if password wrong (attempts < 5)
+  //          Status::PermissionDenied if account locked after 5 failed attempts
+  rpc Login(LoginRequest) returns (LoginResponse);
+
+  // Token Refresh: Exchange refresh_token for new access_token
+  // Returns: Status::Ok with new token + expires_in
+  //          Status::Unauthenticated if refresh_token expired or invalid
+  rpc Refresh(RefreshTokenRequest) returns (RefreshTokenResponse);
+
   // Get single user by ID
   rpc GetUser(GetUserRequest) returns (GetUserResponse);
 
@@ -178,4 +310,11 @@ service AuthService {
 
   // Record a failed login attempt (for rate limiting)
   rpc RecordFailedLogin(RecordFailedLoginRequest) returns (RecordFailedLoginResponse);
+
+  // Update mutable user profile fields (single-writer semantics)
+  rpc UpdateUserProfile(UpdateUserProfileRequest) returns (UpdateUserProfileResponse);
+
+  // Manage user public keys for end-to-end encryption
+  rpc UpsertUserPublicKey(UpsertUserPublicKeyRequest) returns (UpsertUserPublicKeyResponse);
+  rpc GetUserPublicKey(GetUserPublicKeyRequest) returns (GetUserPublicKeyResponse);
 }

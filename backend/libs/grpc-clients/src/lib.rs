@@ -15,41 +15,83 @@ pub mod middleware;
 
 // Re-export generated proto client modules
 pub mod nova {
+    pub mod common {
+        pub mod v1 {
+            tonic::include_proto!("nova.common.v1");
+        }
+        pub use v1::*;
+    }
     pub mod auth_service {
-        tonic::include_proto!("nova.auth_service");
+        pub mod v1 {
+            tonic::include_proto!("nova.auth_service.v1");
+        }
+        pub use v1::*;
     }
     pub mod user_service {
-        tonic::include_proto!("nova.user_service");
+        pub mod v1 {
+            tonic::include_proto!("nova.user_service.v1");
+        }
+        pub use v1::*;
     }
     pub mod messaging_service {
-        tonic::include_proto!("nova.messaging_service");
+        pub mod v1 {
+            tonic::include_proto!("nova.messaging_service.v1");
+        }
+        pub use v1::*;
     }
     pub mod content_service {
-        tonic::include_proto!("nova.content_service");
+        pub mod v1 {
+            tonic::include_proto!("nova.content_service.v1");
+        }
+        pub use v1::*;
     }
     pub mod feed_service {
-        tonic::include_proto!("nova.feed_service");
+        pub mod v1 {
+            tonic::include_proto!("nova.feed_service.v1");
+        }
+        pub use v1::*;
     }
     pub mod search_service {
-        tonic::include_proto!("nova.search_service");
+        pub mod v1 {
+            tonic::include_proto!("nova.search_service.v1");
+        }
+        pub use v1::*;
     }
     pub mod media_service {
-        tonic::include_proto!("nova.media_service");
+        pub mod v1 {
+            tonic::include_proto!("nova.media_service.v1");
+        }
+        pub use v1::*;
     }
     pub mod notification_service {
-        tonic::include_proto!("nova.notification_service");
+        pub mod v1 {
+            tonic::include_proto!("nova.notification_service.v1");
+        }
+        pub use v1::*;
     }
     pub mod streaming_service {
-        tonic::include_proto!("nova.streaming_service");
+        pub mod v1 {
+            tonic::include_proto!("nova.streaming_service.v1");
+        }
+        pub use v1::*;
     }
     pub mod cdn_service {
-        tonic::include_proto!("nova.cdn_service");
+        pub mod v1 {
+            tonic::include_proto!("nova.cdn_service.v1");
+        }
+        pub use v1::*;
     }
     pub mod events_service {
-        tonic::include_proto!("nova.events_service");
+        pub mod v1 {
+            tonic::include_proto!("nova.events_service.v1");
+        }
+        pub use v1::*;
     }
     pub mod video_service {
-        tonic::include_proto!("nova.video_service");
+        pub mod v1 {
+            tonic::include_proto!("nova.video_service.v1");
+        }
+        pub use v1::*;
     }
 }
 
