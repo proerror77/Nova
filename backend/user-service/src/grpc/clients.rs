@@ -935,47 +935,4 @@ impl AuthServiceClient {
         }
     }
 
-    /// Soft delete user and return deleted_at timestamp (seconds)
-    pub async fn soft_delete_user(
-        &self,
-        user_id: Uuid,
-        deleted_by: Option<Uuid>,
-    ) -> Result<i64, tonic::Status> {
-        let attempts = self.retry_attempts.max(1);
-        let mut last_err: Option<tonic::Status> = None;
-
-        for attempt in 0..attempts {
-            let mut client = self.client_pool.acquire().await;
-            let mut request = tonic::Request::new(SoftDeleteUserRequest {
-                user_id: user_id.to_string(),
-                deleted_by: deleted_by.map(|v| v.to_string()),
-            });
-            request.set_timeout(self.request_timeout);
-
-            match client.soft_delete_user(request).await {
-                Ok(resp) => {
-                    self.health_checker
-                        .set_auth_service_health(HealthStatus::Healthy)
-                        .await;
-                    return Ok(resp.into_inner().deleted_at);
-                }
-                Err(err) => {
-                    self.health_checker
-                        .set_auth_service_health(HealthStatus::Unavailable)
-                        .await;
-                    last_err = Some(err);
-                    if attempt + 1 < attempts {
-                        let delay = self
-                            .retry_backoff
-                            .checked_mul((attempt + 1) as u32)
-                            .unwrap_or(self.retry_backoff);
-                        sleep(delay).await;
-                    }
-                }
-            }
-        }
-
-        Err(last_err
-            .unwrap_or_else(|| tonic::Status::internal("auth-service soft_delete_user failed")))
-    }
 }
