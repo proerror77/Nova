@@ -1,6 +1,6 @@
 # Tasks: Database Schema Consolidation
 
-**Status**: Phase 0 COMPLETE (2/2 tasks)
+**Status**: Phase 0 COMPLETE (2/2 tasks) | Phase 1 COMPLETE (2/2 tasks)
 
 ## Phase 0: Freeze & Inventory ✅
 
@@ -31,8 +31,17 @@
     * `SELECT username FROM users WHERE id = $1` → `auth_client.get_user()`
   - Benefits: Eliminates shadow users table dependency, centralizes user source of truth
 
-- [ ] T011 Add foreign keys to canonical `auth.users` where needed (or service API if cross-db not allowed)
-  - TODO: Add FK constraints from messaging_service.conversation_members.user_id → auth.users.id
+- [X] T011 Add foreign keys to canonical `auth.users` where needed (or service API if cross-db not allowed) ✅
+  - **Decision**: Cross-database FK not possible (auth-service DB ≠ messaging-service DB)
+  - **Solution**: Implemented application-level FK validation via gRPC (already done in T010)
+  - Created migration `0023_phase1_users_consolidation_app_level_fk.sql`
+  - Removed local FK constraint on conversation_members.user_id
+  - All user validation now enforced via auth_client.user_exists() in add_member() handler
+  - Added CHECK constraint to ensure user_id IS NOT NULL
+  - Documented shadow users table as DEPRECATED in PostgreSQL comment
+  - **Rationale**: Strangler pattern - keep shadow table for safety, enforce via gRPC
+  - **Verification**: groups.rs::add_member() validates user via gRPC before INSERT
+  - **Safety**: No breaking changes; application already uses gRPC validation
 
 ## Phase 2: Soft Delete
 
