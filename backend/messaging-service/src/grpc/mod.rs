@@ -15,6 +15,27 @@ use tonic::{Request, Response, Status};
 use uuid::Uuid;
 use std::str::FromStr;
 
+// ========== UUID Validation Macro ==========
+
+/// Macro to parse and validate UUID fields from gRPC requests
+///
+/// Usage: `parse_uuid!(field_name, request.field_name)?`
+///
+/// This eliminates boilerplate UUID parsing across all RPC methods
+///
+/// Example:
+/// ```ignore
+/// let conversation_id = parse_uuid!("conversation_id", request.conversation_id)?;
+/// let user_id = parse_uuid!("user_id", request.user_id)?;
+/// ```
+macro_rules! parse_uuid {
+    ($field_name:expr, $uuid_str:expr) => {
+        Uuid::from_str(&$uuid_str).map_err(|_| {
+            Status::invalid_argument(format!("Invalid {}: {}", $field_name, $uuid_str))
+        })
+    };
+}
+
 /// MessagingServiceImpl - gRPC service implementation
 #[derive(Clone)]
 pub struct MessagingServiceImpl {
@@ -36,10 +57,69 @@ impl MessagingServiceImpl {
     /// Helper: Convert AppError to tonic Status
     fn app_error_to_status(err: crate::error::AppError) -> Status {
         match err {
-            crate::error::AppError::NotFound => Status::not_found("Resource not found"),
-            crate::error::AppError::Config(msg) => Status::invalid_argument(msg),
-            crate::error::AppError::StartServer(msg) => Status::internal(msg),
-            _ => Status::internal("Internal server error"),
+            // Client errors (4xx equivalent)
+            crate::error::AppError::BadRequest(msg) => {
+                Status::invalid_argument(msg)
+            }
+            crate::error::AppError::Unauthorized => {
+                Status::unauthenticated("Unauthorized: authentication required")
+            }
+            crate::error::AppError::Forbidden => {
+                Status::permission_denied("Forbidden: access denied")
+            }
+            crate::error::AppError::NotFound => {
+                Status::not_found("Resource not found")
+            }
+
+            // Validation/business logic errors
+            crate::error::AppError::AlreadyRecalled => {
+                Status::failed_precondition("Message already recalled")
+            }
+            crate::error::AppError::RecallWindowExpired { max_recall_minutes, .. } => {
+                Status::failed_precondition(format!(
+                    "Recall window expired (max {} minutes)",
+                    max_recall_minutes
+                ))
+            }
+            crate::error::AppError::EditWindowExpired { max_edit_minutes } => {
+                Status::failed_precondition(format!(
+                    "Edit window expired (max {} minutes)",
+                    max_edit_minutes
+                ))
+            }
+            crate::error::AppError::VersionConflict {
+                current_version,
+                client_version,
+                server_content,
+            } => {
+                Status::aborted(format!(
+                    "Version conflict: client v{} != server v{}, server content: {}",
+                    client_version, current_version, server_content
+                ))
+            }
+
+            // Configuration and setup errors (5xx equivalent)
+            crate::error::AppError::Config(msg) => {
+                Status::internal(format!("Configuration error: {}", msg))
+            }
+            crate::error::AppError::StartServer(msg) => {
+                Status::internal(format!("Server startup error: {}", msg))
+            }
+
+            // Data/persistence errors
+            crate::error::AppError::Database(msg) => {
+                Status::internal(format!("Database error: {}", msg))
+            }
+
+            // Encryption errors
+            crate::error::AppError::Encryption(msg) => {
+                Status::internal(format!("Encryption error: {}", msg))
+            }
+
+            // Generic internal error (catch-all, should rarely occur)
+            crate::error::AppError::Internal => {
+                Status::internal("Internal server error")
+            }
         }
     }
 
