@@ -43,7 +43,12 @@ impl RedisCache {
         }
     }
 
-    pub async fn set<T>(&self, key: &str, value: &T, ttl: Option<Duration>) -> Result<(), CacheError>
+    pub async fn set<T>(
+        &self,
+        key: &str,
+        value: &T,
+        ttl: Option<Duration>,
+    ) -> Result<(), CacheError>
     where
         T: Serialize + ?Sized,
     {
@@ -71,7 +76,10 @@ impl RedisCache {
             .await
     }
 
-    pub async fn get_trending_searches(&self, time_window: &str) -> Result<Vec<TrendingSearchCache>, CacheError> {
+    pub async fn get_trending_searches(
+        &self,
+        time_window: &str,
+    ) -> Result<Vec<TrendingSearchCache>, CacheError> {
         let key = format!("search:trending:{}", time_window);
         self.get(&key).await
     }
@@ -87,7 +95,10 @@ impl RedisCache {
             .await
     }
 
-    pub async fn get_search_results_cache(&self, cache_key: &str) -> Result<CachedSearchResults, CacheError> {
+    pub async fn get_search_results_cache(
+        &self,
+        cache_key: &str,
+    ) -> Result<CachedSearchResults, CacheError> {
         let key = format!("search:results:{}", cache_key);
         self.get(&key).await
     }
@@ -123,7 +134,11 @@ impl RedisCache {
         Ok(())
     }
 
-    pub async fn increment_search_count(&self, query: &str, time_window: &str) -> Result<i64, CacheError> {
+    pub async fn increment_search_count(
+        &self,
+        query: &str,
+        time_window: &str,
+    ) -> Result<i64, CacheError> {
         let mut conn = self.conn.clone();
         let key = format!("search:count:{}:{}", time_window, query.to_lowercase());
         let count: i64 = conn.incr(&key, 1).await?;

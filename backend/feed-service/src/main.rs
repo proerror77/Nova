@@ -1,10 +1,10 @@
 mod openapi;
 
 use actix_web::{dev::Service, web, App, HttpServer};
-use tonic::transport::Server as GrpcServer;
 use std::io;
 use std::sync::Arc;
 use std::time::Instant;
+use tonic::transport::Server as GrpcServer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use utoipa_swagger_ui::SwaggerUi;
 
@@ -20,12 +20,13 @@ use recommendation_service::services::{RecommendationEventConsumer, Recommendati
 use serde_json::from_slice;
 use tracing::{error, info, warn};
 
-async fn openapi_json(doc: web::Data<utoipa::openapi::OpenApi>) -> actix_web::Result<actix_web::HttpResponse> {
-    let body = serde_json::to_string(&*doc)
-        .map_err(|e| {
-            tracing::error!("OpenAPI serialization failed: {}", e);
-            actix_web::error::ErrorInternalServerError("OpenAPI serialization error")
-        })?;
+async fn openapi_json(
+    doc: web::Data<utoipa::openapi::OpenApi>,
+) -> actix_web::Result<actix_web::HttpResponse> {
+    let body = serde_json::to_string(&*doc).map_err(|e| {
+        tracing::error!("OpenAPI serialization failed: {}", e);
+        actix_web::error::ErrorInternalServerError("OpenAPI serialization error")
+    })?;
 
     Ok(actix_web::HttpResponse::Ok()
         .content_type("application/json")
@@ -196,19 +197,24 @@ async fn main() -> io::Result<()> {
         .expect("Invalid gRPC bind address");
     let grpc_pool = db_pool.get_ref().clone();
     tokio::spawn(async move {
-        let svc = match recommendation_service::grpc::RecommendationServiceImpl::new(grpc_pool).await {
-            Ok(svc) => svc,
-            Err(e) => {
-                tracing::error!("Failed to initialize RecommendationService: {}", e);
-                return;
-            }
-        };
+        let svc =
+            match recommendation_service::grpc::RecommendationServiceImpl::new(grpc_pool).await {
+                Ok(svc) => svc,
+                Err(e) => {
+                    tracing::error!("Failed to initialize RecommendationService: {}", e);
+                    return;
+                }
+            };
         tracing::info!("gRPC server listening on {}", grpc_addr);
 
         // Server-side correlation-id extractor interceptor
-        fn server_interceptor(mut req: tonic::Request<()>) -> Result<tonic::Request<()>, tonic::Status> {
+        fn server_interceptor(
+            mut req: tonic::Request<()>,
+        ) -> Result<tonic::Request<()>, tonic::Status> {
             // Extract correlation-id from metadata if present
-            let correlation_id = req.metadata().get("correlation-id")
+            let correlation_id = req
+                .metadata()
+                .get("correlation-id")
                 .and_then(|val| val.to_str().ok())
                 .map(|s| s.to_string());
 

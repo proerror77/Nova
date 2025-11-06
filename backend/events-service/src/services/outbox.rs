@@ -42,7 +42,6 @@
 /// - **Ordering**: Events for same aggregate_id are ordered (Kafka partition key)
 /// - **Durability**: Events survive service crashes (persisted in DB)
 /// - **Reliability**: Automatic retry with exponential backoff
-
 use crate::error::{AppError, Result};
 use chrono::{DateTime, Utc};
 use rdkafka::config::ClientConfig;
@@ -83,7 +82,7 @@ impl Default for OutboxConfig {
             kafka_brokers: "localhost:9092".to_string(),
             batch_size: 100,
             poll_interval_ms: 1000, // Poll every 1 second
-            kafka_timeout_ms: 5000,  // 5 second timeout
+            kafka_timeout_ms: 5000, // 5 second timeout
             max_retries: 3,
             retry_backoff_ms: 1000, // Start with 1 second backoff
         }
@@ -358,9 +357,7 @@ impl OutboxPublisher {
         };
 
         // Build Kafka record
-        let mut record = FutureRecord::to(topic)
-            .payload(&payload_json)
-            .key(key);
+        let mut record = FutureRecord::to(topic).payload(&payload_json).key(key);
 
         // Set partition if specified
         if let Some(partition) = event.kafka_partition {
@@ -489,7 +486,10 @@ impl OutboxPublisher {
             match self.publish_event(&event).await {
                 Ok(_) => {
                     if let Err(e) = self.mark_published(&event.id).await {
-                        error!("Failed to mark retried event {} as published: {:?}", event.id, e);
+                        error!(
+                            "Failed to mark retried event {} as published: {:?}",
+                            event.id, e
+                        );
                     } else {
                         success_count += 1;
                         info!("Successfully retried event {}", event.id);
@@ -498,7 +498,10 @@ impl OutboxPublisher {
                 Err(e) => {
                     error!("Retry failed for event {}: {:?}", event.id, e);
                     if let Err(e) = self.mark_failed(&event.id, &e.to_string()).await {
-                        error!("Failed to mark retried event {} as failed: {:?}", event.id, e);
+                        error!(
+                            "Failed to mark retried event {} as failed: {:?}",
+                            event.id, e
+                        );
                     }
                 }
             }

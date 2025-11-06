@@ -2,7 +2,6 @@
 ///
 /// Manages service endpoint configuration for all inter-service gRPC calls.
 /// Supports environment-based configuration for different deployments.
-
 use serde::{Deserialize, Serialize};
 use std::env;
 use std::fs;
@@ -224,10 +223,7 @@ impl GrpcConfig {
     }
 
     /// Connect to a Channel using this configuration
-    pub async fn connect_channel(
-        &self,
-        url: &str,
-    ) -> Result<Channel, Box<dyn std::error::Error>> {
+    pub async fn connect_channel(&self, url: &str) -> Result<Channel, Box<dyn std::error::Error>> {
         Ok(self.make_endpoint(url)?.connect().await?)
     }
 }

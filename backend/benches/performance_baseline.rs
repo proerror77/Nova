@@ -9,9 +9,9 @@
 //!
 //! 运行：cargo bench --bench performance_baseline
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId};
-use tokio::runtime::Runtime;
+use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 use std::time::Duration;
+use tokio::runtime::Runtime;
 
 // ============================================
 // Benchmark 1: 消息发送延迟
@@ -95,9 +95,8 @@ fn benchmark_feed_inference(c: &mut Criterion) {
             &user_count,
             |b, &user_count| {
                 let rt = Runtime::new().unwrap();
-                b.to_async(&rt).iter(|| async {
-                    simulate_feed_inference(black_box(user_count)).await
-                });
+                b.to_async(&rt)
+                    .iter(|| async { simulate_feed_inference(black_box(user_count)).await });
             },
         );
     }
@@ -131,9 +130,8 @@ fn benchmark_search_query(c: &mut Criterion) {
 
     group.bench_function("search_query_response", |b| {
         let rt = Runtime::new().unwrap();
-        b.to_async(&rt).iter(|| async {
-            simulate_search_query(black_box("Rust async programming")).await
-        });
+        b.to_async(&rt)
+            .iter(|| async { simulate_search_query(black_box("Rust async programming")).await });
     });
 
     group.finish();
@@ -158,9 +156,8 @@ fn benchmark_streaming_chat(c: &mut Criterion) {
             &viewer_count,
             |b, &viewer_count| {
                 let rt = Runtime::new().unwrap();
-                b.to_async(&rt).iter(|| async {
-                    simulate_chat_broadcast(black_box(viewer_count)).await
-                });
+                b.to_async(&rt)
+                    .iter(|| async { simulate_chat_broadcast(black_box(viewer_count)).await });
             },
         );
     }
@@ -184,9 +181,8 @@ fn benchmark_cdn_asset_processing(c: &mut Criterion) {
 
     group.bench_function("asset_upload_and_cdn_url", |b| {
         let rt = Runtime::new().unwrap();
-        b.to_async(&rt).iter(|| async {
-            simulate_cdn_processing(black_box("image.jpg")).await
-        });
+        b.to_async(&rt)
+            .iter(|| async { simulate_cdn_processing(black_box("image.jpg")).await });
     });
 
     group.finish();
@@ -211,9 +207,8 @@ fn benchmark_event_publishing(c: &mut Criterion) {
             &batch_size,
             |b, &batch_size| {
                 let rt = Runtime::new().unwrap();
-                b.to_async(&rt).iter(|| async {
-                    simulate_event_publish(black_box(batch_size)).await
-                });
+                b.to_async(&rt)
+                    .iter(|| async { simulate_event_publish(black_box(batch_size)).await });
             },
         );
     }

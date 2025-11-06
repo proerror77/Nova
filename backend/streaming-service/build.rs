@@ -7,7 +7,10 @@ fn main() {
         .build_server(true)
         .build_client(false)
         .compile(
-            &["../proto/services/streaming_service.proto", "../proto/services/common.proto"],
+            &[
+                "../proto/services/streaming_service.proto",
+                "../proto/services/common.proto",
+            ],
             &["../proto/services/"],
         )
         .expect("Failed to compile streaming_service.proto");

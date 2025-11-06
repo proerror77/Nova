@@ -6,7 +6,6 @@
 /// - Circuit breaker pattern
 /// - Request/response logging
 /// - Distributed tracing support
-
 use std::future::Future;
 use std::time::Duration;
 
@@ -48,10 +47,7 @@ impl RetryConfig {
 }
 
 /// Execute function with retry logic
-pub async fn with_retry<F, Fut, T, E>(
-    config: &RetryConfig,
-    mut f: F,
-) -> Result<T, E>
+pub async fn with_retry<F, Fut, T, E>(config: &RetryConfig, mut f: F) -> Result<T, E>
 where
     F: FnMut() -> Fut,
     Fut: Future<Output = Result<T, E>>,
@@ -145,10 +141,7 @@ mod tests {
             ..Default::default()
         };
 
-        let result: Result<i32, _> = with_retry(&config, || async {
-            Err::<i32, _>("error")
-        })
-        .await;
+        let result: Result<i32, _> = with_retry(&config, || async { Err::<i32, _>("error") }).await;
 
         assert_eq!(result, Err("error"));
     }

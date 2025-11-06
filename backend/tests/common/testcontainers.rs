@@ -3,9 +3,9 @@
 //! Provides reusable container fixtures for Postgres and Redis to enable
 //! integration tests to run in CI without manual infrastructure setup.
 
+use std::sync::Arc;
 use testcontainers::core::WaitFor;
 use testcontainers::{runners::AsyncRunner, GenericImage};
-use std::sync::Arc;
 
 /// PostgreSQL test container fixture
 pub struct PostgresContainer {
@@ -20,14 +20,14 @@ impl PostgresContainer {
             .with_env_var("POSTGRES_DB", "test_db")
             .with_env_var("POSTGRES_USER", "testuser")
             .with_env_var("POSTGRES_PASSWORD", "testpass")
-            .with_wait_for(WaitFor::message_on_stderr("database system is ready to accept connections"));
+            .with_wait_for(WaitFor::message_on_stderr(
+                "database system is ready to accept connections",
+            ));
 
         let container = image.start().await?;
         let port = container.get_host_port_ipv4(5432).await?;
-        let connection_string = format!(
-            "postgresql://testuser:testpass@localhost:{}/test_db",
-            port
-        );
+        let connection_string =
+            format!("postgresql://testuser:testpass@localhost:{}/test_db", port);
 
         Ok(Self {
             _container: Arc::new(container),

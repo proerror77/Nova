@@ -6,10 +6,9 @@
 /// - Preference management endpoints
 /// - Error handling and response formats
 /// - Request validation
-
 use notification_service::models::*;
-use uuid::Uuid;
 use serde_json::json;
+use uuid::Uuid;
 
 #[test]
 fn test_create_notification_payload_serialization() {
@@ -27,8 +26,7 @@ fn test_create_notification_payload_serialization() {
         "priority": "NORMAL"
     });
 
-    let deserialized: CreateNotificationRequest =
-        serde_json::from_value(payload).unwrap();
+    let deserialized: CreateNotificationRequest = serde_json::from_value(payload).unwrap();
 
     assert_eq!(deserialized.recipient_id, user_id);
     assert_eq!(deserialized.notification_type, NotificationType::Like);
@@ -66,7 +64,10 @@ fn test_notification_response_format() {
 
     assert_eq!(deserialized.id, notification.id);
     assert_eq!(deserialized.recipient_id, notification.recipient_id);
-    assert_eq!(deserialized.notification_type, notification.notification_type);
+    assert_eq!(
+        deserialized.notification_type,
+        notification.notification_type
+    );
 }
 
 #[test]
@@ -158,8 +159,7 @@ fn test_notification_priority_in_response() {
 
     for priority in priorities {
         let json = serde_json::to_value(priority).unwrap();
-        let deserialized: NotificationPriority =
-            serde_json::from_value(json).unwrap();
+        let deserialized: NotificationPriority = serde_json::from_value(json).unwrap();
         assert_eq!(deserialized, priority);
     }
 }

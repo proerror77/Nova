@@ -1,8 +1,3 @@
-/// gRPC clients for calling other services (centralized)
-///
-/// Feed Service orchestrates data from UserService and ContentService
-/// to generate personalized feeds without direct database queries.
-use grpc_clients::{config::GrpcConfig, GrpcClientPool};
 use grpc_clients::nova::content_service::v1::{
     GetPostsByAuthorRequest, GetPostsByAuthorResponse, GetPostsByIdsRequest, GetPostsByIdsResponse,
 };
@@ -10,6 +5,11 @@ use grpc_clients::nova::user_service::v1::{
     GetUserFollowingRequest, GetUserFollowingResponse, GetUserProfilesByIdsRequest,
     GetUserProfilesByIdsResponse,
 };
+/// gRPC clients for calling other services (centralized)
+///
+/// Feed Service orchestrates data from UserService and ContentService
+/// to generate personalized feeds without direct database queries.
+use grpc_clients::{config::GrpcConfig, GrpcClientPool};
 use std::sync::Arc;
 use tonic::Status;
 
