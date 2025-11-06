@@ -689,6 +689,7 @@ mod tests {
             max_requests: 100,
             window_secs: 60,
             endpoint_overrides: "auth/*:30:60".to_string(),
+            trusted_proxies: vec![],
         };
 
         // "auth_other" should not match "auth/*" pattern
@@ -703,6 +704,7 @@ mod tests {
             max_requests: 100,
             window_secs: 60,
             endpoint_overrides: "auth/register:30:60,auth/*:40:90".to_string(),
+            trusted_proxies: vec![],
         };
 
         // Exact match should take precedence

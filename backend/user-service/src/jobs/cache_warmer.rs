@@ -18,7 +18,9 @@ use tracing::{debug, info};
 use uuid::Uuid;
 
 use crate::grpc::ContentServiceClient;
-use grpc_clients::nova::content_service::v1::GetFeedRequest;
+// TODO(Phase 1 gRPC): Implement FeedServiceClient for feed retrieval
+// GetFeedRequest belongs to feed-service, not content-service
+// use grpc_clients::nova::feed_service::v1::GetFeedRequest;
 
 /// 预热用户信息
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -135,28 +137,33 @@ impl CacheWarmerJob {
 
     /// 为单个用户预热 feed 缓存
     ///
-    /// 注意: 这里只是 mock 实现,实际需要调用 feed_ranking 服务
+    /// TODO(Phase 1 gRPC): Implement feed service client integration
+    /// This functionality requires FeedServiceClient to call get_feed
+    /// For now, returning mock success to allow compilation
     async fn warmup_user_feed(&self, _ctx: &JobContext, user_id: Uuid) -> Result<usize> {
-        let request = GetFeedRequest {
-            user_id: user_id.to_string(),
-            algo: "ch".to_string(),
-            limit: 20,
-            cursor: String::new(),
-        };
+        // let feed_client = self.feed_client.get_ref().clone();
+        // let request = GetFeedRequest {
+        //     user_id: user_id.to_string(),
+        //     algo: "ch".to_string(),
+        //     limit: 20,
+        //     cursor: String::new(),
+        // };
+        //
+        // let response = feed_client
+        //     .get_feed(request)
+        //     .await
+        //     .map_err(|status| anyhow!("feed-service get_feed failed: {}", status))?;
+        //
+        // debug!(
+        //     "Warmup feed via feed-service (user={} posts={})",
+        //     user_id,
+        //     response.post_ids.len()
+        // );
+        //
+        // Ok(response.post_ids.len())
 
-        let response = self
-            .content_client
-            .get_feed(request)
-            .await
-            .map_err(|status| anyhow!("content-service get_feed failed: {}", status))?;
-
-        debug!(
-            "Warmup feed via content-service (user={} posts={})",
-            user_id,
-            response.post_ids.len()
-        );
-
-        Ok(response.post_ids.len())
+        debug!("Cache warmup for user {} - pending feed service integration", user_id);
+        Ok(0) // Return 0 posts until feed service client is implemented
     }
 
     /// 批量预热用户 feed

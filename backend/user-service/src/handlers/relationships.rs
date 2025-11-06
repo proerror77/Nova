@@ -1,6 +1,6 @@
 use actix_web::{web, HttpResponse};
 use serde::Serialize;
-use sqlx::{PgPool, Row};
+use sqlx::PgPool;
 use tracing::{debug, error, warn};
 use uuid::Uuid;
 
@@ -35,7 +35,7 @@ pub async fn follow_user(
     graph: web::Data<GraphService>,
     event_producer: web::Data<Arc<EventProducer>>,
     redis_manager: Option<web::Data<SharedConnectionManager>>,
-    content_client: web::Data<Arc<ContentServiceClient>>,
+    _content_client: web::Data<Arc<ContentServiceClient>>,
     user: UserId,
 ) -> HttpResponse {
     let target_id = match Uuid::parse_str(&path.into_inner()) {
@@ -169,7 +169,7 @@ pub async fn unfollow_user(
     graph: web::Data<GraphService>,
     event_producer: web::Data<Arc<EventProducer>>,
     redis_manager: Option<web::Data<SharedConnectionManager>>,
-    content_client: web::Data<Arc<ContentServiceClient>>,
+    _content_client: web::Data<Arc<ContentServiceClient>>,
     user: UserId,
 ) -> HttpResponse {
     let target_id = match Uuid::parse_str(&path.into_inner()) {
