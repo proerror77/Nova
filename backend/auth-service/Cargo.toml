@@ -81,6 +81,7 @@ crypto-core = { path = "../libs/crypto-core" }
 redis-utils = { path = "../libs/redis-utils" }
 actix-middleware = { path = "../libs/actix-middleware" }
 db-pool = { path = "../libs/db-pool" }
+grpc-metrics = { path = "../libs/grpc-metrics" }
 
 # API documentation
 utoipa = { version = "4", features = ["chrono", "uuid"] }

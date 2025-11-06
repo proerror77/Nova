@@ -181,7 +181,13 @@ async fn main() -> io::Result<()> {
         .expect("Invalid gRPC bind address");
     let grpc_pool = db_pool.get_ref().clone();
     tokio::spawn(async move {
-        let svc = recommendation_service::grpc::RecommendationServiceImpl::new(grpc_pool);
+        let svc = match recommendation_service::grpc::RecommendationServiceImpl::new(grpc_pool).await {
+            Ok(svc) => svc,
+            Err(e) => {
+                tracing::error!("Failed to initialize RecommendationService: {}", e);
+                return;
+            }
+        };
         tracing::info!("gRPC server listening on {}", grpc_addr);
 
         // Server-side correlation-id extractor interceptor

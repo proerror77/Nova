@@ -6,6 +6,15 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+// Outbox pattern for transactional event publishing
+pub mod outbox;
+// Domain events enumeration
+pub mod events;
+
+// Re-export commonly used types
+pub use outbox::{OutboxEvent, KafkaMessage, priority};
+pub use events::DomainEvent;
+
 /// Current schema version for all events
 pub const SCHEMA_VERSION: u32 = 1;
 

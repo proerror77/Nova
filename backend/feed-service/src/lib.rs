@@ -1,3 +1,4 @@
+pub mod cache;
 pub mod config;
 pub mod db;
 pub mod error;
@@ -10,6 +11,7 @@ pub mod security;
 pub mod services;
 pub mod utils;
 
+pub use cache::{CacheConfig, CachedFeedPost, FeedCache};
 pub use config::Config;
 pub use error::{AppError, Result};
 

@@ -1,16 +1,15 @@
 // gRPC service implementation for content service
 use crate::cache::{ContentCache, FeedCache};
 use crate::error::AppError;
-use crate::handlers::feed::FeedQueryParams;
 use crate::models::{Comment, Post};
 use crate::services::comments::CommentService;
 use crate::services::feed_ranking::FeedRankingService;
 use crate::services::posts::PostService;
+use grpc_metrics::layer::RequestGuard;
 use sqlx::PgPool;
 use std::sync::Arc;
 use tokio::sync::broadcast;
 use tonic::{Request, Response, Status};
-use tracing::warn;
 use uuid::Uuid;
 
 // Import generated proto code
@@ -82,13 +81,19 @@ impl ContentService for ContentServiceImpl {
         &self,
         request: Request<GetPostRequest>,
     ) -> Result<Response<GetPostResponse>, Status> {
+        let guard = RequestGuard::new("content-service", "GetPost");
         let req = request.into_inner();
 
         tracing::info!("gRPC: Getting post with ID: {}", req.post_id);
 
         // Parse post ID from string UUID
-        let post_id = Uuid::parse_str(&req.post_id)
-            .map_err(|_| Status::invalid_argument("Invalid post ID format"))?;
+        let post_id = match Uuid::parse_str(&req.post_id) {
+            Ok(id) => id,
+            Err(_) => {
+                guard.complete("3");
+                return Err(Status::invalid_argument("Invalid post ID format"));
+            }
+        };
 
         // Fetch post using PostService
         let post_service = PostService::with_cache(self.db_pool.clone(), self.cache.clone());
@@ -99,6 +104,7 @@ impl ContentService for ContentServiceImpl {
                     found: true,
                     error: ok_error(),
                 };
+                guard.complete("0");
                 Ok(Response::new(response))
             }
             Ok(None) => {
@@ -107,10 +113,12 @@ impl ContentService for ContentServiceImpl {
                     found: false,
                     error: make_error("NOT_FOUND", "Post not found"),
                 };
+                guard.complete("5");
                 Ok(Response::new(response))
             }
             Err(e) => {
                 tracing::error!("Error fetching post: {}", e);
+                guard.complete("13");
                 Err(Status::internal("Failed to fetch post"))
             }
         }
@@ -121,13 +129,19 @@ impl ContentService for ContentServiceImpl {
         &self,
         request: Request<CreatePostRequest>,
     ) -> Result<Response<CreatePostResponse>, Status> {
+        let guard = RequestGuard::new("content-service", "CreatePost");
         let req = request.into_inner();
 
         tracing::info!("gRPC: Creating post from user: {}", req.creator_id);
 
         // Parse user ID
-        let user_id = Uuid::parse_str(&req.creator_id)
-            .map_err(|_| Status::invalid_argument("Invalid user ID format"))?;
+        let user_id = match Uuid::parse_str(&req.creator_id) {
+            Ok(id) => id,
+            Err(_) => {
+                guard.complete("3");
+                return Err(Status::invalid_argument("Invalid user ID format"));
+            }
+        };
 
         // Create post using PostService
         let post_service = PostService::with_cache(self.db_pool.clone(), self.cache.clone());
@@ -142,10 +156,12 @@ impl ContentService for ContentServiceImpl {
                     post: Some(convert_post_to_proto(&post)),
                     error: ok_error(),
                 };
+                guard.complete("0");
                 Ok(Response::new(response))
             }
             Err(e) => {
                 tracing::error!("Error creating post: {}", e);
+                guard.complete("13");
                 Err(Status::internal("Failed to create post"))
             }
         }
@@ -156,6 +172,7 @@ impl ContentService for ContentServiceImpl {
         &self,
         request: Request<GetCommentsRequest>,
     ) -> Result<Response<GetCommentsResponse>, Status> {
+        let guard = RequestGuard::new("content-service", "GetComments");
         let req = request.into_inner();
 
         tracing::info!(
@@ -166,8 +183,13 @@ impl ContentService for ContentServiceImpl {
         );
 
         // Parse post ID
-        let post_id = Uuid::parse_str(&req.post_id)
-            .map_err(|_| Status::invalid_argument("Invalid post ID format"))?;
+        let post_id = match Uuid::parse_str(&req.post_id) {
+            Ok(id) => id,
+            Err(_) => {
+                guard.complete("3");
+                return Err(Status::invalid_argument("Invalid post ID format"));
+            }
+        };
 
         // Get comments using CommentService
         let comment_service = CommentService::new(self.db_pool.clone());
@@ -187,10 +209,12 @@ impl ContentService for ContentServiceImpl {
                     total,
                     error: ok_error(),
                 };
+                guard.complete("0");
                 Ok(Response::new(response))
             }
             Err(e) => {
                 tracing::error!("Error fetching comments: {}", e);
+                guard.complete("13");
                 Err(Status::internal("Failed to fetch comments"))
             }
         }
@@ -201,28 +225,43 @@ impl ContentService for ContentServiceImpl {
         &self,
         request: Request<LikePostRequest>,
     ) -> Result<Response<LikePostResponse>, Status> {
+        let guard = RequestGuard::new("content-service", "LikePost");
         let req = request.into_inner();
 
         tracing::info!("gRPC: User {} liking post {}", req.user_id, req.post_id);
 
-        let user_id = Uuid::parse_str(&req.user_id)
-            .map_err(|_| Status::invalid_argument("Invalid user ID format"))?;
-        let post_id = Uuid::parse_str(&req.post_id)
-            .map_err(|_| Status::invalid_argument("Invalid post ID format"))?;
+        let user_id = match Uuid::parse_str(&req.user_id) {
+            Ok(id) => id,
+            Err(_) => {
+                guard.complete("3");
+                return Err(Status::invalid_argument("Invalid user ID format"));
+            }
+        };
+        let post_id = match Uuid::parse_str(&req.post_id) {
+            Ok(id) => id,
+            Err(_) => {
+                guard.complete("3");
+                return Err(Status::invalid_argument("Invalid post ID format"));
+            }
+        };
 
         // Ensure the post exists and is not soft-deleted
-        let post_exists = sqlx::query_scalar::<_, i64>(
+        let post_exists = match sqlx::query_scalar::<_, i64>(
             "SELECT 1 FROM posts WHERE id = $1 AND deleted_at IS NULL",
         )
         .bind(post_id)
         .fetch_optional(&self.db_pool)
-        .await
-        .map_err(|e| {
-            tracing::error!("Database error checking post existence: {}", e);
-            Status::internal("Failed to validate post")
-        })?;
+        .await {
+            Ok(r) => r,
+            Err(e) => {
+                tracing::error!("Database error checking post existence: {}", e);
+                guard.complete("13");
+                return Err(Status::internal("Failed to validate post"));
+            }
+        };
 
         if post_exists.is_none() {
+            guard.complete("5");
             return Err(Status::not_found("Post not found"));
         }
 
@@ -248,6 +287,7 @@ impl ContentService for ContentServiceImpl {
                     tracing::debug!("Invalidated cache for post {} after new like", post_id);
                 }
 
+                guard.complete("0");
                 Ok(Response::new(LikePostResponse {
                     success: true,
                     error: ok_error(),
@@ -260,6 +300,7 @@ impl ContentService for ContentServiceImpl {
                     post_id,
                     err
                 );
+                guard.complete("13");
                 Err(Status::internal("Failed to like post"))
             }
         }
@@ -310,6 +351,7 @@ impl ContentService for ContentServiceImpl {
         &self,
         request: Request<GetPostsByAuthorRequest>,
     ) -> Result<Response<GetPostsByAuthorResponse>, Status> {
+        let guard = RequestGuard::new("content-service", "GetPostsByAuthor");
         let req = request.into_inner();
 
         tracing::info!(
@@ -321,8 +363,13 @@ impl ContentService for ContentServiceImpl {
         );
 
         // Parse author ID
-        let author_id = Uuid::parse_str(&req.author_id)
-            .map_err(|_| Status::invalid_argument("Invalid author ID format"))?;
+        let author_id = match Uuid::parse_str(&req.author_id) {
+            Ok(id) => id,
+            Err(_) => {
+                guard.complete("3");
+                return Err(Status::invalid_argument("Invalid author ID format"));
+            }
+        };
 
         let limit = req.limit.clamp(1, 100) as i64;
         let offset = req.offset.max(0) as i64;
@@ -341,7 +388,7 @@ impl ContentService for ContentServiceImpl {
         };
 
         // Fetch posts
-        let posts = if req.status.is_empty() {
+        let posts = match if req.status.is_empty() {
             sqlx::query_as::<_, Post>(&query_str)
                 .bind(author_id)
                 .bind(limit)
@@ -356,14 +403,17 @@ impl ContentService for ContentServiceImpl {
                 .bind(offset)
                 .fetch_all(&self.db_pool)
                 .await
-        }
-        .map_err(|e| {
-            tracing::error!("Database error fetching posts by author: {}", e);
-            Status::internal("Failed to fetch posts")
-        })?;
+        } {
+            Ok(p) => p,
+            Err(e) => {
+                tracing::error!("Database error fetching posts by author: {}", e);
+                guard.complete("13");
+                return Err(Status::internal("Failed to fetch posts"));
+            }
+        };
 
         // Fetch total count
-        let total: i64 = if req.status.is_empty() {
+        let total: i64 = match if req.status.is_empty() {
             sqlx::query_scalar(&count_query_str)
                 .bind(author_id)
                 .fetch_one(&self.db_pool)
@@ -374,11 +424,14 @@ impl ContentService for ContentServiceImpl {
                 .bind(&req.status)
                 .fetch_one(&self.db_pool)
                 .await
-        }
-        .map_err(|e| {
-            tracing::error!("Database error counting posts by author: {}", e);
-            Status::internal("Failed to count posts")
-        })?;
+        } {
+            Ok(t) => t,
+            Err(e) => {
+                tracing::error!("Database error counting posts by author: {}", e);
+                guard.complete("13");
+                return Err(Status::internal("Failed to count posts"));
+            }
+        };
 
         let proto_posts = posts.iter().map(|p| convert_post_to_proto(p)).collect();
 
@@ -387,6 +440,7 @@ impl ContentService for ContentServiceImpl {
             i32::MAX
         });
 
+        guard.complete("0");
         Ok(Response::new(GetPostsByAuthorResponse {
             posts: proto_posts,
             total_count,
@@ -398,19 +452,29 @@ impl ContentService for ContentServiceImpl {
         &self,
         request: Request<UpdatePostRequest>,
     ) -> Result<Response<UpdatePostResponse>, Status> {
+        let guard = RequestGuard::new("content-service", "UpdatePost");
         let req = request.into_inner();
 
         tracing::info!("gRPC: Updating post: {}", req.post_id);
 
         // Parse post ID
-        let post_id = Uuid::parse_str(&req.post_id)
-            .map_err(|_| Status::invalid_argument("Invalid post ID format"))?;
+        let post_id = match Uuid::parse_str(&req.post_id) {
+            Ok(id) => id,
+            Err(_) => {
+                guard.complete("3");
+                return Err(Status::invalid_argument("Invalid post ID format"));
+            }
+        };
 
         // Start a transaction to ensure atomicity
-        let mut tx = self.db_pool.begin().await.map_err(|e| {
-            tracing::error!("Database error starting transaction: {}", e);
-            Status::internal("Failed to update post")
-        })?;
+        let mut tx = match self.db_pool.begin().await {
+            Ok(tx) => tx,
+            Err(e) => {
+                tracing::error!("Database error starting transaction: {}", e);
+                guard.complete("13");
+                return Err(Status::internal("Failed to update post"));
+            }
+        };
 
         // Update the post with only non-empty fields
         let update_query = if req.title.is_empty()
@@ -464,10 +528,14 @@ impl ContentService for ContentServiceImpl {
                 query = query.bind(binding);
             }
 
-            query.fetch_optional(&mut *tx).await.map_err(|e| {
-                tracing::error!("Database error updating post: {}", e);
-                Status::internal("Failed to update post")
-            })?;
+            match query.fetch_optional(&mut *tx).await {
+                Ok(_) => {},
+                Err(e) => {
+                    tracing::error!("Database error updating post: {}", e);
+                    guard.complete("13");
+                    return Err(Status::internal("Failed to update post"));
+                }
+            }
 
             sqlx::query("SELECT 1").execute(&mut *tx).await
         };
@@ -475,10 +543,11 @@ impl ContentService for ContentServiceImpl {
         match update_query {
             Ok(_) => {
                 // Commit transaction and invalidate cache
-                tx.commit().await.map_err(|e| {
+                if let Err(e) = tx.commit().await {
                     tracing::error!("Database error committing transaction: {}", e);
-                    Status::internal("Failed to update post")
-                })?;
+                    guard.complete("13");
+                    return Err(Status::internal("Failed to update post"));
+                }
 
                 // Invalidate cache for this post
                 let _ = self.cache.invalidate_post(post_id).await;
@@ -488,21 +557,27 @@ impl ContentService for ContentServiceImpl {
                 let post_service =
                     PostService::with_cache(self.db_pool.clone(), self.cache.clone());
                 match post_service.get_post(post_id).await {
-                    Ok(Some(post)) => Ok(Response::new(UpdatePostResponse {
-                        post: Some(convert_post_to_proto(&post)),
-                    })),
+                    Ok(Some(post)) => {
+                        guard.complete("0");
+                        Ok(Response::new(UpdatePostResponse {
+                            post: Some(convert_post_to_proto(&post)),
+                        }))
+                    }
                     Ok(None) => {
                         tracing::warn!("Updated post {} not found", post_id);
+                        guard.complete("5");
                         Err(Status::not_found("Post not found after update"))
                     }
                     Err(e) => {
                         tracing::error!("Error fetching updated post: {}", e);
+                        guard.complete("13");
                         Err(Status::internal("Failed to fetch updated post"))
                     }
                 }
             }
             Err(e) => {
                 tracing::error!("Error updating post: {}", e);
+                guard.complete("13");
                 Err(Status::internal("Failed to update post"))
             }
         }
@@ -513,6 +588,7 @@ impl ContentService for ContentServiceImpl {
         &self,
         request: Request<DeletePostRequest>,
     ) -> Result<Response<DeletePostResponse>, Status> {
+        let guard = RequestGuard::new("content-service", "DeletePost");
         let req = request.into_inner();
 
         tracing::info!(
@@ -522,23 +598,36 @@ impl ContentService for ContentServiceImpl {
         );
 
         // Parse IDs
-        let post_id = Uuid::parse_str(&req.post_id)
-            .map_err(|_| Status::invalid_argument("Invalid post ID format"))?;
+        let post_id = match Uuid::parse_str(&req.post_id) {
+            Ok(id) => id,
+            Err(_) => {
+                guard.complete("3");
+                return Err(Status::invalid_argument("Invalid post ID format"));
+            }
+        };
         // Validate deleted_by_id exists (not used in this implementation but required by proto)
-        let _deleted_by_id = Uuid::parse_str(&req.deleted_by_id)
-            .map_err(|_| Status::invalid_argument("Invalid deleted_by_id format"))?;
+        let _deleted_by_id = match Uuid::parse_str(&req.deleted_by_id) {
+            Ok(id) => id,
+            Err(_) => {
+                guard.complete("3");
+                return Err(Status::invalid_argument("Invalid deleted_by_id format"));
+            }
+        };
 
         // Soft delete the post (set deleted_at timestamp)
-        let result = sqlx::query_scalar::<_, chrono::DateTime<chrono::Utc>>(
+        let result = match sqlx::query_scalar::<_, chrono::DateTime<chrono::Utc>>(
             "UPDATE posts SET deleted_at = NOW() WHERE id = $1 AND deleted_at IS NULL RETURNING deleted_at",
         )
         .bind(post_id)
         .fetch_optional(&self.db_pool)
-        .await
-        .map_err(|e| {
-            tracing::error!("Database error deleting post: {}", e);
-            Status::internal("Failed to delete post")
-        })?;
+        .await {
+            Ok(r) => r,
+            Err(e) => {
+                tracing::error!("Database error deleting post: {}", e);
+                guard.complete("13");
+                return Err(Status::internal("Failed to delete post"));
+            }
+        };
 
         match result {
             Some(deleted_at) => {
@@ -546,6 +635,7 @@ impl ContentService for ContentServiceImpl {
                 let _ = self.cache.invalidate_post(post_id).await;
                 tracing::debug!("Invalidated cache for post {} after delete", post_id);
 
+                guard.complete("0");
                 Ok(Response::new(DeletePostResponse {
                     post_id: post_id.to_string(),
                     deleted_at: deleted_at.timestamp(),
@@ -553,6 +643,7 @@ impl ContentService for ContentServiceImpl {
             }
             None => {
                 tracing::warn!("Post {} not found or already deleted", post_id);
+                guard.complete("5");
                 Err(Status::not_found("Post not found or already deleted"))
             }
         }
@@ -709,158 +800,12 @@ impl ContentService for ContentServiceImpl {
         Ok(Response::new(response))
     }
 
-    /// Get personalized feed via gRPC
-    async fn get_feed(
-        &self,
-        request: Request<GetFeedRequest>,
-    ) -> Result<Response<GetFeedResponse>, Status> {
-        let req = request.into_inner();
-
-        let user_id = Uuid::parse_str(&req.user_id)
-            .map_err(|_| Status::invalid_argument("Invalid user ID"))?;
-
-        let algo = if req.algo.is_empty() {
-            "ch".to_string()
-        } else {
-            req.algo.clone()
-        };
-
-        if algo != "ch" && algo != "time" {
-            return Err(Status::invalid_argument(
-                "Invalid algo parameter. Must be 'ch' or 'time'",
-            ));
-        }
-
-        let limit = if req.limit == 0 { 20 } else { req.limit }.min(100).max(1);
-
-        let params = FeedQueryParams {
-            algo: algo.clone(),
-            limit,
-            cursor: if req.cursor.is_empty() {
-                None
-            } else {
-                Some(req.cursor.clone())
-            },
-        };
-
-        let offset = params
-            .decode_cursor()
-            .map_err(|e| map_app_error(e, "get_feed"))?;
-
-        let (post_ids, has_more, total_count) = match self
-            .feed_ranking
-            .get_feed(user_id, limit as usize, offset)
-            .await
-        {
-            Ok(result) => result,
-            Err(e) => {
-                warn!("Primary feed fetch failed for user {}: {}", user_id, e);
-                self.feed_ranking
-                    .fallback_feed(user_id, limit as usize, offset)
-                    .await
-                    .map_err(|err| map_app_error(err, "fallback_feed"))?
-            }
-        };
-
-        let cursor = if has_more && !post_ids.is_empty() {
-            Some(FeedQueryParams::encode_cursor(offset + post_ids.len()))
-        } else {
-            None
-        };
-
-        let response = GetFeedResponse {
-            post_ids: post_ids.iter().map(|id| id.to_string()).collect(),
-            cursor: cursor.unwrap_or_default(),
-            has_more,
-            total_count: total_count as u32,
-            error: ok_error(),
-        };
-
-        Ok(Response::new(response))
-    }
-
-    async fn invalidate_feed_event(
-        &self,
-        request: Request<InvalidateFeedEventRequest>,
-    ) -> Result<Response<InvalidateFeedResponse>, Status> {
-        let req = request.into_inner();
-        let user_id = Uuid::parse_str(&req.user_id)
-            .map_err(|_| Status::invalid_argument("Invalid user ID"))?;
-
-        let target_user_id = if req.target_user_id.is_empty() {
-            None
-        } else {
-            Some(
-                Uuid::parse_str(&req.target_user_id)
-                    .map_err(|_| Status::invalid_argument("Invalid target user ID"))?,
-            )
-        };
-
-        self.feed_cache
-            .invalidate_by_event(&req.event_type, user_id, target_user_id)
-            .await
-            .map_err(|e| map_app_error(e, "invalidate_feed_event"))?;
-
-        Ok(Response::new(InvalidateFeedResponse {
-            success: true,
-            error: ok_error(),
-        }))
-    }
-
-    async fn batch_invalidate_feed(
-        &self,
-        request: Request<BatchInvalidateFeedRequest>,
-    ) -> Result<Response<InvalidateFeedResponse>, Status> {
-        let req = request.into_inner();
-        let mut user_ids = Vec::with_capacity(req.user_ids.len());
-        for id in req.user_ids {
-            let parsed = Uuid::parse_str(&id)
-                .map_err(|_| Status::invalid_argument("Invalid user ID in batch"))?;
-            user_ids.push(parsed);
-        }
-
-        self.feed_cache
-            .batch_invalidate(user_ids)
-            .await
-            .map_err(|e| map_app_error(e, "batch_invalidate_feed"))?;
-
-        Ok(Response::new(InvalidateFeedResponse {
-            success: true,
-            error: ok_error(),
-        }))
-    }
-
-    async fn warm_feed(
-        &self,
-        request: Request<WarmFeedRequest>,
-    ) -> Result<Response<InvalidateFeedResponse>, Status> {
-        let req = request.into_inner();
-        let user_id = Uuid::parse_str(&req.user_id)
-            .map_err(|_| Status::invalid_argument("Invalid user ID"))?;
-
-        let mut post_ids = Vec::with_capacity(req.post_ids.len());
-        for id in req.post_ids {
-            let parsed =
-                Uuid::parse_str(&id).map_err(|_| Status::invalid_argument("Invalid post ID"))?;
-            post_ids.push(parsed);
-        }
-
-        self.feed_cache
-            .warm_cache(user_id, post_ids)
-            .await
-            .map_err(|e| map_app_error(e, "warm_feed"))?;
-
-        Ok(Response::new(InvalidateFeedResponse {
-            success: true,
-            error: ok_error(),
-        }))
-    }
-
     /// Create a new comment on a post
     async fn create_comment(
         &self,
         request: Request<CreateCommentRequest>,
     ) -> Result<Response<CreateCommentResponse>, Status> {
+        let guard = RequestGuard::new("content-service", "CreateComment");
         let req = request.into_inner();
 
         tracing::info!(
@@ -870,23 +815,37 @@ impl ContentService for ContentServiceImpl {
         );
 
         // Parse IDs
-        let post_id = Uuid::parse_str(&req.post_id)
-            .map_err(|_| Status::invalid_argument("Invalid post ID format"))?;
-        let user_id = Uuid::parse_str(&req.user_id)
-            .map_err(|_| Status::invalid_argument("Invalid user ID format"))?;
+        let post_id = match Uuid::parse_str(&req.post_id) {
+            Ok(id) => id,
+            Err(_) => {
+                guard.complete("3");
+                return Err(Status::invalid_argument("Invalid post ID format"));
+            }
+        };
+        let user_id = match Uuid::parse_str(&req.user_id) {
+            Ok(id) => id,
+            Err(_) => {
+                guard.complete("3");
+                return Err(Status::invalid_argument("Invalid user ID format"));
+            }
+        };
 
         // Parse optional parent comment ID
         let parent_comment_id = if req.parent_comment_id.is_empty() {
             None
         } else {
-            Some(
-                Uuid::parse_str(&req.parent_comment_id)
-                    .map_err(|_| Status::invalid_argument("Invalid parent comment ID format"))?,
-            )
+            match Uuid::parse_str(&req.parent_comment_id) {
+                Ok(id) => Some(id),
+                Err(_) => {
+                    guard.complete("3");
+                    return Err(Status::invalid_argument("Invalid parent comment ID format"));
+                }
+            }
         };
 
         // Validate content is not empty
         if req.content.trim().is_empty() {
+            guard.complete("3");
             return Ok(Response::new(CreateCommentResponse {
                 comment: None,
                 error: make_error("VALIDATION_ERROR", "Comment content cannot be empty"),
@@ -894,18 +853,22 @@ impl ContentService for ContentServiceImpl {
         }
 
         // Ensure the post exists and is not soft-deleted
-        let post_exists = sqlx::query_scalar::<_, bool>(
+        let post_exists = match sqlx::query_scalar::<_, bool>(
             "SELECT EXISTS(SELECT 1 FROM posts WHERE id = $1 AND deleted_at IS NULL)",
         )
         .bind(post_id)
         .fetch_one(&self.db_pool)
-        .await
-        .map_err(|e| {
-            tracing::error!("Database error checking post existence: {}", e);
-            Status::internal("Failed to validate post")
-        })?;
+        .await {
+            Ok(exists) => exists,
+            Err(e) => {
+                tracing::error!("Database error checking post existence: {}", e);
+                guard.complete("13");
+                return Err(Status::internal("Failed to validate post"));
+            }
+        };
 
         if !post_exists {
+            guard.complete("5");
             return Ok(Response::new(CreateCommentResponse {
                 comment: None,
                 error: make_error("NOT_FOUND", "Post not found"),
@@ -923,6 +886,7 @@ impl ContentService for ContentServiceImpl {
                 let _ = self.cache.invalidate_post(post_id).await;
                 tracing::debug!("Invalidated cache for post {} after new comment", post_id);
 
+                guard.complete("0");
                 Ok(Response::new(CreateCommentResponse {
                     comment: Some(convert_comment_to_proto(&comment)),
                     error: ok_error(),
@@ -930,6 +894,7 @@ impl ContentService for ContentServiceImpl {
             }
             Err(e) => {
                 tracing::error!("Error creating comment: {}", e);
+                guard.complete("13");
                 Err(Status::internal("Failed to create comment"))
             }
         }
@@ -1244,7 +1209,10 @@ use tonic_health::server::health_reporter;
     // Server-side correlation-id extractor interceptor
     fn server_interceptor(mut req: tonic::Request<()>) -> Result<tonic::Request<()>, tonic::Status> {
         if let Some(val) = req.metadata().get("correlation-id") {
-            if let Ok(s) = val.to_str() { req.extensions_mut().insert::<String>(s.to_string()); }
+            if let Ok(s) = val.to_str() {
+                let correlation_id = s.to_string();
+                req.extensions_mut().insert::<String>(correlation_id);
+            }
         }
         Ok(req)
     }

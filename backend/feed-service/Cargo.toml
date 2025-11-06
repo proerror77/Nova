@@ -61,6 +61,7 @@ video-core = { path = "../libs/video-core" }
 db-pool = { path = "../libs/db-pool" }
 crypto-core = { path = "../libs/crypto-core" }
 grpc-clients = { path = "../libs/grpc-clients" }
+grpc-metrics = { path = "../libs/grpc-metrics" }
 
 [build-dependencies]
 tonic-build = "0.11"

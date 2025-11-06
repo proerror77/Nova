@@ -1,0 +1,64 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: nova-staging
+
+bases:
+  - ../../base/
+
+commonLabels:
+  app.kubernetes.io/environment: staging
+
+commonAnnotations:
+  description: "Nova Staging Environment"
+
+# Staging 特定的镜像标签
+images:
+  - name: auth-service
+    newTag: develop
+  - name: user-service
+    newTag: develop
+  - name: content-service
+    newTag: develop
+  - name: feed-service
+    newTag: develop
+  - name: media-service
+    newTag: develop
+  - name: messaging-service
+    newTag: develop
+  - name: search-service
+    newTag: develop
+  - name: streaming-service
+    newTag: develop
+
+# Staging 的副本数（较少）
+replicas:
+  - name: auth-service
+    count: 1
+  - name: user-service
+    count: 1
+  - name: content-service
+    count: 1
+  - name: messaging-service
+    count: 1
+
+# Staging 的资源限制（较小）
+patches:
+  - target:
+      kind: Deployment
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/memory
+        value: "256Mi"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/cpu
+        value: "100m"
+
+# ConfigMap 覆盖
+configMapGenerator:
+  - name: nova-config
+    behavior: merge
+    literals:
+      - ENVIRONMENT=staging
+      - LOG_LEVEL=debug
+      - DATABASE_POOL_SIZE=5

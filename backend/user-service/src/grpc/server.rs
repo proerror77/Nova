@@ -8,6 +8,7 @@
 /// - SearchUsers
 use super::nova::user_service::*;
 use crate::AppState;
+use grpc_metrics::layer::RequestGuard;
 use sqlx::{PgPool, Row};
 use std::sync::Arc;
 use tonic::{Request, Response, Status};
@@ -33,9 +34,11 @@ impl user_service_server::UserService for UserServiceImpl {
         &self,
         request: Request<GetUserProfileRequest>,
     ) -> Result<Response<GetUserProfileResponse>, Status> {
+        let guard = RequestGuard::new("user-service", "GetUserProfile");
         let req = request.into_inner();
 
         if req.user_id.is_empty() {
+            guard.complete("3");
             return Err(Status::invalid_argument("user_id is required"));
         }
 
@@ -47,32 +50,41 @@ impl user_service_server::UserService for UserServiceImpl {
         )
         .bind(&req.user_id)
         .fetch_optional(self.db.as_ref())
-        .await
-        .map_err(|e| Status::internal(format!("Database error: {}", e)))?;
+        .await;
 
         match row {
-            Some(row) => Ok(Response::new(GetUserProfileResponse {
-                profile: Some(UserProfile {
-                    id: row.get("id"),
-                    username: row.get("username"),
-                    email: row.get("email"),
-                    display_name: row.get("display_name"),
-                    bio: row.get("bio"),
-                    avatar_url: row.get("avatar_url"),
-                    cover_url: row.get("cover_url"),
-                    website: row.get("website"),
-                    location: row.get("location"),
-                    is_verified: row.get("is_verified"),
-                    is_private: row.get("is_private"),
-                    follower_count: row.get("follower_count"),
-                    following_count: row.get("following_count"),
-                    post_count: row.get("post_count"),
-                    created_at: row.get("created_at"),
-                    updated_at: row.get("updated_at"),
-                    deleted_at: row.get("deleted_at"),
-                }),
-            })),
-            None => Err(Status::not_found("User profile not found")),
+            Ok(Some(row)) => {
+                guard.complete("0");
+                Ok(Response::new(GetUserProfileResponse {
+                    profile: Some(UserProfile {
+                        id: row.get("id"),
+                        username: row.get("username"),
+                        email: row.get("email"),
+                        display_name: row.get("display_name"),
+                        bio: row.get("bio"),
+                        avatar_url: row.get("avatar_url"),
+                        cover_url: row.get("cover_url"),
+                        website: row.get("website"),
+                        location: row.get("location"),
+                        is_verified: row.get("is_verified"),
+                        is_private: row.get("is_private"),
+                        follower_count: row.get("follower_count"),
+                        following_count: row.get("following_count"),
+                        post_count: row.get("post_count"),
+                        created_at: row.get("created_at"),
+                        updated_at: row.get("updated_at"),
+                        deleted_at: row.get("deleted_at"),
+                    }),
+                }))
+            }
+            Ok(None) => {
+                guard.complete("5");
+                Err(Status::not_found("User profile not found"))
+            }
+            Err(e) => {
+                guard.complete("13");
+                Err(Status::internal(format!("Database error: {}", e)))
+            }
         }
     }
 
@@ -81,9 +93,11 @@ impl user_service_server::UserService for UserServiceImpl {
         &self,
         request: Request<GetUserProfilesByIdsRequest>,
     ) -> Result<Response<GetUserProfilesByIdsResponse>, Status> {
+        let guard = RequestGuard::new("user-service", "GetUserProfilesByIds");
         let req = request.into_inner();
 
         if req.user_ids.is_empty() {
+            guard.complete("3");
             return Err(Status::invalid_argument("user_ids cannot be empty"));
         }
 
@@ -95,33 +109,41 @@ impl user_service_server::UserService for UserServiceImpl {
         )
         .bind(&req.user_ids)
         .fetch_all(self.db.as_ref())
-        .await
-        .unwrap_or_default();
+        .await;
 
-        let profiles = rows
-            .iter()
-            .map(|row| UserProfile {
-                id: row.get("id"),
-                username: row.get("username"),
-                email: row.get("email"),
-                display_name: row.get("display_name"),
-                bio: row.get("bio"),
-                avatar_url: row.get("avatar_url"),
-                cover_url: row.get("cover_url"),
-                website: row.get("website"),
-                location: row.get("location"),
-                is_verified: row.get("is_verified"),
-                is_private: row.get("is_private"),
-                follower_count: row.get("follower_count"),
-                following_count: row.get("following_count"),
-                post_count: row.get("post_count"),
-                created_at: row.get("created_at"),
-                updated_at: row.get("updated_at"),
-                deleted_at: row.get("deleted_at"),
-            })
-            .collect();
+        match rows {
+            Ok(rows) => {
+                let profiles = rows
+                    .iter()
+                    .map(|row| UserProfile {
+                        id: row.get("id"),
+                        username: row.get("username"),
+                        email: row.get("email"),
+                        display_name: row.get("display_name"),
+                        bio: row.get("bio"),
+                        avatar_url: row.get("avatar_url"),
+                        cover_url: row.get("cover_url"),
+                        website: row.get("website"),
+                        location: row.get("location"),
+                        is_verified: row.get("is_verified"),
+                        is_private: row.get("is_private"),
+                        follower_count: row.get("follower_count"),
+                        following_count: row.get("following_count"),
+                        post_count: row.get("post_count"),
+                        created_at: row.get("created_at"),
+                        updated_at: row.get("updated_at"),
+                        deleted_at: row.get("deleted_at"),
+                    })
+                    .collect();
 
-        Ok(Response::new(GetUserProfilesByIdsResponse { profiles }))
+                guard.complete("0");
+                Ok(Response::new(GetUserProfilesByIdsResponse { profiles }))
+            }
+            Err(e) => {
+                guard.complete("13");
+                Err(Status::internal(format!("Database error: {}", e)))
+            }
+        }
     }
 
     /// UpdateUserProfile - Update user profile information
@@ -130,9 +152,11 @@ impl user_service_server::UserService for UserServiceImpl {
         &self,
         request: Request<UpdateUserProfileRequest>,
     ) -> Result<Response<UpdateUserProfileResponse>, Status> {
+        let guard = RequestGuard::new("user-service", "UpdateUserProfile");
         let req = request.into_inner();
 
         if req.user_id.is_empty() {
+            guard.complete("3");
             return Err(Status::invalid_argument("user_id is required"));
         }
 
@@ -161,39 +185,46 @@ impl user_service_server::UserService for UserServiceImpl {
         .bind(&req.location)
         .bind(&now)
         .fetch_optional(self.db.as_ref())
-        .await
-        .map_err(|e| {
-            tracing::error!(
-                error = %e,
-                user_id = %req.user_id,
-                "Failed to update user profile"
-            );
-            Status::internal("Failed to update user profile")
-        })?;
+        .await;
 
         match row {
-            Some(row) => Ok(Response::new(UpdateUserProfileResponse {
-                profile: Some(UserProfile {
-                    id: row.get("id"),
-                    username: row.get("username"),
-                    email: row.get("email"),
-                    display_name: row.get("display_name"),
-                    bio: row.get("bio"),
-                    avatar_url: row.get("avatar_url"),
-                    cover_url: row.get("cover_url"),
-                    website: row.get("website"),
-                    location: row.get("location"),
-                    is_verified: row.get("is_verified"),
-                    is_private: row.get("is_private"),
-                    follower_count: row.get("follower_count"),
-                    following_count: row.get("following_count"),
-                    post_count: row.get("post_count"),
-                    created_at: row.get("created_at"),
-                    updated_at: row.get("updated_at"),
-                    deleted_at: row.get("deleted_at"),
-                }),
-            })),
-            None => Err(Status::not_found("User profile not found")),
+            Ok(Some(row)) => {
+                guard.complete("0");
+                Ok(Response::new(UpdateUserProfileResponse {
+                    profile: Some(UserProfile {
+                        id: row.get("id"),
+                        username: row.get("username"),
+                        email: row.get("email"),
+                        display_name: row.get("display_name"),
+                        bio: row.get("bio"),
+                        avatar_url: row.get("avatar_url"),
+                        cover_url: row.get("cover_url"),
+                        website: row.get("website"),
+                        location: row.get("location"),
+                        is_verified: row.get("is_verified"),
+                        is_private: row.get("is_private"),
+                        follower_count: row.get("follower_count"),
+                        following_count: row.get("following_count"),
+                        post_count: row.get("post_count"),
+                        created_at: row.get("created_at"),
+                        updated_at: row.get("updated_at"),
+                        deleted_at: row.get("deleted_at"),
+                    }),
+                }))
+            }
+            Ok(None) => {
+                guard.complete("5");
+                Err(Status::not_found("User profile not found"))
+            }
+            Err(e) => {
+                tracing::error!(
+                    error = %e,
+                    user_id = %req.user_id,
+                    "Failed to update user profile"
+                );
+                guard.complete("13");
+                Err(Status::internal("Failed to update user profile"))
+            }
         }
     }
 
@@ -202,9 +233,11 @@ impl user_service_server::UserService for UserServiceImpl {
         &self,
         request: Request<GetUserSettingsRequest>,
     ) -> Result<Response<GetUserSettingsResponse>, Status> {
+        let guard = RequestGuard::new("user-service", "GetUserSettings");
         let req = request.into_inner();
 
         if req.user_id.is_empty() {
+            guard.complete("3");
             return Err(Status::invalid_argument("user_id is required"));
         }
 
@@ -216,26 +249,35 @@ impl user_service_server::UserService for UserServiceImpl {
         )
         .bind(&req.user_id)
         .fetch_optional(self.db.as_ref())
-        .await
-        .map_err(|e| Status::internal(format!("Database error: {}", e)))?;
+        .await;
 
         match row {
-            Some(row) => Ok(Response::new(GetUserSettingsResponse {
-                settings: Some(UserSettings {
-                    user_id: row.get("user_id"),
-                    email_notifications: row.get("email_notifications"),
-                    push_notifications: row.get("push_notifications"),
-                    marketing_emails: row.get("marketing_emails"),
-                    timezone: row.get("timezone"),
-                    language: row.get("language"),
-                    dark_mode: row.get("dark_mode"),
-                    privacy_level: row.get("privacy_level"),
-                    allow_messages: row.get("allow_messages"),
-                    created_at: row.get("created_at"),
-                    updated_at: row.get("updated_at"),
-                }),
-            })),
-            None => Err(Status::not_found("User settings not found")),
+            Ok(Some(row)) => {
+                guard.complete("0");
+                Ok(Response::new(GetUserSettingsResponse {
+                    settings: Some(UserSettings {
+                        user_id: row.get("user_id"),
+                        email_notifications: row.get("email_notifications"),
+                        push_notifications: row.get("push_notifications"),
+                        marketing_emails: row.get("marketing_emails"),
+                        timezone: row.get("timezone"),
+                        language: row.get("language"),
+                        dark_mode: row.get("dark_mode"),
+                        privacy_level: row.get("privacy_level"),
+                        allow_messages: row.get("allow_messages"),
+                        created_at: row.get("created_at"),
+                        updated_at: row.get("updated_at"),
+                    }),
+                }))
+            }
+            Ok(None) => {
+                guard.complete("5");
+                Err(Status::not_found("User settings not found"))
+            }
+            Err(e) => {
+                guard.complete("13");
+                Err(Status::internal(format!("Database error: {}", e)))
+            }
         }
     }
 
@@ -245,9 +287,11 @@ impl user_service_server::UserService for UserServiceImpl {
         &self,
         request: Request<UpdateUserSettingsRequest>,
     ) -> Result<Response<UpdateUserSettingsResponse>, Status> {
+        let guard = RequestGuard::new("user-service", "UpdateUserSettings");
         let req = request.into_inner();
 
         if req.user_id.is_empty() {
+            guard.complete("3");
             return Err(Status::invalid_argument("user_id is required"));
         }
 
@@ -280,33 +324,40 @@ impl user_service_server::UserService for UserServiceImpl {
         .bind(req.allow_messages.to_string())
         .bind(&now)
         .fetch_optional(self.db.as_ref())
-        .await
-        .map_err(|e| {
-            tracing::error!(
-                error = %e,
-                user_id = %req.user_id,
-                "Failed to update user settings"
-            );
-            Status::internal("Failed to update user settings")
-        })?;
+        .await;
 
         match row {
-            Some(row) => Ok(Response::new(UpdateUserSettingsResponse {
-                settings: Some(UserSettings {
-                    user_id: row.get("user_id"),
-                    email_notifications: row.get("email_notifications"),
-                    push_notifications: row.get("push_notifications"),
-                    marketing_emails: row.get("marketing_emails"),
-                    timezone: row.get("timezone"),
-                    language: row.get("language"),
-                    dark_mode: row.get("dark_mode"),
-                    privacy_level: row.get("privacy_level"),
-                    allow_messages: row.get("allow_messages"),
-                    created_at: row.get("created_at"),
-                    updated_at: row.get("updated_at"),
-                }),
-            })),
-            None => Err(Status::not_found("User settings not found")),
+            Ok(Some(row)) => {
+                guard.complete("0");
+                Ok(Response::new(UpdateUserSettingsResponse {
+                    settings: Some(UserSettings {
+                        user_id: row.get("user_id"),
+                        email_notifications: row.get("email_notifications"),
+                        push_notifications: row.get("push_notifications"),
+                        marketing_emails: row.get("marketing_emails"),
+                        timezone: row.get("timezone"),
+                        language: row.get("language"),
+                        dark_mode: row.get("dark_mode"),
+                        privacy_level: row.get("privacy_level"),
+                        allow_messages: row.get("allow_messages"),
+                        created_at: row.get("created_at"),
+                        updated_at: row.get("updated_at"),
+                    }),
+                }))
+            }
+            Ok(None) => {
+                guard.complete("5");
+                Err(Status::not_found("User settings not found"))
+            }
+            Err(e) => {
+                tracing::error!(
+                    error = %e,
+                    user_id = %req.user_id,
+                    "Failed to update user settings"
+                );
+                guard.complete("13");
+                Err(Status::internal("Failed to update user settings"))
+            }
         }
     }
 
@@ -316,9 +367,11 @@ impl user_service_server::UserService for UserServiceImpl {
         &self,
         request: Request<FollowUserRequest>,
     ) -> Result<Response<FollowUserResponse>, Status> {
+        let guard = RequestGuard::new("user-service", "FollowUser");
         let req = request.into_inner();
 
         if req.follower_id.is_empty() || req.followee_id.is_empty() {
+            guard.complete("3");
             return Err(Status::invalid_argument(
                 "follower_id and followee_id are required",
             ));
@@ -346,23 +399,29 @@ impl user_service_server::UserService for UserServiceImpl {
         .bind(&now)
         .bind(&now)
         .fetch_one(self.db.as_ref())
-        .await
-        .map_err(|e| {
-            tracing::error!(error = %e, "Failed to follow user");
-            Status::internal("Failed to follow user")
-        })?;
+        .await;
 
-        Ok(Response::new(FollowUserResponse {
-            relationship: Some(UserRelationship {
-                id: result.get("id"),
-                follower_id: result.get("follower_id"),
-                followee_id: result.get("followee_id"),
-                relationship_type: result.get("relationship_type"),
-                status: result.get("status"),
-                created_at: result.get("created_at"),
-                updated_at: result.get("updated_at"),
-            }),
-        }))
+        match result {
+            Ok(result) => {
+                guard.complete("0");
+                Ok(Response::new(FollowUserResponse {
+                    relationship: Some(UserRelationship {
+                        id: result.get("id"),
+                        follower_id: result.get("follower_id"),
+                        followee_id: result.get("followee_id"),
+                        relationship_type: result.get("relationship_type"),
+                        status: result.get("status"),
+                        created_at: result.get("created_at"),
+                        updated_at: result.get("updated_at"),
+                    }),
+                }))
+            }
+            Err(e) => {
+                tracing::error!(error = %e, "Failed to follow user");
+                guard.complete("13");
+                Err(Status::internal("Failed to follow user"))
+            }
+        }
     }
 
     /// UnfollowUser - Remove follow relationship
@@ -370,9 +429,11 @@ impl user_service_server::UserService for UserServiceImpl {
         &self,
         request: Request<UnfollowUserRequest>,
     ) -> Result<Response<UnfollowUserResponse>, Status> {
+        let guard = RequestGuard::new("user-service", "UnfollowUser");
         let req = request.into_inner();
 
         if req.follower_id.is_empty() || req.followee_id.is_empty() {
+            guard.complete("3");
             return Err(Status::invalid_argument(
                 "follower_id and followee_id are required",
             ));
@@ -386,12 +447,20 @@ impl user_service_server::UserService for UserServiceImpl {
         .bind(&req.follower_id)
         .bind(&req.followee_id)
         .fetch_optional(self.db.as_ref())
-        .await
-        .map_err(|e| Status::internal(format!("Database error: {}", e)))?;
+        .await;
 
-        Ok(Response::new(UnfollowUserResponse {
-            success: result.is_some(),
-        }))
+        match result {
+            Ok(result) => {
+                guard.complete("0");
+                Ok(Response::new(UnfollowUserResponse {
+                    success: result.is_some(),
+                }))
+            }
+            Err(e) => {
+                guard.complete("13");
+                Err(Status::internal(format!("Database error: {}", e)))
+            }
+        }
     }
 
     /// BlockUser - Create block relationship with state machine protection
@@ -400,9 +469,11 @@ impl user_service_server::UserService for UserServiceImpl {
         &self,
         request: Request<BlockUserRequest>,
     ) -> Result<Response<BlockUserResponse>, Status> {
+        let guard = RequestGuard::new("user-service", "BlockUser");
         let req = request.into_inner();
 
         if req.blocker_id.is_empty() || req.blocked_id.is_empty() {
+            guard.complete("3");
             return Err(Status::invalid_argument(
                 "blocker_id and blocked_id are required",
             ));
@@ -429,23 +500,29 @@ impl user_service_server::UserService for UserServiceImpl {
         .bind(&now)
         .bind(&now)
         .fetch_one(self.db.as_ref())
-        .await
-        .map_err(|e| {
-            tracing::error!(error = %e, "Failed to block user");
-            Status::internal("Failed to block user")
-        })?;
+        .await;
 
-        Ok(Response::new(BlockUserResponse {
-            relationship: Some(UserRelationship {
-                id: result.get("id"),
-                follower_id: result.get("follower_id"),
-                followee_id: result.get("followee_id"),
-                relationship_type: result.get("relationship_type"),
-                status: result.get("status"),
-                created_at: result.get("created_at"),
-                updated_at: result.get("updated_at"),
-            }),
-        }))
+        match result {
+            Ok(result) => {
+                guard.complete("0");
+                Ok(Response::new(BlockUserResponse {
+                    relationship: Some(UserRelationship {
+                        id: result.get("id"),
+                        follower_id: result.get("follower_id"),
+                        followee_id: result.get("followee_id"),
+                        relationship_type: result.get("relationship_type"),
+                        status: result.get("status"),
+                        created_at: result.get("created_at"),
+                        updated_at: result.get("updated_at"),
+                    }),
+                }))
+            }
+            Err(e) => {
+                tracing::error!(error = %e, "Failed to block user");
+                guard.complete("13");
+                Err(Status::internal("Failed to block user"))
+            }
+        }
     }
 
     /// UnblockUser - Remove block relationship
@@ -453,9 +530,11 @@ impl user_service_server::UserService for UserServiceImpl {
         &self,
         request: Request<UnblockUserRequest>,
     ) -> Result<Response<UnblockUserResponse>, Status> {
+        let guard = RequestGuard::new("user-service", "UnblockUser");
         let req = request.into_inner();
 
         if req.blocker_id.is_empty() || req.blocked_id.is_empty() {
+            guard.complete("3");
             return Err(Status::invalid_argument(
                 "blocker_id and blocked_id are required",
             ));
@@ -469,12 +548,20 @@ impl user_service_server::UserService for UserServiceImpl {
         .bind(&req.blocker_id)
         .bind(&req.blocked_id)
         .fetch_optional(self.db.as_ref())
-        .await
-        .map_err(|e| Status::internal(format!("Database error: {}", e)))?;
+        .await;
 
-        Ok(Response::new(UnblockUserResponse {
-            success: result.is_some(),
-        }))
+        match result {
+            Ok(result) => {
+                guard.complete("0");
+                Ok(Response::new(UnblockUserResponse {
+                    success: result.is_some(),
+                }))
+            }
+            Err(e) => {
+                guard.complete("13");
+                Err(Status::internal(format!("Database error: {}", e)))
+            }
+        }
     }
 
     /// GetUserFollowers - Get list of followers with pagination
@@ -482,9 +569,11 @@ impl user_service_server::UserService for UserServiceImpl {
         &self,
         request: Request<GetUserFollowersRequest>,
     ) -> Result<Response<GetUserFollowersResponse>, Status> {
+        let guard = RequestGuard::new("user-service", "GetUserFollowers");
         let req = request.into_inner();
 
         if req.user_id.is_empty() {
+            guard.complete("3");
             return Err(Status::invalid_argument("user_id is required"));
         }
 
@@ -519,36 +608,44 @@ impl user_service_server::UserService for UserServiceImpl {
         .bind(limit)
         .bind(offset)
         .fetch_all(self.db.as_ref())
-        .await
-        .unwrap_or_default();
+        .await;
 
-        let profiles = rows
-            .iter()
-            .map(|row| UserProfile {
-                id: row.get("id"),
-                username: row.get("username"),
-                email: row.get("email"),
-                display_name: row.get("display_name"),
-                bio: row.get("bio"),
-                avatar_url: row.get("avatar_url"),
-                cover_url: row.get("cover_url"),
-                website: row.get("website"),
-                location: row.get("location"),
-                is_verified: row.get("is_verified"),
-                is_private: row.get("is_private"),
-                follower_count: row.get("follower_count"),
-                following_count: row.get("following_count"),
-                post_count: row.get("post_count"),
-                created_at: row.get("created_at"),
-                updated_at: row.get("updated_at"),
-                deleted_at: row.get("deleted_at"),
-            })
-            .collect();
+        match rows {
+            Ok(rows) => {
+                let profiles = rows
+                    .iter()
+                    .map(|row| UserProfile {
+                        id: row.get("id"),
+                        username: row.get("username"),
+                        email: row.get("email"),
+                        display_name: row.get("display_name"),
+                        bio: row.get("bio"),
+                        avatar_url: row.get("avatar_url"),
+                        cover_url: row.get("cover_url"),
+                        website: row.get("website"),
+                        location: row.get("location"),
+                        is_verified: row.get("is_verified"),
+                        is_private: row.get("is_private"),
+                        follower_count: row.get("follower_count"),
+                        following_count: row.get("following_count"),
+                        post_count: row.get("post_count"),
+                        created_at: row.get("created_at"),
+                        updated_at: row.get("updated_at"),
+                        deleted_at: row.get("deleted_at"),
+                    })
+                    .collect();
 
-        Ok(Response::new(GetUserFollowersResponse {
-            profiles,
-            total_count: total_count as i32,
-        }))
+                guard.complete("0");
+                Ok(Response::new(GetUserFollowersResponse {
+                    profiles,
+                    total_count: total_count as i32,
+                }))
+            }
+            Err(e) => {
+                guard.complete("13");
+                Err(Status::internal(format!("Database error: {}", e)))
+            }
+        }
     }
 
     /// GetUserFollowing - Get list of users this user is following
@@ -556,9 +653,11 @@ impl user_service_server::UserService for UserServiceImpl {
         &self,
         request: Request<GetUserFollowingRequest>,
     ) -> Result<Response<GetUserFollowingResponse>, Status> {
+        let guard = RequestGuard::new("user-service", "GetUserFollowing");
         let req = request.into_inner();
 
         if req.user_id.is_empty() {
+            guard.complete("3");
             return Err(Status::invalid_argument("user_id is required"));
         }
 
@@ -593,36 +692,44 @@ impl user_service_server::UserService for UserServiceImpl {
         .bind(limit)
         .bind(offset)
         .fetch_all(self.db.as_ref())
-        .await
-        .unwrap_or_default();
+        .await;
 
-        let profiles = rows
-            .iter()
-            .map(|row| UserProfile {
-                id: row.get("id"),
-                username: row.get("username"),
-                email: row.get("email"),
-                display_name: row.get("display_name"),
-                bio: row.get("bio"),
-                avatar_url: row.get("avatar_url"),
-                cover_url: row.get("cover_url"),
-                website: row.get("website"),
-                location: row.get("location"),
-                is_verified: row.get("is_verified"),
-                is_private: row.get("is_private"),
-                follower_count: row.get("follower_count"),
-                following_count: row.get("following_count"),
-                post_count: row.get("post_count"),
-                created_at: row.get("created_at"),
-                updated_at: row.get("updated_at"),
-                deleted_at: row.get("deleted_at"),
-            })
-            .collect();
+        match rows {
+            Ok(rows) => {
+                let profiles = rows
+                    .iter()
+                    .map(|row| UserProfile {
+                        id: row.get("id"),
+                        username: row.get("username"),
+                        email: row.get("email"),
+                        display_name: row.get("display_name"),
+                        bio: row.get("bio"),
+                        avatar_url: row.get("avatar_url"),
+                        cover_url: row.get("cover_url"),
+                        website: row.get("website"),
+                        location: row.get("location"),
+                        is_verified: row.get("is_verified"),
+                        is_private: row.get("is_private"),
+                        follower_count: row.get("follower_count"),
+                        following_count: row.get("following_count"),
+                        post_count: row.get("post_count"),
+                        created_at: row.get("created_at"),
+                        updated_at: row.get("updated_at"),
+                        deleted_at: row.get("deleted_at"),
+                    })
+                    .collect();
 
-        Ok(Response::new(GetUserFollowingResponse {
-            profiles,
-            total_count: total_count as i32,
-        }))
+                guard.complete("0");
+                Ok(Response::new(GetUserFollowingResponse {
+                    profiles,
+                    total_count: total_count as i32,
+                }))
+            }
+            Err(e) => {
+                guard.complete("13");
+                Err(Status::internal(format!("Database error: {}", e)))
+            }
+        }
     }
 
     /// CheckUserRelationship - Check relationship between two users
@@ -630,9 +737,11 @@ impl user_service_server::UserService for UserServiceImpl {
         &self,
         request: Request<CheckUserRelationshipRequest>,
     ) -> Result<Response<CheckUserRelationshipResponse>, Status> {
+        let guard = RequestGuard::new("user-service", "CheckUserRelationship");
         let req = request.into_inner();
 
         if req.follower_id.is_empty() || req.followee_id.is_empty() {
+            guard.complete("3");
             return Err(Status::invalid_argument(
                 "follower_id and followee_id are required",
             ));
@@ -646,18 +755,27 @@ impl user_service_server::UserService for UserServiceImpl {
         .bind(&req.follower_id)
         .bind(&req.followee_id)
         .fetch_optional(self.db.as_ref())
-        .await
-        .map_err(|e| Status::internal(format!("Database error: {}", e)))?;
+        .await;
 
         match row {
-            Some(row) => Ok(Response::new(CheckUserRelationshipResponse {
-                relationship_type: row.get("relationship_type"),
-                status: row.get("status"),
-            })),
-            None => Ok(Response::new(CheckUserRelationshipResponse {
-                relationship_type: "none".to_string(),
-                status: "".to_string(),
-            })),
+            Ok(Some(row)) => {
+                guard.complete("0");
+                Ok(Response::new(CheckUserRelationshipResponse {
+                    relationship_type: row.get("relationship_type"),
+                    status: row.get("status"),
+                }))
+            }
+            Ok(None) => {
+                guard.complete("0");
+                Ok(Response::new(CheckUserRelationshipResponse {
+                    relationship_type: "none".to_string(),
+                    status: "".to_string(),
+                }))
+            }
+            Err(e) => {
+                guard.complete("13");
+                Err(Status::internal(format!("Database error: {}", e)))
+            }
         }
     }
 
@@ -666,9 +784,11 @@ impl user_service_server::UserService for UserServiceImpl {
         &self,
         request: Request<SearchUsersRequest>,
     ) -> Result<Response<SearchUsersResponse>, Status> {
+        let guard = RequestGuard::new("user-service", "SearchUsers");
         let req = request.into_inner();
 
         if req.query.is_empty() {
+            guard.complete("3");
             return Err(Status::invalid_argument("query is required"));
         }
 
@@ -703,35 +823,43 @@ impl user_service_server::UserService for UserServiceImpl {
         .bind(limit)
         .bind(offset)
         .fetch_all(self.db.as_ref())
-        .await
-        .unwrap_or_default();
+        .await;
 
-        let profiles = rows
-            .iter()
-            .map(|row| UserProfile {
-                id: row.get("id"),
-                username: row.get("username"),
-                email: row.get("email"),
-                display_name: row.get("display_name"),
-                bio: row.get("bio"),
-                avatar_url: row.get("avatar_url"),
-                cover_url: row.get("cover_url"),
-                website: row.get("website"),
-                location: row.get("location"),
-                is_verified: row.get("is_verified"),
-                is_private: row.get("is_private"),
-                follower_count: row.get("follower_count"),
-                following_count: row.get("following_count"),
-                post_count: row.get("post_count"),
-                created_at: row.get("created_at"),
-                updated_at: row.get("updated_at"),
-                deleted_at: row.get("deleted_at"),
-            })
-            .collect();
+        match rows {
+            Ok(rows) => {
+                let profiles = rows
+                    .iter()
+                    .map(|row| UserProfile {
+                        id: row.get("id"),
+                        username: row.get("username"),
+                        email: row.get("email"),
+                        display_name: row.get("display_name"),
+                        bio: row.get("bio"),
+                        avatar_url: row.get("avatar_url"),
+                        cover_url: row.get("cover_url"),
+                        website: row.get("website"),
+                        location: row.get("location"),
+                        is_verified: row.get("is_verified"),
+                        is_private: row.get("is_private"),
+                        follower_count: row.get("follower_count"),
+                        following_count: row.get("following_count"),
+                        post_count: row.get("post_count"),
+                        created_at: row.get("created_at"),
+                        updated_at: row.get("updated_at"),
+                        deleted_at: row.get("deleted_at"),
+                    })
+                    .collect();
 
-        Ok(Response::new(SearchUsersResponse {
-            profiles,
-            total_count: total_count as i32,
-        }))
+                guard.complete("0");
+                Ok(Response::new(SearchUsersResponse {
+                    profiles,
+                    total_count: total_count as i32,
+                }))
+            }
+            Err(e) => {
+                guard.complete("13");
+                Err(Status::internal(format!("Database error: {}", e)))
+            }
+        }
     }
 }

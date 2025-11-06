@@ -1,0 +1,121 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "elbv2:DescribeLoadBalancers",
+        "elbv2:DescribeLoadBalancerAttributes",
+        "elbv2:DescribeListeners",
+        "elbv2:DescribeListenerCertificates",
+        "elbv2:DescribeSSLPolicies",
+        "elbv2:DescribeRules",
+        "elbv2:DescribeTargetGroups",
+        "elbv2:DescribeTargetGroupAttributes",
+        "elbv2:DescribeTags",
+        "elbv2:DescribeNetworkInterfaces"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "ec2:DescribeSecurityGroups",
+        "ec2:DescribeNetworkInterfaces",
+        "ec2:DescribeInstances",
+        "ec2:DescribeSubnets",
+        "ec2:DescribeVpcs",
+        "ec2:GetSecurityGroupsForVpc",
+        "elasticloadbalancing:DescribeLoadBalancers",
+        "elasticloadbalancing:DescribeTargetGroups"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "elbv2:CreateLoadBalancer",
+        "elbv2:CreateTargetGroup"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "aws:RequestedRegion": "ap-northeast-1"
+        }
+      }
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "elbv2:CreateListener",
+        "elbv2:DeleteListener",
+        "elbv2:CreateRule",
+        "elbv2:DeleteRule",
+        "elbv2:ModifyListener",
+        "elbv2:ModifyLoadBalancerAttributes",
+        "elbv2:SetIpAddressType",
+        "elbv2:SetSecurityGroups",
+        "elbv2:SetSubnets",
+        "elbv2:DeleteTargetGroup",
+        "elbv2:ModifyTargetGroup",
+        "elbv2:ModifyTargetGroupAttributes",
+        "elbv2:ModifyRule"
+      ],
+      "Resource": "arn:aws:elasticloadbalancing:*:*:*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "elbv2:RegisterTargets",
+        "elbv2:DeregisterTargets"
+      ],
+      "Resource": "arn:aws:elasticloadbalancing:*:*:targetgroup/*/*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "ec2:AuthorizeSecurityGroupIngress",
+        "ec2:RevokeSecurityGroupIngress",
+        "ec2:AuthorizeSecurityGroupEgress",
+        "ec2:RevokeSecurityGroupEgress"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "ec2:CreateSecurityGroup"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "ec2:CreateTags"
+      ],
+      "Resource": "arn:aws:ec2:*:*:security-group/*",
+      "Condition": {
+        "StringEquals": {
+          "ec2:CreateAction": "CreateSecurityGroup"
+        },
+        "Null": {
+          "aws:RequestTag/elbv2.k8s.aws/cluster": "false"
+        }
+      }
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "ec2:CreateTags",
+        "ec2:DeleteTags"
+      ],
+      "Resource": "arn:aws:ec2:*:*:security-group/*",
+      "Condition": {
+        "Null": {
+          "aws:RequestTag/elbv2.k8s.aws/cluster": "true",
+          "aws:ResourceTag/elbv2.k8s.aws/cluster": "false"
+        }
+      }
+    }
+  ]
+}
