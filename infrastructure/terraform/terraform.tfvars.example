@@ -1,0 +1,44 @@
+# ============================================================================
+# AWS Configuration
+# ============================================================================
+aws_region = "ap-northeast-1"
+environment = "staging"
+
+# ============================================================================
+# VPC Configuration
+# ============================================================================
+vpc_cidr             = "10.0.0.0/16"
+availability_zones   = ["ap-northeast-1a", "ap-northeast-1c"]
+public_subnet_cidrs  = ["10.0.1.0/24", "10.0.2.0/24"]
+private_subnet_cidrs = ["10.0.10.0/24", "10.0.11.0/24"]
+
+# ============================================================================
+# EKS Configuration
+# ============================================================================
+cluster_name           = "nova-eks"
+kubernetes_version     = "1.28"
+node_group_min_size    = 2
+node_group_desired_size = 3
+node_group_max_size    = 10
+node_instance_types    = ["t3.medium", "t3.large"]
+
+# ============================================================================
+# ECR Configuration
+# ============================================================================
+ecr_registry_alias = "nova"
+
+# ============================================================================
+# GitHub Configuration (for GitHub Actions OIDC integration)
+# ============================================================================
+github_oidc_provider_arn = ""  # Set this after creating GitHub OIDC provider
+github_repo_owner        = "proerror77"
+github_repo_name         = "Nova"
+
+# ============================================================================
+# Feature Flags
+# ============================================================================
+enable_monitoring        = true
+enable_logging           = true
+enable_ingress_controller = true
+enable_cert_manager      = true
+enable_external_dns      = false

@@ -1,6 +1,6 @@
 # Nova User Service - Backend
 
-高性能 Rust 微服务架构的用户认证服务,基于 Actix-web + PostgreSQL + Redis 构建。
+面向用户资料、社交关系与偏好管理的 Rust 微服务，基于 Actix-web + PostgreSQL + Redis 构建。
 
 ## 技术栈
 
@@ -19,8 +19,9 @@ backend/
 ├── Cargo.toml                 # Workspace 配置
 ├── Dockerfile                 # 多阶段生产构建
 ├── migrations/                # 数据库迁移文件
-│   ├── 001_initial_schema.sql
-│   └── 002_add_auth_logs.sql
+│   ├── 050_search_suggestions_and_history.sql
+│   ├── 051_moderation_and_reports.sql
+│   └── 052_user_core_tables.sql
 └── user-service/
     ├── Cargo.toml            # 服务依赖配置
     └── src/
@@ -30,8 +31,12 @@ backend/
         ├── error.rs          # 错误处理
         ├── db/               # 数据库连接和迁移
         ├── handlers/         # HTTP 请求处理器
-        │   ├── auth.rs       # 认证端点
-        │   └── health.rs     # 健康检查端点
+        │   ├── health.rs     # 健康检查端点
+        │   ├── users.rs      # 用户资料
+        │   ├── relationships.rs # 关注/粉丝
+        │   ├── preferences.rs   # 偏好设置
+        │   ├── moderation.rs    # 社群治理接口
+        │   └── events.rs     # 事件回调
         ├── middleware/       # 中间件
         ├── models/           # 数据模型
         ├── services/         # 业务逻辑层

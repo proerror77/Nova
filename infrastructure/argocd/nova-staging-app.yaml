@@ -1,0 +1,41 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: nova-staging
+  namespace: argocd
+spec:
+  project: default
+
+  source:
+    repoURL: https://github.com/proerror77/Nova.git
+    targetRevision: develop
+    path: k8s/overlays/staging
+    kustomize:
+      version: v5.0.0
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: nova-staging
+
+  syncPolicy:
+    automated:
+      prune: true      # 自动删除 ArgoCD 管理的资源
+      selfHeal: true   # 自动修复偏差
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+
+  # 通知和监控
+  info:
+    - name: 'GitHub Repo'
+      value: 'https://github.com/proerror77/Nova'
+    - name: 'Documentation'
+      value: 'https://github.com/proerror77/Nova/blob/develop/README.md'
+
+  # 健康评估
+  revisionHistoryLimit: 10

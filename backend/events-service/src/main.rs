@@ -2,8 +2,10 @@ use actix_web::{web, App, HttpServer};
 use tonic::transport::Server as GrpcServer;
 use tonic_health::server::health_reporter;
 use std::io;
+use std::sync::Arc;
 use db_pool::{create_pool as create_pg_pool, DbConfig as DbPoolConfig};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+use events_service::services::{OutboxConfig, OutboxPublisher};
 
 #[actix_web::main]
 async fn main() -> io::Result<()> {
@@ -11,12 +13,12 @@ async fn main() -> io::Result<()> {
     tracing_subscriber::registry()
         .with(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "info,actix_web=debug".into()),
+                .unwrap_or_else(|_| "info,actix_web=debug,events_service=debug".into()),
         )
         .with(tracing_subscriber::fmt::layer())
         .init();
 
-    tracing::info!("Starting service");
+    tracing::info!("Starting events-service");
 
     // Initialize database (standardized pool)
     let mut cfg = DbPoolConfig::from_env().unwrap_or_default();
@@ -25,13 +27,66 @@ async fn main() -> io::Result<()> {
     }
     if cfg.max_connections < 20 { cfg.max_connections = 20; }
     cfg.log_config();
-    let db_pool = create_pg_pool(cfg).await.ok();
+
+    let db_pool = create_pg_pool(cfg).await
+        .map_err(|e| {
+            tracing::error!("Failed to create database pool: {}", e);
+            std::io::Error::new(std::io::ErrorKind::Other, e)
+        })?;
+
+    tracing::info!("Database pool created successfully");
+
+    // Run migrations
+    tracing::info!("Running database migrations...");
+    sqlx::migrate!("./migrations")
+        .run(&db_pool)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to run migrations: {}", e);
+            std::io::Error::new(std::io::ErrorKind::Other, e)
+        })?;
+    tracing::info!("Migrations completed successfully");
+
+    // Create AppState for gRPC service
+    let app_state = Arc::new(events_service::grpc::AppState::new(db_pool.clone()));
+
+    // Start OutboxPublisher in background
+    let outbox_config = OutboxConfig::from_env();
+    tracing::info!(
+        "Starting OutboxPublisher (brokers: {}, batch_size: {})",
+        outbox_config.kafka_brokers,
+        outbox_config.batch_size
+    );
+
+    let publisher = match OutboxPublisher::new(db_pool.clone(), outbox_config) {
+        Ok(p) => Arc::new(p),
+        Err(e) => {
+            tracing::error!("Failed to create OutboxPublisher: {:?}", e);
+            tracing::warn!("Events service will run without Kafka publishing");
+            // Continue without publisher - events will be saved to outbox but not published
+            return Ok(());
+        }
+    };
+
+    // Spawn OutboxPublisher background task
+    let publisher_clone = Arc::clone(&publisher);
+    tokio::spawn(async move {
+        tracing::info!("OutboxPublisher task started");
+        if let Err(e) = publisher_clone.start().await {
+            tracing::error!("OutboxPublisher failed: {:?}", e);
+        }
+    });
 
     // Compute HTTP and gRPC ports
     let http_port: u16 = std::env::var("PORT").ok().and_then(|s| s.parse().ok()).unwrap_or(8000);
     let grpc_port: u16 = http_port + 1000;
+
+    tracing::info!("HTTP port: {}, gRPC port: {}", http_port, grpc_port);
+
     // Start gRPC server in background on http_port + 1000
     let grpc_addr: std::net::SocketAddr = format!("0.0.0.0:{}", grpc_port).parse().unwrap();
+    let app_state_clone = Arc::clone(&app_state);
+
     tokio::spawn(async move {
         let (mut health, health_service) = health_reporter();
         health.set_serving::<events_service::grpc::nova::events_service::v1::events_service_server::EventsServiceServer<events_service::grpc::EventsServiceImpl>>().await;
@@ -39,15 +94,26 @@ async fn main() -> io::Result<()> {
         // Server-side correlation-id extractor interceptor
         fn server_interceptor(mut req: tonic::Request<()>) -> Result<tonic::Request<()>, tonic::Status> {
             if let Some(val) = req.metadata().get("correlation-id") {
-                if let Ok(s) = val.to_str() { req.extensions_mut().insert::<String>(s.to_string()); }
+                if let Ok(s) = val.to_str() {
+                    let correlation_id = s.to_string();
+                    req.extensions_mut().insert::<String>(correlation_id);
+                }
             }
             Ok(req)
         }
 
-        let svc = events_service::grpc::EventsServiceImpl::default();
+        let svc = events_service::grpc::EventsServiceImpl::new(app_state_clone);
+
+        tracing::info!("Starting gRPC server on {}", grpc_addr);
+
         if let Err(e) = GrpcServer::builder()
             .add_service(health_service)
-            .add_service(events_service::grpc::nova::events_service::v1::events_service_server::EventsServiceServer::with_interceptor(svc, server_interceptor))
+            .add_service(
+                events_service::grpc::nova::events_service::v1::events_service_server::EventsServiceServer::with_interceptor(
+                    svc,
+                    server_interceptor
+                )
+            )
             .serve(grpc_addr)
             .await
         {
@@ -56,8 +122,14 @@ async fn main() -> io::Result<()> {
     });
 
     // Start HTTP server
-    HttpServer::new(move || App::new().route("/health", web::get().to(|| async { "OK" })))
-        .bind(("0.0.0.0", http_port))?
-        .run()
-        .await
+    tracing::info!("Starting HTTP server on 0.0.0.0:{}", http_port);
+
+    HttpServer::new(move || {
+        App::new()
+            .route("/health", web::get().to(|| async { "OK" }))
+            .route("/ready", web::get().to(|| async { "READY" }))
+    })
+    .bind(("0.0.0.0", http_port))?
+    .run()
+    .await
 }

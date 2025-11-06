@@ -40,11 +40,16 @@ futures = "0.3"
 actix-multipart = "0.4"
 image = "0.24"
 bytes = "1.5"
+
+# Shared libraries
 crypto-core = { path = "../libs/crypto-core" }
 error-types = { path = "../libs/error-types" }
 db-pool = { path = "../libs/db-pool" }
 redis-utils = { path = "../libs/redis-utils" }
 actix-middleware = { path = "../libs/actix-middleware" }
+grpc-metrics = { path = "../libs/grpc-metrics" }
+
+# AWS dependencies
 aws-sdk-s3 = "1.9"
 aws-config = "1.1"
 

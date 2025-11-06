@@ -8,6 +8,7 @@
 //! - Broadcast chat messages
 //! - Update streaming profiles
 
+use grpc_metrics::layer::RequestGuard;
 use sqlx::PgPool;
 use tonic::{Request, Response, Status};
 use tracing::{debug, info};
@@ -48,6 +49,7 @@ impl streaming_service_server::StreamingService for StreamingServiceImpl {
         &self,
         request: Request<StartStreamRequest>,
     ) -> Result<Response<StartStreamResponse>, Status> {
+        let guard = RequestGuard::new("streaming-service", "StartStream");
         let req = request.into_inner();
         info!("Starting stream for user: {}", req.user_id);
 
@@ -57,6 +59,7 @@ impl streaming_service_server::StreamingService for StreamingServiceImpl {
             .unwrap_or_default()
             .as_secs() as i64;
 
+        guard.complete("0");
         Ok(Response::new(StartStreamResponse {
             stream_id: uuid::Uuid::new_v4().to_string(),
             ingest_url: "rtmp://ingest.example.com/live".to_string(),
@@ -70,6 +73,7 @@ impl streaming_service_server::StreamingService for StreamingServiceImpl {
         &self,
         request: Request<StopStreamRequest>,
     ) -> Result<Response<StopStreamResponse>, Status> {
+        let guard = RequestGuard::new("streaming-service", "StopStream");
         let req = request.into_inner();
         info!("Stopping stream: {}", req.stream_id);
 
@@ -79,6 +83,7 @@ impl streaming_service_server::StreamingService for StreamingServiceImpl {
             .unwrap_or_default()
             .as_secs() as i64;
 
+        guard.complete("0");
         Ok(Response::new(StopStreamResponse {
             stream_id: req.stream_id,
             success: true,
@@ -90,6 +95,7 @@ impl streaming_service_server::StreamingService for StreamingServiceImpl {
         &self,
         request: Request<GetStreamStatusRequest>,
     ) -> Result<Response<StreamStatus>, Status> {
+        let guard = RequestGuard::new("streaming-service", "GetStreamStatus");
         let req = request.into_inner();
         debug!("Getting status for stream: {}", req.stream_id);
 
@@ -99,6 +105,7 @@ impl streaming_service_server::StreamingService for StreamingServiceImpl {
             .unwrap_or_default()
             .as_secs() as i64;
 
+        guard.complete("0");
         Ok(Response::new(StreamStatus {
             stream_id: req.stream_id,
             user_id: "user_placeholder".to_string(),
@@ -116,6 +123,7 @@ impl streaming_service_server::StreamingService for StreamingServiceImpl {
         &self,
         request: Request<GetStreamingManifestRequest>,
     ) -> Result<Response<GetStreamingManifestResponse>, Status> {
+        let guard = RequestGuard::new("streaming-service", "GetStreamingManifest");
         let req = request.into_inner();
         debug!(
             "Getting manifest for stream: {} (format: {})",
@@ -128,6 +136,7 @@ impl streaming_service_server::StreamingService for StreamingServiceImpl {
             .unwrap_or_default()
             .as_secs() as i64;
 
+        guard.complete("0");
         Ok(Response::new(GetStreamingManifestResponse {
             manifest_url: format!("https://stream.example.com/{}/manifest.m3u8", req.stream_id),
             content: "".to_string(),
@@ -139,10 +148,12 @@ impl streaming_service_server::StreamingService for StreamingServiceImpl {
         &self,
         request: Request<UpdateStreamingProfileRequest>,
     ) -> Result<Response<UpdateStreamingProfileResponse>, Status> {
+        let guard = RequestGuard::new("streaming-service", "UpdateStreamingProfile");
         let req = request.into_inner();
         info!("Updating profile for stream: {}", req.stream_id);
 
         // TODO: Implement actual profile update logic
+        guard.complete("0");
         Ok(Response::new(UpdateStreamingProfileResponse {
             stream_id: req.stream_id,
             success: true,
@@ -153,10 +164,12 @@ impl streaming_service_server::StreamingService for StreamingServiceImpl {
         &self,
         request: Request<GetStreamAnalyticsRequest>,
     ) -> Result<Response<GetStreamAnalyticsResponse>, Status> {
+        let guard = RequestGuard::new("streaming-service", "GetStreamAnalytics");
         let req = request.into_inner();
         debug!("Getting analytics for stream: {}", req.stream_id);
 
         // TODO: Implement actual analytics retrieval logic
+        guard.complete("0");
         Ok(Response::new(GetStreamAnalyticsResponse {
             analytics: Some(StreamAnalytics {
                 stream_id: req.stream_id,
@@ -174,6 +187,7 @@ impl streaming_service_server::StreamingService for StreamingServiceImpl {
         &self,
         request: Request<BroadcastChatMessageRequest>,
     ) -> Result<Response<BroadcastChatMessageResponse>, Status> {
+        let guard = RequestGuard::new("streaming-service", "BroadcastChatMessage");
         let req = request.into_inner();
         debug!(
             "Broadcasting message to stream: {} from user: {}",
@@ -186,6 +200,7 @@ impl streaming_service_server::StreamingService for StreamingServiceImpl {
             .unwrap_or_default()
             .as_secs() as i64;
 
+        guard.complete("0");
         Ok(Response::new(BroadcastChatMessageResponse {
             message_id: uuid::Uuid::new_v4().to_string(),
             success: true,

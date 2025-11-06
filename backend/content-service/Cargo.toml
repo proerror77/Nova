@@ -53,10 +53,13 @@ urlencoding.workspace = true
 clickhouse.workspace = true
 utoipa.workspace = true
 utoipa-swagger-ui = { version = "5", features = ["actix-web"] }
+
+# Shared libraries
 crypto-core = { path = "../libs/crypto-core" }
 error-types = { path = "../libs/error-types" }
 redis-utils = { path = "../libs/redis-utils" }
 db-pool = { path = "../libs/db-pool" }
+grpc-metrics = { path = "../libs/grpc-metrics" }
 
 # Service-specific dependencies
 futures = "0.3"

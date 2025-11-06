@@ -1,0 +1,67 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# 命名空间
+namespace: nova-production
+
+# 通用标签
+commonLabels:
+  app.kubernetes.io/name: nova
+  app.kubernetes.io/version: "1.0.0"
+  app.kubernetes.io/managed-by: argocd
+
+commonAnnotations:
+  description: "Nova Microservices Platform"
+
+# 包含资源
+resources:
+  - ./microservices/
+
+# Kustomize overlays 用于环境配置
+bases:
+  - ./base/
+
+# 配置管理
+configMapGenerator:
+  - name: nova-config
+    literals:
+      - LOG_LEVEL=info
+      - ENVIRONMENT=production
+
+# 镜像前缀（用于 ECR）
+images:
+  - name: auth-service
+    newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/auth-service
+    newTag: latest
+  - name: user-service
+    newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/user-service
+    newTag: latest
+  - name: content-service
+    newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/content-service
+    newTag: latest
+  - name: feed-service
+    newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/feed-service
+    newTag: latest
+  - name: media-service
+    newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/media-service
+    newTag: latest
+  - name: messaging-service
+    newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/messaging-service
+    newTag: latest
+  - name: search-service
+    newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/search-service
+    newTag: latest
+  - name: streaming-service
+    newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/streaming-service
+    newTag: latest
+
+# 副本数
+replicas:
+  - name: auth-service
+    count: 2
+  - name: user-service
+    count: 2
+  - name: content-service
+    count: 2
+  - name: messaging-service
+    count: 2

@@ -19,6 +19,7 @@ members = [
     "backend/libs/error-handling",
     "backend/libs/error-types",
     "backend/libs/event-schema",
+    "backend/libs/grpc-metrics",
     "backend/libs/nova-apns-shared",
     "backend/libs/nova-fcm-shared",
     "backend/libs/grpc-clients",
@@ -130,9 +131,14 @@ ndarray = "0.15"
 # HTTP utilities for streaming
 http = "0.2"
 
+# Tower - Service abstraction layer
+tower = "0.4"
+pin-project = "1.1"
+
 # ONNX Model Serving
 tract-onnx = "0.21"
 once_cell = "1.19"
+lazy_static = "1.4"
 
 # API Documentation
 utoipa = "4.2"

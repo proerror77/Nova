@@ -1,4 +1,4 @@
-use crate::elasticsearch::{ElasticsearchClient, ElasticsearchError, MessageDocument};
+use crate::services::elasticsearch::{ElasticsearchClient, ElasticsearchError, MessageDocument};
 use chrono::{DateTime, Utc};
 use serde::de::{Deserializer, Error as DeError};
 use serde::Deserialize;

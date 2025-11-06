@@ -3,7 +3,7 @@
 ## 服务端口一览表
 
 ```
-8080  → user-service      (认证、关系、Feed)
+8080  → user-service      (用户资料、关系、Feed 代理)
 8081  → content-service   (发布、评论、故事)
 8082  → media-service     (上传、视频、Reels)
 8083  → auth-service
@@ -24,7 +24,7 @@
 
 ## API 速查表
 
-### 认证相关
+### 认证相关（由 auth-service 提供）
 ```bash
 # 注册
 POST /api/v1/auth/register

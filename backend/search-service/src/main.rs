@@ -5,9 +5,11 @@ use actix_web::{
 };
 use error_types::ErrorResponse;
 use redis::aio::ConnectionManager;
-use search_service::elasticsearch::{ElasticsearchClient, ElasticsearchError, PostDocument};
+use search_service::services::elasticsearch::{ElasticsearchClient, ElasticsearchError, PostDocument};
+use search_service::services::{ClickHouseClient, RedisCache};
 use search_service::events::consumers::EventContext;
 use search_service::events::kafka::{spawn_message_consumer, KafkaConsumerConfig};
+use search_service::events::SearchIndexConsumer;
 use search_service::openapi::ApiDoc;
 use search_service::search_suggestions::SearchSuggestionsService;
 use serde::{Deserialize, Serialize};
@@ -101,6 +103,8 @@ struct SearchParams {
     q: String,
     #[serde(default = "default_limit")]
     limit: i64,
+    #[serde(default)]
+    offset: i64,
 }
 
 fn default_limit() -> i64 {
@@ -149,8 +153,8 @@ impl From<PostDocument> for PostResult {
         Self {
             id: doc.id,
             user_id: doc.user_id,
-            caption: doc.caption,
-            created_at: doc.created_at,
+            caption: doc.content,
+            created_at: Some(doc.created_at),
         }
     }
 }
@@ -243,7 +247,7 @@ async fn search_posts(
     }
 
     if let Some(search_backend) = &state.search_backend {
-        match search_backend.search_posts(&params.q, params.limit).await {
+        match search_backend.search_posts(&params.q, params.limit, params.offset).await {
             Ok(documents) => {
                 let posts: Vec<PostResult> = documents.into_iter().map(PostResult::from).collect();
                 let count = posts.len();
@@ -387,8 +391,12 @@ async fn reindex_posts(
         let doc = PostDocument {
             id: post.id,
             user_id: post.user_id,
-            caption: post.caption.clone(),
-            created_at: post.created_at,
+            title: None,
+            content: post.caption.clone(),
+            tags: vec![],
+            likes_count: 0,
+            comments_count: 0,
+            created_at: post.created_at.unwrap_or(chrono::Utc::now()),
         };
         search_backend.index_post(&doc).await?;
     }
@@ -756,19 +764,49 @@ async fn main() -> std::io::Result<()> {
 
     tracing::info!("Redis connection established");
 
+    // Initialize ClickHouse client
+    let clickhouse_url = std::env::var("CLICKHOUSE_URL")
+        .unwrap_or_else(|_| "http://localhost:8123".to_string());
+    let ch_client = match ClickHouseClient::new(&clickhouse_url).await {
+        Ok(client) => {
+            tracing::info!("ClickHouse connected: {}", clickhouse_url);
+            Some(Arc::new(client))
+        }
+        Err(err) => {
+            tracing::warn!("Failed to initialize ClickHouse client: {}", err);
+            None
+        }
+    };
+
+    // Initialize Redis cache
+    let redis_cache = match RedisCache::new(&redis_url, 3600).await {
+        Ok(cache) => {
+            tracing::info!("Redis cache initialized");
+            Some(Arc::new(cache))
+        }
+        Err(err) => {
+            tracing::warn!("Failed to initialize Redis cache: {}", err);
+            None
+        }
+    };
+
     // Create application state
     let search_backend = match std::env::var("ELASTICSEARCH_URL") {
         Ok(url) if !url.is_empty() => {
-            let index_name = std::env::var("ELASTICSEARCH_POST_INDEX")
+            let post_index = std::env::var("ELASTICSEARCH_POST_INDEX")
                 .unwrap_or_else(|_| "nova_posts".to_string());
             let message_index = std::env::var("ELASTICSEARCH_MESSAGE_INDEX")
                 .unwrap_or_else(|_| "nova_messages".to_string());
-            match ElasticsearchClient::new(&url, &index_name, &message_index).await {
+            let user_index = std::env::var("ELASTICSEARCH_USER_INDEX")
+                .unwrap_or_else(|_| "nova_users".to_string());
+            let comment_index = std::env::var("ELASTICSEARCH_COMMENT_INDEX")
+                .unwrap_or_else(|_| "nova_comments".to_string());
+
+            match ElasticsearchClient::new(&url, &post_index, &message_index, &user_index, &comment_index).await {
                 Ok(client) => {
                     tracing::info!(
-                        "Elasticsearch enabled: post_index={}, message_index={}",
-                        index_name,
-                        message_index
+                        "Elasticsearch enabled: post={}, message={}, user={}, comment={}",
+                        post_index, message_index, user_index, comment_index
                     );
                     Some(Arc::new(client))
                 }
@@ -797,6 +835,11 @@ async fn main() -> std::io::Result<()> {
         tracing::info!("Search backend disabled; Kafka consumer not started");
     }
 
+    // Clone clients for gRPC service before moving into state
+    let grpc_es = search_backend.clone();
+    let grpc_ch = ch_client.clone();
+    let grpc_redis = redis_cache.clone();
+
     let state = AppState {
         db,
         redis,
@@ -805,24 +848,40 @@ async fn main() -> std::io::Result<()> {
 
     let state_data = Data::new(state);
 
-    // Start gRPC server on port (PORT + 1000)
+    // Start gRPC server on port (PORT + 1000) with all clients
     let grpc_addr: std::net::SocketAddr = format!("0.0.0.0:{}", port + 1000)
         .parse()
         .expect("Invalid gRPC bind address");
+
     tokio::spawn(async move {
         let (mut health, health_service) = health_reporter();
         // Mark SearchService as serving
         health
             .set_serving::<search_service::grpc::nova::search_service::v1::search_service_server::SearchServiceServer<search_service::grpc::SearchServiceImpl>>()
             .await;
-        let svc = search_service::grpc::SearchServiceImpl::default();
-        if let Err(e) = GrpcServer::builder()
-            .add_service(health_service)
-            .add_service(search_service::grpc::nova::search_service::v1::search_service_server::SearchServiceServer::new(svc))
-            .serve(grpc_addr)
-            .await
-        {
-            tracing::error!("search-service gRPC server error: {}", e);
+
+        // Create gRPC service with clients (only if all are available)
+        let svc = if let (Some(es), Some(ch), Some(redis)) = (grpc_es, grpc_ch, grpc_redis) {
+            let es = Arc::try_unwrap(es).unwrap_or_else(|arc| (*arc).clone());
+            let ch = Arc::try_unwrap(ch).unwrap_or_else(|arc| (*arc).clone());
+            let redis = Arc::try_unwrap(redis).unwrap_or_else(|arc| (*arc).clone());
+            Some(search_service::grpc::SearchServiceImpl::new(es, ch, redis))
+        } else {
+            tracing::error!("Cannot start gRPC service: missing required clients (ES/ClickHouse/Redis)");
+            None
+        };
+
+        if let Some(svc) = svc {
+            if let Err(e) = GrpcServer::builder()
+                .add_service(health_service)
+                .add_service(search_service::grpc::nova::search_service::v1::search_service_server::SearchServiceServer::new(svc))
+                .serve(grpc_addr)
+                .await
+            {
+                tracing::error!("search-service gRPC server error: {}", e);
+            }
+        } else {
+            tracing::error!("gRPC server not started: missing clients");
         }
     });
 
