@@ -458,7 +458,7 @@ mod full_integration_scenarios {
 
         println!("=== Scenario: Batch User Lookup ===");
 
-        let _user_ids = vec![
+        let user_ids = vec![
             "user-1".to_string(),
             "user-2".to_string(),
             "user-3".to_string(),
