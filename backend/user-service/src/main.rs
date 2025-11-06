@@ -147,24 +147,18 @@ async fn main() -> io::Result<()> {
         config.database.max_connections
     );
 
-    // Run migrations - Fix P0-5: Production failures must exit immediately
+    // Run migrations - Fix P0-5: Migration failures must exit immediately in all environments
     let run_migrations_env = std::env::var("RUN_MIGRATIONS").unwrap_or_else(|_| "true".into());
     if run_migrations_env != "false" {
         tracing::info!("Running database migrations...");
         match run_migrations(&db_pool).await {
             Ok(_) => tracing::info!("Database migrations completed"),
             Err(e) => {
-                if config.is_production() {
-                    // In production, migration failures are fatal - exit immediately with error
-                    tracing::error!(
-                        "Database migration failed in production environment: {:#}",
-                        e
-                    );
-                    std::process::exit(1);
-                } else {
-                    // In development, tolerate migration errors (e.g., VersionMissing from old migrations)
-                    tracing::warn!("Database migration warning (non-production): {:#}", e);
-                }
+                // Migration failures are always fatal, regardless of environment
+                // This prevents silent failures where the service starts but with outdated schema
+                tracing::error!("Database migration failed: {:#}", e);
+                eprintln!("ERROR: Database migration failed: {}", e);
+                std::process::exit(1);
             }
         }
     } else {
