@@ -1,0 +1,207 @@
+name: Build and Deploy to AWS ECS
+
+on:
+  push:
+    branches:
+      - feature/phase1-grpc-migration  # Auto-deploy to staging
+      - main                           # Manual approval for production
+  pull_request:
+    branches:
+      - main
+      - feature/phase1-grpc-migration
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com
+
+jobs:
+  # Stage 1: Test and Lint
+  test:
+    name: Test and Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          override: true
+          components: rustfmt, clippy
+
+      - name: Cache Cargo dependencies
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Run cargo fmt
+        run: cargo fmt --all -- --check
+
+      - name: Run cargo clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Run cargo test
+        run: cargo test --workspace --lib
+
+      - name: Run cargo build (release)
+        run: cargo build --release
+
+  # Stage 2: Build Docker images and push to ECR
+  build-and-push:
+    name: Build and Push Docker Images
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.event_name == 'push'
+    strategy:
+      matrix:
+        service:
+          - auth-service
+          - user-service
+          - content-service
+          - feed-service
+          - media-service
+          - messaging-service
+          - search-service
+          - streaming-service
+          - notification-service
+          - cdn-service
+          - events-service
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./backend/Dockerfile.template
+          build-args: |
+            SERVICE_NAME=${{ matrix.service }}
+          push: true
+          tags: |
+            ${{ env.ECR_REGISTRY }}/nova-${{ matrix.service }}:${{ github.sha }}
+            ${{ env.ECR_REGISTRY }}/nova-${{ matrix.service }}:${{ github.ref_name }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # Stage 3: Deploy to ECS
+  deploy:
+    name: Deploy to ECS
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    if: github.ref == 'refs/heads/feature/phase1-grpc-migration' || github.ref == 'refs/heads/main'
+    environment:
+      name: ${{ github.ref == 'refs/heads/main' && 'production' || 'staging' }}
+    strategy:
+      matrix:
+        service:
+          - auth-service
+          - user-service
+          - content-service
+          - feed-service
+          - media-service
+          - messaging-service
+          - search-service
+          - streaming-service
+          - notification-service
+          - cdn-service
+          - events-service
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Download task definition
+        run: |
+          aws ecs describe-task-definition \
+            --task-definition nova-${{ matrix.service }} \
+            --query taskDefinition > task-definition.json
+
+      - name: Update ECS task definition with new image
+        id: task-def
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: task-definition.json
+          container-name: nova-${{ matrix.service }}
+          image: ${{ env.ECR_REGISTRY }}/nova-${{ matrix.service }}:${{ github.sha }}
+
+      - name: Deploy to ECS
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          task-definition: ${{ steps.task-def.outputs.task-definition }}
+          service: nova-${{ matrix.service }}
+          cluster: nova-${{ github.ref == 'refs/heads/main' && 'production' || 'staging' }}
+          wait-for-service-stability: true
+
+      - name: Verify deployment health
+        run: |
+          echo "Waiting for service to stabilize..."
+          sleep 30
+
+          # Check service status
+          SERVICE_STATUS=$(aws ecs describe-services \
+            --cluster nova-${{ github.ref == 'refs/heads/main' && 'production' || 'staging' }} \
+            --services nova-${{ matrix.service }} \
+            --query 'services[0].deployments[0].rolloutState' \
+            --output text)
+
+          if [ "$SERVICE_STATUS" != "COMPLETED" ]; then
+            echo "Deployment failed or still in progress: $SERVICE_STATUS"
+            exit 1
+          fi
+
+          echo "Deployment successful for nova-${{ matrix.service }}"
+
+  # Stage 4: Notify deployment status
+  notify:
+    name: Notify Deployment Status
+    runs-on: ubuntu-latest
+    needs: [deploy]
+    if: always()
+    steps:
+      - name: Send Slack notification
+        if: env.SLACK_WEBHOOK_URL != ''
+        uses: slackapi/slack-github-action@v1.25.0
+        with:
+          payload: |
+            {
+              "text": "Deployment ${{ needs.deploy.result }} for ${{ github.ref_name }}",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "🚀 *Nova Deployment Status*\n\n*Environment:* ${{ github.ref == 'refs/heads/main' && 'Production' || 'Staging' }}\n*Branch:* ${{ github.ref_name }}\n*Commit:* ${{ github.sha }}\n*Status:* ${{ needs.deploy.result }}\n*Triggered by:* ${{ github.actor }}"
+                  }
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}

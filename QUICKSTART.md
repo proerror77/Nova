@@ -1,106 +1,205 @@
-# Nova EKS 快速启动指南 (5 分钟版)
+# Nova Deployment Quickstart
 
-## 🚀 快速部署（4 条命令）
+## 5 分鐘快速部署指南
 
-```bash
-# 1. 初始化并部署基础设施（15 分钟）
-cd infrastructure/terraform
-cp terraform.tfvars.example terraform.tfvars
-./deploy.sh apply
+這是最小化步驟的部署指南，適合快速啟動 Staging 環境。
 
-# 2. 获取 kubeconfig
-aws eks update-kubeconfig --region ap-northeast-1 --name nova-eks
+## 前置條件
 
-# 3. 添加 GitHub 仓库到 ArgoCD
-argocd repo add https://github.com/proerror77/Nova.git \
-  --username <你的GitHub用户名> \
-  --password <你的GitHub Token>
+- AWS 賬號
+- AWS CLI 已配置
+- Terraform 已安裝
 
-# 4. 部署应用
-kubectl apply -f infrastructure/argocd/nova-staging-app.yaml
-```
-
-## ✅ 验证部署
+## 第一步：初始化 AWS 資源
 
 ```bash
-# 检查集群
-kubectl get nodes      # 应该显示 3 个节点
-kubectl get pods -A    # 应该显示 argocd pods 和其他系统 pods
+# 創建 Terraform state bucket
+aws s3api create-bucket \
+  --bucket nova-terraform-state \
+  --region us-east-1
 
-# 检查应用
-argocd app list        # 应该显示 nova-staging
-kubectl get pods -n nova-staging   # 应该显示你的应用 pods
+aws s3api put-bucket-versioning \
+  --bucket nova-terraform-state \
+  --versioning-configuration Status=Enabled
+
+# 創建 DynamoDB lock table
+aws dynamodb create-table \
+  --table-name nova-terraform-lock \
+  --attribute-definitions AttributeName=LockID,AttributeType=S \
+  --key-schema AttributeName=LockID,KeyType=HASH \
+  --billing-mode PAY_PER_REQUEST \
+  --region us-east-1
 ```
 
-## 🔧 常见任务
+## 第二步：配置 GitHub Secrets
 
-### 查看日志
-```bash
-kubectl logs -f <pod-name> -n nova-staging
-```
-
-### 进入 ArgoCD UI
-```bash
-kubectl port-forward svc/argocd-server -n argocd 8080:443
-# 访问: https://localhost:8080
-# 用户名: admin
-# 密码: (通过 `argocd admin initial-password -n argocd` 获取)
-```
-
-### 更新应用
-```bash
-# 修改 k8s/overlays/staging/ 中的配置
-# 提交并推送到 GitHub
-git push origin develop
-# ArgoCD 会自动同步（通常在 3-5 秒内）
-```
-
-### 查看集群成本
-```bash
-aws ce get-cost-and-usage \
-  --time-period Start=$(date -d '7 days ago' +%Y-%m-%d),End=$(date +%Y-%m-%d) \
-  --granularity DAILY \
-  --metrics "UnblendedCost" \
-  --group-by Type=DIMENSION,Key=SERVICE
-```
-
-## 📊 架构一图
+在 GitHub 倉庫設置中添加：
 
 ```
-GitHub (代码)
-  ↓
-GitHub Actions (构建)
-  ↓
-ECR (镜像)
-  ↓
-ArgoCD (GitOps)
-  ↓
-EKS Cluster (Nova 服务运行)
+AWS_ACCOUNT_ID
+AWS_ACCESS_KEY_ID
+AWS_SECRET_ACCESS_KEY
+AWS_REGION=us-east-1
 ```
 
-## 🛑 删除所有资源（谨慎！）
+## 第三步：部署基礎設施
 
 ```bash
-cd infrastructure/terraform
-terraform destroy -auto-approve
+cd terraform
+
+# 初始化並部署
+terraform init
+terraform apply -var-file="staging.tfvars" -auto-approve
 ```
 
-## 📖 详细指南
+**預計時間：15-20 分鐘**
 
-参见 [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md)
+## 第四步：推送初始鏡像
 
-## ❓ 遇到问题？
+```bash
+# 獲取 AWS 賬號 ID
+AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 
-| 问题 | 解决方案 |
-|------|---------|
-| Pods 无法启动 | `kubectl describe pod <name> -n <ns>` |
-| 镜像拉取失败 | 检查 ECR 凭证：`kubectl get secret -n <ns>` |
-| ArgoCD 无法同步 | 检查 Git 连接：`argocd repo list` |
-| 集群无响应 | 重新配置 kubeconfig：`aws eks update-kubeconfig ...` |
+# 登錄 ECR
+aws ecr get-login-password --region us-east-1 | \
+  docker login --username AWS --password-stdin \
+  ${AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com
 
----
+# 構建並推送所有服務（使用並行處理）
+cd ..
+cat > /tmp/build-services.sh <<'EOF'
+#!/bin/bash
+SERVICE=$1
+AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 
-**部署时间**: ~15 分钟（首次）
-**月度成本**: ~$300（默认配置）
-**支持的环境**: staging、production
-**高可用**: 3 个节点跨 2 个可用区
+echo "Building $SERVICE..."
+docker build \
+  --build-arg SERVICE_NAME=$SERVICE \
+  -f backend/Dockerfile.template \
+  -t ${AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/nova-$SERVICE:latest \
+  .
+
+echo "Pushing $SERVICE..."
+docker push ${AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/nova-$SERVICE:latest
+
+echo "✅ $SERVICE done"
+EOF
+
+chmod +x /tmp/build-services.sh
+
+# 並行構建所有服務（使用 GNU Parallel）
+echo "auth-service user-service content-service feed-service \
+      media-service messaging-service search-service streaming-service \
+      notification-service cdn-service events-service" | \
+  xargs -n1 -P4 /tmp/build-services.sh
+```
+
+**預計時間：30-40 分鐘（並行構建）**
+
+## 第五步：觸發部署
+
+```bash
+# 更新所有 ECS 服務
+for service in auth-service user-service content-service feed-service \
+               media-service messaging-service search-service streaming-service \
+               notification-service cdn-service events-service; do
+  echo "Deploying $service..."
+  aws ecs update-service \
+    --cluster nova-staging \
+    --service nova-$service \
+    --force-new-deployment \
+    --region us-east-1 &
+done
+
+wait
+echo "✅ All services deployed"
+```
+
+**預計時間：5-10 分鐘**
+
+## 驗證部署
+
+```bash
+# 獲取 ALB DNS 名稱
+ALB_DNS=$(cd terraform && terraform output -raw alb_dns_name)
+
+# 測試健康檢查
+for service in auth-service user-service content-service; do
+  echo "Testing $service..."
+  curl -s http://$ALB_DNS/$service/health | jq
+done
+```
+
+**預期輸出：**
+```json
+{"status":"healthy","service":"auth-service"}
+{"status":"healthy","service":"user-service"}
+{"status":"healthy","service":"content-service"}
+```
+
+## 啟用 CI/CD 自動部署
+
+一旦手動部署成功，後續只需：
+
+```bash
+# 推送代碼到 feature/phase1-grpc-migration 分支
+git push origin feature/phase1-grpc-migration
+```
+
+GitHub Actions 會自動執行：
+1. 運行測試（3 分鐘）
+2. 構建 Docker 鏡像（15 分鐘）
+3. 推送到 ECR（5 分鐘）
+4. 更新 ECS 服務（5 分鐘）
+
+**總部署時間：~30 分鐘**
+
+## 監控部署
+
+查看 GitHub Actions 進度：
+```
+https://github.com/<your-org>/nova/actions
+```
+
+查看 ECS 服務狀態：
+```bash
+aws ecs list-services --cluster nova-staging --region us-east-1
+```
+
+查看應用日誌：
+```bash
+aws logs tail /ecs/nova-staging/auth-service --follow --region us-east-1
+```
+
+## 故障排查一行命令
+
+```bash
+# 檢查所有服務健康狀況
+for service in auth-service user-service content-service feed-service \
+               media-service messaging-service search-service streaming-service \
+               notification-service cdn-service events-service; do
+  echo -n "$service: "
+  aws ecs describe-services \
+    --cluster nova-staging \
+    --services nova-$service \
+    --query 'services[0].runningCount' \
+    --region us-east-1
+done
+```
+
+**預期輸出：每個服務應顯示 `2`（2 個運行中的任務）**
+
+## 成本估算
+
+**Staging 環境：~$10/天**
+
+## 清理資源
+
+```bash
+cd terraform
+terraform destroy -var-file="staging.tfvars" -auto-approve
+```
+
+## 下一步
+
+閱讀完整文檔：[DEPLOYMENT.md](./DEPLOYMENT.md)
