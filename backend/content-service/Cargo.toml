@@ -69,6 +69,7 @@ regex = "1"
 # gRPC (for inter-service communication)
 tonic.workspace = true
 prost.workspace = true
+tonic-health = "0.10"
 
 [build-dependencies]
 tonic-build = "0.11"

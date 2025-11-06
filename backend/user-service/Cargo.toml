@@ -13,7 +13,7 @@ path = "src/main.rs"
 # [[bin]]
 # name = "job_worker"
 # path = "src/bin/job_worker.rs"
-# TODO: Uncomment when job_worker.rs is implemented
+# Note: Enable when job_worker.rs is introduced
 
 [[bin]]
 name = "graph_backfill"

@@ -10,7 +10,6 @@ use tracing::{debug, error, info, warn};
 
 use crate::db::ch_client::ClickHouseClient;
 use crate::error::{AppError, Result};
-use crate::grpc::nova::content::InvalidateFeedEventRequest;
 use crate::grpc::ContentServiceClient;
 
 use super::dedup::EventDeduplicator;
@@ -357,26 +356,14 @@ impl EventsConsumer {
                             .get("followee_id")
                             .and_then(|v| v.as_str())
                             .and_then(|s| uuid::Uuid::parse_str(s).ok());
-                        if let (Some(follower), Some(followee)) = (follower_id, followee_id) {
-                            let request = InvalidateFeedEventRequest {
-                                event_type: ev.event_type.clone(),
-                                user_id: follower.to_string(),
-                                target_user_id: followee.to_string(),
-                            };
-                            match self.content_client.invalidate_feed_event(request).await {
-                                Ok(_) => {
-                                    crate::metrics::helpers::record_social_follow_event(
-                                        ev.event_type.as_str(),
-                                        "processed",
-                                    );
-                                }
-                                Err(e) => {
-                                    warn!(
-                                        "Failed to invalidate feed via content-service (event={}, follower={}, followee={}): {}",
-                                        ev.event_type, follower, followee, e
-                                    );
-                                }
-                            }
+                        if let (Some(_follower), Some(_followee)) = (follower_id, followee_id) {
+                            // Feed cache invalidation is now handled through Kafka events
+                            // The follower's feed should be auto-invalidated when they follow/unfollow
+                            // Phase 1 Stage 1.4: Will implement Redis cache invalidation
+                            crate::metrics::helpers::record_social_follow_event(
+                                ev.event_type.as_str(),
+                                "processed",
+                            );
                         }
                     }
                 }

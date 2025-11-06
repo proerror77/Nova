@@ -32,10 +32,10 @@ backend/
         ├── handlers/         # HTTP 请求处理器
         │   ├── auth.rs       # 认证端点
         │   └── health.rs     # 健康检查端点
-        ├── middleware/       # 中间件(待实现)
+        ├── middleware/       # 中间件
         ├── models/           # 数据模型
-        ├── services/         # 业务逻辑层(待实现)
-        └── utils/            # 工具函数(待实现)
+        ├── services/         # 业务逻辑层
+        └── utils/            # 工具函数
 ```
 
 ## 数据库 Schema
@@ -164,12 +164,9 @@ curl http://localhost:8080/api/v1/health/live
 - `GET /api/v1/health/ready` - Kubernetes readiness probe
 - `GET /api/v1/health/live` - Kubernetes liveness probe
 
-### 认证端点(待实现)
+### 认证端点
 
-- `POST /api/v1/auth/register` - 用户注册
-- `POST /api/v1/auth/login` - 用户登录
-- `POST /api/v1/auth/logout` - 用户登出
-- `POST /api/v1/auth/refresh` - 刷新访问令牌
+认证能力已迁移至独立的 `auth-service`，请参见 `backend/auth-service/README.md` 和对应的 gRPC/HTTP 接口文档。
 
 ## 开发工具
 

@@ -120,7 +120,14 @@ async fn main() -> Result<(), error::AppError> {
 
     // Build gRPC service
     let grpc_service = messaging_service::grpc::MessagingServiceImpl::new(state.clone());
-    let grpc_server = MessagingServiceServer::new(grpc_service);
+    // Server-side correlation-id extractor interceptor
+    fn grpc_server_interceptor(mut req: tonic::Request<()>) -> Result<tonic::Request<()>, tonic::Status> {
+        if let Some(val) = req.metadata().get("correlation-id") {
+            if let Ok(s) = val.to_str() { req.extensions_mut().insert::<String>(s.to_string()); }
+        }
+        Ok(req)
+    }
+    let grpc_server = MessagingServiceServer::with_interceptor(grpc_service, grpc_server_interceptor);
 
     // Start both REST and gRPC servers
     let rest_state = state.clone();
@@ -172,7 +179,12 @@ async fn main() -> Result<(), error::AppError> {
 
         tracing::info!("gRPC server listening on {}", grpc_addr_parsed);
 
+        let (mut health, health_service) = tonic_health::server::health_reporter();
+        health
+            .set_serving::<MessagingServiceServer<messaging_service::grpc::MessagingServiceImpl>>()
+            .await;
         GrpcServer::builder()
+            .add_service(health_service)
             .add_service(grpc_server)
             .serve(grpc_addr_parsed)
             .await

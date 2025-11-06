@@ -8,6 +8,7 @@ use std::sync::{
     Arc,
 };
 use tonic::transport::Server as GrpcServer;
+use tonic_health::server::health_reporter;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use user_service::grpc::{
@@ -502,8 +503,20 @@ async fn main() -> io::Result<()> {
             })?;
 
         tracing::info!("gRPC server listening on {}", grpc_addr_parsed);
+        let (mut health, health_service) = health_reporter();
+        health
+            .set_serving::<user_service::grpc::nova::user_service::user_service_server::UserServiceServer<UserServiceImpl>>()
+            .await;
+        // Server-side correlation-id extractor interceptor
+        fn server_interceptor(mut req: tonic::Request<()>) -> Result<tonic::Request<()>, tonic::Status> {
+            if let Some(val) = req.metadata().get("correlation-id") {
+                if let Ok(s) = val.to_str() { req.extensions_mut().insert::<String>(s.to_string()); }
+            }
+            Ok(req)
+        }
 
         GrpcServer::builder()
+            .add_service(health_service)
             .add_service(grpc_server_svc)
             .add_service(video_grpc_svc)
             .serve_with_shutdown(grpc_addr_parsed, async {
