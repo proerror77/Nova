@@ -36,17 +36,11 @@ pub mod nova {
         }
         pub use v1::*;
     }
-    pub mod content {
-        pub use super::content_service::*;
-    }
     pub mod media_service {
         pub mod v1 {
             tonic::include_proto!("nova.media_service.v1");
         }
         pub use v1::*;
-    }
-    pub mod media {
-        pub use super::media_service::*;
     }
     pub mod auth_service {
         pub mod v1 {
@@ -59,8 +53,5 @@ pub mod nova {
             tonic::include_proto!("nova.video_service.v1");
         }
         pub use v1::*;
-    }
-    pub mod video {
-        pub use super::video_service::*;
     }
 }
