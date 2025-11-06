@@ -18,6 +18,15 @@ pub enum AppError {
 
     #[error("Internal server error: {0}")]
     InternalError(String),
+
+    #[error("S3 error: {0}")]
+    S3Error(String),
+
+    #[error("Redis error: {0}")]
+    RedisError(String),
+
+    #[error("Quota exceeded: {0}")]
+    QuotaExceeded(String),
 }
 
 #[derive(Serialize)]

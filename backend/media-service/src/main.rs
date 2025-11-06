@@ -46,13 +46,16 @@ async fn shutdown_signal() {
     }
 }
 
-async fn openapi_json(doc: web::Data<utoipa::openapi::OpenApi>) -> HttpResponse {
+async fn openapi_json(doc: web::Data<utoipa::openapi::OpenApi>) -> actix_web::Result<HttpResponse> {
     let body = serde_json::to_string(&*doc)
-        .expect("Failed to serialize OpenAPI document for media-service");
+        .map_err(|e| {
+            tracing::error!("OpenAPI serialization failed: {}", e);
+            actix_web::error::ErrorInternalServerError("OpenAPI serialization error")
+        })?;
 
-    HttpResponse::Ok()
+    Ok(HttpResponse::Ok()
         .content_type("application/json")
-        .body(body)
+        .body(body))
 }
 
 #[actix_web::main]
