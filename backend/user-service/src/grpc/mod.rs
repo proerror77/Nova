@@ -36,6 +36,12 @@ pub mod nova {
         }
         pub use v1::*;
     }
+    pub mod feed_service {
+        pub mod v1 {
+            tonic::include_proto!("nova.feed_service.v1");
+        }
+        pub use v1::*;
+    }
     pub mod media_service {
         pub mod v1 {
             tonic::include_proto!("nova.media_service.v1");
