@@ -2,12 +2,13 @@ use actix_web::{get, post, web, HttpMessage, HttpRequest, HttpResponse};
 use base64::{engine::general_purpose, Engine as _};
 use serde::Deserialize;
 use std::sync::Arc;
-use tracing::{debug, warn};
+use tracing::{debug, info, warn};
 use uuid::Uuid;
 
 use crate::error::{AppError, Result};
-use crate::grpc::clients::ContentServiceClient;
-use grpc_clients::nova::content_service::v1::{GetFeedRequest, InvalidateFeedEventRequest};
+use crate::grpc::clients::{ContentServiceClient, UserServiceClient};
+use grpc_clients::nova::content_service::v1::GetPostsByAuthorRequest;
+use grpc_clients::nova::user_service::v1::GetUserFollowingRequest;
 use crate::middleware::jwt_auth::UserId;
 use crate::models::FeedResponse;
 
@@ -52,6 +53,7 @@ impl FeedQueryParams {
 
 pub struct FeedHandlerState {
     pub content_client: Arc<ContentServiceClient>,
+    pub user_client: Arc<UserServiceClient>,
 }
 
 #[get("")]

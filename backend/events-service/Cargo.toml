@@ -42,6 +42,7 @@ clickhouse.workspace = true
 # gRPC
 tonic.workspace = true
 prost.workspace = true
+tonic-health = "0.10"
 
 # Shared libraries
 error-types = { path = "../libs/error-types" }
