@@ -7,7 +7,14 @@
 //!
 //! Linus 原则：只测试真实场景，不测试假想问题
 
-use crate::fixtures::{test_env::TestEnvironment, assertions::*};
+// 导入共享测试模块
+#[path = "../fixtures/mod.rs"]
+mod fixtures;
+
+#[path = "../common/mod.rs"]
+mod common;
+
+use fixtures::{test_env::TestEnvironment, assertions::*};
 use sqlx::PgPool;
 use std::time::Instant;
 use uuid::Uuid;
@@ -39,7 +46,7 @@ async fn test_messaging_to_notification_e2e() {
     .bind(conversation_id)
     .bind(sender_id)
     .bind("Hello World")
-    .execute(&**db)
+    .execute(&*db)
     .await
     .expect("插入消息失败");
 
@@ -60,7 +67,7 @@ async fn test_messaging_to_notification_e2e() {
     .bind("新消息")
     .bind("你收到一条新消息")
     .bind(message_id)
-    .execute(&**db)
+    .execute(&*db)
     .await
     .expect("插入通知失败");
 
@@ -73,7 +80,7 @@ async fn test_messaging_to_notification_e2e() {
                 "SELECT COUNT(*) FROM notifications WHERE user_id = $1"
             )
             .bind(receiver_id)
-            .fetch_one(&**db)
+            .fetch_one(&*db)
             .await
             .unwrap_or(0);
             count > 0
@@ -95,7 +102,7 @@ async fn test_messaging_to_notification_e2e() {
         "SELECT COUNT(*) FROM notifications WHERE user_id = $1 AND notification_type = 'message_received'"
     )
     .bind(receiver_id)
-    .fetch_one(&**db)
+    .fetch_one(&*db)
     .await
     .expect("查询通知失败");
 
@@ -127,7 +134,7 @@ async fn test_post_creation_to_feed_recommendation() {
     .bind(user_id)
     .bind("测试帖子")
     .bind("published")
-    .execute(&**db)
+    .execute(&*db)
     .await
     .expect("插入帖子失败");
 
@@ -144,7 +151,7 @@ async fn test_post_creation_to_feed_recommendation() {
     .bind(post_id)
     .bind(vec![0.1f32; 128]) // 模拟 embedding
     .bind(0.75)
-    .execute(&**db)
+    .execute(&*db)
     .await
     .expect("插入帖子特征失败");
 
@@ -194,7 +201,7 @@ async fn test_streaming_full_lifecycle() {
     .bind(streamer_id)
     .bind("测试直播")
     .bind("live")
-    .execute(&**db)
+    .execute(&*db)
     .await
     .expect("创建直播失败");
 
@@ -211,7 +218,7 @@ async fn test_streaming_full_lifecycle() {
     )
     .bind(stream_id)
     .bind(viewer_id)
-    .execute(&**db)
+    .execute(&*db)
     .await
     .expect("观众加入失败");
 
@@ -225,7 +232,7 @@ async fn test_streaming_full_lifecycle() {
     .bind(stream_id)
     .bind(viewer_id)
     .bind("Hello!")
-    .execute(&**db)
+    .execute(&*db)
     .await
     .expect("发送聊天消息失败");
 
@@ -234,7 +241,7 @@ async fn test_streaming_full_lifecycle() {
         "UPDATE streams SET status = 'ended', ended_at = NOW() WHERE id = $1"
     )
     .bind(stream_id)
-    .execute(&**db)
+    .execute(&*db)
     .await
     .expect("结束直播失败");
 
@@ -243,7 +250,7 @@ async fn test_streaming_full_lifecycle() {
         "SELECT COUNT(*) FROM stream_viewers WHERE stream_id = $1"
     )
     .bind(stream_id)
-    .fetch_one(&**db)
+    .fetch_one(&*db)
     .await
     .expect("查询观众数失败");
 
@@ -279,7 +286,7 @@ async fn test_asset_upload_to_cdn_url() {
     .bind(user_id)
     .bind(format!("assets/{}/file.jpg", asset_id))
     .bind("processing")
-    .execute(&**db)
+    .execute(&*db)
     .await
     .expect("创建资产失败");
 
@@ -290,7 +297,7 @@ async fn test_asset_upload_to_cdn_url() {
     )
     .bind(&cdn_url)
     .bind(asset_id)
-    .execute(&**db)
+    .execute(&*db)
     .await
     .expect("更新资产失败");
 
@@ -308,7 +315,7 @@ async fn test_asset_upload_to_cdn_url() {
     .bind(asset_id)
     .bind(&cdn_url)
     .bind("pending")
-    .execute(&**db)
+    .execute(&*db)
     .await
     .expect("创建缓存失效记录失败");
 
@@ -317,7 +324,7 @@ async fn test_asset_upload_to_cdn_url() {
         "SELECT status, cdn_url FROM assets WHERE id = $1"
     )
     .bind(asset_id)
-    .fetch_one(&**db)
+    .fetch_one(&*db)
     .await
     .expect("查询资产失败");
 
@@ -354,7 +361,7 @@ async fn test_search_query_to_trending_analytics() {
     .bind(user_id)
     .bind("Rust async")
     .bind(42)
-    .execute(&**db)
+    .execute(&*db)
     .await
     .expect("记录搜索查询失败");
 
@@ -372,7 +379,7 @@ async fn test_search_query_to_trending_analytics() {
     .bind(Uuid::new_v4())
     .bind("Rust async")
     .bind(1)
-    .execute(&**db)
+    .execute(&*db)
     .await
     .expect("更新热门话题失败");
 
@@ -381,7 +388,7 @@ async fn test_search_query_to_trending_analytics() {
         "SELECT search_count FROM trending_topics WHERE topic = $1"
     )
     .bind("Rust async")
-    .fetch_one(&**db)
+    .fetch_one(&*db)
     .await
     .expect("查询热门话题失败");
 
@@ -416,7 +423,7 @@ async fn test_cross_service_data_consistency() {
     .bind(user_id)
     .bind("跨服务测试")
     .bind("published")
-    .execute(&**db)
+    .execute(&*db)
     .await
     .expect("创建帖子失败");
 
@@ -428,7 +435,7 @@ async fn test_cross_service_data_consistency() {
     .bind(post_id)
     .bind(vec![0.5f32; 128])
     .bind(0.8)
-    .execute(&**db)
+    .execute(&*db)
     .await
     .expect("同步到 feed-service 失败");
 
@@ -439,7 +446,7 @@ async fn test_cross_service_data_consistency() {
     )
     .bind(post_id)
     .bind("跨服务测试")
-    .execute(&**db)
+    .execute(&*db)
     .await
     .ok(); // 忽略表不存在的错误
 
@@ -494,7 +501,7 @@ async fn test_kafka_event_deduplication_idempotency() {
     .bind("TestEvent")
     .bind(r#"{"data": "test"}"#)
     .bind("pending")
-    .execute(&**db)
+    .execute(&*db)
     .await
     .expect("创建 Outbox 事件失败");
 
@@ -503,7 +510,7 @@ async fn test_kafka_event_deduplication_idempotency() {
         "UPDATE outbox_events SET status = 'published', published_at = NOW() WHERE id = $1"
     )
     .bind(event_id)
-    .execute(&**db)
+    .execute(&*db)
     .await
     .expect("更新事件状态失败");
 
@@ -516,7 +523,7 @@ async fn test_kafka_event_deduplication_idempotency() {
     )
     .bind(event_id)
     .bind("notification-service")
-    .execute(&**db)
+    .execute(&*db)
     .await
     .ok(); // 忽略表不存在
 
@@ -552,7 +559,7 @@ async fn test_eventual_consistency_convergence() {
         .bind(i as i64)
         .bind(format!(r#"{{"step": {}}}"#, i))
         .bind("pending")
-        .execute(&**db)
+        .execute(&*db)
         .await
         .expect("创建事件失败");
     }
@@ -572,7 +579,7 @@ async fn test_eventual_consistency_convergence() {
                     "SELECT COUNT(*) FROM outbox_events WHERE aggregate_id = $1 AND status = 'pending'"
                 )
                 .bind(aggregate_id)
-                .fetch_one(&**db)
+                .fetch_one(&*db)
                 .await
                 .unwrap_or(5);
                 pending_count == 0
@@ -589,7 +596,7 @@ async fn test_eventual_consistency_convergence() {
         "SELECT COUNT(*) FROM outbox_events WHERE aggregate_id = $1"
     )
     .bind(aggregate_id)
-    .fetch_one(&**db)
+    .fetch_one(&*db)
     .await
     .expect("查询事件失败");
 

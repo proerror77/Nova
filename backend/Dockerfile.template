@@ -1,0 +1,71 @@
+# Nova Services - Unified Dockerfile Template
+# This template builds all 11 Rust microservices with the same multi-stage build process
+# Usage: docker build --build-arg SERVICE_NAME=auth-service -f Dockerfile.template -t nova-auth-service:latest .
+
+# ============================================
+# Stage 1: Builder - Compile Rust binaries
+# ============================================
+FROM rust:1.75-slim AS builder
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    pkg-config \
+    libssl-dev \
+    cmake \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /build
+
+# Accept SERVICE_NAME as build argument (e.g., "auth-service")
+ARG SERVICE_NAME
+ENV SERVICE_NAME=${SERVICE_NAME}
+
+# Copy workspace manifests first for better layer caching
+COPY Cargo.toml Cargo.lock ./
+COPY backend/ ./backend/
+
+# Build the specific service in release mode
+# This leverages cargo's workspace caching for shared dependencies
+RUN cargo build --release --package ${SERVICE_NAME}
+
+# ============================================
+# Stage 2: Runtime - Minimal production image
+# ============================================
+FROM debian:bookworm-slim
+
+# Install runtime dependencies only
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    libssl3 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user for security
+RUN useradd -m -u 1000 -s /bin/bash nova
+WORKDIR /app
+
+# Accept SERVICE_NAME again for the final image
+ARG SERVICE_NAME
+ENV SERVICE_NAME=${SERVICE_NAME}
+
+# Copy the compiled binary from builder stage
+COPY --from=builder /build/target/release/${SERVICE_NAME} /app/service
+
+# Copy migrations directory (shared by all services)
+COPY --from=builder /build/backend/migrations /app/migrations
+
+# Set ownership to non-root user
+RUN chown -R nova:nova /app
+USER nova
+
+# Health check endpoint (unified for all services)
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD curl -f http://localhost:${HTTP_PORT:-8080}/api/v1/health || exit 1
+
+# Expose HTTP port (default: 8080, override via environment variable)
+EXPOSE ${HTTP_PORT:-8080}
+
+# Expose gRPC port (default: HTTP_PORT + 1000)
+# This is automatically calculated at runtime, no need to expose explicitly here
+
+# Run the service
+CMD ["/app/service"]

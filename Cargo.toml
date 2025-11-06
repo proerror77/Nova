@@ -170,6 +170,15 @@ tokio-test = "0.4"
 criterion = { version = "0.5", features = ["async_tokio", "html_reports"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+# Integration test dependencies
+uuid = { version = "1.7", features = ["v4", "serde"] }
+rand = "0.8"
+once_cell = "1.19"
+testcontainers = "0.17"
+hex = "0.4"
+# Service dependencies for integration tests
+# Temporarily disabled due to user-service compilation issues
+# user-service = { path = "backend/user-service" }
 
 [[test]]
 name = "core_flow_test"

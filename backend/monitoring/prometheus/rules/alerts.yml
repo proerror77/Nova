@@ -1,0 +1,285 @@
+# ==============================================
+# Prometheus Alert Rules for Nova Backend
+# ==============================================
+# Based on real-world SLIs/SLOs for microservices
+
+groups:
+  # ==============================================
+  # Service Availability Alerts
+  # ==============================================
+  - name: service_availability
+    interval: 30s
+    rules:
+      - alert: ServiceDown
+        expr: up{job=~".*-service"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          category: availability
+        annotations:
+          summary: "Service {{ $labels.job }} is down"
+          description: "{{ $labels.job }} has been down for more than 1 minute."
+
+      - alert: HighErrorRate
+        expr: |
+          (
+            rate(http_requests_total{status=~"5..", job=~".*-service"}[5m])
+            /
+            rate(http_requests_total{job=~".*-service"}[5m])
+          ) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          category: errors
+        annotations:
+          summary: "High error rate on {{ $labels.job }}"
+          description: "{{ $labels.job }} has error rate > 5% (current: {{ $value | humanizePercentage }})"
+
+  # ==============================================
+  # Latency Alerts (P95/P99)
+  # ==============================================
+  - name: service_latency
+    interval: 30s
+    rules:
+      - alert: HighLatencyP95
+        expr: |
+          histogram_quantile(0.95,
+            rate(http_request_duration_seconds_bucket{job=~".*-service"}[5m])
+          ) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+          category: performance
+        annotations:
+          summary: "High P95 latency on {{ $labels.job }}"
+          description: "{{ $labels.job }} P95 latency > 500ms (current: {{ $value | humanizeDuration }})"
+
+      - alert: HighLatencyP99
+        expr: |
+          histogram_quantile(0.99,
+            rate(http_request_duration_seconds_bucket{job=~".*-service"}[5m])
+          ) > 1.0
+        for: 5m
+        labels:
+          severity: critical
+          category: performance
+        annotations:
+          summary: "High P99 latency on {{ $labels.job }}"
+          description: "{{ $labels.job }} P99 latency > 1s (current: {{ $value | humanizeDuration }})"
+
+  # ==============================================
+  # Database Alerts
+  # ==============================================
+  - name: database
+    interval: 30s
+    rules:
+      - alert: PostgreSQLDown
+        expr: up{job="postgres"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          category: database
+        annotations:
+          summary: "PostgreSQL is down"
+          description: "PostgreSQL has been unreachable for more than 1 minute."
+
+      - alert: PostgreSQLHighConnections
+        expr: |
+          (
+            pg_stat_database_numbackends{datname="nova"}
+            /
+            pg_settings_max_connections
+          ) > 0.8
+        for: 5m
+        labels:
+          severity: warning
+          category: database
+        annotations:
+          summary: "PostgreSQL connection pool usage high"
+          description: "PostgreSQL connections > 80% (current: {{ $value | humanizePercentage }})"
+
+      - alert: PostgreSQLSlowQueries
+        expr: rate(pg_stat_statements_mean_exec_time_seconds[5m]) > 1.0
+        for: 5m
+        labels:
+          severity: warning
+          category: database
+        annotations:
+          summary: "PostgreSQL slow queries detected"
+          description: "Average query time > 1s (current: {{ $value | humanizeDuration }})"
+
+  # ==============================================
+  # Redis Alerts
+  # ==============================================
+  - name: redis
+    interval: 30s
+    rules:
+      - alert: RedisDown
+        expr: up{job="redis"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          category: cache
+        annotations:
+          summary: "Redis is down"
+          description: "Redis has been unreachable for more than 1 minute."
+
+      - alert: RedisHighMemory
+        expr: |
+          (
+            redis_memory_used_bytes{job="redis"}
+            /
+            redis_memory_max_bytes{job="redis"}
+          ) > 0.7
+        for: 5m
+        labels:
+          severity: warning
+          category: cache
+        annotations:
+          summary: "Redis memory usage high"
+          description: "Redis memory > 70% (current: {{ $value | humanizePercentage }})"
+
+      - alert: RedisHighEvictionRate
+        expr: rate(redis_evicted_keys_total[5m]) > 100
+        for: 5m
+        labels:
+          severity: warning
+          category: cache
+        annotations:
+          summary: "Redis high eviction rate"
+          description: "Redis evicting > 100 keys/s (current: {{ $value | humanize }})"
+
+  # ==============================================
+  # ClickHouse Alerts (Feed Service)
+  # ==============================================
+  - name: clickhouse
+    interval: 30s
+    rules:
+      - alert: ClickHouseDown
+        expr: up{job="clickhouse"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          category: database
+        annotations:
+          summary: "ClickHouse is down"
+          description: "ClickHouse has been unreachable for more than 1 minute."
+
+      - alert: ClickHouseSlowQueries
+        expr: |
+          histogram_quantile(0.95,
+            rate(clickhouse_query_duration_seconds_bucket[5m])
+          ) > 1.0
+        for: 5m
+        labels:
+          severity: warning
+          category: database
+        annotations:
+          summary: "ClickHouse slow queries"
+          description: "ClickHouse P95 query time > 1s (current: {{ $value | humanizeDuration }})"
+
+  # ==============================================
+  # Kafka Alerts
+  # ==============================================
+  - name: kafka
+    interval: 30s
+    rules:
+      - alert: KafkaDown
+        expr: up{job="kafka"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          category: messaging
+        annotations:
+          summary: "Kafka is down"
+          description: "Kafka has been unreachable for more than 1 minute."
+
+      - alert: KafkaConsumerLag
+        expr: kafka_consumergroup_lag{consumergroup="nova-consumer-v1"} > 100000
+        for: 5m
+        labels:
+          severity: warning
+          category: messaging
+        annotations:
+          summary: "Kafka consumer lag high"
+          description: "Consumer group {{ $labels.consumergroup }} lag > 100k messages (current: {{ $value | humanize }})"
+
+      - alert: KafkaUnderReplicatedPartitions
+        expr: kafka_topic_partition_under_replicated_partition > 0
+        for: 5m
+        labels:
+          severity: critical
+          category: messaging
+        annotations:
+          summary: "Kafka under-replicated partitions"
+          description: "Topic {{ $labels.topic }} has {{ $value }} under-replicated partitions"
+
+  # ==============================================
+  # Resource Utilization Alerts
+  # ==============================================
+  - name: resource_utilization
+    interval: 30s
+    rules:
+      - alert: HighCPUUsage
+        expr: |
+          (
+            rate(container_cpu_usage_seconds_total{pod=~".*-service.*"}[5m])
+            /
+            on(pod) container_spec_cpu_quota{pod=~".*-service.*"}
+          ) > 0.8
+        for: 5m
+        labels:
+          severity: warning
+          category: resources
+        annotations:
+          summary: "High CPU usage on {{ $labels.pod }}"
+          description: "Pod {{ $labels.pod }} CPU > 80% (current: {{ $value | humanizePercentage }})"
+
+      - alert: HighMemoryUsage
+        expr: |
+          (
+            container_memory_usage_bytes{pod=~".*-service.*"}
+            /
+            container_spec_memory_limit_bytes{pod=~".*-service.*"}
+          ) > 0.8
+        for: 5m
+        labels:
+          severity: warning
+          category: resources
+        annotations:
+          summary: "High memory usage on {{ $labels.pod }}"
+          description: "Pod {{ $labels.pod }} memory > 80% (current: {{ $value | humanizePercentage }})"
+
+  # ==============================================
+  # gRPC Alerts
+  # ==============================================
+  - name: grpc
+    interval: 30s
+    rules:
+      - alert: HighGrpcErrorRate
+        expr: |
+          (
+            rate(grpc_server_handled_total{grpc_code!="OK"}[5m])
+            /
+            rate(grpc_server_handled_total[5m])
+          ) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          category: grpc
+        annotations:
+          summary: "High gRPC error rate on {{ $labels.job }}"
+          description: "{{ $labels.job }} gRPC error rate > 5% (current: {{ $value | humanizePercentage }})"
+
+      - alert: SlowGrpcCalls
+        expr: |
+          histogram_quantile(0.95,
+            rate(grpc_server_handling_seconds_bucket[5m])
+          ) > 1.0
+        for: 5m
+        labels:
+          severity: warning
+          category: grpc
+        annotations:
+          summary: "Slow gRPC calls on {{ $labels.job }}"
+          description: "{{ $labels.job }} gRPC P95 > 1s (current: {{ $value | humanizeDuration }})"
