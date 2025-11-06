@@ -38,18 +38,22 @@ nova/
 │           ├── handlers/              # HTTP 处理器
 │           │   ├── mod.rs
 │           │   ├── health.rs          # 健康检查
-│           │   └── auth.rs            # 认证端点(占位符)
+│           │   ├── users.rs           # 用户资料
+│           │   ├── relationships.rs   # 用户关系
+│           │   ├── preferences.rs     # 偏好设定
+│           │   ├── moderation.rs      # 社群治理
+│           │   └── events.rs          # 事件回调
 │           │
-│           ├── middleware/            # 中间件(待实现)
+│           ├── middleware/            # 中间件
 │           │   └── mod.rs
 │           │
 │           ├── models/                # 数据模型
 │           │   └── mod.rs             # User, Session, RefreshToken, etc.
 │           │
-│           ├── services/              # 业务逻辑(待实现)
+│           ├── services/              # 业务逻辑层
 │           │   └── mod.rs
 │           │
-│           └── utils/                 # 工具函数(待实现)
+│           └── utils/                 # 工具函数
 │               └── mod.rs
 │
 └── docs/
@@ -79,7 +83,7 @@ nova/
                         ▼
 ┌─────────────────────────────────────────────────────┐
 │                  Handlers Layer                      │
-│  (Health, Auth placeholders)                        │
+│  (Health, Users, Relationships, Preferences)        │
 └─────────────────────────────────────────────────────┘
                         ▼
 ┌─────────────────────────────────────────────────────┐

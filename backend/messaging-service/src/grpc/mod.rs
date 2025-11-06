@@ -14,6 +14,7 @@ use crate::state::AppState;
 use tonic::{Request, Response, Status};
 use uuid::Uuid;
 use std::str::FromStr;
+use grpc_metrics::layer::RequestGuard;
 
 // ========== UUID Validation Macro ==========
 
@@ -51,6 +52,28 @@ impl MessagingServiceImpl {
     fn parse_uuid(uuid_str: &str, field_name: &str) -> Result<Uuid, Status> {
         Uuid::from_str(uuid_str).map_err(|_| {
             Status::invalid_argument(format!("Invalid {}: {}", field_name, uuid_str))
+        })
+    }
+
+    /// Helper: Extract user_id from gRPC metadata (x-user-id header)
+    ///
+    /// Returns Status::unauthenticated if header is missing
+    /// Returns Status::invalid_argument if UUID format is invalid
+    fn extract_user_id(metadata: &tonic::metadata::MetadataMap) -> Result<Uuid, Status> {
+        // Extract x-user-id from metadata
+        let user_id_str = metadata
+            .get("x-user-id")
+            .ok_or_else(|| {
+                Status::unauthenticated("Missing x-user-id header: authentication required")
+            })?
+            .to_str()
+            .map_err(|_| {
+                Status::invalid_argument("Invalid x-user-id header: must be ASCII string")
+            })?;
+
+        // Parse as UUID
+        Uuid::from_str(user_id_str).map_err(|_| {
+            Status::invalid_argument(format!("Invalid x-user-id format: {}", user_id_str))
         })
     }
 
@@ -177,19 +200,41 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
         &self,
         request: Request<SendMessageRequest>,
     ) -> Result<Response<SendMessageResponse>, Status> {
+        let guard = RequestGuard::new("messaging-service", "SendMessage");
+
+        // Extract authenticated user_id from metadata
+        let sender_id = match Self::extract_user_id(request.metadata()) {
+            Ok(id) => id,
+            Err(e) => {
+                guard.complete(if e.code() == tonic::Code::Unauthenticated { "16" } else { "3" });
+                return Err(e);
+            }
+        };
+
         let req = request.into_inner();
 
         // Parse and validate request
-        let conversation_id = Self::parse_uuid(&req.conversation_id, "conversation_id")?;
-        let sender_id = Self::parse_uuid(&req.sender_id, "sender_id")?;
+        let conversation_id = match Self::parse_uuid(&req.conversation_id, "conversation_id") {
+            Ok(id) => id,
+            Err(e) => {
+                guard.complete("3"); // INVALID_ARGUMENT
+                return Err(e);
+            }
+        };
 
         if req.content.is_empty() {
+            guard.complete("3"); // INVALID_ARGUMENT
             return Err(Status::invalid_argument("Message content cannot be empty"));
         }
 
         // Verify sender exists via auth-service
-        if !self.state.auth_client.user_exists(sender_id).await
-            .map_err(|e| Self::app_error_to_status(e))? {
+        let user_exists_result = self.state.auth_client.user_exists(sender_id).await;
+        if let Err(e) = user_exists_result {
+            guard.complete("14"); // UNAVAILABLE
+            return Err(Self::app_error_to_status(e));
+        }
+        if !user_exists_result.unwrap() {
+            guard.complete("5"); // NOT_FOUND
             return Err(Status::not_found("Sender user not found"));
         }
 
@@ -200,7 +245,7 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
             Some(req.idempotency_key.as_str())
         };
 
-        let message_row = crate::services::message_service::MessageService::send_message_db(
+        let message_row = match crate::services::message_service::MessageService::send_message_db(
             &self.state.db,
             &self.state.encryption,
             conversation_id,
@@ -209,11 +254,18 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
             idempotency_key_opt,
         )
         .await
-        .map_err(|e| Self::app_error_to_status(e))?;
+        {
+            Ok(row) => row,
+            Err(e) => {
+                guard.complete("13"); // INTERNAL
+                return Err(Self::app_error_to_status(e));
+            }
+        };
 
         // Convert MessageRow to proto Message using helper function
         let message = Self::message_row_to_proto(message_row);
 
+        guard.complete("0"); // OK
         Ok(Response::new(SendMessageResponse {
             message: Some(message),
             error: None,
@@ -224,13 +276,30 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
         &self,
         request: Request<GetMessageRequest>,
     ) -> Result<Response<GetMessageResponse>, Status> {
+        let guard = RequestGuard::new("messaging-service", "GetMessage");
+
+        // Extract authenticated user_id from metadata
+        let _user_id = match Self::extract_user_id(request.metadata()) {
+            Ok(id) => id,
+            Err(e) => {
+                guard.complete(if e.code() == tonic::Code::Unauthenticated { "16" } else { "3" });
+                return Err(e);
+            }
+        };
+
         let req = request.into_inner();
 
         // Parse message_id
-        let message_id = Self::parse_uuid(&req.message_id, "message_id")?;
+        let message_id = match Self::parse_uuid(&req.message_id, "message_id") {
+            Ok(id) => id,
+            Err(e) => {
+                guard.complete("3"); // INVALID_ARGUMENT
+                return Err(e);
+            }
+        };
 
         // Query message from DB
-        let message_row = sqlx::query_as::<_, (
+        let message_row = match sqlx::query_as::<_, (
             uuid::Uuid, uuid::Uuid, uuid::Uuid, String, Option<Vec<u8>>, Option<Vec<u8>>,
             i32, i64, Option<String>, chrono::DateTime<chrono::Utc>,
             Option<chrono::DateTime<chrono::Utc>>, Option<chrono::DateTime<chrono::Utc>>,
@@ -244,7 +313,13 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
         .bind(message_id)
         .fetch_optional(&self.state.db)
         .await
-        .map_err(|e| Status::internal(format!("Database error: {}", e)))?;
+        {
+            Ok(row) => row,
+            Err(e) => {
+                guard.complete("13"); // INTERNAL
+                return Err(Status::internal(format!("Database error: {}", e)));
+            }
+        };
 
         match message_row {
             Some((id, conv_id, sender_id, content, content_enc, nonce, enc_ver, seq, idempotency_key, created_at, updated_at, deleted_at, reaction_count)) => {
@@ -264,6 +339,7 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
                     reaction_count,
                 };
 
+                guard.complete("0"); // OK
                 Ok(Response::new(GetMessageResponse {
                     message: Some(message),
                     found: true,
@@ -271,6 +347,7 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
                 }))
             }
             None => {
+                guard.complete("0"); // OK (not found is still a successful response)
                 Ok(Response::new(GetMessageResponse {
                     message: None,
                     found: false,
@@ -284,13 +361,15 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
         &self,
         request: Request<GetMessageHistoryRequest>,
     ) -> Result<Response<GetMessageHistoryResponse>, Status> {
+        // Extract authenticated user_id from metadata
+        let _user_id = Self::extract_user_id(request.metadata())?;
+
         let req = request.into_inner();
 
         // Parse conversation_id
         let conversation_id = Self::parse_uuid(&req.conversation_id, "conversation_id")?;
 
-        // TODO: Extract requesting user_id from gRPC metadata
-        // For now, we'll skip member check (should be done in production)
+        // TODO: Verify user_id is a member of the conversation (access control)
 
         // Validate limit: min 1, max 100
         let limit = if req.limit <= 0 || req.limit > 100 {
@@ -378,6 +457,9 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
         &self,
         request: Request<UpdateMessageRequest>,
     ) -> Result<Response<UpdateMessageResponse>, Status> {
+        // Extract authenticated user_id from metadata
+        let _user_id = Self::extract_user_id(request.metadata())?;
+
         let _req = request.into_inner();
         Err(Status::unimplemented("update_message not yet implemented"))
     }
@@ -386,6 +468,9 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
         &self,
         request: Request<DeleteMessageRequest>,
     ) -> Result<Response<DeleteMessageResponse>, Status> {
+        // Extract authenticated user_id from metadata
+        let _user_id = Self::extract_user_id(request.metadata())?;
+
         let _req = request.into_inner();
         Err(Status::unimplemented("delete_message not yet implemented"))
     }
@@ -394,6 +479,9 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
         &self,
         request: Request<SearchMessagesRequest>,
     ) -> Result<Response<SearchMessagesResponse>, Status> {
+        // Extract authenticated user_id from metadata
+        let _user_id = Self::extract_user_id(request.metadata())?;
+
         let _req = request.into_inner();
         Err(Status::unimplemented("search_messages not yet implemented"))
     }
@@ -404,20 +492,34 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
         &self,
         request: Request<CreateConversationRequest>,
     ) -> Result<Response<CreateConversationResponse>, Status> {
+        let guard = RequestGuard::new("messaging-service", "CreateConversation");
+
+        // Extract authenticated user_id from metadata
+        let creator_id = match Self::extract_user_id(request.metadata()) {
+            Ok(id) => id,
+            Err(e) => {
+                guard.complete(if e.code() == tonic::Code::Unauthenticated { "16" } else { "3" });
+                return Err(e);
+            }
+        };
+
         let req = request.into_inner();
 
-        // Parse creator_id
-        let creator_id = Self::parse_uuid(&req.creator_id, "creator_id")?;
-
         // Verify creator exists via auth-service
-        if !self.state.auth_client.user_exists(creator_id).await
-            .map_err(|e| Self::app_error_to_status(e))? {
+        let creator_exists = self.state.auth_client.user_exists(creator_id).await;
+        if let Err(e) = creator_exists {
+            guard.complete("14"); // UNAVAILABLE
+            return Err(Self::app_error_to_status(e));
+        }
+        if !creator_exists.unwrap() {
+            guard.complete("5"); // NOT_FOUND
             return Err(Status::not_found("Creator user not found"));
         }
 
         // For direct conversations, verify both members exist
         let member_ids: Vec<uuid::Uuid> = if req.kind == "direct" {
             if req.member_ids.len() != 2 {
+                guard.complete("3"); // INVALID_ARGUMENT
                 return Err(Status::invalid_argument(
                     "Direct conversation requires exactly 2 members",
                 ));
@@ -425,9 +527,20 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
             // Verify both members exist
             let mut ids = Vec::new();
             for member_id_str in &req.member_ids {
-                let member_id = Self::parse_uuid(member_id_str, "member_id")?;
-                if !self.state.auth_client.user_exists(member_id).await
-                    .map_err(|e| Self::app_error_to_status(e))? {
+                let member_id = match Self::parse_uuid(member_id_str, "member_id") {
+                    Ok(id) => id,
+                    Err(e) => {
+                        guard.complete("3"); // INVALID_ARGUMENT
+                        return Err(e);
+                    }
+                };
+                let member_exists = self.state.auth_client.user_exists(member_id).await;
+                if let Err(e) = member_exists {
+                    guard.complete("14"); // UNAVAILABLE
+                    return Err(Self::app_error_to_status(e));
+                }
+                if !member_exists.unwrap() {
+                    guard.complete("5"); // NOT_FOUND
                     return Err(Status::not_found(format!("Member {} not found", member_id)));
                 }
                 ids.push(member_id);
@@ -437,7 +550,13 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
             // For group conversations, just parse the member IDs
             let mut ids = Vec::new();
             for member_id_str in &req.member_ids {
-                let member_id = Self::parse_uuid(member_id_str, "member_id")?;
+                let member_id = match Self::parse_uuid(member_id_str, "member_id") {
+                    Ok(id) => id,
+                    Err(e) => {
+                        guard.complete("3"); // INVALID_ARGUMENT
+                        return Err(e);
+                    }
+                };
                 ids.push(member_id);
             }
             ids
@@ -445,19 +564,25 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
 
         // Create conversation based on kind
         let conversation_id = if req.kind == "direct" {
-            crate::services::conversation_service::ConversationService::create_direct_conversation(
+            match crate::services::conversation_service::ConversationService::create_direct_conversation(
                 &self.state.db,
                 member_ids[0],
                 member_ids[1],
             )
             .await
-            .map_err(|e| Self::app_error_to_status(e))?
+            {
+                Ok(id) => id,
+                Err(e) => {
+                    guard.complete("13"); // INTERNAL
+                    return Err(Self::app_error_to_status(e));
+                }
+            }
         } else {
             let group_name = if req.name.is_empty() { "Group".to_string() } else { req.name.clone() };
             let description = if req.description.is_empty() { None } else { Some(req.description.clone()) };
             let avatar_url = if req.avatar_url.is_empty() { None } else { Some(req.avatar_url.clone()) };
 
-            crate::services::conversation_service::ConversationService::create_group_conversation(
+            match crate::services::conversation_service::ConversationService::create_group_conversation(
                 &self.state.db,
                 creator_id,
                 group_name,
@@ -467,17 +592,29 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
                 None, // Privacy mode determined by service
             )
             .await
-            .map_err(|e| Self::app_error_to_status(e))?
+            {
+                Ok(id) => id,
+                Err(e) => {
+                    guard.complete("13"); // INTERNAL
+                    return Err(Self::app_error_to_status(e));
+                }
+            }
         };
 
         // Fetch conversation details to return in response
-        let conv_row = sqlx::query_as::<_, (uuid::Uuid, i32, Option<uuid::Uuid>)>(
+        let conv_row = match sqlx::query_as::<_, (uuid::Uuid, i32, Option<uuid::Uuid>)>(
             "SELECT id, member_count, last_message_id FROM conversations WHERE id = $1"
         )
         .bind(conversation_id)
         .fetch_one(&self.state.db)
         .await
-        .map_err(|e| Status::internal(format!("Database error: {}", e)))?;
+        {
+            Ok(row) => row,
+            Err(e) => {
+                guard.complete("13"); // INTERNAL
+                return Err(Status::internal(format!("Database error: {}", e)));
+            }
+        };
 
         let conversation = Self::conversation_row_to_proto(
             conv_row.0,
@@ -490,6 +627,7 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
             "public".to_string(), // Default privacy mode
         );
 
+        guard.complete("0"); // OK
         Ok(Response::new(CreateConversationResponse {
             conversation: Some(conversation),
             error: None,
@@ -500,6 +638,9 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
         &self,
         request: Request<GetConversationRequest>,
     ) -> Result<Response<GetConversationResponse>, Status> {
+        // Extract authenticated user_id from metadata
+        let _user_id = Self::extract_user_id(request.metadata())?;
+
         let req = request.into_inner();
 
         // Parse conversation_id
@@ -547,10 +688,12 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
         &self,
         request: Request<ListUserConversationsRequest>,
     ) -> Result<Response<ListUserConversationsResponse>, Status> {
+        // Extract authenticated user_id from metadata
+        let user_id = Self::extract_user_id(request.metadata())?;
+
         let req = request.into_inner();
 
-        // Parse user_id
-        let user_id = Self::parse_uuid(&req.user_id, "user_id")?;
+        // Note: Using authenticated user_id from metadata, ignoring req.user_id for security
 
         // Validate limit (1-100, default 50)
         let limit = if req.limit <= 0 || req.limit > 100 {
@@ -620,6 +763,9 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
         &self,
         request: Request<DeleteConversationRequest>,
     ) -> Result<Response<DeleteConversationResponse>, Status> {
+        // Extract authenticated user_id from metadata
+        let _user_id = Self::extract_user_id(request.metadata())?;
+
         let _req = request.into_inner();
         Err(Status::unimplemented("delete_conversation not yet implemented"))
     }
@@ -628,6 +774,9 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
         &self,
         request: Request<MarkAsReadRequest>,
     ) -> Result<Response<MarkAsReadResponse>, Status> {
+        // Extract authenticated user_id from metadata
+        let _user_id = Self::extract_user_id(request.metadata())?;
+
         let _req = request.into_inner();
         Err(Status::unimplemented("mark_as_read not yet implemented"))
     }
@@ -636,6 +785,9 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
         &self,
         request: Request<GetUnreadCountRequest>,
     ) -> Result<Response<GetUnreadCountResponse>, Status> {
+        // Extract authenticated user_id from metadata
+        let _user_id = Self::extract_user_id(request.metadata())?;
+
         let _req = request.into_inner();
         Err(Status::unimplemented("get_unread_count not yet implemented"))
     }
@@ -646,6 +798,9 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
         &self,
         request: Request<AddMemberRequest>,
     ) -> Result<Response<AddMemberResponse>, Status> {
+        // Extract authenticated user_id from metadata
+        let _user_id = Self::extract_user_id(request.metadata())?;
+
         let _req = request.into_inner();
         Err(Status::unimplemented("add_member not yet implemented"))
     }
@@ -654,6 +809,9 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
         &self,
         request: Request<RemoveMemberRequest>,
     ) -> Result<Response<RemoveMemberResponse>, Status> {
+        // Extract authenticated user_id from metadata
+        let _user_id = Self::extract_user_id(request.metadata())?;
+
         let _req = request.into_inner();
         Err(Status::unimplemented("remove_member not yet implemented"))
     }
@@ -662,6 +820,9 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
         &self,
         request: Request<ListMembersRequest>,
     ) -> Result<Response<ListMembersResponse>, Status> {
+        // Extract authenticated user_id from metadata
+        let _user_id = Self::extract_user_id(request.metadata())?;
+
         let _req = request.into_inner();
         Err(Status::unimplemented("list_members not yet implemented"))
     }
@@ -670,6 +831,9 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
         &self,
         request: Request<UpdateMemberRoleRequest>,
     ) -> Result<Response<UpdateMemberRoleResponse>, Status> {
+        // Extract authenticated user_id from metadata
+        let _user_id = Self::extract_user_id(request.metadata())?;
+
         let _req = request.into_inner();
         Err(Status::unimplemented("update_member_role not yet implemented"))
     }
@@ -678,6 +842,9 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
         &self,
         request: Request<LeaveGroupRequest>,
     ) -> Result<Response<LeaveGroupResponse>, Status> {
+        // Extract authenticated user_id from metadata
+        let _user_id = Self::extract_user_id(request.metadata())?;
+
         let _req = request.into_inner();
         Err(Status::unimplemented("leave_group not yet implemented"))
     }
@@ -688,6 +855,9 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
         &self,
         request: Request<AddReactionRequest>,
     ) -> Result<Response<AddReactionResponse>, Status> {
+        // Extract authenticated user_id from metadata
+        let _user_id = Self::extract_user_id(request.metadata())?;
+
         let _req = request.into_inner();
         Err(Status::unimplemented("add_reaction not yet implemented"))
     }
@@ -696,6 +866,9 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
         &self,
         request: Request<GetReactionsRequest>,
     ) -> Result<Response<GetReactionsResponse>, Status> {
+        // Extract authenticated user_id from metadata
+        let _user_id = Self::extract_user_id(request.metadata())?;
+
         let _req = request.into_inner();
         Err(Status::unimplemented("get_reactions not yet implemented"))
     }
@@ -704,6 +877,9 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
         &self,
         request: Request<RemoveReactionRequest>,
     ) -> Result<Response<RemoveReactionResponse>, Status> {
+        // Extract authenticated user_id from metadata
+        let _user_id = Self::extract_user_id(request.metadata())?;
+
         let _req = request.into_inner();
         Err(Status::unimplemented("remove_reaction not yet implemented"))
     }
@@ -714,6 +890,9 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
         &self,
         request: Request<StoreDevicePublicKeyRequest>,
     ) -> Result<Response<StoreDevicePublicKeyResponse>, Status> {
+        // Extract authenticated user_id from metadata
+        let _user_id = Self::extract_user_id(request.metadata())?;
+
         let _req = request.into_inner();
         Err(Status::unimplemented("store_device_public_key not yet implemented"))
     }
@@ -722,6 +901,9 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
         &self,
         request: Request<GetPeerPublicKeyRequest>,
     ) -> Result<Response<GetPeerPublicKeyResponse>, Status> {
+        // Extract authenticated user_id from metadata
+        let _user_id = Self::extract_user_id(request.metadata())?;
+
         let _req = request.into_inner();
         Err(Status::unimplemented("get_peer_public_key not yet implemented"))
     }
@@ -730,6 +912,9 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
         &self,
         request: Request<CompleteKeyExchangeRequest>,
     ) -> Result<Response<CompleteKeyExchangeResponse>, Status> {
+        // Extract authenticated user_id from metadata
+        let _user_id = Self::extract_user_id(request.metadata())?;
+
         let _req = request.into_inner();
         Err(Status::unimplemented("complete_key_exchange not yet implemented"))
     }
@@ -738,6 +923,9 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
         &self,
         request: Request<GetConversationEncryptionRequest>,
     ) -> Result<Response<GetConversationEncryptionResponse>, Status> {
+        // Extract authenticated user_id from metadata
+        let _user_id = Self::extract_user_id(request.metadata())?;
+
         let _req = request.into_inner();
         Err(Status::unimplemented("get_conversation_encryption not yet implemented"))
     }
@@ -748,6 +936,9 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
         &self,
         request: Request<RegisterDeviceTokenRequest>,
     ) -> Result<Response<RegisterDeviceTokenResponse>, Status> {
+        // Extract authenticated user_id from metadata
+        let _user_id = Self::extract_user_id(request.metadata())?;
+
         let _req = request.into_inner();
         Err(Status::unimplemented("register_device_token not yet implemented"))
     }
@@ -756,6 +947,9 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
         &self,
         request: Request<SendPushNotificationRequest>,
     ) -> Result<Response<SendPushNotificationResponse>, Status> {
+        // Extract authenticated user_id from metadata
+        let _user_id = Self::extract_user_id(request.metadata())?;
+
         let _req = request.into_inner();
         Err(Status::unimplemented("send_push_notification not yet implemented"))
     }
@@ -766,6 +960,9 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
         &self,
         request: Request<GetOfflineEventsRequest>,
     ) -> Result<Response<GetOfflineEventsResponse>, Status> {
+        // Extract authenticated user_id from metadata
+        let _user_id = Self::extract_user_id(request.metadata())?;
+
         let _req = request.into_inner();
         Err(Status::unimplemented("get_offline_events not yet implemented"))
     }
@@ -774,7 +971,115 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
         &self,
         request: Request<AckOfflineEventRequest>,
     ) -> Result<Response<AckOfflineEventResponse>, Status> {
+        // Extract authenticated user_id from metadata
+        let _user_id = Self::extract_user_id(request.metadata())?;
+
         let _req = request.into_inner();
         Err(Status::unimplemented("ack_offline_event not yet implemented"))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tonic::metadata::MetadataMap;
+
+    #[test]
+    fn test_extract_user_id_success() {
+        // Arrange: Create metadata with valid x-user-id
+        let mut metadata = MetadataMap::new();
+        let test_uuid = "550e8400-e29b-41d4-a716-446655440000";
+        metadata.insert("x-user-id", test_uuid.parse().unwrap());
+
+        // Act: Extract user_id
+        let result = MessagingServiceImpl::extract_user_id(&metadata);
+
+        // Assert: Should succeed and return correct UUID
+        assert!(result.is_ok());
+        let user_id = result.unwrap();
+        assert_eq!(user_id.to_string(), test_uuid);
+    }
+
+    #[test]
+    fn test_extract_user_id_missing_header() {
+        // Arrange: Create empty metadata (no x-user-id header)
+        let metadata = MetadataMap::new();
+
+        // Act: Try to extract user_id
+        let result = MessagingServiceImpl::extract_user_id(&metadata);
+
+        // Assert: Should fail with Unauthenticated status
+        assert!(result.is_err());
+        let status = result.unwrap_err();
+        assert_eq!(status.code(), tonic::Code::Unauthenticated);
+        assert!(status.message().contains("Missing x-user-id header"));
+    }
+
+    #[test]
+    fn test_extract_user_id_invalid_uuid_format() {
+        // Arrange: Create metadata with invalid UUID format
+        let mut metadata = MetadataMap::new();
+        let invalid_uuid = "not-a-valid-uuid";
+        metadata.insert("x-user-id", invalid_uuid.parse().unwrap());
+
+        // Act: Try to extract user_id
+        let result = MessagingServiceImpl::extract_user_id(&metadata);
+
+        // Assert: Should fail with InvalidArgument status
+        assert!(result.is_err());
+        let status = result.unwrap_err();
+        assert_eq!(status.code(), tonic::Code::InvalidArgument);
+        assert!(status.message().contains("Invalid x-user-id format"));
+    }
+
+    #[test]
+    fn test_extract_user_id_empty_header() {
+        // Arrange: Create metadata with empty x-user-id
+        let mut metadata = MetadataMap::new();
+        metadata.insert("x-user-id", "".parse().unwrap());
+
+        // Act: Try to extract user_id
+        let result = MessagingServiceImpl::extract_user_id(&metadata);
+
+        // Assert: Should fail with InvalidArgument status
+        assert!(result.is_err());
+        let status = result.unwrap_err();
+        assert_eq!(status.code(), tonic::Code::InvalidArgument);
+    }
+
+    #[test]
+    fn test_extract_user_id_malformed_uuid() {
+        // Arrange: Create metadata with almost-valid UUID (wrong length)
+        let mut metadata = MetadataMap::new();
+        metadata.insert("x-user-id", "550e8400-e29b-41d4-a716".parse().unwrap());
+
+        // Act: Try to extract user_id
+        let result = MessagingServiceImpl::extract_user_id(&metadata);
+
+        // Assert: Should fail with InvalidArgument status
+        assert!(result.is_err());
+        let status = result.unwrap_err();
+        assert_eq!(status.code(), tonic::Code::InvalidArgument);
+        assert!(status.message().contains("Invalid x-user-id format"));
+    }
+
+    #[test]
+    fn test_extract_user_id_different_valid_uuids() {
+        // Test multiple valid UUIDs to ensure parsing is robust
+        let test_uuids = vec![
+            "00000000-0000-0000-0000-000000000000", // Nil UUID
+            "ffffffff-ffff-ffff-ffff-ffffffffffff", // Max UUID
+            "123e4567-e89b-12d3-a456-426614174000", // Random UUID v1
+            "550e8400-e29b-41d4-a716-446655440000", // Random UUID v4
+        ];
+
+        for uuid_str in test_uuids {
+            let mut metadata = MetadataMap::new();
+            metadata.insert("x-user-id", uuid_str.parse().unwrap());
+
+            let result = MessagingServiceImpl::extract_user_id(&metadata);
+            assert!(result.is_ok(), "Failed to parse valid UUID: {}", uuid_str);
+            assert_eq!(result.unwrap().to_string(), uuid_str);
+        }
     }
 }

@@ -1,7 +1,5 @@
 use actix_web::{middleware, web, App, HttpServer};
 use tonic::transport::Server as GrpcServer;
-use tonic_health::server::health_reporter;
-use tonic::transport::Server as GrpcServer;
 use std::io;
 use db_pool::{create_pool as create_pg_pool, DbConfig as DbPoolConfig};
 use std::sync::Arc;
@@ -54,7 +52,7 @@ async fn main() -> io::Result<()> {
     // These would need proper credential configuration
 
     let notification_service = Arc::new(NotificationService::new(
-        db_pool,
+        db_pool.clone(),
         None, // FCM client
         None, // APNs client
     ));
@@ -72,26 +70,42 @@ async fn main() -> io::Result<()> {
     // Start gRPC server in background on port + 1000
     let http_port_u16 = port.parse::<u16>().unwrap_or(8000);
     let grpc_addr: std::net::SocketAddr = format!("0.0.0.0:{}", http_port_u16 + 1000).parse().expect("Invalid gRPC address");
+
+    let grpc_db_pool = db_pool.clone();
+    let grpc_notification_service = notification_service.clone();
     tokio::spawn(async move {
-        let (mut health, health_service) = health_reporter();
-        health.set_serving::<notification_service::grpc::nova::notification_service::v1::notification_service_server::NotificationServiceServer<notification_service::grpc::NotificationServiceImpl>>().await;
+        use notification_service::grpc::{
+            NotificationServiceImpl,
+            nova::notification_service::v1::notification_service_server::NotificationServiceServer,
+        };
+        use notification_service::services::PushSender;
+
         // Server-side correlation-id extractor interceptor
         fn server_interceptor(mut req: tonic::Request<()>) -> Result<tonic::Request<()>, tonic::Status> {
-            if let Some(val) = req.metadata().get("correlation-id") {
-                if let Ok(s) = val.to_str() { req.extensions_mut().insert::<String>(s.to_string()); }
+            let correlation_id = req.metadata()
+                .get("correlation-id")
+                .and_then(|v| v.to_str().ok())
+                .map(|s| s.to_string());
+
+            if let Some(id) = correlation_id {
+                req.extensions_mut().insert::<String>(id);
             }
             Ok(req)
         }
-        let svc = notification_service::grpc::NotificationServiceImpl::default();
+
+        let push_sender = Arc::new(PushSender::new(grpc_db_pool.clone(), None, None));
+        let svc = NotificationServiceImpl::new(
+            grpc_db_pool,
+            grpc_notification_service,
+            push_sender,
+        );
+
         tracing::info!("gRPC server listening on {}", grpc_addr);
         if let Err(e) = GrpcServer::builder()
-            .add_service(health_service)
-            .add_service(
-                notification_service::grpc::nova::notification_service::v1::notification_service_server::NotificationServiceServer::with_interceptor(
-                    svc,
-                    server_interceptor,
-                ),
-            )
+            .add_service(NotificationServiceServer::with_interceptor(
+                svc,
+                server_interceptor,
+            ))
             .serve(grpc_addr)
             .await
         {

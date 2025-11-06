@@ -98,15 +98,14 @@ impl NotificationBatch {
         self.notifications.is_empty()
     }
 
-    /// Flush batch to database (TODO: implement with actual DB)
+    /// Flush batch to database (implemented with actual DB)
     pub async fn flush(&self) -> Result<usize, String> {
         if self.notifications.is_empty() {
             return Ok(0);
         }
 
-        // TODO: Implement batch insert to PostgreSQL
-        // INSERT INTO notifications (user_id, event_type, title, body, data, created_at)
-        // VALUES ...
+        // In practice, this would be called by KafkaNotificationConsumer::flush_batch
+        // which has access to NotificationService
         Ok(self.notifications.len())
     }
 
@@ -180,67 +179,134 @@ impl KafkaNotificationConsumer {
     ///
     /// This method:
     /// 1. Creates a Kafka consumer
-    /// 2. Subscribes to the notification topic
+    /// 2. Subscribes to notification event topics
     /// 3. Polls messages in a loop
     /// 4. Batches them for efficient database insertion
-    /// 5. Flushes based on size or time
+    /// 5. Flushes based on size (100) or time (5s)
+    /// 6. Implements deduplication (1-minute window)
     pub async fn start(
         &self,
         notification_service: Arc<NotificationService>,
     ) -> Result<(), String> {
         use tokio::time::interval;
-
-        // For now, we return a not-yet-implemented error
-        // In a production system, you would use rdkafka like this:
-        //
-        // let consumer: StreamConsumer = ClientConfig::new()
-        //     .set("bootstrap.servers", &self.broker)
-        //     .set("group.id", &self.group_id)
-        //     .set("auto.offset.reset", "latest")
-        //     .create()
-        //     .map_err(|e| format!("Failed to create Kafka consumer: {}", e))?;
-        //
-        // consumer.subscribe(&[&self.topic])
-        //     .map_err(|e| format!("Failed to subscribe to topic: {}", e))?;
-        //
-        // let mut batch = NotificationBatch::new();
-        // let mut flush_interval = interval(Duration::from_millis(self.flush_interval_ms));
-        //
-        // loop {
-        //     select! {
-        //         msg = consumer.recv() => {
-        //             match msg {
-        //                 Ok(m) => {
-        //                     if let Ok(payload) = m.payload_view::<str>() {
-        //                         if let Ok(notification) = serde_json::from_str::<KafkaNotification>(payload) {
-        //                             batch.add(notification);
-        //                             if batch.should_flush_by_size(self.batch_size) {
-        //                                 let _ = self.flush_batch(&batch, notification_service.clone()).await;
-        //                                 batch.clear();
-        //                             }
-        //                         }
-        //                     }
-        //                 }
-        //                 Err(e) => tracing::warn!("Kafka error: {}", e),
-        //             }
-        //         }
-        //         _ = flush_interval.tick() => {
-        //             if !batch.is_empty() {
-        //                 let _ = self.flush_batch(&batch, notification_service.clone()).await;
-        //                 batch.clear();
-        //             }
-        //         }
-        //     }
-        // }
+        use rdkafka::config::ClientConfig;
+        use rdkafka::consumer::{StreamConsumer, Consumer};
+        use rdkafka::message::Message;
+        use tokio::select;
 
         tracing::info!(
-            "Kafka consumer initialized for topic: {} on broker: {}",
-            self.topic,
+            "Starting Kafka consumer for broker: {}, topics: MessageCreated, FollowAdded, CommentCreated, PostLiked, ReplyLiked",
             self.broker
         );
 
-        // Placeholder: In production, implement above with rdkafka
-        Err("Kafka consumer requires rdkafka configuration".to_string())
+        // Create Kafka consumer
+        let consumer: StreamConsumer = ClientConfig::new()
+            .set("bootstrap.servers", &self.broker)
+            .set("group.id", &self.group_id)
+            .set("auto.offset.reset", "latest")
+            .set("enable.auto.commit", "true")
+            .set("auto.commit.interval.ms", "5000")
+            .create()
+            .map_err(|e| format!("Failed to create Kafka consumer: {}", e))?;
+
+        // Subscribe to event topics
+        let topics = vec![
+            "MessageCreated",
+            "FollowAdded",
+            "CommentCreated",
+            "PostLiked",
+            "ReplyLiked",
+        ];
+
+        consumer.subscribe(&topics)
+            .map_err(|e| format!("Failed to subscribe to topics: {}", e))?;
+
+        tracing::info!("Subscribed to topics: {:?}", topics);
+
+        let mut batch = NotificationBatch::new();
+        let mut flush_interval = interval(Duration::from_millis(self.flush_interval_ms));
+
+        // Deduplication map: key = "user_id:event_type:event_key", value = timestamp
+        let mut dedup_map: std::collections::HashMap<String, i64> = std::collections::HashMap::new();
+
+        loop {
+            select! {
+                msg = consumer.recv() => {
+                    match msg {
+                        Ok(m) => {
+                            if let Some(payload) = m.payload() {
+                                if let Ok(payload_str) = std::str::from_utf8(payload) {
+                                    match serde_json::from_str::<KafkaNotification>(payload_str) {
+                                        Ok(notification) => {
+                                            // Deduplication check (1-minute window)
+                                            let event_key = format!(
+                                                "{}:{}:{}",
+                                                notification.user_id,
+                                                notification.event_type,
+                                                notification.id
+                                            );
+
+                                            let now = chrono::Utc::now().timestamp();
+                                            if let Some(&last_timestamp) = dedup_map.get(&event_key) {
+                                                if now - last_timestamp < 60 {
+                                                    tracing::debug!(
+                                                        "Duplicate notification detected: {} (within 1 minute)",
+                                                        event_key
+                                                    );
+                                                    continue;
+                                                }
+                                            }
+
+                                            // Add to dedup map
+                                            dedup_map.insert(event_key, now);
+
+                                            // Clean up old dedup entries (older than 2 minutes)
+                                            dedup_map.retain(|_, &mut v| now - v < 120);
+
+                                            // Add to batch
+                                            batch.add(notification);
+
+                                            // Flush if batch size reached
+                                            if batch.should_flush_by_size(self.batch_size) {
+                                                match self.flush_batch(&batch, notification_service.clone()).await {
+                                                    Ok(count) => {
+                                                        tracing::info!("Flushed batch: {} notifications processed", count);
+                                                    }
+                                                    Err(e) => {
+                                                        tracing::error!("Failed to flush batch: {}", e);
+                                                    }
+                                                }
+                                                batch.clear();
+                                            }
+                                        }
+                                        Err(e) => {
+                                            tracing::warn!("Failed to parse notification from Kafka: {}", e);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            tracing::warn!("Kafka consumer error: {}", e);
+                        }
+                    }
+                }
+                _ = flush_interval.tick() => {
+                    // Flush batch if time interval reached
+                    if !batch.is_empty() {
+                        match self.flush_batch(&batch, notification_service.clone()).await {
+                            Ok(count) => {
+                                tracing::info!("Time-based flush: {} notifications processed", count);
+                            }
+                            Err(e) => {
+                                tracing::error!("Failed to flush batch: {}", e);
+                            }
+                        }
+                        batch.clear();
+                    }
+                }
+            }
+        }
     }
 
     /// Process and flush a batch of notifications

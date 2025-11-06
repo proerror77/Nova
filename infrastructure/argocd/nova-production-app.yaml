@@ -1,0 +1,41 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: nova-production
+  namespace: argocd
+spec:
+  project: default
+
+  source:
+    repoURL: https://github.com/proerror77/Nova.git
+    targetRevision: main
+    path: k8s/overlays/production
+    kustomize:
+      version: v5.0.0
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: nova-production
+
+  syncPolicy:
+    # Production 不使用自动同步，要求手动审核
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+
+  # 通知和监控
+  info:
+    - name: 'GitHub Repo'
+      value: 'https://github.com/proerror77/Nova'
+    - name: 'Documentation'
+      value: 'https://github.com/proerror77/Nova/blob/main/README.md'
+    - name: 'SLA'
+      value: '99.9% 可用性'
+
+  # 健康评估
+  revisionHistoryLimit: 20

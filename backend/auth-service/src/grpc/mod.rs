@@ -2,6 +2,7 @@
 /// Based on Phase 0 proto definitions (nova.auth_service)
 /// This is a core foundational service that provides user identity and authentication
 use tonic::{Request, Response, Status};
+use grpc_metrics::layer::RequestGuard;
 
 use crate::{
     metrics::{
@@ -62,6 +63,8 @@ impl AuthService for AuthServiceImpl {
         &self,
         request: Request<RegisterRequest>,
     ) -> Result<Response<RegisterResponse>, Status> {
+        let guard = RequestGuard::new("auth-service", "Register");
+
         // T050: Increment register requests counter
         inc_register_requests();
 
@@ -70,47 +73,70 @@ impl AuthService for AuthServiceImpl {
         // Validate email format (basic check, full validation in 005-p1-input-validation)
         if req.email.is_empty() || !req.email.contains('@') {
             warn!(event = "invalid_email_format", email = %req.email);
+            guard.complete("3");
             return Err(Status::invalid_argument("invalid_email_format"));
         }
 
         // Validate username (3-32 chars)
         if req.username.len() < 3 || req.username.len() > 32 {
             warn!(event = "invalid_username_length", username = %req.username);
+            guard.complete("3");
             return Err(Status::invalid_argument("username_invalid_length"));
         }
 
         // Hash password (includes zxcvbn validation via 005)
-        let password_hash = hash_password(&req.password).map_err(|_| {
-            warn!(event = "weak_password", email = %req.email);
-            Status::invalid_argument("weak_password")
-        })?;
+        let password_hash = match hash_password(&req.password) {
+            Ok(hash) => hash,
+            Err(_) => {
+                warn!(event = "weak_password", email = %req.email);
+                guard.complete("3");
+                return Err(Status::invalid_argument("weak_password"));
+            }
+        };
 
         // Check if email already exists
-        let email_exists = crate::db::users::email_exists(&self.state.db, &req.email)
-            .await
-            .map_err(|_| Status::internal("Failed to check email"))?;
+        let email_exists = match crate::db::users::email_exists(&self.state.db, &req.email).await {
+            Ok(exists) => exists,
+            Err(_) => {
+                guard.complete("13");
+                return Err(Status::internal("Failed to check email"));
+            }
+        };
 
         if email_exists {
             warn!(event = "duplicate_email_registration", email = %req.email);
+            guard.complete("6");
             return Err(Status::already_exists("email_already_registered"));
         }
 
         // Create user in database
-        let user = crate::db::users::create_user(
+        let user = match crate::db::users::create_user(
             &self.state.db,
             &req.email,
             &req.username,
             &password_hash,
         )
         .await
-        .map_err(|_| Status::internal("Failed to create user"))?;
+        {
+            Ok(user) => user,
+            Err(_) => {
+                guard.complete("13");
+                return Err(Status::internal("Failed to create user"));
+            }
+        };
 
         // Generate JWT token pair (access + refresh)
-        let token_response = generate_token_pair(user.id, &user.email, &user.username)
-            .map_err(|_| Status::internal("Failed to generate token"))?;
+        let token_response = match generate_token_pair(user.id, &user.email, &user.username) {
+            Ok(token) => token,
+            Err(_) => {
+                guard.complete("13");
+                return Err(Status::internal("Failed to generate token"));
+            }
+        };
 
         info!(event = "user_registration_success", user_id = %user.id, email = %user.email);
 
+        guard.complete("0");
         Ok(Response::new(RegisterResponse {
             user_id: user.id.to_string(),
             token: token_response.access_token,
@@ -125,6 +151,8 @@ impl AuthService for AuthServiceImpl {
         &self,
         request: Request<LoginRequest>,
     ) -> Result<Response<LoginResponse>, Status> {
+        let guard = RequestGuard::new("auth-service", "Login");
+
         // T050: Increment login requests counter
         inc_login_requests();
 
@@ -133,19 +161,26 @@ impl AuthService for AuthServiceImpl {
         // Validate email format
         if req.email.is_empty() || !req.email.contains('@') {
             warn!(event = "invalid_email_format", email = %req.email);
+            guard.complete("3");
             return Err(Status::invalid_argument("invalid_email_format"));
         }
 
         // Find user by email
-        let user = crate::db::users::find_by_email(&self.state.db, &req.email)
-            .await
-            .map_err(|_| Status::internal("Failed to find user"))?
-            .ok_or_else(|| {
+        let user_result = crate::db::users::find_by_email(&self.state.db, &req.email).await;
+        let user = match user_result {
+            Ok(Some(user)) => user,
+            Ok(None) => {
                 // T050: Increment login failures for missing user
                 inc_login_failures();
                 warn!(event = "login_failed_user_not_found", email = %req.email);
-                Status::unauthenticated("invalid_credentials")
-            })?;
+                guard.complete("16");
+                return Err(Status::unauthenticated("invalid_credentials"));
+            }
+            Err(_) => {
+                guard.complete("13");
+                return Err(Status::internal("Failed to find user"));
+            }
+        };
 
         // Check if account is locked
         if user.is_locked() {
@@ -154,6 +189,7 @@ impl AuthService for AuthServiceImpl {
                 .map(|dt| dt.to_rfc3339())
                 .unwrap_or_default();
             warn!(event = "login_failed_account_locked", user_id = %user.id, locked_until = %locked_until);
+            guard.complete("7");
             return Err(Status::permission_denied(format!(
                 "account_locked_until_{}",
                 locked_until
@@ -161,41 +197,47 @@ impl AuthService for AuthServiceImpl {
         }
 
         // Verify password
-        verify_password(&req.password, &user.password_hash)
-            .map_err(|_| {
-                // T050: Increment login failures counter
-                inc_login_failures();
+        if let Err(_) = verify_password(&req.password, &user.password_hash) {
+            // T050: Increment login failures counter
+            inc_login_failures();
 
-                let user_id = user.id;
-                let user_email = user.email.clone();
-                warn!(event = "login_failed_wrong_password", user_id = %user_id, email = %user_email);
+            let user_id = user.id;
+            let user_email = user.email.clone();
+            warn!(event = "login_failed_wrong_password", user_id = %user_id, email = %user_email);
 
-                // Record failed attempt (fire-and-forget, don't block on errors)
-                // This also triggers account lockout after 5 failed attempts
-                let db = self.state.db.clone();
-                tokio::spawn(async move {
-                    let _ = crate::db::users::record_failed_login(&db, user_id, 5, 900).await;
-                    // Fetch updated user to check if account was just locked
-                    if let Ok(Some(updated_user)) = crate::db::users::find_by_id(&db, user_id).await {
-                        // T050: Increment account lockouts counter when account becomes locked
-                        if updated_user.failed_login_attempts >= 5 && updated_user.is_locked() {
-                            inc_account_lockouts();
-                            warn!(event = "account_locked_due_to_failed_attempts", user_id = %user_id, email = %user_email, attempts = updated_user.failed_login_attempts);
-                        }
+            // Record failed attempt (fire-and-forget, don't block on errors)
+            // This also triggers account lockout after 5 failed attempts
+            let db = self.state.db.clone();
+            tokio::spawn(async move {
+                let _ = crate::db::users::record_failed_login(&db, user_id, 5, 900).await;
+                // Fetch updated user to check if account was just locked
+                if let Ok(Some(updated_user)) = crate::db::users::find_by_id(&db, user_id).await {
+                    // T050: Increment account lockouts counter when account becomes locked
+                    if updated_user.failed_login_attempts >= 5 && updated_user.is_locked() {
+                        inc_account_lockouts();
+                        warn!(event = "account_locked_due_to_failed_attempts", user_id = %user_id, email = %user_email, attempts = updated_user.failed_login_attempts);
                     }
-                });
-                Status::unauthenticated("invalid_credentials")
-            })?;
+                }
+            });
+            guard.complete("16");
+            return Err(Status::unauthenticated("invalid_credentials"));
+        }
 
         // Clear failed login attempts on success
         let _ = crate::db::users::record_successful_login(&self.state.db, user.id).await;
 
         // Generate JWT token pair
-        let token_response = generate_token_pair(user.id, &user.email, &user.username)
-            .map_err(|_| Status::internal("Failed to generate token"))?;
+        let token_response = match generate_token_pair(user.id, &user.email, &user.username) {
+            Ok(token) => token,
+            Err(_) => {
+                guard.complete("13");
+                return Err(Status::internal("Failed to generate token"));
+            }
+        };
 
         info!(event = "user_login_success", user_id = %user.id, email = %user.email);
 
+        guard.complete("0");
         Ok(Response::new(LoginResponse {
             user_id: user.id.to_string(),
             token: token_response.access_token,
@@ -210,88 +252,106 @@ impl AuthService for AuthServiceImpl {
         &self,
         request: Request<RefreshTokenRequest>,
     ) -> Result<Response<RefreshTokenResponse>, Status> {
+        let guard = RequestGuard::new("auth-service", "RefreshToken");
+
         let req = request.into_inner();
 
         if req.refresh_token.is_empty() {
+            guard.complete("3");
             return Err(Status::unauthenticated("refresh_token_required"));
         }
 
         // Validate refresh token and extract claims
-        let token_data = crate::security::validate_token(&req.refresh_token)
-            .map_err(|_| Status::unauthenticated("refresh_token_invalid_or_expired"))?;
+        let token_data = match crate::security::validate_token(&req.refresh_token) {
+            Ok(data) => data,
+            Err(_) => {
+                guard.complete("16");
+                return Err(Status::unauthenticated("refresh_token_invalid_or_expired"));
+            }
+        };
 
         let claims = token_data.claims;
 
         if claims.token_type != "refresh" {
+            guard.complete("16");
             return Err(Status::unauthenticated("refresh_token_invalid_or_expired"));
         }
 
-        let redis_revoked =
-            token_revocation::is_token_revoked(&self.state.redis, &req.refresh_token)
-                .await
-                .map_err(|e| {
-                    error!(
-                        error = %e,
-                        "Failed to check refresh token revocation in redis"
-                    );
-                    Status::internal("token_revocation_check_failed")
-                })?;
+        let redis_revoked = match token_revocation::is_token_revoked(&self.state.redis, &req.refresh_token).await {
+            Ok(revoked) => revoked,
+            Err(e) => {
+                error!(error = %e, "Failed to check refresh token revocation in redis");
+                guard.complete("14");
+                return Err(Status::internal("token_revocation_check_failed"));
+            }
+        };
         if redis_revoked {
+            guard.complete("16");
             return Err(Status::unauthenticated("refresh_token_revoked"));
         }
 
         let token_hash = token_revocation::hash_token(&req.refresh_token);
-        let db_revoked = crate::db::token_revocation::is_token_revoked(&self.state.db, &token_hash)
-            .await
-            .map_err(|e| {
-                error!(
-                    error = %e,
-                    "Failed to check refresh token revocation in database"
-                );
-                Status::internal("token_revocation_check_failed")
-            })?;
+        let db_revoked = match crate::db::token_revocation::is_token_revoked(&self.state.db, &token_hash).await {
+            Ok(revoked) => revoked,
+            Err(e) => {
+                error!(error = %e, "Failed to check refresh token revocation in database");
+                guard.complete("13");
+                return Err(Status::internal("token_revocation_check_failed"));
+            }
+        };
         if db_revoked {
+            guard.complete("16");
             return Err(Status::unauthenticated("refresh_token_revoked"));
         }
 
         if let Some(jti) = &claims.jti {
-            let jti_revoked = crate::db::token_revocation::is_jti_revoked(&self.state.db, jti)
-                .await
-                .map_err(|e| {
-                    error!(
-                        error = %e,
-                        "Failed to check refresh token jti revocation in database"
-                    );
-                    Status::internal("token_revocation_check_failed")
-                })?;
+            let jti_revoked = match crate::db::token_revocation::is_jti_revoked(&self.state.db, jti).await {
+                Ok(revoked) => revoked,
+                Err(e) => {
+                    error!(error = %e, "Failed to check refresh token jti revocation in database");
+                    guard.complete("13");
+                    return Err(Status::internal("token_revocation_check_failed"));
+                }
+            };
             if jti_revoked {
+                guard.complete("16");
                 return Err(Status::unauthenticated("refresh_token_revoked"));
             }
         }
 
         // Parse user_id UUID from claims.sub
-        let user_id = uuid::Uuid::parse_str(&claims.sub)
-            .map_err(|_| Status::internal("Invalid user_id in token"))?;
+        let user_id = match uuid::Uuid::parse_str(&claims.sub) {
+            Ok(id) => id,
+            Err(_) => {
+                guard.complete("13");
+                return Err(Status::internal("Invalid user_id in token"));
+            }
+        };
 
-        let user_revoked =
-            token_revocation::check_user_token_revocation(&self.state.redis, user_id, claims.iat)
-                .await
-                .map_err(|e| {
-                    error!(
-                        error = %e,
-                        "Failed to check user-wide token revocation in redis"
-                    );
-                    Status::internal("token_revocation_check_failed")
-                })?;
+        let user_revoked = match token_revocation::check_user_token_revocation(&self.state.redis, user_id, claims.iat).await {
+            Ok(revoked) => revoked,
+            Err(e) => {
+                error!(error = %e, "Failed to check user-wide token revocation in redis");
+                guard.complete("14");
+                return Err(Status::internal("token_revocation_check_failed"));
+            }
+        };
 
         if user_revoked {
+            guard.complete("16");
             return Err(Status::unauthenticated("refresh_token_revoked"));
         }
 
         // Generate new access token with updated expiration
-        let token_response = generate_token_pair(user_id, &claims.email, &claims.username)
-            .map_err(|_| Status::internal("Failed to generate token"))?;
+        let token_response = match generate_token_pair(user_id, &claims.email, &claims.username) {
+            Ok(token) => token,
+            Err(_) => {
+                guard.complete("13");
+                return Err(Status::internal("Failed to generate token"));
+            }
+        };
 
+        guard.complete("0");
         Ok(Response::new(RefreshTokenResponse {
             token: token_response.access_token,
             expires_in: token_response.expires_in as i64,
@@ -412,10 +472,13 @@ impl AuthService for AuthServiceImpl {
         &self,
         request: Request<VerifyTokenRequest>,
     ) -> Result<Response<VerifyTokenResponse>, Status> {
+        let guard = RequestGuard::new("auth-service", "VerifyToken");
+
         let req = request.into_inner();
         let token_data = match crate::security::jwt::validate_token(&req.token) {
             Ok(data) => data,
             Err(_e) => {
+                guard.complete("16");
                 return Ok(Response::new(VerifyTokenResponse {
                     is_valid: false,
                     user_id: String::new(),
@@ -430,56 +493,54 @@ impl AuthService for AuthServiceImpl {
 
         let claims = token_data.claims.clone();
 
-        let redis_revoked = token_revocation::is_token_revoked(&self.state.redis, &req.token)
-            .await
-            .map_err(|e| {
-                error!(
-                    error = %e,
-                    "Failed to check token revocation in redis during verify_token"
-                );
-                Status::internal("token_revocation_check_failed")
-            })?;
+        let redis_revoked = match token_revocation::is_token_revoked(&self.state.redis, &req.token).await {
+            Ok(revoked) => revoked,
+            Err(e) => {
+                error!(error = %e, "Failed to check token revocation in redis during verify_token");
+                guard.complete("14");
+                return Err(Status::internal("token_revocation_check_failed"));
+            }
+        };
 
         let token_hash = token_revocation::hash_token(&req.token);
-        let db_revoked = crate::db::token_revocation::is_token_revoked(&self.state.db, &token_hash)
-            .await
-            .map_err(|e| {
-                error!(
-                    error = %e,
-                    "Failed to check token revocation in database during verify_token"
-                );
-                Status::internal("token_revocation_check_failed")
-            })?;
+        let db_revoked = match crate::db::token_revocation::is_token_revoked(&self.state.db, &token_hash).await {
+            Ok(revoked) => revoked,
+            Err(e) => {
+                error!(error = %e, "Failed to check token revocation in database during verify_token");
+                guard.complete("13");
+                return Err(Status::internal("token_revocation_check_failed"));
+            }
+        };
 
         let mut is_revoked = redis_revoked || db_revoked;
 
         if let Some(jti) = &claims.jti {
-            let jti_revoked = crate::db::token_revocation::is_jti_revoked(&self.state.db, jti)
-                .await
-                .map_err(|e| {
-                    error!(
-                        error = %e,
-                        "Failed to check token jti revocation in database during verify_token"
-                    );
-                    Status::internal("token_revocation_check_failed")
-                })?;
+            let jti_revoked = match crate::db::token_revocation::is_jti_revoked(&self.state.db, jti).await {
+                Ok(revoked) => revoked,
+                Err(e) => {
+                    error!(error = %e, "Failed to check token jti revocation in database during verify_token");
+                    guard.complete("13");
+                    return Err(Status::internal("token_revocation_check_failed"));
+                }
+            };
             is_revoked |= jti_revoked;
         }
 
         if let Ok(user_uuid) = uuid::Uuid::parse_str(&claims.sub) {
-            let user_revoked = token_revocation::check_user_token_revocation(
+            let user_revoked = match token_revocation::check_user_token_revocation(
                 &self.state.redis,
                 user_uuid,
                 claims.iat,
             )
             .await
-            .map_err(|e| {
-                error!(
-                    error = %e,
-                    "Failed to check user token revocation window during verify_token"
-                );
-                Status::internal("token_revocation_check_failed")
-            })?;
+            {
+                Ok(revoked) => revoked,
+                Err(e) => {
+                    error!(error = %e, "Failed to check user token revocation window during verify_token");
+                    guard.complete("14");
+                    return Err(Status::internal("token_revocation_check_failed"));
+                }
+            };
 
             if user_revoked {
                 is_revoked = true;
@@ -492,6 +553,7 @@ impl AuthService for AuthServiceImpl {
             ok_error()
         };
 
+        guard.complete(if is_revoked { "16" } else { "0" });
         Ok(Response::new(VerifyTokenResponse {
             is_valid: !is_revoked,
             user_id: claims.sub,

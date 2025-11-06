@@ -11,7 +11,7 @@
 use crate::error::{AppError, Result};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info};
 use uuid::Uuid;
 
 /// Post embedding stored in Milvus
