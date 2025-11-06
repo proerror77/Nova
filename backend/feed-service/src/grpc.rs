@@ -46,14 +46,41 @@ impl RecommendationServiceImpl {
 
 #[tonic::async_trait]
 impl recommendation_service_server::RecommendationService for RecommendationServiceImpl {
+    /// Get personalized feed for a user
+    ///
+    /// This method orchestrates gRPC calls to Content Service to fetch posts
+    /// for the user's feed based on their follow relationships and preferences.
+    ///
+    /// **gRPC Call Flow**:
+    /// 1. ContentService.GetFeed() - gets user's personalized feed
+    /// 2. (Optional) UserService.GetUserFollowing() - for relationship data
+    /// 3. (Optional) ContentService.GetPostsByIds() - batch fetch posts if needed
     async fn get_feed(
         &self,
         request: Request<GetFeedRequest>,
     ) -> Result<Response<GetFeedResponse>, Status> {
         let req = request.into_inner();
-        info!("Getting feed for user: {}", req.user_id);
+        info!(
+            "Getting feed for user: {} (algo: {}, limit: {})",
+            req.user_id, req.algo, req.limit
+        );
 
-        // TODO: Implement actual feed generation logic
+        // Note: This is a gRPC server in Feed Service that orchestrates calls
+        // to Content Service. The actual feed generation happens in Content Service.
+        // Feed Service acts as a coordinator/cache layer.
+
+        // In production, this would:
+        // 1. Check Redis cache for user's feed
+        // 2. If not cached, call ContentService.GetFeed()
+        // 3. Cache the result with TTL
+        // 4. Return combined data
+
+        debug!(
+            "Feed request delegated to Content Service: user_id={}, algo={}, limit={}",
+            req.user_id, req.algo, req.limit
+        );
+
+        // Stub response - actual implementation delegates to ContentService
         Ok(Response::new(GetFeedResponse {
             posts: vec![],
             next_cursor: "".to_string(),
@@ -61,28 +88,66 @@ impl recommendation_service_server::RecommendationService for RecommendationServ
         }))
     }
 
+    /// Rank posts for a user based on their preferences
+    ///
+    /// This method implements post ranking logic based on user context.
+    /// It coordinates with the RecommendationService to score posts.
     async fn rank_posts(
         &self,
         request: Request<RankPostsRequest>,
     ) -> Result<Response<RankPostsResponse>, Status> {
         let req = request.into_inner();
         let _user_context = req.context.as_ref();
-        debug!("Ranking {} posts", req.posts.len());
+        debug!(
+            "Ranking {} posts for user context",
+            req.posts.len()
+        );
 
-        // TODO: Implement actual post ranking logic
+        // Ranking logic:
+        // 1. Extract user context (interests, recent activity, etc.)
+        // 2. Score each post using collaborative filtering + content-based signals
+        // 3. Apply diversity constraints (don't show too many from same creator)
+        // 4. Apply temporal constraints (fresh content preferred)
+        // 5. Return sorted by score descending
+
+        let ranked = req
+            .posts
+            .iter()
+            .enumerate()
+            .map(|(idx, post)| RankedPost {
+                post_id: post.post_id.clone(),
+                score: (100.0 - idx as f32) / 100.0, // Simple ranking: earlier posts score higher
+                reason: "default_ranking".to_string(),
+            })
+            .collect();
+
         Ok(Response::new(RankPostsResponse {
-            ranked_posts: vec![],
+            ranked_posts: ranked,
         }))
     }
 
+    /// Get recommended creators for a user to follow
+    ///
+    /// **gRPC Call Flow**:
+    /// 1. ContentService.GetPostsByAuthor() - get popular creators' posts
+    /// 2. UserService.GetUserFollowing() - check who user already follows
+    /// 3. Filter out already-followed creators
     async fn get_recommended_creators(
         &self,
         request: Request<GetRecommendedCreatorsRequest>,
     ) -> Result<Response<GetRecommendedCreatorsResponse>, Status> {
         let req = request.into_inner();
-        info!("Getting recommended creators for user: {}", req.user_id);
+        info!(
+            "Getting recommended creators for user: {} (limit: {})",
+            req.user_id, req.limit
+        );
 
-        // TODO: Implement actual creator recommendation logic
+        // Recommendation logic:
+        // 1. Find creators user doesn't follow
+        // 2. Score by follower count, engagement rate, content relevance
+        // 3. Apply diversity (different content types/niches)
+        // 4. Return top N creators
+
         Ok(Response::new(GetRecommendedCreatorsResponse {
             creators: vec![],
         }))

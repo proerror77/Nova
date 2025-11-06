@@ -14,6 +14,8 @@ use serde::{Deserialize, Serialize};
 use sqlx::{postgres::PgPoolOptions, PgPool};
 use std::sync::Arc;
 use utoipa::OpenApi;
+use tonic::transport::Server as GrpcServer;
+use tonic_health::server::health_reporter;
 use utoipa_swagger_ui::SwaggerUi;
 use uuid::Uuid;
 
@@ -802,6 +804,27 @@ async fn main() -> std::io::Result<()> {
     };
 
     let state_data = Data::new(state);
+
+    // Start gRPC server on port (PORT + 1000)
+    let grpc_addr: std::net::SocketAddr = format!("0.0.0.0:{}", port + 1000)
+        .parse()
+        .expect("Invalid gRPC bind address");
+    tokio::spawn(async move {
+        let (mut health, health_service) = health_reporter();
+        // Mark SearchService as serving
+        health
+            .set_serving::<search_service::grpc::nova::search_service::v1::search_service_server::SearchServiceServer<search_service::grpc::SearchServiceImpl>>()
+            .await;
+        let svc = search_service::grpc::SearchServiceImpl::default();
+        if let Err(e) = GrpcServer::builder()
+            .add_service(health_service)
+            .add_service(search_service::grpc::nova::search_service::v1::search_service_server::SearchServiceServer::new(svc))
+            .serve(grpc_addr)
+            .await
+        {
+            tracing::error!("search-service gRPC server error: {}", e);
+        }
+    });
 
     // Start server
     tracing::info!("search-service listening on 0.0.0.0:{}", port);

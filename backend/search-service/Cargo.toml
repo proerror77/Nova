@@ -45,8 +45,7 @@ url = "2"
 error-types = { path = "../libs/error-types" }
 actix-middleware = { path = "../libs/actix-middleware" }
 db-pool = { path = "../libs/db-pool" }
-
-# gRPC
+tonic-health = "0.10"
 tonic = { workspace = true }
 prost = { workspace = true }
 

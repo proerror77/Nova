@@ -1,5 +1,7 @@
 use actix_web::{middleware, web, App, HttpServer};
 use tonic::transport::Server as GrpcServer;
+use tonic_health::server::health_reporter;
+use tonic::transport::Server as GrpcServer;
 use std::io;
 use db_pool::{create_pool as create_pg_pool, DbConfig as DbPoolConfig};
 use std::sync::Arc;
@@ -67,20 +69,27 @@ async fn main() -> io::Result<()> {
 
     tracing::info!("Starting HTTP server on {}", addr);
 
-    // Start gRPC server in background on port +1000
-    let grpc_addr: std::net::SocketAddr = format!(
-        "0.0.0.0:{}",
-        port.parse::<u16>().unwrap_or(8000) + 1000
-    )
-    .parse()
-    .expect("Invalid gRPC address");
+    // Start gRPC server in background on port + 1000
+    let http_port_u16 = port.parse::<u16>().unwrap_or(8000);
+    let grpc_addr: std::net::SocketAddr = format!("0.0.0.0:{}", http_port_u16 + 1000).parse().expect("Invalid gRPC address");
     tokio::spawn(async move {
+        let (mut health, health_service) = health_reporter();
+        health.set_serving::<notification_service::grpc::nova::notification_service::v1::notification_service_server::NotificationServiceServer<notification_service::grpc::NotificationServiceImpl>>().await;
+        // Server-side correlation-id extractor interceptor
+        fn server_interceptor(mut req: tonic::Request<()>) -> Result<tonic::Request<()>, tonic::Status> {
+            if let Some(val) = req.metadata().get("correlation-id") {
+                if let Ok(s) = val.to_str() { req.extensions_mut().insert::<String>(s.to_string()); }
+            }
+            Ok(req)
+        }
         let svc = notification_service::grpc::NotificationServiceImpl::default();
         tracing::info!("gRPC server listening on {}", grpc_addr);
         if let Err(e) = GrpcServer::builder()
+            .add_service(health_service)
             .add_service(
-                notification_service::grpc::nova::notification_service::v1::notification_service_server::NotificationServiceServer::new(
+                notification_service::grpc::nova::notification_service::v1::notification_service_server::NotificationServiceServer::with_interceptor(
                     svc,
+                    server_interceptor,
                 ),
             )
             .serve(grpc_addr)

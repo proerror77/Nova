@@ -9,6 +9,9 @@ members = [
     "backend/messaging-service",
     "backend/search-service",
     "backend/streaming-service",
+    "backend/notification-service",
+    "backend/cdn-service",
+    "backend/events-service",
     # Shared Libraries
     "backend/libs/actix-middleware",
     "backend/libs/crypto-core",
