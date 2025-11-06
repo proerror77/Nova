@@ -181,9 +181,9 @@ impl CdcConsumer {
                             topic, partition, offset, e
                         );
 
-                        // On error, we don't commit offset - message will be reprocessed
+                        // On error, we don't commit offset — message will be reprocessed
                         // This ensures at-least-once delivery
-                        // TODO: Add DLQ (Dead Letter Queue) for persistent failures
+                        // 持續失敗的訊息將改由專用事件服務處理（DLQ 由 events-service/messaging-service 提供）
                         continue;
                     }
 

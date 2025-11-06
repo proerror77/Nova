@@ -9,6 +9,7 @@
 mod openapi;
 
 use actix_web::{dev::Service, middleware as actix_middleware, web, App, HttpServer};
+use tonic_health::server::health_reporter;
 use db_pool::{create_pool as create_pg_pool, DbConfig as DbPoolConfig};
 use std::io;
 use std::net::SocketAddr;
@@ -123,10 +124,25 @@ async fn main() -> io::Result<()> {
     tokio::spawn(async move {
         let svc = streaming_service::grpc::StreamingServiceImpl::new(db_pool_grpc);
         tracing::info!("gRPC server listening on {}", grpc_addr);
+        let (mut health, health_service) = health_reporter();
+        health
+            .set_serving::<streaming_service::grpc::streaming_service_server::StreamingServiceServer<streaming_service::grpc::StreamingServiceImpl>>()
+            .await;
+
+        // Server-side correlation-id extractor interceptor
+        fn server_interceptor(mut req: tonic::Request<()>) -> Result<tonic::Request<()>, tonic::Status> {
+            if let Some(val) = req.metadata().get("correlation-id") {
+                if let Ok(s) = val.to_str() { req.extensions_mut().insert::<String>(s.to_string()); }
+            }
+            Ok(req)
+        }
+
         if let Err(e) = tonic::transport::Server::builder()
+            .add_service(health_service)
             .add_service(
-                streaming_service::grpc::streaming_service_server::StreamingServiceServer::new(
+                streaming_service::grpc::streaming_service_server::StreamingServiceServer::with_interceptor(
                     svc,
+                    server_interceptor,
                 ),
             )
             .serve(grpc_addr)

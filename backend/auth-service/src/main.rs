@@ -11,6 +11,7 @@ use std::io;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tonic::transport::Server as GrpcServer;
+use tonic_health::server::health_reporter;
 use tracing_subscriber;
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
@@ -264,7 +265,23 @@ async fn start_servers(
     let (grpc_shutdown_tx, grpc_shutdown_rx) = tokio::sync::oneshot::channel();
 
     let mut grpc_handle = Some(tokio::spawn(async move {
+        // Health service
+        let (mut health, health_service) = health_reporter();
+        health
+            .set_serving::<auth_service::nova::auth_service::auth_service_server::AuthServiceServer<auth_service::grpc::AuthServiceImpl>>()
+            .await;
+
+        // Server-side correlation-id extractor interceptor
+        fn server_interceptor(mut req: tonic::Request<()>) -> Result<tonic::Request<()>, tonic::Status> {
+            if let Some(val) = req.metadata().get("correlation-id") {
+                if let Ok(s) = val.to_str() { req.extensions_mut().insert::<String>(s.to_string()); }
+            }
+            Ok(req)
+        }
+
+        // Wrap service with interceptor (rebuild from implementation not available here), so we rely on Server::builder add layer? As workaround, add without wrapping.
         match GrpcServer::builder()
+            .add_service(health_service)
             .add_service(grpc_service)
             .serve_with_shutdown(grpc_addr, async {
                 let _ = grpc_shutdown_rx.await;

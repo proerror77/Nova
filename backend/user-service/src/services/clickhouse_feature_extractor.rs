@@ -253,7 +253,7 @@ impl ClickHouseFeatureExtractor {
             let row: PostSignalRow = serde_json::from_str(line)
                 .map_err(|e| format!("Failed to parse ClickHouse row: {}", e))?;
 
-            // TODO: Fetch deep_model_score from ML service (for now, use 0.5)
+            // deep_model_score 来自外部 ML 服务；此处暂以常数占位，待模型服务接入后替换
             let signal = row.to_ranking_signals(0.5);
 
             // Validate signal before returning
