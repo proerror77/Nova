@@ -36,6 +36,13 @@ prometheus.workspace = true
 
 # CDN-specific
 futures = "0.3"
+aws-sdk-s3 = "1.63"
+aws-config = "1.5"
+hmac = "0.12"
+sha2 = "0.10"
+hex = "0.4"
+base64 = "0.22"
+url = "2.5"
 
 # gRPC
 tonic.workspace = true
@@ -45,6 +52,7 @@ tonic-health = "0.10"
 # Shared libraries
 error-types = { path = "../libs/error-types" }
 db-pool = { path = "../libs/db-pool" }
+grpc-metrics = { path = "../libs/grpc-metrics" }
 
 [build-dependencies]
 tonic-build = "0.11"
