@@ -1,5 +1,5 @@
 use chrono::Utc;
-use event_schema::{DomainEvent, OutboxEvent, priority};
+use event_schema::{priority, DomainEvent, OutboxEvent};
 use uuid::Uuid;
 
 fn main() {
@@ -57,7 +57,10 @@ fn main() {
     println!("  Priority: {} (HIGH)", post_outbox.priority);
     println!("  Kafka Topic: {}", post_outbox.kafka_topic());
     println!("  Affects Feed: {}", post_event.affects_feed());
-    println!("  Requires Search Indexing: {}", post_event.requires_search_indexing());
+    println!(
+        "  Requires Search Indexing: {}",
+        post_event.requires_search_indexing()
+    );
     println!();
 
     // Example 3: Generate Kafka message

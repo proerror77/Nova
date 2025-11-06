@@ -7,9 +7,9 @@ use uuid::Uuid;
 
 use crate::error::{AppError, Result};
 use crate::grpc::clients::{ContentServiceClient, UserServiceClient};
-use grpc_clients::nova::user_service::v1::GetUserFollowingRequest;
 use crate::middleware::jwt_auth::UserId;
 use crate::models::FeedResponse;
+use grpc_clients::nova::user_service::v1::GetUserFollowingRequest;
 
 #[derive(Debug, Deserialize)]
 pub struct FeedQueryParams {

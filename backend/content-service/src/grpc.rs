@@ -251,7 +251,8 @@ impl ContentService for ContentServiceImpl {
         )
         .bind(post_id)
         .fetch_optional(&self.db_pool)
-        .await {
+        .await
+        {
             Ok(r) => r,
             Err(e) => {
                 tracing::error!("Database error checking post existence: {}", e);
@@ -529,7 +530,7 @@ impl ContentService for ContentServiceImpl {
             }
 
             match query.fetch_optional(&mut *tx).await {
-                Ok(_) => {},
+                Ok(_) => {}
                 Err(e) => {
                     tracing::error!("Database error updating post: {}", e);
                     guard.complete("13");
@@ -858,7 +859,8 @@ impl ContentService for ContentServiceImpl {
         )
         .bind(post_id)
         .fetch_one(&self.db_pool)
-        .await {
+        .await
+        {
             Ok(exists) => exists,
             Err(e) => {
                 tracing::error!("Database error checking post existence: {}", e);
@@ -1135,15 +1137,14 @@ impl ContentService for ContentServiceImpl {
         })?;
 
         // Fetch total count
-        let total_count: i64 =
-            sqlx::query_scalar("SELECT COUNT(*) FROM likes WHERE post_id = $1")
-                .bind(post_id)
-                .fetch_one(&self.db_pool)
-                .await
-                .map_err(|e| {
-                    tracing::error!("Database error counting likes: {}", e);
-                    Status::internal("Failed to count likes")
-                })?;
+        let total_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM likes WHERE post_id = $1")
+            .bind(post_id)
+            .fetch_one(&self.db_pool)
+            .await
+            .map_err(|e| {
+                tracing::error!("Database error counting likes: {}", e);
+                Status::internal("Failed to count likes")
+            })?;
 
         let proto_likes = likes
             .into_iter()
@@ -1154,7 +1155,11 @@ impl ContentService for ContentServiceImpl {
             .collect();
 
         let total_count_i32 = i32::try_from(total_count).unwrap_or_else(|_| {
-            tracing::warn!("Like count exceeded i32::MAX for post {}: {}", post_id, total_count);
+            tracing::warn!(
+                "Like count exceeded i32::MAX for post {}: {}",
+                post_id,
+                total_count
+            );
             i32::MAX
         });
 
@@ -1192,9 +1197,9 @@ pub async fn start_grpc_server(
     feed_ranking: Arc<FeedRankingService>,
     mut shutdown: broadcast::Receiver<()>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-use nova::content::content_service_server::ContentServiceServer;
-use tonic::transport::Server;
-use tonic_health::server::health_reporter;
+    use nova::content::content_service_server::ContentServiceServer;
+    use tonic::transport::Server;
+    use tonic_health::server::health_reporter;
 
     tracing::info!("Starting gRPC server at {}", addr);
 
@@ -1207,7 +1212,9 @@ use tonic_health::server::health_reporter;
         .await;
 
     // Server-side correlation-id extractor interceptor
-    fn server_interceptor(mut req: tonic::Request<()>) -> Result<tonic::Request<()>, tonic::Status> {
+    fn server_interceptor(
+        mut req: tonic::Request<()>,
+    ) -> Result<tonic::Request<()>, tonic::Status> {
         if let Some(val) = req.metadata().get("correlation-id") {
             if let Ok(s) = val.to_str() {
                 let correlation_id = s.to_string();
@@ -1219,7 +1226,10 @@ use tonic_health::server::health_reporter;
 
     Server::builder()
         .add_service(health_service)
-        .add_service(ContentServiceServer::with_interceptor(service, server_interceptor))
+        .add_service(ContentServiceServer::with_interceptor(
+            service,
+            server_interceptor,
+        ))
         .serve_with_shutdown(addr, async move {
             // Wait for shutdown notification; ignore errors if sender dropped.
             let _ = shutdown.recv().await;

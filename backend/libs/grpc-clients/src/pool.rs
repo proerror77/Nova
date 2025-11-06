@@ -1,10 +1,9 @@
 /// Connection Pool Management
 ///
 /// Manages gRPC connection pooling and lifecycle for efficient inter-service communication.
-
 use std::sync::Arc;
-use tonic::transport::{Channel, Endpoint};
 use std::time::Duration;
+use tonic::transport::{Channel, Endpoint};
 
 /// gRPC Connection Pool
 /// Manages multiple connections with automatic cleanup and health checks
@@ -41,7 +40,9 @@ impl ConnectionPool {
 
     /// Get next connection from pool (round-robin)
     pub fn get(&self) -> Arc<Channel> {
-        let index = self.current_index.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let index = self
+            .current_index
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         self.channels[index % self.size].clone()
     }
 

@@ -1,11 +1,11 @@
 use actix_web::{web, App, HttpServer};
-use tonic::transport::Server as GrpcServer;
-use tonic_health::server::health_reporter;
+use db_pool::{create_pool as create_pg_pool, DbConfig as DbPoolConfig};
+use events_service::services::{OutboxConfig, OutboxPublisher};
 use std::io;
 use std::sync::Arc;
-use db_pool::{create_pool as create_pg_pool, DbConfig as DbPoolConfig};
+use tonic::transport::Server as GrpcServer;
+use tonic_health::server::health_reporter;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
-use events_service::services::{OutboxConfig, OutboxPublisher};
 
 #[actix_web::main]
 async fn main() -> io::Result<()> {
@@ -25,14 +25,15 @@ async fn main() -> io::Result<()> {
     if cfg.database_url.is_empty() {
         cfg.database_url = std::env::var("DATABASE_URL").unwrap_or_default();
     }
-    if cfg.max_connections < 20 { cfg.max_connections = 20; }
+    if cfg.max_connections < 20 {
+        cfg.max_connections = 20;
+    }
     cfg.log_config();
 
-    let db_pool = create_pg_pool(cfg).await
-        .map_err(|e| {
-            tracing::error!("Failed to create database pool: {}", e);
-            std::io::Error::new(std::io::ErrorKind::Other, e)
-        })?;
+    let db_pool = create_pg_pool(cfg).await.map_err(|e| {
+        tracing::error!("Failed to create database pool: {}", e);
+        std::io::Error::new(std::io::ErrorKind::Other, e)
+    })?;
 
     tracing::info!("Database pool created successfully");
 
@@ -78,7 +79,10 @@ async fn main() -> io::Result<()> {
     });
 
     // Compute HTTP and gRPC ports
-    let http_port: u16 = std::env::var("PORT").ok().and_then(|s| s.parse().ok()).unwrap_or(8000);
+    let http_port: u16 = std::env::var("PORT")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(8000);
     let grpc_port: u16 = http_port + 1000;
 
     tracing::info!("HTTP port: {}, gRPC port: {}", http_port, grpc_port);
@@ -92,7 +96,9 @@ async fn main() -> io::Result<()> {
         health.set_serving::<events_service::grpc::nova::events_service::v1::events_service_server::EventsServiceServer<events_service::grpc::EventsServiceImpl>>().await;
 
         // Server-side correlation-id extractor interceptor
-        fn server_interceptor(mut req: tonic::Request<()>) -> Result<tonic::Request<()>, tonic::Status> {
+        fn server_interceptor(
+            mut req: tonic::Request<()>,
+        ) -> Result<tonic::Request<()>, tonic::Status> {
             if let Some(val) = req.metadata().get("correlation-id") {
                 if let Ok(s) = val.to_str() {
                     let correlation_id = s.to_string();

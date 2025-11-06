@@ -766,5 +766,4 @@ impl AuthServiceClient {
             }
         }
     }
-
 }

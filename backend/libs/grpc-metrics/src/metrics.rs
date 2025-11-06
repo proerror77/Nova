@@ -3,7 +3,7 @@
 //! Tracks RED (Request, Error, Duration) metrics at the method level
 
 use lazy_static::lazy_static;
-use prometheus::{CounterVec, HistogramVec, IntGaugeVec, Registry, Result, opts, histogram_opts};
+use prometheus::{histogram_opts, opts, CounterVec, HistogramVec, IntGaugeVec, Registry, Result};
 
 lazy_static! {
     /// Global gRPC metrics instance
@@ -33,10 +33,7 @@ impl GrpcMetrics {
     /// Create new GrpcMetrics instance
     pub fn new() -> Self {
         let requests_total = CounterVec::new(
-            opts!(
-                "grpc_server_requests_total",
-                "Total gRPC server requests"
-            ),
+            opts!("grpc_server_requests_total", "Total gRPC server requests"),
             &["service", "method", "code"],
         )
         .expect("failed to create requests_total metric");
@@ -79,13 +76,7 @@ impl GrpcMetrics {
     }
 
     /// Record a completed gRPC request
-    pub fn record_request(
-        &self,
-        service: &str,
-        method: &str,
-        code: &str,
-        duration_secs: f64,
-    ) {
+    pub fn record_request(&self, service: &str, method: &str, code: &str, duration_secs: f64) {
         // Record total requests
         self.requests_total
             .with_label_values(&[service, method, code])

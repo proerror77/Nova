@@ -1,17 +1,15 @@
+use grpc_metrics::layer::RequestGuard;
 /// gRPC service implementations for Auth Service
 /// Based on Phase 0 proto definitions (nova.auth_service)
 /// This is a core foundational service that provides user identity and authentication
 use tonic::{Request, Response, Status};
-use grpc_metrics::layer::RequestGuard;
 
 use crate::{
     metrics::{
         inc_account_lockouts, inc_login_failures, inc_login_requests, inc_register_requests,
     },
     nova::{
-        auth_service::auth_service_server::AuthService,
-        auth_service::*,
-        common::v1::ErrorStatus,
+        auth_service::auth_service_server::AuthService, auth_service::*, common::v1::ErrorStatus,
     },
     security::{generate_token_pair, hash_password, token_revocation, verify_password},
     AppState,
@@ -277,21 +275,27 @@ impl AuthService for AuthServiceImpl {
             return Err(Status::unauthenticated("refresh_token_invalid_or_expired"));
         }
 
-        let redis_revoked = match token_revocation::is_token_revoked(&self.state.redis, &req.refresh_token).await {
-            Ok(revoked) => revoked,
-            Err(e) => {
-                error!(error = %e, "Failed to check refresh token revocation in redis");
-                guard.complete("14");
-                return Err(Status::internal("token_revocation_check_failed"));
-            }
-        };
+        let redis_revoked =
+            match token_revocation::is_token_revoked(&self.state.redis, &req.refresh_token).await {
+                Ok(revoked) => revoked,
+                Err(e) => {
+                    error!(error = %e, "Failed to check refresh token revocation in redis");
+                    guard.complete("14");
+                    return Err(Status::internal("token_revocation_check_failed"));
+                }
+            };
         if redis_revoked {
             guard.complete("16");
             return Err(Status::unauthenticated("refresh_token_revoked"));
         }
 
         let token_hash = token_revocation::hash_token(&req.refresh_token);
-        let db_revoked = match crate::db::token_revocation::is_token_revoked(&self.state.db, &token_hash).await {
+        let db_revoked = match crate::db::token_revocation::is_token_revoked(
+            &self.state.db,
+            &token_hash,
+        )
+        .await
+        {
             Ok(revoked) => revoked,
             Err(e) => {
                 error!(error = %e, "Failed to check refresh token revocation in database");
@@ -305,7 +309,9 @@ impl AuthService for AuthServiceImpl {
         }
 
         if let Some(jti) = &claims.jti {
-            let jti_revoked = match crate::db::token_revocation::is_jti_revoked(&self.state.db, jti).await {
+            let jti_revoked = match crate::db::token_revocation::is_jti_revoked(&self.state.db, jti)
+                .await
+            {
                 Ok(revoked) => revoked,
                 Err(e) => {
                     error!(error = %e, "Failed to check refresh token jti revocation in database");
@@ -328,7 +334,13 @@ impl AuthService for AuthServiceImpl {
             }
         };
 
-        let user_revoked = match token_revocation::check_user_token_revocation(&self.state.redis, user_id, claims.iat).await {
+        let user_revoked = match token_revocation::check_user_token_revocation(
+            &self.state.redis,
+            user_id,
+            claims.iat,
+        )
+        .await
+        {
             Ok(revoked) => revoked,
             Err(e) => {
                 error!(error = %e, "Failed to check user-wide token revocation in redis");
@@ -487,13 +499,15 @@ impl AuthService for AuthServiceImpl {
                     expires_at: 0,
                     is_revoked: false,
                     error: make_error("TOKEN_INVALID", "Invalid or expired token"),
-                }))
+                }));
             }
         };
 
         let claims = token_data.claims.clone();
 
-        let redis_revoked = match token_revocation::is_token_revoked(&self.state.redis, &req.token).await {
+        let redis_revoked = match token_revocation::is_token_revoked(&self.state.redis, &req.token)
+            .await
+        {
             Ok(revoked) => revoked,
             Err(e) => {
                 error!(error = %e, "Failed to check token revocation in redis during verify_token");
@@ -503,7 +517,12 @@ impl AuthService for AuthServiceImpl {
         };
 
         let token_hash = token_revocation::hash_token(&req.token);
-        let db_revoked = match crate::db::token_revocation::is_token_revoked(&self.state.db, &token_hash).await {
+        let db_revoked = match crate::db::token_revocation::is_token_revoked(
+            &self.state.db,
+            &token_hash,
+        )
+        .await
+        {
             Ok(revoked) => revoked,
             Err(e) => {
                 error!(error = %e, "Failed to check token revocation in database during verify_token");
@@ -515,7 +534,9 @@ impl AuthService for AuthServiceImpl {
         let mut is_revoked = redis_revoked || db_revoked;
 
         if let Some(jti) = &claims.jti {
-            let jti_revoked = match crate::db::token_revocation::is_jti_revoked(&self.state.db, jti).await {
+            let jti_revoked = match crate::db::token_revocation::is_jti_revoked(&self.state.db, jti)
+                .await
+            {
                 Ok(revoked) => revoked,
                 Err(e) => {
                     error!(error = %e, "Failed to check token jti revocation in database during verify_token");
@@ -787,8 +808,9 @@ impl AuthService for AuthServiceImpl {
             900
         };
 
-        let (failed_attempts, is_locked, locked_until): (i32, bool, Option<DateTime<Utc>>) = sqlx::query_as(
-            r#"
+        let (failed_attempts, is_locked, locked_until): (i32, bool, Option<DateTime<Utc>>) =
+            sqlx::query_as(
+                r#"
             UPDATE users
             SET failed_login_attempts = failed_login_attempts + 1,
                 locked_until = CASE
@@ -802,13 +824,13 @@ impl AuthService for AuthServiceImpl {
                 (locked_until IS NOT NULL AND locked_until > CURRENT_TIMESTAMP) AS is_locked,
                 locked_until
             "#,
-        )
-        .bind(&req.user_id)
-        .bind(max_attempts)
-        .bind(lock_secs.to_string())
-        .fetch_one(&self.state.db)
-        .await
-        .map_err(|e| Status::internal(format!("Database error: {}", e)))?;
+            )
+            .bind(&req.user_id)
+            .bind(max_attempts)
+            .bind(lock_secs.to_string())
+            .fetch_one(&self.state.db)
+            .await
+            .map_err(|e| Status::internal(format!("Database error: {}", e)))?;
 
         Ok(Response::new(RecordFailedLoginResponse {
             failed_attempts,

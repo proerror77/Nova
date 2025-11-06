@@ -8,9 +8,8 @@
 ///
 /// Tests use a real PostgreSQL database (via DATABASE_URL env var)
 /// and follow the red-green-refactor TDD cycle.
-
 use crate::error::AuthError;
-use crate::models::user::{LoginRequest, RegisterRequest, RefreshTokenRequest};
+use crate::models::user::{LoginRequest, RefreshTokenRequest, RegisterRequest};
 use crate::security::{jwt, password};
 use crate::tests::fixtures::*;
 use sqlx::PgPool;
@@ -24,8 +23,8 @@ use uuid::Uuid;
 ///
 /// Requires DATABASE_URL environment variable to be set
 async fn setup_test_db() -> PgPool {
-    let database_url = std::env::var("DATABASE_URL")
-        .expect("DATABASE_URL must be set for integration tests");
+    let database_url =
+        std::env::var("DATABASE_URL").expect("DATABASE_URL must be set for integration tests");
 
     PgPool::connect(&database_url)
         .await
@@ -49,7 +48,10 @@ async fn test_register_user_happy_path() {
     let result = register_user_logic(&pool, &req).await;
 
     // THEN: Registration should succeed and return a user ID and tokens
-    assert!(result.is_ok(), "Registration should succeed with valid input");
+    assert!(
+        result.is_ok(),
+        "Registration should succeed with valid input"
+    );
     let (user_id, access_token, refresh_token) = result.unwrap();
 
     // Verify user ID is valid UUID
@@ -57,11 +59,22 @@ async fn test_register_user_happy_path() {
 
     // Verify tokens are not empty
     assert!(!access_token.is_empty(), "Access token should not be empty");
-    assert!(!refresh_token.is_empty(), "Refresh token should not be empty");
+    assert!(
+        !refresh_token.is_empty(),
+        "Refresh token should not be empty"
+    );
 
     // Verify tokens are valid JWT format (3 parts separated by dots)
-    assert_eq!(access_token.matches('.').count(), 2, "Access token should be valid JWT");
-    assert_eq!(refresh_token.matches('.').count(), 2, "Refresh token should be valid JWT");
+    assert_eq!(
+        access_token.matches('.').count(),
+        2,
+        "Access token should be valid JWT"
+    );
+    assert_eq!(
+        refresh_token.matches('.').count(),
+        2,
+        "Refresh token should be valid JWT"
+    );
 
     // Verify user was created in database
     let user = crate::db::users::find_by_email(&pool, &req.email)
@@ -71,7 +84,10 @@ async fn test_register_user_happy_path() {
 
     assert_eq!(user.email, req.email);
     assert_eq!(user.username, req.username);
-    assert!(!user.email_verified, "New user should not be email verified");
+    assert!(
+        !user.email_verified,
+        "New user should not be email verified"
+    );
 
     // Clean up
     delete_test_user_by_id(&pool, user_id).await;
@@ -86,15 +102,18 @@ async fn test_register_user_duplicate_email() {
     delete_test_user_by_email(&pool, &req.email).await;
 
     // Create the first user
-    let password_hash = password::hash_password(TEST_PASSWORD)
-        .expect("Password hashing should succeed");
+    let password_hash =
+        password::hash_password(TEST_PASSWORD).expect("Password hashing should succeed");
     let existing_user_id = create_test_user(&pool, &req.email, TEST_USERNAME, &password_hash).await;
 
     // WHEN: We attempt to register another user with the same email
     let result = register_user_logic(&pool, &req).await;
 
     // THEN: Registration should fail with EmailAlreadyExists error
-    assert!(result.is_err(), "Registration should fail for duplicate email");
+    assert!(
+        result.is_err(),
+        "Registration should fail for duplicate email"
+    );
 
     let err = result.unwrap_err();
     assert!(
@@ -115,18 +134,22 @@ async fn test_register_user_duplicate_username() {
     delete_test_user_by_email(&pool, TEST_EMAIL).await;
     delete_test_user_by_email(&pool, TEST_EMAIL_2).await;
 
-    let password_hash = password::hash_password(TEST_PASSWORD)
-        .expect("Password hashing should succeed");
+    let password_hash =
+        password::hash_password(TEST_PASSWORD).expect("Password hashing should succeed");
 
     // Create user with TEST_USERNAME
-    let existing_user_id = create_test_user(&pool, TEST_EMAIL_2, TEST_USERNAME, &password_hash).await;
+    let existing_user_id =
+        create_test_user(&pool, TEST_EMAIL_2, TEST_USERNAME, &password_hash).await;
 
     // WHEN: We attempt to register with same username but different email
     let req = custom_register_request(TEST_EMAIL, TEST_USERNAME, TEST_PASSWORD);
     let result = register_user_logic(&pool, &req).await;
 
     // THEN: Registration should fail with UsernameAlreadyExists error
-    assert!(result.is_err(), "Registration should fail for duplicate username");
+    assert!(
+        result.is_err(),
+        "Registration should fail for duplicate username"
+    );
 
     let err = result.unwrap_err();
     assert!(
@@ -206,8 +229,8 @@ async fn test_login_user_correct_credentials() {
 
     delete_test_user_by_email(&pool, TEST_EMAIL).await;
 
-    let password_hash = password::hash_password(TEST_PASSWORD)
-        .expect("Password hashing should succeed");
+    let password_hash =
+        password::hash_password(TEST_PASSWORD).expect("Password hashing should succeed");
     let user_id = create_test_user(&pool, TEST_EMAIL, TEST_USERNAME, &password_hash).await;
 
     let req = valid_login_request();
@@ -216,13 +239,19 @@ async fn test_login_user_correct_credentials() {
     let result = login_user_logic(&pool, &req).await;
 
     // THEN: Login should succeed and return tokens
-    assert!(result.is_ok(), "Login should succeed with correct credentials");
+    assert!(
+        result.is_ok(),
+        "Login should succeed with correct credentials"
+    );
 
     let (returned_user_id, access_token, refresh_token) = result.unwrap();
 
     assert_eq!(returned_user_id, user_id, "Returned user ID should match");
     assert!(!access_token.is_empty(), "Access token should not be empty");
-    assert!(!refresh_token.is_empty(), "Refresh token should not be empty");
+    assert!(
+        !refresh_token.is_empty(),
+        "Refresh token should not be empty"
+    );
 
     // Verify tokens can be validated
     let access_claims = jwt::validate_token(&access_token);
@@ -242,8 +271,8 @@ async fn test_login_user_wrong_password() {
 
     delete_test_user_by_email(&pool, TEST_EMAIL).await;
 
-    let password_hash = password::hash_password(TEST_PASSWORD)
-        .expect("Password hashing should succeed");
+    let password_hash =
+        password::hash_password(TEST_PASSWORD).expect("Password hashing should succeed");
     let user_id = create_test_user(&pool, TEST_EMAIL, TEST_USERNAME, &password_hash).await;
 
     // WHEN: We attempt to login with wrong password
@@ -296,7 +325,10 @@ async fn test_login_user_invalid_email_format() {
     let result = login_user_logic(&pool, &req).await;
 
     // THEN: Login should fail with InvalidEmailFormat error
-    assert!(result.is_err(), "Login should fail for invalid email format");
+    assert!(
+        result.is_err(),
+        "Login should fail for invalid email format"
+    );
 
     let err = result.unwrap_err();
     assert!(
@@ -331,13 +363,22 @@ async fn test_refresh_token_valid() {
     let result = refresh_token_logic(&req);
 
     // THEN: Refresh should succeed and return new tokens
-    assert!(result.is_ok(), "Token refresh should succeed with valid refresh token");
+    assert!(
+        result.is_ok(),
+        "Token refresh should succeed with valid refresh token"
+    );
 
     let (new_access, new_refresh) = result.unwrap();
 
     // Verify new tokens are different from old tokens
-    assert_ne!(new_access, token_pair.access_token, "New access token should be different");
-    assert_ne!(new_refresh, token_pair.refresh_token, "New refresh token should be different");
+    assert_ne!(
+        new_access, token_pair.access_token,
+        "New access token should be different"
+    );
+    assert_ne!(
+        new_refresh, token_pair.refresh_token,
+        "New refresh token should be different"
+    );
 
     // Verify new tokens are valid
     let access_claims = jwt::validate_token(&new_access);
@@ -365,7 +406,10 @@ async fn test_refresh_token_with_access_token() {
     let result = refresh_token_logic(&req);
 
     // THEN: Refresh should fail with InvalidToken error
-    assert!(result.is_err(), "Token refresh should fail when using access token");
+    assert!(
+        result.is_err(),
+        "Token refresh should fail when using access token"
+    );
 
     let err = result.unwrap_err();
     assert!(
@@ -386,7 +430,10 @@ async fn test_refresh_token_invalid_token() {
     let result = refresh_token_logic(&req);
 
     // THEN: Refresh should fail
-    assert!(result.is_err(), "Token refresh should fail with invalid token");
+    assert!(
+        result.is_err(),
+        "Token refresh should fail with invalid token"
+    );
 }
 
 // ============================================================================

@@ -130,7 +130,10 @@ impl SearchIndexConsumer {
                             // Continue processing other messages
                         } else {
                             // Commit offset after successful processing
-                            if let Err(e) = self.consumer.commit_message(&msg, rdkafka::consumer::CommitMode::Async) {
+                            if let Err(e) = self
+                                .consumer
+                                .commit_message(&msg, rdkafka::consumer::CommitMode::Async)
+                            {
                                 warn!("Failed to commit offset: {}", e);
                             }
                         }
@@ -172,10 +175,7 @@ impl SearchIndexConsumer {
         Ok(())
     }
 
-    async fn handle_post_created(
-        &self,
-        event: PostCreatedEvent,
-    ) -> Result<(), KafkaConsumerError> {
+    async fn handle_post_created(&self, event: PostCreatedEvent) -> Result<(), KafkaConsumerError> {
         info!("Indexing new post: {}", event.post_id);
 
         let doc = elasticsearch::PostDocument {
@@ -214,20 +214,14 @@ impl SearchIndexConsumer {
         Ok(())
     }
 
-    async fn handle_post_deleted(
-        &self,
-        event: PostDeletedEvent,
-    ) -> Result<(), KafkaConsumerError> {
+    async fn handle_post_deleted(&self, event: PostDeletedEvent) -> Result<(), KafkaConsumerError> {
         info!("Deleting post from index: {}", event.post_id);
 
         self.es_client.delete_post(event.post_id).await?;
         Ok(())
     }
 
-    async fn handle_user_updated(
-        &self,
-        event: UserUpdatedEvent,
-    ) -> Result<(), KafkaConsumerError> {
+    async fn handle_user_updated(&self, event: UserUpdatedEvent) -> Result<(), KafkaConsumerError> {
         info!("Updating user index: {}", event.user_id);
 
         let doc = elasticsearch::UserDocument {
