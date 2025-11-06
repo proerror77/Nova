@@ -284,6 +284,7 @@ pub async fn update_post_metadata(
 // ============================================
 
 /// Create a test upload session
+#[allow(dead_code)]
 pub async fn create_test_upload_session(pool: &PgPool, post_id: Uuid) -> String {
     use rand::Rng;
     let mut rng = rand::thread_rng();
@@ -313,6 +314,7 @@ pub async fn create_test_upload_session(pool: &PgPool, post_id: Uuid) -> String 
 // ============================================
 
 /// Create multiple test posts for pagination testing
+#[allow(dead_code)]
 pub async fn create_test_posts_batch(pool: &PgPool, user_id: Uuid, count: usize) -> Vec<Post> {
     let mut posts = Vec::new();
 
