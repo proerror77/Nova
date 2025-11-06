@@ -5,7 +5,7 @@ pub mod assertions;
 pub mod test_env;
 
 use chrono::{DateTime, Utc};
-use sqlx::{FromRow, PgPool, Postgres, Transaction};
+use sqlx::{FromRow, PgPool};
 use uuid::Uuid;
 
 // ============================================

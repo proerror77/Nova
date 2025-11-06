@@ -8,6 +8,8 @@
 //! - Redis client
 //! - Feed API client
 
+#![allow(dead_code)]
+
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::Arc;

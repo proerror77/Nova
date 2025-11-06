@@ -11,7 +11,6 @@
 //! Expected Duration: ~60s per test
 
 use serde_json::json;
-use std::collections::HashMap;
 use tokio::time::{sleep, Duration, Instant};
 
 mod test_harness;
