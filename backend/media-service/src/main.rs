@@ -64,7 +64,14 @@ async fn main() -> io::Result<()> {
     tracing_subscriber::fmt::init();
 
     // Load configuration from environment
-    let config = Config::from_env().expect("Failed to load configuration");
+    let config = match Config::from_env() {
+        Ok(cfg) => cfg,
+        Err(e) => {
+            tracing::error!("Configuration loading failed: {:#}", e);
+            eprintln!("ERROR: Failed to load configuration: {}", e);
+            std::process::exit(1);
+        }
+    };
 
     let http_bind_address = format!("{}:{}", config.app.host, 8082);
     let grpc_bind_address = format!("{}:9082", config.app.host);
@@ -100,9 +107,14 @@ async fn main() -> io::Result<()> {
         cfg.database_url = config.database.url.clone();
     }
     cfg.max_connections = std::cmp::max(cfg.max_connections, config.database.max_connections);
-    let db_pool = create_pg_pool(cfg)
-        .await
-        .expect("Failed to connect to database");
+    let db_pool = match create_pg_pool(cfg).await {
+        Ok(pool) => pool,
+        Err(e) => {
+            tracing::error!("Database pool creation failed: {:#}", e);
+            eprintln!("ERROR: Failed to connect to database: {}", e);
+            std::process::exit(1);
+        }
+    };
 
     let db_pool_http = db_pool.clone();
     let reel_pipeline = ReelTranscodePipeline::new(db_pool.clone());

@@ -741,7 +741,14 @@ async fn main() -> std::io::Result<()> {
     dotenvy::dotenv().ok();
 
     // Get configuration from environment
-    let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+    let database_url = match std::env::var("DATABASE_URL") {
+        Ok(url) => url,
+        Err(e) => {
+            tracing::error!("DATABASE_URL environment variable not set: {:#}", e);
+            eprintln!("ERROR: DATABASE_URL must be set");
+            std::process::exit(1);
+        }
+    };
 
     let redis_url =
         std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379".to_string());
@@ -753,17 +760,27 @@ async fn main() -> std::io::Result<()> {
 
     // Initialize database connection pool
     tracing::info!("Connecting to database...");
-    let db = init_db_pool(&database_url)
-        .await
-        .expect("Failed to connect to database");
+    let db = match init_db_pool(&database_url).await {
+        Ok(pool) => pool,
+        Err(e) => {
+            tracing::error!("Database pool creation failed: {:#}", e);
+            eprintln!("ERROR: Failed to connect to database: {}", e);
+            std::process::exit(1);
+        }
+    };
 
     tracing::info!("Database connection established");
 
     // Initialize Redis connection
     tracing::info!("Connecting to Redis at {}...", redis_url);
-    let redis = init_redis_connection(&redis_url)
-        .await
-        .expect("Failed to connect to Redis");
+    let redis = match init_redis_connection(&redis_url).await {
+        Ok(conn) => conn,
+        Err(e) => {
+            tracing::error!("Redis connection failed: {:#}", e);
+            eprintln!("ERROR: Failed to connect to Redis: {}", e);
+            std::process::exit(1);
+        }
+    };
 
     tracing::info!("Redis connection established");
 

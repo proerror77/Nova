@@ -300,7 +300,14 @@ async fn main() -> io::Result<()> {
         .init();
 
     // Load configuration
-    let config = content_service::Config::from_env().expect("Failed to load configuration");
+    let config = match content_service::Config::from_env() {
+        Ok(cfg) => cfg,
+        Err(e) => {
+            tracing::error!("Configuration loading failed: {:#}", e);
+            eprintln!("ERROR: Failed to load configuration: {}", e);
+            std::process::exit(1);
+        }
+    };
 
     tracing::info!("Starting content-service v{}", env!("CARGO_PKG_VERSION"));
     tracing::info!("Environment: {}", config.app.env);
@@ -332,9 +339,14 @@ async fn main() -> io::Result<()> {
     }
 
     db_cfg.log_config();
-    let db_pool = create_pg_pool(db_cfg)
-        .await
-        .expect("Failed to create standardized database pool");
+    let db_pool = match create_pg_pool(db_cfg).await {
+        Ok(pool) => pool,
+        Err(e) => {
+            tracing::error!("Database pool creation failed: {:#}", e);
+            eprintln!("ERROR: Failed to create database pool: {}", e);
+            std::process::exit(1);
+        }
+    };
     let db_pool_http = db_pool.clone();
 
     tracing::info!("Connected to database via db-pool crate");
