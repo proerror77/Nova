@@ -9,11 +9,9 @@ use sqlx::{PgPool, postgres::PgPoolOptions};
 use redis::aio::ConnectionManager;
 use std::sync::Arc;
 use once_cell::sync::Lazy;
-use testcontainers::{clients, images, Container};
+use testcontainers::core::WaitFor;
+use testcontainers::{runners::AsyncRunner, GenericImage};
 use std::time::Duration;
-
-/// 全局 Docker 客户端（延迟初始化）
-static DOCKER_CLIENT: Lazy<clients::Cli> = Lazy::new(|| clients::Cli::default());
 
 /// 统一测试环境 - 所有集成测试共享
 pub struct TestEnvironment {
@@ -38,13 +36,14 @@ impl TestEnvironment {
         tracing::info!("初始化测试环境：启动 PostgreSQL + Redis 容器");
 
         // 1. 启动 PostgreSQL 容器
-        let postgres_image = images::postgres::Postgres::default()
-            .with_db_name("nova_test")
-            .with_user("testuser")
-            .with_password("testpass");
+        let postgres_image = GenericImage::new("postgres", "15-alpine")
+            .with_env_var("POSTGRES_DB", "nova_test")
+            .with_env_var("POSTGRES_USER", "testuser")
+            .with_env_var("POSTGRES_PASSWORD", "testpass")
+            .with_wait_for(WaitFor::message_on_stderr("database system is ready to accept connections"));
 
-        let postgres_container = DOCKER_CLIENT.run(postgres_image);
-        let postgres_port = postgres_container.get_host_port_ipv4(5432);
+        let postgres_container = postgres_image.start().await.expect("启动 PostgreSQL 容器失败");
+        let postgres_port = postgres_container.get_host_port_ipv4(5432).await.expect("获取 PostgreSQL 端口失败");
         let postgres_url = format!(
             "postgres://testuser:testpass@127.0.0.1:{}/nova_test",
             postgres_port
@@ -53,9 +52,11 @@ impl TestEnvironment {
         tracing::info!("PostgreSQL 容器启动于端口: {}", postgres_port);
 
         // 2. 启动 Redis 容器
-        let redis_image = images::redis::Redis::default();
-        let redis_container = DOCKER_CLIENT.run(redis_image);
-        let redis_port = redis_container.get_host_port_ipv4(6379);
+        let redis_image = GenericImage::new("redis", "7-alpine")
+            .with_wait_for(WaitFor::message_on_stdout("Ready to accept connections"));
+
+        let redis_container = redis_image.start().await.expect("启动 Redis 容器失败");
+        let redis_port = redis_container.get_host_port_ipv4(6379).await.expect("获取 Redis 端口失败");
         let redis_url = format!("redis://127.0.0.1:{}", redis_port);
 
         tracing::info!("Redis 容器启动于端口: {}", redis_port);
@@ -239,7 +240,7 @@ impl TestEnvironment {
 
         for table in tables {
             let query = format!("TRUNCATE TABLE {} CASCADE", table);
-            match sqlx::query(&query).execute(&**self.postgres).await {
+            match sqlx::query(&query).execute(&*self.postgres).await {
                 Ok(_) => tracing::trace!("清理表成功: {}", table),
                 Err(e) => {
                     // 忽略不存在的表
@@ -295,7 +296,7 @@ mod tests {
 
         // 验证数据库连接
         let result = sqlx::query("SELECT 1 as value")
-            .fetch_one(&**env.db())
+            .fetch_one(&*env.db())
             .await;
         assert!(result.is_ok(), "PostgreSQL 连接失败");
 

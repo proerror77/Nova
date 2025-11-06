@@ -107,6 +107,7 @@ utoipa.workspace = true
 error-types = { path = "../libs/error-types" }
 nova-fcm-shared = { path = "../libs/nova-fcm-shared" }
 grpc-metrics = { path = "../libs/grpc-metrics" }
+grpc-clients = { path = "../libs/grpc-clients" }
 
 [build-dependencies]
 tonic-build = "0.11"
