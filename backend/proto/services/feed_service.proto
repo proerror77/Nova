@@ -7,8 +7,10 @@ option java_multiple_files = true;
 option java_outer_classname = "RecommendationProto";
 
 // RecommendationService provides recommendation and feed ranking capabilities
+// This service orchestrates data from UserService and ContentService to generate personalized feeds
 service RecommendationService {
   // GetFeed returns a personalized feed for a user
+  // Aggregates data from UserService (following) and ContentService (posts)
   rpc GetFeed(GetFeedRequest) returns (GetFeedResponse);
 
   // RankPosts ranks a list of posts based on user context
@@ -17,6 +19,9 @@ service RecommendationService {
   // GetRecommendedCreators returns recommended creators for a user
   rpc GetRecommendedCreators(GetRecommendedCreatorsRequest)
     returns (GetRecommendedCreatorsResponse);
+
+  // InvalidateFeedCache invalidates the cached feed for a user
+  rpc InvalidateFeedCache(InvalidateFeedCacheRequest) returns (InvalidateFeedCacheResponse);
 }
 
 // GetFeedRequest represents a request for user's personalized feed
@@ -104,4 +109,15 @@ message RecommendedCreator {
 // GetRecommendedCreatorsResponse contains recommended creators
 message GetRecommendedCreatorsResponse {
   repeated RecommendedCreator creators = 1;
+}
+
+// InvalidateFeedCacheRequest invalidates feed cache
+message InvalidateFeedCacheRequest {
+  string user_id = 1;
+  string event_type = 2;  // e.g., "new_post", "follow", "unfollow"
+}
+
+// InvalidateFeedCacheResponse confirms cache invalidation
+message InvalidateFeedCacheResponse {
+  bool success = 1;
 }

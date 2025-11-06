@@ -77,40 +77,9 @@ message GetUserBookmarksResponse {
     .nova.common.v1.ErrorStatus error = 3;
 }
 
-message GetFeedRequest {
-    string user_id = 1;
-    string algo = 2;
-    uint32 limit = 3;
-    string cursor = 4;
-}
-
-message GetFeedResponse {
-    repeated string post_ids = 1;
-    string cursor = 2;
-    bool has_more = 3;
-    uint32 total_count = 4;
-    .nova.common.v1.ErrorStatus error = 5;
-}
-
-message InvalidateFeedEventRequest {
-    string event_type = 1;
-    string user_id = 2;
-    string target_user_id = 3;
-}
-
-message InvalidateFeedResponse {
-    bool success = 1;
-    .nova.common.v1.ErrorStatus error = 2;
-}
-
-message BatchInvalidateFeedRequest {
-    repeated string user_ids = 1;
-}
-
-message WarmFeedRequest {
-    string user_id = 1;
-    repeated string post_ids = 2;
-}
+// Feed-related messages removed - these belong to feed_service.proto
+// The content service should only manage posts, comments, and likes
+// Feed aggregation is the responsibility of the feed service
 
 message GetPostsByIdsRequest {
     repeated string post_ids = 1;
@@ -232,25 +201,30 @@ message GetPostLikesResponse {
     .nova.common.v1.ErrorStatus error = 3;
 }
 
+// ContentService manages posts, comments, and likes
+// Feed aggregation is handled by FeedService (feed_service.proto)
 service ContentService {
+    // Post operations
     rpc GetPost(GetPostRequest) returns (GetPostResponse) {}
     rpc CreatePost(CreatePostRequest) returns (CreatePostResponse) {}
-    rpc GetComments(GetCommentsRequest) returns (GetCommentsResponse) {}
-    rpc LikePost(LikePostRequest) returns (LikePostResponse) {}
-    rpc UnlikePost(UnlikePostRequest) returns (UnlikePostResponse) {}
-    rpc GetPostLikes(GetPostLikesRequest) returns (GetPostLikesResponse) {}
-    rpc GetUserBookmarks(GetUserBookmarksRequest) returns (GetUserBookmarksResponse) {}
-    rpc GetFeed(GetFeedRequest) returns (GetFeedResponse) {}
-    rpc InvalidateFeedEvent(InvalidateFeedEventRequest) returns (InvalidateFeedResponse) {}
-    rpc BatchInvalidateFeed(BatchInvalidateFeedRequest) returns (InvalidateFeedResponse) {}
-    rpc WarmFeed(WarmFeedRequest) returns (InvalidateFeedResponse) {}
-    rpc GetPostsByIds(GetPostsByIdsRequest) returns (GetPostsByIdsResponse) {}
-    rpc GetPostsByAuthor(GetPostsByAuthorRequest) returns (GetPostsByAuthorResponse) {}
     rpc UpdatePost(UpdatePostRequest) returns (UpdatePostResponse) {}
     rpc DeletePost(DeletePostRequest) returns (DeletePostResponse) {}
-    rpc DecrementLikeCount(DecrementLikeCountRequest) returns (DecrementLikeCountResponse) {}
+    rpc GetPostsByIds(GetPostsByIdsRequest) returns (GetPostsByIdsResponse) {}
+    rpc GetPostsByAuthor(GetPostsByAuthorRequest) returns (GetPostsByAuthorResponse) {}
     rpc CheckPostExists(CheckPostExistsRequest) returns (CheckPostExistsResponse) {}
+
+    // Comment operations
+    rpc GetComments(GetCommentsRequest) returns (GetCommentsResponse) {}
     rpc CreateComment(CreateCommentRequest) returns (CreateCommentResponse) {}
     rpc UpdateComment(UpdateCommentRequest) returns (UpdateCommentResponse) {}
     rpc DeleteComment(DeleteCommentRequest) returns (DeleteCommentResponse) {}
+
+    // Like operations
+    rpc LikePost(LikePostRequest) returns (LikePostResponse) {}
+    rpc UnlikePost(UnlikePostRequest) returns (UnlikePostResponse) {}
+    rpc GetPostLikes(GetPostLikesRequest) returns (GetPostLikesResponse) {}
+    rpc DecrementLikeCount(DecrementLikeCountRequest) returns (DecrementLikeCountResponse) {}
+
+    // Bookmark operations
+    rpc GetUserBookmarks(GetUserBookmarksRequest) returns (GetUserBookmarksResponse) {}
 }
