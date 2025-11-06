@@ -74,7 +74,6 @@ async fn test_messaging_to_notification_e2e() {
     // Step 5: 等待通知被创建
     wait_for_default(|| {
         let db = db.clone();
-        let receiver_id = receiver_id;
         async move {
             let count: i64 =
                 sqlx::query_scalar("SELECT COUNT(*) FROM notifications WHERE user_id = $1")
@@ -567,7 +566,6 @@ async fn test_eventual_consistency_convergence() {
     wait_for(
         || {
             let db = db.clone();
-            let aggregate_id = aggregate_id;
             async move {
                 let pending_count: i64 = sqlx::query_scalar(
                     "SELECT COUNT(*) FROM outbox_events WHERE aggregate_id = $1 AND status = 'pending'"
