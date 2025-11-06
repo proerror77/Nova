@@ -118,7 +118,14 @@ async fn main() -> io::Result<()> {
         .init();
 
     // Load configuration
-    let config = Config::from_env().expect("Failed to load configuration");
+    let config = match Config::from_env() {
+        Ok(cfg) => cfg,
+        Err(e) => {
+            tracing::error!("Configuration loading failed: {:#}", e);
+            eprintln!("ERROR: Failed to load configuration: {}", e);
+            std::process::exit(1);
+        }
+    };
 
     tracing::info!(
         "Starting recommendation-service v{}",
@@ -132,9 +139,14 @@ async fn main() -> io::Result<()> {
         db_cfg.database_url = config.database.url.clone();
     }
     db_cfg.max_connections = std::cmp::max(db_cfg.max_connections, config.database.max_connections);
-    let db_pool = db_pool::create_pool(db_cfg)
-        .await
-        .expect("Failed to create database pool");
+    let db_pool = match db_pool::create_pool(db_cfg).await {
+        Ok(pool) => pool,
+        Err(e) => {
+            tracing::error!("Database pool creation failed: {:#}", e);
+            eprintln!("ERROR: Failed to create database pool: {}", e);
+            std::process::exit(1);
+        }
+    };
 
     let db_pool = web::Data::new(db_pool.clone());
 

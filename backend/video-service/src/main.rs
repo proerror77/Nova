@@ -17,7 +17,14 @@ async fn main() -> io::Result<()> {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
-    let config = Config::from_env().expect("Failed to load configuration");
+    let config = match Config::from_env() {
+        Ok(cfg) => cfg,
+        Err(e) => {
+            tracing::error!("Configuration loading failed: {:#}", e);
+            eprintln!("ERROR: Failed to load configuration: {}", e);
+            std::process::exit(1);
+        }
+    };
 
     tracing::info!("Starting video-service v{}", env!("CARGO_PKG_VERSION"));
     tracing::info!("Environment: {}", config.app.env);
@@ -26,7 +33,14 @@ async fn main() -> io::Result<()> {
     if cfg.database_url.is_empty() { cfg.database_url = config.database.url.clone(); }
     cfg.max_connections = std::cmp::max(cfg.max_connections, config.database.max_connections);
     cfg.log_config();
-    let db_pool = create_pg_pool(cfg).await.expect("Failed to create database pool");
+    let db_pool = match create_pg_pool(cfg).await {
+        Ok(pool) => pool,
+        Err(e) => {
+            tracing::error!("Database pool creation failed: {:#}", e);
+            eprintln!("ERROR: Failed to create database pool: {}", e);
+            std::process::exit(1);
+        }
+    };
     let db_pool = web::Data::new(db_pool);
 
     // TODO: Start gRPC server for VideoService in addition to HTTP server
