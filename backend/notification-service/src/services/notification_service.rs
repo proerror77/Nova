@@ -7,19 +7,17 @@
 /// 4. Supports notification preferences and filtering
 /// 5. Manages device tokens and delivery tracking
 /// 6. Implements priority queuing and batch processing
-
-use super::{FCMClient, APNsClient, KafkaNotification};
+use super::{APNsClient, FCMClient, KafkaNotification};
 use crate::models::{
-    Notification, NotificationType, NotificationStatus, NotificationPriority,
-    NotificationChannel, DeviceToken, DeliveryAttempt, NotificationPreference,
-    CreateNotificationRequest,
+    CreateNotificationRequest, DeliveryAttempt, DeviceToken, Notification, NotificationChannel,
+    NotificationPreference, NotificationPriority, NotificationStatus, NotificationType,
 };
+use chrono::{Duration, Utc};
+use serde::{Deserialize, Serialize};
 use sqlx::{PgPool, Row};
-use uuid::Uuid;
-use chrono::{Utc, Duration};
 use std::sync::Arc;
-use tracing::{debug, error, warn, info};
-use serde::{Serialize, Deserialize};
+use tracing::{debug, error, info, warn};
+use uuid::Uuid;
 
 /// Push notification result
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -115,7 +113,10 @@ impl NotificationService {
             expires_at: row.get("expires_at"),
         };
 
-        info!("Created notification: {} for user: {}", notification_id, req.recipient_id);
+        info!(
+            "Created notification: {} for user: {}",
+            notification_id, req.recipient_id
+        );
         Ok(notification)
     }
 
@@ -161,11 +162,7 @@ impl NotificationService {
     }
 
     /// Unregister a device token
-    pub async fn unregister_device_token(
-        &self,
-        user_id: Uuid,
-        token: &str,
-    ) -> Result<(), String> {
+    pub async fn unregister_device_token(&self, user_id: Uuid, token: &str) -> Result<(), String> {
         let query = r#"
             UPDATE device_tokens
             SET is_active = false
@@ -187,10 +184,7 @@ impl NotificationService {
     }
 
     /// Get user's active device tokens
-    pub async fn get_user_devices(
-        &self,
-        user_id: Uuid,
-    ) -> Result<Vec<DeviceToken>, String> {
+    pub async fn get_user_devices(&self, user_id: Uuid) -> Result<Vec<DeviceToken>, String> {
         let query = r#"
             SELECT id, user_id, token, channel, device_type, is_active, last_used_at, created_at
             FROM device_tokens
@@ -203,38 +197,38 @@ impl NotificationService {
             .await
             .map_err(|e| format!("Failed to fetch user devices: {}", e))?;
 
-        let devices = rows.iter().map(|row| {
-            let channel_str: String = row.get("channel");
-            let channel = match channel_str.as_str() {
-                "fcm" => NotificationChannel::FCM,
-                "apns" => NotificationChannel::APNs,
-                "websocket" => NotificationChannel::WebSocket,
-                "email" => NotificationChannel::Email,
-                "sms" => NotificationChannel::SMS,
-                _ => NotificationChannel::FCM,
-            };
+        let devices = rows
+            .iter()
+            .map(|row| {
+                let channel_str: String = row.get("channel");
+                let channel = match channel_str.as_str() {
+                    "fcm" => NotificationChannel::FCM,
+                    "apns" => NotificationChannel::APNs,
+                    "websocket" => NotificationChannel::WebSocket,
+                    "email" => NotificationChannel::Email,
+                    "sms" => NotificationChannel::SMS,
+                    _ => NotificationChannel::FCM,
+                };
 
-            DeviceToken {
-                id: row.get("id"),
-                user_id: row.get("user_id"),
-                token: row.get("token"),
-                channel,
-                device_type: row.get("device_type"),
-                device_name: None,
-                is_active: row.get("is_active"),
-                last_used_at: row.get("last_used_at"),
-                created_at: row.get("created_at"),
-            }
-        }).collect();
+                DeviceToken {
+                    id: row.get("id"),
+                    user_id: row.get("user_id"),
+                    token: row.get("token"),
+                    channel,
+                    device_type: row.get("device_type"),
+                    device_name: None,
+                    is_active: row.get("is_active"),
+                    last_used_at: row.get("last_used_at"),
+                    created_at: row.get("created_at"),
+                }
+            })
+            .collect();
 
         Ok(devices)
     }
 
     /// Get user's notification preferences
-    pub async fn get_preferences(
-        &self,
-        user_id: Uuid,
-    ) -> Result<NotificationPreference, String> {
+    pub async fn get_preferences(&self, user_id: Uuid) -> Result<NotificationPreference, String> {
         let query = r#"
             SELECT id, user_id, enabled, like_enabled, comment_enabled, follow_enabled,
                    mention_enabled, message_enabled, stream_enabled,
@@ -345,7 +339,10 @@ impl NotificationService {
 
         // Check if should send
         if !self.should_send_notification(&preferences, notification.notification_type) {
-            debug!("Notification disabled for type: {:?}", notification.notification_type);
+            debug!(
+                "Notification disabled for type: {:?}",
+                notification.notification_type
+            );
             return Ok(Vec::new());
         }
 
@@ -355,7 +352,9 @@ impl NotificationService {
         let mut results = Vec::new();
 
         for device in devices {
-            let result = self.send_to_device(notification, &device, &preferences).await;
+            let result = self
+                .send_to_device(notification, &device, &preferences)
+                .await;
             results.push(result);
         }
 
@@ -373,9 +372,7 @@ impl NotificationService {
             NotificationChannel::APNs if preferences.prefer_apns => {
                 self.send_via_apns(notification, device).await
             }
-            NotificationChannel::FCM => {
-                self.send_via_fcm(notification, device).await
-            }
+            NotificationChannel::FCM => self.send_via_fcm(notification, device).await,
             NotificationChannel::WebSocket => {
                 // WebSocket handled separately (real-time push)
                 PushNotificationResult {
@@ -405,12 +402,15 @@ impl NotificationService {
     ) -> PushNotificationResult {
         match &self.apns_client {
             Some(apns) => {
-                match apns.send(
-                    &device.token,
-                    &notification.title,
-                    &notification.body,
-                    super::apns_client::APNsPriority::High, // Use High priority for normal notifications
-                ).await {
+                match apns
+                    .send(
+                        &device.token,
+                        &notification.title,
+                        &notification.body,
+                        super::apns_client::APNsPriority::High, // Use High priority for normal notifications
+                    )
+                    .await
+                {
                     Ok(result) => {
                         debug!("APNs delivery successful: {}", result.message_id);
                         PushNotificationResult {
@@ -451,12 +451,15 @@ impl NotificationService {
     ) -> PushNotificationResult {
         match &self.fcm_client {
             Some(fcm) => {
-                match fcm.send(
-                    &device.token,
-                    &notification.title,
-                    &notification.body,
-                    notification.metadata.clone(),
-                ).await {
+                match fcm
+                    .send(
+                        &device.token,
+                        &notification.title,
+                        &notification.body,
+                        notification.metadata.clone(),
+                    )
+                    .await
+                {
                     Ok(result) => {
                         debug!("FCM delivery successful: {}", result.message_id);
                         PushNotificationResult {
@@ -490,10 +493,7 @@ impl NotificationService {
     }
 
     /// Mark notification as read
-    pub async fn mark_as_read(
-        &self,
-        notification_id: Uuid,
-    ) -> Result<(), String> {
+    pub async fn mark_as_read(&self, notification_id: Uuid) -> Result<(), String> {
         let now = Utc::now();
         let query = r#"
             UPDATE notifications
@@ -605,30 +605,78 @@ mod tests {
 
     #[test]
     fn test_parse_notification_type() {
-        assert_eq!(NotificationService::parse_notification_type("LIKE"), NotificationType::Like);
-        assert_eq!(NotificationService::parse_notification_type("comment"), NotificationType::Comment);
-        assert_eq!(NotificationService::parse_notification_type("FOLLOW"), NotificationType::Follow);
-        assert_eq!(NotificationService::parse_notification_type("mention"), NotificationType::Mention);
-        assert_eq!(NotificationService::parse_notification_type("SYSTEM"), NotificationType::System);
-        assert_eq!(NotificationService::parse_notification_type("unknown"), NotificationType::System);
+        assert_eq!(
+            NotificationService::parse_notification_type("LIKE"),
+            NotificationType::Like
+        );
+        assert_eq!(
+            NotificationService::parse_notification_type("comment"),
+            NotificationType::Comment
+        );
+        assert_eq!(
+            NotificationService::parse_notification_type("FOLLOW"),
+            NotificationType::Follow
+        );
+        assert_eq!(
+            NotificationService::parse_notification_type("mention"),
+            NotificationType::Mention
+        );
+        assert_eq!(
+            NotificationService::parse_notification_type("SYSTEM"),
+            NotificationType::System
+        );
+        assert_eq!(
+            NotificationService::parse_notification_type("unknown"),
+            NotificationType::System
+        );
     }
 
     #[test]
     fn test_parse_priority() {
-        assert_eq!(NotificationService::parse_priority("LOW"), NotificationPriority::Low);
-        assert_eq!(NotificationService::parse_priority("normal"), NotificationPriority::Normal);
-        assert_eq!(NotificationService::parse_priority("HIGH"), NotificationPriority::High);
-        assert_eq!(NotificationService::parse_priority("unknown"), NotificationPriority::Normal);
+        assert_eq!(
+            NotificationService::parse_priority("LOW"),
+            NotificationPriority::Low
+        );
+        assert_eq!(
+            NotificationService::parse_priority("normal"),
+            NotificationPriority::Normal
+        );
+        assert_eq!(
+            NotificationService::parse_priority("HIGH"),
+            NotificationPriority::High
+        );
+        assert_eq!(
+            NotificationService::parse_priority("unknown"),
+            NotificationPriority::Normal
+        );
     }
 
     #[test]
     fn test_parse_status() {
-        assert_eq!(NotificationService::parse_status("QUEUED"), NotificationStatus::Queued);
-        assert_eq!(NotificationService::parse_status("sending"), NotificationStatus::Sending);
-        assert_eq!(NotificationService::parse_status("DELIVERED"), NotificationStatus::Delivered);
-        assert_eq!(NotificationService::parse_status("FAILED"), NotificationStatus::Failed);
-        assert_eq!(NotificationService::parse_status("READ"), NotificationStatus::Read);
-        assert_eq!(NotificationService::parse_status("unknown"), NotificationStatus::Queued);
+        assert_eq!(
+            NotificationService::parse_status("QUEUED"),
+            NotificationStatus::Queued
+        );
+        assert_eq!(
+            NotificationService::parse_status("sending"),
+            NotificationStatus::Sending
+        );
+        assert_eq!(
+            NotificationService::parse_status("DELIVERED"),
+            NotificationStatus::Delivered
+        );
+        assert_eq!(
+            NotificationService::parse_status("FAILED"),
+            NotificationStatus::Failed
+        );
+        assert_eq!(
+            NotificationService::parse_status("READ"),
+            NotificationStatus::Read
+        );
+        assert_eq!(
+            NotificationService::parse_status("unknown"),
+            NotificationStatus::Queued
+        );
     }
 
     #[test]

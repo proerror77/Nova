@@ -4,9 +4,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .build_server(true)
         .build_client(false)
         .compile(
-            &[
-                "../proto/services/notification_service.proto",
-            ],
+            &["../proto/services/notification_service.proto"],
             &["../proto/services", "../proto"],
         )?;
 

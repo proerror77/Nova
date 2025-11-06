@@ -201,11 +201,10 @@ async fn liveness_check() -> HttpResponse {
 }
 
 async fn openapi_json(doc: web::Data<utoipa::openapi::OpenApi>) -> actix_web::Result<HttpResponse> {
-    let body = serde_json::to_string(&*doc)
-        .map_err(|e| {
-            tracing::error!("OpenAPI serialization failed: {}", e);
-            actix_web::error::ErrorInternalServerError("OpenAPI serialization error")
-        })?;
+    let body = serde_json::to_string(&*doc).map_err(|e| {
+        tracing::error!("OpenAPI serialization failed: {}", e);
+        actix_web::error::ErrorInternalServerError("OpenAPI serialization error")
+    })?;
 
     Ok(HttpResponse::Ok()
         .content_type("application/json")

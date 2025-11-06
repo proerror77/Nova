@@ -1,12 +1,11 @@
+pub mod assertions;
 /// Test fixtures and utilities for integration tests
 /// Provides database setup, test data creation, and cleanup
-
 // Phase 1B 集成测试基础设施
 pub mod test_env;
-pub mod assertions;
 
 use chrono::{DateTime, Utc};
-use sqlx::{PgPool, Postgres, Transaction, FromRow};
+use sqlx::{FromRow, PgPool, Postgres, Transaction};
 use uuid::Uuid;
 
 // ============================================
@@ -107,15 +106,9 @@ pub async fn cleanup_test_data(pool: &PgPool) {
         .await
         .ok();
 
-    sqlx::query("DELETE FROM posts")
-        .execute(pool)
-        .await
-        .ok();
+    sqlx::query("DELETE FROM posts").execute(pool).await.ok();
 
-    sqlx::query("DELETE FROM sessions")
-        .execute(pool)
-        .await
-        .ok();
+    sqlx::query("DELETE FROM sessions").execute(pool).await.ok();
 
     sqlx::query("DELETE FROM refresh_tokens")
         .execute(pool)
@@ -127,10 +120,7 @@ pub async fn cleanup_test_data(pool: &PgPool) {
         .await
         .ok();
 
-    sqlx::query("DELETE FROM users")
-        .execute(pool)
-        .await
-        .ok();
+    sqlx::query("DELETE FROM users").execute(pool).await.ok();
 }
 
 // ============================================
@@ -144,7 +134,14 @@ pub async fn create_test_user(pool: &PgPool) -> User {
 
 /// Create a test user with specific email
 pub async fn create_test_user_with_email(pool: &PgPool, email: &str) -> User {
-    let username = format!("user_{}", Uuid::new_v4().to_string().chars().take(8).collect::<String>());
+    let username = format!(
+        "user_{}",
+        Uuid::new_v4()
+            .to_string()
+            .chars()
+            .take(8)
+            .collect::<String>()
+    );
     let password_hash = "$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5oe2QRfhJK2Gu"; // "password"
 
     sqlx::query_as::<_, User>(
@@ -316,11 +313,7 @@ pub async fn create_test_upload_session(pool: &PgPool, post_id: Uuid) -> String 
 // ============================================
 
 /// Create multiple test posts for pagination testing
-pub async fn create_test_posts_batch(
-    pool: &PgPool,
-    user_id: Uuid,
-    count: usize,
-) -> Vec<Post> {
+pub async fn create_test_posts_batch(pool: &PgPool, user_id: Uuid, count: usize) -> Vec<Post> {
     let mut posts = Vec::new();
 
     for i in 0..count {

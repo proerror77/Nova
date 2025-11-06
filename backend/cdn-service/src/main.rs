@@ -1,10 +1,10 @@
 use actix_web::{web, App, HttpServer};
 use cdn_service::services::{AssetManager, CacheInvalidator, UrlSigner};
+use db_pool::{create_pool as create_pg_pool, DbConfig as DbPoolConfig};
 use std::io;
 use std::sync::Arc;
 use tonic::transport::Server as GrpcServer;
 use tonic_health::server::health_reporter;
-use db_pool::{create_pool as create_pg_pool, DbConfig as DbPoolConfig};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[actix_web::main]
@@ -43,16 +43,12 @@ async fn main() -> io::Result<()> {
     let s3_bucket = std::env::var("S3_BUCKET").unwrap_or_else(|_| "nova-cdn".into());
 
     // Initialize Redis client
-    let redis_url = std::env::var("REDIS_URL")
-        .unwrap_or_else(|_| "redis://localhost:6379".into());
-    let redis_client = Arc::new(
-        redis::Client::open(redis_url)
-            .expect("Failed to create Redis client"),
-    );
+    let redis_url = std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://localhost:6379".into());
+    let redis_client =
+        Arc::new(redis::Client::open(redis_url).expect("Failed to create Redis client"));
 
     // Initialize services
-    let cdn_domain = std::env::var("CDN_DOMAIN")
-        .unwrap_or_else(|_| "cdn.nova.dev".into());
+    let cdn_domain = std::env::var("CDN_DOMAIN").unwrap_or_else(|_| "cdn.nova.dev".into());
     let secret_key = std::env::var("CDN_SECRET_KEY")
         .unwrap_or_else(|_| "default-secret-key-change-in-production".into());
 
@@ -63,10 +59,7 @@ async fn main() -> io::Result<()> {
         s3_bucket,
         url_signer.clone(),
     ));
-    let cache_invalidator = Arc::new(CacheInvalidator::new(
-        db_pool.clone(),
-        redis_client,
-    ));
+    let cache_invalidator = Arc::new(CacheInvalidator::new(db_pool.clone(), redis_client));
 
     // Compute HTTP and gRPC ports
     let http_port: u16 = std::env::var("PORT")
@@ -76,8 +69,7 @@ async fn main() -> io::Result<()> {
     let grpc_port: u16 = http_port + 1000;
 
     // Start gRPC server in background on http_port + 1000
-    let grpc_addr: std::net::SocketAddr =
-        format!("0.0.0.0:{}", grpc_port).parse().unwrap();
+    let grpc_addr: std::net::SocketAddr = format!("0.0.0.0:{}", grpc_port).parse().unwrap();
 
     let grpc_asset_manager = asset_manager.clone();
     let grpc_cache_invalidator = cache_invalidator.clone();
@@ -128,10 +120,8 @@ async fn main() -> io::Result<()> {
 
     // Start HTTP server
     tracing::info!("cdn-service HTTP listening on 0.0.0.0:{}", http_port);
-    HttpServer::new(move || {
-        App::new().route("/health", web::get().to(|| async { "OK" }))
-    })
-    .bind(("0.0.0.0", http_port))?
-    .run()
-    .await
+    HttpServer::new(move || App::new().route("/health", web::get().to(|| async { "OK" })))
+        .bind(("0.0.0.0", http_port))?
+        .run()
+        .await
 }

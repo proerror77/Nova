@@ -16,9 +16,9 @@ use crate::cache::{CachedFeed, CachedFeedPost, FeedCache};
 use chrono::Utc;
 use grpc_metrics::layer::RequestGuard;
 use sqlx::PgPool;
+use std::sync::Arc;
 use tonic::{Request, Response, Status};
 use tracing::{debug, info, warn};
-use std::sync::Arc;
 
 // Generated protobuf types and service traits
 pub mod proto {
@@ -31,9 +31,9 @@ pub mod proto {
 
 pub use proto::feed_service::v1::{
     recommendation_service_server, FeedPost, GetFeedRequest, GetFeedResponse,
-    GetRecommendedCreatorsRequest, GetRecommendedCreatorsResponse, RankPostsRequest,
-    RankPostsResponse, RankablePost, RankedPost, RankingContext, RecommendedCreator,
-    InvalidateFeedCacheRequest, InvalidateFeedCacheResponse,
+    GetRecommendedCreatorsRequest, GetRecommendedCreatorsResponse, InvalidateFeedCacheRequest,
+    InvalidateFeedCacheResponse, RankPostsRequest, RankPostsResponse, RankablePost, RankedPost,
+    RankingContext, RecommendedCreator,
 };
 
 /// RecommendationService gRPC server implementation
@@ -47,9 +47,13 @@ impl RecommendationServiceImpl {
     /// Create a new RecommendationService implementation
     /// This requires cache initialization via with_cache() in an async context
     pub async fn new(pool: PgPool) -> Result<Self, Box<dyn std::error::Error>> {
-        let redis_url = std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://localhost:6379".to_string());
+        let redis_url =
+            std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://localhost:6379".to_string());
         let cache = FeedCache::new(&redis_url, Default::default()).await?;
-        Ok(Self { pool, cache: Arc::new(cache) })
+        Ok(Self {
+            pool,
+            cache: Arc::new(cache),
+        })
     }
 
     /// Create a new RecommendationService with explicit cache
@@ -94,11 +98,16 @@ impl recommendation_service_server::RecommendationService for RecommendationServ
         // Step 1: Check Redis cache
         match self.cache.get_feed(&user_id, &algorithm).await {
             Ok(Some(cached)) => {
-                debug!("Cache hit for user {} with algorithm {}", user_id, algorithm);
+                debug!(
+                    "Cache hit for user {} with algorithm {}",
+                    user_id, algorithm
+                );
                 // Return cached feed
                 guard.complete("0");
                 return Ok(Response::new(GetFeedResponse {
-                    posts: cached.posts.iter()
+                    posts: cached
+                        .posts
+                        .iter()
                         .map(|post| FeedPost {
                             id: post.id.clone(),
                             user_id: post.user_id.clone(),
@@ -115,7 +124,10 @@ impl recommendation_service_server::RecommendationService for RecommendationServ
                 }));
             }
             Ok(None) => {
-                debug!("Cache miss for user {} with algorithm {}", user_id, algorithm);
+                debug!(
+                    "Cache miss for user {} with algorithm {}",
+                    user_id, algorithm
+                );
             }
             Err(e) => {
                 warn!("Cache retrieval error for user {}: {}", user_id, e);
@@ -125,8 +137,14 @@ impl recommendation_service_server::RecommendationService for RecommendationServ
 
         // Step 2: Cache miss - fetch from ContentService
         // For now, return a stub response with cache populated
-        let _limit = if req.limit == 0 { 20 } else { req.limit as usize }.min(100).max(1);
-        let posts = vec![];  // Placeholder: would fetch from ContentService
+        let _limit = if req.limit == 0 {
+            20
+        } else {
+            req.limit as usize
+        }
+        .min(100)
+        .max(1);
+        let posts = vec![]; // Placeholder: would fetch from ContentService
         let has_more = false;
 
         // Step 3: Cache the result
@@ -138,7 +156,11 @@ impl recommendation_service_server::RecommendationService for RecommendationServ
             cached_at: Utc::now().timestamp(),
         };
 
-        if let Err(e) = self.cache.set_feed(&user_id, &algorithm, &cached_feed).await {
+        if let Err(e) = self
+            .cache
+            .set_feed(&user_id, &algorithm, &cached_feed)
+            .await
+        {
             warn!("Failed to cache feed for user {}: {}", user_id, e);
             // Don't fail the request, just log the error
         }
@@ -146,7 +168,8 @@ impl recommendation_service_server::RecommendationService for RecommendationServ
         // Step 4: Return feed
         guard.complete("0");
         Ok(Response::new(GetFeedResponse {
-            posts: posts.iter()
+            posts: posts
+                .iter()
                 .map(|post| FeedPost {
                     id: post.id.clone(),
                     user_id: post.user_id.clone(),
@@ -175,10 +198,7 @@ impl recommendation_service_server::RecommendationService for RecommendationServ
 
         let req = request.into_inner();
         let _user_context = req.context.as_ref();
-        debug!(
-            "Ranking {} posts for user context",
-            req.posts.len()
-        );
+        debug!("Ranking {} posts for user context", req.posts.len());
 
         // Ranking logic:
         // 1. Extract user context (interests, recent activity, etc.)
@@ -192,7 +212,7 @@ impl recommendation_service_server::RecommendationService for RecommendationServ
             .iter()
             .enumerate()
             .map(|(idx, post)| RankedPost {
-                id: post.id.clone(),  // Use 'id' field from proto
+                id: post.id.clone(),                 // Use 'id' field from proto
                 score: (100.0 - idx as f64) / 100.0, // Simple ranking: earlier posts score higher
                 reason: "default_ranking".to_string(),
             })
@@ -261,7 +281,10 @@ impl recommendation_service_server::RecommendationService for RecommendationServ
         // Invalidate Redis cache for this user
         let result = match self.cache.invalidate_feed(&req.user_id).await {
             Ok(()) => {
-                debug!("Successfully invalidated feed cache for user {}", req.user_id);
+                debug!(
+                    "Successfully invalidated feed cache for user {}",
+                    req.user_id
+                );
                 Response::new(InvalidateFeedCacheResponse { success: true })
             }
             Err(e) => {
@@ -318,8 +341,20 @@ mod tests {
         };
 
         // In get_feed(), limit 0 becomes 20, limit 500 becomes 100
-        let constrained_zero = if req_zero.limit == 0 { 20 } else { req_zero.limit as usize }.min(100).max(1);
-        let constrained_large = if req_large.limit == 0 { 20 } else { req_large.limit as usize }.min(100).max(1);
+        let constrained_zero = if req_zero.limit == 0 {
+            20
+        } else {
+            req_zero.limit as usize
+        }
+        .min(100)
+        .max(1);
+        let constrained_large = if req_large.limit == 0 {
+            20
+        } else {
+            req_large.limit as usize
+        }
+        .min(100)
+        .max(1);
 
         assert_eq!(constrained_zero, 20);
         assert_eq!(constrained_large, 100);
@@ -374,7 +409,7 @@ mod tests {
 
         // Verify scoring
         assert_eq!(ranked.len(), 2);
-        assert_eq!(ranked[0].score, 1.0);  // (100 - 0) / 100
+        assert_eq!(ranked[0].score, 1.0); // (100 - 0) / 100
         assert_eq!(ranked[1].score, 0.99); // (100 - 1) / 100
         assert!(ranked[0].score > ranked[1].score);
     }
@@ -481,9 +516,7 @@ mod tests {
             },
         ];
 
-        let response = RankPostsResponse {
-            ranked_posts,
-        };
+        let response = RankPostsResponse { ranked_posts };
 
         // Verify response structure
         assert_eq!(response.ranked_posts.len(), 2);
@@ -550,9 +583,7 @@ mod tests {
             },
         ];
 
-        let response = GetRecommendedCreatorsResponse {
-            creators,
-        };
+        let response = GetRecommendedCreatorsResponse { creators };
 
         assert_eq!(response.creators.len(), 2);
         assert_eq!(response.creators[0].follower_count, 100000);
@@ -642,8 +673,15 @@ mod tests {
         let avg_micros = elapsed.as_micros() as f64 / iterations as f64;
 
         // Should be well under 100 microseconds per message
-        println!("FeedPost serialization: avg {:.2} µs per message", avg_micros);
-        assert!(avg_micros < 100.0, "FeedPost serialization too slow: {:.2} µs", avg_micros);
+        println!(
+            "FeedPost serialization: avg {:.2} µs per message",
+            avg_micros
+        );
+        assert!(
+            avg_micros < 100.0,
+            "FeedPost serialization too slow: {:.2} µs",
+            avg_micros
+        );
     }
 
     /// Performance test: Measure batch request processing latency
@@ -686,7 +724,11 @@ mod tests {
 
         // Should be under 50 microseconds per post ranking
         println!("Batch post ranking: avg {:.2} µs per post", avg_micros);
-        assert!(avg_micros < 50.0, "Batch ranking too slow: {:.2} µs per post", avg_micros);
+        assert!(
+            avg_micros < 50.0,
+            "Batch ranking too slow: {:.2} µs per post",
+            avg_micros
+        );
     }
 
     /// Performance test: Measure GetFeedResponse construction latency
@@ -724,8 +766,15 @@ mod tests {
         let avg_micros = elapsed.as_micros() as f64 / iterations as f64;
 
         // Should be under 200 microseconds per response
-        println!("GetFeedResponse construction: avg {:.2} µs per response", avg_micros);
-        assert!(avg_micros < 200.0, "Response construction too slow: {:.2} µs", avg_micros);
+        println!(
+            "GetFeedResponse construction: avg {:.2} µs per response",
+            avg_micros
+        );
+        assert!(
+            avg_micros < 200.0,
+            "Response construction too slow: {:.2} µs",
+            avg_micros
+        );
     }
 
     /// Performance test: Measure pagination handling throughput
@@ -776,7 +825,11 @@ mod tests {
 
         // Should process each page in under 2ms (target P99 latency)
         println!("Pagination throughput: avg {:.3} ms per page", avg_ms);
-        assert!(avg_ms < 2.0, "Pagination too slow: {:.3} ms per page", avg_ms);
+        assert!(
+            avg_ms < 2.0,
+            "Pagination too slow: {:.3} ms per page",
+            avg_ms
+        );
     }
 
     /// Performance test: Algorithm variant selection latency
@@ -811,7 +864,11 @@ mod tests {
 
         // Should be under 10 microseconds per request
         println!("Algorithm selection: avg {:.2} µs per request", avg_micros);
-        assert!(avg_micros < 10.0, "Algorithm selection too slow: {:.2} µs", avg_micros);
+        assert!(
+            avg_micros < 10.0,
+            "Algorithm selection too slow: {:.2} µs",
+            avg_micros
+        );
     }
 
     /// Performance test: Scoring calculation throughput

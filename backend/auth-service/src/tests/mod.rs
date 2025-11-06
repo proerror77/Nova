@@ -2,7 +2,6 @@
 ///
 /// This module provides comprehensive unit tests for the auth service core business logic.
 /// Tests follow the TDD red-green-refactor cycle.
-
 pub mod fixtures;
 pub mod unit_tests;
 

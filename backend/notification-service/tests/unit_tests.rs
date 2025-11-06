@@ -1,3 +1,4 @@
+use chrono::Utc;
 /// Unit tests for notification-service core functionality
 ///
 /// This test module covers:
@@ -5,10 +6,8 @@
 /// - Enum parsing helpers
 /// - Business logic validation
 /// - Error handling
-
 use notification_service::models::*;
 use uuid::Uuid;
-use chrono::Utc;
 
 #[test]
 fn test_notification_type_serialization() {
@@ -127,10 +126,7 @@ fn test_notification_preference_creation() {
     assert!(preference.enabled);
     assert!(preference.like_enabled);
     assert!(!preference.comment_enabled);
-    assert_eq!(
-        preference.quiet_hours_start.as_ref().unwrap(),
-        "22:00"
-    );
+    assert_eq!(preference.quiet_hours_start.as_ref().unwrap(), "22:00");
 }
 
 #[test]

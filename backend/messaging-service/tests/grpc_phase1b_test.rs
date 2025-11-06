@@ -58,32 +58,29 @@ async fn create_direct_conversation_success() {
     let user_a_id = Uuid::new_v4();
     let user_b_id = Uuid::new_v4();
 
-    sqlx::query(
-        "INSERT INTO users (id, username, email, phone) VALUES ($1, $2, $3, $4)"
-    )
-    .bind(user_a_id)
-    .bind("test_user_a")
-    .bind("user_a@example.com")
-    .bind(Some("+1234567890"))
-    .execute(&pool)
-    .await
-    .expect("failed to create user_a");
+    sqlx::query("INSERT INTO users (id, username, email, phone) VALUES ($1, $2, $3, $4)")
+        .bind(user_a_id)
+        .bind("test_user_a")
+        .bind("user_a@example.com")
+        .bind(Some("+1234567890"))
+        .execute(&pool)
+        .await
+        .expect("failed to create user_a");
 
-    sqlx::query(
-        "INSERT INTO users (id, username, email, phone) VALUES ($1, $2, $3, $4)"
-    )
-    .bind(user_b_id)
-    .bind("test_user_b")
-    .bind("user_b@example.com")
-    .bind(Some("+0987654321"))
-    .execute(&pool)
-    .await
-    .expect("failed to create user_b");
+    sqlx::query("INSERT INTO users (id, username, email, phone) VALUES ($1, $2, $3, $4)")
+        .bind(user_b_id)
+        .bind("test_user_b")
+        .bind("user_b@example.com")
+        .bind(Some("+0987654321"))
+        .execute(&pool)
+        .await
+        .expect("failed to create user_b");
 
     // Create direct conversation
-    let conversation_id = ConversationService::create_direct_conversation(&pool, user_a_id, user_b_id)
-        .await
-        .expect("failed to create direct conversation");
+    let conversation_id =
+        ConversationService::create_direct_conversation(&pool, user_a_id, user_b_id)
+            .await
+            .expect("failed to create direct conversation");
 
     // Verify conversation exists
     let row = sqlx::query("SELECT id, member_count FROM conversations WHERE id = $1")
@@ -122,16 +119,14 @@ async fn create_group_conversation_success() {
         (creator_id, "creator", "creator@example.com"),
         (member_id, "member", "member@example.com"),
     ] {
-        sqlx::query(
-            "INSERT INTO users (id, username, email, phone) VALUES ($1, $2, $3, $4)"
-        )
-        .bind(uid)
-        .bind(username)
-        .bind(email)
-        .bind(Some("+1234567890"))
-        .execute(&pool)
-        .await
-        .expect("failed to create user");
+        sqlx::query("INSERT INTO users (id, username, email, phone) VALUES ($1, $2, $3, $4)")
+            .bind(uid)
+            .bind(username)
+            .bind(email)
+            .bind(Some("+1234567890"))
+            .execute(&pool)
+            .await
+            .expect("failed to create user");
     }
 
     // Create group conversation
@@ -184,16 +179,14 @@ async fn create_group_conversation_with_multiple_members() {
     all_ids.extend_from_slice(&member_ids);
 
     for (i, uid) in all_ids.iter().enumerate() {
-        sqlx::query(
-            "INSERT INTO users (id, username, email, phone) VALUES ($1, $2, $3, $4)"
-        )
-        .bind(uid)
-        .bind(format!("user_{}", i))
-        .bind(format!("user{}@example.com", i))
-        .bind(Some("+1234567890"))
-        .execute(&pool)
-        .await
-        .expect("failed to create user");
+        sqlx::query("INSERT INTO users (id, username, email, phone) VALUES ($1, $2, $3, $4)")
+            .bind(uid)
+            .bind(format!("user_{}", i))
+            .bind(format!("user{}@example.com", i))
+            .bind(Some("+1234567890"))
+            .execute(&pool)
+            .await
+            .expect("failed to create user");
     }
 
     // Create group with multiple members
@@ -217,7 +210,11 @@ async fn create_group_conversation_with_multiple_members() {
         .expect("conversation should exist");
 
     let member_count: i32 = row.get("member_count");
-    assert_eq!(member_count as usize, 1 + member_ids.len(), "should have creator + 3 members");
+    assert_eq!(
+        member_count as usize,
+        1 + member_ids.len(),
+        "should have creator + 3 members"
+    );
 
     // Cleanup
     let _ = sqlx::query("DELETE FROM conversation_members WHERE conversation_id = $1")
@@ -240,16 +237,14 @@ async fn get_conversation_success() {
     let creator_id = Uuid::new_v4();
 
     // Create user
-    sqlx::query(
-        "INSERT INTO users (id, username, email, phone) VALUES ($1, $2, $3, $4)"
-    )
-    .bind(creator_id)
-    .bind("test_user")
-    .bind("test@example.com")
-    .bind(Some("+1234567890"))
-    .execute(&pool)
-    .await
-    .expect("failed to create user");
+    sqlx::query("INSERT INTO users (id, username, email, phone) VALUES ($1, $2, $3, $4)")
+        .bind(creator_id)
+        .bind("test_user")
+        .bind("test@example.com")
+        .bind(Some("+1234567890"))
+        .execute(&pool)
+        .await
+        .expect("failed to create user");
 
     // Create conversation
     let conversation_id = ConversationService::create_group_conversation(
@@ -292,7 +287,10 @@ async fn get_conversation_not_found() {
         .await
         .expect("query failed");
 
-    assert!(row.is_none(), "nonexistent conversation should not be found");
+    assert!(
+        row.is_none(),
+        "nonexistent conversation should not be found"
+    );
 }
 
 // ========== ListUserConversations Tests ==========
@@ -304,16 +302,14 @@ async fn list_user_conversations_empty() {
     let user_id = Uuid::new_v4();
 
     // Create user
-    sqlx::query(
-        "INSERT INTO users (id, username, email, phone) VALUES ($1, $2, $3, $4)"
-    )
-    .bind(user_id)
-    .bind("empty_user")
-    .bind("empty@example.com")
-    .bind(Some("+1234567890"))
-    .execute(&pool)
-    .await
-    .expect("failed to create user");
+    sqlx::query("INSERT INTO users (id, username, email, phone) VALUES ($1, $2, $3, $4)")
+        .bind(user_id)
+        .bind("empty_user")
+        .bind("empty@example.com")
+        .bind(Some("+1234567890"))
+        .execute(&pool)
+        .await
+        .expect("failed to create user");
 
     // List conversations for user with no conversations
     let rows = sqlx::query("SELECT c.id FROM conversations c INNER JOIN conversation_members cm ON c.id = cm.conversation_id WHERE cm.user_id = $1")
@@ -338,16 +334,14 @@ async fn list_user_conversations_multiple() {
     let user_id = Uuid::new_v4();
 
     // Create user
-    sqlx::query(
-        "INSERT INTO users (id, username, email, phone) VALUES ($1, $2, $3, $4)"
-    )
-    .bind(user_id)
-    .bind("list_user")
-    .bind("list@example.com")
-    .bind(Some("+1234567890"))
-    .execute(&pool)
-    .await
-    .expect("failed to create user");
+    sqlx::query("INSERT INTO users (id, username, email, phone) VALUES ($1, $2, $3, $4)")
+        .bind(user_id)
+        .bind("list_user")
+        .bind("list@example.com")
+        .bind(Some("+1234567890"))
+        .execute(&pool)
+        .await
+        .expect("failed to create user");
 
     // Create multiple conversations
     let mut conversation_ids = Vec::new();
@@ -399,16 +393,14 @@ async fn list_user_conversations_with_pagination() {
     let user_id = Uuid::new_v4();
 
     // Create user
-    sqlx::query(
-        "INSERT INTO users (id, username, email, phone) VALUES ($1, $2, $3, $4)"
-    )
-    .bind(user_id)
-    .bind("pagination_user")
-    .bind("pagination@example.com")
-    .bind(Some("+1234567890"))
-    .execute(&pool)
-    .await
-    .expect("failed to create user");
+    sqlx::query("INSERT INTO users (id, username, email, phone) VALUES ($1, $2, $3, $4)")
+        .bind(user_id)
+        .bind("pagination_user")
+        .bind("pagination@example.com")
+        .bind(Some("+1234567890"))
+        .execute(&pool)
+        .await
+        .expect("failed to create user");
 
     // Create 10 conversations
     let mut conversation_ids = Vec::new();
@@ -463,16 +455,14 @@ async fn conversation_proto_conversion_complete() {
     let creator_id = Uuid::new_v4();
 
     // Create user
-    sqlx::query(
-        "INSERT INTO users (id, username, email, phone) VALUES ($1, $2, $3, $4)"
-    )
-    .bind(creator_id)
-    .bind("proto_test_user")
-    .bind("proto@example.com")
-    .bind(Some("+1234567890"))
-    .execute(&pool)
-    .await
-    .expect("failed to create user");
+    sqlx::query("INSERT INTO users (id, username, email, phone) VALUES ($1, $2, $3, $4)")
+        .bind(creator_id)
+        .bind("proto_test_user")
+        .bind("proto@example.com")
+        .bind(Some("+1234567890"))
+        .execute(&pool)
+        .await
+        .expect("failed to create user");
 
     // Create conversation
     let conversation_id = ConversationService::create_group_conversation(
@@ -488,11 +478,12 @@ async fn conversation_proto_conversion_complete() {
     .expect("failed to create conversation");
 
     // Fetch and verify essential fields
-    let row = sqlx::query("SELECT id, member_count, last_message_id FROM conversations WHERE id = $1")
-        .bind(conversation_id)
-        .fetch_one(&pool)
-        .await
-        .expect("conversation should exist");
+    let row =
+        sqlx::query("SELECT id, member_count, last_message_id FROM conversations WHERE id = $1")
+            .bind(conversation_id)
+            .fetch_one(&pool)
+            .await
+            .expect("conversation should exist");
 
     let id: Uuid = row.get("id");
     let member_count: i32 = row.get("member_count");
@@ -501,7 +492,10 @@ async fn conversation_proto_conversion_complete() {
     // Verify conversion would succeed with these fields
     assert_eq!(id, conversation_id);
     assert!(member_count > 0, "member count should be positive");
-    assert!(last_message_id.is_none(), "new conversation should have no messages");
+    assert!(
+        last_message_id.is_none(),
+        "new conversation should have no messages"
+    );
 
     cleanup_conversation(&pool, conversation_id, creator_id).await;
 }
@@ -515,16 +509,14 @@ async fn create_and_list_conversation_flow() {
     let user_id = Uuid::new_v4();
 
     // Create user
-    sqlx::query(
-        "INSERT INTO users (id, username, email, phone) VALUES ($1, $2, $3, $4)"
-    )
-    .bind(user_id)
-    .bind("flow_user")
-    .bind("flow@example.com")
-    .bind(Some("+1234567890"))
-    .execute(&pool)
-    .await
-    .expect("failed to create user");
+    sqlx::query("INSERT INTO users (id, username, email, phone) VALUES ($1, $2, $3, $4)")
+        .bind(user_id)
+        .bind("flow_user")
+        .bind("flow@example.com")
+        .bind(Some("+1234567890"))
+        .execute(&pool)
+        .await
+        .expect("failed to create user");
 
     // Create conversation
     let conversation_id = ConversationService::create_group_conversation(
@@ -547,10 +539,11 @@ async fn create_and_list_conversation_flow() {
         .expect("query failed");
 
     assert!(rows.len() > 0, "created conversation should appear in list");
-    let returned_ids: Vec<Uuid> = rows.into_iter()
-        .map(|row| row.get("id"))
-        .collect();
-    assert!(returned_ids.contains(&conversation_id), "created conversation should be in results");
+    let returned_ids: Vec<Uuid> = rows.into_iter().map(|row| row.get("id")).collect();
+    assert!(
+        returned_ids.contains(&conversation_id),
+        "created conversation should be in results"
+    );
 
     cleanup_conversation(&pool, conversation_id, user_id).await;
 }
@@ -563,17 +556,18 @@ async fn conversation_isolation_between_users() {
     let user_b = Uuid::new_v4();
 
     // Create both users
-    for (uid, username, email) in &[(user_a, "iso_user_a", "iso_a@example.com"), (user_b, "iso_user_b", "iso_b@example.com")] {
-        sqlx::query(
-            "INSERT INTO users (id, username, email, phone) VALUES ($1, $2, $3, $4)"
-        )
-        .bind(uid)
-        .bind(username)
-        .bind(email)
-        .bind(Some("+1234567890"))
-        .execute(&pool)
-        .await
-        .expect("failed to create user");
+    for (uid, username, email) in &[
+        (user_a, "iso_user_a", "iso_a@example.com"),
+        (user_b, "iso_user_b", "iso_b@example.com"),
+    ] {
+        sqlx::query("INSERT INTO users (id, username, email, phone) VALUES ($1, $2, $3, $4)")
+            .bind(uid)
+            .bind(username)
+            .bind(email)
+            .bind(Some("+1234567890"))
+            .execute(&pool)
+            .await
+            .expect("failed to create user");
     }
 
     // Create conversation for user_a
@@ -610,8 +604,14 @@ async fn conversation_isolation_between_users() {
         .expect("query failed");
 
     let conv_ids_a: Vec<Uuid> = rows_a.into_iter().map(|row| row.get("id")).collect();
-    assert!(conv_ids_a.contains(&conv_a), "user_a should see their conversation");
-    assert!(!conv_ids_a.contains(&conv_b), "user_a should NOT see user_b's conversation");
+    assert!(
+        conv_ids_a.contains(&conv_a),
+        "user_a should see their conversation"
+    );
+    assert!(
+        !conv_ids_a.contains(&conv_b),
+        "user_a should NOT see user_b's conversation"
+    );
 
     // User B should only see their conversation
     let rows_b = sqlx::query("SELECT c.id FROM conversations c INNER JOIN conversation_members cm ON c.id = cm.conversation_id WHERE cm.user_id = $1")
@@ -621,8 +621,14 @@ async fn conversation_isolation_between_users() {
         .expect("query failed");
 
     let conv_ids_b: Vec<Uuid> = rows_b.into_iter().map(|row| row.get("id")).collect();
-    assert!(conv_ids_b.contains(&conv_b), "user_b should see their conversation");
-    assert!(!conv_ids_b.contains(&conv_a), "user_b should NOT see user_a's conversation");
+    assert!(
+        conv_ids_b.contains(&conv_b),
+        "user_b should see their conversation"
+    );
+    assert!(
+        !conv_ids_b.contains(&conv_a),
+        "user_b should NOT see user_a's conversation"
+    );
 
     // Cleanup
     for (uid, conv_id) in &[(user_a, conv_a), (user_b, conv_b)] {

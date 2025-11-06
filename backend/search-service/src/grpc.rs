@@ -68,11 +68,7 @@ impl SearchService for SearchServiceImpl {
         }
 
         // Perform search with fallback
-        let search_result = match self
-            .es_client
-            .full_text_search(query, limit, offset)
-            .await
-        {
+        let search_result = match self.es_client.full_text_search(query, limit, offset).await {
             Ok(results) => results,
             Err(e) => {
                 error!("Elasticsearch error: {}", e);

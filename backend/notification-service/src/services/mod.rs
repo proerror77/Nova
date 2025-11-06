@@ -10,6 +10,7 @@ pub use fcm_client::*;
 pub use kafka_consumer::*;
 pub use notification_service::*;
 pub use priority_queue::{
-    NotificationPriorityQueue, PriorityNotification, AdaptiveFlushStrategy, RateLimiter, QueueMetrics,
+    AdaptiveFlushStrategy, NotificationPriorityQueue, PriorityNotification, QueueMetrics,
+    RateLimiter,
 };
 pub use push_sender::*;

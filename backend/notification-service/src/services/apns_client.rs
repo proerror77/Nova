@@ -2,8 +2,7 @@
 ///
 /// This module provides APNs support for iOS/macOS push notifications
 /// using the consolidated nova-apns-shared library
-
-use nova_apns_shared::{ApnsPush as NovaApnsPush, ApnsConfig as NovaApnsConfig, PushProvider};
+use nova_apns_shared::{ApnsConfig as NovaApnsConfig, ApnsPush as NovaApnsPush, PushProvider};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -51,12 +50,11 @@ impl APNsClient {
     ) -> Self {
         // Extract bundle_id from certificate path or use a default
         // In production, you would get this from environment config
-        let bundle_id = std::env::var("APNS_BUNDLE_ID")
-            .unwrap_or_else(|_| "com.example.app".to_string());
+        let bundle_id =
+            std::env::var("APNS_BUNDLE_ID").unwrap_or_else(|_| "com.example.app".to_string());
 
         let cfg = NovaApnsConfig::new(certificate_path, bundle_id, is_production);
-        let inner = NovaApnsPush::new(&cfg)
-            .expect("Failed to initialize APNs client");
+        let inner = NovaApnsPush::new(&cfg).expect("Failed to initialize APNs client");
 
         Self {
             inner,
@@ -81,12 +79,16 @@ impl APNsClient {
         body: &str,
         _priority: APNsPriority,
     ) -> Result<APNsSendResult, String> {
-        match self.inner.send(
-            device_token.to_string(),
-            title.to_string(),
-            body.to_string(),
-            None,
-        ).await {
+        match self
+            .inner
+            .send(
+                device_token.to_string(),
+                title.to_string(),
+                body.to_string(),
+                None,
+            )
+            .await
+        {
             Ok(_) => Ok(APNsSendResult {
                 message_id: Uuid::new_v4().to_string(),
                 success: true,
@@ -144,12 +146,16 @@ impl APNsClient {
         body: &str,
         badge: i32,
     ) -> Result<APNsSendResult, String> {
-        match self.inner.send(
-            device_token.to_string(),
-            title.to_string(),
-            body.to_string(),
-            Some(badge as u32),
-        ).await {
+        match self
+            .inner
+            .send(
+                device_token.to_string(),
+                title.to_string(),
+                body.to_string(),
+                Some(badge as u32),
+            )
+            .await
+        {
             Ok(_) => Ok(APNsSendResult {
                 message_id: Uuid::new_v4().to_string(),
                 success: true,
@@ -166,12 +172,16 @@ impl APNsClient {
         _data: serde_json::Value,
     ) -> Result<APNsSendResult, String> {
         // Silent notifications still use basic send for now
-        match self.inner.send(
-            device_token.to_string(),
-            "".to_string(),
-            "".to_string(),
-            None,
-        ).await {
+        match self
+            .inner
+            .send(
+                device_token.to_string(),
+                "".to_string(),
+                "".to_string(),
+                None,
+            )
+            .await
+        {
             Ok(_) => Ok(APNsSendResult {
                 message_id: Uuid::new_v4().to_string(),
                 success: true,

@@ -2,9 +2,7 @@ use std::time::Duration;
 
 use actix_web::HttpResponse;
 use once_cell::sync::Lazy;
-use prometheus::{
-    Encoder, HistogramOpts, HistogramVec, IntCounterVec, Opts, TextEncoder,
-};
+use prometheus::{Encoder, HistogramOpts, HistogramVec, IntCounterVec, Opts, TextEncoder};
 
 static HTTP_REQUESTS_TOTAL: Lazy<IntCounterVec> = Lazy::new(|| {
     let counter = IntCounterVec::new(
@@ -27,7 +25,9 @@ static HTTP_REQUEST_DURATION_SECONDS: Lazy<HistogramVec> = Lazy::new(|| {
             "notification_service_http_request_duration_seconds",
             "HTTP request latency for notification-service",
         )
-        .buckets(vec![0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5]),
+        .buckets(vec![
+            0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5,
+        ]),
         &["method", "path", "status"],
     )
     .expect("failed to create notification_service_http_request_duration_seconds");

@@ -1,7 +1,6 @@
 /// Test fixtures and helpers for auth-service tests
 ///
 /// Provides reusable test data and utility functions following the DRY principle.
-
 use crate::models::user::{LoginRequest, RegisterRequest};
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -52,12 +51,12 @@ pub fn custom_login_request(email: &str, password: &str) -> LoginRequest {
 /// Weak passwords for testing validation
 pub fn weak_passwords() -> Vec<&'static str> {
     vec![
-        "short",                 // Too short
-        "nouppercase123!",       // No uppercase
-        "NOLOWERCASE123!",       // No lowercase
-        "NoDigitsHere!",         // No digits
-        "NoSpecialChars123",     // No special characters
-        "12345678",              // Only digits
+        "short",             // Too short
+        "nouppercase123!",   // No uppercase
+        "NOLOWERCASE123!",   // No lowercase
+        "NoDigitsHere!",     // No digits
+        "NoSpecialChars123", // No special characters
+        "12345678",          // Only digits
     ]
 }
 
@@ -74,7 +73,12 @@ pub fn invalid_emails() -> Vec<&'static str> {
 }
 
 /// Test helper to create a user directly in the database
-pub async fn create_test_user(pool: &PgPool, email: &str, username: &str, password_hash: &str) -> Uuid {
+pub async fn create_test_user(
+    pool: &PgPool,
+    email: &str,
+    username: &str,
+    password_hash: &str,
+) -> Uuid {
     let user_id = Uuid::new_v4();
 
     sqlx::query(

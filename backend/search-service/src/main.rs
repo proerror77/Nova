@@ -5,19 +5,21 @@ use actix_web::{
 };
 use error_types::ErrorResponse;
 use redis::aio::ConnectionManager;
-use search_service::services::elasticsearch::{ElasticsearchClient, ElasticsearchError, PostDocument};
-use search_service::services::{ClickHouseClient, RedisCache};
 use search_service::events::consumers::EventContext;
 use search_service::events::kafka::{spawn_message_consumer, KafkaConsumerConfig};
 use search_service::events::SearchIndexConsumer;
 use search_service::openapi::ApiDoc;
 use search_service::search_suggestions::SearchSuggestionsService;
+use search_service::services::elasticsearch::{
+    ElasticsearchClient, ElasticsearchError, PostDocument,
+};
+use search_service::services::{ClickHouseClient, RedisCache};
 use serde::{Deserialize, Serialize};
 use sqlx::{postgres::PgPoolOptions, PgPool};
 use std::sync::Arc;
-use utoipa::OpenApi;
 use tonic::transport::Server as GrpcServer;
 use tonic_health::server::health_reporter;
+use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
 use uuid::Uuid;
 
@@ -247,7 +249,10 @@ async fn search_posts(
     }
 
     if let Some(search_backend) = &state.search_backend {
-        match search_backend.search_posts(&params.q, params.limit, params.offset).await {
+        match search_backend
+            .search_posts(&params.q, params.limit, params.offset)
+            .await
+        {
             Ok(documents) => {
                 let posts: Vec<PostResult> = documents.into_iter().map(PostResult::from).collect();
                 let count = posts.len();
@@ -667,11 +672,10 @@ async fn unified_search(
 
 // OpenAPI endpoint handler
 async fn openapi_json(doc: Data<utoipa::openapi::OpenApi>) -> actix_web::Result<HttpResponse> {
-    let body = serde_json::to_string(&*doc)
-        .map_err(|e| {
-            tracing::error!("OpenAPI serialization failed: {}", e);
-            actix_web::error::ErrorInternalServerError("OpenAPI serialization error")
-        })?;
+    let body = serde_json::to_string(&*doc).map_err(|e| {
+        tracing::error!("OpenAPI serialization failed: {}", e);
+        actix_web::error::ErrorInternalServerError("OpenAPI serialization error")
+    })?;
 
     Ok(HttpResponse::Ok()
         .content_type("application/json")
@@ -785,8 +789,8 @@ async fn main() -> std::io::Result<()> {
     tracing::info!("Redis connection established");
 
     // Initialize ClickHouse client
-    let clickhouse_url = std::env::var("CLICKHOUSE_URL")
-        .unwrap_or_else(|_| "http://localhost:8123".to_string());
+    let clickhouse_url =
+        std::env::var("CLICKHOUSE_URL").unwrap_or_else(|_| "http://localhost:8123".to_string());
     let ch_client = match ClickHouseClient::new(&clickhouse_url).await {
         Ok(client) => {
             tracing::info!("ClickHouse connected: {}", clickhouse_url);
@@ -822,11 +826,22 @@ async fn main() -> std::io::Result<()> {
             let comment_index = std::env::var("ELASTICSEARCH_COMMENT_INDEX")
                 .unwrap_or_else(|_| "nova_comments".to_string());
 
-            match ElasticsearchClient::new(&url, &post_index, &message_index, &user_index, &comment_index).await {
+            match ElasticsearchClient::new(
+                &url,
+                &post_index,
+                &message_index,
+                &user_index,
+                &comment_index,
+            )
+            .await
+            {
                 Ok(client) => {
                     tracing::info!(
                         "Elasticsearch enabled: post={}, message={}, user={}, comment={}",
-                        post_index, message_index, user_index, comment_index
+                        post_index,
+                        message_index,
+                        user_index,
+                        comment_index
                     );
                     Some(Arc::new(client))
                 }
@@ -887,7 +902,9 @@ async fn main() -> std::io::Result<()> {
             let redis = Arc::try_unwrap(redis).unwrap_or_else(|arc| (*arc).clone());
             Some(search_service::grpc::SearchServiceImpl::new(es, ch, redis))
         } else {
-            tracing::error!("Cannot start gRPC service: missing required clients (ES/ClickHouse/Redis)");
+            tracing::error!(
+                "Cannot start gRPC service: missing required clients (ES/ClickHouse/Redis)"
+            );
             None
         };
 

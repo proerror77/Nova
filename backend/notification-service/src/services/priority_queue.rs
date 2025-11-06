@@ -7,7 +7,6 @@
 /// - Rate limiting per user
 /// - Configurable batch parameters
 /// - Metrics collection
-
 use super::kafka_consumer::KafkaNotification;
 use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashMap};
@@ -233,9 +232,7 @@ impl RateLimiter {
     /// Get current rate for user
     pub fn current_rate(&self, user_id: Uuid) -> (usize, usize) {
         if let Some((count, window_start)) = self.windows.get(&user_id) {
-            let remaining = self
-                .window_duration
-                .saturating_sub(window_start.elapsed());
+            let remaining = self.window_duration.saturating_sub(window_start.elapsed());
 
             if remaining > Duration::from_secs(0) {
                 return (*count, self.max_per_window);
@@ -358,7 +355,8 @@ impl NotificationPriorityQueue {
         }
 
         // Check queue multiplier
-        if queue_size as f64 >= self.strategy.min_batch_size as f64 * self.strategy.queue_size_multiplier
+        if queue_size as f64
+            >= self.strategy.min_batch_size as f64 * self.strategy.queue_size_multiplier
         {
             return true;
         }
@@ -619,13 +617,7 @@ mod tests {
 
     #[test]
     fn test_exceeds_max_wait_time() {
-        let strategy = AdaptiveFlushStrategy::custom(
-            1,
-            100,
-            Duration::from_millis(100),
-            5,
-            2.0,
-        );
+        let strategy = AdaptiveFlushStrategy::custom(1, 100, Duration::from_millis(100), 5, 2.0);
         let mut queue = NotificationPriorityQueue::with_strategy(strategy);
         let user_id = Uuid::new_v4();
 

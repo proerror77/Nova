@@ -24,7 +24,7 @@ impl Default for RateLimitConfig {
     fn default() -> Self {
         Self {
             max_requests: 100,
-            window_seconds: 900, // 15 minutes
+            window_seconds: 900,   // 15 minutes
             redis_timeout_ms: 100, // Fast timeout to prevent blocking
         }
     }
@@ -154,7 +154,10 @@ async fn check_rate_limit(
     // that shares the same underlying connection pool
     let mut conn = redis.as_ref().clone();
 
-    let count: u32 = conn.incr(key, 1).await.map_err(|e| format!("Redis incr failed: {}", e))?;
+    let count: u32 = conn
+        .incr(key, 1)
+        .await
+        .map_err(|e| format!("Redis incr failed: {}", e))?;
 
     // Set expiry on first request
     if count == 1 {
@@ -228,7 +231,10 @@ mod tests {
         // Redis operations should have a fast timeout (100ms)
         // This prevents Redis slowness from blocking all requests
         assert_eq!(config.redis_timeout_ms, 100);
-        assert!(config.redis_timeout_ms < 1000, "Timeout too long, will block requests");
+        assert!(
+            config.redis_timeout_ms < 1000,
+            "Timeout too long, will block requests"
+        );
     }
 
     #[test]

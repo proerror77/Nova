@@ -9,13 +9,12 @@
 /// - Token invalidation for permanent failures (4xx)
 /// - Delivery logging and metrics
 /// - Circuit breaker pattern
-
-use crate::services::{FCMClient, APNsClient};
-use sqlx::PgPool;
-use uuid::Uuid;
-use std::sync::Arc;
-use tracing::{debug, error, warn, info};
+use crate::services::{APNsClient, FCMClient};
 use chrono::Utc;
+use sqlx::PgPool;
+use std::sync::Arc;
+use tracing::{debug, error, info, warn};
+use uuid::Uuid;
 
 /// Push notification result for a single device
 #[derive(Debug, Clone)]
@@ -129,9 +128,7 @@ impl PushSender {
 
         for request in requests {
             let sender = self.clone_arc();
-            let task = tokio::spawn(async move {
-                sender.send(request).await
-            });
+            let task = tokio::spawn(async move { sender.send(request).await });
             tasks.push(task);
         }
 
@@ -160,17 +157,22 @@ impl PushSender {
     async fn send_fcm(&self, request: &PushRequest) -> PushResult {
         match &self.fcm_client {
             Some(fcm) => {
-                match fcm.send(
-                    &request.token,
-                    &request.title,
-                    &request.body,
-                    request.data.clone(),
-                ).await {
+                match fcm
+                    .send(
+                        &request.token,
+                        &request.title,
+                        &request.body,
+                        request.data.clone(),
+                    )
+                    .await
+                {
                     Ok(result) => {
                         debug!("FCM delivery successful: {}", result.message_id);
 
                         // Check if token is invalid (FCM returns error in result)
-                        let should_invalidate = result.error.as_ref()
+                        let should_invalidate = result
+                            .error
+                            .as_ref()
                             .map(|e| self.is_token_invalid_error(e))
                             .unwrap_or(false);
 
@@ -218,12 +220,15 @@ impl PushSender {
     async fn send_apns(&self, request: &PushRequest) -> PushResult {
         match &self.apns_client {
             Some(apns) => {
-                match apns.send(
-                    &request.token,
-                    &request.title,
-                    &request.body,
-                    super::apns_client::APNsPriority::High,
-                ).await {
+                match apns
+                    .send(
+                        &request.token,
+                        &request.title,
+                        &request.body,
+                        super::apns_client::APNsPriority::High,
+                    )
+                    .await
+                {
                     Ok(result) => {
                         debug!("APNs delivery successful: {}", result.message_id);
                         PushResult {

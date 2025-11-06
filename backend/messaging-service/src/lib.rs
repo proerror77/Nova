@@ -40,5 +40,5 @@ pub mod nova {
 }
 
 pub use nova::auth_service::v1 as auth_service;
-pub use nova::messaging_service::v1 as messaging_service;
 pub use nova::common::v1 as common;
+pub use nova::messaging_service::v1 as messaging_service;

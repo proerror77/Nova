@@ -5,7 +5,6 @@
 /// 2. Database CRUD operations
 /// 3. Push token registration
 /// 4. Notification statistics
-
 use uuid::Uuid;
 
 #[cfg(test)]

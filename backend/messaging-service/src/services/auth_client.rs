@@ -4,9 +4,9 @@
 //! Consolidates user lookups to go through canonical auth-service instead of
 //! the shadow users table in messaging-service.
 
+use crate::error::AppError;
 use grpc_clients::nova::auth_service::v1::{CheckUserExistsRequest, GetUserRequest};
 use grpc_clients::{config::GrpcConfig, GrpcClientPool};
-use crate::error::AppError;
 use std::sync::Arc;
 use tonic::Request;
 use uuid::Uuid;
@@ -14,21 +14,24 @@ use uuid::Uuid;
 /// Cached gRPC client for auth-service
 /// Implements connection pooling and reuse via tonic channel
 #[derive(Clone)]
-pub struct AuthClient { pool: Arc<GrpcClientPool> }
+pub struct AuthClient {
+    pool: Arc<GrpcClientPool>,
+}
 
 impl AuthClient {
     /// Create a new auth client
     pub async fn new(_auth_service_url: &str) -> Result<Self, AppError> {
         // Prefer centralized gRPC config from env (URL is ignored once centralized pool is used)
-        let cfg = GrpcConfig::from_env().map_err(|e| {
-            AppError::StartServer(format!("Failed to load gRPC config: {}", e))
-        })?;
+        let cfg = GrpcConfig::from_env()
+            .map_err(|e| AppError::StartServer(format!("Failed to load gRPC config: {}", e)))?;
 
         let pool = GrpcClientPool::new(&cfg)
             .await
             .map_err(|e| AppError::StartServer(format!("Failed to init gRPC pool: {}", e)))?;
 
-        Ok(Self { pool: Arc::new(pool) })
+        Ok(Self {
+            pool: Arc::new(pool),
+        })
     }
 
     /// Check if a user exists by ID

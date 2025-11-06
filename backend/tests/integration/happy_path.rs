@@ -14,11 +14,11 @@ mod fixtures;
 #[path = "../common/mod.rs"]
 mod common;
 
-use fixtures::{test_env::TestEnvironment, assertions::*};
+use fixtures::{assertions::*, test_env::TestEnvironment};
 use sqlx::PgPool;
+use std::time::Duration;
 use std::time::Instant;
 use uuid::Uuid;
-use std::time::Duration;
 
 // ============================================
 // Test 1: 消息发送 → 通知触发
@@ -40,7 +40,7 @@ async fn test_messaging_to_notification_e2e() {
 
     sqlx::query(
         "INSERT INTO messages (id, conversation_id, sender_id, content, created_at)
-         VALUES ($1, $2, $3, $4, NOW())"
+         VALUES ($1, $2, $3, $4, NOW())",
     )
     .bind(message_id)
     .bind(conversation_id)
@@ -76,13 +76,12 @@ async fn test_messaging_to_notification_e2e() {
         let db = db.clone();
         let receiver_id = receiver_id;
         async move {
-            let count: i64 = sqlx::query_scalar(
-                "SELECT COUNT(*) FROM notifications WHERE user_id = $1"
-            )
-            .bind(receiver_id)
-            .fetch_one(&*db)
-            .await
-            .unwrap_or(0);
+            let count: i64 =
+                sqlx::query_scalar("SELECT COUNT(*) FROM notifications WHERE user_id = $1")
+                    .bind(receiver_id)
+                    .fetch_one(&*db)
+                    .await
+                    .unwrap_or(0);
             count > 0
         }
     })
@@ -128,7 +127,7 @@ async fn test_post_creation_to_feed_recommendation() {
 
     sqlx::query(
         "INSERT INTO posts (id, user_id, caption, status, created_at)
-         VALUES ($1, $2, $3, $4, NOW())"
+         VALUES ($1, $2, $3, $4, NOW())",
     )
     .bind(post_id)
     .bind(user_id)
@@ -146,7 +145,7 @@ async fn test_post_creation_to_feed_recommendation() {
     // Step 3: 模拟 feed-service 计算特征并缓存
     sqlx::query(
         "INSERT INTO post_features (post_id, embedding, engagement_score, created_at)
-         VALUES ($1, $2, $3, NOW())"
+         VALUES ($1, $2, $3, NOW())",
     )
     .bind(post_id)
     .bind(vec![0.1f32; 128]) // 模拟 embedding
@@ -195,7 +194,7 @@ async fn test_streaming_full_lifecycle() {
     // Step 1: 创建直播
     sqlx::query(
         "INSERT INTO streams (id, user_id, title, status, created_at)
-         VALUES ($1, $2, $3, $4, NOW())"
+         VALUES ($1, $2, $3, $4, NOW())",
     )
     .bind(stream_id)
     .bind(streamer_id)
@@ -214,7 +213,7 @@ async fn test_streaming_full_lifecycle() {
     let viewer_id = Uuid::new_v4();
     sqlx::query(
         "INSERT INTO stream_viewers (stream_id, user_id, joined_at)
-         VALUES ($1, $2, NOW())"
+         VALUES ($1, $2, NOW())",
     )
     .bind(stream_id)
     .bind(viewer_id)
@@ -226,7 +225,7 @@ async fn test_streaming_full_lifecycle() {
     let chat_message_id = Uuid::new_v4();
     sqlx::query(
         "INSERT INTO stream_chat_messages (id, stream_id, user_id, message, created_at)
-         VALUES ($1, $2, $3, $4, NOW())"
+         VALUES ($1, $2, $3, $4, NOW())",
     )
     .bind(chat_message_id)
     .bind(stream_id)
@@ -237,22 +236,19 @@ async fn test_streaming_full_lifecycle() {
     .expect("发送聊天消息失败");
 
     // Step 5: 结束直播
-    sqlx::query(
-        "UPDATE streams SET status = 'ended', ended_at = NOW() WHERE id = $1"
-    )
-    .bind(stream_id)
-    .execute(&*db)
-    .await
-    .expect("结束直播失败");
+    sqlx::query("UPDATE streams SET status = 'ended', ended_at = NOW() WHERE id = $1")
+        .bind(stream_id)
+        .execute(&*db)
+        .await
+        .expect("结束直播失败");
 
     // Step 6: 验证数据一致性
-    let viewer_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM stream_viewers WHERE stream_id = $1"
-    )
-    .bind(stream_id)
-    .fetch_one(&*db)
-    .await
-    .expect("查询观众数失败");
+    let viewer_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM stream_viewers WHERE stream_id = $1")
+            .bind(stream_id)
+            .fetch_one(&*db)
+            .await
+            .expect("查询观众数失败");
 
     assert_eq!(viewer_count, 1, "观众数量不正确");
 
@@ -280,7 +276,7 @@ async fn test_asset_upload_to_cdn_url() {
     // Step 1: 创建资产记录
     sqlx::query(
         "INSERT INTO assets (id, user_id, s3_key, status, created_at)
-         VALUES ($1, $2, $3, $4, NOW())"
+         VALUES ($1, $2, $3, $4, NOW())",
     )
     .bind(asset_id)
     .bind(user_id)
@@ -293,7 +289,7 @@ async fn test_asset_upload_to_cdn_url() {
     // Step 2: 模拟 CDN 处理完成，生成 URL
     let cdn_url = format!("https://cdn.example.com/assets/{}/file.jpg", asset_id);
     sqlx::query(
-        "UPDATE assets SET status = 'completed', cdn_url = $1, updated_at = NOW() WHERE id = $2"
+        "UPDATE assets SET status = 'completed', cdn_url = $1, updated_at = NOW() WHERE id = $2",
     )
     .bind(&cdn_url)
     .bind(asset_id)
@@ -309,7 +305,7 @@ async fn test_asset_upload_to_cdn_url() {
     // Step 4: 缓存失效（CDN 刷新）
     sqlx::query(
         "INSERT INTO cache_invalidations (id, asset_id, cdn_url, status, created_at)
-         VALUES ($1, $2, $3, $4, NOW())"
+         VALUES ($1, $2, $3, $4, NOW())",
     )
     .bind(Uuid::new_v4())
     .bind(asset_id)
@@ -320,13 +316,12 @@ async fn test_asset_upload_to_cdn_url() {
     .expect("创建缓存失效记录失败");
 
     // Step 5: 验证资产状态
-    let (status, url): (String, Option<String>) = sqlx::query_as(
-        "SELECT status, cdn_url FROM assets WHERE id = $1"
-    )
-    .bind(asset_id)
-    .fetch_one(&*db)
-    .await
-    .expect("查询资产失败");
+    let (status, url): (String, Option<String>) =
+        sqlx::query_as("SELECT status, cdn_url FROM assets WHERE id = $1")
+            .bind(asset_id)
+            .fetch_one(&*db)
+            .await
+            .expect("查询资产失败");
 
     assert_eq!(status, "completed");
     assert_eq!(url, Some(cdn_url));
@@ -355,7 +350,7 @@ async fn test_search_query_to_trending_analytics() {
     // Step 1: 记录搜索查询
     sqlx::query(
         "INSERT INTO search_queries (id, user_id, query, results_count, created_at)
-         VALUES ($1, $2, $3, $4, NOW())"
+         VALUES ($1, $2, $3, $4, NOW())",
     )
     .bind(query_id)
     .bind(user_id)
@@ -374,7 +369,7 @@ async fn test_search_query_to_trending_analytics() {
     sqlx::query(
         "INSERT INTO trending_topics (id, topic, search_count, created_at)
          VALUES ($1, $2, $3, NOW())
-         ON CONFLICT (topic) DO UPDATE SET search_count = trending_topics.search_count + 1"
+         ON CONFLICT (topic) DO UPDATE SET search_count = trending_topics.search_count + 1",
     )
     .bind(Uuid::new_v4())
     .bind("Rust async")
@@ -384,13 +379,12 @@ async fn test_search_query_to_trending_analytics() {
     .expect("更新热门话题失败");
 
     // Step 4: 验证热门话题
-    let search_count: i64 = sqlx::query_scalar(
-        "SELECT search_count FROM trending_topics WHERE topic = $1"
-    )
-    .bind("Rust async")
-    .fetch_one(&*db)
-    .await
-    .expect("查询热门话题失败");
+    let search_count: i64 =
+        sqlx::query_scalar("SELECT search_count FROM trending_topics WHERE topic = $1")
+            .bind("Rust async")
+            .fetch_one(&*db)
+            .await
+            .expect("查询热门话题失败");
 
     assert!(search_count >= 1, "搜索计数不正确");
 
@@ -417,7 +411,7 @@ async fn test_cross_service_data_consistency() {
     // Step 1: 创建帖子（content-service）
     sqlx::query(
         "INSERT INTO posts (id, user_id, caption, status, created_at)
-         VALUES ($1, $2, $3, $4, NOW())"
+         VALUES ($1, $2, $3, $4, NOW())",
     )
     .bind(post_id)
     .bind(user_id)
@@ -430,7 +424,7 @@ async fn test_cross_service_data_consistency() {
     // Step 2: 同步到 feed-service
     sqlx::query(
         "INSERT INTO post_features (post_id, embedding, engagement_score, created_at)
-         VALUES ($1, $2, $3, NOW())"
+         VALUES ($1, $2, $3, NOW())",
     )
     .bind(post_id)
     .bind(vec![0.5f32; 128])
@@ -442,7 +436,7 @@ async fn test_cross_service_data_consistency() {
     // Step 3: 索引到 search-service（模拟）
     sqlx::query(
         "INSERT INTO search_index (post_id, content, indexed_at)
-         VALUES ($1, $2, NOW())"
+         VALUES ($1, $2, NOW())",
     )
     .bind(post_id)
     .bind("跨服务测试")
@@ -494,7 +488,7 @@ async fn test_kafka_event_deduplication_idempotency() {
     // Step 1: 创建 Outbox 事件
     sqlx::query(
         "INSERT INTO outbox_events (id, aggregate_id, event_type, payload, status, created_at)
-         VALUES ($1, $2, $3, $4, $5, NOW())"
+         VALUES ($1, $2, $3, $4, $5, NOW())",
     )
     .bind(event_id)
     .bind(aggregate_id)
@@ -507,7 +501,7 @@ async fn test_kafka_event_deduplication_idempotency() {
 
     // Step 2: 模拟事件发布
     sqlx::query(
-        "UPDATE outbox_events SET status = 'published', published_at = NOW() WHERE id = $1"
+        "UPDATE outbox_events SET status = 'published', published_at = NOW() WHERE id = $1",
     )
     .bind(event_id)
     .execute(&*db)
@@ -519,7 +513,7 @@ async fn test_kafka_event_deduplication_idempotency() {
     sqlx::query(
         "INSERT INTO event_consumption_log (event_id, consumer_group, consumed_at)
          VALUES ($1, $2, NOW())
-         ON CONFLICT (event_id, consumer_group) DO NOTHING"
+         ON CONFLICT (event_id, consumer_group) DO NOTHING",
     )
     .bind(event_id)
     .bind("notification-service")
@@ -592,13 +586,12 @@ async fn test_eventual_consistency_convergence() {
     .ok(); // 允许超时（模拟场景）
 
     // Step 4: 验证最终状态
-    let event_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM outbox_events WHERE aggregate_id = $1"
-    )
-    .bind(aggregate_id)
-    .fetch_one(&*db)
-    .await
-    .expect("查询事件失败");
+    let event_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM outbox_events WHERE aggregate_id = $1")
+            .bind(aggregate_id)
+            .fetch_one(&*db)
+            .await
+            .expect("查询事件失败");
 
     assert_eq!(event_count, 5, "事件数量不正确");
 

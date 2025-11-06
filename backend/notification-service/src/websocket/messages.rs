@@ -7,14 +7,10 @@ use uuid::Uuid;
 #[serde(tag = "type")]
 pub enum WebSocketMessage {
     /// Client subscribes to user's notifications
-    Subscribe {
-        user_id: Uuid,
-    },
+    Subscribe { user_id: Uuid },
 
     /// Client unsubscribes from notifications
-    Unsubscribe {
-        user_id: Uuid,
-    },
+    Unsubscribe { user_id: Uuid },
 
     /// Server pushes a notification to client
     Notification {
@@ -30,31 +26,19 @@ pub enum WebSocketMessage {
     },
 
     /// Server acknowledges message receipt
-    Ack {
-        message_id: Option<String>,
-    },
+    Ack { message_id: Option<String> },
 
     /// Heartbeat/ping from server
-    Ping {
-        timestamp: i64,
-    },
+    Ping { timestamp: i64 },
 
     /// Client responds to ping
-    Pong {
-        timestamp: i64,
-    },
+    Pong { timestamp: i64 },
 
     /// Error message from server
-    Error {
-        code: String,
-        message: String,
-    },
+    Error { code: String, message: String },
 
     /// Connection established confirmation
-    Connected {
-        server_id: String,
-        timestamp: i64,
-    },
+    Connected { server_id: String, timestamp: i64 },
 }
 
 impl WebSocketMessage {
@@ -153,7 +137,10 @@ mod tests {
         let deserialized = WebSocketMessage::from_json(&json).unwrap();
 
         // Verify type is preserved
-        assert!(matches!(deserialized, WebSocketMessage::Notification { .. }));
+        assert!(matches!(
+            deserialized,
+            WebSocketMessage::Notification { .. }
+        ));
     }
 
     #[test]
@@ -168,10 +155,8 @@ mod tests {
 
     #[test]
     fn test_error_message() {
-        let error = WebSocketMessage::error(
-            "INVALID_USER".to_string(),
-            "User ID is invalid".to_string(),
-        );
+        let error =
+            WebSocketMessage::error("INVALID_USER".to_string(), "User ID is invalid".to_string());
         let json = error.to_json().unwrap();
         let deserialized = WebSocketMessage::from_json(&json).unwrap();
         assert!(matches!(deserialized, WebSocketMessage::Error { .. }));

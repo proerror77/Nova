@@ -1,3 +1,4 @@
+use chrono::Utc;
 /// Unit tests for Kafka consumer functionality
 ///
 /// This test module covers:
@@ -5,11 +6,9 @@
 /// - Message validation
 /// - Event type conversion
 /// - Retry policy logic
-
 use notification_service::services::kafka_consumer::*;
-use uuid::Uuid;
-use chrono::Utc;
 use std::time::Duration;
+use uuid::Uuid;
 
 #[test]
 fn test_notification_batch_creation() {
@@ -207,10 +206,8 @@ fn test_kafka_notification_event_type_conversion() {
 
 #[test]
 fn test_kafka_consumer_creation() {
-    let consumer = KafkaNotificationConsumer::new(
-        "localhost:9092".to_string(),
-        "notifications".to_string(),
-    );
+    let consumer =
+        KafkaNotificationConsumer::new("localhost:9092".to_string(), "notifications".to_string());
 
     assert_eq!(consumer.broker, "localhost:9092");
     assert_eq!(consumer.topic, "notifications");
@@ -220,10 +217,8 @@ fn test_kafka_consumer_creation() {
 
 #[test]
 fn test_kafka_consumer_configuration() {
-    let consumer = KafkaNotificationConsumer::new(
-        "kafka-broker:9092".to_string(),
-        "user-events".to_string(),
-    );
+    let consumer =
+        KafkaNotificationConsumer::new("kafka-broker:9092".to_string(), "user-events".to_string());
 
     assert_eq!(consumer.group_id, "notifications-consumer");
     assert_eq!(consumer.batch_size, 100);
@@ -286,10 +281,22 @@ fn test_batch_add_with_mixed_event_types() {
     }
 
     assert_eq!(batch.len(), 4);
-    assert_eq!(batch.notifications[0].event_type, NotificationEventType::Like);
-    assert_eq!(batch.notifications[1].event_type, NotificationEventType::Comment);
-    assert_eq!(batch.notifications[2].event_type, NotificationEventType::Follow);
-    assert_eq!(batch.notifications[3].event_type, NotificationEventType::Message);
+    assert_eq!(
+        batch.notifications[0].event_type,
+        NotificationEventType::Like
+    );
+    assert_eq!(
+        batch.notifications[1].event_type,
+        NotificationEventType::Comment
+    );
+    assert_eq!(
+        batch.notifications[2].event_type,
+        NotificationEventType::Follow
+    );
+    assert_eq!(
+        batch.notifications[3].event_type,
+        NotificationEventType::Message
+    );
 }
 
 #[test]

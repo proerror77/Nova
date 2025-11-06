@@ -8,10 +8,9 @@
 /// - Provides connection pooling and management
 /// - Handles common gRPC patterns (retries, timeouts, circuit breakers)
 /// - Implements dependency injection for service clients
-
 pub mod config;
-pub mod pool;
 pub mod middleware;
+pub mod pool;
 
 // Re-export generated proto client modules
 pub mod nova {
@@ -100,16 +99,16 @@ use tonic::transport::Channel;
 
 /// Client types for all services
 pub use nova::auth_service::auth_service_client::AuthServiceClient;
-pub use nova::user_service::user_service_client::UserServiceClient;
-pub use nova::messaging_service::messaging_service_client::MessagingServiceClient;
-pub use nova::content_service::content_service_client::ContentServiceClient;
-pub use nova::feed_service::recommendation_service_client::RecommendationServiceClient;
-pub use nova::search_service::search_service_client::SearchServiceClient;
-pub use nova::media_service::media_service_client::MediaServiceClient;
-pub use nova::notification_service::notification_service_client::NotificationServiceClient;
-pub use nova::streaming_service::streaming_service_client::StreamingServiceClient;
 pub use nova::cdn_service::cdn_service_client::CdnServiceClient;
+pub use nova::content_service::content_service_client::ContentServiceClient;
 pub use nova::events_service::events_service_client::EventsServiceClient;
+pub use nova::feed_service::recommendation_service_client::RecommendationServiceClient;
+pub use nova::media_service::media_service_client::MediaServiceClient;
+pub use nova::messaging_service::messaging_service_client::MessagingServiceClient;
+pub use nova::notification_service::notification_service_client::NotificationServiceClient;
+pub use nova::search_service::search_service_client::SearchServiceClient;
+pub use nova::streaming_service::streaming_service_client::StreamingServiceClient;
+pub use nova::user_service::user_service_client::UserServiceClient;
 pub use nova::video_service::video_service_client::VideoServiceClient;
 
 #[derive(Clone)]
@@ -138,7 +137,9 @@ impl GrpcClientPool {
             config.connect_channel(&config.user_service_url).await?,
         ));
         let messaging_client = Arc::new(MessagingServiceClient::new(
-            config.connect_channel(&config.messaging_service_url).await?,
+            config
+                .connect_channel(&config.messaging_service_url)
+                .await?,
         ));
         let content_client = Arc::new(ContentServiceClient::new(
             config.connect_channel(&config.content_service_url).await?,
@@ -153,10 +154,14 @@ impl GrpcClientPool {
             config.connect_channel(&config.media_service_url).await?,
         ));
         let notification_client = Arc::new(NotificationServiceClient::new(
-            config.connect_channel(&config.notification_service_url).await?,
+            config
+                .connect_channel(&config.notification_service_url)
+                .await?,
         ));
         let streaming_client = Arc::new(StreamingServiceClient::new(
-            config.connect_channel(&config.streaming_service_url).await?,
+            config
+                .connect_channel(&config.streaming_service_url)
+                .await?,
         ));
         let cdn_client = Arc::new(CdnServiceClient::new(
             config.connect_channel(&config.cdn_service_url).await?,

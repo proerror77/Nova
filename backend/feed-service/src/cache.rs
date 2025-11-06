@@ -32,9 +32,9 @@ pub struct CacheConfig {
 impl Default for CacheConfig {
     fn default() -> Self {
         Self {
-            feed_ttl: 300,           // 5 minutes
-            post_ttl: 3600,          // 1 hour
-            user_context_ttl: 1800,  // 30 minutes
+            feed_ttl: 300,          // 5 minutes
+            post_ttl: 3600,         // 1 hour
+            user_context_ttl: 1800, // 30 minutes
             max_feed_size: 100,
         }
     }
@@ -66,11 +66,7 @@ impl FeedCache {
     /// Get cached feed for user
     ///
     /// Returns serialized feed response if found in cache, None if miss/error
-    pub async fn get_feed(
-        &self,
-        user_id: &str,
-        algorithm: &str,
-    ) -> Result<Option<CachedFeed>> {
+    pub async fn get_feed(&self, user_id: &str, algorithm: &str) -> Result<Option<CachedFeed>> {
         let key = format!("feed:{}:{}", user_id, algorithm);
 
         let value: Option<String> = redis::cmd("GET")
@@ -84,8 +80,9 @@ impl FeedCache {
 
         match value {
             Some(json) => {
-                let cached = serde_json::from_str::<CachedFeed>(&json)
-                    .map_err(|e| AppError::Internal(format!("Cache deserialization failed: {}", e)))?;
+                let cached = serde_json::from_str::<CachedFeed>(&json).map_err(|e| {
+                    AppError::Internal(format!("Cache deserialization failed: {}", e))
+                })?;
                 debug!("Cache hit for feed:{}:{}", user_id, algorithm);
                 Ok(Some(cached))
             }
@@ -99,12 +96,7 @@ impl FeedCache {
     /// Cache feed ranking results
     ///
     /// Stores serialized feed with algorithm and timestamp
-    pub async fn set_feed(
-        &self,
-        user_id: &str,
-        algorithm: &str,
-        feed: &CachedFeed,
-    ) -> Result<()> {
+    pub async fn set_feed(&self, user_id: &str, algorithm: &str, feed: &CachedFeed) -> Result<()> {
         let key = format!("feed:{}:{}", user_id, algorithm);
         let json = serde_json::to_string(feed)
             .map_err(|e| AppError::Internal(format!("Cache serialization failed: {}", e)))?;
@@ -120,7 +112,10 @@ impl FeedCache {
                 AppError::Internal(format!("Redis error: {}", e))
             })?;
 
-        debug!("Cached feed for {}:{} with TTL={}s", user_id, algorithm, self.config.feed_ttl);
+        debug!(
+            "Cached feed for {}:{} with TTL={}s",
+            user_id, algorithm, self.config.feed_ttl
+        );
         Ok(())
     }
 
@@ -153,7 +148,11 @@ impl FeedCache {
                     AppError::Internal(format!("Redis error: {}", e))
                 })?;
 
-            debug!("Invalidated {} feed caches for user {}", keys.len(), user_id);
+            debug!(
+                "Invalidated {} feed caches for user {}",
+                keys.len(),
+                user_id
+            );
         }
 
         Ok(())
@@ -209,8 +208,9 @@ impl FeedCache {
 
         match value {
             Some(json) => {
-                let cached = serde_json::from_str::<CachedPost>(&json)
-                    .map_err(|e| AppError::Internal(format!("Cache deserialization failed: {}", e)))?;
+                let cached = serde_json::from_str::<CachedPost>(&json).map_err(|e| {
+                    AppError::Internal(format!("Cache deserialization failed: {}", e))
+                })?;
                 Ok(Some(cached))
             }
             None => Ok(None),
@@ -252,8 +252,9 @@ impl FeedCache {
 
         match value {
             Some(json) => {
-                let cached = serde_json::from_str::<CachedUserContext>(&json)
-                    .map_err(|e| AppError::Internal(format!("Cache deserialization failed: {}", e)))?;
+                let cached = serde_json::from_str::<CachedUserContext>(&json).map_err(|e| {
+                    AppError::Internal(format!("Cache deserialization failed: {}", e))
+                })?;
                 Ok(Some(cached))
             }
             None => Ok(None),

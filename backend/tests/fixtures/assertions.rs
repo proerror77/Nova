@@ -5,8 +5,8 @@
 //! - 好品味：清晰的错误信息，而不是神秘的断言失败
 
 use sqlx::PgPool;
-use std::time::{Duration, Instant};
 use std::future::Future;
+use std::time::{Duration, Instant};
 use uuid::Uuid;
 
 // ============================================
@@ -94,7 +94,12 @@ pub fn assert_latency(duration: Duration, max_ms: u64, context: &str) {
         latency_ms,
         max_ms
     );
-    tracing::info!("✅ 性能达标: {} 延迟 {}ms ≤ {}ms", context, latency_ms, max_ms);
+    tracing::info!(
+        "✅ 性能达标: {} 延迟 {}ms ≤ {}ms",
+        context,
+        latency_ms,
+        max_ms
+    );
 }
 
 /// 断言 P95 延迟（对批量操作）
@@ -116,7 +121,12 @@ pub fn assert_p95_latency(durations: &[Duration], max_ms: u64, context: &str) {
 }
 
 /// 断言吞吐量（每秒操作数）
-pub fn assert_throughput(operations: usize, duration: Duration, min_ops_per_sec: f64, context: &str) {
+pub fn assert_throughput(
+    operations: usize,
+    duration: Duration,
+    min_ops_per_sec: f64,
+    context: &str,
+) {
     let ops_per_sec = operations as f64 / duration.as_secs_f64();
     assert!(
         ops_per_sec >= min_ops_per_sec,
@@ -149,7 +159,7 @@ pub async fn assert_outbox_event_exists(
         "SELECT EXISTS(
             SELECT 1 FROM outbox_events
             WHERE aggregate_id = $1 AND event_type = $2
-        )"
+        )",
     )
     .bind(aggregate_id)
     .bind(event_type)
@@ -287,17 +297,12 @@ pub async fn assert_redis_key_not_exists(
 // ============================================
 
 /// 断言事件已发布到 Kafka（通过 outbox 状态）
-pub async fn assert_event_published(
-    db: &PgPool,
-    event_id: Uuid,
-) -> Result<(), String> {
-    let status: String = sqlx::query_scalar(
-        "SELECT status FROM outbox_events WHERE id = $1"
-    )
-    .bind(event_id)
-    .fetch_one(db)
-    .await
-    .map_err(|e| format!("查询事件状态失败: {}", e))?;
+pub async fn assert_event_published(db: &PgPool, event_id: Uuid) -> Result<(), String> {
+    let status: String = sqlx::query_scalar("SELECT status FROM outbox_events WHERE id = $1")
+        .bind(event_id)
+        .fetch_one(db)
+        .await
+        .map_err(|e| format!("查询事件状态失败: {}", e))?;
 
     if status == "published" {
         tracing::debug!("✅ 事件已发布: {}", event_id);
@@ -308,14 +313,11 @@ pub async fn assert_event_published(
 }
 
 /// 断言事件顺序正确（同一聚合根）
-pub async fn assert_event_ordering(
-    db: &PgPool,
-    aggregate_id: Uuid,
-) -> Result<(), String> {
+pub async fn assert_event_ordering(db: &PgPool, aggregate_id: Uuid) -> Result<(), String> {
     let events: Vec<(Uuid, i64)> = sqlx::query_as(
         "SELECT id, sequence_number FROM outbox_events
          WHERE aggregate_id = $1
-         ORDER BY sequence_number"
+         ORDER BY sequence_number",
     )
     .bind(aggregate_id)
     .fetch_all(db)
@@ -333,7 +335,11 @@ pub async fn assert_event_ordering(
         }
     }
 
-    tracing::debug!("✅ 事件顺序正确: aggregate {} 有 {} 个事件", aggregate_id, events.len());
+    tracing::debug!(
+        "✅ 事件顺序正确: aggregate {} 有 {} 个事件",
+        aggregate_id,
+        events.len()
+    );
     Ok(())
 }
 
@@ -352,7 +358,8 @@ mod tests {
             },
             Duration::from_secs(5),
             Duration::from_millis(10),
-        ).await;
+        )
+        .await;
 
         assert!(result.is_ok());
         assert_eq!(counter, 3);
@@ -364,7 +371,8 @@ mod tests {
             || async { false },
             Duration::from_millis(100),
             Duration::from_millis(10),
-        ).await;
+        )
+        .await;
 
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("超时"));

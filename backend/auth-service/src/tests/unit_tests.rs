@@ -2,7 +2,6 @@
 ///
 /// These tests verify password validation, email validation, and token operations
 /// without requiring database connectivity.
-
 use crate::error::AuthError;
 use crate::models::user::RefreshTokenRequest;
 use crate::security::{jwt, password};
@@ -23,13 +22,19 @@ fn test_password_hash_and_verify() {
     let hash = password::hash_password(password);
 
     // THEN: Hashing should succeed
-    assert!(hash.is_ok(), "Password hashing should succeed with strong password");
+    assert!(
+        hash.is_ok(),
+        "Password hashing should succeed with strong password"
+    );
 
     let hash_str = hash.unwrap();
 
     // AND: Verification with correct password should succeed
     let verify_result = password::verify_password(password, &hash_str);
-    assert!(verify_result.is_ok(), "Password verification should succeed with correct password");
+    assert!(
+        verify_result.is_ok(),
+        "Password verification should succeed with correct password"
+    );
 }
 
 #[test]
@@ -42,7 +47,10 @@ fn test_password_verify_wrong_password() {
     let result = password::verify_password("WrongPassword123!", &hash);
 
     // THEN: Verification should fail
-    assert!(result.is_err(), "Password verification should fail with wrong password");
+    assert!(
+        result.is_err(),
+        "Password verification should fail with wrong password"
+    );
     assert!(
         matches!(result.unwrap_err(), AuthError::InvalidCredentials),
         "Error should be InvalidCredentials"
@@ -74,7 +82,10 @@ fn test_weak_password_no_uppercase() {
     let result = password::hash_password(weak_password);
 
     // THEN: Should fail with WeakPassword
-    assert!(result.is_err(), "Password without uppercase should be rejected");
+    assert!(
+        result.is_err(),
+        "Password without uppercase should be rejected"
+    );
 }
 
 #[test]
@@ -86,7 +97,10 @@ fn test_weak_password_no_lowercase() {
     let result = password::hash_password(weak_password);
 
     // THEN: Should fail with WeakPassword
-    assert!(result.is_err(), "Password without lowercase should be rejected");
+    assert!(
+        result.is_err(),
+        "Password without lowercase should be rejected"
+    );
 }
 
 #[test]
@@ -110,7 +124,10 @@ fn test_weak_password_no_special() {
     let result = password::hash_password(weak_password);
 
     // THEN: Should fail with WeakPassword
-    assert!(result.is_err(), "Password without special character should be rejected");
+    assert!(
+        result.is_err(),
+        "Password without special character should be rejected"
+    );
 }
 
 #[test]
@@ -215,7 +232,11 @@ fn test_generate_access_token() {
     let token = result.unwrap();
 
     // AND: Token should be valid JWT format
-    assert_eq!(token.matches('.').count(), 2, "Token should have JWT format (3 parts)");
+    assert_eq!(
+        token.matches('.').count(),
+        2,
+        "Token should have JWT format (3 parts)"
+    );
 }
 
 #[test]
@@ -246,8 +267,14 @@ fn test_generate_token_pair() {
     assert!(result.is_ok(), "Token pair generation should succeed");
 
     let pair = result.unwrap();
-    assert!(!pair.access_token.is_empty(), "Access token should not be empty");
-    assert!(!pair.refresh_token.is_empty(), "Refresh token should not be empty");
+    assert!(
+        !pair.access_token.is_empty(),
+        "Access token should not be empty"
+    );
+    assert!(
+        !pair.refresh_token.is_empty(),
+        "Refresh token should not be empty"
+    );
     assert_eq!(pair.token_type, "Bearer", "Token type should be Bearer");
 }
 
@@ -342,7 +369,10 @@ fn test_refresh_token_wrong_type_rejected() {
     let result = validate_refresh_token_type(&req);
 
     // THEN: Should fail
-    assert!(result.is_err(), "Access token should not be accepted for refresh");
+    assert!(
+        result.is_err(),
+        "Access token should not be accepted for refresh"
+    );
     assert!(
         matches!(result.unwrap_err(), AuthError::InvalidToken),
         "Error should be InvalidToken"

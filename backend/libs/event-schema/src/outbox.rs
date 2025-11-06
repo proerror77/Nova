@@ -205,12 +205,8 @@ mod tests {
             "content": "Hello World"
         });
 
-        let event = OutboxEvent::new(
-            aggregate_id,
-            "MessageCreated",
-            &payload,
-            priority::NORMAL,
-        ).unwrap();
+        let event =
+            OutboxEvent::new(aggregate_id, "MessageCreated", &payload, priority::NORMAL).unwrap();
 
         assert_eq!(event.aggregate_id, aggregate_id);
         assert_eq!(event.event_type, "MessageCreated");

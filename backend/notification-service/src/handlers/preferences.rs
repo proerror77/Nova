@@ -1,10 +1,10 @@
+use super::ApiResponse;
+use crate::services::NotificationService;
 /// Notification preferences handlers
 use actix_web::{web, HttpResponse, Result as ActixResult};
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
-use crate::services::NotificationService;
 use std::sync::Arc;
-use super::ApiResponse;
+use uuid::Uuid;
 
 /// Update notification preferences request
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -33,12 +33,8 @@ pub async fn get_preferences(
     let user_id = path.into_inner();
 
     match service.get_preferences(user_id).await {
-        Ok(preferences) => {
-            Ok(HttpResponse::Ok().json(ApiResponse::ok(preferences)))
-        }
-        Err(e) => {
-            Ok(HttpResponse::InternalServerError().json(ApiResponse::<String>::err(e)))
-        }
+        Ok(preferences) => Ok(HttpResponse::Ok().json(ApiResponse::ok(preferences))),
+        Err(e) => Ok(HttpResponse::InternalServerError().json(ApiResponse::<String>::err(e))),
     }
 }
 
@@ -97,9 +93,7 @@ pub async fn update_preferences(
             // For now, we'll just return the updated preferences
             Ok(HttpResponse::Ok().json(ApiResponse::ok(prefs)))
         }
-        Err(e) => {
-            Ok(HttpResponse::InternalServerError().json(ApiResponse::<String>::err(e)))
-        }
+        Err(e) => Ok(HttpResponse::InternalServerError().json(ApiResponse::<String>::err(e))),
     }
 }
 

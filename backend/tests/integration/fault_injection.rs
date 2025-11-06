@@ -13,7 +13,7 @@ mod fixtures;
 #[path = "../common/mod.rs"]
 mod common;
 
-use fixtures::{test_env::TestEnvironment, assertions::*};
+use fixtures::{assertions::*, test_env::TestEnvironment};
 use std::time::{Duration, Instant};
 use uuid::Uuid;
 
@@ -32,7 +32,7 @@ async fn test_kafka_consumer_offset_recovery() {
     // Step 1: 创建事件
     sqlx::query(
         "INSERT INTO outbox_events (id, aggregate_id, event_type, payload, status, created_at)
-         VALUES ($1, $2, $3, $4, $5, NOW())"
+         VALUES ($1, $2, $3, $4, $5, NOW())",
     )
     .bind(event_id)
     .bind(aggregate_id)
@@ -48,7 +48,7 @@ async fn test_kafka_consumer_offset_recovery() {
         sqlx::query(
             "INSERT INTO event_retry_log (event_id, attempt, error_message, retried_at)
              VALUES ($1, $2, $3, NOW())
-             ON CONFLICT DO NOTHING"
+             ON CONFLICT DO NOTHING",
         )
         .bind(event_id)
         .bind(attempt)
@@ -60,7 +60,7 @@ async fn test_kafka_consumer_offset_recovery() {
 
     // Step 3: 模拟最终成功
     sqlx::query(
-        "UPDATE outbox_events SET status = 'published', published_at = NOW() WHERE id = $1"
+        "UPDATE outbox_events SET status = 'published', published_at = NOW() WHERE id = $1",
     )
     .bind(event_id)
     .execute(&*db)
@@ -114,7 +114,7 @@ async fn test_redis_connection_fallback() {
     // Step 4: 缓存未命中 - 降级到数据库
     sqlx::query(
         "INSERT INTO posts (id, user_id, caption, status, created_at)
-         VALUES ($1, $2, $3, $4, NOW())"
+         VALUES ($1, $2, $3, $4, NOW())",
     )
     .bind(post_id)
     .bind(user_id)
@@ -150,7 +150,7 @@ async fn test_database_timeout_retry() {
     for attempt in 1..=3 {
         match sqlx::query(
             "INSERT INTO messages (id, sender_id, content, created_at)
-             VALUES ($1, $2, $3, NOW())"
+             VALUES ($1, $2, $3, NOW())",
         )
         .bind(message_id)
         .bind(user_id)
@@ -212,7 +212,7 @@ async fn test_outbox_event_retry_on_failure() {
     // Step 2: 模拟发布失败，增加重试计数
     for retry in 1..=3 {
         sqlx::query(
-            "UPDATE outbox_events SET retry_count = $1, last_retry_at = NOW() WHERE id = $2"
+            "UPDATE outbox_events SET retry_count = $1, last_retry_at = NOW() WHERE id = $2",
         )
         .bind(retry)
         .bind(event_id)
@@ -225,7 +225,7 @@ async fn test_outbox_event_retry_on_failure() {
 
     // Step 3: 最终成功
     sqlx::query(
-        "UPDATE outbox_events SET status = 'published', published_at = NOW() WHERE id = $1"
+        "UPDATE outbox_events SET status = 'published', published_at = NOW() WHERE id = $1",
     )
     .bind(event_id)
     .execute(&*db)
@@ -233,13 +233,12 @@ async fn test_outbox_event_retry_on_failure() {
     .expect("更新事件状态失败");
 
     // Step 4: 验证重试逻辑
-    let (status, retry_count): (String, i32) = sqlx::query_as(
-        "SELECT status, retry_count FROM outbox_events WHERE id = $1"
-    )
-    .bind(event_id)
-    .fetch_one(&*db)
-    .await
-    .expect("查询事件失败");
+    let (status, retry_count): (String, i32) =
+        sqlx::query_as("SELECT status, retry_count FROM outbox_events WHERE id = $1")
+            .bind(event_id)
+            .fetch_one(&*db)
+            .await
+            .expect("查询事件失败");
 
     assert_eq!(status, "published");
     assert_eq!(retry_count, 3, "重试计数不正确");
@@ -338,7 +337,7 @@ async fn test_dead_letter_queue_handling() {
 
     for retry in 1..=MAX_RETRIES {
         sqlx::query(
-            "UPDATE outbox_events SET retry_count = $1, last_retry_at = NOW() WHERE id = $2"
+            "UPDATE outbox_events SET retry_count = $1, last_retry_at = NOW() WHERE id = $2",
         )
         .bind(retry)
         .bind(event_id)
@@ -348,22 +347,19 @@ async fn test_dead_letter_queue_handling() {
     }
 
     // Step 3: 移动到死信队列
-    sqlx::query(
-        "UPDATE outbox_events SET status = 'failed', failed_at = NOW() WHERE id = $1"
-    )
-    .bind(event_id)
-    .execute(&*db)
-    .await
-    .expect("标记为失败失败");
+    sqlx::query("UPDATE outbox_events SET status = 'failed', failed_at = NOW() WHERE id = $1")
+        .bind(event_id)
+        .execute(&*db)
+        .await
+        .expect("标记为失败失败");
 
     // Step 4: 验证死信队列记录
-    let (status, retry_count): (String, i32) = sqlx::query_as(
-        "SELECT status, retry_count FROM outbox_events WHERE id = $1"
-    )
-    .bind(event_id)
-    .fetch_one(&*db)
-    .await
-    .expect("查询事件失败");
+    let (status, retry_count): (String, i32) =
+        sqlx::query_as("SELECT status, retry_count FROM outbox_events WHERE id = $1")
+            .bind(event_id)
+            .fetch_one(&*db)
+            .await
+            .expect("查询事件失败");
 
     assert_eq!(status, "failed");
     assert_eq!(retry_count, MAX_RETRIES);

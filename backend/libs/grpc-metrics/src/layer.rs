@@ -55,7 +55,8 @@ impl RequestGuard {
     pub fn complete(&self, code: &str) {
         let duration = self.start.elapsed();
         record_grpc_request(&self.service, &self.method, code, duration.as_secs_f64());
-        self.completed.store(true, std::sync::atomic::Ordering::Relaxed);
+        self.completed
+            .store(true, std::sync::atomic::Ordering::Relaxed);
     }
 }
 

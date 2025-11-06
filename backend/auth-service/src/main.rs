@@ -268,11 +268,15 @@ async fn start_servers(
         // Health service
         let (mut health, health_service) = health_reporter();
         health
-            .set_serving::<auth_service::nova::auth_service::auth_service_server::AuthServiceServer<auth_service::grpc::AuthServiceImpl>>()
+            .set_serving::<auth_service::nova::auth_service::auth_service_server::AuthServiceServer<
+                auth_service::grpc::AuthServiceImpl,
+            >>()
             .await;
 
         // Server-side correlation-id extractor interceptor
-        fn server_interceptor(mut req: tonic::Request<()>) -> Result<tonic::Request<()>, tonic::Status> {
+        fn server_interceptor(
+            mut req: tonic::Request<()>,
+        ) -> Result<tonic::Request<()>, tonic::Status> {
             if let Some(val) = req.metadata().get("correlation-id") {
                 let correlation_id = val.to_str().map(|s| s.to_string()).ok();
                 if let Some(id) = correlation_id {

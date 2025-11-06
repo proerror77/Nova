@@ -7,7 +7,6 @@
 /// 2. Message broadcast: Sends notifications to connected clients
 /// 3. User-specific channels: Route notifications to specific users
 /// 4. Graceful disconnection: Handle client disconnects
-
 pub mod manager;
 pub mod messages;
 

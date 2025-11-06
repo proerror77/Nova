@@ -41,8 +41,8 @@ pub enum DomainEvent {
     // ============================================================================
     ReactionAdded {
         reaction_id: Uuid,
-        target_id: Uuid,      // post_id or comment_id
-        target_type: String,  // "post" or "comment"
+        target_id: Uuid,     // post_id or comment_id
+        target_type: String, // "post" or "comment"
         user_id: Uuid,
         reaction_type: String, // "like", "love", "laugh", etc.
         created_at: DateTime<Utc>,

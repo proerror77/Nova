@@ -19,12 +19,13 @@ use tonic::transport::Server as GrpcServer;
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
 
-async fn openapi_json(doc: web::Data<utoipa::openapi::OpenApi>) -> actix_web::Result<actix_web::HttpResponse> {
-    let body = serde_json::to_string(&*doc)
-        .map_err(|e| {
-            tracing::error!("OpenAPI serialization failed: {}", e);
-            actix_web::error::ErrorInternalServerError("OpenAPI serialization error")
-        })?;
+async fn openapi_json(
+    doc: web::Data<utoipa::openapi::OpenApi>,
+) -> actix_web::Result<actix_web::HttpResponse> {
+    let body = serde_json::to_string(&*doc).map_err(|e| {
+        tracing::error!("OpenAPI serialization failed: {}", e);
+        actix_web::error::ErrorInternalServerError("OpenAPI serialization error")
+    })?;
 
     Ok(actix_web::HttpResponse::Ok()
         .content_type("application/json")
@@ -124,7 +125,9 @@ async fn main() -> Result<(), error::AppError> {
     // Build gRPC service
     let grpc_service = messaging_service::grpc::MessagingServiceImpl::new(state.clone());
     // Server-side correlation-id extractor interceptor
-    fn grpc_server_interceptor(mut req: tonic::Request<()>) -> Result<tonic::Request<()>, tonic::Status> {
+    fn grpc_server_interceptor(
+        mut req: tonic::Request<()>,
+    ) -> Result<tonic::Request<()>, tonic::Status> {
         if let Some(val) = req.metadata().get("correlation-id") {
             let correlation_id = val.to_str().map(|s| s.to_string()).ok();
             if let Some(id) = correlation_id {
@@ -133,7 +136,8 @@ async fn main() -> Result<(), error::AppError> {
         }
         Ok(req)
     }
-    let grpc_server = MessagingServiceServer::with_interceptor(grpc_service, grpc_server_interceptor);
+    let grpc_server =
+        MessagingServiceServer::with_interceptor(grpc_service, grpc_server_interceptor);
 
     // Start both REST and gRPC servers
     let rest_state = state.clone();
@@ -142,8 +146,8 @@ async fn main() -> Result<(), error::AppError> {
     // REST API server on cfg.port
     // CRITICAL: HttpServer must be created outside tokio::spawn to avoid Send issues
     // Only the .run() future (which is Send) goes into spawn
-    let bind_addr_parsed: SocketAddr = bind_addr.parse()
-        .map_err(|e: std::net::AddrParseError| {
+    let bind_addr_parsed: SocketAddr =
+        bind_addr.parse().map_err(|e: std::net::AddrParseError| {
             error::AppError::StartServer(format!("Invalid bind address: {}", e))
         })?;
 
@@ -171,7 +175,8 @@ async fn main() -> Result<(), error::AppError> {
 
     // Now spawn only the Server future (which IS Send)
     let rest_handle = tokio::spawn(async move {
-        rest_server.await
+        rest_server
+            .await
             .map_err(|e| error::AppError::StartServer(format!("REST server error: {}", e)))
     });
 

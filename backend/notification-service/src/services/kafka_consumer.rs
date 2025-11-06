@@ -158,9 +158,9 @@ pub struct KafkaNotificationConsumer {
     pub retry_policy: RetryPolicy,
 }
 
-use std::sync::Arc;
+use crate::models::{CreateNotificationRequest, NotificationPriority, NotificationType};
 use crate::services::NotificationService;
-use crate::models::{CreateNotificationRequest, NotificationType, NotificationPriority};
+use std::sync::Arc;
 
 impl KafkaNotificationConsumer {
     /// Create new consumer
@@ -188,11 +188,11 @@ impl KafkaNotificationConsumer {
         &self,
         notification_service: Arc<NotificationService>,
     ) -> Result<(), String> {
-        use tokio::time::interval;
         use rdkafka::config::ClientConfig;
-        use rdkafka::consumer::{StreamConsumer, Consumer};
+        use rdkafka::consumer::{Consumer, StreamConsumer};
         use rdkafka::message::Message;
         use tokio::select;
+        use tokio::time::interval;
 
         tracing::info!(
             "Starting Kafka consumer for broker: {}, topics: MessageCreated, FollowAdded, CommentCreated, PostLiked, ReplyLiked",
@@ -218,7 +218,8 @@ impl KafkaNotificationConsumer {
             "ReplyLiked",
         ];
 
-        consumer.subscribe(&topics)
+        consumer
+            .subscribe(&topics)
             .map_err(|e| format!("Failed to subscribe to topics: {}", e))?;
 
         tracing::info!("Subscribed to topics: {:?}", topics);
@@ -227,7 +228,8 @@ impl KafkaNotificationConsumer {
         let mut flush_interval = interval(Duration::from_millis(self.flush_interval_ms));
 
         // Deduplication map: key = "user_id:event_type:event_key", value = timestamp
-        let mut dedup_map: std::collections::HashMap<String, i64> = std::collections::HashMap::new();
+        let mut dedup_map: std::collections::HashMap<String, i64> =
+            std::collections::HashMap::new();
 
         loop {
             select! {
@@ -327,10 +329,7 @@ impl KafkaNotificationConsumer {
                     match notification_service.create_notification(create_req).await {
                         Ok(_) => {
                             processed_count += 1;
-                            tracing::debug!(
-                                "Processed notification: {}",
-                                kafka_notification.id
-                            );
+                            tracing::debug!("Processed notification: {}", kafka_notification.id);
                         }
                         Err(e) => {
                             tracing::warn!(
@@ -400,7 +399,9 @@ impl KafkaNotificationConsumer {
             title: message.title,
             body: message.body,
             image_url: message.data.as_ref().and_then(|d| {
-                d.get("image_url").and_then(|v| v.as_str()).map(String::from)
+                d.get("image_url")
+                    .and_then(|v| v.as_str())
+                    .map(String::from)
             }),
             object_id: message.data.as_ref().and_then(|d| {
                 d.get("object_id")

@@ -111,7 +111,10 @@ impl CacheInvalidator {
     }
 
     /// Get invalidation status
-    pub async fn get_invalidation_status(&self, invalidation_id: Uuid) -> Result<CacheInvalidation> {
+    pub async fn get_invalidation_status(
+        &self,
+        invalidation_id: Uuid,
+    ) -> Result<CacheInvalidation> {
         sqlx::query_as::<_, CacheInvalidation>(
             r#"
             SELECT * FROM cache_invalidations WHERE invalidation_id = $1
@@ -131,7 +134,8 @@ impl CacheInvalidator {
     ) -> Result<()> {
         let cache_key = format!("cdn:asset:{}", asset_id);
 
-        let mut conn = self.redis
+        let mut conn = self
+            .redis
             .get_multiplexed_async_connection()
             .await
             .map_err(|e| AppError::InternalError(format!("Redis connection failed: {}", e)))?;
@@ -148,7 +152,8 @@ impl CacheInvalidator {
     pub async fn get_cached_metadata(&self, asset_id: Uuid) -> Result<Option<String>> {
         let cache_key = format!("cdn:asset:{}", asset_id);
 
-        let mut conn = self.redis
+        let mut conn = self
+            .redis
             .get_multiplexed_async_connection()
             .await
             .map_err(|e| AppError::InternalError(format!("Redis connection failed: {}", e)))?;
@@ -165,7 +170,8 @@ impl CacheInvalidator {
 
     /// Delete cache key from Redis
     async fn delete_cache_key(&self, cache_key: &str) -> Result<()> {
-        let mut conn = self.redis
+        let mut conn = self
+            .redis
             .get_multiplexed_async_connection()
             .await
             .map_err(|e| AppError::InternalError(format!("Redis connection failed: {}", e)))?;

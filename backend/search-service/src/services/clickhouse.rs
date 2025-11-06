@@ -229,10 +229,7 @@ impl ClickHouseClient {
     }
 
     pub async fn health_check(&self) -> Result<(), ClickHouseError> {
-        self.client
-            .query("SELECT 1")
-            .execute()
-            .await?;
+        self.client.query("SELECT 1").execute().await?;
         Ok(())
     }
 }
@@ -248,10 +245,7 @@ mod tests {
             .await
             .expect("Failed to connect to ClickHouse");
 
-        client
-            .health_check()
-            .await
-            .expect("Health check failed");
+        client.health_check().await.expect("Health check failed");
     }
 
     #[tokio::test]

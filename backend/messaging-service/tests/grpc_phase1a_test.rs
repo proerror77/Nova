@@ -88,7 +88,10 @@ async fn test_send_message_basic_plaintext() {
     assert_eq!(message.sender_id, user_id);
     assert_eq!(message.content, "Hello, World!");
     assert_eq!(message.sequence_number, 1); // First message
-    assert!(message.created_at.timestamp() > 0, "created_at should be set");
+    assert!(
+        message.created_at.timestamp() > 0,
+        "created_at should be set"
+    );
 
     cleanup_conversation(&pool, conversation_id, user_id).await;
 }
@@ -128,7 +131,10 @@ async fn test_send_message_with_idempotency_key() {
     .expect("send_message_db failed");
 
     // Both should return the same message ID (idempotent)
-    assert_eq!(message1.id, message2.id, "idempotent messages should have same ID");
+    assert_eq!(
+        message1.id, message2.id,
+        "idempotent messages should have same ID"
+    );
     assert_eq!(message1.idempotency_key, Some(idempotency_key.to_string()));
 
     cleanup_conversation(&pool, conversation_id, user_id).await;
@@ -156,8 +162,14 @@ async fn test_send_message_strict_e2e_encryption() {
     .expect("send_message_db failed");
 
     // Verify encryption settings
-    assert_eq!(message.encryption_version, 1, "should use encryption version 1");
-    assert!(message.content.is_empty(), "plaintext content should be empty");
+    assert_eq!(
+        message.encryption_version, 1,
+        "should use encryption version 1"
+    );
+    assert!(
+        message.content.is_empty(),
+        "plaintext content should be empty"
+    );
     assert!(
         message.content_encrypted.is_some(),
         "encrypted content should be present"
@@ -240,25 +252,28 @@ async fn test_get_message_exists() {
     .expect("send_message_db failed");
 
     // Retrieve the message directly from DB
-    let retrieved = sqlx::query_as::<_, (
-        uuid::Uuid,
-        uuid::Uuid,
-        uuid::Uuid,
-        String,
-        Option<Vec<u8>>,
-        Option<Vec<u8>>,
-        i32,
-        i64,
-        Option<String>,
-        chrono::DateTime<chrono::Utc>,
-        Option<chrono::DateTime<chrono::Utc>>,
-        Option<chrono::DateTime<chrono::Utc>>,
-        i32,
-    )>(
+    let retrieved = sqlx::query_as::<
+        _,
+        (
+            uuid::Uuid,
+            uuid::Uuid,
+            uuid::Uuid,
+            String,
+            Option<Vec<u8>>,
+            Option<Vec<u8>>,
+            i32,
+            i64,
+            Option<String>,
+            chrono::DateTime<chrono::Utc>,
+            Option<chrono::DateTime<chrono::Utc>>,
+            Option<chrono::DateTime<chrono::Utc>>,
+            i32,
+        ),
+    >(
         "SELECT id, conversation_id, sender_id, content, content_encrypted, content_nonce,
                 encryption_version, sequence_number, idempotency_key, created_at,
                 updated_at, deleted_at, 0 as reaction_count
-         FROM messages WHERE id = $1"
+         FROM messages WHERE id = $1",
     )
     .bind(sent_message.id)
     .fetch_one(&pool)
@@ -282,25 +297,28 @@ async fn test_get_message_not_found() {
     let fake_id = Uuid::new_v4();
 
     // Try to retrieve non-existent message
-    let result = sqlx::query_as::<_, (
-        uuid::Uuid,
-        uuid::Uuid,
-        uuid::Uuid,
-        String,
-        Option<Vec<u8>>,
-        Option<Vec<u8>>,
-        i32,
-        i64,
-        Option<String>,
-        chrono::DateTime<chrono::Utc>,
-        Option<chrono::DateTime<chrono::Utc>>,
-        Option<chrono::DateTime<chrono::Utc>>,
-        i32,
-    )>(
+    let result = sqlx::query_as::<
+        _,
+        (
+            uuid::Uuid,
+            uuid::Uuid,
+            uuid::Uuid,
+            String,
+            Option<Vec<u8>>,
+            Option<Vec<u8>>,
+            i32,
+            i64,
+            Option<String>,
+            chrono::DateTime<chrono::Utc>,
+            Option<chrono::DateTime<chrono::Utc>>,
+            Option<chrono::DateTime<chrono::Utc>>,
+            i32,
+        ),
+    >(
         "SELECT id, conversation_id, sender_id, content, content_encrypted, content_nonce,
                 encryption_version, sequence_number, idempotency_key, created_at,
                 updated_at, deleted_at, 0 as reaction_count
-         FROM messages WHERE id = $1"
+         FROM messages WHERE id = $1",
     )
     .bind(fake_id)
     .fetch_optional(&pool)
@@ -323,7 +341,10 @@ async fn test_get_message_history_empty() {
         .await
         .expect("get_message_history_db failed");
 
-    assert!(history.is_empty(), "empty conversation should have no history");
+    assert!(
+        history.is_empty(),
+        "empty conversation should have no history"
+    );
 
     cleanup_conversation(&pool, conversation_id, user_id).await;
 }
@@ -355,7 +376,10 @@ async fn test_get_message_history_single_message() {
     assert_eq!(history.len(), 1, "history should contain one message");
     assert_eq!(history[0].id, sent_message.id);
     assert_eq!(history[0].content, "Single message");
-    assert!(!history[0].encrypted, "plaintext message should not be marked encrypted");
+    assert!(
+        !history[0].encrypted,
+        "plaintext message should not be marked encrypted"
+    );
 
     cleanup_conversation(&pool, conversation_id, user_id).await;
 }
@@ -461,8 +485,14 @@ async fn test_get_message_history_encrypted_messages() {
     assert!(history[0].nonce.is_some(), "nonce should be present");
 
     // Verify plaintext content is empty
-    assert!(history[0].content.is_empty(), "plaintext content should be empty");
-    assert!(history[1].content.is_empty(), "plaintext content should be empty");
+    assert!(
+        history[0].content.is_empty(),
+        "plaintext content should be empty"
+    );
+    assert!(
+        history[1].content.is_empty(),
+        "plaintext content should be empty"
+    );
 
     cleanup_conversation(&pool, conversation_id, user_id).await;
 }
@@ -509,7 +539,11 @@ async fn test_get_message_history_excludes_deleted() {
         .expect("get_message_history_db failed");
 
     // History should only contain non-deleted messages
-    assert_eq!(history.len(), 1, "history should only include non-deleted messages");
+    assert_eq!(
+        history.len(),
+        1,
+        "history should only include non-deleted messages"
+    );
     assert_eq!(history[0].id, msg2.id);
 
     cleanup_conversation(&pool, conversation_id, user_id).await;
@@ -542,7 +576,11 @@ async fn test_get_message_history_pagination_limit() {
         .expect("get_message_history_db failed");
 
     // Service layer limits to 200
-    assert_eq!(history.len(), 200, "history should be limited to 200 messages");
+    assert_eq!(
+        history.len(),
+        200,
+        "history should be limited to 200 messages"
+    );
 
     cleanup_conversation(&pool, conversation_id, user_id).await;
 }

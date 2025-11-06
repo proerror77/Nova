@@ -157,8 +157,9 @@ impl MessageService {
         }
 
         // Send message without idempotency key (for simple use cases)
-        let message = Self::send_message_db(db, encryption, conversation_id, sender_id, plaintext, None)
-            .await?;
+        let message =
+            Self::send_message_db(db, encryption, conversation_id, sender_id, plaintext, None)
+                .await?;
 
         Ok(message.id)
     }

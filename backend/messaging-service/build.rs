@@ -12,8 +12,8 @@ fn main() {
     // If split into separate compile() calls, each generates isolated module trees
     // and common::v1::ErrorStatus won't be accessible across them
     tonic_build::configure()
-        .build_server(true)  // MessagingService server
-        .build_client(true)  // AuthService client
+        .build_server(true) // MessagingService server
+        .build_client(true) // AuthService client
         .compile(
             &[
                 "../proto/services/messaging_service.proto",

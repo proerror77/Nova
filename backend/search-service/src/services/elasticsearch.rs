@@ -373,15 +373,13 @@ impl ElasticsearchClient {
         let size = limit.clamp(1, 100);
         let from = offset.max(0);
 
-        let must_clauses = vec![
-            json!({
-                "multi_match": {
-                    "query": query,
-                    "fields": ["username^2", "display_name^1.5", "bio"],
-                    "type": "best_fields"
-                }
-            })
-        ];
+        let must_clauses = vec![json!({
+            "multi_match": {
+                "query": query,
+                "fields": ["username^2", "display_name^1.5", "bio"],
+                "type": "best_fields"
+            }
+        })];
 
         let mut filter_clauses = vec![];
         if verified_only {
@@ -602,7 +600,8 @@ impl ElasticsearchClient {
         // Build NDJSON body for bulk operation
         let mut body_lines = Vec::new();
         for doc in docs {
-            let action = json!({ "index": { "_index": &self.post_index, "_id": doc.id.to_string() } });
+            let action =
+                json!({ "index": { "_index": &self.post_index, "_id": doc.id.to_string() } });
             body_lines.push(serde_json::to_string(&action)?);
             body_lines.push(serde_json::to_string(&doc)?);
         }
@@ -621,12 +620,12 @@ impl ElasticsearchClient {
         if response.status_code().is_success() {
             Ok(())
         } else {
-            Err(ElasticsearchError::Transport(
-                elasticsearch::Error::from(std::io::Error::new(
+            Err(ElasticsearchError::Transport(elasticsearch::Error::from(
+                std::io::Error::new(
                     std::io::ErrorKind::Other,
-                    "Elasticsearch health check failed"
-                )),
-            ))
+                    "Elasticsearch health check failed",
+                ),
+            )))
         }
     }
 }
