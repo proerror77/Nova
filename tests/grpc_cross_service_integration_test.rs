@@ -32,7 +32,7 @@ mod grpc_cross_service_tests {
         }
 
         let messaging_endpoint = "http://127.0.0.1:9085";
-        let test_user_id = "test-user-123".to_string();
+        let _test_user_id = "test-user-123".to_string();
 
         // In a real scenario, this would use the generated gRPC client
         // For now, we demonstrate the expected flow and error handling
@@ -72,7 +72,7 @@ mod grpc_cross_service_tests {
         }
 
         let user_endpoint = "http://127.0.0.1:9081";
-        let test_user_id = "test-user-123".to_string();
+        let _test_user_id = "test-user-123".to_string();
 
         println!("Connecting to User Service at: {}", user_endpoint);
 
@@ -109,8 +109,8 @@ mod grpc_cross_service_tests {
             return;
         }
 
-        let user_endpoint = "http://127.0.0.1:9081";
-        let messaging_endpoint = "http://127.0.0.1:9085";
+        let _user_endpoint = "http://127.0.0.1:9081";
+        let _messaging_endpoint = "http://127.0.0.1:9085";
 
         println!("Testing concurrent gRPC calls to multiple services");
 
@@ -158,7 +158,7 @@ mod grpc_cross_service_tests {
     #[tokio::test]
     #[ignore]
     async fn test_grpc_error_handling() {
-        let invalid_endpoint = "http://127.0.0.1:19999";
+        let _invalid_endpoint = "http://127.0.0.1:19999";
 
         println!("Testing gRPC timeout handling for unreachable endpoint");
 
@@ -190,8 +190,8 @@ mod grpc_cross_service_tests {
             return;
         }
 
-        let user_endpoint = "http://127.0.0.1:9081";
-        let messaging_endpoint = "http://127.0.0.1:9085";
+        let _user_endpoint = "http://127.0.0.1:9081";
+        let _messaging_endpoint = "http://127.0.0.1:9085";
 
         println!("Testing Message CRUD operations with user consistency");
 
@@ -213,6 +213,7 @@ mod grpc_test_utils {
     use std::time::Duration;
 
     /// Configuration for gRPC service endpoints
+    #[allow(dead_code)]
     pub struct GrpcServiceEndpoints {
         pub user_service: String,
         pub messaging_service: String,
@@ -230,6 +231,7 @@ mod grpc_test_utils {
     }
 
     /// Helper to wait for gRPC service to be healthy
+    #[allow(dead_code)]
     pub async fn wait_for_grpc_service(
         endpoint: &str,
         timeout: Duration,
@@ -338,7 +340,7 @@ mod full_integration_scenarios {
             return;
         }
 
-        let endpoints = GrpcServiceEndpoints::default();
+        let _endpoints = GrpcServiceEndpoints::default();
 
         println!("=== E2E Scenario: Message with User Lookup ===");
 
@@ -400,7 +402,7 @@ mod full_integration_scenarios {
             return;
         }
 
-        let endpoints = GrpcServiceEndpoints::default();
+        let _endpoints = GrpcServiceEndpoints::default();
 
         println!("=== Scenario: Profile Update Propagation ===");
 
@@ -452,11 +454,11 @@ mod full_integration_scenarios {
             return;
         }
 
-        let endpoints = GrpcServiceEndpoints::default();
+        let _endpoints = GrpcServiceEndpoints::default();
 
         println!("=== Scenario: Batch User Lookup ===");
 
-        let user_ids = vec![
+        let _user_ids = vec![
             "user-1".to_string(),
             "user-2".to_string(),
             "user-3".to_string(),

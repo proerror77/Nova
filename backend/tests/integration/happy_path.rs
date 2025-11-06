@@ -15,7 +15,6 @@ mod fixtures;
 mod common;
 
 use fixtures::{assertions::*, test_env::TestEnvironment};
-use sqlx::PgPool;
 use std::time::Duration;
 use std::time::Instant;
 use uuid::Uuid;
