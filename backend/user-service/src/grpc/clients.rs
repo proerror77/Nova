@@ -4,10 +4,10 @@ use crate::grpc::config::GrpcClientConfig;
 use crate::grpc::health::{HealthChecker, HealthStatus};
 use crate::grpc::nova::auth_service::auth_service_client::AuthServiceClient as TonicAuthServiceClient;
 use crate::grpc::nova::auth_service::*;
-use crate::grpc::nova::content::content_service_client::ContentServiceClient as TonicContentServiceClient;
-use crate::grpc::nova::content::*;
-use crate::grpc::nova::media::media_service_client::MediaServiceClient as TonicMediaServiceClient;
-use crate::grpc::nova::media::*;
+use crate::grpc::nova::content_service::content_service_client::ContentServiceClient as TonicContentServiceClient;
+use crate::grpc::nova::content_service::*;
+use crate::grpc::nova::media_service::media_service_client::MediaServiceClient as TonicMediaServiceClient;
+use crate::grpc::nova::media_service::*;
 use std::future::Future;
 use std::ops::{Deref, DerefMut};
 use std::pin::Pin;
@@ -766,5 +766,4 @@ impl AuthServiceClient {
             }
         }
     }
-
 }
