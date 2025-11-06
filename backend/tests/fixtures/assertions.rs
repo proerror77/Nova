@@ -103,6 +103,7 @@ pub fn assert_latency(duration: Duration, max_ms: u64, context: &str) {
 }
 
 /// 断言 P95 延迟（对批量操作）
+#[allow(dead_code)]
 pub fn assert_p95_latency(durations: &[Duration], max_ms: u64, context: &str) {
     let mut sorted: Vec<_> = durations.iter().map(|d| d.as_millis() as u64).collect();
     sorted.sort_unstable();
@@ -205,6 +206,7 @@ pub async fn assert_record_exists(
 }
 
 /// 断言记录不存在（验证删除操作）
+#[allow(dead_code)]
 pub async fn assert_record_not_exists(
     db: &PgPool,
     table: &str,
@@ -231,6 +233,7 @@ pub async fn assert_record_not_exists(
 }
 
 /// 断言记录数量
+#[allow(dead_code)]
 pub async fn assert_record_count(
     db: &PgPool,
     table: &str,
@@ -274,6 +277,7 @@ pub async fn assert_redis_key_exists(
 }
 
 /// 断言 Redis 键不存在
+#[allow(dead_code)]
 pub async fn assert_redis_key_not_exists(
     redis: &mut redis::aio::ConnectionManager,
     key: &str,
