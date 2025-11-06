@@ -13,6 +13,7 @@ use uuid::Uuid;
 // ============================================
 
 #[derive(Debug, Clone, FromRow)]
+#[allow(dead_code)]
 pub struct User {
     pub id: Uuid,
     pub email: String,

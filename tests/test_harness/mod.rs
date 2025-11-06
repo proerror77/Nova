@@ -68,7 +68,7 @@ impl TestEnvironment {
     pub async fn stop_clickhouse(&self) {
         eprintln!("Stopping ClickHouse container...");
         let _ = tokio::process::Command::new("docker")
-            .args(&["stop", "clickhouse"])
+            .args(["stop", "clickhouse"])
             .output()
             .await;
     }
@@ -76,7 +76,7 @@ impl TestEnvironment {
     pub async fn start_clickhouse(&self) {
         eprintln!("Starting ClickHouse container...");
         let _ = tokio::process::Command::new("docker")
-            .args(&["start", "clickhouse"])
+            .args(["start", "clickhouse"])
             .output()
             .await;
     }

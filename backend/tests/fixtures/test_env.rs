@@ -179,7 +179,7 @@ impl TestEnvironment {
     }
 
     /// 运行数据库迁移（如果迁移目录存在）
-    async fn run_migrations(pool: &PgPool) {
+    async fn run_migrations(_pool: &PgPool) {
         // 尝试运行多个服务的迁移
         let migration_paths = vec![
             "./backend/messaging-service/migrations",
