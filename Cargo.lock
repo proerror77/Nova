@@ -635,6 +635,7 @@ dependencies = [
  "tokio-test",
  "tonic 0.11.0",
  "tonic-build 0.11.0",
+ "tonic-health 0.11.0",
  "totp-lite",
  "tracing",
  "tracing-subscriber",
@@ -1441,7 +1442,7 @@ dependencies = [
  "tokio-test",
  "tonic 0.10.2",
  "tonic-build 0.11.0",
- "tonic-health",
+ "tonic-health 0.10.2",
  "tracing",
  "tracing-subscriber",
  "url",
@@ -1748,7 +1749,7 @@ dependencies = [
  "tokio-test",
  "tonic 0.10.2",
  "tonic-build 0.11.0",
- "tonic-health",
+ "tonic-health 0.10.2",
  "tracing",
  "tracing-actix-web",
  "tracing-subscriber",
@@ -2667,7 +2668,7 @@ dependencies = [
  "tokio-test",
  "tonic 0.10.2",
  "tonic-build 0.11.0",
- "tonic-health",
+ "tonic-health 0.10.2",
  "tracing",
  "tracing-subscriber",
  "uuid 1.18.1",
@@ -4360,6 +4361,7 @@ dependencies = [
  "tokio-tungstenite",
  "tonic 0.10.2",
  "tonic-build 0.11.0",
+ "tonic-health 0.11.0",
  "tracing",
  "tracing-subscriber",
  "utoipa",
@@ -6310,7 +6312,7 @@ dependencies = [
  "tokio",
  "tonic 0.10.2",
  "tonic-build 0.11.0",
- "tonic-health",
+ "tonic-health 0.10.2",
  "tracing",
  "tracing-subscriber",
  "url",
@@ -7592,6 +7594,19 @@ dependencies = [
  "tokio",
  "tokio-stream",
  "tonic 0.10.2",
+]
+
+[[package]]
+name = "tonic-health"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2cef6e24bc96871001a7e48e820ab240b3de2201e59b517cf52835df2f1d2350"
+dependencies = [
+ "async-stream",
+ "prost 0.12.6",
+ "tokio",
+ "tokio-stream",
+ "tonic 0.11.0",
 ]
 
 [[package]]

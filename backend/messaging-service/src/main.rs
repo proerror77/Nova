@@ -126,7 +126,10 @@ async fn main() -> Result<(), error::AppError> {
     // Server-side correlation-id extractor interceptor
     fn grpc_server_interceptor(mut req: tonic::Request<()>) -> Result<tonic::Request<()>, tonic::Status> {
         if let Some(val) = req.metadata().get("correlation-id") {
-            if let Ok(s) = val.to_str() { req.extensions_mut().insert::<String>(s.to_string()); }
+            let correlation_id = val.to_str().map(|s| s.to_string()).ok();
+            if let Some(id) = correlation_id {
+                req.extensions_mut().insert::<String>(id);
+            }
         }
         Ok(req)
     }
