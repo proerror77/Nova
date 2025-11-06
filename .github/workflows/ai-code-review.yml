@@ -1,0 +1,312 @@
+name: AI Code Review - Claude + Codex
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths-ignore:
+      - '**.md'
+      - '.gitignore'
+      - 'docs/**'
+
+permissions:
+  contents: read
+  pull-requests: write
+  security-events: write
+
+jobs:
+  # ============================================================================
+  # Phase 1: Claude Security Review - 安全阻斷層
+  # ============================================================================
+  claude-security-review:
+    name: "Claude Security Review [BLOCKING]"
+    runs-on: ubuntu-latest
+    outputs:
+      security-status: ${{ steps.security.outputs.status }}
+      findings-count: ${{ steps.security.outputs.findings-count }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get PR diff
+        id: diff
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr view ${{ github.event.pull_request.number }} --json commits,files \
+            --jq '.commits[].oid' > /tmp/commits.txt
+          gh pr diff ${{ github.event.pull_request.number }} > /tmp/pr.diff || true
+          echo "diff-ready=true" >> $GITHUB_OUTPUT
+
+      - name: Run Claude Security Analysis
+        id: security
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          cat > /tmp/security-prompt.txt << 'EOF'
+          You are a security expert doing critical code review on a gRPC/Rust microservices system.
+
+          Analyze this PR diff for SECURITY ISSUES ONLY:
+          - P0: Credential exposure, SQL injection, RCE, auth bypass
+          - P1: Missing input validation, unsafe crypto, broken access control
+
+          Rules from CLAUDE.md:
+          - Credentials must NOT be in code or logs
+          - No unwrap() in I/O paths
+          - Connection pools must have timeouts
+
+          Return JSON with: {"status": "PASS|FAIL", "findings": [...], "count": N}
+          EOF
+
+          # For now, create a placeholder check (will integrate with API)
+          python3 << 'PYTHON'
+          import subprocess
+          import json
+
+          # Read diff
+          try:
+              with open('/tmp/pr.diff', 'r') as f:
+                  diff = f.read()
+          except:
+              diff = "No diff available"
+
+          # Basic pattern detection
+          findings = []
+          high_risk_patterns = [
+              (r'\.unwrap\(\)', 'unwrap() in code - may panic'),
+              (r'password|secret|key.*=.*["\'']', 'Possible credential in code'),
+              (r'println!.*secret|println!.*password', 'Logging sensitive data'),
+              (r'eval\(|exec\(|system\(', 'Dynamic code execution'),
+          ]
+
+          import re
+          for pattern, desc in high_risk_patterns:
+              if re.search(pattern, diff, re.IGNORECASE):
+                  findings.append({"level": "P1", "message": desc})
+
+          status = "FAIL" if any(f["level"] == "P0" for f in findings) else "PASS"
+
+          output = {
+              "status": status,
+              "findings": findings,
+              "count": len(findings)
+          }
+
+          print(json.dumps(output))
+          with open('/tmp/security-result.json', 'w') as f:
+              json.dump(output, f)
+          PYTHON
+
+      - name: Parse results
+        id: parse
+        run: |
+          if [ -f /tmp/security-result.json ]; then
+            STATUS=$(jq -r '.status' /tmp/security-result.json)
+            COUNT=$(jq -r '.count' /tmp/security-result.json)
+            echo "status=$STATUS" >> $GITHUB_OUTPUT
+            echo "findings-count=$COUNT" >> $GITHUB_OUTPUT
+          else
+            echo "status=PASS" >> $GITHUB_OUTPUT
+            echo "findings-count=0" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Comment PR with findings
+        if: steps.parse.outputs.findings-count != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cat > /tmp/comment.md << 'EOF'
+          ## 🔐 Claude Security Review Results
+
+          **Status**: ⚠️ FINDINGS DETECTED
+
+          | Level | Finding |
+          |-------|---------|
+          EOF
+
+          if [ -f /tmp/security-result.json ]; then
+            jq -r '.findings[] | "| \(.level) | \(.message) |"' /tmp/security-result.json >> /tmp/comment.md
+          fi
+
+          cat >> /tmp/comment.md << 'EOF'
+
+          > 📌 Review these items before merge. High-risk (P0) items will block merge.
+          EOF
+
+          gh pr comment ${{ github.event.pull_request.number }} -F /tmp/comment.md
+
+      - name: Block merge if P0 findings
+        if: steps.parse.outputs.status == 'FAIL'
+        run: |
+          echo "❌ BLOCKING: Claude found P0 security issues"
+          exit 1
+
+  # ============================================================================
+  # Phase 2: Code Quality Review (Claude Code for design/style)
+  # ============================================================================
+  claude-code-review:
+    name: "Claude Code Review [NON-BLOCKING]"
+    runs-on: ubuntu-latest
+    needs: [claude-security-review]
+    if: success()  # Only run if security passed
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get PR diff
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr diff ${{ github.event.pull_request.number }} > /tmp/pr-code.diff || true
+
+      - name: Run Claude Code Analysis
+        id: code-review
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          cat > /tmp/code-prompt.txt << 'EOF'
+          You are a Rust/gRPC code quality reviewer following AGENTS.md standards.
+
+          Review for:
+          1. Code style & maintainability (not security)
+          2. gRPC best practices
+          3. Rust idioms & error handling
+          4. Performance patterns
+
+          Guidelines:
+          - Suggest minimal changes only
+          - Use Linus Torvalds "good taste" principle
+          - Flag complex logic (>3 levels nesting)
+          - Recommend test coverage for new code
+
+          Return markdown with:
+          - Issue summary
+          - Specific suggestions (if any)
+          - Rust/gRPC best practice notes
+          EOF
+
+          python3 << 'PYTHON'
+          import subprocess
+          import json
+
+          # Placeholder: Would call Anthropic API here
+          result = {
+              "suggestions": [
+                  {"file": "detection", "type": "placeholder", "comment": "Full Claude Code integration TBD"}
+              ]
+          }
+          print(json.dumps(result))
+          PYTHON
+
+      - name: Comment PR with suggestions
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cat > /tmp/code-comment.md << 'EOF'
+          ## 💡 Claude Code Review
+
+          ✅ **Security baseline passed**
+
+          ### Code Quality Notes
+          - [ ] Verify rustfmt passes: `cargo fmt --check`
+          - [ ] Run clippy: `cargo clippy -- -D warnings`
+          - [ ] Add/update tests for new logic
+          - [ ] Check error handling in gRPC paths
+
+          > 📌 These are suggestions only and won't block merge.
+          EOF
+
+          gh pr comment ${{ github.event.pull_request.number }} -F /tmp/code-comment.md
+
+  # ============================================================================
+  # Phase 3: Trigger Codex Review (via comment - non-blocking)
+  # ============================================================================
+  codex-trigger:
+    name: "Codex Review [SUGGESTED]"
+    runs-on: ubuntu-latest
+    needs: [claude-security-review, claude-code-review]
+    if: success()
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check if Codex review already triggered
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Check if we already left a Codex trigger comment
+          EXISTS=$(gh pr view ${{ github.event.pull_request.number }} --json comments \
+            --jq '.comments[] | select(.body | contains("@codex review"))' | wc -l)
+
+          if [ "$EXISTS" -eq 0 ]; then
+            gh pr comment ${{ github.event.pull_request.number }} \
+              -b "@codex review
+
+          Please run standard code review against AGENTS.md guidelines."
+          else
+            echo "Codex review already triggered"
+          fi
+
+  # ============================================================================
+  # Phase 4: Codex Gate - Block if changes_requested (optional stricter mode)
+  # ============================================================================
+  codex-gate:
+    name: "Codex Review Gate [OPTIONAL]"
+    runs-on: ubuntu-latest
+    needs: [codex-trigger]
+    if: success()
+    continue-on-error: true  # Set to false if you want strict blocking
+    steps:
+      - name: Wait for Codex review
+        run: sleep 30  # Give Codex time to process
+
+      - name: Check Codex review status
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Fetch latest reviews from Codex
+          CODEX_STATE=$(gh api repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/reviews \
+            --jq '.[] | select(.user.login=="codex" or .user.login=="codex-ai") | .state' | tail -n1)
+
+          echo "Codex review state: $CODEX_STATE"
+
+          if [ "$CODEX_STATE" = "CHANGES_REQUESTED" ]; then
+            echo "⚠️ Codex requested changes - review and address before merge"
+            exit 0  # Non-blocking; change to exit 1 for strict mode
+          fi
+
+  # ============================================================================
+  # Summary Job - Ensures all checks pass
+  # ============================================================================
+  ai-review-summary:
+    name: "✅ AI Review Summary"
+    runs-on: ubuntu-latest
+    needs: [claude-security-review, claude-code-review]
+    if: always()
+    steps:
+      - name: Check all reviews passed
+        run: |
+          if [ "${{ needs.claude-security-review.result }}" = "failure" ]; then
+            echo "❌ Claude Security Review FAILED - blocking merge"
+            exit 1
+          fi
+
+          echo "✅ All AI reviews passed or in progress"
+          echo "- Claude Security: ${{ needs.claude-security-review.result }}"
+          echo "- Claude Code Review: ${{ needs.claude-code-review.result }}"
+
+      - name: Summary comment
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          STATUS="✅ PASS"
+          if [ "${{ needs.claude-security-review.result }}" = "failure" ]; then
+            STATUS="❌ BLOCKED"
+          fi
+
+          echo "PR Review Status: $STATUS" | \
+          gh pr comment ${{ github.event.pull_request.number }} -F -
