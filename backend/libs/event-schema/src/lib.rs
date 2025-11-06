@@ -12,8 +12,8 @@ pub mod outbox;
 pub mod events;
 
 // Re-export commonly used types
-pub use outbox::{OutboxEvent, KafkaMessage, priority};
 pub use events::DomainEvent;
+pub use outbox::{priority, KafkaMessage, OutboxEvent};
 
 /// Current schema version for all events
 pub const SCHEMA_VERSION: u32 = 1;

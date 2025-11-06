@@ -5,13 +5,13 @@
 //! 2. 消除特殊情况：统一的初始化和清理逻辑
 //! 3. 简洁执念：单一职责，清晰的生命周期管理
 
-use sqlx::{PgPool, postgres::PgPoolOptions};
-use redis::aio::ConnectionManager;
-use std::sync::Arc;
 use once_cell::sync::Lazy;
+use redis::aio::ConnectionManager;
+use sqlx::{postgres::PgPoolOptions, PgPool};
+use std::sync::Arc;
+use std::time::Duration;
 use testcontainers::core::WaitFor;
 use testcontainers::{runners::AsyncRunner, GenericImage};
-use std::time::Duration;
 
 /// 统一测试环境 - 所有集成测试共享
 pub struct TestEnvironment {
@@ -40,10 +40,18 @@ impl TestEnvironment {
             .with_env_var("POSTGRES_DB", "nova_test")
             .with_env_var("POSTGRES_USER", "testuser")
             .with_env_var("POSTGRES_PASSWORD", "testpass")
-            .with_wait_for(WaitFor::message_on_stderr("database system is ready to accept connections"));
+            .with_wait_for(WaitFor::message_on_stderr(
+                "database system is ready to accept connections",
+            ));
 
-        let postgres_container = postgres_image.start().await.expect("启动 PostgreSQL 容器失败");
-        let postgres_port = postgres_container.get_host_port_ipv4(5432).await.expect("获取 PostgreSQL 端口失败");
+        let postgres_container = postgres_image
+            .start()
+            .await
+            .expect("启动 PostgreSQL 容器失败");
+        let postgres_port = postgres_container
+            .get_host_port_ipv4(5432)
+            .await
+            .expect("获取 PostgreSQL 端口失败");
         let postgres_url = format!(
             "postgres://testuser:testpass@127.0.0.1:{}/nova_test",
             postgres_port
@@ -56,7 +64,10 @@ impl TestEnvironment {
             .with_wait_for(WaitFor::message_on_stdout("Ready to accept connections"));
 
         let redis_container = redis_image.start().await.expect("启动 Redis 容器失败");
-        let redis_port = redis_container.get_host_port_ipv4(6379).await.expect("获取 Redis 端口失败");
+        let redis_port = redis_container
+            .get_host_port_ipv4(6379)
+            .await
+            .expect("获取 Redis 端口失败");
         let redis_url = format!("redis://127.0.0.1:{}", redis_port);
 
         tracing::info!("Redis 容器启动于端口: {}", redis_port);
@@ -73,10 +84,7 @@ impl TestEnvironment {
         TestEnvironment {
             postgres: Arc::new(postgres),
             redis,
-            _containers: vec![
-                Box::new(postgres_container),
-                Box::new(redis_container),
-            ],
+            _containers: vec![Box::new(postgres_container), Box::new(redis_container)],
         }
     }
 
@@ -101,7 +109,10 @@ impl TestEnvironment {
                     let backoff = Duration::from_millis(100 * (2_u64.pow(retries.min(5))));
                     tracing::warn!(
                         "PostgreSQL 连接失败（重试 {}/{}），{}ms 后重试: {}",
-                        retries, MAX_RETRIES, backoff.as_millis(), e
+                        retries,
+                        MAX_RETRIES,
+                        backoff.as_millis(),
+                        e
                     );
                     tokio::time::sleep(backoff).await;
                 }
@@ -131,7 +142,10 @@ impl TestEnvironment {
                             let backoff = Duration::from_millis(100 * (2_u64.pow(retries.min(5))));
                             tracing::warn!(
                                 "Redis 连接失败（重试 {}/{}），{}ms 后重试: {}",
-                                retries, MAX_RETRIES, backoff.as_millis(), e
+                                retries,
+                                MAX_RETRIES,
+                                backoff.as_millis(),
+                                e
                             );
                             tokio::time::sleep(backoff).await;
                         }
@@ -143,7 +157,10 @@ impl TestEnvironment {
                     let backoff = Duration::from_millis(100 * (2_u64.pow(retries.min(5))));
                     tracing::warn!(
                         "Redis 客户端创建失败（重试 {}/{}），{}ms 后重试: {}",
-                        retries, MAX_RETRIES, backoff.as_millis(), e
+                        retries,
+                        MAX_RETRIES,
+                        backoff.as_millis(),
+                        e
                     );
                     tokio::time::sleep(backoff).await;
                 }
@@ -208,31 +225,25 @@ impl TestEnvironment {
             "notifications",
             "push_tokens",
             "push_delivery_logs",
-
             // Feed Service
             "user_interactions",
             "post_features",
             "ab_experiments",
             "feed_cache",
-
             // Streaming Service
             "streams",
             "stream_chat_messages",
             "stream_viewers",
-
             // CDN Service
             "assets",
             "cache_invalidations",
-
             // Events Service
             "outbox_events",
             "event_delivery_logs",
-
             // Messaging Service
             "messages",
             "conversations",
             "message_read_receipts",
-
             // Search Service
             "search_queries",
             "trending_topics",
@@ -253,7 +264,10 @@ impl TestEnvironment {
 
         // 清理 Redis（FLUSHDB 清空当前数据库）
         let mut conn = self.redis.clone();
-        match redis::cmd("FLUSHDB").query_async::<_, String>(&mut conn).await {
+        match redis::cmd("FLUSHDB")
+            .query_async::<_, String>(&mut conn)
+            .await
+        {
             Ok(_) => tracing::trace!("Redis 清理成功"),
             Err(e) => tracing::warn!("Redis 清理失败: {}", e),
         }
@@ -295,9 +309,7 @@ mod tests {
         let env = TestEnvironment::new().await;
 
         // 验证数据库连接
-        let result = sqlx::query("SELECT 1 as value")
-            .fetch_one(&*env.db())
-            .await;
+        let result = sqlx::query("SELECT 1 as value").fetch_one(&*env.db()).await;
         assert!(result.is_ok(), "PostgreSQL 连接失败");
 
         // 验证 Redis 连接

@@ -5,11 +5,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("cargo:rerun-if-changed={}/{}", services_dir, proto);
     }
 
-    tonic_build::configure()
-        .compile(
-            &[format!("{services_dir}/search_service.proto")],
-            &[services_dir],
-        )?;
+    tonic_build::configure().compile(
+        &[format!("{services_dir}/search_service.proto")],
+        &[services_dir],
+    )?;
 
     Ok(())
 }

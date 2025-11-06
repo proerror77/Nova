@@ -1,10 +1,10 @@
+use crate::models::{CreateNotificationRequest, Notification};
+use crate::services::NotificationService;
 /// Notification CRUD handlers
 use actix_web::{web, HttpResponse, Result as ActixResult};
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
-use crate::services::NotificationService;
-use crate::models::{CreateNotificationRequest, Notification};
 use std::sync::Arc;
+use uuid::Uuid;
 
 /// Request to create a notification
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -71,12 +71,8 @@ pub async fn create_notification(
     };
 
     match service.create_notification(create_req).await {
-        Ok(notification) => {
-            Ok(HttpResponse::Ok().json(ApiResponse::ok(notification)))
-        }
-        Err(e) => {
-            Ok(HttpResponse::InternalServerError().json(ApiResponse::<String>::err(e)))
-        }
+        Ok(notification) => Ok(HttpResponse::Ok().json(ApiResponse::ok(notification))),
+        Err(e) => Ok(HttpResponse::InternalServerError().json(ApiResponse::<String>::err(e))),
     }
 }
 
@@ -90,17 +86,11 @@ pub async fn get_notification(
     let notification_id = path.into_inner();
 
     match service.get_notification(notification_id).await {
-        Ok(Some(notification)) => {
-            Ok(HttpResponse::Ok().json(ApiResponse::ok(notification)))
-        }
-        Ok(None) => {
-            Ok(HttpResponse::NotFound().json(ApiResponse::<String>::err(
-                "Notification not found".to_string(),
-            )))
-        }
-        Err(e) => {
-            Ok(HttpResponse::InternalServerError().json(ApiResponse::<String>::err(e)))
-        }
+        Ok(Some(notification)) => Ok(HttpResponse::Ok().json(ApiResponse::ok(notification))),
+        Ok(None) => Ok(HttpResponse::NotFound().json(ApiResponse::<String>::err(
+            "Notification not found".to_string(),
+        ))),
+        Err(e) => Ok(HttpResponse::InternalServerError().json(ApiResponse::<String>::err(e))),
     }
 }
 
@@ -114,12 +104,8 @@ pub async fn mark_as_read(
     let notification_id = path.into_inner();
 
     match service.mark_as_read(notification_id).await {
-        Ok(_) => {
-            Ok(HttpResponse::Ok().json(ApiResponse::ok(serde_json::json!({"success": true}))))
-        }
-        Err(e) => {
-            Ok(HttpResponse::InternalServerError().json(ApiResponse::<String>::err(e)))
-        }
+        Ok(_) => Ok(HttpResponse::Ok().json(ApiResponse::ok(serde_json::json!({"success": true})))),
+        Err(e) => Ok(HttpResponse::InternalServerError().json(ApiResponse::<String>::err(e))),
     }
 }
 
@@ -133,24 +119,14 @@ pub async fn send_notification(
     let notification_id = path.into_inner();
 
     match service.get_notification(notification_id).await {
-        Ok(Some(notification)) => {
-            match service.send_push_notifications(&notification).await {
-                Ok(results) => {
-                    Ok(HttpResponse::Ok().json(ApiResponse::ok(results)))
-                }
-                Err(e) => {
-                    Ok(HttpResponse::InternalServerError().json(ApiResponse::<String>::err(e)))
-                }
-            }
-        }
-        Ok(None) => {
-            Ok(HttpResponse::NotFound().json(ApiResponse::<String>::err(
-                "Notification not found".to_string(),
-            )))
-        }
-        Err(e) => {
-            Ok(HttpResponse::InternalServerError().json(ApiResponse::<String>::err(e)))
-        }
+        Ok(Some(notification)) => match service.send_push_notifications(&notification).await {
+            Ok(results) => Ok(HttpResponse::Ok().json(ApiResponse::ok(results))),
+            Err(e) => Ok(HttpResponse::InternalServerError().json(ApiResponse::<String>::err(e))),
+        },
+        Ok(None) => Ok(HttpResponse::NotFound().json(ApiResponse::<String>::err(
+            "Notification not found".to_string(),
+        ))),
+        Err(e) => Ok(HttpResponse::InternalServerError().json(ApiResponse::<String>::err(e))),
     }
 }
 

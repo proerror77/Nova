@@ -9,13 +9,13 @@
 mod openapi;
 
 use actix_web::{dev::Service, middleware as actix_middleware, web, App, HttpServer};
-use tonic_health::server::health_reporter;
 use db_pool::{create_pool as create_pg_pool, DbConfig as DbPoolConfig};
 use std::io;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::Mutex;
+use tonic_health::server::health_reporter;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use utoipa_swagger_ui::SwaggerUi;
 
@@ -130,9 +130,13 @@ async fn main() -> io::Result<()> {
             .await;
 
         // Server-side correlation-id extractor interceptor
-        fn server_interceptor(mut req: tonic::Request<()>) -> Result<tonic::Request<()>, tonic::Status> {
+        fn server_interceptor(
+            mut req: tonic::Request<()>,
+        ) -> Result<tonic::Request<()>, tonic::Status> {
             if let Some(val) = req.metadata().get("correlation-id") {
-                if let Ok(s) = val.to_str() { req.extensions_mut().insert::<String>(s.to_string()); }
+                if let Ok(s) = val.to_str() {
+                    req.extensions_mut().insert::<String>(s.to_string());
+                }
             }
             Ok(req)
         }

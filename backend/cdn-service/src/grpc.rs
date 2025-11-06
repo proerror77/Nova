@@ -182,9 +182,7 @@ impl CdnService for CdnServiceImpl {
             last_accessed_at: asset_info.upload_timestamp,
         };
 
-        Ok(Response::new(UpdateCdnAssetResponse {
-            asset: Some(asset),
-        }))
+        Ok(Response::new(UpdateCdnAssetResponse { asset: Some(asset) }))
     }
 
     /// Invalidate asset cache on all edges
@@ -258,10 +256,7 @@ impl CdnService for CdnServiceImpl {
                 affected_edges: 0,
                 status: inv.status,
                 created_at: inv.created_at.timestamp(),
-                completed_at: inv
-                    .resolved_at
-                    .map(|dt| dt.timestamp())
-                    .unwrap_or_default(),
+                completed_at: inv.resolved_at.map(|dt| dt.timestamp()).unwrap_or_default(),
             }),
         }))
     }
@@ -343,4 +338,3 @@ impl CdnService for CdnServiceImpl {
         }))
     }
 }
-

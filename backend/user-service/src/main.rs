@@ -117,7 +117,7 @@ async fn main() -> io::Result<()> {
     };
 
     match user_service::security::jwt::initialize_keys(&private_key_pem, &public_key_pem) {
-        Ok(()) => {},
+        Ok(()) => {}
         Err(e) => {
             tracing::error!("JWT keys initialization failed: {:#}", e);
             eprintln!("ERROR: JWT initialization failed: {}", e);
@@ -278,10 +278,13 @@ async fn main() -> io::Result<()> {
             Ok(client) => client,
             Err(e) => {
                 tracing::error!("content-service gRPC client initialization failed: {:#}", e);
-                eprintln!("ERROR: Failed to initialize content-service gRPC client: {}", e);
+                eprintln!(
+                    "ERROR: Failed to initialize content-service gRPC client: {}",
+                    e
+                );
                 std::process::exit(1);
             }
-        }
+        },
     );
 
     let auth_client = Arc::new(
@@ -289,10 +292,13 @@ async fn main() -> io::Result<()> {
             Ok(client) => client,
             Err(e) => {
                 tracing::error!("auth-service gRPC client initialization failed: {:#}", e);
-                eprintln!("ERROR: Failed to initialize auth-service gRPC client: {}", e);
+                eprintln!(
+                    "ERROR: Failed to initialize auth-service gRPC client: {}",
+                    e
+                );
                 std::process::exit(1);
             }
-        }
+        },
     );
 
     let media_client = Arc::new(
@@ -300,10 +306,13 @@ async fn main() -> io::Result<()> {
             Ok(client) => client,
             Err(e) => {
                 tracing::error!("media-service gRPC client initialization failed: {:#}", e);
-                eprintln!("ERROR: Failed to initialize media-service gRPC client: {}", e);
+                eprintln!(
+                    "ERROR: Failed to initialize media-service gRPC client: {}",
+                    e
+                );
                 std::process::exit(1);
             }
-        }
+        },
     );
 
     // Feed state moved to feed-service (port 8089)
@@ -328,11 +337,19 @@ async fn main() -> io::Result<()> {
                 neo4j_uri: String::new(),
                 neo4j_user: String::new(),
                 neo4j_password: String::new(),
-            }).await {
+            })
+            .await
+            {
                 Ok(svc) => svc,
                 Err(e2) => {
-                    tracing::error!("GraphService fallback initialization failed (should never happen): {:#}", e2);
-                    eprintln!("FATAL: GraphService disabled mode initialization failed: {}", e2);
+                    tracing::error!(
+                        "GraphService fallback initialization failed (should never happen): {:#}",
+                        e2
+                    );
+                    eprintln!(
+                        "FATAL: GraphService disabled mode initialization failed: {}",
+                        e2
+                    );
                     std::process::exit(1);
                 }
             }
@@ -344,16 +361,14 @@ async fn main() -> io::Result<()> {
     // ========================================
     // Initialize Kafka producer for events (needed by multiple services)
     // ========================================
-    let event_producer = Arc::new(
-        match EventProducer::new(&config.kafka) {
-            Ok(producer) => producer,
-            Err(e) => {
-                tracing::error!("Kafka producer initialization failed: {:#}", e);
-                eprintln!("ERROR: Failed to create Kafka producer: {}", e);
-                std::process::exit(1);
-            }
+    let event_producer = Arc::new(match EventProducer::new(&config.kafka) {
+        Ok(producer) => producer,
+        Err(e) => {
+            tracing::error!("Kafka producer initialization failed: {:#}", e);
+            eprintln!("ERROR: Failed to create Kafka producer: {}", e);
+            std::process::exit(1);
         }
-    );
+    });
 
     // ========================================
     // Initialize events state (producer already created above)
@@ -402,14 +417,15 @@ async fn main() -> io::Result<()> {
             max_concurrent_inserts: 10,
         };
 
-        let cdc_consumer = match CdcConsumer::new(cdc_config, ch_writer.as_ref().clone(), db_pool.clone()).await {
-            Ok(consumer) => consumer,
-            Err(e) => {
-                tracing::error!("CDC consumer initialization failed: {:#}", e);
-                eprintln!("ERROR: Failed to create CDC consumer: {}", e);
-                std::process::exit(1);
-            }
-        };
+        let cdc_consumer =
+            match CdcConsumer::new(cdc_config, ch_writer.as_ref().clone(), db_pool.clone()).await {
+                Ok(consumer) => consumer,
+                Err(e) => {
+                    tracing::error!("CDC consumer initialization failed: {:#}", e);
+                    eprintln!("ERROR: Failed to create CDC consumer: {}", e);
+                    std::process::exit(1);
+                }
+            };
 
         let cdc_health_for_task = cdc_health_flag.clone();
         let cdc_handle = tokio::spawn(async move {
@@ -583,9 +599,13 @@ async fn main() -> io::Result<()> {
             .set_serving::<user_service::grpc::nova::user_service::user_service_server::UserServiceServer<UserServiceImpl>>()
             .await;
         // Server-side correlation-id extractor interceptor
-        fn server_interceptor(mut req: tonic::Request<()>) -> Result<tonic::Request<()>, tonic::Status> {
+        fn server_interceptor(
+            mut req: tonic::Request<()>,
+        ) -> Result<tonic::Request<()>, tonic::Status> {
             if let Some(val) = req.metadata().get("correlation-id") {
-                if let Ok(s) = val.to_str() { req.extensions_mut().insert::<String>(s.to_string()); }
+                if let Ok(s) = val.to_str() {
+                    req.extensions_mut().insert::<String>(s.to_string());
+                }
             }
             Ok(req)
         }

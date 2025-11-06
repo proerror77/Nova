@@ -1,18 +1,18 @@
+use super::ApiResponse;
+use crate::models::NotificationChannel;
+use crate::services::NotificationService;
 /// Device token management handlers
 use actix_web::{web, HttpResponse, Result as ActixResult};
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
-use crate::services::NotificationService;
-use crate::models::NotificationChannel;
 use std::sync::Arc;
-use super::ApiResponse;
+use uuid::Uuid;
 
 /// Register device token request
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct RegisterDevicePayload {
     pub user_id: Uuid,
     pub token: String,
-    pub channel: String, // "fcm", "apns", "websocket"
+    pub channel: String,     // "fcm", "apns", "websocket"
     pub device_type: String, // "ios", "android", "web"
 }
 
@@ -33,18 +33,19 @@ pub async fn register_device(
     let channel = parse_channel(&req.channel);
 
     match service
-        .register_device_token(req.user_id, req.token.clone(), channel, req.device_type.clone())
+        .register_device_token(
+            req.user_id,
+            req.token.clone(),
+            channel,
+            req.device_type.clone(),
+        )
         .await
     {
-        Ok(device_id) => {
-            Ok(HttpResponse::Ok().json(ApiResponse::ok(serde_json::json!({
-                "device_id": device_id,
-                "success": true
-            }))))
-        }
-        Err(e) => {
-            Ok(HttpResponse::InternalServerError().json(ApiResponse::<String>::err(e)))
-        }
+        Ok(device_id) => Ok(HttpResponse::Ok().json(ApiResponse::ok(serde_json::json!({
+            "device_id": device_id,
+            "success": true
+        })))),
+        Err(e) => Ok(HttpResponse::InternalServerError().json(ApiResponse::<String>::err(e))),
     }
 }
 
@@ -59,14 +60,10 @@ pub async fn unregister_device(
         .unregister_device_token(req.user_id, &req.token)
         .await
     {
-        Ok(_) => {
-            Ok(HttpResponse::Ok().json(ApiResponse::ok(serde_json::json!({
-                "success": true
-            }))))
-        }
-        Err(e) => {
-            Ok(HttpResponse::InternalServerError().json(ApiResponse::<String>::err(e)))
-        }
+        Ok(_) => Ok(HttpResponse::Ok().json(ApiResponse::ok(serde_json::json!({
+            "success": true
+        })))),
+        Err(e) => Ok(HttpResponse::InternalServerError().json(ApiResponse::<String>::err(e))),
     }
 }
 
@@ -80,12 +77,8 @@ pub async fn get_user_devices(
     let user_id = path.into_inner();
 
     match service.get_user_devices(user_id).await {
-        Ok(devices) => {
-            Ok(HttpResponse::Ok().json(ApiResponse::ok(devices)))
-        }
-        Err(e) => {
-            Ok(HttpResponse::InternalServerError().json(ApiResponse::<String>::err(e)))
-        }
+        Ok(devices) => Ok(HttpResponse::Ok().json(ApiResponse::ok(devices))),
+        Err(e) => Ok(HttpResponse::InternalServerError().json(ApiResponse::<String>::err(e))),
     }
 }
 

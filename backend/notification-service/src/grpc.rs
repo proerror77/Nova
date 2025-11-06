@@ -1,10 +1,10 @@
 // gRPC server for NotificationService
-use tonic::{Request, Response, Status};
-use uuid::Uuid;
-use std::sync::Arc;
+use chrono::{Duration, Utc};
 use sqlx::{PgPool, Row};
-use chrono::{Utc, Duration};
-use tracing::{debug, error, warn, info};
+use std::sync::Arc;
+use tonic::{Request, Response, Status};
+use tracing::{debug, error, info, warn};
+use uuid::Uuid;
 
 pub mod nova {
     pub mod common {
@@ -24,10 +24,10 @@ pub mod nova {
 use nova::notification_service::v1::notification_service_server::NotificationService;
 use nova::notification_service::v1::*;
 
-use crate::services::{NotificationService as CoreNotificationService, PushSender};
 use crate::models::{
-    NotificationType, NotificationPriority, CreateNotificationRequest as CoreCreateRequest,
+    CreateNotificationRequest as CoreCreateRequest, NotificationPriority, NotificationType,
 };
+use crate::services::{NotificationService as CoreNotificationService, PushSender};
 
 #[derive(Clone)]
 pub struct NotificationServiceImpl {
@@ -83,8 +83,10 @@ impl NotificationService for NotificationServiceImpl {
         };
         let offset = req.offset.max(0);
 
-        info!("GetNotifications: user_id={}, limit={}, offset={}, unread_only={}",
-              user_id, limit, offset, req.unread_only);
+        info!(
+            "GetNotifications: user_id={}, limit={}, offset={}, unread_only={}",
+            user_id, limit, offset, req.unread_only
+        );
 
         // Build query with optional unread filter
         let query = if req.unread_only {
@@ -123,37 +125,51 @@ impl NotificationService for NotificationServiceImpl {
         let mut notifications = Vec::new();
         for row in rows {
             let id: Uuid = row.try_get("id").unwrap_or_default();
-            let created_at: chrono::DateTime<Utc> = row.try_get("created_at").unwrap_or_else(|_| Utc::now());
+            let created_at: chrono::DateTime<Utc> =
+                row.try_get("created_at").unwrap_or_else(|_| Utc::now());
             let sent_at: Option<chrono::DateTime<Utc>> = row.try_get("sent_at").ok().flatten();
             let read_at: Option<chrono::DateTime<Utc>> = row.try_get("read_at").ok().flatten();
-            let deleted_at: Option<chrono::DateTime<Utc>> = row.try_get("deleted_at").ok().flatten();
+            let deleted_at: Option<chrono::DateTime<Utc>> =
+                row.try_get("deleted_at").ok().flatten();
             let data: Option<serde_json::Value> = row.try_get("data").ok().flatten();
 
             notifications.push(Notification {
                 id: id.to_string(),
-                user_id: row.try_get::<Uuid, _>("user_id").unwrap_or_default().to_string(),
-                notification_type: row.try_get("notification_type").unwrap_or_else(|_| "system".to_string()),
+                user_id: row
+                    .try_get::<Uuid, _>("user_id")
+                    .unwrap_or_default()
+                    .to_string(),
+                notification_type: row
+                    .try_get("notification_type")
+                    .unwrap_or_else(|_| "system".to_string()),
                 title: row.try_get("title").unwrap_or_default(),
                 body: row.try_get("body").unwrap_or_default(),
                 data: data.map(|d| d.to_string()).unwrap_or_default(),
-                related_user_id: row.try_get::<Option<Uuid>, _>("related_user_id")
+                related_user_id: row
+                    .try_get::<Option<Uuid>, _>("related_user_id")
                     .ok()
                     .flatten()
                     .map(|u| u.to_string())
                     .unwrap_or_default(),
-                related_post_id: row.try_get::<Option<Uuid>, _>("related_post_id")
+                related_post_id: row
+                    .try_get::<Option<Uuid>, _>("related_post_id")
                     .ok()
                     .flatten()
                     .map(|u| u.to_string())
                     .unwrap_or_default(),
-                related_message_id: row.try_get::<Option<Uuid>, _>("related_message_id")
+                related_message_id: row
+                    .try_get::<Option<Uuid>, _>("related_message_id")
                     .ok()
                     .flatten()
                     .map(|u| u.to_string())
                     .unwrap_or_default(),
                 is_read: row.try_get("is_read").unwrap_or(false),
-                channel: row.try_get("channel").unwrap_or_else(|_| "in_app".to_string()),
-                status: row.try_get("status").unwrap_or_else(|_| "pending".to_string()),
+                channel: row
+                    .try_get("channel")
+                    .unwrap_or_else(|_| "in_app".to_string()),
+                status: row
+                    .try_get("status")
+                    .unwrap_or_else(|_| "pending".to_string()),
                 created_at: created_at.timestamp(),
                 sent_at: sent_at.map(|t| t.timestamp()).unwrap_or(0),
                 read_at: read_at.map(|t| t.timestamp()).unwrap_or(0),
@@ -203,32 +219,33 @@ impl NotificationService for NotificationServiceImpl {
         debug!("GetNotification: notification_id={}", notification_id);
 
         match self.core_service.get_notification(notification_id).await {
-            Ok(Some(notif)) => {
-                Ok(Response::new(GetNotificationResponse {
-                    notification: Some(Notification {
-                        id: notif.id.to_string(),
-                        user_id: notif.recipient_id.to_string(),
-                        notification_type: notif.notification_type.as_str().to_string(),
-                        title: notif.title,
-                        body: notif.body,
-                        data: notif.metadata.map(|d| d.to_string()).unwrap_or_default(),
-                        related_user_id: notif.sender_id.map(|u| u.to_string()).unwrap_or_default(),
-                        related_post_id: notif.object_id.map(|u| u.to_string()).unwrap_or_default(),
-                        related_message_id: String::new(),
-                        is_read: notif.is_read,
-                        channel: "in_app".to_string(),
-                        status: notif.status.as_str().to_string(),
-                        created_at: notif.created_at.timestamp(),
-                        sent_at: 0,
-                        read_at: notif.read_at.map(|t| t.timestamp()).unwrap_or(0),
-                        deleted_at: 0,
-                    }),
-                }))
-            }
+            Ok(Some(notif)) => Ok(Response::new(GetNotificationResponse {
+                notification: Some(Notification {
+                    id: notif.id.to_string(),
+                    user_id: notif.recipient_id.to_string(),
+                    notification_type: notif.notification_type.as_str().to_string(),
+                    title: notif.title,
+                    body: notif.body,
+                    data: notif.metadata.map(|d| d.to_string()).unwrap_or_default(),
+                    related_user_id: notif.sender_id.map(|u| u.to_string()).unwrap_or_default(),
+                    related_post_id: notif.object_id.map(|u| u.to_string()).unwrap_or_default(),
+                    related_message_id: String::new(),
+                    is_read: notif.is_read,
+                    channel: "in_app".to_string(),
+                    status: notif.status.as_str().to_string(),
+                    created_at: notif.created_at.timestamp(),
+                    sent_at: 0,
+                    read_at: notif.read_at.map(|t| t.timestamp()).unwrap_or(0),
+                    deleted_at: 0,
+                }),
+            })),
             Ok(None) => Err(Status::not_found("Notification not found")),
             Err(e) => {
                 error!("Failed to get notification: {}", e);
-                Err(Status::internal(format!("Failed to get notification: {}", e)))
+                Err(Status::internal(format!(
+                    "Failed to get notification: {}",
+                    e
+                )))
             }
         }
     }
@@ -243,21 +260,28 @@ impl NotificationService for NotificationServiceImpl {
         let user_id = Uuid::parse_str(&req.user_id)
             .map_err(|e| Status::invalid_argument(format!("Invalid user_id: {}", e)))?;
 
-        let related_user_id = if !req.related_user_id.is_empty() {
-            Some(Uuid::parse_str(&req.related_user_id)
-                .map_err(|e| Status::invalid_argument(format!("Invalid related_user_id: {}", e)))?)
-        } else {
-            None
-        };
+        let related_user_id =
+            if !req.related_user_id.is_empty() {
+                Some(Uuid::parse_str(&req.related_user_id).map_err(|e| {
+                    Status::invalid_argument(format!("Invalid related_user_id: {}", e))
+                })?)
+            } else {
+                None
+            };
 
-        let related_post_id = if !req.related_post_id.is_empty() {
-            Some(Uuid::parse_str(&req.related_post_id)
-                .map_err(|e| Status::invalid_argument(format!("Invalid related_post_id: {}", e)))?)
-        } else {
-            None
-        };
+        let related_post_id =
+            if !req.related_post_id.is_empty() {
+                Some(Uuid::parse_str(&req.related_post_id).map_err(|e| {
+                    Status::invalid_argument(format!("Invalid related_post_id: {}", e))
+                })?)
+            } else {
+                None
+            };
 
-        info!("CreateNotification: user_id={}, type={}", user_id, req.notification_type);
+        info!(
+            "CreateNotification: user_id={}, type={}",
+            user_id, req.notification_type
+        );
 
         let notification_type = match req.notification_type.to_lowercase().as_str() {
             "like" => NotificationType::Like,
@@ -323,7 +347,10 @@ impl NotificationService for NotificationServiceImpl {
             }
             Err(e) => {
                 error!("Failed to create notification: {}", e);
-                Err(Status::internal(format!("Failed to create notification: {}", e)))
+                Err(Status::internal(format!(
+                    "Failed to create notification: {}",
+                    e
+                )))
             }
         }
     }
@@ -338,36 +365,48 @@ impl NotificationService for NotificationServiceImpl {
         let notification_id = Uuid::parse_str(&req.notification_id)
             .map_err(|e| Status::invalid_argument(format!("Invalid notification_id: {}", e)))?;
 
-        debug!("MarkNotificationAsRead: notification_id={}", notification_id);
+        debug!(
+            "MarkNotificationAsRead: notification_id={}",
+            notification_id
+        );
 
         match self.core_service.mark_as_read(notification_id).await {
             Ok(_) => {
                 // Fetch updated notification
                 match self.core_service.get_notification(notification_id).await {
-                    Ok(Some(notif)) => {
-                        Ok(Response::new(MarkNotificationAsReadResponse {
-                            notification: Some(Notification {
-                                id: notif.id.to_string(),
-                                user_id: notif.recipient_id.to_string(),
-                                notification_type: notif.notification_type.as_str().to_string(),
-                                title: notif.title,
-                                body: notif.body,
-                                data: notif.metadata.map(|d| d.to_string()).unwrap_or_default(),
-                                related_user_id: notif.sender_id.map(|u| u.to_string()).unwrap_or_default(),
-                                related_post_id: notif.object_id.map(|u| u.to_string()).unwrap_or_default(),
-                                related_message_id: String::new(),
-                                is_read: notif.is_read,
-                                channel: "in_app".to_string(),
-                                status: notif.status.as_str().to_string(),
-                                created_at: notif.created_at.timestamp(),
-                                sent_at: 0,
-                                read_at: notif.read_at.map(|t| t.timestamp()).unwrap_or(0),
-                                deleted_at: 0,
-                            }),
-                        }))
-                    }
-                    Ok(None) => Err(Status::not_found("Notification not found after marking as read")),
-                    Err(e) => Err(Status::internal(format!("Failed to fetch notification: {}", e))),
+                    Ok(Some(notif)) => Ok(Response::new(MarkNotificationAsReadResponse {
+                        notification: Some(Notification {
+                            id: notif.id.to_string(),
+                            user_id: notif.recipient_id.to_string(),
+                            notification_type: notif.notification_type.as_str().to_string(),
+                            title: notif.title,
+                            body: notif.body,
+                            data: notif.metadata.map(|d| d.to_string()).unwrap_or_default(),
+                            related_user_id: notif
+                                .sender_id
+                                .map(|u| u.to_string())
+                                .unwrap_or_default(),
+                            related_post_id: notif
+                                .object_id
+                                .map(|u| u.to_string())
+                                .unwrap_or_default(),
+                            related_message_id: String::new(),
+                            is_read: notif.is_read,
+                            channel: "in_app".to_string(),
+                            status: notif.status.as_str().to_string(),
+                            created_at: notif.created_at.timestamp(),
+                            sent_at: 0,
+                            read_at: notif.read_at.map(|t| t.timestamp()).unwrap_or(0),
+                            deleted_at: 0,
+                        }),
+                    })),
+                    Ok(None) => Err(Status::not_found(
+                        "Notification not found after marking as read",
+                    )),
+                    Err(e) => Err(Status::internal(format!(
+                        "Failed to fetch notification: {}",
+                        e
+                    ))),
                 }
             }
             Err(e) => {
@@ -436,9 +475,7 @@ impl NotificationService for NotificationServiceImpl {
                 Status::internal(format!("Database error: {}", e))
             })?;
 
-        Ok(Response::new(DeleteNotificationResponse {
-            success: true,
-        }))
+        Ok(Response::new(DeleteNotificationResponse { success: true }))
     }
 
     /// Get user's notification preferences
@@ -454,30 +491,31 @@ impl NotificationService for NotificationServiceImpl {
         debug!("GetNotificationPreferences: user_id={}", user_id);
 
         match self.core_service.get_preferences(user_id).await {
-            Ok(pref) => {
-                Ok(Response::new(GetNotificationPreferencesResponse {
-                    preferences: Some(NotificationPreference {
-                        user_id: pref.user_id.to_string(),
-                        email_on_like: pref.like_enabled,
-                        email_on_comment: pref.comment_enabled,
-                        email_on_follow: pref.follow_enabled,
-                        email_on_mention: pref.mention_enabled,
-                        push_on_like: pref.like_enabled,
-                        push_on_comment: pref.comment_enabled,
-                        push_on_follow: pref.follow_enabled,
-                        push_on_mention: pref.mention_enabled,
-                        push_on_message: pref.message_enabled,
-                        quiet_hours_start: pref.quiet_hours_start.unwrap_or_default(),
-                        quiet_hours_end: pref.quiet_hours_end.unwrap_or_default(),
-                        disable_all: !pref.enabled,
-                        created_at: 0,
-                        updated_at: pref.updated_at.timestamp(),
-                    }),
-                }))
-            }
+            Ok(pref) => Ok(Response::new(GetNotificationPreferencesResponse {
+                preferences: Some(NotificationPreference {
+                    user_id: pref.user_id.to_string(),
+                    email_on_like: pref.like_enabled,
+                    email_on_comment: pref.comment_enabled,
+                    email_on_follow: pref.follow_enabled,
+                    email_on_mention: pref.mention_enabled,
+                    push_on_like: pref.like_enabled,
+                    push_on_comment: pref.comment_enabled,
+                    push_on_follow: pref.follow_enabled,
+                    push_on_mention: pref.mention_enabled,
+                    push_on_message: pref.message_enabled,
+                    quiet_hours_start: pref.quiet_hours_start.unwrap_or_default(),
+                    quiet_hours_end: pref.quiet_hours_end.unwrap_or_default(),
+                    disable_all: !pref.enabled,
+                    created_at: 0,
+                    updated_at: pref.updated_at.timestamp(),
+                }),
+            })),
             Err(e) => {
                 error!("Failed to get preferences: {}", e);
-                Err(Status::internal(format!("Failed to get preferences: {}", e)))
+                Err(Status::internal(format!(
+                    "Failed to get preferences: {}",
+                    e
+                )))
             }
         }
     }
@@ -488,7 +526,9 @@ impl NotificationService for NotificationServiceImpl {
         _request: Request<UpdateNotificationPreferencesRequest>,
     ) -> Result<Response<UpdateNotificationPreferencesResponse>, Status> {
         // TODO: Implement preferences update
-        Err(Status::unimplemented("update_notification_preferences is not implemented yet"))
+        Err(Status::unimplemented(
+            "update_notification_preferences is not implemented yet",
+        ))
     }
 
     /// Register push token
@@ -501,7 +541,10 @@ impl NotificationService for NotificationServiceImpl {
         let user_id = Uuid::parse_str(&req.user_id)
             .map_err(|e| Status::invalid_argument(format!("Invalid user_id: {}", e)))?;
 
-        info!("RegisterPushToken: user_id={}, platform={}", user_id, req.platform);
+        info!(
+            "RegisterPushToken: user_id={}, platform={}",
+            user_id, req.platform
+        );
 
         let token_type = match req.platform.to_lowercase().as_str() {
             "ios" => "APNs",
@@ -532,8 +575,10 @@ impl NotificationService for NotificationServiceImpl {
             })?;
 
         let id: Uuid = row.try_get("id").unwrap_or_default();
-        let created_at: chrono::DateTime<Utc> = row.try_get("created_at").unwrap_or_else(|_| Utc::now());
-        let last_used_at: Option<chrono::DateTime<Utc>> = row.try_get("last_used_at").ok().flatten();
+        let created_at: chrono::DateTime<Utc> =
+            row.try_get("created_at").unwrap_or_else(|_| Utc::now());
+        let last_used_at: Option<chrono::DateTime<Utc>> =
+            row.try_get("last_used_at").ok().flatten();
 
         Ok(Response::new(RegisterPushTokenResponse {
             push_token: Some(PushToken {
@@ -574,9 +619,7 @@ impl NotificationService for NotificationServiceImpl {
                 Status::internal(format!("Database error: {}", e))
             })?;
 
-        Ok(Response::new(UnregisterPushTokenResponse {
-            success: true,
-        }))
+        Ok(Response::new(UnregisterPushTokenResponse { success: true }))
     }
 
     /// Get unread count
@@ -608,7 +651,9 @@ impl NotificationService for NotificationServiceImpl {
         _request: Request<BatchCreateNotificationsRequest>,
     ) -> Result<Response<BatchCreateNotificationsResponse>, Status> {
         // TODO: Implement batch create
-        Err(Status::unimplemented("batch_create_notifications is not implemented yet"))
+        Err(Status::unimplemented(
+            "batch_create_notifications is not implemented yet",
+        ))
     }
 
     /// Get notification statistics
@@ -624,12 +669,12 @@ impl NotificationService for NotificationServiceImpl {
         debug!("GetNotificationStats: user_id={}", user_id);
 
         let total_count: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM notifications WHERE user_id = $1 AND is_deleted = FALSE"
+            "SELECT COUNT(*) FROM notifications WHERE user_id = $1 AND is_deleted = FALSE",
         )
-            .bind(&user_id)
-            .fetch_one(&self.db)
-            .await
-            .unwrap_or(0);
+        .bind(&user_id)
+        .fetch_one(&self.db)
+        .await
+        .unwrap_or(0);
 
         let unread_count: i64 = sqlx::query_scalar(
             "SELECT COUNT(*) FROM notifications WHERE user_id = $1 AND is_deleted = FALSE AND is_read = FALSE"

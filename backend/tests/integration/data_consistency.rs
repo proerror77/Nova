@@ -13,7 +13,7 @@ mod fixtures;
 #[path = "../common/mod.rs"]
 mod common;
 
-use fixtures::{test_env::TestEnvironment, assertions::*};
+use fixtures::{assertions::*, test_env::TestEnvironment};
 use std::time::Duration;
 use uuid::Uuid;
 
@@ -38,7 +38,7 @@ async fn test_no_orphan_events() {
 
     sqlx::query(
         "INSERT INTO messages (id, sender_id, content, created_at)
-         VALUES ($1, $2, $3, NOW())"
+         VALUES ($1, $2, $3, NOW())",
     )
     .bind(message_id)
     .bind(user_id)
@@ -49,7 +49,7 @@ async fn test_no_orphan_events() {
 
     sqlx::query(
         "INSERT INTO outbox_events (id, aggregate_id, event_type, payload, status, created_at)
-         VALUES ($1, $2, $3, $4, $5, NOW())"
+         VALUES ($1, $2, $3, $4, $5, NOW())",
     )
     .bind(Uuid::new_v4())
     .bind(message_id)
@@ -76,7 +76,7 @@ async fn test_no_orphan_events() {
         "SELECT COUNT(*) FROM outbox_events oe
          WHERE NOT EXISTS (
              SELECT 1 FROM messages m WHERE m.id = oe.aggregate_id
-         )"
+         )",
     )
     .fetch_one(&*db)
     .await
@@ -103,7 +103,7 @@ async fn test_idempotent_event_consumption() {
     // Step 1: 创建事件
     sqlx::query(
         "INSERT INTO outbox_events (id, aggregate_id, event_type, payload, status, created_at)
-         VALUES ($1, $2, $3, $4, $5, NOW())"
+         VALUES ($1, $2, $3, $4, $5, NOW())",
     )
     .bind(event_id)
     .bind(aggregate_id)
@@ -118,7 +118,7 @@ async fn test_idempotent_event_consumption() {
     sqlx::query(
         "INSERT INTO event_consumption_log (event_id, consumer_group, consumed_at, result)
          VALUES ($1, $2, NOW(), $3)
-         ON CONFLICT (event_id, consumer_group) DO NOTHING"
+         ON CONFLICT (event_id, consumer_group) DO NOTHING",
     )
     .bind(event_id)
     .bind(consumer_group)
@@ -131,7 +131,7 @@ async fn test_idempotent_event_consumption() {
     let result = sqlx::query(
         "INSERT INTO event_consumption_log (event_id, consumer_group, consumed_at, result)
          VALUES ($1, $2, NOW(), $3)
-         ON CONFLICT (event_id, consumer_group) DO NOTHING"
+         ON CONFLICT (event_id, consumer_group) DO NOTHING",
     )
     .bind(event_id)
     .bind(consumer_group)
@@ -143,7 +143,7 @@ async fn test_idempotent_event_consumption() {
     // Step 4: 验证只有一条消费记录
     let consumption_count: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM event_consumption_log
-         WHERE event_id = $1 AND consumer_group = $2"
+         WHERE event_id = $1 AND consumer_group = $2",
     )
     .bind(event_id)
     .bind(consumer_group)
@@ -201,7 +201,7 @@ async fn test_event_ordering_per_aggregate() {
     let events: Vec<(i64, chrono::DateTime<chrono::Utc>)> = sqlx::query_as(
         "SELECT sequence_number, created_at FROM outbox_events
          WHERE aggregate_id = $1
-         ORDER BY created_at"
+         ORDER BY created_at",
     )
     .bind(aggregate_id)
     .fetch_all(&*db)
@@ -259,7 +259,7 @@ async fn test_eventual_consistency() {
                     "UPDATE outbox_events
                      SET status = 'published', published_at = NOW()
                      WHERE aggregate_id = $1 AND status = 'pending'
-                     LIMIT 1"
+                     LIMIT 1",
                 )
                 .bind(aggregate_id)
                 .execute(&*db)
@@ -279,7 +279,7 @@ async fn test_eventual_consistency() {
             async move {
                 let published_count: i64 = sqlx::query_scalar(
                     "SELECT COUNT(*) FROM outbox_events
-                     WHERE aggregate_id = $1 AND status = 'published'"
+                     WHERE aggregate_id = $1 AND status = 'published'",
                 )
                 .bind(aggregate_id)
                 .fetch_one(&*db)
@@ -302,7 +302,7 @@ async fn test_eventual_consistency() {
     // Step 4: 验证最终状态
     let final_published_count: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM outbox_events
-         WHERE aggregate_id = $1 AND status = 'published'"
+         WHERE aggregate_id = $1 AND status = 'published'",
     )
     .bind(aggregate_id)
     .fetch_one(&*db)
@@ -335,7 +335,7 @@ async fn test_cross_table_transaction_consistency() {
 
     sqlx::query(
         "INSERT INTO posts (id, user_id, caption, status, created_at)
-         VALUES ($1, $2, $3, $4, NOW())"
+         VALUES ($1, $2, $3, $4, NOW())",
     )
     .bind(post_id)
     .bind(user_id)
@@ -347,7 +347,7 @@ async fn test_cross_table_transaction_consistency() {
 
     sqlx::query(
         "INSERT INTO post_features (post_id, embedding, engagement_score, created_at)
-         VALUES ($1, $2, $3, NOW())"
+         VALUES ($1, $2, $3, NOW())",
     )
     .bind(post_id)
     .bind(vec![0.1f32; 128])
@@ -358,7 +358,7 @@ async fn test_cross_table_transaction_consistency() {
 
     sqlx::query(
         "INSERT INTO outbox_events (id, aggregate_id, event_type, payload, status, created_at)
-         VALUES ($1, $2, $3, $4, $5, NOW())"
+         VALUES ($1, $2, $3, $4, $5, NOW())",
     )
     .bind(Uuid::new_v4())
     .bind(post_id)
@@ -390,7 +390,7 @@ async fn test_cross_table_transaction_consistency() {
 
     sqlx::query(
         "INSERT INTO posts (id, user_id, caption, status, created_at)
-         VALUES ($1, $2, $3, $4, NOW())"
+         VALUES ($1, $2, $3, $4, NOW())",
     )
     .bind(failed_post_id)
     .bind(user_id)
@@ -456,13 +456,12 @@ async fn test_concurrent_write_isolation() {
     }
 
     // Step 3: 验证所有事件都写入成功
-    let event_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM outbox_events WHERE aggregate_id = $1"
-    )
-    .bind(aggregate_id)
-    .fetch_one(&*db)
-    .await
-    .expect("查询事件数量失败");
+    let event_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM outbox_events WHERE aggregate_id = $1")
+            .bind(aggregate_id)
+            .fetch_one(&*db)
+            .await
+            .expect("查询事件数量失败");
 
     assert_eq!(event_count, concurrent_count, "并发写入丢失数据");
 

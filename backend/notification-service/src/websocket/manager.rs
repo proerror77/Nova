@@ -7,7 +7,6 @@
 /// - Heartbeat (ping/pong) mechanism
 /// - Graceful disconnection handling
 /// - Multiple concurrent connections per user
-
 use super::WebSocketMessage;
 use crate::error::Result;
 use std::collections::HashMap;
@@ -170,12 +169,7 @@ impl ConnectionManager {
     /// * `user_id` - The recipient user
     /// * `code` - The error code
     /// * `message` - The error message
-    pub async fn send_error(
-        &self,
-        user_id: Uuid,
-        code: String,
-        message: String,
-    ) -> Result<()> {
+    pub async fn send_error(&self, user_id: Uuid, code: String, message: String) -> Result<()> {
         let error_msg = WebSocketMessage::error(code, message);
         self.send_notification(user_id, error_msg).await
     }
@@ -417,7 +411,11 @@ mod tests {
 
         manager.subscribe(user_id, tx).await.unwrap();
         manager
-            .send_error(user_id, "INVALID_USER".to_string(), "User not found".to_string())
+            .send_error(
+                user_id,
+                "INVALID_USER".to_string(),
+                "User not found".to_string(),
+            )
             .await
             .unwrap();
 
@@ -454,7 +452,10 @@ mod tests {
 
         let received = rx.recv().await;
         assert!(received.is_some());
-        assert!(matches!(received.unwrap(), WebSocketMessage::Connected { .. }));
+        assert!(matches!(
+            received.unwrap(),
+            WebSocketMessage::Connected { .. }
+        ));
     }
 
     #[tokio::test]

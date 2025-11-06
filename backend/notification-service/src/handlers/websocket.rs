@@ -2,14 +2,13 @@
 ///
 /// Implements WebSocket endpoints for connection status and broadcasting.
 /// Real-time WebSocket connections are handled via /ws/{user_id}
-
 use actix_web::{web, HttpResponse, Result as ActixResult};
 use serde_json::json;
 use std::sync::Arc;
 use uuid::Uuid;
 
-use crate::ConnectionManager;
 use crate::websocket::WebSocketMessage;
+use crate::ConnectionManager;
 
 /// WebSocket message size limit (256 KB)
 #[allow(dead_code)]
@@ -44,24 +43,20 @@ pub async fn broadcast_message(
     let notification = WebSocketMessage::notification(
         Uuid::new_v4(),
         Uuid::nil(), // Broadcast to all
-        body
-            .get("notification_type")
+        body.get("notification_type")
             .and_then(|v| v.as_str())
             .unwrap_or("broadcast")
             .to_string(),
-        body
-            .get("title")
+        body.get("title")
             .and_then(|v| v.as_str())
             .unwrap_or("Broadcast")
             .to_string(),
-        body
-            .get("body")
+        body.get("body")
             .and_then(|v| v.as_str())
             .unwrap_or("")
             .to_string(),
         None,
-        body
-            .get("priority")
+        body.get("priority")
             .and_then(|v| v.as_str())
             .unwrap_or("normal")
             .to_string(),
@@ -112,24 +107,22 @@ pub async fn send_user_notification(
     let notification = WebSocketMessage::notification(
         Uuid::new_v4(),
         recipient_id,
-        body
-            .get("notification_type")
+        body.get("notification_type")
             .and_then(|v| v.as_str())
             .unwrap_or("notification")
             .to_string(),
-        body
-            .get("title")
+        body.get("title")
             .and_then(|v| v.as_str())
             .unwrap_or("Notification")
             .to_string(),
-        body
-            .get("body")
+        body.get("body")
             .and_then(|v| v.as_str())
             .unwrap_or("")
             .to_string(),
-        body.get("image_url").and_then(|v| v.as_str()).map(String::from),
-        body
-            .get("priority")
+        body.get("image_url")
+            .and_then(|v| v.as_str())
+            .map(String::from),
+        body.get("priority")
             .and_then(|v| v.as_str())
             .unwrap_or("normal")
             .to_string(),

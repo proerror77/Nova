@@ -8,7 +8,10 @@ fn main() {
         .build_server(true)
         .build_client(false)
         .compile(
-            &["../proto/services/auth_service.proto", "../proto/services/common.proto"],
+            &[
+                "../proto/services/auth_service.proto",
+                "../proto/services/common.proto",
+            ],
             &["../proto/services/"],
         )
         .expect("Failed to compile auth_service.proto");

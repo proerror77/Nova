@@ -1,10 +1,10 @@
 // gRPC server implementation for EventsService
-use tonic::{Request, Response, Status};
+use chrono::Utc;
 use sqlx::{PgPool, Row};
 use std::sync::Arc;
-use uuid::Uuid;
-use chrono::Utc;
+use tonic::{Request, Response, Status};
 use tracing::{error, info, warn};
+use uuid::Uuid;
 
 pub mod nova {
     pub mod common {
@@ -26,10 +26,8 @@ use nova::events_service::v1::*;
 
 // Import proto-generated types with full qualification to avoid conflicts
 use nova::events_service::v1::{
-    DomainEvent as ProtoDomainEvent,
-    EventSchema as ProtoEventSchema,
-    EventSubscription as ProtoEventSubscription,
-    OutboxEvent as ProtoOutboxEvent,
+    DomainEvent as ProtoDomainEvent, EventSchema as ProtoEventSchema,
+    EventSubscription as ProtoEventSubscription, OutboxEvent as ProtoOutboxEvent,
 };
 
 /// AppState for gRPC service
@@ -76,9 +74,10 @@ impl EventsServiceImpl {
 
         let parts: Vec<&str> = event_type.split('.').collect();
         if parts.len() < 2 {
-            return Err(Status::invalid_argument(
-                format!("event_type must follow 'domain.action' pattern, got: {}", event_type)
-            ));
+            return Err(Status::invalid_argument(format!(
+                "event_type must follow 'domain.action' pattern, got: {}",
+                event_type
+            )));
         }
 
         Ok(())
@@ -344,7 +343,8 @@ impl EventsService for EventsServiceImpl {
             aggregate_id: row.get("aggregate_id"),
             aggregate_type: row.get("aggregate_type"),
             version: row.get("event_version"),
-            data: serde_json::to_string(&row.get::<serde_json::Value, _>("data")).unwrap_or_default(),
+            data: serde_json::to_string(&row.get::<serde_json::Value, _>("data"))
+                .unwrap_or_default(),
             metadata: row
                 .get::<Option<serde_json::Value>, _>("metadata")
                 .map(|m| serde_json::to_string(&m).unwrap_or_default())
@@ -357,8 +357,12 @@ impl EventsService for EventsServiceImpl {
                 .get::<Option<Uuid>, _>("causation_id")
                 .map(|id| id.to_string())
                 .unwrap_or_default(),
-            created_at: row.get::<chrono::DateTime<Utc>, _>("created_at").timestamp(),
-            created_by: row.get::<Option<String>, _>("created_by").unwrap_or_default(),
+            created_at: row
+                .get::<chrono::DateTime<Utc>, _>("created_at")
+                .timestamp(),
+            created_by: row
+                .get::<Option<String>, _>("created_by")
+                .unwrap_or_default(),
         };
 
         Ok(Response::new(GetEventResponse {
@@ -407,7 +411,8 @@ impl EventsService for EventsServiceImpl {
                 aggregate_id: row.get("aggregate_id"),
                 aggregate_type: row.get("aggregate_type"),
                 version: row.get("event_version"),
-                data: serde_json::to_string(&row.get::<serde_json::Value, _>("data")).unwrap_or_default(),
+                data: serde_json::to_string(&row.get::<serde_json::Value, _>("data"))
+                    .unwrap_or_default(),
                 metadata: row
                     .get::<Option<serde_json::Value>, _>("metadata")
                     .map(|m| serde_json::to_string(&m).unwrap_or_default())
@@ -420,8 +425,12 @@ impl EventsService for EventsServiceImpl {
                     .get::<Option<Uuid>, _>("causation_id")
                     .map(|id| id.to_string())
                     .unwrap_or_default(),
-                created_at: row.get::<chrono::DateTime<Utc>, _>("created_at").timestamp(),
-                created_by: row.get::<Option<String>, _>("created_by").unwrap_or_default(),
+                created_at: row
+                    .get::<chrono::DateTime<Utc>, _>("created_at")
+                    .timestamp(),
+                created_by: row
+                    .get::<Option<String>, _>("created_by")
+                    .unwrap_or_default(),
             })
             .collect();
 
@@ -480,7 +489,8 @@ impl EventsService for EventsServiceImpl {
                 aggregate_id: row.get("aggregate_id"),
                 aggregate_type: row.get("aggregate_type"),
                 version: row.get("event_version"),
-                data: serde_json::to_string(&row.get::<serde_json::Value, _>("data")).unwrap_or_default(),
+                data: serde_json::to_string(&row.get::<serde_json::Value, _>("data"))
+                    .unwrap_or_default(),
                 metadata: row
                     .get::<Option<serde_json::Value>, _>("metadata")
                     .map(|m| serde_json::to_string(&m).unwrap_or_default())
@@ -493,18 +503,21 @@ impl EventsService for EventsServiceImpl {
                     .get::<Option<Uuid>, _>("causation_id")
                     .map(|id| id.to_string())
                     .unwrap_or_default(),
-                created_at: row.get::<chrono::DateTime<Utc>, _>("created_at").timestamp(),
-                created_by: row.get::<Option<String>, _>("created_by").unwrap_or_default(),
+                created_at: row
+                    .get::<chrono::DateTime<Utc>, _>("created_at")
+                    .timestamp(),
+                created_by: row
+                    .get::<Option<String>, _>("created_by")
+                    .unwrap_or_default(),
             })
             .collect();
 
-        let total_count: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM domain_events WHERE event_type = $1",
-        )
-        .bind(&req.event_type)
-        .fetch_one(&self.state.db)
-        .await
-        .map_err(Self::db_error_to_status)?;
+        let total_count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM domain_events WHERE event_type = $1")
+                .bind(&req.event_type)
+                .fetch_one(&self.state.db)
+                .await
+                .map_err(Self::db_error_to_status)?;
 
         Ok(Response::new(GetEventsByTypeResponse {
             events,
@@ -575,13 +588,11 @@ impl EventsService for EventsServiceImpl {
 
         let subscription_id = Self::parse_uuid(&req.subscription_id, "subscription_id")?;
 
-        let result = sqlx::query(
-            "UPDATE event_subscriptions SET is_active = false WHERE id = $1",
-        )
-        .bind(&subscription_id)
-        .execute(&self.state.db)
-        .await
-        .map_err(Self::db_error_to_status)?;
+        let result = sqlx::query("UPDATE event_subscriptions SET is_active = false WHERE id = $1")
+            .bind(&subscription_id)
+            .execute(&self.state.db)
+            .await
+            .map_err(Self::db_error_to_status)?;
 
         Ok(Response::new(UnsubscribeFromEventsResponse {
             success: result.rows_affected() > 0,
@@ -627,7 +638,9 @@ impl EventsService for EventsServiceImpl {
                 event_types: row.get("event_types"),
                 endpoint: row.get("endpoint"),
                 is_active: row.get("is_active"),
-                created_at: row.get::<chrono::DateTime<Utc>, _>("created_at").timestamp(),
+                created_at: row
+                    .get::<chrono::DateTime<Utc>, _>("created_at")
+                    .timestamp(),
             })
             .collect();
 
@@ -728,7 +741,10 @@ impl EventsService for EventsServiceImpl {
         .map_err(Self::db_error_to_status)?;
 
         let row = row.ok_or_else(|| {
-            Status::not_found(format!("No active schema found for event type: {}", req.event_type))
+            Status::not_found(format!(
+                "No active schema found for event type: {}",
+                req.event_type
+            ))
         })?;
 
         let schema = ProtoEventSchema {
@@ -738,7 +754,9 @@ impl EventsService for EventsServiceImpl {
             schema_json: serde_json::to_string(&row.get::<serde_json::Value, _>("schema_json"))
                 .unwrap_or_default(),
             is_active: row.get("is_active"),
-            created_at: row.get::<chrono::DateTime<Utc>, _>("created_at").timestamp(),
+            created_at: row
+                .get::<chrono::DateTime<Utc>, _>("created_at")
+                .timestamp(),
         };
 
         Ok(Response::new(GetEventSchemaResponse {
@@ -783,17 +801,20 @@ impl EventsService for EventsServiceImpl {
                 event_type: row.get("event_type"),
                 aggregate_id: row.get("aggregate_id"),
                 aggregate_type: row.get("aggregate_type"),
-                data: serde_json::to_string(&row.get::<serde_json::Value, _>("data")).unwrap_or_default(),
+                data: serde_json::to_string(&row.get::<serde_json::Value, _>("data"))
+                    .unwrap_or_default(),
                 status: row.get("status"),
                 retry_count: row.get("retry_count"),
-                error: row
-                    .get::<Option<String>, _>("last_error")
-                    .map(|e| nova::common::v1::ErrorStatus {
+                error: row.get::<Option<String>, _>("last_error").map(|e| {
+                    nova::common::v1::ErrorStatus {
                         code: "500".to_string(),
                         message: e,
                         metadata: std::collections::HashMap::new(),
-                    }),
-                created_at: row.get::<chrono::DateTime<Utc>, _>("created_at").timestamp(),
+                    }
+                }),
+                created_at: row
+                    .get::<chrono::DateTime<Utc>, _>("created_at")
+                    .timestamp(),
                 published_at: row
                     .get::<Option<chrono::DateTime<Utc>>, _>("published_at")
                     .map(|dt| dt.timestamp())
@@ -843,17 +864,20 @@ impl EventsService for EventsServiceImpl {
             event_type: row.get("event_type"),
             aggregate_id: row.get("aggregate_id"),
             aggregate_type: row.get("aggregate_type"),
-            data: serde_json::to_string(&row.get::<serde_json::Value, _>("data")).unwrap_or_default(),
+            data: serde_json::to_string(&row.get::<serde_json::Value, _>("data"))
+                .unwrap_or_default(),
             status: row.get("status"),
             retry_count: row.get("retry_count"),
-            error: row
-                .get::<Option<String>, _>("last_error")
-                .map(|e| nova::common::v1::ErrorStatus {
+            error: row.get::<Option<String>, _>("last_error").map(|e| {
+                nova::common::v1::ErrorStatus {
                     code: "500".to_string(),
                     message: e,
                     metadata: std::collections::HashMap::new(),
-                }),
-            created_at: row.get::<chrono::DateTime<Utc>, _>("created_at").timestamp(),
+                }
+            }),
+            created_at: row
+                .get::<chrono::DateTime<Utc>, _>("created_at")
+                .timestamp(),
             published_at: row
                 .get::<Option<chrono::DateTime<Utc>>, _>("published_at")
                 .map(|dt| dt.timestamp())
@@ -908,17 +932,20 @@ impl EventsService for EventsServiceImpl {
             event_type: row.get("event_type"),
             aggregate_id: row.get("aggregate_id"),
             aggregate_type: row.get("aggregate_type"),
-            data: serde_json::to_string(&row.get::<serde_json::Value, _>("data")).unwrap_or_default(),
+            data: serde_json::to_string(&row.get::<serde_json::Value, _>("data"))
+                .unwrap_or_default(),
             status: row.get("status"),
             retry_count: row.get("retry_count"),
-            error: row
-                .get::<Option<String>, _>("last_error")
-                .map(|e| nova::common::v1::ErrorStatus {
+            error: row.get::<Option<String>, _>("last_error").map(|e| {
+                nova::common::v1::ErrorStatus {
                     code: "500".to_string(),
                     message: e,
                     metadata: std::collections::HashMap::new(),
-                }),
-            created_at: row.get::<chrono::DateTime<Utc>, _>("created_at").timestamp(),
+                }
+            }),
+            created_at: row
+                .get::<chrono::DateTime<Utc>, _>("created_at")
+                .timestamp(),
             published_at: row
                 .get::<Option<chrono::DateTime<Utc>>, _>("published_at")
                 .map(|dt| dt.timestamp())
@@ -935,19 +962,17 @@ impl EventsService for EventsServiceImpl {
         _request: Request<GetEventStatsRequest>,
     ) -> Result<Response<GetEventStatsResponse>, Status> {
         // Get stats from outbox_events
-        let total_published: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM outbox_events WHERE status = 'published'",
-        )
-        .fetch_one(&self.state.db)
-        .await
-        .map_err(Self::db_error_to_status)?;
+        let total_published: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM outbox_events WHERE status = 'published'")
+                .fetch_one(&self.state.db)
+                .await
+                .map_err(Self::db_error_to_status)?;
 
-        let total_failed: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM outbox_events WHERE status = 'failed'",
-        )
-        .fetch_one(&self.state.db)
-        .await
-        .map_err(Self::db_error_to_status)?;
+        let total_failed: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM outbox_events WHERE status = 'failed'")
+                .fetch_one(&self.state.db)
+                .await
+                .map_err(Self::db_error_to_status)?;
 
         // Get events by type
         let rows = sqlx::query(

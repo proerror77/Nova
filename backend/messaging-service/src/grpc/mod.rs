@@ -8,13 +8,12 @@
 /// - Encryption & key exchange: StoreDevicePublicKey, GetPeerPublicKey, CompleteKeyExchange, GetConversationEncryption
 /// - Push notifications: RegisterDeviceToken, SendPushNotification
 /// - Offline queue: GetOfflineEvents, AckOfflineEvent
-
 use crate::nova::messaging_service::*;
 use crate::state::AppState;
+use grpc_metrics::layer::RequestGuard;
+use std::str::FromStr;
 use tonic::{Request, Response, Status};
 use uuid::Uuid;
-use std::str::FromStr;
-use grpc_metrics::layer::RequestGuard;
 
 // ========== UUID Validation Macro ==========
 
@@ -50,9 +49,8 @@ impl MessagingServiceImpl {
 
     /// Helper: Parse UUID from string with error handling
     fn parse_uuid(uuid_str: &str, field_name: &str) -> Result<Uuid, Status> {
-        Uuid::from_str(uuid_str).map_err(|_| {
-            Status::invalid_argument(format!("Invalid {}: {}", field_name, uuid_str))
-        })
+        Uuid::from_str(uuid_str)
+            .map_err(|_| Status::invalid_argument(format!("Invalid {}: {}", field_name, uuid_str)))
     }
 
     /// Helper: Extract user_id from gRPC metadata (x-user-id header)
@@ -81,29 +79,25 @@ impl MessagingServiceImpl {
     fn app_error_to_status(err: crate::error::AppError) -> Status {
         match err {
             // Client errors (4xx equivalent)
-            crate::error::AppError::BadRequest(msg) => {
-                Status::invalid_argument(msg)
-            }
+            crate::error::AppError::BadRequest(msg) => Status::invalid_argument(msg),
             crate::error::AppError::Unauthorized => {
                 Status::unauthenticated("Unauthorized: authentication required")
             }
             crate::error::AppError::Forbidden => {
                 Status::permission_denied("Forbidden: access denied")
             }
-            crate::error::AppError::NotFound => {
-                Status::not_found("Resource not found")
-            }
+            crate::error::AppError::NotFound => Status::not_found("Resource not found"),
 
             // Validation/business logic errors
             crate::error::AppError::AlreadyRecalled => {
                 Status::failed_precondition("Message already recalled")
             }
-            crate::error::AppError::RecallWindowExpired { max_recall_minutes, .. } => {
-                Status::failed_precondition(format!(
-                    "Recall window expired (max {} minutes)",
-                    max_recall_minutes
-                ))
-            }
+            crate::error::AppError::RecallWindowExpired {
+                max_recall_minutes, ..
+            } => Status::failed_precondition(format!(
+                "Recall window expired (max {} minutes)",
+                max_recall_minutes
+            )),
             crate::error::AppError::EditWindowExpired { max_edit_minutes } => {
                 Status::failed_precondition(format!(
                     "Edit window expired (max {} minutes)",
@@ -114,12 +108,10 @@ impl MessagingServiceImpl {
                 current_version,
                 client_version,
                 server_content,
-            } => {
-                Status::aborted(format!(
-                    "Version conflict: client v{} != server v{}, server content: {}",
-                    client_version, current_version, server_content
-                ))
-            }
+            } => Status::aborted(format!(
+                "Version conflict: client v{} != server v{}, server content: {}",
+                client_version, current_version, server_content
+            )),
 
             // Configuration and setup errors (5xx equivalent)
             crate::error::AppError::Config(msg) => {
@@ -140,9 +132,7 @@ impl MessagingServiceImpl {
             }
 
             // Generic internal error (catch-all, should rarely occur)
-            crate::error::AppError::Internal => {
-                Status::internal("Internal server error")
-            }
+            crate::error::AppError::Internal => Status::internal("Internal server error"),
         }
     }
 
@@ -182,7 +172,7 @@ impl MessagingServiceImpl {
             kind: kind.to_string(),
             name: name.unwrap_or_default(),
             description: String::new(), // Not fetched from basic conversation data
-            avatar_url: String::new(), // Not fetched from basic conversation data
+            avatar_url: String::new(),  // Not fetched from basic conversation data
             member_count,
             privacy_mode,
             last_message_id: last_message_id.unwrap_or_default(),
@@ -206,7 +196,11 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
         let sender_id = match Self::extract_user_id(request.metadata()) {
             Ok(id) => id,
             Err(e) => {
-                guard.complete(if e.code() == tonic::Code::Unauthenticated { "16" } else { "3" });
+                guard.complete(if e.code() == tonic::Code::Unauthenticated {
+                    "16"
+                } else {
+                    "3"
+                });
                 return Err(e);
             }
         };
@@ -282,7 +276,11 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
         let _user_id = match Self::extract_user_id(request.metadata()) {
             Ok(id) => id,
             Err(e) => {
-                guard.complete(if e.code() == tonic::Code::Unauthenticated { "16" } else { "3" });
+                guard.complete(if e.code() == tonic::Code::Unauthenticated {
+                    "16"
+                } else {
+                    "3"
+                });
                 return Err(e);
             }
         };
@@ -299,16 +297,28 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
         };
 
         // Query message from DB
-        let message_row = match sqlx::query_as::<_, (
-            uuid::Uuid, uuid::Uuid, uuid::Uuid, String, Option<Vec<u8>>, Option<Vec<u8>>,
-            i32, i64, Option<String>, chrono::DateTime<chrono::Utc>,
-            Option<chrono::DateTime<chrono::Utc>>, Option<chrono::DateTime<chrono::Utc>>,
-            i32
-        )>(
+        let message_row = match sqlx::query_as::<
+            _,
+            (
+                uuid::Uuid,
+                uuid::Uuid,
+                uuid::Uuid,
+                String,
+                Option<Vec<u8>>,
+                Option<Vec<u8>>,
+                i32,
+                i64,
+                Option<String>,
+                chrono::DateTime<chrono::Utc>,
+                Option<chrono::DateTime<chrono::Utc>>,
+                Option<chrono::DateTime<chrono::Utc>>,
+                i32,
+            ),
+        >(
             "SELECT id, conversation_id, sender_id, content, content_encrypted, content_nonce,
                     encryption_version, sequence_number, idempotency_key, created_at,
                     updated_at, deleted_at, 0 as reaction_count
-             FROM messages WHERE id = $1"
+             FROM messages WHERE id = $1",
         )
         .bind(message_id)
         .fetch_optional(&self.state.db)
@@ -322,7 +332,21 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
         };
 
         match message_row {
-            Some((id, conv_id, sender_id, content, content_enc, nonce, enc_ver, seq, idempotency_key, created_at, updated_at, deleted_at, reaction_count)) => {
+            Some((
+                id,
+                conv_id,
+                sender_id,
+                content,
+                content_enc,
+                nonce,
+                enc_ver,
+                seq,
+                idempotency_key,
+                created_at,
+                updated_at,
+                deleted_at,
+                reaction_count,
+            )) => {
                 let message = Message {
                     id: id.to_string(),
                     conversation_id: conv_id.to_string(),
@@ -379,12 +403,13 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
         };
 
         // Fetch message history from service
-        let message_dtos = crate::services::message_service::MessageService::get_message_history_db(
-            &self.state.db,
-            conversation_id,
-        )
-        .await
-        .map_err(|e| Self::app_error_to_status(e))?;
+        let message_dtos =
+            crate::services::message_service::MessageService::get_message_history_db(
+                &self.state.db,
+                conversation_id,
+            )
+            .await
+            .map_err(|e| Self::app_error_to_status(e))?;
 
         // Convert MessageDto to proto Message, applying limit and cursor
         let mut proto_messages = Vec::new();
@@ -425,7 +450,9 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
                 created_at: chrono::DateTime::parse_from_rfc3339(&dto.created_at)
                     .map(|dt| dt.timestamp())
                     .unwrap_or(0),
-                updated_at: dto.updated_at.as_ref()
+                updated_at: dto
+                    .updated_at
+                    .as_ref()
                     .and_then(|ts| chrono::DateTime::parse_from_rfc3339(ts).ok())
                     .map(|dt| dt.timestamp())
                     .unwrap_or(0),
@@ -438,9 +465,7 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
         // Determine if there are more messages and compute next cursor
         let has_more = total_dtos > (limit as usize);
         let next_cursor = if has_more && !proto_messages.is_empty() {
-            proto_messages.last()
-                .map(|m| m.created_at)
-                .unwrap_or(0)
+            proto_messages.last().map(|m| m.created_at).unwrap_or(0)
         } else {
             0
         };
@@ -498,7 +523,11 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
         let creator_id = match Self::extract_user_id(request.metadata()) {
             Ok(id) => id,
             Err(e) => {
-                guard.complete(if e.code() == tonic::Code::Unauthenticated { "16" } else { "3" });
+                guard.complete(if e.code() == tonic::Code::Unauthenticated {
+                    "16"
+                } else {
+                    "3"
+                });
                 return Err(e);
             }
         };
@@ -578,9 +607,21 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
                 }
             }
         } else {
-            let group_name = if req.name.is_empty() { "Group".to_string() } else { req.name.clone() };
-            let description = if req.description.is_empty() { None } else { Some(req.description.clone()) };
-            let avatar_url = if req.avatar_url.is_empty() { None } else { Some(req.avatar_url.clone()) };
+            let group_name = if req.name.is_empty() {
+                "Group".to_string()
+            } else {
+                req.name.clone()
+            };
+            let description = if req.description.is_empty() {
+                None
+            } else {
+                Some(req.description.clone())
+            };
+            let avatar_url = if req.avatar_url.is_empty() {
+                None
+            } else {
+                Some(req.avatar_url.clone())
+            };
 
             match crate::services::conversation_service::ConversationService::create_group_conversation(
                 &self.state.db,
@@ -603,7 +644,7 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
 
         // Fetch conversation details to return in response
         let conv_row = match sqlx::query_as::<_, (uuid::Uuid, i32, Option<uuid::Uuid>)>(
-            "SELECT id, member_count, last_message_id FROM conversations WHERE id = $1"
+            "SELECT id, member_count, last_message_id FROM conversations WHERE id = $1",
         )
         .bind(conversation_id)
         .fetch_one(&self.state.db)
@@ -618,8 +659,16 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
 
         let conversation = Self::conversation_row_to_proto(
             conv_row.0,
-            if req.kind == "direct" { "direct" } else { "group" },
-            if req.kind == "group" && !req.name.is_empty() { Some(req.name.clone()) } else { None },
+            if req.kind == "direct" {
+                "direct"
+            } else {
+                "group"
+            },
+            if req.kind == "group" && !req.name.is_empty() {
+                Some(req.name.clone())
+            } else {
+                None
+            },
             conv_row.1,
             chrono::Utc::now(),
             chrono::Utc::now(),
@@ -648,7 +697,7 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
 
         // Fetch conversation details
         let conv_row = sqlx::query_as::<_, (uuid::Uuid, i32, Option<uuid::Uuid>)>(
-            "SELECT id, member_count, last_message_id FROM conversations WHERE id = $1"
+            "SELECT id, member_count, last_message_id FROM conversations WHERE id = $1",
         )
         .bind(conversation_id)
         .fetch_optional(&self.state.db)
@@ -674,13 +723,11 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
                     error: None,
                 }))
             }
-            None => {
-                Ok(Response::new(GetConversationResponse {
-                    conversation: None,
-                    found: false,
-                    error: None,
-                }))
-            }
+            None => Ok(Response::new(GetConversationResponse {
+                conversation: None,
+                found: false,
+                error: None,
+            })),
         }
     }
 
@@ -709,7 +756,7 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
              INNER JOIN conversation_members cm ON c.id = cm.conversation_id
              WHERE cm.user_id = $1
              ORDER BY c.updated_at DESC
-             LIMIT $2"
+             LIMIT $2",
         )
         .bind(user_id)
         .bind(limit + 1) // Fetch one extra to determine has_more
@@ -744,7 +791,8 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
         let next_cursor = if has_more && !conversations.is_empty() {
             // Use the last conversation's updated_at as cursor
             // Since we don't have updated_at from query, use ID as simple cursor
-            conversations.last()
+            conversations
+                .last()
                 .map(|c| c.id.clone())
                 .unwrap_or_default()
         } else {
@@ -767,7 +815,9 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
         let _user_id = Self::extract_user_id(request.metadata())?;
 
         let _req = request.into_inner();
-        Err(Status::unimplemented("delete_conversation not yet implemented"))
+        Err(Status::unimplemented(
+            "delete_conversation not yet implemented",
+        ))
     }
 
     async fn mark_as_read(
@@ -789,7 +839,9 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
         let _user_id = Self::extract_user_id(request.metadata())?;
 
         let _req = request.into_inner();
-        Err(Status::unimplemented("get_unread_count not yet implemented"))
+        Err(Status::unimplemented(
+            "get_unread_count not yet implemented",
+        ))
     }
 
     // ========== Group Management ==========
@@ -835,7 +887,9 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
         let _user_id = Self::extract_user_id(request.metadata())?;
 
         let _req = request.into_inner();
-        Err(Status::unimplemented("update_member_role not yet implemented"))
+        Err(Status::unimplemented(
+            "update_member_role not yet implemented",
+        ))
     }
 
     async fn leave_group(
@@ -894,7 +948,9 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
         let _user_id = Self::extract_user_id(request.metadata())?;
 
         let _req = request.into_inner();
-        Err(Status::unimplemented("store_device_public_key not yet implemented"))
+        Err(Status::unimplemented(
+            "store_device_public_key not yet implemented",
+        ))
     }
 
     async fn get_peer_public_key(
@@ -905,7 +961,9 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
         let _user_id = Self::extract_user_id(request.metadata())?;
 
         let _req = request.into_inner();
-        Err(Status::unimplemented("get_peer_public_key not yet implemented"))
+        Err(Status::unimplemented(
+            "get_peer_public_key not yet implemented",
+        ))
     }
 
     async fn complete_key_exchange(
@@ -916,7 +974,9 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
         let _user_id = Self::extract_user_id(request.metadata())?;
 
         let _req = request.into_inner();
-        Err(Status::unimplemented("complete_key_exchange not yet implemented"))
+        Err(Status::unimplemented(
+            "complete_key_exchange not yet implemented",
+        ))
     }
 
     async fn get_conversation_encryption(
@@ -927,7 +987,9 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
         let _user_id = Self::extract_user_id(request.metadata())?;
 
         let _req = request.into_inner();
-        Err(Status::unimplemented("get_conversation_encryption not yet implemented"))
+        Err(Status::unimplemented(
+            "get_conversation_encryption not yet implemented",
+        ))
     }
 
     // ========== Push Notifications ==========
@@ -940,7 +1002,9 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
         let _user_id = Self::extract_user_id(request.metadata())?;
 
         let _req = request.into_inner();
-        Err(Status::unimplemented("register_device_token not yet implemented"))
+        Err(Status::unimplemented(
+            "register_device_token not yet implemented",
+        ))
     }
 
     async fn send_push_notification(
@@ -951,7 +1015,9 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
         let _user_id = Self::extract_user_id(request.metadata())?;
 
         let _req = request.into_inner();
-        Err(Status::unimplemented("send_push_notification not yet implemented"))
+        Err(Status::unimplemented(
+            "send_push_notification not yet implemented",
+        ))
     }
 
     // ========== Offline Queue Management ==========
@@ -964,7 +1030,9 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
         let _user_id = Self::extract_user_id(request.metadata())?;
 
         let _req = request.into_inner();
-        Err(Status::unimplemented("get_offline_events not yet implemented"))
+        Err(Status::unimplemented(
+            "get_offline_events not yet implemented",
+        ))
     }
 
     async fn ack_offline_event(
@@ -975,7 +1043,9 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
         let _user_id = Self::extract_user_id(request.metadata())?;
 
         let _req = request.into_inner();
-        Err(Status::unimplemented("ack_offline_event not yet implemented"))
+        Err(Status::unimplemented(
+            "ack_offline_event not yet implemented",
+        ))
     }
 }
 
