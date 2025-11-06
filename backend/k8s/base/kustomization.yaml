@@ -1,0 +1,23 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: nova-backend
+
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - auth-service.yaml
+  - user-service.yaml
+  - content-service.yaml
+  - feed-service.yaml
+  - media-service.yaml
+  - messaging-service.yaml
+  - search-service.yaml
+  - streaming-service.yaml
+  - notification-service.yaml
+  - cdn-service.yaml
+  - events-service.yaml
+
+commonLabels:
+  app.kubernetes.io/name: nova
+  app.kubernetes.io/component: backend

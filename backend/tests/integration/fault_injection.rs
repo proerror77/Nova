@@ -6,7 +6,14 @@
 //! 3. 数据库超时重试
 //! 4. Outbox 事件重试机制
 
-use crate::fixtures::{test_env::TestEnvironment, assertions::*};
+// 导入共享测试模块
+#[path = "../fixtures/mod.rs"]
+mod fixtures;
+
+#[path = "../common/mod.rs"]
+mod common;
+
+use fixtures::{test_env::TestEnvironment, assertions::*};
 use std::time::{Duration, Instant};
 use uuid::Uuid;
 
@@ -32,7 +39,7 @@ async fn test_kafka_consumer_offset_recovery() {
     .bind("TestEvent")
     .bind(r#"{"data": "test"}"#)
     .bind("pending")
-    .execute(&**db)
+    .execute(&*db)
     .await
     .expect("创建事件失败");
 
@@ -46,7 +53,7 @@ async fn test_kafka_consumer_offset_recovery() {
         .bind(event_id)
         .bind(attempt)
         .bind(format!("模拟失败 attempt {}", attempt))
-        .execute(&**db)
+        .execute(&*db)
         .await
         .ok(); // 忽略表不存在
     }
@@ -56,7 +63,7 @@ async fn test_kafka_consumer_offset_recovery() {
         "UPDATE outbox_events SET status = 'published', published_at = NOW() WHERE id = $1"
     )
     .bind(event_id)
-    .execute(&**db)
+    .execute(&*db)
     .await
     .expect("更新事件状态失败");
 
@@ -113,7 +120,7 @@ async fn test_redis_connection_fallback() {
     .bind(user_id)
     .bind("Fallback to DB")
     .bind("published")
-    .execute(&**db)
+    .execute(&*db)
     .await
     .expect("插入帖子失败");
 
@@ -148,7 +155,7 @@ async fn test_database_timeout_retry() {
         .bind(message_id)
         .bind(user_id)
         .bind(format!("Retry attempt {}", attempt))
-        .execute(&**db)
+        .execute(&*db)
         .await
         {
             Ok(_) => {
@@ -198,7 +205,7 @@ async fn test_outbox_event_retry_on_failure() {
     .bind(r#"{"data": "retry"}"#)
     .bind("pending")
     .bind(0)
-    .execute(&**db)
+    .execute(&*db)
     .await
     .expect("创建事件失败");
 
@@ -209,7 +216,7 @@ async fn test_outbox_event_retry_on_failure() {
         )
         .bind(retry)
         .bind(event_id)
-        .execute(&**db)
+        .execute(&*db)
         .await
         .expect("更新重试计数失败");
 
@@ -221,7 +228,7 @@ async fn test_outbox_event_retry_on_failure() {
         "UPDATE outbox_events SET status = 'published', published_at = NOW() WHERE id = $1"
     )
     .bind(event_id)
-    .execute(&**db)
+    .execute(&*db)
     .await
     .expect("更新事件状态失败");
 
@@ -230,7 +237,7 @@ async fn test_outbox_event_retry_on_failure() {
         "SELECT status, retry_count FROM outbox_events WHERE id = $1"
     )
     .bind(event_id)
-    .fetch_one(&**db)
+    .fetch_one(&*db)
     .await
     .expect("查询事件失败");
 
@@ -270,7 +277,7 @@ async fn test_concurrent_write_conflict_resolution() {
     .bind(1_i64)
     .bind(r#"{"data": "event1"}"#)
     .bind("pending")
-    .execute(&**db)
+    .execute(&*db)
     .await
     .expect("插入事件1失败");
 
@@ -285,7 +292,7 @@ async fn test_concurrent_write_conflict_resolution() {
     .bind(1_i64) // 故意冲突
     .bind(r#"{"data": "event2"}"#)
     .bind("pending")
-    .execute(&**db)
+    .execute(&*db)
     .await;
 
     // Step 2: 验证唯一约束生效（如果有）
@@ -322,7 +329,7 @@ async fn test_dead_letter_queue_handling() {
     .bind(r#"{"data": "will fail"}"#)
     .bind("pending")
     .bind(0)
-    .execute(&**db)
+    .execute(&*db)
     .await
     .expect("创建事件失败");
 
@@ -335,7 +342,7 @@ async fn test_dead_letter_queue_handling() {
         )
         .bind(retry)
         .bind(event_id)
-        .execute(&**db)
+        .execute(&*db)
         .await
         .expect("更新重试计数失败");
     }
@@ -345,7 +352,7 @@ async fn test_dead_letter_queue_handling() {
         "UPDATE outbox_events SET status = 'failed', failed_at = NOW() WHERE id = $1"
     )
     .bind(event_id)
-    .execute(&**db)
+    .execute(&*db)
     .await
     .expect("标记为失败失败");
 
@@ -354,7 +361,7 @@ async fn test_dead_letter_queue_handling() {
         "SELECT status, retry_count FROM outbox_events WHERE id = $1"
     )
     .bind(event_id)
-    .fetch_one(&**db)
+    .fetch_one(&*db)
     .await
     .expect("查询事件失败");
 

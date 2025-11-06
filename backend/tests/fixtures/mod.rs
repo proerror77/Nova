@@ -5,10 +5,67 @@
 pub mod test_env;
 pub mod assertions;
 
-use chrono::Utc;
-use sqlx::{PgPool, Postgres, Transaction};
-use user_service::models::{Post, PostImage, PostMetadata, User};
+use chrono::{DateTime, Utc};
+use sqlx::{PgPool, Postgres, Transaction, FromRow};
 use uuid::Uuid;
+
+// ============================================
+// Test Models (simplified versions)
+// ============================================
+
+#[derive(Debug, Clone, FromRow)]
+pub struct User {
+    pub id: Uuid,
+    pub email: String,
+    pub username: String,
+    pub password_hash: String,
+    pub email_verified: bool,
+    pub is_active: bool,
+    pub failed_login_attempts: i32,
+    pub locked_until: Option<DateTime<Utc>>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub last_login_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, FromRow)]
+pub struct Post {
+    pub id: Uuid,
+    pub user_id: Uuid,
+    pub caption: Option<String>,
+    pub image_key: String,
+    pub image_sizes: Option<sqlx::types::Json<serde_json::Value>>,
+    pub status: String,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub soft_delete: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, FromRow)]
+pub struct PostImage {
+    pub id: Uuid,
+    pub post_id: Uuid,
+    pub s3_key: String,
+    pub status: String,
+    pub size_variant: String,
+    pub file_size: Option<i64>,
+    pub width: Option<i32>,
+    pub height: Option<i32>,
+    pub url: Option<String>,
+    pub error_message: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, FromRow)]
+pub struct PostMetadata {
+    pub post_id: Uuid,
+    pub like_count: i32,
+    pub comment_count: i32,
+    pub view_count: i32,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
 
 // ============================================
 // Database Setup
@@ -23,8 +80,8 @@ pub async fn create_test_pool() -> PgPool {
         .await
         .expect("Failed to connect to test database");
 
-    // Run migrations
-    sqlx::migrate!("./migrations")
+    // Run migrations (path relative to workspace root)
+    sqlx::migrate!("backend/migrations")
         .run(&pool)
         .await
         .expect("Failed to run migrations");
@@ -267,7 +324,8 @@ pub async fn create_test_posts_batch(
     let mut posts = Vec::new();
 
     for i in 0..count {
-        let caption = Some(format!("Test post {}", i + 1).as_str());
+        let caption_text = format!("Test post {}", i + 1);
+        let caption = Some(caption_text.as_str());
         let post = create_test_post_with_caption(pool, user_id, caption, "published").await;
         posts.push(post);
 

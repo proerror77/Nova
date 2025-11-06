@@ -6,7 +6,14 @@
 //! 3. 事件顺序保证
 //! 4. 最终一致性收敛
 
-use crate::fixtures::{test_env::TestEnvironment, assertions::*};
+// 导入共享测试模块
+#[path = "../fixtures/mod.rs"]
+mod fixtures;
+
+#[path = "../common/mod.rs"]
+mod common;
+
+use fixtures::{test_env::TestEnvironment, assertions::*};
 use std::time::Duration;
 use uuid::Uuid;
 
@@ -71,7 +78,7 @@ async fn test_no_orphan_events() {
              SELECT 1 FROM messages m WHERE m.id = oe.aggregate_id
          )"
     )
-    .fetch_one(&**db)
+    .fetch_one(&*db)
     .await
     .unwrap_or(0);
 
@@ -103,7 +110,7 @@ async fn test_idempotent_event_consumption() {
     .bind("TestEvent")
     .bind(r#"{"data": "idempotency test"}"#)
     .bind("published")
-    .execute(&**db)
+    .execute(&*db)
     .await
     .expect("创建事件失败");
 
@@ -116,7 +123,7 @@ async fn test_idempotent_event_consumption() {
     .bind(event_id)
     .bind(consumer_group)
     .bind("success")
-    .execute(&**db)
+    .execute(&*db)
     .await
     .ok(); // 忽略表不存在
 
@@ -129,7 +136,7 @@ async fn test_idempotent_event_consumption() {
     .bind(event_id)
     .bind(consumer_group)
     .bind("duplicate")
-    .execute(&**db)
+    .execute(&*db)
     .await
     .ok();
 
@@ -140,7 +147,7 @@ async fn test_idempotent_event_consumption() {
     )
     .bind(event_id)
     .bind(consumer_group)
-    .fetch_one(&**db)
+    .fetch_one(&*db)
     .await
     .unwrap_or(0);
 
@@ -177,7 +184,7 @@ async fn test_event_ordering_per_aggregate() {
         .bind(seq as i64)
         .bind(format!(r#"{{"step": {}}}"#, seq))
         .bind("pending")
-        .execute(&**db)
+        .execute(&*db)
         .await
         .expect("插入事件失败");
 
@@ -197,7 +204,7 @@ async fn test_event_ordering_per_aggregate() {
          ORDER BY created_at"
     )
     .bind(aggregate_id)
-    .fetch_all(&**db)
+    .fetch_all(&*db)
     .await
     .expect("查询事件失败");
 
@@ -234,7 +241,7 @@ async fn test_eventual_consistency() {
         .bind(i as i64)
         .bind(format!(r#"{{"step": {}}}"#, i))
         .bind("pending")
-        .execute(&**db)
+        .execute(&*db)
         .await
         .expect("插入事件失败");
     }
@@ -255,7 +262,7 @@ async fn test_eventual_consistency() {
                      LIMIT 1"
                 )
                 .bind(aggregate_id)
-                .execute(&**db)
+                .execute(&*db)
                 .await
                 .ok();
 
@@ -275,7 +282,7 @@ async fn test_eventual_consistency() {
                      WHERE aggregate_id = $1 AND status = 'published'"
                 )
                 .bind(aggregate_id)
-                .fetch_one(&**db)
+                .fetch_one(&*db)
                 .await
                 .unwrap_or(0);
 
@@ -298,7 +305,7 @@ async fn test_eventual_consistency() {
          WHERE aggregate_id = $1 AND status = 'published'"
     )
     .bind(aggregate_id)
-    .fetch_one(&**db)
+    .fetch_one(&*db)
     .await
     .expect("查询最终状态失败");
 
@@ -436,7 +443,7 @@ async fn test_concurrent_write_isolation() {
             .bind(i as i64)
             .bind(format!(r#"{{"index": {}}}"#, i))
             .bind("pending")
-            .execute(&**db)
+            .execute(&*db)
             .await
         });
 
@@ -453,7 +460,7 @@ async fn test_concurrent_write_isolation() {
         "SELECT COUNT(*) FROM outbox_events WHERE aggregate_id = $1"
     )
     .bind(aggregate_id)
-    .fetch_one(&**db)
+    .fetch_one(&*db)
     .await
     .expect("查询事件数量失败");
 
