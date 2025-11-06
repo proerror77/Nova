@@ -55,6 +55,9 @@ out/
 release/
 temp/
 terraform/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
 tmp/
 vendor/
 **/.build/
