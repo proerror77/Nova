@@ -6,52 +6,171 @@ public struct ContentView: View {
     @State private var showEnvironmentInfo = false
 
     public var body: some View {
-        TabView(selection: $selectedTab) {
-            FeedTabView()
-                .tabItem {
-                    Image(systemName: "house.fill")
-                    Text("Home")
+        ZStack(alignment: .bottom) {
+            // Main content area
+            Group {
+                switch selectedTab {
+                case 0:
+                    HomeView() // Figma-designed home page
+                case 1:
+                    ExploreTabView()
+                case 2:
+                    CreateTabView()
+                case 3:
+                    NotificationsTabView()
+                case 4:
+                    ProfileTabView()
+                default:
+                    HomeView()
                 }
-                .tag(0)
+            }
 
-            ExploreTabView()
-                .tabItem {
-                    Image(systemName: "magnifyingglass")
-                    Text("Explore")
-                }
-                .tag(1)
-
-            MessagingTabView()
-                .tabItem {
-                    Image(systemName: "bubble.left.and.bubble.right.fill")
-                    Text("Messages")
-                }
-                .tag(2)
-
-            CreateTabView()
-                .tabItem {
-                    Image(systemName: "plus.square.fill")
-                    Text("Create")
-                }
-                .tag(3)
-
-            NotificationsTabView()
-                .tabItem {
-                    Image(systemName: "bell.fill")
-                    Text("Notifications")
-                }
-                .tag(4)
-
-            ProfileTabView()
-                .tabItem {
-                    Image(systemName: "person.fill")
-                    Text("Profile")
-                }
-                .tag(5)
+            // Custom bottom navigation bar
+            CustomTabBar(selectedTab: $selectedTab)
         }
+        .ignoresSafeArea(.keyboard)
     }
 
     public init() {}
+}
+
+// MARK: - Custom Tab Bar
+struct CustomTabBar: View {
+    @Binding var selectedTab: Int
+
+    // Brand color from Figma design
+    private let accentColor = Color(red: 0.82, green: 0.11, blue: 0.26)
+    private let inactiveColor = Color(red: 0.53, green: 0.53, blue: 0.54)
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // Top border line
+            Rectangle()
+                .fill(Color(red: 0.85, green: 0.85, blue: 0.85))
+                .frame(height: 0.5)
+
+            HStack(spacing: 0) {
+                // Tab 1: HOTS (Home/Feed)
+                TabBarItem(
+                    icon: "HomeIcon",
+                    label: "HOTS",
+                    isSelected: selectedTab == 0,
+                    accentColor: accentColor,
+                    inactiveColor: inactiveColor,
+                    isCustomIcon: true
+                ) {
+                    selectedTab = 0
+                }
+
+                Spacer()
+
+                // Tab 2: LNFORG (Explore)
+                TabBarItem(
+                    icon: "person.2.fill",
+                    label: "LNFORG",
+                    isSelected: selectedTab == 1,
+                    accentColor: accentColor,
+                    inactiveColor: inactiveColor
+                ) {
+                    selectedTab = 1
+                }
+
+                Spacer()
+
+                // Central Plus Button
+                Button {
+                    selectedTab = 2
+                } label: {
+                    ZStack {
+                        Circle()
+                            .fill(accentColor)
+                            .frame(width: 56, height: 56)
+                            .shadow(color: accentColor.opacity(0.3), radius: 8, x: 0, y: 4)
+
+                        Image(systemName: "plus")
+                            .font(.system(size: 24, weight: .semibold))
+                            .foregroundColor(.white)
+                    }
+                }
+                .offset(y: -16)
+
+                Spacer()
+
+                // Tab 4: FEED (Notifications)
+                TabBarItem(
+                    icon: "square.grid.2x2.fill",
+                    label: "FEED",
+                    isSelected: selectedTab == 3,
+                    accentColor: accentColor,
+                    inactiveColor: inactiveColor
+                ) {
+                    selectedTab = 3
+                }
+
+                Spacer()
+
+                // Tab 5: ACCOUNT (Profile)
+                TabBarItem(
+                    icon: "person.circle.fill",
+                    label: "ACCOUNT",
+                    isSelected: selectedTab == 4,
+                    accentColor: accentColor,
+                    inactiveColor: inactiveColor
+                ) {
+                    selectedTab = 4
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 8)
+            .padding(.bottom, 8)
+            .background(Color.white)
+        }
+    }
+}
+
+// MARK: - Tab Bar Item
+struct TabBarItem: View {
+    let icon: String
+    let label: String
+    let isSelected: Bool
+    let accentColor: Color
+    let inactiveColor: Color
+    let isCustomIcon: Bool
+    let action: () -> Void
+
+    init(icon: String, label: String, isSelected: Bool, accentColor: Color, inactiveColor: Color, isCustomIcon: Bool = false, action: @escaping () -> Void) {
+        self.icon = icon
+        self.label = label
+        self.isSelected = isSelected
+        self.accentColor = accentColor
+        self.inactiveColor = inactiveColor
+        self.isCustomIcon = isCustomIcon
+        self.action = action
+    }
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 4) {
+                if isCustomIcon {
+                    Image(icon)
+                        .resizable()
+                        .renderingMode(.template)
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 24, height: 24)
+                        .foregroundColor(isSelected ? accentColor : inactiveColor)
+                } else {
+                    Image(systemName: icon)
+                        .font(.system(size: 20, weight: .medium))
+                        .foregroundColor(isSelected ? accentColor : inactiveColor)
+                }
+
+                Text(label)
+                    .font(.system(size: 9, weight: .medium))
+                    .foregroundColor(isSelected ? accentColor : inactiveColor)
+            }
+            .frame(width: 60)
+        }
+    }
 }
 
 // MARK: - Feed Tab

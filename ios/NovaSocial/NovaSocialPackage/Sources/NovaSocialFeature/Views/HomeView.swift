@@ -1,12 +1,13 @@
 import SwiftUI
 
-struct HomeView: View {
+public struct HomeView: View {
+    public init() {}
     @State private var posts: [Post] = []
     @State private var isLoading = true
     @State private var error: String?
     @State private var currentPollIndex = 0
 
-    var body: some View {
+    public var body: some View {
         NavigationStack {
             ZStack {
                 Color(red: 0.97, green: 0.96, blue: 0.96)
@@ -36,10 +37,16 @@ struct HomeView: View {
                             }
                             .padding(.top, 24)
                         }
+
+                        // Bottom padding for custom tab bar
+                        Color.clear
+                            .frame(height: 72)
                     }
                 }
             }
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(.white, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button(action: {}) {
@@ -51,9 +58,9 @@ struct HomeView: View {
 
                 ToolbarItem(placement: .principal) {
                     Text("ICERED")
-                        .font(.custom("Helvetica Neue", size: 20))
-                        .fontWeight(.bold)
-                        .tracking(2)
+                        .font(.system(size: 18, weight: .bold))
+                        .foregroundColor(.black)
+                        .tracking(1.5) // Letter spacing for brand feel
                 }
 
                 ToolbarItem(placement: .navigationBarTrailing) {
