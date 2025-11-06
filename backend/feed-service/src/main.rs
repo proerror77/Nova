@@ -2,6 +2,7 @@ mod openapi;
 
 use actix_web::{dev::Service, web, App, HttpServer};
 use tonic::transport::Server as GrpcServer;
+use tonic_health::server::health_reporter;
 use std::io;
 use std::sync::Arc;
 use std::time::Instant;
@@ -183,9 +184,26 @@ async fn main() -> io::Result<()> {
     tokio::spawn(async move {
         let svc = recommendation_service::grpc::RecommendationServiceImpl::new(grpc_pool);
         tracing::info!("gRPC server listening on {}", grpc_addr);
+        let (mut health, health_service) = health_reporter();
+        health
+            .set_serving::<recommendation_service::grpc::recommendation_service_server::RecommendationServiceServer<recommendation_service::grpc::RecommendationServiceImpl>>()
+            .await;
+
+        // Server-side correlation-id extractor interceptor
+        fn server_interceptor(mut req: tonic::Request<()>) -> Result<tonic::Request<()>, tonic::Status> {
+            if let Some(val) = req.metadata().get("correlation-id") {
+                if let Ok(s) = val.to_str() { req.extensions_mut().insert::<String>(s.to_string()); }
+            }
+            Ok(req)
+        }
+
         if let Err(e) = GrpcServer::builder()
+            .add_service(health_service)
             .add_service(
-                recommendation_service::grpc::recommendation_service_server::RecommendationServiceServer::new(svc),
+                recommendation_service::grpc::recommendation_service_server::RecommendationServiceServer::with_interceptor(
+                    svc,
+                    server_interceptor,
+                ),
             )
             .serve(grpc_addr)
             .await

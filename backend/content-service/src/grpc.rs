@@ -1227,14 +1227,31 @@ pub async fn start_grpc_server(
     feed_ranking: Arc<FeedRankingService>,
     mut shutdown: broadcast::Receiver<()>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    use nova::content::content_service_server::ContentServiceServer;
-    use tonic::transport::Server;
+use nova::content::content_service_server::ContentServiceServer;
+use tonic::transport::Server;
+use tonic_health::server::health_reporter;
 
     tracing::info!("Starting gRPC server at {}", addr);
 
     let service = ContentServiceImpl::new(db_pool, cache, feed_cache, feed_ranking);
+
+    // Health service
+    let (mut health, health_service) = health_reporter();
+    health
+        .set_serving::<crate::grpc::nova::content::content_service_server::ContentServiceServer<ContentServiceImpl>>()
+        .await;
+
+    // Server-side correlation-id extractor interceptor
+    fn server_interceptor(mut req: tonic::Request<()>) -> Result<tonic::Request<()>, tonic::Status> {
+        if let Some(val) = req.metadata().get("correlation-id") {
+            if let Ok(s) = val.to_str() { req.extensions_mut().insert::<String>(s.to_string()); }
+        }
+        Ok(req)
+    }
+
     Server::builder()
-        .add_service(ContentServiceServer::new(service))
+        .add_service(health_service)
+        .add_service(ContentServiceServer::with_interceptor(service, server_interceptor))
         .serve_with_shutdown(addr, async move {
             // Wait for shutdown notification; ignore errors if sender dropped.
             let _ = shutdown.recv().await;

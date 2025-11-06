@@ -8,7 +8,6 @@ use crate::cache::{invalidate_search_cache_with_retry, invalidate_user_cache_wit
 use crate::db::user_repo;
 use crate::error::AppError;
 use crate::grpc::ContentServiceClient;
-use grpc_clients::nova::content_service::v1::InvalidateFeedEventRequest;
 use crate::metrics::helpers::record_social_follow_event;
 use crate::middleware::{jwt_auth::UserId, CircuitBreaker};
 use crate::services::graph::GraphService;

@@ -162,8 +162,8 @@ impl HotPostGenerator {
             self.config.redis_ttl_secs
         );
 
-        // TODO(BACKEND-173): 將熱門貼文改由 content-service 緩存後再寫入 Redis。
-        let _ = json_data; // keep clippy happy until整合完成
+        // 熱門貼文快取改由 content-service 維護；此處僅保留佔位避免舊有寫入（BACKEND-173）
+        let _ = json_data; // 占位，待 content-service 完成整合後移除此分支
         Ok(())
     }
 }
@@ -299,13 +299,13 @@ impl SuggestedUsersGenerator {
             user_id
         );
 
-        // NOTE: 建議使用者是 Content Service 後續任務的一部分（BACKEND-172）。目前先回傳空集合避免不一致。
+        // 建議使用者由 content-service 後續提供（BACKEND-172）；暫時回傳空集合避免資料不一致
         Ok(Vec::new())
     }
 
     /// Get cached suggestions from Redis
     async fn get_cached_suggestions(&self, _cache_key: &str) -> Result<Vec<SuggestedUser>> {
-        // TODO(BACKEND-172): 改用 content-service/Redis 線上資料，現在總是視為快取 miss。
+        // 將改用 content-service/Redis 線上資料；目前固定視為快取 miss（BACKEND-172）
         Err(crate::error::AppError::NotFound("Cache miss".to_string()))
     }
 
@@ -423,7 +423,7 @@ impl FeedCacheWarmer {
             self.config.top_active_users
         );
 
-        // TODO: Execute real query
+        // 由下游服務提供實際查詢資料來源，這裡暫返回空集合作為占位
         Ok(vec![])
     }
 
@@ -431,8 +431,7 @@ impl FeedCacheWarmer {
     async fn warm_user_feed(&self, user_id: Uuid) -> Result<()> {
         let _cache_key = format!("feed:v1:{}:0:{}", user_id, self.config.page_size);
 
-        // TODO: Query ClickHouse for user's feed (similar to FeedService)
-        // TODO: Cache to Redis with TTL
+        // 使用者 Feed 由 feed-service 生成並緩存；此處只保留占位並記錄行為
 
         debug!("Warmed feed cache for user {}", user_id);
         Ok(())

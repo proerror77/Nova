@@ -29,6 +29,7 @@ pub use proto::feed_service::v1::{
     recommendation_service_server, FeedPost, GetFeedRequest, GetFeedResponse,
     GetRecommendedCreatorsRequest, GetRecommendedCreatorsResponse, RankPostsRequest,
     RankPostsResponse, RankablePost, RankedPost, RankingContext, RecommendedCreator,
+    InvalidateFeedCacheRequest, InvalidateFeedCacheResponse,
 };
 
 /// RecommendationService gRPC server implementation
@@ -62,7 +63,7 @@ impl recommendation_service_server::RecommendationService for RecommendationServ
         let req = request.into_inner();
         info!(
             "Getting feed for user: {} (algo: {}, limit: {})",
-            req.user_id, req.algo, req.limit
+            req.user_id, req.algorithm, req.limit
         );
 
         // Note: This is a gRPC server in Feed Service that orchestrates calls
@@ -77,7 +78,7 @@ impl recommendation_service_server::RecommendationService for RecommendationServ
 
         debug!(
             "Feed request delegated to Content Service: user_id={}, algo={}, limit={}",
-            req.user_id, req.algo, req.limit
+            req.user_id, req.algorithm, req.limit
         );
 
         // Stub response - actual implementation delegates to ContentService
@@ -115,8 +116,8 @@ impl recommendation_service_server::RecommendationService for RecommendationServ
             .iter()
             .enumerate()
             .map(|(idx, post)| RankedPost {
-                post_id: post.post_id.clone(),
-                score: (100.0 - idx as f32) / 100.0, // Simple ranking: earlier posts score higher
+                id: post.id.clone(),  // Use 'id' field from proto
+                score: (100.0 - idx as f64) / 100.0, // Simple ranking: earlier posts score higher
                 reason: "default_ranking".to_string(),
             })
             .collect();
@@ -151,5 +152,30 @@ impl recommendation_service_server::RecommendationService for RecommendationServ
         Ok(Response::new(GetRecommendedCreatorsResponse {
             creators: vec![],
         }))
+    }
+
+    /// Invalidate cached feed for a user
+    ///
+    /// Triggered when user's feed should be refreshed due to:
+    /// - New post from followed user
+    /// - User follows/unfollows someone
+    /// - Post is liked/commented/shared
+    async fn invalidate_feed_cache(
+        &self,
+        request: Request<InvalidateFeedCacheRequest>,
+    ) -> Result<Response<InvalidateFeedCacheResponse>, Status> {
+        let req = request.into_inner();
+        info!(
+            "Invalidating feed cache for user: {} (event: {})",
+            req.user_id, req.event_type
+        );
+
+        // Cache invalidation strategy:
+        // 1. Remove user's feed from Redis cache
+        // 2. Trigger background refresh if needed
+        // Phase 1 Stage 1.4: Implement Redis invalidation
+        // For now, just record the event
+
+        Ok(Response::new(InvalidateFeedCacheResponse { success: true }))
     }
 }

@@ -61,6 +61,32 @@ impl MessagingServiceImpl {
             reaction_count: row.reaction_count,
         }
     }
+
+    /// Helper: Convert conversation row to proto Conversation
+    /// Note: This requires querying last_message_id separately from conversations table
+    fn conversation_row_to_proto(
+        id: uuid::Uuid,
+        kind: &str,
+        name: Option<String>,
+        member_count: i32,
+        created_at: chrono::DateTime<chrono::Utc>,
+        updated_at: chrono::DateTime<chrono::Utc>,
+        last_message_id: Option<String>,
+        privacy_mode: String,
+    ) -> Conversation {
+        Conversation {
+            id: id.to_string(),
+            kind: kind.to_string(),
+            name: name.unwrap_or_default(),
+            description: String::new(), // Not fetched from basic conversation data
+            avatar_url: String::new(), // Not fetched from basic conversation data
+            member_count,
+            privacy_mode,
+            last_message_id: last_message_id.unwrap_or_default(),
+            created_at: created_at.timestamp(),
+            updated_at: updated_at.timestamp(),
+        }
+    }
 }
 
 #[tonic::async_trait]
@@ -298,24 +324,216 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
         &self,
         request: Request<CreateConversationRequest>,
     ) -> Result<Response<CreateConversationResponse>, Status> {
-        let _req = request.into_inner();
-        Err(Status::unimplemented("create_conversation not yet implemented"))
+        let req = request.into_inner();
+
+        // Parse creator_id
+        let creator_id = Self::parse_uuid(&req.creator_id, "creator_id")?;
+
+        // Verify creator exists via auth-service
+        if !self.state.auth_client.user_exists(creator_id).await
+            .map_err(|e| Self::app_error_to_status(e))? {
+            return Err(Status::not_found("Creator user not found"));
+        }
+
+        // For direct conversations, verify both members exist
+        let member_ids: Vec<uuid::Uuid> = if req.kind == "direct" {
+            if req.member_ids.len() != 2 {
+                return Err(Status::invalid_argument(
+                    "Direct conversation requires exactly 2 members",
+                ));
+            }
+            // Verify both members exist
+            let mut ids = Vec::new();
+            for member_id_str in &req.member_ids {
+                let member_id = Self::parse_uuid(member_id_str, "member_id")?;
+                if !self.state.auth_client.user_exists(member_id).await
+                    .map_err(|e| Self::app_error_to_status(e))? {
+                    return Err(Status::not_found(format!("Member {} not found", member_id)));
+                }
+                ids.push(member_id);
+            }
+            ids
+        } else {
+            // For group conversations, just parse the member IDs
+            let mut ids = Vec::new();
+            for member_id_str in &req.member_ids {
+                let member_id = Self::parse_uuid(member_id_str, "member_id")?;
+                ids.push(member_id);
+            }
+            ids
+        };
+
+        // Create conversation based on kind
+        let conversation_id = if req.kind == "direct" {
+            crate::services::conversation_service::ConversationService::create_direct_conversation(
+                &self.state.db,
+                member_ids[0],
+                member_ids[1],
+            )
+            .await
+            .map_err(|e| Self::app_error_to_status(e))?
+        } else {
+            let group_name = if req.name.is_empty() { "Group".to_string() } else { req.name.clone() };
+            let description = if req.description.is_empty() { None } else { Some(req.description.clone()) };
+            let avatar_url = if req.avatar_url.is_empty() { None } else { Some(req.avatar_url.clone()) };
+
+            crate::services::conversation_service::ConversationService::create_group_conversation(
+                &self.state.db,
+                creator_id,
+                group_name,
+                description,
+                avatar_url,
+                member_ids,
+                None, // Privacy mode determined by service
+            )
+            .await
+            .map_err(|e| Self::app_error_to_status(e))?
+        };
+
+        // Fetch conversation details to return in response
+        let conv_row = sqlx::query_as::<_, (uuid::Uuid, i32, Option<uuid::Uuid>)>(
+            "SELECT id, member_count, last_message_id FROM conversations WHERE id = $1"
+        )
+        .bind(conversation_id)
+        .fetch_one(&self.state.db)
+        .await
+        .map_err(|e| Status::internal(format!("Database error: {}", e)))?;
+
+        let conversation = Self::conversation_row_to_proto(
+            conv_row.0,
+            if req.kind == "direct" { "direct" } else { "group" },
+            if req.kind == "group" && !req.name.is_empty() { Some(req.name.clone()) } else { None },
+            conv_row.1,
+            chrono::Utc::now(),
+            chrono::Utc::now(),
+            conv_row.2.map(|id| id.to_string()),
+            "public".to_string(), // Default privacy mode
+        );
+
+        Ok(Response::new(CreateConversationResponse {
+            conversation: Some(conversation),
+            error: None,
+        }))
     }
 
     async fn get_conversation(
         &self,
         request: Request<GetConversationRequest>,
     ) -> Result<Response<GetConversationResponse>, Status> {
-        let _req = request.into_inner();
-        Err(Status::unimplemented("get_conversation not yet implemented"))
+        let req = request.into_inner();
+
+        // Parse conversation_id
+        let conversation_id = Self::parse_uuid(&req.conversation_id, "conversation_id")?;
+
+        // Fetch conversation details
+        let conv_row = sqlx::query_as::<_, (uuid::Uuid, i32, Option<uuid::Uuid>)>(
+            "SELECT id, member_count, last_message_id FROM conversations WHERE id = $1"
+        )
+        .bind(conversation_id)
+        .fetch_optional(&self.state.db)
+        .await
+        .map_err(|e| Status::internal(format!("Database error: {}", e)))?;
+
+        match conv_row {
+            Some((id, member_count, last_message_id)) => {
+                let conversation = Self::conversation_row_to_proto(
+                    id,
+                    "direct",
+                    None,
+                    member_count,
+                    chrono::Utc::now(),
+                    chrono::Utc::now(),
+                    last_message_id.map(|id| id.to_string()),
+                    "public".to_string(),
+                );
+
+                Ok(Response::new(GetConversationResponse {
+                    conversation: Some(conversation),
+                    found: true,
+                    error: None,
+                }))
+            }
+            None => {
+                Ok(Response::new(GetConversationResponse {
+                    conversation: None,
+                    found: false,
+                    error: None,
+                }))
+            }
+        }
     }
 
     async fn list_user_conversations(
         &self,
         request: Request<ListUserConversationsRequest>,
     ) -> Result<Response<ListUserConversationsResponse>, Status> {
-        let _req = request.into_inner();
-        Err(Status::unimplemented("list_user_conversations not yet implemented"))
+        let req = request.into_inner();
+
+        // Parse user_id
+        let user_id = Self::parse_uuid(&req.user_id, "user_id")?;
+
+        // Validate limit (1-100, default 50)
+        let limit = if req.limit <= 0 || req.limit > 100 {
+            50_i64
+        } else {
+            req.limit as i64
+        };
+
+        // Fetch conversations for user, ordered by updated_at DESC
+        let query = sqlx::query_as::<_, (uuid::Uuid, i32, Option<uuid::Uuid>)>(
+            "SELECT c.id, c.member_count, c.last_message_id
+             FROM conversations c
+             INNER JOIN conversation_members cm ON c.id = cm.conversation_id
+             WHERE cm.user_id = $1
+             ORDER BY c.updated_at DESC
+             LIMIT $2"
+        )
+        .bind(user_id)
+        .bind(limit + 1) // Fetch one extra to determine has_more
+        .fetch_all(&self.state.db)
+        .await
+        .map_err(|e| Status::internal(format!("Database error: {}", e)))?;
+
+        // Convert rows to proto, respecting limit
+        let mut conversations = Vec::new();
+        let has_more = query.len() > limit as usize;
+
+        for (i, (id, member_count, last_message_id)) in query.iter().enumerate() {
+            // Stop after limit items
+            if i >= limit as usize {
+                break;
+            }
+
+            let conversation = Self::conversation_row_to_proto(
+                *id,
+                "direct",
+                None,
+                *member_count,
+                chrono::Utc::now(),
+                chrono::Utc::now(),
+                last_message_id.map(|id| id.to_string()),
+                "public".to_string(),
+            );
+            conversations.push(conversation);
+        }
+
+        // Compute next cursor
+        let next_cursor = if has_more && !conversations.is_empty() {
+            // Use the last conversation's updated_at as cursor
+            // Since we don't have updated_at from query, use ID as simple cursor
+            conversations.last()
+                .map(|c| c.id.clone())
+                .unwrap_or_default()
+        } else {
+            String::new()
+        };
+
+        Ok(Response::new(ListUserConversationsResponse {
+            conversations,
+            next_cursor,
+            has_more,
+            error: None,
+        }))
     }
 
     async fn delete_conversation(
