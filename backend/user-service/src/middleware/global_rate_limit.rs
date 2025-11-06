@@ -85,10 +85,15 @@ where
         let client_id = if let Some(user_id) = req.extensions().get::<crate::middleware::UserId>() {
             format!("user:{}", user_id.0)
         } else {
+            // IMPORTANT: Call connection_info() ONCE to avoid BorrowMutError
+            // ConnectionInfo internally uses request.extensions() to cache its value
+            let conn_info = req.connection_info();
+            let peer_addr = conn_info.peer_addr().map(|s| s.to_string());
+            drop(conn_info); // Explicitly drop to release borrow
+
             // Determine client IP with trusted proxy awareness
-            let connection_ip = req
-                .connection_info()
-                .peer_addr()
+            let connection_ip = peer_addr
+                .as_ref()
                 .and_then(|addr| addr.split(':').next().map(|s| s.to_string()));
 
             let client_ip = if let Some(ref proxy_ip) = connection_ip {
@@ -108,8 +113,7 @@ where
                     proxy_ip.clone()
                 }
             } else {
-                req.connection_info()
-                    .peer_addr()
+                peer_addr
                     .and_then(|addr| addr.split(':').next().map(|s| s.to_string()))
                     .unwrap_or_else(|| "unknown".to_string())
             };
