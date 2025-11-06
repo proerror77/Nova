@@ -1,6 +1,10 @@
 /// Test fixtures and utilities for integration tests
 /// Provides database setup, test data creation, and cleanup
 
+// Phase 1B 集成测试基础设施
+pub mod test_env;
+pub mod assertions;
+
 use chrono::Utc;
 use sqlx::{PgPool, Postgres, Transaction};
 use user_service::models::{Post, PostImage, PostMetadata, User};

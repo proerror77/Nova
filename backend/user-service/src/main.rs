@@ -75,7 +75,14 @@ async fn main() -> io::Result<()> {
         .init();
 
     // Load configuration
-    let config = Config::from_env().expect("Failed to load configuration");
+    let config = match Config::from_env() {
+        Ok(cfg) => cfg,
+        Err(e) => {
+            tracing::error!("Configuration loading failed: {:#}", e);
+            eprintln!("ERROR: Failed to load configuration: {}", e);
+            std::process::exit(1);
+        }
+    };
 
     tracing::info!("Starting user-service v{}", env!("CARGO_PKG_VERSION"));
     tracing::info!("Environment: {}", config.app.env);
@@ -85,18 +92,38 @@ async fn main() -> io::Result<()> {
     // ========================================
     // 支援從檔案讀取金鑰（JWT_PRIVATE_KEY_FILE / JWT_PUBLIC_KEY_FILE）
     let private_key_pem = if let Ok(path) = std::env::var("JWT_PRIVATE_KEY_FILE") {
-        std::fs::read_to_string(path).expect("Failed to read JWT private key file")
+        match std::fs::read_to_string(&path) {
+            Ok(key) => key,
+            Err(e) => {
+                tracing::error!("Failed to read JWT private key file at {}: {:#}", path, e);
+                eprintln!("ERROR: JWT_PRIVATE_KEY_FILE read failed: {}", e);
+                std::process::exit(1);
+            }
+        }
     } else {
         config.jwt.private_key_pem.clone()
     };
     let public_key_pem = if let Ok(path) = std::env::var("JWT_PUBLIC_KEY_FILE") {
-        std::fs::read_to_string(path).expect("Failed to read JWT public key file")
+        match std::fs::read_to_string(&path) {
+            Ok(key) => key,
+            Err(e) => {
+                tracing::error!("Failed to read JWT public key file at {}: {:#}", path, e);
+                eprintln!("ERROR: JWT_PUBLIC_KEY_FILE read failed: {}", e);
+                std::process::exit(1);
+            }
+        }
     } else {
         config.jwt.public_key_pem.clone()
     };
 
-    user_service::security::jwt::initialize_keys(&private_key_pem, &public_key_pem)
-        .expect("Failed to initialize JWT keys from environment variables or files");
+    match user_service::security::jwt::initialize_keys(&private_key_pem, &public_key_pem) {
+        Ok(()) => {},
+        Err(e) => {
+            tracing::error!("JWT keys initialization failed: {:#}", e);
+            eprintln!("ERROR: JWT initialization failed: {}", e);
+            std::process::exit(1);
+        }
+    }
     tracing::info!("JWT keys initialized from environment variables");
 
     // ========================================
@@ -106,9 +133,14 @@ async fn main() -> io::Result<()> {
     tracing::info!("Prometheus metrics initialized");
 
     // Create database connection pool
-    let db_pool = create_pool(&config.database.url, config.database.max_connections)
-        .await
-        .expect("Failed to create database pool");
+    let db_pool = match create_pool(&config.database.url, config.database.max_connections).await {
+        Ok(pool) => pool,
+        Err(e) => {
+            tracing::error!("Database pool creation failed: {:#}", e);
+            eprintln!("ERROR: Failed to create database pool: {}", e);
+            std::process::exit(1);
+        }
+    };
 
     tracing::info!(
         "Database pool created with {} max connections",
@@ -143,9 +175,14 @@ async fn main() -> io::Result<()> {
     }
 
     // Create Redis connection pool
-    let redis_pool = RedisPool::connect(&config.redis.url, None)
-        .await
-        .expect("Failed to initialize Redis pool");
+    let redis_pool = match RedisPool::connect(&config.redis.url, None).await {
+        Ok(pool) => pool,
+        Err(e) => {
+            tracing::error!("Redis pool initialization failed: {:#}", e);
+            eprintln!("ERROR: Failed to initialize Redis pool: {}", e);
+            std::process::exit(1);
+        }
+    };
     let redis_manager = redis_pool.manager();
 
     tracing::info!("Redis connection established");
@@ -233,25 +270,46 @@ async fn main() -> io::Result<()> {
     tracing::info!("PostgreSQL circuit breaker initialized");
 
     // Initialize downstream gRPC clients
-    let grpc_config =
-        GrpcClientConfig::from_env().expect("Failed to load gRPC client configuration");
+    let grpc_config = match GrpcClientConfig::from_env() {
+        Ok(cfg) => cfg,
+        Err(e) => {
+            tracing::error!("gRPC client configuration loading failed: {:#}", e);
+            eprintln!("ERROR: Failed to load gRPC client configuration: {}", e);
+            std::process::exit(1);
+        }
+    };
     let health_checker = Arc::new(HealthChecker::new());
     let content_client = Arc::new(
-        ContentServiceClient::new(&grpc_config, health_checker.clone())
-            .await
-            .expect("Failed to initialize content-service gRPC client"),
+        match ContentServiceClient::new(&grpc_config, health_checker.clone()).await {
+            Ok(client) => client,
+            Err(e) => {
+                tracing::error!("content-service gRPC client initialization failed: {:#}", e);
+                eprintln!("ERROR: Failed to initialize content-service gRPC client: {}", e);
+                std::process::exit(1);
+            }
+        }
     );
 
     let auth_client = Arc::new(
-        AuthServiceClient::new(&grpc_config, health_checker.clone())
-            .await
-            .expect("Failed to initialize auth-service gRPC client"),
+        match AuthServiceClient::new(&grpc_config, health_checker.clone()).await {
+            Ok(client) => client,
+            Err(e) => {
+                tracing::error!("auth-service gRPC client initialization failed: {:#}", e);
+                eprintln!("ERROR: Failed to initialize auth-service gRPC client: {}", e);
+                std::process::exit(1);
+            }
+        }
     );
 
     let media_client = Arc::new(
-        MediaServiceClient::new(&grpc_config, health_checker.clone())
-            .await
-            .expect("Failed to initialize media-service gRPC client"),
+        match MediaServiceClient::new(&grpc_config, health_checker.clone()).await {
+            Ok(client) => client,
+            Err(e) => {
+                tracing::error!("media-service gRPC client initialization failed: {:#}", e);
+                eprintln!("ERROR: Failed to initialize media-service gRPC client: {}", e);
+                std::process::exit(1);
+            }
+        }
     );
 
     // Feed state moved to feed-service (port 8089)
@@ -271,14 +329,19 @@ async fn main() -> io::Result<()> {
         }
         Err(e) => {
             tracing::warn!("Neo4j service init failed: {} (graph disabled)", e);
-            GraphService::new(&user_service::config::GraphConfig {
+            match GraphService::new(&user_service::config::GraphConfig {
                 enabled: false,
                 neo4j_uri: String::new(),
                 neo4j_user: String::new(),
                 neo4j_password: String::new(),
-            })
-            .await
-            .expect("GraphService disabled init should succeed")
+            }).await {
+                Ok(svc) => svc,
+                Err(e2) => {
+                    tracing::error!("GraphService fallback initialization failed (should never happen): {:#}", e2);
+                    eprintln!("FATAL: GraphService disabled mode initialization failed: {}", e2);
+                    std::process::exit(1);
+                }
+            }
         }
     };
     let graph_service_clone = graph_service.clone();
@@ -287,8 +350,16 @@ async fn main() -> io::Result<()> {
     // ========================================
     // Initialize Kafka producer for events (needed by multiple services)
     // ========================================
-    let event_producer =
-        Arc::new(EventProducer::new(&config.kafka).expect("Failed to create Kafka producer"));
+    let event_producer = Arc::new(
+        match EventProducer::new(&config.kafka) {
+            Ok(producer) => producer,
+            Err(e) => {
+                tracing::error!("Kafka producer initialization failed: {:#}", e);
+                eprintln!("ERROR: Failed to create Kafka producer: {}", e);
+                std::process::exit(1);
+            }
+        }
+    );
 
     // ========================================
     // Initialize events state (producer already created above)
@@ -337,10 +408,14 @@ async fn main() -> io::Result<()> {
             max_concurrent_inserts: 10,
         };
 
-        let cdc_consumer =
-            CdcConsumer::new(cdc_config, ch_writer.as_ref().clone(), db_pool.clone())
-                .await
-                .expect("Failed to create CDC consumer");
+        let cdc_consumer = match CdcConsumer::new(cdc_config, ch_writer.as_ref().clone(), db_pool.clone()).await {
+            Ok(consumer) => consumer,
+            Err(e) => {
+                tracing::error!("CDC consumer initialization failed: {:#}", e);
+                eprintln!("ERROR: Failed to create CDC consumer: {}", e);
+                std::process::exit(1);
+            }
+        };
 
         let cdc_health_for_task = cdc_health_flag.clone();
         let cdc_handle = tokio::spawn(async move {
@@ -362,13 +437,19 @@ async fn main() -> io::Result<()> {
             max_concurrent_inserts: 5,
         };
 
-        let events_consumer = EventsConsumer::new(
+        let events_consumer = match EventsConsumer::new(
             events_config,
             ch_writer.as_ref().clone(),
             event_deduplicator,
             content_client.clone(),
-        )
-        .expect("Failed to create Events consumer");
+        ) {
+            Ok(consumer) => consumer,
+            Err(e) => {
+                tracing::error!("Events consumer initialization failed: {:#}", e);
+                eprintln!("ERROR: Failed to create Events consumer: {}", e);
+                std::process::exit(1);
+            }
+        };
 
         let events_handle = tokio::spawn(async move {
             if let Err(e) = events_consumer.run().await {

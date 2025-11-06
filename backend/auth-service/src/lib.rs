@@ -28,6 +28,9 @@ pub mod services;
 pub mod utils;
 pub mod validators;
 
+#[cfg(test)]
+mod tests;
+
 pub use error::{AuthError, AuthResult};
 use redis_utils::SharedConnectionManager;
 use services::{

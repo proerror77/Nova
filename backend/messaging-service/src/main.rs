@@ -19,13 +19,16 @@ use tonic::transport::Server as GrpcServer;
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
 
-async fn openapi_json(doc: web::Data<utoipa::openapi::OpenApi>) -> actix_web::HttpResponse {
+async fn openapi_json(doc: web::Data<utoipa::openapi::OpenApi>) -> actix_web::Result<actix_web::HttpResponse> {
     let body = serde_json::to_string(&*doc)
-        .expect("Failed to serialize OpenAPI document for messaging-service");
+        .map_err(|e| {
+            tracing::error!("OpenAPI serialization failed: {}", e);
+            actix_web::error::ErrorInternalServerError("OpenAPI serialization error")
+        })?;
 
-    actix_web::HttpResponse::Ok()
+    Ok(actix_web::HttpResponse::Ok()
         .content_type("application/json")
-        .body(body)
+        .body(body))
 }
 
 #[actix_web::main]

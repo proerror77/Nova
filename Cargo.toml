@@ -167,6 +167,9 @@ chrono = { version = "0.4", features = ["serde"] }
 
 [dev-dependencies]
 tokio-test = "0.4"
+criterion = { version = "0.5", features = ["async_tokio", "html_reports"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [[test]]
 name = "core_flow_test"
@@ -182,6 +185,28 @@ harness = true
 name = "performance_benchmark_test"
 path = "tests/performance_benchmark_test.rs"
 harness = true
+
+# Phase 1B 集成测试
+[[test]]
+name = "happy_path"
+path = "backend/tests/integration/happy_path.rs"
+harness = true
+
+[[test]]
+name = "fault_injection"
+path = "backend/tests/integration/fault_injection.rs"
+harness = true
+
+[[test]]
+name = "data_consistency"
+path = "backend/tests/integration/data_consistency.rs"
+harness = true
+
+# Phase 1B 性能基准测试
+[[bench]]
+name = "performance_baseline"
+path = "backend/benches/performance_baseline.rs"
+harness = false
 
 [profile.dev]
 opt-level = 0
