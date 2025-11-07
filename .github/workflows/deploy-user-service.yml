@@ -32,17 +32,40 @@ jobs:
           aws ecr get-login-password --region ${{ env.AWS_REGION }} | \
           docker login --username AWS --password-stdin ${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com
 
+      - name: Verify Docker installation
+        run: |
+          echo "=== Docker Info ==="
+          docker version
+          echo "=== Docker Images ==="
+          docker images
+          echo "=== Dockerfile ==="
+          head -20 backend/Dockerfile.template
+
       - name: Build Docker image
         run: |
           echo "Building Docker image for user-service..."
-          /usr/bin/docker build \
+          echo "Service name: user-service"
+          echo "Registry: ${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com"
+          echo "Repository: ${{ env.ECR_REPOSITORY }}"
+          echo "Tag: ${{ github.sha }}"
+
+          docker build \
             --build-arg SERVICE_NAME=user-service \
             -f backend/Dockerfile.template \
             -t ${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPOSITORY }}:${{ github.sha }} \
             -t ${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPOSITORY }}:latest \
-            . 2>&1 | tee /tmp/docker-build.log
-          echo "✅ Docker image built successfully"
-          /usr/bin/docker images | grep -i nova
+            . 2>&1
+
+          BUILD_STATUS=$?
+          echo "Build exit code: $BUILD_STATUS"
+
+          if [ $BUILD_STATUS -eq 0 ]; then
+            echo "✅ Docker image built successfully"
+            docker images | grep -i nova
+          else
+            echo "❌ Docker build failed with exit code $BUILD_STATUS"
+            exit 1
+          fi
 
       - name: Push Docker image to ECR
         run: |
