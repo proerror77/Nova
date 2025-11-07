@@ -1,6 +1,7 @@
 // gRPC service implementation for content service
 use crate::cache::{ContentCache, FeedCache};
 use crate::error::AppError;
+use crate::grpc::AuthClient;
 use crate::models::{Comment, Post};
 use crate::services::comments::CommentService;
 use crate::services::feed_ranking::FeedRankingService;
@@ -38,6 +39,7 @@ pub struct ContentServiceImpl {
     cache: Arc<ContentCache>,
     feed_cache: Arc<FeedCache>,
     feed_ranking: Arc<FeedRankingService>,
+    auth_client: Arc<AuthClient>,
 }
 
 fn convert_post_to_proto(post: &Post) -> crate::grpc::nova::content::Post {
@@ -96,7 +98,10 @@ impl ContentService for ContentServiceImpl {
         };
 
         // Fetch post using PostService
-        let post_service = PostService::with_cache(self.db_pool.clone(), self.cache.clone());
+        let post_service = PostService::with_cache(
+            self.db_pool.clone(),
+            self.cache.clone(),
+        );
         match post_service.get_post(post_id).await {
             Ok(Some(post)) => {
                 let response = GetPostResponse {
@@ -144,7 +149,10 @@ impl ContentService for ContentServiceImpl {
         };
 
         // Create post using PostService
-        let post_service = PostService::with_cache(self.db_pool.clone(), self.cache.clone());
+        let post_service = PostService::with_cache(
+            self.db_pool.clone(),
+            self.cache.clone(),
+        );
         let content = req.content;
         let image_key = format!("text-content-{}", Uuid::new_v4());
         match post_service
@@ -555,8 +563,10 @@ impl ContentService for ContentServiceImpl {
                 tracing::debug!("Invalidated cache for post {} after update", post_id);
 
                 // Fetch the updated post
-                let post_service =
-                    PostService::with_cache(self.db_pool.clone(), self.cache.clone());
+                let post_service = PostService::with_cache(
+                    self.db_pool.clone(),
+                    self.cache.clone(),
+                );
                 match post_service.get_post(post_id).await {
                     Ok(Some(post)) => {
                         guard.complete("0");
@@ -1178,12 +1188,14 @@ impl ContentServiceImpl {
         cache: Arc<ContentCache>,
         feed_cache: Arc<FeedCache>,
         feed_ranking: Arc<FeedRankingService>,
+        auth_client: Arc<AuthClient>,
     ) -> Self {
         Self {
             db_pool,
             cache,
             feed_cache,
             feed_ranking,
+            auth_client,
         }
     }
 }
@@ -1195,6 +1207,7 @@ pub async fn start_grpc_server(
     cache: Arc<ContentCache>,
     feed_cache: Arc<FeedCache>,
     feed_ranking: Arc<FeedRankingService>,
+    auth_client: Arc<AuthClient>,
     mut shutdown: broadcast::Receiver<()>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     use nova::content::content_service_server::ContentServiceServer;
@@ -1203,7 +1216,7 @@ pub async fn start_grpc_server(
 
     tracing::info!("Starting gRPC server at {}", addr);
 
-    let service = ContentServiceImpl::new(db_pool, cache, feed_cache, feed_ranking);
+    let service = ContentServiceImpl::new(db_pool, cache, feed_cache, feed_ranking, auth_client);
 
     // Health service
     let (mut health, health_service) = health_reporter();

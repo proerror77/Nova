@@ -3119,7 +3119,6 @@ dependencies = [
  "async-trait",
  "dotenv",
  "envy",
- "futures",
  "hyper 1.7.0",
  "lazy_static",
  "once_cell",

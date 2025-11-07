@@ -599,6 +599,16 @@ async fn main() -> io::Result<()> {
         Ok(())
     });
 
+    // Phase 2: Spec 007 - Content cleaner background job
+    // Cleans up content from soft-deleted users after 30-day retention period
+    let cleaner_db = db_pool.clone();
+    let cleaner_auth = auth_client.clone();
+    tasks.spawn(async move {
+        content_service::jobs::content_cleaner::start_content_cleaner(cleaner_db, cleaner_auth).await;
+        Ok(())
+    });
+    tracing::info!("✅ Content cleaner background job started");
+
     let mut first_error: Option<io::Error> = None;
 
     let shutdown = shutdown_signal();
