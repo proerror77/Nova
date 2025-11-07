@@ -37,10 +37,7 @@ async fn setup_test_db() -> Result<Pool<Postgres>, Box<dyn std::error::Error>> {
     let container = postgres_image.start().await?;
     let port = container.get_host_port_ipv4(5432).await?;
 
-    let connection_string = format!(
-        "postgres://postgres:postgres@127.0.0.1:{}/postgres",
-        port
-    );
+    let connection_string = format!("postgres://postgres:postgres@127.0.0.1:{}/postgres", port);
 
     // Wait for database to be ready and create pool
     let pool = PgPoolOptions::new()
@@ -49,9 +46,7 @@ async fn setup_test_db() -> Result<Pool<Postgres>, Box<dyn std::error::Error>> {
         .await?;
 
     // Run migrations
-    sqlx::migrate!("./migrations")
-        .run(&pool)
-        .await?;
+    sqlx::migrate!("./migrations").run(&pool).await?;
 
     // Leak container to keep it alive for the duration of the test
     // This is acceptable for integration tests
@@ -66,7 +61,7 @@ async fn create_test_post(pool: &Pool<Postgres>, user_id: Uuid) -> Uuid {
 
     sqlx::query(
         "INSERT INTO posts (id, user_id, content, media_key, media_type, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, NOW(), NOW())"
+         VALUES ($1, $2, $3, $4, $5, NOW(), NOW())",
     )
     .bind(post_id)
     .bind(user_id)
@@ -86,7 +81,7 @@ async fn create_test_comment(pool: &Pool<Postgres>, post_id: Uuid, user_id: Uuid
 
     sqlx::query(
         "INSERT INTO comments (id, post_id, user_id, content, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, NOW(), NOW())"
+         VALUES ($1, $2, $3, $4, NOW(), NOW())",
     )
     .bind(comment_id)
     .bind(post_id)
@@ -103,7 +98,7 @@ async fn create_test_comment(pool: &Pool<Postgres>, post_id: Uuid, user_id: Uuid
 async fn create_test_like(pool: &Pool<Postgres>, post_id: Uuid, user_id: Uuid) {
     sqlx::query(
         "INSERT INTO likes (post_id, user_id, created_at)
-         VALUES ($1, $2, NOW())"
+         VALUES ($1, $2, NOW())",
     )
     .bind(post_id)
     .bind(user_id)
@@ -116,7 +111,7 @@ async fn create_test_like(pool: &Pool<Postgres>, post_id: Uuid, user_id: Uuid) {
 async fn create_test_bookmark(pool: &Pool<Postgres>, post_id: Uuid, user_id: Uuid) {
     sqlx::query(
         "INSERT INTO bookmarks (post_id, user_id, created_at)
-         VALUES ($1, $2, NOW())"
+         VALUES ($1, $2, NOW())",
     )
     .bind(post_id)
     .bind(user_id)
@@ -129,7 +124,7 @@ async fn create_test_bookmark(pool: &Pool<Postgres>, post_id: Uuid, user_id: Uui
 async fn create_test_share(pool: &Pool<Postgres>, post_id: Uuid, user_id: Uuid) {
     sqlx::query(
         "INSERT INTO shares (post_id, user_id, created_at)
-         VALUES ($1, $2, NOW())"
+         VALUES ($1, $2, NOW())",
     )
     .bind(post_id)
     .bind(user_id)
@@ -154,12 +149,11 @@ async fn test_cleaner_soft_deletes_posts() {
     let post2_id = create_test_post(&pool, user2_id).await;
 
     // Verify both posts exist and are not deleted
-    let initial_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM posts WHERE deleted_at IS NULL"
-    )
-    .fetch_one(&pool)
-    .await
-    .expect("Failed to count posts");
+    let initial_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM posts WHERE deleted_at IS NULL")
+            .fetch_one(&pool)
+            .await
+            .expect("Failed to count posts");
 
     assert_eq!(initial_count, 2, "Should have 2 posts initially");
 
@@ -167,12 +161,11 @@ async fn test_cleaner_soft_deletes_posts() {
     let mock_client = MockAuthClient::new(vec![(user1_id, "user1".to_string())]);
 
     // Simulate content cleaner logic
-    let all_user_ids: Vec<Uuid> = sqlx::query_scalar(
-        "SELECT DISTINCT user_id FROM posts WHERE deleted_at IS NULL"
-    )
-    .fetch_all(&pool)
-    .await
-    .expect("Failed to fetch user IDs");
+    let all_user_ids: Vec<Uuid> =
+        sqlx::query_scalar("SELECT DISTINCT user_id FROM posts WHERE deleted_at IS NULL")
+            .fetch_all(&pool)
+            .await
+            .expect("Failed to fetch user IDs");
 
     // Get existing users from mock auth-service
     let existing_users = mock_client.get_users_by_ids(&all_user_ids).await.unwrap();
@@ -180,44 +173,46 @@ async fn test_cleaner_soft_deletes_posts() {
     // Soft-delete posts for non-existent users
     for user_id in &all_user_ids {
         if !existing_users.contains_key(user_id) {
-            sqlx::query("UPDATE posts SET deleted_at = NOW() WHERE user_id = $1 AND deleted_at IS NULL")
-                .bind(user_id)
-                .execute(&pool)
-                .await
-                .expect("Failed to soft-delete post");
+            sqlx::query(
+                "UPDATE posts SET deleted_at = NOW() WHERE user_id = $1 AND deleted_at IS NULL",
+            )
+            .bind(user_id)
+            .execute(&pool)
+            .await
+            .expect("Failed to soft-delete post");
         }
     }
 
     // Verify only user1's post remains active
-    let final_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM posts WHERE deleted_at IS NULL"
-    )
-    .fetch_one(&pool)
-    .await
-    .expect("Failed to count posts");
+    let final_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM posts WHERE deleted_at IS NULL")
+            .fetch_one(&pool)
+            .await
+            .expect("Failed to count posts");
 
     assert_eq!(final_count, 1, "Should only have 1 active post");
 
     // Verify user1's post is still active
-    let active_post: Uuid = sqlx::query_scalar(
-        "SELECT id FROM posts WHERE deleted_at IS NULL"
-    )
-    .fetch_one(&pool)
-    .await
-    .expect("Failed to fetch active post");
+    let active_post: Uuid = sqlx::query_scalar("SELECT id FROM posts WHERE deleted_at IS NULL")
+        .fetch_one(&pool)
+        .await
+        .expect("Failed to fetch active post");
 
     assert_eq!(active_post, post1_id, "User1's post should remain active");
 
     // Verify user2's post is soft-deleted
-    let deleted_post: Option<Uuid> = sqlx::query_scalar(
-        "SELECT id FROM posts WHERE id = $1 AND deleted_at IS NOT NULL"
-    )
-    .bind(post2_id)
-    .fetch_optional(&pool)
-    .await
-    .expect("Failed to check deleted post");
+    let deleted_post: Option<Uuid> =
+        sqlx::query_scalar("SELECT id FROM posts WHERE id = $1 AND deleted_at IS NOT NULL")
+            .bind(post2_id)
+            .fetch_optional(&pool)
+            .await
+            .expect("Failed to check deleted post");
 
-    assert_eq!(deleted_post, Some(post2_id), "User2's post should be soft-deleted");
+    assert_eq!(
+        deleted_post,
+        Some(post2_id),
+        "User2's post should be soft-deleted"
+    );
 
     // Verify batch API was used (1 call)
     assert_eq!(
@@ -242,12 +237,10 @@ async fn test_cleaner_hard_deletes_comments() {
     create_test_comment(&pool, post_id, user2_id).await;
 
     // Verify both comments exist
-    let initial_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM comments"
-    )
-    .fetch_one(&pool)
-    .await
-    .expect("Failed to count comments");
+    let initial_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM comments")
+        .fetch_one(&pool)
+        .await
+        .expect("Failed to count comments");
 
     assert_eq!(initial_count, 2, "Should have 2 comments initially");
 
@@ -255,12 +248,10 @@ async fn test_cleaner_hard_deletes_comments() {
     let mock_client = MockAuthClient::new(vec![(user1_id, "user1".to_string())]);
 
     // Simulate content cleaner logic
-    let all_user_ids: Vec<Uuid> = sqlx::query_scalar(
-        "SELECT DISTINCT user_id FROM comments"
-    )
-    .fetch_all(&pool)
-    .await
-    .expect("Failed to fetch user IDs");
+    let all_user_ids: Vec<Uuid> = sqlx::query_scalar("SELECT DISTINCT user_id FROM comments")
+        .fetch_all(&pool)
+        .await
+        .expect("Failed to fetch user IDs");
 
     let existing_users = mock_client.get_users_by_ids(&all_user_ids).await.unwrap();
 
@@ -276,22 +267,18 @@ async fn test_cleaner_hard_deletes_comments() {
     }
 
     // Verify only user1's comment remains
-    let final_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM comments"
-    )
-    .fetch_one(&pool)
-    .await
-    .expect("Failed to count comments");
+    let final_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM comments")
+        .fetch_one(&pool)
+        .await
+        .expect("Failed to count comments");
 
     assert_eq!(final_count, 1, "Should only have 1 comment");
 
     // Verify user1's comment exists
-    let remaining_user: Uuid = sqlx::query_scalar(
-        "SELECT user_id FROM comments"
-    )
-    .fetch_one(&pool)
-    .await
-    .expect("Failed to fetch remaining comment");
+    let remaining_user: Uuid = sqlx::query_scalar("SELECT user_id FROM comments")
+        .fetch_one(&pool)
+        .await
+        .expect("Failed to fetch remaining comment");
 
     assert_eq!(remaining_user, user1_id, "User1's comment should remain");
 }
@@ -467,7 +454,7 @@ async fn test_cleaner_batch_api_efficiency() {
         UNION
         SELECT DISTINCT user_id FROM likes
         ORDER BY 1
-        "#
+        "#,
     )
     .fetch_all(&pool)
     .await

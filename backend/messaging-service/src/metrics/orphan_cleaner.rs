@@ -51,9 +51,7 @@ static ORPHANS_DELETED_TOTAL: Lazy<IntCounterVec> = Lazy::new(|| {
 
 /// Record a cleanup cycle completion
 pub fn record_orphan_cleanup_run(status: &str) {
-    CLEANUP_RUNS_TOTAL
-        .with_label_values(&[status])
-        .inc();
+    CLEANUP_RUNS_TOTAL.with_label_values(&[status]).inc();
 }
 
 /// Record cleanup operation duration

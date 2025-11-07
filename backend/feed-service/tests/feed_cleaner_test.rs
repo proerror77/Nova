@@ -36,10 +36,7 @@ async fn setup_test_db() -> Result<Pool<Postgres>, Box<dyn std::error::Error>> {
     let container = postgres_image.start().await?;
     let port = container.get_host_port_ipv4(5432).await?;
 
-    let connection_string = format!(
-        "postgres://postgres:postgres@127.0.0.1:{}/postgres",
-        port
-    );
+    let connection_string = format!("postgres://postgres:postgres@127.0.0.1:{}/postgres", port);
 
     // Wait for database to be ready and create pool
     let pool = PgPoolOptions::new()
@@ -48,9 +45,7 @@ async fn setup_test_db() -> Result<Pool<Postgres>, Box<dyn std::error::Error>> {
         .await?;
 
     // Run migrations
-    sqlx::migrate!("./migrations")
-        .run(&pool)
-        .await?;
+    sqlx::migrate!("./migrations").run(&pool).await?;
 
     // Leak container to keep it alive for the duration of the test
     // This is acceptable for integration tests
@@ -83,17 +78,13 @@ async fn create_test_experiment(
 }
 
 /// Create test experiment assignment
-async fn create_test_assignment(
-    pool: &Pool<Postgres>,
-    experiment_id: Uuid,
-    user_id: Uuid,
-) -> Uuid {
+async fn create_test_assignment(pool: &Pool<Postgres>, experiment_id: Uuid, user_id: Uuid) -> Uuid {
     let assignment_id = Uuid::new_v4();
     let variant_id = Uuid::new_v4();
 
     sqlx::query(
         "INSERT INTO experiment_assignments (id, experiment_id, user_id, variant_id, assigned_at)
-         VALUES ($1, $2, $3, $4, NOW())"
+         VALUES ($1, $2, $3, $4, NOW())",
     )
     .bind(assignment_id)
     .bind(experiment_id)
@@ -148,14 +139,16 @@ async fn test_cleaner_cancels_deleted_user_experiments() {
     let exp2_id = create_test_experiment(&pool, "exp2", Some(user2_id)).await;
 
     // Verify both experiments are active
-    let initial_active_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM experiments WHERE status = 'active'"
-    )
-    .fetch_one(&pool)
-    .await
-    .expect("Failed to count active experiments");
+    let initial_active_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM experiments WHERE status = 'active'")
+            .fetch_one(&pool)
+            .await
+            .expect("Failed to count active experiments");
 
-    assert_eq!(initial_active_count, 2, "Should have 2 active experiments initially");
+    assert_eq!(
+        initial_active_count, 2,
+        "Should have 2 active experiments initially"
+    );
 
     // Mock auth-service: only user1 exists
     let mock_client = MockAuthClient::new(vec![(user1_id, "user1".to_string())]);
@@ -171,7 +164,7 @@ async fn test_cleaner_cancels_deleted_user_experiments() {
          UNION
          SELECT DISTINCT user_id
          FROM experiment_metrics
-         ORDER BY 1"
+         ORDER BY 1",
     )
     .fetch_all(&pool)
     .await
@@ -185,7 +178,7 @@ async fn test_cleaner_cancels_deleted_user_experiments() {
             sqlx::query(
                 "UPDATE experiments
                  SET status = 'cancelled', updated_at = NOW()
-                 WHERE created_by = $1 AND status != 'cancelled'"
+                 WHERE created_by = $1 AND status != 'cancelled'",
             )
             .bind(user_id)
             .execute(&pool)
@@ -195,25 +188,29 @@ async fn test_cleaner_cancels_deleted_user_experiments() {
     }
 
     // Verify user1's experiment is still active
-    let active_exp: Uuid = sqlx::query_scalar(
-        "SELECT id FROM experiments WHERE status = 'active'"
-    )
-    .fetch_one(&pool)
-    .await
-    .expect("Failed to fetch active experiment");
+    let active_exp: Uuid = sqlx::query_scalar("SELECT id FROM experiments WHERE status = 'active'")
+        .fetch_one(&pool)
+        .await
+        .expect("Failed to fetch active experiment");
 
-    assert_eq!(active_exp, exp1_id, "User1's experiment should remain active");
+    assert_eq!(
+        active_exp, exp1_id,
+        "User1's experiment should remain active"
+    );
 
     // Verify user2's experiment is cancelled (soft-deleted)
-    let cancelled_exp: Option<Uuid> = sqlx::query_scalar(
-        "SELECT id FROM experiments WHERE id = $1 AND status = 'cancelled'"
-    )
-    .bind(exp2_id)
-    .fetch_optional(&pool)
-    .await
-    .expect("Failed to check cancelled experiment");
+    let cancelled_exp: Option<Uuid> =
+        sqlx::query_scalar("SELECT id FROM experiments WHERE id = $1 AND status = 'cancelled'")
+            .bind(exp2_id)
+            .fetch_optional(&pool)
+            .await
+            .expect("Failed to check cancelled experiment");
 
-    assert_eq!(cancelled_exp, Some(exp2_id), "User2's experiment should be cancelled");
+    assert_eq!(
+        cancelled_exp,
+        Some(exp2_id),
+        "User2's experiment should be cancelled"
+    );
 
     // Verify batch API was used (1 call for 2 users)
     assert_eq!(
@@ -238,12 +235,10 @@ async fn test_cleaner_hard_deletes_assignments() {
     create_test_assignment(&pool, exp_id, user2_id).await;
 
     // Verify both assignments exist
-    let initial_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM experiment_assignments"
-    )
-    .fetch_one(&pool)
-    .await
-    .expect("Failed to count assignments");
+    let initial_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM experiment_assignments")
+        .fetch_one(&pool)
+        .await
+        .expect("Failed to count assignments");
 
     assert_eq!(initial_count, 2, "Should have 2 assignments initially");
 
@@ -251,12 +246,11 @@ async fn test_cleaner_hard_deletes_assignments() {
     let mock_client = MockAuthClient::new(vec![(user1_id, "user1".to_string())]);
 
     // Simulate feed cleaner logic
-    let all_user_ids: Vec<Uuid> = sqlx::query_scalar(
-        "SELECT DISTINCT user_id FROM experiment_assignments"
-    )
-    .fetch_all(&pool)
-    .await
-    .expect("Failed to fetch user IDs");
+    let all_user_ids: Vec<Uuid> =
+        sqlx::query_scalar("SELECT DISTINCT user_id FROM experiment_assignments")
+            .fetch_all(&pool)
+            .await
+            .expect("Failed to fetch user IDs");
 
     let existing_users = mock_client.get_users_by_ids(&all_user_ids).await.unwrap();
 
@@ -272,22 +266,18 @@ async fn test_cleaner_hard_deletes_assignments() {
     }
 
     // Verify only user1's assignment remains
-    let final_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM experiment_assignments"
-    )
-    .fetch_one(&pool)
-    .await
-    .expect("Failed to count assignments");
+    let final_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM experiment_assignments")
+        .fetch_one(&pool)
+        .await
+        .expect("Failed to count assignments");
 
     assert_eq!(final_count, 1, "Should only have 1 assignment");
 
     // Verify user1's assignment exists
-    let remaining_user: Uuid = sqlx::query_scalar(
-        "SELECT user_id FROM experiment_assignments"
-    )
-    .fetch_one(&pool)
-    .await
-    .expect("Failed to fetch remaining assignment");
+    let remaining_user: Uuid = sqlx::query_scalar("SELECT user_id FROM experiment_assignments")
+        .fetch_one(&pool)
+        .await
+        .expect("Failed to fetch remaining assignment");
 
     assert_eq!(remaining_user, user1_id, "User1's assignment should remain");
 }
@@ -315,12 +305,11 @@ async fn test_cleaner_hard_deletes_metrics() {
     // Mock auth-service: only user1 exists
     let mock_client = MockAuthClient::new(vec![(user1_id, "user1".to_string())]);
 
-    let all_user_ids: Vec<Uuid> = sqlx::query_scalar(
-        "SELECT DISTINCT user_id FROM experiment_metrics"
-    )
-    .fetch_all(&pool)
-    .await
-    .unwrap();
+    let all_user_ids: Vec<Uuid> =
+        sqlx::query_scalar("SELECT DISTINCT user_id FROM experiment_metrics")
+            .fetch_all(&pool)
+            .await
+            .unwrap();
 
     let existing_users = mock_client.get_users_by_ids(&all_user_ids).await.unwrap();
 
@@ -375,7 +364,7 @@ async fn test_cleaner_preserves_active_user_experiments() {
          UNION
          SELECT DISTINCT user_id
          FROM experiment_metrics
-         ORDER BY 1"
+         ORDER BY 1",
     )
     .fetch_all(&pool)
     .await
@@ -386,13 +375,11 @@ async fn test_cleaner_preserves_active_user_experiments() {
     // Attempt cleanup (should do nothing)
     for uid in &all_user_ids {
         if !existing_users.contains_key(uid) {
-            sqlx::query(
-                "UPDATE experiments SET status = 'cancelled' WHERE created_by = $1"
-            )
-            .bind(uid)
-            .execute(&pool)
-            .await
-            .unwrap();
+            sqlx::query("UPDATE experiments SET status = 'cancelled' WHERE created_by = $1")
+                .bind(uid)
+                .execute(&pool)
+                .await
+                .unwrap();
 
             sqlx::query("DELETE FROM experiment_assignments WHERE user_id = $1")
                 .bind(uid)
@@ -409,29 +396,27 @@ async fn test_cleaner_preserves_active_user_experiments() {
     }
 
     // Verify all data remains
-    let exp_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM experiments WHERE status = 'active'"
-    )
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let exp_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM experiments WHERE status = 'active'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
 
-    let assignment_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM experiment_assignments"
-    )
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let assignment_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM experiment_assignments")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
 
-    let metric_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM experiment_metrics"
-    )
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let metric_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM experiment_metrics")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
 
     assert_eq!(exp_count, 1, "Active user's experiment should remain");
-    assert_eq!(assignment_count, 1, "Active user's assignment should remain");
+    assert_eq!(
+        assignment_count, 1,
+        "Active user's assignment should remain"
+    );
     assert_eq!(metric_count, 1, "Active user's metric should remain");
 }
 
@@ -462,7 +447,7 @@ async fn test_batch_api_n_plus_1_elimination() {
         "SELECT DISTINCT created_by AS user_id
          FROM experiments
          WHERE created_by IS NOT NULL
-         ORDER BY 1"
+         ORDER BY 1",
     )
     .fetch_all(&pool)
     .await
@@ -475,13 +460,11 @@ async fn test_batch_api_n_plus_1_elimination() {
 
         for user_id in chunk {
             if !existing.contains_key(user_id) {
-                sqlx::query(
-                    "UPDATE experiments SET status = 'cancelled' WHERE created_by = $1"
-                )
-                .bind(user_id)
-                .execute(&pool)
-                .await
-                .unwrap();
+                sqlx::query("UPDATE experiments SET status = 'cancelled' WHERE created_by = $1")
+                    .bind(user_id)
+                    .execute(&pool)
+                    .await
+                    .unwrap();
             }
         }
     }
@@ -494,19 +477,17 @@ async fn test_batch_api_n_plus_1_elimination() {
     );
 
     // Verify cleanup results: 250 cancelled, 250 active
-    let cancelled_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM experiments WHERE status = 'cancelled'"
-    )
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let cancelled_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM experiments WHERE status = 'cancelled'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
 
-    let active_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM experiments WHERE status = 'active'"
-    )
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let active_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM experiments WHERE status = 'active'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
 
     assert_eq!(cancelled_count, 250, "250 experiments should be cancelled");
     assert_eq!(active_count, 250, "250 experiments should remain active");

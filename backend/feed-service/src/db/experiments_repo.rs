@@ -5,8 +5,8 @@
 //! All user_id references are validated via AuthClient before INSERT.
 
 use crate::error::{AppError, Result};
-use grpc_clients::AuthClient;
 use chrono::{DateTime, Utc};
+use grpc_clients::AuthClient;
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use std::sync::Arc;
@@ -395,7 +395,10 @@ impl ExperimentsRepo {
         .fetch_all(&self.pool)
         .await
         .map_err(|e| {
-            error!("Failed to get variants for experiment {}: {}", experiment_id, e);
+            error!(
+                "Failed to get variants for experiment {}: {}",
+                experiment_id, e
+            );
             AppError::Database(e.to_string())
         })?;
 
@@ -422,11 +425,17 @@ impl ExperimentsRepo {
         .fetch_one(&self.pool)
         .await
         .map_err(|e| {
-            error!("Failed to update experiment {} status: {}", experiment_id, e);
+            error!(
+                "Failed to update experiment {} status: {}",
+                experiment_id, e
+            );
             AppError::Database(e.to_string())
         })?;
 
-        info!("Updated experiment {} status to {:?}", experiment_id, status);
+        info!(
+            "Updated experiment {} status to {:?}",
+            experiment_id, status
+        );
 
         Ok(experiment)
     }

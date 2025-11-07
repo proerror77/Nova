@@ -34,10 +34,7 @@ async fn setup_test_db() -> Result<Pool<Postgres>, Box<dyn std::error::Error>> {
     let container = postgres_image.start().await?;
     let port = container.get_host_port_ipv4(5432).await?;
 
-    let connection_string = format!(
-        "postgres://postgres:postgres@127.0.0.1:{}/postgres",
-        port
-    );
+    let connection_string = format!("postgres://postgres:postgres@127.0.0.1:{}/postgres", port);
 
     // Wait for database to be ready and create pool
     let pool = PgPoolOptions::new()
@@ -46,9 +43,7 @@ async fn setup_test_db() -> Result<Pool<Postgres>, Box<dyn std::error::Error>> {
         .await?;
 
     // Run migrations
-    sqlx::migrate!("./migrations")
-        .run(&pool)
-        .await?;
+    sqlx::migrate!("./migrations").run(&pool).await?;
 
     // Leak container to keep it alive for the duration of the test
     // This is acceptable for integration tests
@@ -68,7 +63,7 @@ async fn create_test_conversation(
     // Insert conversation
     sqlx::query(
         "INSERT INTO conversations (id, name, creator_id, privacy_mode, created_at, updated_at)
-         VALUES ($1, $2, $3, 'standard', NOW(), NOW())"
+         VALUES ($1, $2, $3, 'standard', NOW(), NOW())",
     )
     .bind(conversation_id)
     .bind("Test Conversation")
@@ -80,7 +75,7 @@ async fn create_test_conversation(
     // Add creator as member
     sqlx::query(
         "INSERT INTO conversation_members (conversation_id, user_id, role, joined_at)
-         VALUES ($1, $2, 'owner', NOW())"
+         VALUES ($1, $2, 'owner', NOW())",
     )
     .bind(conversation_id)
     .bind(creator_id)
@@ -92,7 +87,7 @@ async fn create_test_conversation(
     for user_id in member_ids {
         sqlx::query(
             "INSERT INTO conversation_members (conversation_id, user_id, role, joined_at)
-             VALUES ($1, $2, 'member', NOW())"
+             VALUES ($1, $2, 'member', NOW())",
         )
         .bind(conversation_id)
         .bind(user_id)
@@ -237,20 +232,16 @@ async fn test_orphan_cleaner_deletes_non_existent_users() {
     let member1_id = Uuid::new_v4();
     let member2_id = Uuid::new_v4();
 
-    let conversation_id = create_test_conversation(
-        &pool,
-        creator_id,
-        vec![member1_id, member2_id],
-    ).await;
+    let conversation_id =
+        create_test_conversation(&pool, creator_id, vec![member1_id, member2_id]).await;
 
     // Verify 3 members exist initially
-    let initial_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM conversation_members WHERE conversation_id = $1"
-    )
-    .bind(conversation_id)
-    .fetch_one(&pool)
-    .await
-    .expect("Failed to count members");
+    let initial_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM conversation_members WHERE conversation_id = $1")
+            .bind(conversation_id)
+            .fetch_one(&pool)
+            .await
+            .expect("Failed to count members");
 
     assert_eq!(initial_count, 3, "Should have 3 members initially");
 
@@ -258,12 +249,11 @@ async fn test_orphan_cleaner_deletes_non_existent_users() {
     let mock_client = MockAuthClient::new(vec![(creator_id, "creator".to_string())]);
 
     // Simulate orphan cleaner logic
-    let all_user_ids: Vec<Uuid> = sqlx::query_scalar(
-        "SELECT DISTINCT user_id FROM conversation_members"
-    )
-    .fetch_all(&pool)
-    .await
-    .expect("Failed to fetch user IDs");
+    let all_user_ids: Vec<Uuid> =
+        sqlx::query_scalar("SELECT DISTINCT user_id FROM conversation_members")
+            .fetch_all(&pool)
+            .await
+            .expect("Failed to fetch user IDs");
 
     // Get existing users from mock auth-service
     let existing_users = mock_client.get_users_by_ids(&all_user_ids).await.unwrap();
@@ -280,26 +270,27 @@ async fn test_orphan_cleaner_deletes_non_existent_users() {
     }
 
     // Verify only creator remains
-    let final_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM conversation_members WHERE conversation_id = $1"
-    )
-    .bind(conversation_id)
-    .fetch_one(&pool)
-    .await
-    .expect("Failed to count members");
+    let final_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM conversation_members WHERE conversation_id = $1")
+            .bind(conversation_id)
+            .fetch_one(&pool)
+            .await
+            .expect("Failed to count members");
 
     assert_eq!(final_count, 1, "Should only have creator remaining");
 
     // Verify creator is the remaining member
-    let remaining_user: Uuid = sqlx::query_scalar(
-        "SELECT user_id FROM conversation_members WHERE conversation_id = $1"
-    )
-    .bind(conversation_id)
-    .fetch_one(&pool)
-    .await
-    .expect("Failed to fetch remaining user");
+    let remaining_user: Uuid =
+        sqlx::query_scalar("SELECT user_id FROM conversation_members WHERE conversation_id = $1")
+            .bind(conversation_id)
+            .fetch_one(&pool)
+            .await
+            .expect("Failed to fetch remaining user");
 
-    assert_eq!(remaining_user, creator_id, "Remaining user should be creator");
+    assert_eq!(
+        remaining_user, creator_id,
+        "Remaining user should be creator"
+    );
 
     // Verify batch API was used (1 call, not 3)
     assert_eq!(
@@ -318,11 +309,7 @@ async fn test_orphan_cleaner_preserves_existing_users() {
     let creator_id = Uuid::new_v4();
     let member1_id = Uuid::new_v4();
 
-    let conversation_id = create_test_conversation(
-        &pool,
-        creator_id,
-        vec![member1_id],
-    ).await;
+    let conversation_id = create_test_conversation(&pool, creator_id, vec![member1_id]).await;
 
     // Mock auth-service: both users exist
     let mock_client = MockAuthClient::new(vec![
@@ -331,12 +318,11 @@ async fn test_orphan_cleaner_preserves_existing_users() {
     ]);
 
     // Simulate orphan cleaner logic
-    let all_user_ids: Vec<Uuid> = sqlx::query_scalar(
-        "SELECT DISTINCT user_id FROM conversation_members"
-    )
-    .fetch_all(&pool)
-    .await
-    .expect("Failed to fetch user IDs");
+    let all_user_ids: Vec<Uuid> =
+        sqlx::query_scalar("SELECT DISTINCT user_id FROM conversation_members")
+            .fetch_all(&pool)
+            .await
+            .expect("Failed to fetch user IDs");
 
     let existing_users = mock_client.get_users_by_ids(&all_user_ids).await.unwrap();
 
@@ -357,13 +343,12 @@ async fn test_orphan_cleaner_preserves_existing_users() {
     assert_eq!(deleted_count, 0, "Should not delete any existing users");
 
     // Verify all members remain
-    let final_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM conversation_members WHERE conversation_id = $1"
-    )
-    .bind(conversation_id)
-    .fetch_one(&pool)
-    .await
-    .expect("Failed to count members");
+    let final_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM conversation_members WHERE conversation_id = $1")
+            .bind(conversation_id)
+            .fetch_one(&pool)
+            .await
+            .expect("Failed to count members");
 
     assert_eq!(final_count, 2, "Both members should remain");
 }
@@ -380,20 +365,15 @@ async fn test_orphan_cleaner_batch_processing() {
         member_ids.push(Uuid::new_v4());
     }
 
-    let conversation_id = create_test_conversation(
-        &pool,
-        creator_id,
-        member_ids.clone(),
-    ).await;
+    let conversation_id = create_test_conversation(&pool, creator_id, member_ids.clone()).await;
 
     // Verify 150 members exist
-    let initial_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM conversation_members WHERE conversation_id = $1"
-    )
-    .bind(conversation_id)
-    .fetch_one(&pool)
-    .await
-    .expect("Failed to count members");
+    let initial_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM conversation_members WHERE conversation_id = $1")
+            .bind(conversation_id)
+            .fetch_one(&pool)
+            .await
+            .expect("Failed to count members");
 
     assert_eq!(initial_count, 150, "Should have 150 members initially");
 
@@ -407,12 +387,11 @@ async fn test_orphan_cleaner_batch_processing() {
     let mock_client = MockAuthClient::new(existing_members);
 
     // Get all user IDs
-    let all_user_ids: Vec<Uuid> = sqlx::query_scalar(
-        "SELECT DISTINCT user_id FROM conversation_members"
-    )
-    .fetch_all(&pool)
-    .await
-    .expect("Failed to fetch user IDs");
+    let all_user_ids: Vec<Uuid> =
+        sqlx::query_scalar("SELECT DISTINCT user_id FROM conversation_members")
+            .fetch_all(&pool)
+            .await
+            .expect("Failed to fetch user IDs");
 
     // Simulate orphan cleaner batch processing (BATCH_SIZE = 100)
     const BATCH_SIZE: usize = 100;
@@ -437,15 +416,17 @@ async fn test_orphan_cleaner_batch_processing() {
     assert_eq!(total_deleted, 50, "Should delete 50 non-existent users");
 
     // Verify 100 members remain
-    let final_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM conversation_members WHERE conversation_id = $1"
-    )
-    .bind(conversation_id)
-    .fetch_one(&pool)
-    .await
-    .expect("Failed to count members");
+    let final_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM conversation_members WHERE conversation_id = $1")
+            .bind(conversation_id)
+            .fetch_one(&pool)
+            .await
+            .expect("Failed to count members");
 
-    assert_eq!(final_count, 100, "Should have 100 existing members remaining");
+    assert_eq!(
+        final_count, 100,
+        "Should have 100 existing members remaining"
+    );
 
     // Verify batch API was called twice (150 users / 100 batch size = 2 batches)
     assert_eq!(
@@ -480,8 +461,7 @@ async fn test_n_plus_1_elimination_50_members() {
     let batch_calls = mock_client.get_batch_call_count();
 
     assert_eq!(
-        batch_calls,
-        1,
+        batch_calls, 1,
         "Batch API should make only 1 call for 50 users (50x improvement over N+1)"
     );
 }
