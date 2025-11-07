@@ -280,61 +280,34 @@ async fn main() -> io::Result<()> {
         }
     };
     let health_checker = Arc::new(HealthChecker::new());
+    // Initialize gRPC clients with fallback on error (services may not be running)
     let content_client = Arc::new(
-        match ContentServiceClient::new(&grpc_config, health_checker.clone()).await {
-            Ok(client) => client,
-            Err(e) => {
-                tracing::error!("content-service gRPC client initialization failed: {:#}", e);
-                eprintln!(
-                    "ERROR: Failed to initialize content-service gRPC client: {}",
-                    e
-                );
-                std::process::exit(1);
-            }
-        },
+        ContentServiceClient::new(&grpc_config, health_checker.clone()).await.unwrap_or_else(|e| {
+            tracing::warn!("content-service gRPC client initialization failed: {:#} (running in degraded mode)", e);
+            ContentServiceClient::default()
+        })
     );
 
     let auth_client = Arc::new(
-        match AuthServiceClient::new(&grpc_config, health_checker.clone()).await {
-            Ok(client) => client,
-            Err(e) => {
-                tracing::error!("auth-service gRPC client initialization failed: {:#}", e);
-                eprintln!(
-                    "ERROR: Failed to initialize auth-service gRPC client: {}",
-                    e
-                );
-                std::process::exit(1);
-            }
-        },
+        AuthServiceClient::new(&grpc_config, health_checker.clone()).await.unwrap_or_else(|e| {
+            tracing::warn!("auth-service gRPC client initialization failed: {:#} (running in degraded mode)", e);
+            AuthServiceClient::default()
+        })
     );
 
     // NOTE: media_client unused after video service migration to media-service
     let _media_client = Arc::new(
-        match MediaServiceClient::new(&grpc_config, health_checker.clone()).await {
-            Ok(client) => client,
-            Err(e) => {
-                tracing::error!("media-service gRPC client initialization failed: {:#}", e);
-                eprintln!(
-                    "ERROR: Failed to initialize media-service gRPC client: {}",
-                    e
-                );
-                std::process::exit(1);
-            }
-        },
+        MediaServiceClient::new(&grpc_config, health_checker.clone()).await.unwrap_or_else(|e| {
+            tracing::warn!("media-service gRPC client initialization failed: {:#} (running in degraded mode)", e);
+            MediaServiceClient::default()
+        })
     );
 
     let feed_client = Arc::new(
-        match FeedServiceClient::new(&grpc_config, health_checker.clone()).await {
-            Ok(client) => client,
-            Err(e) => {
-                tracing::error!("feed-service gRPC client initialization failed: {:#}", e);
-                eprintln!(
-                    "ERROR: Failed to initialize feed-service gRPC client: {}",
-                    e
-                );
-                std::process::exit(1);
-            }
-        },
+        FeedServiceClient::new(&grpc_config, health_checker.clone()).await.unwrap_or_else(|e| {
+            tracing::warn!("feed-service gRPC client initialization failed: {:#} (running in degraded mode)", e);
+            FeedServiceClient::default()
+        })
     );
 
     // Feed state moved to feed-service (port 8089)
