@@ -220,6 +220,15 @@ async fn main() -> io::Result<()> {
     });
     info!("Kafka consumer task spawned");
 
+    // Phase 3: Spec 007 - Feed cleaner background job
+    // Cleans up experiment data from soft-deleted users after 30-day retention period
+    let cleaner_db = db_pool.get_ref().clone();
+    let cleaner_auth = auth_client.clone();
+    tokio::spawn(async move {
+        recommendation_service::jobs::feed_cleaner::start_feed_cleaner(cleaner_db, cleaner_auth).await;
+    });
+    info!("✅ Feed cleaner background job started");
+
     // Start gRPC server for RecommendationService in addition to HTTP server
     let grpc_addr: std::net::SocketAddr = format!("0.0.0.0:{}", config.app.port + 1000)
         .parse()
