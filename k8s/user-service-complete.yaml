@@ -1,0 +1,191 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: user-service-config
+  namespace: nova
+data:
+  DATABASE_URL: "postgresql://nova_admin:nova_password_staging_2024%21%40%23@postgres:5432/nova_staging?sslmode=disable"
+  REDIS_URL: "redis://nova-staging.mssth2.0001.apne1.cache.amazonaws.com:6379"
+  CLICKHOUSE_URL: "http://localhost:8123"
+  KAFKA_BROKERS: "localhost:9092"
+  S3_BUCKET_NAME: "nova-staging-025434362120"
+  S3_REGION: "ap-northeast-1"
+  CLOUDFRONT_URL: "https://d1234567890.cloudfront.net"
+  APP_ENV: "staging"
+  APP_HOST: "0.0.0.0"
+  APP_PORT: "8080"
+  GRPC_PORT: "9052"
+  DATABASE_MAX_CONNECTIONS: "30"
+  REDIS_POOL_SIZE: "10"
+  JWT_ACCESS_TOKEN_TTL: "3600"
+  JWT_REFRESH_TOKEN_TTL: "604800"
+  SMTP_HOST: "localhost"
+  SMTP_PORT: "587"
+  SMTP_FROM: "noreply@nova.dev"
+  RATE_LIMIT_MAX_REQUESTS: "100"
+  RATE_LIMIT_WINDOW_SECS: "60"
+  S3_PRESIGNED_URL_EXPIRY_SECS: "3600"
+  CORS_ALLOWED_ORIGINS: "*"
+  RUST_LOG: "debug"
+  SERVICE_NAME: "user-service"
+  ENVIRONMENT: "staging"
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: user-service-secrets
+  namespace: nova
+type: Opaque
+data:
+  jwt_secret: cUlpWHhuU05LNkphZG9hNUd2ZUZ1TTVCRkdDQml0YTgxUmdOR3B6REtFbz0=  # base64 encoded JWT secret
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: user-service
+  namespace: nova
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: user-service
+  namespace: nova
+  labels:
+    app: user-service
+    version: v1
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: user-service
+  template:
+    metadata:
+      labels:
+        app: user-service
+        version: v1
+    spec:
+      serviceAccountName: user-service
+      containers:
+      - name: user-service
+        image: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/user-service:latest
+        imagePullPolicy: Always
+        ports:
+        - name: http
+          containerPort: 8080
+          protocol: TCP
+        - name: grpc
+          containerPort: 9052
+          protocol: TCP
+        envFrom:
+        - configMapRef:
+            name: user-service-config
+        env:
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: user-service-secrets
+              key: jwt_secret
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: aws-credentials
+              key: AWS_ACCESS_KEY_ID
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: aws-credentials
+              key: AWS_SECRET_ACCESS_KEY
+        - name: JWT_PRIVATE_KEY_PEM
+          valueFrom:
+            secretKeyRef:
+              name: user-service-secrets
+              key: JWT_PRIVATE_KEY_PEM
+        - name: JWT_PUBLIC_KEY_PEM
+          valueFrom:
+            secretKeyRef:
+              name: user-service-secrets
+              key: JWT_PUBLIC_KEY_PEM
+        livenessProbe:
+          httpGet:
+            path: /api/v1/health
+            port: http
+          initialDelaySeconds: 60
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /api/v1/health
+            port: http
+          initialDelaySeconds: 30
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        resources:
+          requests:
+            cpu: 250m
+            memory: 512Mi
+          limits:
+            cpu: 500m
+            memory: 1Gi
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: true
+          runAsUser: 1000
+          capabilities:
+            drop:
+            - ALL
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: user-service
+  namespace: nova
+  labels:
+    app: user-service
+spec:
+  type: ClusterIP
+  selector:
+    app: user-service
+  ports:
+  - name: http
+    port: 8080
+    targetPort: http
+    protocol: TCP
+  - name: grpc
+    port: 9052
+    targetPort: grpc
+    protocol: TCP
+  sessionAffinity: None
+
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: user-service-hpa
+  namespace: nova
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: user-service
+  minReplicas: 2
+  maxReplicas: 5
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80

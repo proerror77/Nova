@@ -22,8 +22,7 @@ ON search_history(user_id, searched_at DESC);
 
 -- Index for trending queries (global)
 CREATE INDEX IF NOT EXISTS idx_search_history_query_time
-ON search_history(query_type, query_text, searched_at DESC)
-WHERE searched_at > NOW() - INTERVAL '30 days';
+ON search_history(query_type, query_text, searched_at DESC);
 
 -- Popular/trending searches
 CREATE TABLE IF NOT EXISTS trending_searches (
@@ -58,13 +57,11 @@ CREATE TABLE IF NOT EXISTS search_suggestions (
 
 -- Index for fast suggestion lookup
 CREATE INDEX IF NOT EXISTS idx_search_suggestions_user_type
-ON search_suggestions(user_id, query_type, created_at DESC)
-WHERE expires_at > NOW();
+ON search_suggestions(user_id, query_type, created_at DESC);
 
 -- Create composite index for autocomplete queries
 CREATE INDEX IF NOT EXISTS idx_suggestions_autocomplete
-ON search_suggestions(query_type, suggestion_text, relevance_score DESC)
-WHERE user_id IS NULL AND expires_at > NOW();
+ON search_suggestions(query_type, suggestion_text, relevance_score DESC);
 
 -- Table to track popular search results (for relevance ranking)
 CREATE TABLE IF NOT EXISTS popular_search_results (
