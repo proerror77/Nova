@@ -34,7 +34,7 @@ async fn test_cdc_consumption_from_kafka() {
     pg.execute_simple(
         "INSERT INTO posts (id, author_id, content, created_at)
          VALUES ($1, $2, $3, NOW())",
-        &[&post_id, &"author-123", &"Test post content"],
+        &[post_id, "author-123", "Test post content"],
     )
     .await
     .expect("Failed to insert post into PostgreSQL");
@@ -235,7 +235,7 @@ async fn test_complete_event_to_feed_flow() {
     let post_id = "golden-post-001";
     pg.execute_simple(
         "INSERT INTO posts (id, author_id, content, created_at) VALUES ($1, $2, $3, NOW())",
-        &[&post_id, &"author-golden", &"Golden path test post"],
+        &[post_id, "author-golden", "Golden path test post"],
     )
     .await
     .unwrap();

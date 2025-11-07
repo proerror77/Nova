@@ -50,12 +50,14 @@ actix = "0.13"
 # gRPC
 tonic.workspace = true
 prost.workspace = true
+tonic-health = "0.10"
 
 # Shared libraries
 error-types = { path = "../libs/error-types" }
 db-pool = { path = "../libs/db-pool" }
 error-handling = { path = "../libs/error-handling" }
 grpc-metrics = { path = "../libs/grpc-metrics" }
+grpc-clients = { path = "../libs/grpc-clients" }
 
 [build-dependencies]
 tonic-build = "0.11"

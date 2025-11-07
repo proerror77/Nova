@@ -73,7 +73,7 @@ fn benchmark_notification_throughput(c: &mut Criterion) {
     group.finish();
 }
 
-async fn simulate_notification_push(batch_size: usize) {
+async fn simulate_notification_push(_batch_size: usize) {
     // 模拟批量推送（每批 1000 条）
     let batch_delay = Duration::from_millis(100); // 100ms 处理一批
     tokio::time::sleep(batch_delay).await;

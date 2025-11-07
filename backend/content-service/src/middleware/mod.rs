@@ -14,7 +14,6 @@ use actix_web::{error::ErrorUnauthorized, Error, FromRequest, HttpMessage, HttpR
 use crypto_core::jwt;
 use futures::future::LocalBoxFuture;
 use redis::aio::ConnectionManager;
-use redis::AsyncCommands;
 use std::future::{ready, Ready};
 use std::rc::Rc;
 use std::sync::Arc;

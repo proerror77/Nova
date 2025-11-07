@@ -25,7 +25,8 @@ pub struct GrpcMetrics {
     /// Labels: service, method
     pub in_flight_requests: IntGaugeVec,
 
-    /// Internal registry for proper scoping
+    /// Internal registry for proper scoping (reserved for future use)
+    #[allow(dead_code)]
     registry: Option<Registry>,
 }
 

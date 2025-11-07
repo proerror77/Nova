@@ -4,7 +4,7 @@
 /// This prevents stolen tokens from being used after logout or password change
 use actix_web::{
     dev::{forward_ready, Service, ServiceRequest, ServiceResponse, Transform},
-    Error, HttpMessage,
+    Error,
 };
 use futures::future::LocalBoxFuture;
 use redis_utils::SharedConnectionManager;

@@ -3,6 +3,8 @@
 //! Provides reusable container fixtures for Postgres and Redis to enable
 //! integration tests to run in CI without manual infrastructure setup.
 
+#![allow(dead_code)]
+
 use std::sync::Arc;
 use testcontainers::core::WaitFor;
 use testcontainers::{runners::AsyncRunner, GenericImage};

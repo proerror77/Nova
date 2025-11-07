@@ -15,6 +15,8 @@ pub struct GrpcClientConfig {
     pub media_service_url: String,
     /// Auth service gRPC address
     pub auth_service_url: String,
+    /// Feed service gRPC address
+    pub feed_service_url: String,
     /// Connection timeout in seconds
     pub connection_timeout_secs: u64,
     /// Request timeout in seconds
@@ -52,11 +54,13 @@ impl GrpcClientConfig {
         content_service_url: String,
         media_service_url: String,
         auth_service_url: String,
+        feed_service_url: String,
     ) -> Self {
         Self {
             content_service_url,
             media_service_url,
             auth_service_url,
+            feed_service_url,
             connection_timeout_secs: 10,
             request_timeout_secs: 30,
             max_concurrent_streams: 100,
@@ -121,6 +125,9 @@ impl GrpcClientConfig {
 
         let auth_service_url = std::env::var("AUTH_SERVICE_GRPC_URL")
             .unwrap_or_else(|_| "http://localhost:9080".to_string());
+
+        let feed_service_url = std::env::var("FEED_SERVICE_GRPC_URL")
+            .unwrap_or_else(|_| "http://localhost:9083".to_string());
 
         let connection_timeout_secs = std::env::var("GRPC_CONNECTION_TIMEOUT_SECS")
             .ok()
@@ -221,6 +228,7 @@ impl GrpcClientConfig {
             content_service_url,
             media_service_url,
             auth_service_url,
+            feed_service_url,
             connection_timeout_secs,
             request_timeout_secs,
             max_concurrent_streams,
@@ -302,6 +310,7 @@ impl Default for GrpcClientConfig {
             "http://localhost:9081".to_string(),
             "http://localhost:9082".to_string(),
             "http://localhost:9080".to_string(),
+            "http://localhost:9083".to_string(),
         )
     }
 }

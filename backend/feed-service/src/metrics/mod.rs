@@ -1,3 +1,5 @@
+pub mod feed_cleaner;
+
 use std::time::Duration;
 
 use actix_web::HttpResponse;

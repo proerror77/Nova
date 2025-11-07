@@ -1,0 +1,66 @@
+name: P0 Debug - Minimal Test
+
+on:
+  push:
+    branches:
+      - feature/phase1-grpc-migration
+
+jobs:
+  debug:
+    name: Debug CI Environment
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Step 1 - Checkout
+        uses: actions/checkout@v4
+
+      - name: Step 2 - Verify Checkout
+        run: |
+          echo "✅ Checkout successful"
+          ls -la
+          echo "Current directory: $(pwd)"
+
+      - name: Step 3 - Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          override: true
+
+      - name: Step 4 - Verify Rust
+        run: |
+          echo "✅ Rust installed"
+          rustc --version
+          cargo --version
+
+      - name: Step 5 - Install protoc
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler
+          protoc --version
+          echo "✅ Protoc installed"
+
+      - name: Step 6 - Check backend directory
+        run: |
+          ls -la backend/
+          echo "✅ Backend directory exists"
+
+      - name: Step 7 - Check user-service directory
+        run: |
+          ls -la backend/user-service/
+          echo "✅ User service directory exists"
+
+      - name: Step 8 - Check Cargo.toml
+        run: |
+          cat backend/user-service/Cargo.toml | head -30
+          echo "✅ Cargo.toml readable"
+
+      - name: Step 9 - Try cargo check
+        working-directory: backend/user-service
+        run: |
+          cargo check --lib
+          echo "✅ Cargo check passed"
+
+      - name: Final Report
+        if: always()
+        run: echo "🎉 All debug steps completed!"

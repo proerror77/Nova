@@ -5,6 +5,7 @@ use std::io;
 use std::sync::Arc;
 use std::time::Instant;
 use tonic::transport::Server as GrpcServer;
+use tonic_health::server::health_reporter;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use utoipa_swagger_ui::SwaggerUi;
 
@@ -19,6 +20,8 @@ use recommendation_service::handlers::{
 use recommendation_service::services::{RecommendationEventConsumer, RecommendationServiceV2};
 use serde_json::from_slice;
 use tracing::{error, info, warn};
+
+use grpc_clients::{config::GrpcConfig, AuthClient, GrpcClientPool};
 
 async fn openapi_json(
     doc: web::Data<utoipa::openapi::OpenApi>,
@@ -151,6 +154,32 @@ async fn main() -> io::Result<()> {
 
     let db_pool = web::Data::new(db_pool.clone());
 
+    // Initialize gRPC client pool with connection pooling
+    let grpc_config = match GrpcConfig::from_env() {
+        Ok(cfg) => cfg,
+        Err(e) => {
+            tracing::error!("Failed to load gRPC config: {:#}", e);
+            eprintln!("ERROR: Failed to load gRPC config: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    let grpc_pool = match GrpcClientPool::new(&grpc_config).await {
+        Ok(pool) => {
+            tracing::info!("gRPC client pool initialized successfully");
+            Arc::new(pool)
+        }
+        Err(e) => {
+            tracing::error!("Failed to create gRPC client pool: {:#}", e);
+            eprintln!("ERROR: Failed to create gRPC client pool: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    // Initialize AuthService gRPC client from connection pool
+    let auth_client = Arc::new(AuthClient::from_pool(grpc_pool.clone()));
+    tracing::info!("AuthService gRPC client initialized from pool");
+
     // Initialize recommendation service
     let rec_config = recommendation_service::services::RecommendationConfig {
         collaborative_model_path: config.recommendation.collaborative_model_path.clone(),
@@ -161,7 +190,7 @@ async fn main() -> io::Result<()> {
     };
 
     let recommendation_svc =
-        match RecommendationServiceV2::new(rec_config, db_pool.get_ref().clone()).await {
+        match RecommendationServiceV2::new(rec_config, db_pool.get_ref().clone(), auth_client.clone()).await {
             Ok(service) => {
                 tracing::info!("Recommendation service initialized successfully");
                 Arc::new(service)
@@ -190,6 +219,15 @@ async fn main() -> io::Result<()> {
         }
     });
     info!("Kafka consumer task spawned");
+
+    // Phase 3: Spec 007 - Feed cleaner background job
+    // Cleans up experiment data from soft-deleted users after 30-day retention period
+    let cleaner_db = db_pool.get_ref().clone();
+    let cleaner_auth = auth_client.clone();
+    tokio::spawn(async move {
+        recommendation_service::jobs::feed_cleaner::start_feed_cleaner(cleaner_db, cleaner_auth).await;
+    });
+    info!("✅ Feed cleaner background job started");
 
     // Start gRPC server for RecommendationService in addition to HTTP server
     let grpc_addr: std::net::SocketAddr = format!("0.0.0.0:{}", config.app.port + 1000)
@@ -225,7 +263,14 @@ async fn main() -> io::Result<()> {
             Ok(req)
         }
 
+        // Health service
+        let (mut health, health_service) = health_reporter();
+        health
+            .set_serving::<recommendation_service::grpc::recommendation_service_server::RecommendationServiceServer<recommendation_service::grpc::RecommendationServiceImpl>>()
+            .await;
+
         if let Err(e) = GrpcServer::builder()
+            .add_service(health_service)
             .add_service(
                 recommendation_service::grpc::recommendation_service_server::RecommendationServiceServer::with_interceptor(
                     svc,

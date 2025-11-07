@@ -5,6 +5,7 @@
 use actix_web::HttpResponse;
 use prometheus::{Encoder, TextEncoder};
 
+pub mod content_cleaner;
 pub mod feed;
 
 /// Actix handler that renders Prometheus metrics in text format.

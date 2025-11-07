@@ -43,6 +43,8 @@ pub struct HealthChecker {
     media_service_health: Arc<RwLock<ServiceHealth>>,
     /// Health status for auth service
     auth_service_health: Arc<RwLock<ServiceHealth>>,
+    /// Health status for feed service
+    feed_service_health: Arc<RwLock<ServiceHealth>>,
 }
 
 impl HealthChecker {
@@ -61,6 +63,11 @@ impl HealthChecker {
             })),
             auth_service_health: Arc::new(RwLock::new(ServiceHealth {
                 name: "auth-service".to_string(),
+                status: HealthStatus::Unreachable,
+                last_check: std::time::SystemTime::now(),
+            })),
+            feed_service_health: Arc::new(RwLock::new(ServiceHealth {
+                name: "feed-service".to_string(),
                 status: HealthStatus::Unreachable,
                 last_check: std::time::SystemTime::now(),
             })),
@@ -106,15 +113,30 @@ impl HealthChecker {
         tracing::info!("Auth service health updated: {}", status);
     }
 
+    /// Get feed service health status
+    pub async fn feed_service_health(&self) -> ServiceHealth {
+        self.feed_service_health.read().await.clone()
+    }
+
+    /// Update feed service health status
+    pub async fn set_feed_service_health(&self, status: HealthStatus) {
+        let mut health = self.feed_service_health.write().await;
+        health.status = status;
+        health.last_check = std::time::SystemTime::now();
+        tracing::info!("Feed service health updated: {}", status);
+    }
+
     /// Check if all services are healthy
     pub async fn all_healthy(&self) -> bool {
         let content_health = self.content_service_health.read().await;
         let media_health = self.media_service_health.read().await;
         let auth_health = self.auth_service_health.read().await;
+        let feed_health = self.feed_service_health.read().await;
 
         content_health.status == HealthStatus::Healthy
             && media_health.status == HealthStatus::Healthy
             && auth_health.status == HealthStatus::Healthy
+            && feed_health.status == HealthStatus::Healthy
     }
 
     /// Get overall health status string
@@ -122,10 +144,11 @@ impl HealthChecker {
         let content_health = self.content_service_health.read().await;
         let media_health = self.media_service_health.read().await;
         let auth_health = self.auth_service_health.read().await;
+        let feed_health = self.feed_service_health.read().await;
 
         format!(
-            "{{\"content_service\": \"{}\", \"media_service\": \"{}\", \"auth_service\": \"{}\"}}",
-            content_health.status, media_health.status, auth_health.status
+            "{{\"content_service\": \"{}\", \"media_service\": \"{}\", \"auth_service\": \"{}\", \"feed_service\": \"{}\"}}",
+            content_health.status, media_health.status, auth_health.status, feed_health.status
         )
     }
 }
@@ -172,6 +195,7 @@ mod tests {
             .set_media_service_health(HealthStatus::Healthy)
             .await;
         checker.set_auth_service_health(HealthStatus::Healthy).await;
+        checker.set_feed_service_health(HealthStatus::Healthy).await;
         assert!(checker.all_healthy().await);
     }
 }

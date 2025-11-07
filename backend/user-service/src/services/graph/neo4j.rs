@@ -1,7 +1,6 @@
 use crate::config::GraphConfig;
 use anyhow::{anyhow, Result};
 use neo4rs::{query, Graph};
-use tokio_stream::StreamExt;
 use uuid::Uuid;
 
 #[derive(Clone)]

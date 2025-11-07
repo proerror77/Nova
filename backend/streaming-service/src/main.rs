@@ -19,6 +19,7 @@ use tonic_health::server::health_reporter;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use utoipa_swagger_ui::SwaggerUi;
 
+use grpc_clients::{config::GrpcConfig, AuthClient, GrpcClientPool};
 use streaming_service::handlers::StreamHandlerState;
 use streaming_service::metrics;
 use streaming_service::services::{
@@ -53,6 +54,8 @@ async fn main() -> io::Result<()> {
         std::env::var("DATABASE_URL").unwrap_or_else(|_| "postgres://localhost/nova".to_string());
     let redis_url =
         std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://localhost:6379".to_string());
+    let auth_service_url =
+        std::env::var("AUTH_SERVICE_URL").unwrap_or_else(|_| "http://localhost:9051".to_string());
     let port = std::env::var("PORT")
         .unwrap_or_else(|_| "8083".to_string())
         .parse::<u16>()
@@ -86,11 +89,23 @@ async fn main() -> io::Result<()> {
             .expect("Failed to create Kafka producer"),
     );
 
+    // Initialize gRPC client pool with connection pooling
+    let grpc_config = GrpcConfig::from_env().expect("Failed to load gRPC config");
+    let grpc_pool = Arc::new(
+        GrpcClientPool::new(&grpc_config)
+            .await
+            .expect("Failed to create gRPC client pool"),
+    );
+
+    // Initialize AuthService gRPC client from connection pool
+    let auth_client = Arc::new(AuthClient::from_pool(grpc_pool.clone()));
+
     let stream_service = Arc::new(Mutex::new(StreamService::new(
         repository.clone(),
         viewer_counter.clone(),
         chat_store.clone(),
         kafka_producer.clone(),
+        auth_client.clone(),
         "rtmp://localhost/live".to_string(),
         "https://cdn.nova.dev/hls".to_string(),
     )));
@@ -133,10 +148,14 @@ async fn main() -> io::Result<()> {
         fn server_interceptor(
             mut req: tonic::Request<()>,
         ) -> Result<tonic::Request<()>, tonic::Status> {
-            if let Some(val) = req.metadata().get("correlation-id") {
-                if let Ok(s) = val.to_str() {
-                    req.extensions_mut().insert::<String>(s.to_string());
-                }
+            // Extract correlation-id before mutable borrow
+            let correlation_id = req.metadata()
+                .get("correlation-id")
+                .and_then(|val| val.to_str().ok())
+                .map(|s| s.to_string());
+
+            if let Some(id) = correlation_id {
+                req.extensions_mut().insert::<String>(id);
             }
             Ok(req)
         }

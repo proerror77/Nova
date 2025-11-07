@@ -5,7 +5,6 @@
 //! 2. 消除特殊情况：统一的初始化和清理逻辑
 //! 3. 简洁执念：单一职责，清晰的生命周期管理
 
-use once_cell::sync::Lazy;
 use redis::aio::ConnectionManager;
 use sqlx::{postgres::PgPoolOptions, PgPool};
 use std::sync::Arc;
@@ -180,7 +179,7 @@ impl TestEnvironment {
     }
 
     /// 运行数据库迁移（如果迁移目录存在）
-    async fn run_migrations(pool: &PgPool) {
+    async fn run_migrations(_pool: &PgPool) {
         // 尝试运行多个服务的迁移
         let migration_paths = vec![
             "./backend/messaging-service/migrations",

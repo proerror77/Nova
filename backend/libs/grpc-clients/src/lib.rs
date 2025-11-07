@@ -8,9 +8,13 @@
 /// - Provides connection pooling and management
 /// - Handles common gRPC patterns (retries, timeouts, circuit breakers)
 /// - Implements dependency injection for service clients
+pub mod auth_client;
 pub mod config;
 pub mod middleware;
 pub mod pool;
+
+// Re-export AuthClient for easier access
+pub use auth_client::AuthClient;
 
 // Re-export generated proto client modules
 pub mod nova {

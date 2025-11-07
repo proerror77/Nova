@@ -6,6 +6,8 @@ use crate::grpc::nova::auth_service::auth_service_client::AuthServiceClient as T
 use crate::grpc::nova::auth_service::*;
 use crate::grpc::nova::content_service::content_service_client::ContentServiceClient as TonicContentServiceClient;
 use crate::grpc::nova::content_service::*;
+use crate::grpc::nova::feed_service::recommendation_service_client::RecommendationServiceClient as TonicFeedServiceClient;
+use crate::grpc::nova::feed_service::*;
 use crate::grpc::nova::media_service::media_service_client::MediaServiceClient as TonicMediaServiceClient;
 use crate::grpc::nova::media_service::*;
 use std::future::Future;
@@ -135,8 +137,6 @@ pub struct ContentServiceClient {
     client_pool: Arc<GrpcClientPool<TonicContentServiceClient<Channel>>>,
     health_checker: Arc<HealthChecker>,
     request_timeout: Duration,
-    retry_attempts: u32,
-    retry_backoff: Duration,
 }
 
 impl ContentServiceClient {
@@ -188,8 +188,6 @@ impl ContentServiceClient {
             client_pool,
             health_checker,
             request_timeout: config.request_timeout(),
-            retry_attempts: config.connect_retry_attempts(),
-            retry_backoff: config.connect_retry_backoff(),
         })
     }
 
@@ -761,6 +759,124 @@ impl AuthServiceClient {
             Err(err) => {
                 self.health_checker
                     .set_auth_service_health(HealthStatus::Unavailable)
+                    .await;
+                Err(err)
+            }
+        }
+    }
+}
+
+/// Feed Service gRPC client wrapper
+#[derive(Clone)]
+pub struct FeedServiceClient {
+    client_pool: Arc<GrpcClientPool<TonicFeedServiceClient<Channel>>>,
+    health_checker: Arc<HealthChecker>,
+    request_timeout: Duration,
+}
+
+impl FeedServiceClient {
+    /// Create a new feed service client
+    pub async fn new(
+        config: &GrpcClientConfig,
+        health_checker: Arc<HealthChecker>,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
+        tracing::info!(
+            "Creating feed service gRPC client: {}",
+            config.feed_service_url
+        );
+
+        let pool_size = config.pool_size();
+        let endpoint_url = config.endpoint_url(&config.feed_service_url)?;
+        let base_endpoint = Endpoint::from_shared(endpoint_url)?
+            .connect_timeout(config.connection_timeout())
+            .timeout(config.connection_timeout())
+            .http2_keep_alive_interval(config.http2_keep_alive_interval())
+            .keep_alive_while_idle(true)
+            .tcp_keepalive(Some(config.http2_keep_alive_interval()))
+            .keep_alive_timeout(config.connection_timeout())
+            .tcp_nodelay(true)
+            .concurrency_limit(config.max_concurrent_streams as usize);
+        let endpoint = if let Some(tls) = config.tls_config_for(&config.feed_service_url)? {
+            base_endpoint.tls_config(tls)?
+        } else {
+            base_endpoint
+        };
+
+        let mut clients = Vec::with_capacity(pool_size);
+        for _ in 0..pool_size {
+            let channel = connect_with_retry(
+                endpoint.clone(),
+                config.connect_retry_attempts(),
+                config.connect_retry_backoff(),
+            )
+            .await?;
+            clients.push(TonicFeedServiceClient::new(channel));
+        }
+        let client_pool = GrpcClientPool::new(clients);
+
+        tracing::info!("Feed service gRPC client connected successfully");
+        health_checker
+            .set_feed_service_health(HealthStatus::Healthy)
+            .await;
+
+        Ok(Self {
+            client_pool,
+            health_checker,
+            request_timeout: config.request_timeout(),
+        })
+    }
+
+    /// Get personalized feed for a user
+    pub async fn get_feed(
+        &self,
+        request: GetFeedRequest,
+    ) -> Result<GetFeedResponse, tonic::Status> {
+        let mut client = self.client_pool.acquire().await;
+        let mut tonic_request = tonic::Request::new(request);
+        tonic_request.set_timeout(self.request_timeout);
+
+        let response = client.get_feed(tonic_request).await;
+        match response {
+            Ok(resp) => {
+                self.health_checker
+                    .set_feed_service_health(HealthStatus::Healthy)
+                    .await;
+                Ok(resp.into_inner())
+            }
+            Err(err) => {
+                self.health_checker
+                    .set_feed_service_health(HealthStatus::Unavailable)
+                    .await;
+                Err(err)
+            }
+        }
+    }
+
+    /// Invalidate feed cache for a user
+    pub async fn invalidate_feed_cache(
+        &self,
+        user_id: String,
+        event_type: String,
+    ) -> Result<InvalidateFeedCacheResponse, tonic::Status> {
+        let mut client = self.client_pool.acquire().await;
+        let request = InvalidateFeedCacheRequest {
+            user_id,
+            event_type,
+        };
+        let mut tonic_request = tonic::Request::new(request);
+        tonic_request.set_timeout(self.request_timeout);
+
+        let response = client.invalidate_feed_cache(tonic_request).await;
+        match response {
+            Ok(resp) => {
+                self.health_checker
+                    .set_feed_service_health(HealthStatus::Healthy)
+                    .await;
+                Ok(resp.into_inner())
+            }
+            Err(err) => {
+                self.health_checker
+                    .set_feed_service_health(HealthStatus::Unavailable)
                     .await;
                 Err(err)
             }

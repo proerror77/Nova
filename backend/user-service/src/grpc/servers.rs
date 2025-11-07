@@ -14,8 +14,8 @@ use tonic::{Response, Status};
 use uuid::Uuid;
 
 use crate::grpc::clients::MediaServiceClient;
-use crate::grpc::nova::media::Video as MediaVideo;
-use crate::grpc::nova::video::v1::{
+use crate::grpc::nova::media_service::v1::Video as MediaVideo;
+use crate::grpc::nova::video_service::v1::{
     video_service_server::VideoService as VideoServiceTrait, DeleteVideoRequest,
     DeleteVideoResponse, GetTranscodingProgressRequest, GetVideoMetadataRequest, ListVideosRequest,
     ListVideosResponse, TranscodeVideoRequest, TranscodeVideoResponse, TranscodingProgress,

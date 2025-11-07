@@ -5,7 +5,7 @@ pub mod assertions;
 pub mod test_env;
 
 use chrono::{DateTime, Utc};
-use sqlx::{FromRow, PgPool, Postgres, Transaction};
+use sqlx::{FromRow, PgPool};
 use uuid::Uuid;
 
 // ============================================
@@ -13,6 +13,7 @@ use uuid::Uuid;
 // ============================================
 
 #[derive(Debug, Clone, FromRow)]
+#[allow(dead_code)]
 pub struct User {
     pub id: Uuid,
     pub email: String,
@@ -28,6 +29,7 @@ pub struct User {
 }
 
 #[derive(Debug, Clone, FromRow)]
+#[allow(dead_code)]
 pub struct Post {
     pub id: Uuid,
     pub user_id: Uuid,
@@ -41,6 +43,7 @@ pub struct Post {
 }
 
 #[derive(Debug, Clone, FromRow)]
+#[allow(dead_code)]
 pub struct PostImage {
     pub id: Uuid,
     pub post_id: Uuid,
@@ -57,6 +60,7 @@ pub struct PostImage {
 }
 
 #[derive(Debug, Clone, FromRow)]
+#[allow(dead_code)]
 pub struct PostMetadata {
     pub post_id: Uuid,
     pub like_count: i32,
@@ -71,6 +75,7 @@ pub struct PostMetadata {
 // ============================================
 
 /// Create a test database pool with migrations
+#[allow(dead_code)]
 pub async fn create_test_pool() -> PgPool {
     let database_url = std::env::var("DATABASE_URL")
         .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:5432/nova_test".to_string());
@@ -89,6 +94,7 @@ pub async fn create_test_pool() -> PgPool {
 }
 
 /// Clean up test data after tests
+#[allow(dead_code)]
 pub async fn cleanup_test_data(pool: &PgPool) {
     // Delete in order to respect foreign key constraints
     sqlx::query("DELETE FROM upload_sessions")
@@ -128,11 +134,13 @@ pub async fn cleanup_test_data(pool: &PgPool) {
 // ============================================
 
 /// Create a test user with default values
+#[allow(dead_code)]
 pub async fn create_test_user(pool: &PgPool) -> User {
     create_test_user_with_email(pool, &format!("test-{}@example.com", Uuid::new_v4())).await
 }
 
 /// Create a test user with specific email
+#[allow(dead_code)]
 pub async fn create_test_user_with_email(pool: &PgPool, email: &str) -> User {
     let username = format!(
         "user_{}",
@@ -165,11 +173,13 @@ pub async fn create_test_user_with_email(pool: &PgPool, email: &str) -> User {
 // ============================================
 
 /// Create a test post with default values
+#[allow(dead_code)]
 pub async fn create_test_post(pool: &PgPool, user_id: Uuid) -> Post {
     create_test_post_with_caption(pool, user_id, Some("Test post"), "pending").await
 }
 
 /// Create a test post with specific caption and status
+#[allow(dead_code)]
 pub async fn create_test_post_with_caption(
     pool: &PgPool,
     user_id: Uuid,
@@ -195,6 +205,7 @@ pub async fn create_test_post_with_caption(
 }
 
 /// Create a test post with images in specific status
+#[allow(dead_code)]
 pub async fn create_test_post_with_images(
     pool: &PgPool,
     user_id: Uuid,
@@ -237,6 +248,7 @@ pub async fn create_test_post_with_images(
 }
 
 /// Soft delete a post
+#[allow(dead_code)]
 pub async fn soft_delete_post(pool: &PgPool, post_id: Uuid) {
     sqlx::query(
         r#"
@@ -256,6 +268,7 @@ pub async fn soft_delete_post(pool: &PgPool, post_id: Uuid) {
 // ============================================
 
 /// Update post metadata with specific engagement counts
+#[allow(dead_code)]
 pub async fn update_post_metadata(
     pool: &PgPool,
     post_id: Uuid,
@@ -284,6 +297,7 @@ pub async fn update_post_metadata(
 // ============================================
 
 /// Create a test upload session
+#[allow(dead_code)]
 pub async fn create_test_upload_session(pool: &PgPool, post_id: Uuid) -> String {
     use rand::Rng;
     let mut rng = rand::thread_rng();
@@ -313,6 +327,7 @@ pub async fn create_test_upload_session(pool: &PgPool, post_id: Uuid) -> String 
 // ============================================
 
 /// Create multiple test posts for pagination testing
+#[allow(dead_code)]
 pub async fn create_test_posts_batch(pool: &PgPool, user_id: Uuid, count: usize) -> Vec<Post> {
     let mut posts = Vec::new();
 

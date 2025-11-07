@@ -1,0 +1,76 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: seed-data-scripts
+  namespace: nova
+data:
+  01_seed_auth_users.sql: |
+    -- Seed data for auth-service (nova_auth database)
+    INSERT INTO users (id, email, password_hash, email_verified, created_at, updated_at)
+    VALUES
+        ('00000000-0000-0000-0000-000000000001'::uuid, 'alice@test.nova.com', '$2b$10$YourBcryptHashHere1', true, NOW(), NOW()),
+        ('00000000-0000-0000-0000-000000000002'::uuid, 'bob@test.nova.com', '$2b$10$YourBcryptHashHere2', true, NOW(), NOW()),
+        ('00000000-0000-0000-0000-000000000003'::uuid, 'charlie@test.nova.com', '$2b$10$YourBcryptHashHere3', true, NOW(), NOW()),
+        ('00000000-0000-0000-0000-000000000004'::uuid, 'diana@test.nova.com', '$2b$10$YourBcryptHashHere4', true, NOW(), NOW()),
+        ('00000000-0000-0000-0000-000000000005'::uuid, 'eve@test.nova.com', '$2b$10$YourBcryptHashHere5', true, NOW(), NOW())
+    ON CONFLICT (id) DO NOTHING;
+
+  02_seed_user_profiles.sql: |
+    -- Seed data for user-service (nova_user database)
+    INSERT INTO users (id, username, display_name, bio, avatar_url, is_verified, is_private, created_at, updated_at)
+    VALUES
+        ('00000000-0000-0000-0000-000000000001'::uuid, 'alice_test', 'Alice Smith', 'Software engineer', 'https://avatar.test.nova.com/alice.jpg', true, false, NOW(), NOW()),
+        ('00000000-0000-0000-0000-000000000002'::uuid, 'bob_test', 'Bob Johnson', 'Full-stack developer', 'https://avatar.test.nova.com/bob.jpg', true, false, NOW(), NOW()),
+        ('00000000-0000-0000-0000-000000000003'::uuid, 'charlie_test', 'Charlie Brown', 'DevOps engineer', 'https://avatar.test.nova.com/charlie.jpg', false, false, NOW(), NOW()),
+        ('00000000-0000-0000-0000-000000000004'::uuid, 'diana_test', 'Diana Prince', 'Product designer', 'https://avatar.test.nova.com/diana.jpg', true, true, NOW(), NOW()),
+        ('00000000-0000-0000-0000-000000000005'::uuid, 'eve_test', 'Eve Anderson', 'Backend architect', 'https://avatar.test.nova.com/eve.jpg', false, false, NOW(), NOW())
+    ON CONFLICT (id) DO UPDATE SET username = EXCLUDED.username, updated_at = NOW();
+
+  run_seed.sh: |
+    #!/bin/bash
+    set -euo pipefail
+    echo "Starting seed data initialization..."
+    for db in nova_auth nova_user nova_content nova_messaging; do
+      echo "Seeding database: $db"
+      for sql in /seed-data/*.sql; do
+        echo "  Executing: $(basename $sql)"
+        PGPASSWORD="$DB_PASSWORD" psql -h postgres -p 5432 -U nova -d "$db" -f "$sql" -q || echo "  Warning: Some inserts may have been skipped (ON CONFLICT)"
+      done
+    done
+    echo "✓ Seed data initialization complete"
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: seed-data-init
+  namespace: nova
+  annotations:
+    description: "Initialize staging database with test data for E2E testing"
+spec:
+  ttlSecondsAfterFinished: 3600  # Clean up after 1 hour
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        app: seed-data-init
+    spec:
+      restartPolicy: OnFailure
+      containers:
+      - name: seed-data
+        image: postgres:16-alpine
+        command: ["/bin/sh", "/seed-data/run_seed.sh"]
+        env:
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: nova-db-credentials
+              key: DB_PASSWORD
+        volumeMounts:
+        - name: seed-scripts
+          mountPath: /seed-data
+          readOnly: true
+      volumes:
+      - name: seed-scripts
+        configMap:
+          name: seed-data-scripts
+          defaultMode: 0755

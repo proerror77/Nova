@@ -386,10 +386,10 @@ mod tests {
         assert_eq!(TokenType::APNs.as_str(), "APNs");
     }
 
-    #[test]
-    fn test_is_token_invalid_error() {
+    #[tokio::test]
+    async fn test_is_token_invalid_error() {
         let sender = PushSender {
-            db: PgPool::connect_lazy("").unwrap(),
+            db: PgPool::connect_lazy("postgresql://test:test@localhost/test").unwrap(),
             fcm_client: None,
             apns_client: None,
         };

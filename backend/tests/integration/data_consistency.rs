@@ -128,7 +128,7 @@ async fn test_idempotent_event_consumption() {
     .ok(); // 忽略表不存在
 
     // Step 3: 第二次消费（幂等性 - 应该被忽略）
-    let result = sqlx::query(
+    let _result = sqlx::query(
         "INSERT INTO event_consumption_log (event_id, consumer_group, consumed_at, result)
          VALUES ($1, $2, NOW(), $3)
          ON CONFLICT (event_id, consumer_group) DO NOTHING",
@@ -249,7 +249,6 @@ async fn test_eventual_consistency() {
     // Step 2: 模拟异步发布过程
     tokio::spawn({
         let db = db.clone();
-        let aggregate_id = aggregate_id;
         async move {
             // 延迟 200ms 后开始发布
             tokio::time::sleep(Duration::from_millis(200)).await;
@@ -275,7 +274,6 @@ async fn test_eventual_consistency() {
     let result = wait_for(
         || {
             let db = db.clone();
-            let aggregate_id = aggregate_id;
             async move {
                 let published_count: i64 = sqlx::query_scalar(
                     "SELECT COUNT(*) FROM outbox_events
@@ -430,7 +428,6 @@ async fn test_concurrent_write_isolation() {
 
     for i in 1..=concurrent_count {
         let db = db.clone();
-        let aggregate_id = aggregate_id;
 
         let handle = tokio::spawn(async move {
             sqlx::query(
@@ -440,7 +437,7 @@ async fn test_concurrent_write_isolation() {
             .bind(Uuid::new_v4())
             .bind(aggregate_id)
             .bind(format!("ConcurrentEvent{}", i))
-            .bind(i as i64)
+            .bind(i)
             .bind(format!(r#"{{"index": {}}}"#, i))
             .bind("pending")
             .execute(&*db)
