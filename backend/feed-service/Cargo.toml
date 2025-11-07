@@ -52,6 +52,7 @@ lazy_static = "1.4"
 
 # gRPC
 tonic.workspace = true
+tonic-health.workspace = true
 prost.workspace = true
 
 # Shared libraries

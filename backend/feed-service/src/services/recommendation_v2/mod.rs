@@ -32,6 +32,7 @@ use crate::error::Result;
 use chrono::{DateTime, Utc};
 use sqlx::{PgPool, Row};
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 use tracing::{info, warn};
 use uuid::Uuid;
 
@@ -57,12 +58,23 @@ pub struct RecommendationServiceV2 {
 
 impl RecommendationServiceV2 {
     /// Initialize recommendation service (load models)
-    pub async fn new(config: RecommendationConfig, db_pool: PgPool) -> Result<Self> {
+    pub async fn new(
+        config: RecommendationConfig,
+        db_pool: PgPool,
+        auth_client: Arc<grpc_clients::AuthClient>,
+    ) -> Result<Self> {
         let (cf_model, cb_model) = Self::load_models_from_config(&config)?;
         let hybrid_ranker =
             HybridRanker::new(cf_model.clone(), cb_model.clone(), config.hybrid_weights)?;
 
-        let ab_framework = ABTestingFramework::new().await?;
+        // Initialize ExperimentsRepo with auth validation from connection pool
+        let experiments_repo = Arc::new(crate::db::ExperimentsRepo::new(
+            db_pool.clone(),
+            Arc::clone(&auth_client),
+        ));
+
+        // Initialize A/B testing framework with database backend
+        let ab_framework = ABTestingFramework::new(Arc::clone(&experiments_repo)).await?;
         let onnx_server = ONNXModelServer::load(&config.onnx_model_path)?;
 
         // Initialize vector search service with Milvus

@@ -4,6 +4,7 @@ use chrono::Utc;
 use content_service::cache::{ContentCache, FeedCache};
 use content_service::db::ch_client::ClickHouseClient;
 use content_service::db::ensure_feed_tables;
+use grpc_clients::{config::GrpcConfig, AuthClient, GrpcClientPool};
 use content_service::handlers::{self, feed::FeedHandlerState};
 use content_service::jobs::feed_candidates::FeedCandidateRefreshJob;
 use content_service::middleware;
@@ -410,6 +411,29 @@ async fn main() -> io::Result<()> {
         }
     }
 
+    // Initialize gRPC client pool with connection pooling
+    tracing::info!("Initializing gRPC client pool with connection pooling");
+    let grpc_config = GrpcConfig::from_env().map_err(|e| {
+        io::Error::new(
+            io::ErrorKind::Other,
+            format!("Failed to load gRPC config: {}", e),
+        )
+    })?;
+    let grpc_pool = Arc::new(
+        GrpcClientPool::new(&grpc_config)
+            .await
+            .map_err(|e| {
+                io::Error::new(
+                    io::ErrorKind::Other,
+                    format!("Failed to create gRPC client pool: {}", e),
+                )
+            })?,
+    );
+
+    // Initialize AuthClient from connection pool
+    let auth_client = Arc::new(AuthClient::from_pool(grpc_pool.clone()));
+    tracing::info!("✅ Auth-service gRPC client initialized from connection pool");
+
     let feed_ranking = Arc::new(FeedRankingService::new(
         ch_client.clone(),
         feed_cache.clone(),
@@ -423,6 +447,7 @@ async fn main() -> io::Result<()> {
         feed_ranking: feed_ranking.clone(),
     });
     let content_cache_data = web::Data::new(content_cache.clone());
+    let auth_client_data = web::Data::new(auth_client.clone());
 
     let health_state = web::Data::new(HealthState::new(
         db_pool.clone(),
@@ -461,6 +486,7 @@ async fn main() -> io::Result<()> {
             .route("/api/v1/openapi.json", web::get().to(openapi_json))
             .app_data(web::Data::new(db_pool_http.clone()))
             .app_data(content_cache_data.clone())
+            .app_data(auth_client_data.clone())
             .app_data(feed_state.clone())
             .app_data(health_state.clone())
             .wrap(cors)
@@ -550,6 +576,7 @@ async fn main() -> io::Result<()> {
     let cache_grpc = content_cache.clone();
     let feed_cache_grpc = feed_cache.clone();
     let feed_ranking_grpc = feed_ranking.clone();
+    let auth_client_grpc = auth_client.clone();
     tasks.spawn(async move {
         tracing::info!("gRPC server is running");
         content_service::grpc::start_grpc_server(
@@ -558,6 +585,7 @@ async fn main() -> io::Result<()> {
             cache_grpc,
             feed_cache_grpc,
             feed_ranking_grpc,
+            auth_client_grpc,
             grpc_shutdown,
         )
         .await
