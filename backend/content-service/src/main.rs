@@ -4,7 +4,6 @@ use chrono::Utc;
 use content_service::cache::{ContentCache, FeedCache};
 use content_service::db::ch_client::ClickHouseClient;
 use content_service::db::ensure_feed_tables;
-use grpc_clients::{config::GrpcConfig, AuthClient, GrpcClientPool};
 use content_service::handlers::{self, feed::FeedHandlerState};
 use content_service::jobs::feed_candidates::FeedCandidateRefreshJob;
 use content_service::middleware;
@@ -12,6 +11,7 @@ use content_service::openapi::ApiDoc;
 use content_service::services::{FeedRankingConfig, FeedRankingService};
 use crypto_core::jwt;
 use db_pool::{create_pool as create_pg_pool, DbConfig as DbPoolConfig};
+use grpc_clients::{config::GrpcConfig, AuthClient, GrpcClientPool};
 use redis::aio::ConnectionManager;
 use redis::RedisError;
 use redis_utils::{RedisPool, SentinelConfig};
@@ -419,16 +419,12 @@ async fn main() -> io::Result<()> {
             format!("Failed to load gRPC config: {}", e),
         )
     })?;
-    let grpc_pool = Arc::new(
-        GrpcClientPool::new(&grpc_config)
-            .await
-            .map_err(|e| {
-                io::Error::new(
-                    io::ErrorKind::Other,
-                    format!("Failed to create gRPC client pool: {}", e),
-                )
-            })?,
-    );
+    let grpc_pool = Arc::new(GrpcClientPool::new(&grpc_config).await.map_err(|e| {
+        io::Error::new(
+            io::ErrorKind::Other,
+            format!("Failed to create gRPC client pool: {}", e),
+        )
+    })?);
 
     // Initialize AuthClient from connection pool
     let auth_client = Arc::new(AuthClient::from_pool(grpc_pool.clone()));
@@ -604,7 +600,8 @@ async fn main() -> io::Result<()> {
     let cleaner_db = db_pool.clone();
     let cleaner_auth = auth_client.clone();
     tasks.spawn(async move {
-        content_service::jobs::content_cleaner::start_content_cleaner(cleaner_db, cleaner_auth).await;
+        content_service::jobs::content_cleaner::start_content_cleaner(cleaner_db, cleaner_auth)
+            .await;
         Ok(())
     });
     tracing::info!("✅ Content cleaner background job started");

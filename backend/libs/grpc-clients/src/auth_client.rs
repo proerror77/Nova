@@ -11,8 +11,8 @@
 
 use crate::config::GrpcConfig;
 use crate::nova::auth_service::v1::{
-    auth_service_client::AuthServiceClient as TonicAuthServiceClient,
-    CheckUserExistsRequest, GetUserRequest, GetUsersByIdsRequest,
+    auth_service_client::AuthServiceClient as TonicAuthServiceClient, CheckUserExistsRequest,
+    GetUserRequest, GetUsersByIdsRequest,
 };
 use crate::GrpcClientPool;
 use anyhow::{Context, Result};

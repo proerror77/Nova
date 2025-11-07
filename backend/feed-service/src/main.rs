@@ -189,22 +189,27 @@ async fn main() -> io::Result<()> {
         enable_ab_testing: config.recommendation.enable_ab_testing,
     };
 
-    let recommendation_svc =
-        match RecommendationServiceV2::new(rec_config, db_pool.get_ref().clone(), auth_client.clone()).await {
-            Ok(service) => {
-                tracing::info!("Recommendation service initialized successfully");
-                Arc::new(service)
-            }
-            Err(e) => {
-                tracing::error!("Failed to initialize recommendation service: {:?}", e);
-                // Continue without recommendation service (fallback to v1.0)
-                // For now, we'll still fail startup since this is critical
-                return Err(io::Error::new(
-                    io::ErrorKind::Other,
-                    format!("Failed to initialize recommendation service: {:?}", e),
-                ));
-            }
-        };
+    let recommendation_svc = match RecommendationServiceV2::new(
+        rec_config,
+        db_pool.get_ref().clone(),
+        auth_client.clone(),
+    )
+    .await
+    {
+        Ok(service) => {
+            tracing::info!("Recommendation service initialized successfully");
+            Arc::new(service)
+        }
+        Err(e) => {
+            tracing::error!("Failed to initialize recommendation service: {:?}", e);
+            // Continue without recommendation service (fallback to v1.0)
+            // For now, we'll still fail startup since this is critical
+            return Err(io::Error::new(
+                io::ErrorKind::Other,
+                format!("Failed to initialize recommendation service: {:?}", e),
+            ));
+        }
+    };
 
     let rec_handler_state = web::Data::new(RecommendationHandlerState {
         service: Arc::clone(&recommendation_svc),
@@ -225,7 +230,8 @@ async fn main() -> io::Result<()> {
     let cleaner_db = db_pool.get_ref().clone();
     let cleaner_auth = auth_client.clone();
     tokio::spawn(async move {
-        recommendation_service::jobs::feed_cleaner::start_feed_cleaner(cleaner_db, cleaner_auth).await;
+        recommendation_service::jobs::feed_cleaner::start_feed_cleaner(cleaner_db, cleaner_auth)
+            .await;
     });
     info!("✅ Feed cleaner background job started");
 
