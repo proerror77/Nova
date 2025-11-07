@@ -17,8 +17,7 @@ use std::sync::Arc;
 use tracing::{debug, info};
 use uuid::Uuid;
 
-use crate::grpc::ContentServiceClient;
-use grpc_clients::nova::content_service::v1::GetFeedRequest;
+use crate::grpc::{ContentServiceClient, FeedServiceClient};
 
 /// 预热用户信息
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -58,13 +57,19 @@ impl Default for CacheWarmerConfig {
 pub struct CacheWarmerJob {
     config: CacheWarmerConfig,
     content_client: Arc<ContentServiceClient>,
+    feed_client: Arc<FeedServiceClient>,
 }
 
 impl CacheWarmerJob {
-    pub fn new(config: CacheWarmerConfig, content_client: Arc<ContentServiceClient>) -> Self {
+    pub fn new(
+        config: CacheWarmerConfig,
+        content_client: Arc<ContentServiceClient>,
+        feed_client: Arc<FeedServiceClient>,
+    ) -> Self {
         Self {
             config,
             content_client,
+            feed_client,
         }
     }
 
@@ -135,28 +140,30 @@ impl CacheWarmerJob {
 
     /// 为单个用户预热 feed 缓存
     ///
-    /// 注意: 这里只是 mock 实现,实际需要调用 feed_ranking 服务
+    /// 通过 feed-service gRPC 调用获取用户 feed 并预热缓存
     async fn warmup_user_feed(&self, _ctx: &JobContext, user_id: Uuid) -> Result<usize> {
+        use crate::grpc::nova::feed_service::GetFeedRequest;
+
         let request = GetFeedRequest {
             user_id: user_id.to_string(),
-            algo: "ch".to_string(),
             limit: 20,
             cursor: String::new(),
+            algorithm: "ch".to_string(),
         };
 
         let response = self
-            .content_client
+            .feed_client
             .get_feed(request)
             .await
-            .map_err(|status| anyhow!("content-service get_feed failed: {}", status))?;
+            .map_err(|status| anyhow!("feed-service get_feed failed: {}", status))?;
 
         debug!(
-            "Warmup feed via content-service (user={} posts={})",
+            "Warmup feed via feed-service (user={} posts={})",
             user_id,
-            response.post_ids.len()
+            response.posts.len()
         );
 
-        Ok(response.post_ids.len())
+        Ok(response.posts.len())
     }
 
     /// 批量预热用户 feed

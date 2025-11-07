@@ -11,7 +11,10 @@ pub mod health;
 pub mod server;
 pub mod servers;
 
-pub use clients::{AuthServiceClient, ContentServiceClient, MediaServiceClient, UserProfileUpdate};
+pub use clients::{
+    AuthServiceClient, ContentServiceClient, FeedServiceClient, MediaServiceClient,
+    UserProfileUpdate,
+};
 pub use config::GrpcClientConfig;
 pub use health::HealthChecker;
 pub use server::UserServiceImpl;
@@ -33,6 +36,12 @@ pub mod nova {
     pub mod content_service {
         pub mod v1 {
             tonic::include_proto!("nova.content_service.v1");
+        }
+        pub use v1::*;
+    }
+    pub mod feed_service {
+        pub mod v1 {
+            tonic::include_proto!("nova.feed_service.v1");
         }
         pub use v1::*;
     }

@@ -103,7 +103,7 @@ async fn main() -> Result<(), error::AppError> {
         apns: apns_client.clone(),
         encryption: encryption.clone(),
         key_exchange_service: Some(key_exchange_service),
-        auth_client,
+        auth_client: auth_client.clone(),
     };
 
     // Metrics updater (queue depth gauges)
@@ -179,6 +179,15 @@ async fn main() -> Result<(), error::AppError> {
             .await
             .map_err(|e| error::AppError::StartServer(format!("REST server error: {}", e)))
     });
+
+    // Phase 1: Spec 007 - Start orphan cleaner background job
+    // Cleans up conversation_members for soft-deleted users after 30-day retention period
+    let orphan_cleaner_db = db.clone();
+    let orphan_cleaner_auth = auth_client.clone();
+    let _orphan_cleaner_handle: JoinHandle<()> = tokio::spawn(async move {
+        messaging_service::jobs::start_orphan_cleaner(orphan_cleaner_db, orphan_cleaner_auth).await;
+    });
+    tracing::info!("Orphan cleaner background job started");
 
     // gRPC server on cfg.port + 1000 (e.g., 8080 -> 9080)
     let grpc_addr = format!("0.0.0.0:{}", cfg.port + 1000);

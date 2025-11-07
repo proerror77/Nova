@@ -117,21 +117,30 @@ mod tests {
 
     #[tokio::test]
     async fn test_with_retry_success() {
-        let config = RetryConfig::default();
-        let mut attempts = 0;
+        use std::sync::{
+            atomic::{AtomicUsize, Ordering},
+            Arc,
+        };
 
-        let result = with_retry(&config, || async {
-            attempts += 1;
-            if attempts < 2 {
-                Err::<i32, _>("error")
-            } else {
-                Ok(42)
+        let config = RetryConfig::default();
+        let attempts = Arc::new(AtomicUsize::new(0));
+        let attempts_clone = Arc::clone(&attempts);
+
+        let result = with_retry(&config, move || {
+            let attempts = Arc::clone(&attempts_clone);
+            async move {
+                let current = attempts.fetch_add(1, Ordering::SeqCst) + 1;
+                if current < 2 {
+                    Err::<i32, _>("error")
+                } else {
+                    Ok(42)
+                }
             }
         })
         .await;
 
         assert_eq!(result, Ok(42));
-        assert_eq!(attempts, 2);
+        assert_eq!(attempts.load(Ordering::SeqCst), 2);
     }
 
     #[tokio::test]

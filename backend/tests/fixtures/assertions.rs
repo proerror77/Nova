@@ -65,6 +65,7 @@ where
 }
 
 /// 等待条件满足（默认超时 10 秒，轮询 100ms）
+#[allow(dead_code)]
 pub async fn wait_for_default<F, Fut>(f: F) -> Result<(), String>
 where
     F: FnMut() -> Fut,
@@ -103,6 +104,7 @@ pub fn assert_latency(duration: Duration, max_ms: u64, context: &str) {
 }
 
 /// 断言 P95 延迟（对批量操作）
+#[allow(dead_code)]
 pub fn assert_p95_latency(durations: &[Duration], max_ms: u64, context: &str) {
     let mut sorted: Vec<_> = durations.iter().map(|d| d.as_millis() as u64).collect();
     sorted.sort_unstable();
@@ -150,6 +152,7 @@ pub fn assert_throughput(
 /// 断言 Outbox 事件已创建（事件溯源核心）
 ///
 /// 验证：写入数据库的操作都生成了对应的事件
+#[allow(dead_code)]
 pub async fn assert_outbox_event_exists(
     db: &PgPool,
     aggregate_id: Uuid,
@@ -205,6 +208,7 @@ pub async fn assert_record_exists(
 }
 
 /// 断言记录不存在（验证删除操作）
+#[allow(dead_code)]
 pub async fn assert_record_not_exists(
     db: &PgPool,
     table: &str,
@@ -231,6 +235,7 @@ pub async fn assert_record_not_exists(
 }
 
 /// 断言记录数量
+#[allow(dead_code)]
 pub async fn assert_record_count(
     db: &PgPool,
     table: &str,
@@ -255,6 +260,7 @@ pub async fn assert_record_count(
 }
 
 /// 断言 Redis 键存在
+#[allow(dead_code)]
 pub async fn assert_redis_key_exists(
     redis: &mut redis::aio::ConnectionManager,
     key: &str,
@@ -274,6 +280,7 @@ pub async fn assert_redis_key_exists(
 }
 
 /// 断言 Redis 键不存在
+#[allow(dead_code)]
 pub async fn assert_redis_key_not_exists(
     redis: &mut redis::aio::ConnectionManager,
     key: &str,
@@ -297,6 +304,7 @@ pub async fn assert_redis_key_not_exists(
 // ============================================
 
 /// 断言事件已发布到 Kafka（通过 outbox 状态）
+#[allow(dead_code)]
 pub async fn assert_event_published(db: &PgPool, event_id: Uuid) -> Result<(), String> {
     let status: String = sqlx::query_scalar("SELECT status FROM outbox_events WHERE id = $1")
         .bind(event_id)
@@ -313,6 +321,7 @@ pub async fn assert_event_published(db: &PgPool, event_id: Uuid) -> Result<(), S
 }
 
 /// 断言事件顺序正确（同一聚合根）
+#[allow(dead_code)]
 pub async fn assert_event_ordering(db: &PgPool, aggregate_id: Uuid) -> Result<(), String> {
     let events: Vec<(Uuid, i64)> = sqlx::query_as(
         "SELECT id, sequence_number FROM outbox_events
