@@ -34,8 +34,11 @@ const CHECK_INTERVAL: Duration = Duration::from_secs(24 * 60 * 60); // 24 hours
 const BATCH_SIZE: i64 = 100;
 
 pub async fn start_content_cleaner(db: PgPool, auth_client: Arc<AuthClient>) {
-    tracing::info!("Starting content cleaner background job (check_interval={}h, retention_days={})",
-        CHECK_INTERVAL.as_secs() / 3600, RETENTION_DAYS);
+    tracing::info!(
+        "Starting content cleaner background job (check_interval={}h, retention_days={})",
+        CHECK_INTERVAL.as_secs() / 3600,
+        RETENTION_DAYS
+    );
 
     loop {
         // Wait for the next check interval
@@ -48,7 +51,10 @@ pub async fn start_content_cleaner(db: PgPool, auth_client: Arc<AuthClient>) {
             Ok(()) => {
                 metrics::record_cleanup_run("success");
                 metrics::record_cleanup_duration("total", cycle_start.elapsed());
-                tracing::info!(duration_ms = cycle_start.elapsed().as_millis(), "Content cleanup cycle completed successfully");
+                tracing::info!(
+                    duration_ms = cycle_start.elapsed().as_millis(),
+                    "Content cleanup cycle completed successfully"
+                );
             }
             Err(e) => {
                 metrics::record_cleanup_run("error");
@@ -121,7 +127,10 @@ async fn cleanup_deleted_user_content(
             continue;
         }
 
-        tracing::info!(deleted_users = deleted_user_ids.len(), "Found deleted users in batch");
+        tracing::info!(
+            deleted_users = deleted_user_ids.len(),
+            "Found deleted users in batch"
+        );
 
         // Delete content for non-existent users
         for user_id in deleted_user_ids {
@@ -140,13 +149,11 @@ async fn cleanup_deleted_user_content(
             }
 
             // Hard-delete comments
-            let comments_deleted = sqlx::query(
-                "DELETE FROM comments WHERE user_id = $1",
-            )
-            .bind(user_id)
-            .execute(db)
-            .await?
-            .rows_affected();
+            let comments_deleted = sqlx::query("DELETE FROM comments WHERE user_id = $1")
+                .bind(user_id)
+                .execute(db)
+                .await?
+                .rows_affected();
 
             if comments_deleted > 0 {
                 tracing::info!(user_id = %user_id, comments = comments_deleted, "Deleted user comments");
@@ -154,13 +161,11 @@ async fn cleanup_deleted_user_content(
             }
 
             // Hard-delete likes
-            let likes_deleted = sqlx::query(
-                "DELETE FROM likes WHERE user_id = $1",
-            )
-            .bind(user_id)
-            .execute(db)
-            .await?
-            .rows_affected();
+            let likes_deleted = sqlx::query("DELETE FROM likes WHERE user_id = $1")
+                .bind(user_id)
+                .execute(db)
+                .await?
+                .rows_affected();
 
             if likes_deleted > 0 {
                 tracing::info!(user_id = %user_id, likes = likes_deleted, "Deleted user likes");
@@ -168,13 +173,11 @@ async fn cleanup_deleted_user_content(
             }
 
             // Hard-delete bookmarks
-            let bookmarks_deleted = sqlx::query(
-                "DELETE FROM bookmarks WHERE user_id = $1",
-            )
-            .bind(user_id)
-            .execute(db)
-            .await?
-            .rows_affected();
+            let bookmarks_deleted = sqlx::query("DELETE FROM bookmarks WHERE user_id = $1")
+                .bind(user_id)
+                .execute(db)
+                .await?
+                .rows_affected();
 
             if bookmarks_deleted > 0 {
                 tracing::info!(user_id = %user_id, bookmarks = bookmarks_deleted, "Deleted user bookmarks");
@@ -182,13 +185,11 @@ async fn cleanup_deleted_user_content(
             }
 
             // Hard-delete shares
-            let shares_deleted = sqlx::query(
-                "DELETE FROM shares WHERE user_id = $1",
-            )
-            .bind(user_id)
-            .execute(db)
-            .await?
-            .rows_affected();
+            let shares_deleted = sqlx::query("DELETE FROM shares WHERE user_id = $1")
+                .bind(user_id)
+                .execute(db)
+                .await?
+                .rows_affected();
 
             if shares_deleted > 0 {
                 tracing::info!(user_id = %user_id, shares = shares_deleted, "Deleted user shares");

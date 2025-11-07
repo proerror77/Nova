@@ -88,9 +88,8 @@ async fn main() -> Result<(), error::AppError> {
 
     // Phase 1: Spec 007 - Initialize gRPC client pool with connection pooling
     tracing::info!("Initializing gRPC client pool with connection pooling");
-    let grpc_config = GrpcConfig::from_env().map_err(|e| {
-        error::AppError::Config(format!("Failed to load gRPC config: {}", e))
-    })?;
+    let grpc_config = GrpcConfig::from_env()
+        .map_err(|e| error::AppError::Config(format!("Failed to load gRPC config: {}", e)))?;
     let grpc_pool = Arc::new(
         GrpcClientPool::new(&grpc_config)
             .await

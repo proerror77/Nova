@@ -148,7 +148,8 @@ async fn main() -> io::Result<()> {
             mut req: tonic::Request<()>,
         ) -> Result<tonic::Request<()>, tonic::Status> {
             // Extract correlation-id before mutable borrow
-            let correlation_id = req.metadata()
+            let correlation_id = req
+                .metadata()
                 .get("correlation-id")
                 .and_then(|val| val.to_str().ok())
                 .map(|s| s.to_string());

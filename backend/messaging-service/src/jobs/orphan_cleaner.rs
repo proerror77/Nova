@@ -30,8 +30,11 @@ const CHECK_INTERVAL: Duration = Duration::from_secs(24 * 60 * 60); // 24 hours
 const BATCH_SIZE: i64 = 100;
 
 pub async fn start_orphan_cleaner(db: PgPool, auth_client: Arc<AuthClient>) {
-    tracing::info!("Starting orphan cleaner background job (check_interval={}h, retention_days={})",
-        CHECK_INTERVAL.as_secs() / 3600, RETENTION_DAYS);
+    tracing::info!(
+        "Starting orphan cleaner background job (check_interval={}h, retention_days={})",
+        CHECK_INTERVAL.as_secs() / 3600,
+        RETENTION_DAYS
+    );
 
     loop {
         // Wait for the next check interval
@@ -125,12 +128,10 @@ async fn cleanup_orphaned_conversation_members(
 
         // Delete conversation_members for non-existent users
         for user_id in deleted_user_ids {
-            let result = sqlx::query(
-                "DELETE FROM conversation_members WHERE user_id = $1",
-            )
-            .bind(user_id)
-            .execute(db)
-            .await?;
+            let result = sqlx::query("DELETE FROM conversation_members WHERE user_id = $1")
+                .bind(user_id)
+                .execute(db)
+                .await?;
 
             let deleted = result.rows_affected();
             if deleted > 0 {

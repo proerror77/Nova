@@ -138,7 +138,7 @@ async fn cleanup_deleted_user_experiments(
             let experiments_cancelled = sqlx::query(
                 "UPDATE experiments
                  SET status = 'cancelled', updated_at = NOW()
-                 WHERE created_by = $1 AND status != 'cancelled'"
+                 WHERE created_by = $1 AND status != 'cancelled'",
             )
             .bind(user_id)
             .execute(db)
@@ -155,13 +155,12 @@ async fn cleanup_deleted_user_experiments(
             }
 
             // Hard-delete experiment assignments
-            let assignments_deleted = sqlx::query(
-                "DELETE FROM experiment_assignments WHERE user_id = $1"
-            )
-            .bind(user_id)
-            .execute(db)
-            .await?
-            .rows_affected();
+            let assignments_deleted =
+                sqlx::query("DELETE FROM experiment_assignments WHERE user_id = $1")
+                    .bind(user_id)
+                    .execute(db)
+                    .await?
+                    .rows_affected();
 
             if assignments_deleted > 0 {
                 tracing::info!(
@@ -173,13 +172,11 @@ async fn cleanup_deleted_user_experiments(
             }
 
             // Hard-delete experiment metrics
-            let metrics_deleted = sqlx::query(
-                "DELETE FROM experiment_metrics WHERE user_id = $1"
-            )
-            .bind(user_id)
-            .execute(db)
-            .await?
-            .rows_affected();
+            let metrics_deleted = sqlx::query("DELETE FROM experiment_metrics WHERE user_id = $1")
+                .bind(user_id)
+                .execute(db)
+                .await?
+                .rows_affected();
 
             if metrics_deleted > 0 {
                 tracing::info!(

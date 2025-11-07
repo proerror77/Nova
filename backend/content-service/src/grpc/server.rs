@@ -98,10 +98,7 @@ impl ContentService for ContentServiceImpl {
         };
 
         // Fetch post using PostService
-        let post_service = PostService::with_cache(
-            self.db_pool.clone(),
-            self.cache.clone(),
-        );
+        let post_service = PostService::with_cache(self.db_pool.clone(), self.cache.clone());
         match post_service.get_post(post_id).await {
             Ok(Some(post)) => {
                 let response = GetPostResponse {
@@ -149,10 +146,7 @@ impl ContentService for ContentServiceImpl {
         };
 
         // Create post using PostService
-        let post_service = PostService::with_cache(
-            self.db_pool.clone(),
-            self.cache.clone(),
-        );
+        let post_service = PostService::with_cache(self.db_pool.clone(), self.cache.clone());
         let content = req.content;
         let image_key = format!("text-content-{}", Uuid::new_v4());
         match post_service
@@ -563,10 +557,8 @@ impl ContentService for ContentServiceImpl {
                 tracing::debug!("Invalidated cache for post {} after update", post_id);
 
                 // Fetch the updated post
-                let post_service = PostService::with_cache(
-                    self.db_pool.clone(),
-                    self.cache.clone(),
-                );
+                let post_service =
+                    PostService::with_cache(self.db_pool.clone(), self.cache.clone());
                 match post_service.get_post(post_id).await {
                     Ok(Some(post)) => {
                         guard.complete("0");

@@ -31,7 +31,10 @@ impl MockAuthClient {
     }
 
     /// Batch get users by IDs (simulates grpc_clients::AuthClient::get_users_by_ids)
-    pub async fn get_users_by_ids(&self, user_ids: &[Uuid]) -> Result<HashMap<Uuid, String>, String> {
+    pub async fn get_users_by_ids(
+        &self,
+        user_ids: &[Uuid],
+    ) -> Result<HashMap<Uuid, String>, String> {
         // Increment call counter for N+1 verification
         {
             let mut count = self.batch_call_count.lock().unwrap();

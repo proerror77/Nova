@@ -1,10 +1,7 @@
 use crate::{
     config::Config,
     redis_client::RedisClient,
-    services::{
-        encryption::EncryptionService, key_exchange::KeyExchangeService,
-        push::ApnsPush,
-    },
+    services::{encryption::EncryptionService, key_exchange::KeyExchangeService, push::ApnsPush},
     websocket::ConnectionRegistry,
 };
 use grpc_clients::AuthClient;
