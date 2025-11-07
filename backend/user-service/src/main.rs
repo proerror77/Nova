@@ -478,29 +478,38 @@ async fn main() -> io::Result<()> {
             max_concurrent_inserts: 5,
         };
 
-        let events_consumer = match EventsConsumer::new(
-            events_config,
-            ch_writer.as_ref().clone(),
-            event_deduplicator,
-            content_client.clone(),
-            feed_client.clone(),
-        ) {
-            Ok(consumer) => consumer,
-            Err(e) => {
-                tracing::error!("Events consumer initialization failed: {:#}", e);
-                eprintln!("ERROR: Failed to create Events consumer: {}", e);
-                std::process::exit(1);
+        // Events consumer requires content and feed service clients
+        let (events_handle, degraded_mode) = if content_client.is_some() && feed_client.is_some() {
+            match EventsConsumer::new(
+                events_config,
+                ch_writer.as_ref().clone(),
+                event_deduplicator,
+                content_client.clone().unwrap(),
+                feed_client.clone().unwrap(),
+            ) {
+                Ok(consumer) => {
+                    let handle = tokio::spawn(async move {
+                        if let Err(e) = consumer.run().await {
+                            tracing::error!("Events consumer error: {}", e);
+                        }
+                    });
+                    tracing::info!("Events consumer spawned");
+                    (Some(handle), false)
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        "Events consumer initialization failed: {:#} (running in degraded mode)",
+                        e
+                    );
+                    (None, true)
+                }
             }
+        } else {
+            tracing::warn!("Skipping events consumer - required gRPC services unavailable (running in degraded mode)");
+            (None, true)
         };
 
-        let events_handle = tokio::spawn(async move {
-            if let Err(e) = events_consumer.run().await {
-                tracing::error!("Events consumer error: {}", e);
-            }
-        });
-        tracing::info!("Events consumer spawned");
-
-        (Some(cdc_handle), Some(events_handle))
+        (Some(cdc_handle), events_handle)
     } else {
         tracing::info!("Skipping CDC and events consumers (ClickHouse unavailable)");
         (None, None)
@@ -553,29 +562,32 @@ async fn main() -> io::Result<()> {
         let job_ctx3 = jobs::JobContext::new(redis_manager.clone(), ch_client_for_jobs);
 
         let suggested_job = SuggestedUsersJob::new(SuggestionConfig::default());
-        let cache_warmer = jobs::cache_warmer::CacheWarmerJob::new(
-            jobs::cache_warmer::CacheWarmerConfig::default(),
-            content_client.clone(),
-            feed_client.clone(),
-        );
+
+        // Cache warmer requires both content and feed service clients
+        let mut jobs_vec: Vec<(Arc<dyn jobs::CacheRefreshJob>, jobs::JobContext)> = vec![(
+            Arc::new(suggested_job) as Arc<dyn jobs::CacheRefreshJob>,
+            job_ctx,
+        )];
+
+        if content_client.is_some() && feed_client.is_some() {
+            let cache_warmer = jobs::cache_warmer::CacheWarmerJob::new(
+                jobs::cache_warmer::CacheWarmerConfig::default(),
+                content_client.clone().unwrap(),
+                feed_client.clone().unwrap(),
+            );
+            jobs_vec.push((
+                Arc::new(cache_warmer) as Arc<dyn jobs::CacheRefreshJob>,
+                job_ctx3,
+            ));
+            tracing::info!("Cache warmer job spawned");
+        } else {
+            tracing::warn!("Skipping cache warmer job - required gRPC services unavailable (running in degraded mode)");
+        }
 
         // Run jobs in background (suggested + cache warmup; trending moved to feed-service)
+        let num_jobs = jobs_vec.len();
         let handle = tokio::spawn(async move {
-            run_jobs(
-                vec![
-                    (
-                        Arc::new(suggested_job) as Arc<dyn jobs::CacheRefreshJob>,
-                        job_ctx,
-                    ),
-                    (
-                        Arc::new(cache_warmer) as Arc<dyn jobs::CacheRefreshJob>,
-                        job_ctx3,
-                    ),
-                ],
-                2,
-                shutdown_tx,
-            )
-            .await;
+            run_jobs(jobs_vec, num_jobs, shutdown_tx).await;
         });
         Some(handle)
     } else {
