@@ -26,6 +26,7 @@ pub fn map_error(err: &AppError) -> (u16, ErrorResponse) {
         ),
         AppError::Database(_) => ("server_error", error_types::error_codes::DATABASE_ERROR),
         AppError::Encryption(_) => ("server_error", "ENCRYPTION_ERROR"),
+        AppError::GrpcClient(_) => ("server_error", "GRPC_CLIENT_ERROR"),
         AppError::Internal => (
             "server_error",
             error_types::error_codes::INTERNAL_SERVER_ERROR,

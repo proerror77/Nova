@@ -2,11 +2,12 @@ use crate::{
     config::Config,
     redis_client::RedisClient,
     services::{
-        auth_client::AuthClient, encryption::EncryptionService, key_exchange::KeyExchangeService,
+        encryption::EncryptionService, key_exchange::KeyExchangeService,
         push::ApnsPush,
     },
     websocket::ConnectionRegistry,
 };
+use grpc_clients::AuthClient;
 use sqlx::{Pool, Postgres};
 use std::sync::Arc;
 
