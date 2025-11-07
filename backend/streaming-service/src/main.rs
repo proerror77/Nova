@@ -105,7 +105,6 @@ async fn main() -> io::Result<()> {
         viewer_counter.clone(),
         chat_store.clone(),
         kafka_producer.clone(),
-        auth_client.clone(),
         "rtmp://localhost/live".to_string(),
         "https://cdn.nova.dev/hls".to_string(),
     )));
@@ -130,6 +129,15 @@ async fn main() -> io::Result<()> {
     });
 
     tracing::info!("Listening on 0.0.0.0:{}", port);
+
+    // Phase 4: Spec 007 - Stream cleaner background job
+    // Cleans up streaming data from soft-deleted users after 30-day retention period
+    let cleaner_db = db_pool.clone();
+    let cleaner_auth = auth_client.clone();
+    tokio::spawn(async move {
+        streaming_service::jobs::stream_cleaner::start_stream_cleaner(cleaner_db, cleaner_auth).await;
+    });
+    tracing::info!("✅ Stream cleaner background job started");
 
     // gRPC server (spawned in background) on PORT+1000
     let grpc_addr: SocketAddr = format!("0.0.0.0:{}", port + 1000)

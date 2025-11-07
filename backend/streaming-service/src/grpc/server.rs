@@ -15,6 +15,11 @@ use tracing::{debug, info};
 
 // Generated protobuf types and service traits
 pub mod proto {
+    pub mod common {
+        pub mod v1 {
+            tonic::include_proto!("nova.common.v1");
+        }
+    }
     pub mod streaming_service {
         pub mod v1 {
             tonic::include_proto!("nova.streaming_service.v1");
