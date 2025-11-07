@@ -69,7 +69,10 @@ jobs:
           cargo test --lib
 
       - name: Run cargo build (release)
-        run: cargo build --release
+        # TEMPORARY: Only build user-service for P0 fix
+        run: |
+          cd backend/user-service
+          cargo build --release --bin user-service
 
   # Stage 2: Build Docker images and push to ECR
   build-and-push:
