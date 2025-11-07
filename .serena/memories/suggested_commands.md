@@ -13,6 +13,8 @@ Backend: Build, Test, Lint
 - `make test` — Run all tests (workspace).
 - `make test-verbose` — Tests with output; `make test-nextest` — faster runner.
 - `make test-social` — Social graph tests; `make test-grpc-*` — gRPC integration tests.
+- `cargo test --test batch_api_orphan_cleaner_test` — Test orphan cleaners (messaging/content/feed services).
+- `cargo test --test stream_cleaner_test` — Test streaming-service cleanup.
 - `make fmt` / `make fmt-check` — Format/check formatting.
 - `make lint` — Run clippy with warnings as errors.
 - `make coverage` — Test coverage report.
