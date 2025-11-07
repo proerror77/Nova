@@ -117,7 +117,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_with_retry_success() {
-        use std::sync::{Arc, atomic::{AtomicUsize, Ordering}};
+        use std::sync::{
+            atomic::{AtomicUsize, Ordering},
+            Arc,
+        };
 
         let config = RetryConfig::default();
         let attempts = Arc::new(AtomicUsize::new(0));

@@ -353,7 +353,10 @@ impl EventsConsumer {
                             let user_id = follower.to_string();
                             let event_type = ev.event_type.clone();
                             tokio::spawn(async move {
-                                match feed_client.invalidate_feed_cache(user_id, event_type.clone()).await {
+                                match feed_client
+                                    .invalidate_feed_cache(user_id, event_type.clone())
+                                    .await
+                                {
                                     Ok(_) => {
                                         crate::metrics::helpers::record_social_follow_event(
                                             event_type.as_str(),

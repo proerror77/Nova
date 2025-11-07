@@ -11,7 +11,10 @@ pub mod health;
 pub mod server;
 pub mod servers;
 
-pub use clients::{AuthServiceClient, ContentServiceClient, FeedServiceClient, MediaServiceClient, UserProfileUpdate};
+pub use clients::{
+    AuthServiceClient, ContentServiceClient, FeedServiceClient, MediaServiceClient,
+    UserProfileUpdate,
+};
 pub use config::GrpcClientConfig;
 pub use health::HealthChecker;
 pub use server::UserServiceImpl;

@@ -6,10 +6,10 @@ use crate::grpc::nova::auth_service::auth_service_client::AuthServiceClient as T
 use crate::grpc::nova::auth_service::*;
 use crate::grpc::nova::content_service::content_service_client::ContentServiceClient as TonicContentServiceClient;
 use crate::grpc::nova::content_service::*;
-use crate::grpc::nova::media_service::media_service_client::MediaServiceClient as TonicMediaServiceClient;
-use crate::grpc::nova::media_service::*;
 use crate::grpc::nova::feed_service::recommendation_service_client::RecommendationServiceClient as TonicFeedServiceClient;
 use crate::grpc::nova::feed_service::*;
+use crate::grpc::nova::media_service::media_service_client::MediaServiceClient as TonicMediaServiceClient;
+use crate::grpc::nova::media_service::*;
 use std::future::Future;
 use std::ops::{Deref, DerefMut};
 use std::pin::Pin;
@@ -827,7 +827,10 @@ impl FeedServiceClient {
     }
 
     /// Get personalized feed for a user
-    pub async fn get_feed(&self, request: GetFeedRequest) -> Result<GetFeedResponse, tonic::Status> {
+    pub async fn get_feed(
+        &self,
+        request: GetFeedRequest,
+    ) -> Result<GetFeedResponse, tonic::Status> {
         let mut client = self.client_pool.acquire().await;
         let mut tonic_request = tonic::Request::new(request);
         tonic_request.set_timeout(self.request_timeout);

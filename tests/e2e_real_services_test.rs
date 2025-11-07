@@ -153,11 +153,7 @@ async fn login(config: &E2EConfig, email: &str, password: &str) -> LoginResponse
 }
 
 /// Helper: Get user profile
-async fn get_user_profile(
-    config: &E2EConfig,
-    user_id: &str,
-    access_token: &str,
-) -> UserProfile {
+async fn get_user_profile(config: &E2EConfig, user_id: &str, access_token: &str) -> UserProfile {
     let client = create_client();
 
     let response = client
@@ -227,8 +223,7 @@ async fn test_e2e_02_user_profile_retrieval() {
 
     // Get Alice's profile
     println!("Fetching Alice's profile...");
-    let alice_profile =
-        get_user_profile(&config, ALICE_ID, &alice_login.access_token).await;
+    let alice_profile = get_user_profile(&config, ALICE_ID, &alice_login.access_token).await;
 
     assert_eq!(alice_profile.id, ALICE_ID);
     assert_eq!(alice_profile.username, "alice_test");
@@ -263,8 +258,7 @@ async fn test_e2e_03_follow_relationship_consistency() {
     let alice_login = login(&config, TEST_USER_ALICE, TEST_PASSWORD).await;
 
     // Get Alice's profile (should show she's following 2 users from seed data)
-    let alice_profile =
-        get_user_profile(&config, ALICE_ID, &alice_login.access_token).await;
+    let alice_profile = get_user_profile(&config, ALICE_ID, &alice_login.access_token).await;
     println!("Alice's following count: {}", alice_profile.following_count);
     assert!(
         alice_profile.following_count >= 2,
