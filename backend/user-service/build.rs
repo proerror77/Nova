@@ -7,6 +7,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "content_service.proto",
         "media_service.proto",
         "video_service.proto",
+        "feed_service.proto",
         "common.proto",
     ] {
         println!("cargo:rerun-if-changed={}/{}", services_dir, proto);
@@ -22,6 +23,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 format!("{services_dir}/content_service.proto"),
                 format!("{services_dir}/media_service.proto"),
                 format!("{services_dir}/video_service.proto"),
+                format!("{services_dir}/feed_service.proto"),
                 format!("{services_dir}/common.proto"),
             ],
             &[services_dir],

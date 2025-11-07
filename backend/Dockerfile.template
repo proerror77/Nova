@@ -5,13 +5,15 @@
 # ============================================
 # Stage 1: Builder - Compile Rust binaries
 # ============================================
-FROM rust:1.75-slim AS builder
+FROM rust:1.86-slim AS builder
 
 # Install build dependencies
 RUN apt-get update && apt-get install -y \
+    build-essential \
     pkg-config \
     libssl-dev \
     cmake \
+    protobuf-compiler \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /build
