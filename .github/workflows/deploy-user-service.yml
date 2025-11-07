@@ -34,19 +34,21 @@ jobs:
 
       - name: Build Docker image
         run: |
-          docker build \
+          echo "Building Docker image for user-service..."
+          /usr/bin/docker build \
             --build-arg SERVICE_NAME=user-service \
             -f backend/Dockerfile.template \
             -t ${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPOSITORY }}:${{ github.sha }} \
             -t ${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPOSITORY }}:latest \
-            .
+            . 2>&1 | tee /tmp/docker-build.log
           echo "✅ Docker image built successfully"
-          docker images | grep nova
+          /usr/bin/docker images | grep -i nova
 
       - name: Push Docker image to ECR
         run: |
-          docker push ${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
-          docker push ${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPOSITORY }}:latest
+          echo "Pushing Docker image to ECR..."
+          /usr/bin/docker push ${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
+          /usr/bin/docker push ${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPOSITORY }}:latest
           echo "✅ Docker image pushed to ECR successfully"
 
   deploy:
