@@ -8,6 +8,7 @@
 /// - Encryption & key exchange: StoreDevicePublicKey, GetPeerPublicKey, CompleteKeyExchange, GetConversationEncryption
 /// - Push notifications: RegisterDeviceToken, SendPushNotification
 /// - Offline queue: GetOfflineEvents, AckOfflineEvent
+use crate::error;
 use crate::nova::messaging_service::*;
 use crate::state::AppState;
 use grpc_metrics::layer::RequestGuard;
@@ -131,6 +132,11 @@ impl MessagingServiceImpl {
                 Status::internal(format!("Encryption error: {}", msg))
             }
 
+            // gRPC client errors
+            crate::error::AppError::GrpcClient(msg) => {
+                Status::unavailable(format!("gRPC client error: {}", msg))
+            }
+
             // Generic internal error (catch-all, should rarely occur)
             crate::error::AppError::Internal => Status::internal("Internal server error"),
         }
@@ -225,7 +231,9 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
         let user_exists_result = self.state.auth_client.user_exists(sender_id).await;
         if let Err(e) = user_exists_result {
             guard.complete("14"); // UNAVAILABLE
-            return Err(Self::app_error_to_status(e));
+            return Err(Self::app_error_to_status(
+                error::AppError::GrpcClient(format!("auth-service error: {}", e))
+            ));
         }
         if !user_exists_result.unwrap() {
             guard.complete("5"); // NOT_FOUND
@@ -538,7 +546,9 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
         let creator_exists = self.state.auth_client.user_exists(creator_id).await;
         if let Err(e) = creator_exists {
             guard.complete("14"); // UNAVAILABLE
-            return Err(Self::app_error_to_status(e));
+            return Err(Self::app_error_to_status(
+                error::AppError::GrpcClient(format!("auth-service error: {}", e))
+            ));
         }
         if !creator_exists.unwrap() {
             guard.complete("5"); // NOT_FOUND
@@ -566,7 +576,9 @@ impl messaging_service_server::MessagingService for MessagingServiceImpl {
                 let member_exists = self.state.auth_client.user_exists(member_id).await;
                 if let Err(e) = member_exists {
                     guard.complete("14"); // UNAVAILABLE
-                    return Err(Self::app_error_to_status(e));
+                    return Err(Self::app_error_to_status(
+                        error::AppError::GrpcClient(format!("auth-service error: {}", e))
+                    ));
                 }
                 if !member_exists.unwrap() {
                     guard.complete("5"); // NOT_FOUND

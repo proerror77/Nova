@@ -2,6 +2,7 @@ pub mod config;
 pub mod db;
 pub mod error;
 pub mod grpc;
+pub mod jobs;
 pub mod logging;
 pub mod metrics;
 pub mod middleware;

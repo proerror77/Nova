@@ -1,3 +1,5 @@
+pub mod orphan_cleaner;
+
 use actix_web::HttpResponse;
 use once_cell::sync::Lazy;
 use prometheus::{
@@ -5,6 +7,12 @@ use prometheus::{
 };
 use sqlx::PgPool;
 use std::time::Duration;
+
+// Re-export orphan_cleaner metrics functions
+pub use orphan_cleaner::{
+    record_orphan_cleanup_deleted, record_orphan_cleanup_duration, record_orphan_cleanup_run,
+    set_orphan_cleanup_users_checked,
+};
 
 static HTTP_REQUESTS_TOTAL: Lazy<IntCounterVec> = Lazy::new(|| {
     let counter = IntCounterVec::new(

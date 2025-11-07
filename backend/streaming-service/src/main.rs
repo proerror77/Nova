@@ -105,7 +105,6 @@ async fn main() -> io::Result<()> {
         viewer_counter.clone(),
         chat_store.clone(),
         kafka_producer.clone(),
-        auth_client.clone(),
         "rtmp://localhost/live".to_string(),
         "https://cdn.nova.dev/hls".to_string(),
     )));

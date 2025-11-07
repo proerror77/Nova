@@ -13,7 +13,7 @@
 //! have been soft-deleted for 30+ days, reducing risk of accidental data loss.
 
 use crate::metrics;
-use crate::services::auth_client::AuthClient;
+use grpc_clients::AuthClient;
 use sqlx::PgPool;
 use std::sync::Arc;
 use std::time::{Duration, Instant};

@@ -43,6 +43,9 @@ pub enum AppError {
     #[error("encryption error: {0}")]
     Encryption(String),
 
+    #[error("grpc client error: {0}")]
+    GrpcClient(String),
+
     #[error("internal server error")]
     Internal,
 
@@ -98,7 +101,7 @@ impl AppError {
             AppError::AlreadyRecalled => 410,        // 410 Gone
             AppError::VersionConflict { .. } => 409, // 409 Conflict
             AppError::RecallWindowExpired { .. } | AppError::EditWindowExpired { .. } => 403,
-            AppError::Database(_) | AppError::Internal => 500,
+            AppError::Database(_) | AppError::GrpcClient(_) | AppError::Internal => 500,
             _ => 500,
         }
     }

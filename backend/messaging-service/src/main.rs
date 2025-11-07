@@ -1,5 +1,6 @@
 use actix_web::{web, App, HttpServer};
 use crypto_core::jwt as core_jwt;
+use grpc_clients::{config::GrpcConfig, AuthClient, GrpcClientPool};
 use messaging_service::openapi::ApiDoc;
 use messaging_service::{
     config, db, error, logging,
@@ -85,15 +86,20 @@ async fn main() -> Result<(), error::AppError> {
     let encryption = Arc::new(EncryptionService::new(cfg.encryption_master_key));
     let key_exchange_service = Arc::new(KeyExchangeService::new(Arc::new(db.clone())));
 
-    // Phase 1: Spec 007 - Initialize auth-service gRPC client for users consolidation
-    let auth_client = Arc::new(
-        messaging_service::services::auth_client::AuthClient::new(&cfg.auth_service_url)
+    // Phase 1: Spec 007 - Initialize gRPC client pool with connection pooling
+    tracing::info!("Initializing gRPC client pool with connection pooling");
+    let grpc_config = GrpcConfig::from_env().map_err(|e| {
+        error::AppError::Config(format!("Failed to load gRPC config: {}", e))
+    })?;
+    let grpc_pool = Arc::new(
+        GrpcClientPool::new(&grpc_config)
             .await
-            .map_err(|e| {
-                tracing::warn!(error=%e, "Failed to initialize auth-service client; some operations may fail");
-                e
-            })?,
+            .expect("Failed to create gRPC client pool"),
     );
+
+    // Initialize AuthClient from connection pool
+    let auth_client = Arc::new(AuthClient::from_pool(grpc_pool.clone()));
+    tracing::info!("✅ Auth-service gRPC client initialized from connection pool");
 
     let state = AppState {
         db: db.clone(),
