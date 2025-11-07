@@ -20,4 +20,8 @@ iOS Layout (ios/NovaSocial)
 Backend Layout (backend)
 - Cargo.toml (workspace), Dockerfiles, prometheus configs.
 - services directories: auth-service, user-service, content-service, messaging-service, feed-service, search-service, notification-service, video-service, streaming-service.
-- libs, proto, scripts, migrations, docs.
+- libs: Shared libraries including grpc-clients (unified gRPC client pool and AuthClient), db-pool, error-types, crypto-core, etc.
+- proto: Protocol buffer definitions for gRPC services.
+- scripts: Utility scripts including seed_data for E2E testing.
+- migrations: Shared database migrations.
+- tests: Integration tests including orphan cleaner tests with testcontainers.
