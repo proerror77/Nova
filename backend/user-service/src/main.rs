@@ -299,63 +299,51 @@ async fn main() -> io::Result<()> {
         }
     };
 
-    let auth_client: Option<Arc<AuthServiceClient>> = match AuthServiceClient::new(
-        &grpc_config,
-        health_checker.clone(),
-    )
-    .await
-    {
-        Ok(client) => {
-            tracing::info!("auth-service gRPC client initialized");
-            Some(Arc::new(client))
-        }
-        Err(e) => {
-            tracing::warn!(
+    let auth_client: Option<Arc<AuthServiceClient>> =
+        match AuthServiceClient::new(&grpc_config, health_checker.clone()).await {
+            Ok(client) => {
+                tracing::info!("auth-service gRPC client initialized");
+                Some(Arc::new(client))
+            }
+            Err(e) => {
+                tracing::warn!(
                 "auth-service gRPC client initialization failed: {:#} (running in degraded mode)",
                 e
             );
-            None
-        }
-    };
+                None
+            }
+        };
 
     // NOTE: media_client unused after video service migration to media-service
-    let _media_client: Option<Arc<MediaServiceClient>> = match MediaServiceClient::new(
-        &grpc_config,
-        health_checker.clone(),
-    )
-    .await
-    {
-        Ok(client) => {
-            tracing::info!("media-service gRPC client initialized");
-            Some(Arc::new(client))
-        }
-        Err(e) => {
-            tracing::warn!(
+    let _media_client: Option<Arc<MediaServiceClient>> =
+        match MediaServiceClient::new(&grpc_config, health_checker.clone()).await {
+            Ok(client) => {
+                tracing::info!("media-service gRPC client initialized");
+                Some(Arc::new(client))
+            }
+            Err(e) => {
+                tracing::warn!(
                 "media-service gRPC client initialization failed: {:#} (running in degraded mode)",
                 e
             );
-            None
-        }
-    };
+                None
+            }
+        };
 
-    let feed_client: Option<Arc<FeedServiceClient>> = match FeedServiceClient::new(
-        &grpc_config,
-        health_checker.clone(),
-    )
-    .await
-    {
-        Ok(client) => {
-            tracing::info!("feed-service gRPC client initialized");
-            Some(Arc::new(client))
-        }
-        Err(e) => {
-            tracing::warn!(
+    let feed_client: Option<Arc<FeedServiceClient>> =
+        match FeedServiceClient::new(&grpc_config, health_checker.clone()).await {
+            Ok(client) => {
+                tracing::info!("feed-service gRPC client initialized");
+                Some(Arc::new(client))
+            }
+            Err(e) => {
+                tracing::warn!(
                 "feed-service gRPC client initialization failed: {:#} (running in degraded mode)",
                 e
             );
-            None
-        }
-    };
+                None
+            }
+        };
 
     // Feed state moved to feed-service (port 8089)
     let content_client_data = web::Data::new(content_client.clone());
