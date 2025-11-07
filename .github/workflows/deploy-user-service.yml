@@ -6,8 +6,8 @@ on:
       - feature/phase1-grpc-migration
 
 env:
-  AWS_REGION: us-east-1
-  ECR_REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com
+  AWS_REGION: ap-northeast-1
+  ECR_REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.ap-northeast-1.amazonaws.com
 
 jobs:
   build-and-push-user-service:
@@ -67,7 +67,7 @@ jobs:
         run: |
           aws eks update-kubeconfig \
             --name nova-staging \
-            --region ${{ env.AWS_REGION }}
+            --region ap-northeast-1
 
       - name: Update user-service deployment
         run: |
