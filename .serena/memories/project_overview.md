@@ -5,8 +5,11 @@ Purpose
 
 Core Components
 - Backend (Rust): Actix-web/Axum services; PostgreSQL, Redis, MongoDB/Cassandra; Kafka/RabbitMQ; custom Rust API gateway.
+  - gRPC: All services expose gRPC on HTTP_PORT + 1000 with tonic_health
+  - Microservice Independence: Application-level FK validation via gRPC (Spec 007 complete)
+  - Shared Libraries: grpc-clients (unified AuthClient with connection pooling), db-pool, error-types, crypto-core
 - iOS (Swift): SwiftUI + UIKit; Clean Architecture + Repository; URLSession; optional Rust FFI for algorithms.
-- Infra: Docker + Kubernetes; Prometheus + Grafana; GitHub Actions CI/CD; AWS/GCP + CloudFront/Cloudflare.
+- Infra: Docker + Kubernetes (EKS on AWS); Prometheus + Grafana; GitHub Actions CI/CD; AWS ECR + CloudFront/Cloudflare.
 
 Principles (from constitution)
 - Microservices architecture (Rust-first), cross-platform Rust core libraries via FFI.
