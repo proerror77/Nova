@@ -17,10 +17,7 @@ use std::sync::Arc;
 use tracing::{debug, info};
 use uuid::Uuid;
 
-use crate::grpc::ContentServiceClient;
-// TODO(Phase 1 gRPC): Implement FeedServiceClient for feed retrieval
-// GetFeedRequest belongs to feed-service, not content-service
-// use grpc_clients::nova::feed_service::v1::GetFeedRequest;
+use crate::grpc::{ContentServiceClient, FeedServiceClient};
 
 /// 预热用户信息
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -60,13 +57,19 @@ impl Default for CacheWarmerConfig {
 pub struct CacheWarmerJob {
     config: CacheWarmerConfig,
     content_client: Arc<ContentServiceClient>,
+    feed_client: Arc<FeedServiceClient>,
 }
 
 impl CacheWarmerJob {
-    pub fn new(config: CacheWarmerConfig, content_client: Arc<ContentServiceClient>) -> Self {
+    pub fn new(
+        config: CacheWarmerConfig,
+        content_client: Arc<ContentServiceClient>,
+        feed_client: Arc<FeedServiceClient>,
+    ) -> Self {
         Self {
             config,
             content_client,
+            feed_client,
         }
     }
 
@@ -137,33 +140,30 @@ impl CacheWarmerJob {
 
     /// 为单个用户预热 feed 缓存
     ///
-    /// TODO(Phase 1 gRPC): Implement feed service client integration
-    /// This functionality requires FeedServiceClient to call get_feed
-    /// For now, returning mock success to allow compilation
+    /// 通过 feed-service gRPC 调用获取用户 feed 并预热缓存
     async fn warmup_user_feed(&self, _ctx: &JobContext, user_id: Uuid) -> Result<usize> {
-        // let feed_client = self.feed_client.get_ref().clone();
-        // let request = GetFeedRequest {
-        //     user_id: user_id.to_string(),
-        //     algo: "ch".to_string(),
-        //     limit: 20,
-        //     cursor: String::new(),
-        // };
-        //
-        // let response = feed_client
-        //     .get_feed(request)
-        //     .await
-        //     .map_err(|status| anyhow!("feed-service get_feed failed: {}", status))?;
-        //
-        // debug!(
-        //     "Warmup feed via feed-service (user={} posts={})",
-        //     user_id,
-        //     response.post_ids.len()
-        // );
-        //
-        // Ok(response.post_ids.len())
+        use crate::grpc::nova::feed_service::GetFeedRequest;
 
-        debug!("Cache warmup for user {} - pending feed service integration", user_id);
-        Ok(0) // Return 0 posts until feed service client is implemented
+        let request = GetFeedRequest {
+            user_id: user_id.to_string(),
+            limit: 20,
+            cursor: String::new(),
+            algorithm: "ch".to_string(),
+        };
+
+        let response = self
+            .feed_client
+            .get_feed(request)
+            .await
+            .map_err(|status| anyhow!("feed-service get_feed failed: {}", status))?;
+
+        debug!(
+            "Warmup feed via feed-service (user={} posts={})",
+            user_id,
+            response.posts.len()
+        );
+
+        Ok(response.posts.len())
     }
 
     /// 批量预热用户 feed

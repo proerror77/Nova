@@ -7,7 +7,7 @@ use uuid::Uuid;
 use crate::cache::{invalidate_search_cache_with_retry, invalidate_user_cache_with_retry};
 use crate::db::user_repo;
 use crate::error::AppError;
-use crate::grpc::ContentServiceClient;
+use crate::grpc::FeedServiceClient;
 use crate::metrics::helpers::record_social_follow_event;
 use crate::middleware::{jwt_auth::UserId, CircuitBreaker};
 use crate::services::graph::GraphService;
@@ -35,7 +35,7 @@ pub async fn follow_user(
     graph: web::Data<GraphService>,
     event_producer: web::Data<Arc<EventProducer>>,
     redis_manager: Option<web::Data<SharedConnectionManager>>,
-    _content_client: web::Data<Arc<ContentServiceClient>>,
+    feed_client: web::Data<Arc<FeedServiceClient>>,
     user: UserId,
 ) -> HttpResponse {
     let target_id = match Uuid::parse_str(&path.into_inner()) {
@@ -108,22 +108,22 @@ pub async fn follow_user(
                     let _ = producer.send_json(&key, &payload).await;
                 });
             }
-            // TODO(Phase 1 gRPC): Implement feed service client for cache invalidation
-            // Feed cache invalidation should be done through feed-service, not content-service
-            // For now, we rely on the synchronous Redis cache invalidation below
-            //
-            // Planned implementation:
-            // use crate::grpc::nova::feed_service::v1::InvalidateFeedCacheRequest;
-            // let feed_client = feed_service_client.get_ref().clone();
-            // let request = InvalidateFeedCacheRequest {
-            //     user_id: user.0.to_string(),
-            //     event_type: "new_follow".to_string(),
-            // };
-            // match feed_client.invalidate_feed_cache(request).await {
-            //     Ok(_) => record_social_follow_event("new_follow", "processed"),
-            //     Err(e) => warn!("Failed to invalidate feed cache: {}", e),
-            // }
-            record_social_follow_event("new_follow", "processed");
+            // Invalidate feed cache via feed-service gRPC
+            {
+                let client = feed_client.get_ref().clone();
+                let follower_id = user.0.to_string();
+                let event_type = "new_follow".to_string();
+                tokio::spawn(async move {
+                    match client.invalidate_feed_cache(follower_id, event_type).await {
+                        Ok(_) => {
+                            record_social_follow_event("new_follow", "processed");
+                        }
+                        Err(e) => {
+                            warn!("Failed to invalidate feed cache via feed-service: {}", e);
+                        }
+                    }
+                });
+            }
 
             // Synchronous cache invalidation (fallback)
             if let Some(redis_manager) = redis_manager {
@@ -169,7 +169,7 @@ pub async fn unfollow_user(
     graph: web::Data<GraphService>,
     event_producer: web::Data<Arc<EventProducer>>,
     redis_manager: Option<web::Data<SharedConnectionManager>>,
-    _content_client: web::Data<Arc<ContentServiceClient>>,
+    feed_client: web::Data<Arc<FeedServiceClient>>,
     user: UserId,
 ) -> HttpResponse {
     let target_id = match Uuid::parse_str(&path.into_inner()) {
@@ -216,22 +216,22 @@ pub async fn unfollow_user(
                     let _ = producer.send_json(&key, &payload).await;
                 });
             }
-            // TODO(Phase 1 gRPC): Implement feed service client for cache invalidation
-            // Feed cache invalidation should be done through feed-service, not content-service
-            // For now, we rely on the synchronous Redis cache invalidation below
-            //
-            // Planned implementation:
-            // use crate::grpc::nova::feed_service::v1::InvalidateFeedCacheRequest;
-            // let feed_client = feed_service_client.get_ref().clone();
-            // let request = InvalidateFeedCacheRequest {
-            //     user_id: user.0.to_string(),
-            //     event_type: "unfollow".to_string(),
-            // };
-            // match feed_client.invalidate_feed_cache(request).await {
-            //     Ok(_) => record_social_follow_event("unfollow", "processed"),
-            //     Err(e) => warn!("Failed to invalidate feed cache: {}", e),
-            // }
-            record_social_follow_event("unfollow", "processed");
+            // Invalidate feed cache via feed-service gRPC
+            {
+                let client = feed_client.get_ref().clone();
+                let follower_id = user.0.to_string();
+                let event_type = "unfollow".to_string();
+                tokio::spawn(async move {
+                    match client.invalidate_feed_cache(follower_id, event_type).await {
+                        Ok(_) => {
+                            record_social_follow_event("unfollow", "processed");
+                        }
+                        Err(e) => {
+                            warn!("Failed to invalidate feed cache via feed-service: {}", e);
+                        }
+                    }
+                });
+            }
 
             // Synchronous cache invalidation (fallback)
             if let Some(redis_manager) = redis_manager {

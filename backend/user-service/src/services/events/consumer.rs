@@ -10,7 +10,7 @@ use tracing::{debug, error, info, warn};
 
 use crate::db::ch_client::ClickHouseClient;
 use crate::error::{AppError, Result};
-use crate::grpc::ContentServiceClient;
+use crate::grpc::{ContentServiceClient, FeedServiceClient};
 
 use super::dedup::EventDeduplicator;
 
@@ -132,6 +132,7 @@ pub struct EventsConsumer {
     config: EventsConsumerConfig,
     semaphore: Arc<Semaphore>,
     content_client: Arc<ContentServiceClient>,
+    feed_client: Arc<FeedServiceClient>,
 }
 
 impl EventsConsumer {
@@ -141,6 +142,7 @@ impl EventsConsumer {
         ch_client: ClickHouseClient,
         deduplicator: EventDeduplicator,
         content_client: Arc<ContentServiceClient>,
+        feed_client: Arc<FeedServiceClient>,
     ) -> Result<Self> {
         info!("Initializing Events consumer with config: {:?}", config);
 
@@ -176,6 +178,7 @@ impl EventsConsumer {
             semaphore: Arc::new(Semaphore::new(config.max_concurrent_inserts)),
             config,
             content_client,
+            feed_client,
         })
     }
 
@@ -345,27 +348,26 @@ impl EventsConsumer {
                             .and_then(|v| v.as_str())
                             .and_then(|s| uuid::Uuid::parse_str(s).ok());
                         if let (Some(follower), Some(followee)) = (follower_id, followee_id) {
-                            // TODO(Phase 1 gRPC): Implement FeedServiceClient for feed cache invalidation
-                            // InvalidateFeedCacheRequest belongs to feed-service, not content-service
-                            // let feed_client = self.feed_client.get_ref().clone();
-                            // let request = InvalidateFeedCacheRequest {
-                            //     user_id: follower.to_string(),
-                            //     event_type: ev.event_type.clone(),
-                            // };
-                            // match feed_client.invalidate_feed_cache(request).await {
-                            //     Ok(_) => {
-                            //         crate::metrics::helpers::record_social_follow_event(
-                            //             ev.event_type.as_str(),
-                            //             "processed",
-                            //         );
-                            //     }
-                            //     Err(e) => {
-                            //         warn!(
-                            //             "Failed to invalidate feed via feed-service (event={}, follower={}, followee={}): {}",
-                            //             ev.event_type, follower, followee, e
-                            //         );
-                            //     }
-                            // }
+                            // Invalidate feed cache via feed-service gRPC
+                            let feed_client = self.feed_client.clone();
+                            let user_id = follower.to_string();
+                            let event_type = ev.event_type.clone();
+                            tokio::spawn(async move {
+                                match feed_client.invalidate_feed_cache(user_id, event_type.clone()).await {
+                                    Ok(_) => {
+                                        crate::metrics::helpers::record_social_follow_event(
+                                            event_type.as_str(),
+                                            "processed",
+                                        );
+                                    }
+                                    Err(e) => {
+                                        warn!(
+                                            "Failed to invalidate feed via feed-service (event={}, follower={}, followee={}): {}",
+                                            event_type, follower, followee, e
+                                        );
+                                    }
+                                }
+                            });
 
                             crate::metrics::helpers::record_social_follow_event(
                                 ev.event_type.as_str(),

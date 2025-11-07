@@ -90,3 +90,4 @@ resources:
 - clickhouse-service-internal.yaml
 - external-secrets-store.yaml
 - external-secrets.yaml
+- seed-data-job.yaml

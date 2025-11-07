@@ -92,6 +92,7 @@ url = "2"
 
 # Phase 4: Video Processing & gRPC
 tonic.workspace = true
+tonic-health.workspace = true
 prost.workspace = true
 ndarray = "0.15"
 http = "0.2"

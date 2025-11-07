@@ -8115,6 +8115,7 @@ dependencies = [
  "tokio-test",
  "tonic 0.10.2",
  "tonic-build 0.11.0",
+ "tonic-health 0.10.2",
  "tracing",
  "tracing-actix-web",
  "tracing-subscriber",
