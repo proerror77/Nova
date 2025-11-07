@@ -2776,7 +2776,7 @@ dependencies = [
  "serde_json",
  "sqlx",
  "tempfile",
- "testcontainers",
+ "testcontainers 0.17.0",
  "thiserror 1.0.69",
  "tokio",
  "tokio-stream",

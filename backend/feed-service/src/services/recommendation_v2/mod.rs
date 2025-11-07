@@ -67,14 +67,9 @@ impl RecommendationServiceV2 {
         let hybrid_ranker =
             HybridRanker::new(cf_model.clone(), cb_model.clone(), config.hybrid_weights)?;
 
-        // Initialize ExperimentsRepo with auth validation from connection pool
-        let experiments_repo = Arc::new(crate::db::ExperimentsRepo::new(
-            db_pool.clone(),
-            Arc::clone(&auth_client),
-        ));
-
-        // Initialize A/B testing framework with database backend
-        let ab_framework = ABTestingFramework::new(Arc::clone(&experiments_repo)).await?;
+        // Initialize A/B testing framework
+        // Note: ExperimentsRepo integration is TODO - framework currently uses in-memory state
+        let ab_framework = ABTestingFramework::new().await?;
         let onnx_server = ONNXModelServer::load(&config.onnx_model_path)?;
 
         // Initialize vector search service with Milvus
