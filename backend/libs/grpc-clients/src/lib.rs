@@ -133,48 +133,84 @@ pub struct GrpcClientPool {
 
 impl GrpcClientPool {
     /// Create a new gRPC client pool from configuration
+    ///
+    /// **Graceful Degradation**: If a service endpoint is unavailable, creates a placeholder
+    /// channel that will fail at call-time rather than blocking initialization.
+    /// This allows services to start even when their gRPC dependencies are not yet deployed.
     pub async fn new(config: &config::GrpcConfig) -> Result<Self, Box<dyn std::error::Error>> {
+        // Helper to create channel with fallback to placeholder on failure
+        async fn connect_or_placeholder(
+            config: &config::GrpcConfig,
+            url: &str,
+            service_name: &str,
+        ) -> Channel {
+            match config.connect_channel(url).await {
+                Ok(channel) => {
+                    tracing::debug!("✅ Connected to {}", service_name);
+                    channel
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        "⚠️  Failed to connect to {} at {}: {}",
+                        service_name,
+                        url,
+                        e
+                    );
+                    tracing::warn!(
+                        "   {} calls will fail until service is deployed",
+                        service_name
+                    );
+                    // Create a placeholder endpoint that will fail at call-time
+                    config
+                        .make_endpoint("http://unavailable.local:1")
+                        .unwrap()
+                        .connect_lazy()
+                }
+            }
+        }
+
         let auth_client = Arc::new(AuthServiceClient::new(
-            config.connect_channel(&config.auth_service_url).await?,
+            connect_or_placeholder(config, &config.auth_service_url, "auth-service").await,
         ));
         let user_client = Arc::new(UserServiceClient::new(
-            config.connect_channel(&config.user_service_url).await?,
+            connect_or_placeholder(config, &config.user_service_url, "user-service").await,
         ));
         let messaging_client = Arc::new(MessagingServiceClient::new(
-            config
-                .connect_channel(&config.messaging_service_url)
-                .await?,
+            connect_or_placeholder(config, &config.messaging_service_url, "messaging-service")
+                .await,
         ));
         let content_client = Arc::new(ContentServiceClient::new(
-            config.connect_channel(&config.content_service_url).await?,
+            connect_or_placeholder(config, &config.content_service_url, "content-service").await,
         ));
         let feed_client = Arc::new(RecommendationServiceClient::new(
-            config.connect_channel(&config.feed_service_url).await?,
+            connect_or_placeholder(config, &config.feed_service_url, "feed-service").await,
         ));
         let search_client = Arc::new(SearchServiceClient::new(
-            config.connect_channel(&config.search_service_url).await?,
+            connect_or_placeholder(config, &config.search_service_url, "search-service").await,
         ));
         let media_client = Arc::new(MediaServiceClient::new(
-            config.connect_channel(&config.media_service_url).await?,
+            connect_or_placeholder(config, &config.media_service_url, "media-service").await,
         ));
         let notification_client = Arc::new(NotificationServiceClient::new(
-            config
-                .connect_channel(&config.notification_service_url)
-                .await?,
+            connect_or_placeholder(
+                config,
+                &config.notification_service_url,
+                "notification-service",
+            )
+            .await,
         ));
         let streaming_client = Arc::new(StreamingServiceClient::new(
-            config
-                .connect_channel(&config.streaming_service_url)
-                .await?,
+            connect_or_placeholder(config, &config.streaming_service_url, "streaming-service")
+                .await,
         ));
         let cdn_client = Arc::new(CdnServiceClient::new(
-            config.connect_channel(&config.cdn_service_url).await?,
+            connect_or_placeholder(config, &config.cdn_service_url, "cdn-service").await,
         ));
         let events_client = Arc::new(EventsServiceClient::new(
-            config.connect_channel(&config.events_service_url).await?,
+            connect_or_placeholder(config, &config.events_service_url, "events-service").await,
         ));
         let video_client = Arc::new(VideoServiceClient::new(
-            config.connect_channel(&config.video_service_url).await?,
+            connect_or_placeholder(config, &config.video_service_url, "video-service").await,
         ));
 
         Ok(Self {
