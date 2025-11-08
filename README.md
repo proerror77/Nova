@@ -55,22 +55,43 @@ Nova Social Platform 是一个全功能的社交媒体应用，包含：
 
 ## 📚 文档结构
 
+### 根目录核心文档
+- **README.md** - 项目总览（本文档）
+- **[SETUP.md](./SETUP.md)** - 快速安装指南
+- **[DEPLOYMENT.md](./DEPLOYMENT.md)** - 部署概述
+- **[CLAUDE.md](./CLAUDE.md)** - AI代码审查标准
+- **[AGENTS.md](./AGENTS.md)** - AI Agent协作规范
+
+### docs/ 目录结构
 ```
 docs/
-├── PRD.md                    # 产品需求文档 ✅
-├── NEXT_STEPS.md            # 后续步骤指南 ✅
-├── architecture/            # 系统架构
-│   ├── microservices.md    # 微服务设计
-│   ├── data-model.md       # 数据模型
-│   └── deployment.md       # 部署架构
-├── api/                     # API 规范
-│   ├── openapi.yaml        # OpenAPI 3.0
-│   ├── auth.md             # 认证 API
-│   ├── content.md          # 内容 API
-│   └── websocket.md        # 实时通讯协议
-└── design/                  # UI/UX 设计
-    ├── figma-prototype.md  # Figma 链接
-    └── swiftui-components.md
+├── api/                        # API 规范与接口文档
+├── architecture/               # 系统架构设计文档
+│   ├── ARCHITECTURE_DECISION_FRAMEWORK.md
+│   ├── ARCHITECTURE_DEEP_ANALYSIS.md
+│   ├── CACHE_AND_RATE_LIMIT_FIXES.md
+│   └── CACHE_AND_RATE_LIMIT_REVIEW.md
+├── db/                         # 数据库设计与优化
+│   └── DATABASE_QUICK_REFERENCE.md
+├── deployment/                 # 部署与运维文档
+│   ├── DEPLOYMENT_WATCH.md
+│   ├── PRE_DEPLOYMENT_CHECKLIST.md
+│   └── STAGING_QUICK_START.md
+├── design/                     # UI/UX 设计文档
+│   └── FIGMA_INTEGRATION_GUIDE.md
+├── development/                # 开发指南与工具
+│   ├── AI_REVIEW_IMPLEMENTATION.md
+│   ├── AI_REVIEW_QUICK_START.md
+│   └── CODE_REVIEW_FIXES.md
+├── ios/                        # iOS 开发文档
+│   ├── iOS_AWS_BACKEND_SETUP.md
+│   └── iOS_QUICK_START.md
+├── operations/                 # 运维与监控
+├── specs/                      # 功能规格说明
+└── archive/                    # 历史文档归档
+    ├── 审计报告（已过时）
+    ├── Phase 阶段性文档（已完成）
+    └── 临时总结文档
 ```
 
 ## 🚀 快速开始
