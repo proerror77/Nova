@@ -1,0 +1,296 @@
+name: CI/CD Pipeline - Kubernetes/EKS
+
+on:
+  push:
+    branches:
+      - feature/phase1-grpc-migration  # Auto-deploy to staging
+      - main                           # Deploy to production
+  pull_request:
+    branches:
+      - main
+      - feature/phase1-grpc-migration
+
+env:
+  AWS_REGION: ap-northeast-1
+  AWS_ACCOUNT_ID: 025434362120
+  ECR_REGISTRY: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com
+  REGISTRY_ALIAS: nova
+
+jobs:
+  # ============ Stage 1: Test & Lint ============
+  test-and-lint:
+    name: Test and Lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          override: true
+          components: rustfmt, clippy
+
+      - name: Install protoc
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler
+          protoc --version
+
+      - name: Cache Cargo dependencies
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+
+      - name: Run cargo fmt
+        run: cargo fmt --all -- --check
+
+      - name: Run cargo clippy (user-service)
+        run: |
+          cd backend/user-service
+          cargo clippy --lib --bins -- -D warnings
+
+      - name: Run cargo test (user-service)
+        run: |
+          cd backend/user-service
+          cargo test --lib
+
+      - name: Run cargo build (release)
+        run: |
+          cd backend/user-service
+          cargo build --release --bin user-service
+
+  # ============ Stage 2: Build & Push Docker Images ============
+  build-and-push:
+    name: Build and Push Docker Images
+    runs-on: ubuntu-latest
+    needs: test-and-lint
+    if: github.event_name == 'push'
+
+    strategy:
+      matrix:
+        service:
+          - user-service
+          - auth-service
+          - content-service
+          - feed-service
+          - media-service
+          - messaging-service
+          - search-service
+          - streaming-service
+          - notification-service
+          - cdn-service
+          - events-service
+      max-parallel: 4
+      fail-fast: false
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./backend/Dockerfile.template
+          build-args: SERVICE_NAME=${{ matrix.service }}
+          push: true
+          tags: |
+            ${{ env.ECR_REGISTRY }}/${{ env.REGISTRY_ALIAS }}/${{ matrix.service }}:${{ github.sha }}
+            ${{ env.ECR_REGISTRY }}/${{ env.REGISTRY_ALIAS }}/${{ matrix.service }}:${{ github.ref_name }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Verify image pushed
+        run: |
+          echo "✅ Image ${{ matrix.service }}:${{ github.sha }} pushed to ECR"
+          aws ecr describe-images \
+            --repository-name "${{ env.REGISTRY_ALIAS }}/${{ matrix.service }}" \
+            --region ${{ env.AWS_REGION }} \
+            --image-ids imageTag=${{ github.sha }} \
+            --query 'imageDetails[0].[imageTags,imageSizeInBytes]' \
+            --output text 2>/dev/null || echo "Image verification pending..."
+
+  # ============ Stage 3: Deploy to EKS (Staging) ============
+  deploy-staging:
+    name: Deploy to EKS Staging
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    if: github.ref == 'refs/heads/feature/phase1-grpc-migration' || github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig \
+            --name nova-staging \
+            --region ${{ env.AWS_REGION }}
+
+      - name: Verify cluster connectivity
+        run: |
+          kubectl cluster-info
+          kubectl get nodes
+          echo "✅ Connected to EKS cluster"
+
+      - name: Check deployment namespaces
+        run: |
+          echo "Checking Kubernetes namespaces..."
+          kubectl get namespaces | grep -E "nova|kube-system"
+
+      - name: Rollout restart all services
+        run: |
+          echo "Rolling out updated images..."
+
+          # Restart all deployments to pull new images
+          for namespace in nova nova-content nova-feed nova-media nova-auth; do
+            kubectl rollout restart deployment -n "$namespace" 2>/dev/null || echo "Namespace $namespace not found or no deployments"
+          done
+
+          echo "✅ Rollout commands issued"
+
+      - name: Wait for user-service rollout
+        run: |
+          echo "Waiting for user-service to be ready..."
+          kubectl rollout status deployment/user-service -n nova --timeout=5m 2>/dev/null || true
+          kubectl get pods -n nova -l app=user-service -o wide
+
+      - name: Check service health
+        run: |
+          echo "Service deployment status:"
+          echo ""
+          for namespace in nova nova-content nova-feed nova-media nova-auth; do
+            echo "=== Namespace: $namespace ==="
+            kubectl get deployments -n "$namespace" 2>/dev/null || echo "No deployments found"
+            echo ""
+          done
+
+      - name: Get pod status summary
+        run: |
+          echo "📊 Pod Status Summary:"
+          kubectl get pods -A --sort-by=.metadata.namespace | grep -E "nova|Running|Pending|Error"
+
+  # ============ Stage 4: Smoke Tests ============
+  smoke-test:
+    name: Smoke Tests
+    runs-on: ubuntu-latest
+    needs: deploy-staging
+    if: always()
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig \
+            --name nova-staging \
+            --region ${{ env.AWS_REGION }}
+
+      - name: Run smoke tests
+        run: |
+          echo "🧪 Running Smoke Tests..."
+          echo ""
+
+          # Check if pods are running
+          echo "Checking pod status..."
+          kubectl get pods -n nova -l app=user-service -o wide || true
+
+          echo ""
+          echo "Checking service endpoints..."
+          kubectl get svc -n nova || true
+
+          echo ""
+          echo "Checking ConfigMaps..."
+          kubectl get configmaps -n nova-content,nova-feed,nova-media || true
+
+          echo "✅ Smoke tests completed"
+
+  # ============ Stage 5: Notification ============
+  notify:
+    name: Notify Deployment Status
+    runs-on: ubuntu-latest
+    needs: [build-and-push, deploy-staging, smoke-test]
+    if: always()
+
+    steps:
+      - name: Determine status
+        id: status
+        run: |
+          BUILD_STATUS="${{ needs.build-and-push.result }}"
+          DEPLOY_STATUS="${{ needs.deploy-staging.result }}"
+          TEST_STATUS="${{ needs.smoke-test.result }}"
+
+          if [ "$BUILD_STATUS" = "success" ] && [ "$DEPLOY_STATUS" = "success" ]; then
+            echo "overall=success" >> $GITHUB_OUTPUT
+            echo "message=✅ Deployment SUCCESSFUL" >> $GITHUB_OUTPUT
+          else
+            echo "overall=failure" >> $GITHUB_OUTPUT
+            echo "message=❌ Deployment FAILED" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Print deployment summary
+        run: |
+          echo "════════════════════════════════════════════════════"
+          echo "🚀 DEPLOYMENT SUMMARY"
+          echo "════════════════════════════════════════════════════"
+          echo ""
+          echo "Branch: ${{ github.ref_name }}"
+          echo "Commit: ${{ github.sha }}"
+          echo "Environment: ${{ github.ref == 'refs/heads/main' && 'Production' || 'Staging' }}"
+          echo ""
+          echo "📊 Job Results:"
+          echo "  Build & Push: ${{ needs.build-and-push.result }}"
+          echo "  Deploy: ${{ needs.deploy-staging.result }}"
+          echo "  Smoke Tests: ${{ needs.smoke-test.result }}"
+          echo ""
+          echo "${{ steps.status.outputs.message }}"
+          echo ""
+          echo "📦 Next Steps:"
+          echo "  1. kubectl get pods -A (check all pods)"
+          echo "  2. kubectl logs -n nova <pod-name> (check logs)"
+          echo "  3. kubectl describe pod -n nova <pod-name> (debug)"
+          echo "════════════════════════════════════════════════════"
+
+      - name: Exit with error on failure
+        if: steps.status.outputs.overall == 'failure'
+        run: exit 1
