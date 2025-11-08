@@ -1987,6 +1987,8 @@ dependencies = [
  "sodiumoxide",
  "thiserror 1.0.69",
  "tokio",
+ "tonic 0.10.2",
+ "tracing",
  "uuid 1.18.1",
 ]
 
@@ -6296,6 +6298,7 @@ dependencies = [
  "actix-web",
  "chrono",
  "clickhouse",
+ "crypto-core",
  "db-pool",
  "dotenvy",
  "elasticsearch",
@@ -8030,6 +8033,7 @@ dependencies = [
  "actix",
  "actix-cors",
  "actix-http",
+ "actix-middleware",
  "actix-multipart",
  "actix-rt",
  "actix-web",
@@ -8043,6 +8047,7 @@ dependencies = [
  "base64 0.21.7",
  "chrono",
  "clickhouse",
+ "crypto-core",
  "db-pool",
  "dotenv",
  "envy",

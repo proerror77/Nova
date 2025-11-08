@@ -110,6 +110,8 @@ error-types = { path = "../libs/error-types" }
 nova-fcm-shared = { path = "../libs/nova-fcm-shared" }
 grpc-metrics = { path = "../libs/grpc-metrics" }
 grpc-clients = { path = "../libs/grpc-clients" }
+crypto-core = { path = "../libs/crypto-core" }
+actix-middleware = { path = "../libs/actix-middleware" }
 
 [build-dependencies]
 tonic-build = "0.11"

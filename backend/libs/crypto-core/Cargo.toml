@@ -17,3 +17,5 @@ sha2 = { workspace = true }
 hex = { workspace = true }
 tokio = { workspace = true, features = ["sync"] }
 rdkafka = { workspace = true }
+tonic = { workspace = true, features = ["transport"] }
+tracing = { workspace = true }

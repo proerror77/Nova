@@ -10,8 +10,8 @@
 //! - Provides audit trail via correlation-id
 
 use tonic::{service::Interceptor, Code, Request, Status};
-use crate::jwt::{validate_token, TokenData};
-use crate::correlation;
+use crate::jwt::{validate_token, Claims};
+use jsonwebtoken::TokenData;
 use tracing::{debug, warn};
 
 /// gRPC authentication interceptor
@@ -47,7 +47,7 @@ impl GrpcAuthInterceptor {
     }
 
     /// Extract and validate JWT token from Authorization header
-    fn extract_and_validate_token(&self, req: &Request<()>) -> Result<TokenData, Status> {
+    fn extract_and_validate_token(&self, req: &Request<()>) -> Result<TokenData<Claims>, Status> {
         let auth_header = req
             .metadata()
             .get("authorization")
@@ -85,10 +85,16 @@ impl Default for GrpcAuthInterceptor {
 
 impl Interceptor for GrpcAuthInterceptor {
     fn call(&mut self, mut req: Request<()>) -> Result<Request<()>, Status> {
-        let method = req.uri().path();
+        // Extract method name from grpc-path header
+        let method = req
+            .metadata()
+            .get(":path")
+            .and_then(|v| v.to_str().ok())
+            .map(String::from)
+            .unwrap_or_else(|| "/unknown".to_string());
 
         // Public methods bypass authentication
-        if self.is_public_method(method) {
+        if self.is_public_method(&method) {
             debug!(method = %method, "Allowing public gRPC method");
             return Ok(req);
         }
@@ -104,10 +110,17 @@ impl Interceptor for GrpcAuthInterceptor {
             .map(String::from)
             .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
 
+        // Parse user_id from JWT claims (stored as string UUID)
+        let user_id = uuid::Uuid::parse_str(&token_data.claims.sub)
+            .map_err(|_| {
+                warn!("Invalid user_id format in JWT token");
+                Status::new(Code::Internal, "Invalid token claims")
+            })?;
+
         // Inject user_id and correlation-id into extensions for handlers
         req.extensions_mut()
             .insert(AuthenticatedUser {
-                user_id: token_data.claims.sub,
+                user_id,
                 correlation_id,
             });
 
