@@ -1,10 +1,16 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: nova-feed
+
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: user-service
-  namespace: nova-user
+  name: feed-service
+  namespace: nova-feed
   labels:
-    app: user-service
+    app: feed-service
     tier: backend
 spec:
   replicas: 3
@@ -15,20 +21,20 @@ spec:
       maxUnavailable: 0
   selector:
     matchLabels:
-      app: user-service
+      app: feed-service
   template:
     metadata:
       labels:
-        app: user-service
+        app: feed-service
         tier: backend
     spec:
-      serviceAccountName: user-service
+      serviceAccountName: feed-service
       securityContext:
         runAsNonRoot: true
         readOnlyRootFilesystem: true
         fsGroup: 1000
 
-      # InitContainers wait for critical gRPC service dependencies before starting main container
+      # Feed service depends on content-service being ready
       initContainers:
         - name: wait-for-content-service
           image: busybox:1.35
@@ -48,60 +54,6 @@ spec:
               echo "✗ FATAL: content-service not ready after 5 minutes"
               exit 1
 
-        - name: wait-for-feed-service
-          image: busybox:1.35
-          command:
-            - sh
-            - -c
-            - |
-              echo "Waiting for feed-service to be ready..."
-              for i in $(seq 1 300); do
-                if nc -z feed-service.nova-feed.svc.cluster.local 9087; then
-                  echo "✓ feed-service is ready"
-                  exit 0
-                fi
-                echo "Attempt $i/300 - feed-service not ready yet, retrying in 1s..."
-                sleep 1
-              done
-              echo "✗ FATAL: feed-service not ready after 5 minutes"
-              exit 1
-
-        - name: wait-for-media-service
-          image: busybox:1.35
-          command:
-            - sh
-            - -c
-            - |
-              echo "Waiting for media-service to be ready..."
-              for i in $(seq 1 300); do
-                if nc -z media-service.nova-media.svc.cluster.local 9082; then
-                  echo "✓ media-service is ready"
-                  exit 0
-                fi
-                echo "Attempt $i/300 - media-service not ready yet, retrying in 1s..."
-                sleep 1
-              done
-              echo "✗ FATAL: media-service not ready after 5 minutes"
-              exit 1
-
-        - name: wait-for-auth-service
-          image: busybox:1.35
-          command:
-            - sh
-            - -c
-            - |
-              echo "Waiting for auth-service to be ready..."
-              for i in $(seq 1 300); do
-                if nc -z auth-service.nova-auth.svc.cluster.local 9080; then
-                  echo "✓ auth-service is ready"
-                  exit 0
-                fi
-                echo "Attempt $i/300 - auth-service not ready yet, retrying in 1s..."
-                sleep 1
-              done
-              echo "✗ FATAL: auth-service not ready after 5 minutes"
-              exit 1
-
       affinity:
         podAntiAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
@@ -112,7 +64,7 @@ spec:
                     - key: app
                       operator: In
                       values:
-                        - user-service
+                        - feed-service
                 topologyKey: kubernetes.io/hostname
         nodeAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
@@ -124,15 +76,15 @@ spec:
                     values:
                       - backend
       containers:
-        - name: user-service
-          image: nova/user-service:latest
+        - name: feed-service
+          image: nova/feed-service:latest
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
-              containerPort: 8081
+              containerPort: 8089
               protocol: TCP
             - name: grpc
-              containerPort: 9081
+              containerPort: 9087
               protocol: TCP
           resources:
             requests:
@@ -141,20 +93,21 @@ spec:
             limits:
               memory: "512Mi"
               cpu: "1000m"
+
           # Startup probe: Allows longer initial startup time for dependency initialization
           startupProbe:
             httpGet:
               path: /api/v1/health
-              port: 8081
+              port: 8089
             initialDelaySeconds: 10
             periodSeconds: 5
             timeoutSeconds: 5
-            failureThreshold: 60  # 5 minutes (60 * 5s) for all services to initialize and gRPC clients to connect
+            failureThreshold: 60  # 5 minutes for initialization and dependency setup
 
           livenessProbe:
             httpGet:
               path: /api/v1/health
-              port: 8081
+              port: 8089
             initialDelaySeconds: 60  # Wait for initialization to complete
             periodSeconds: 10
             timeoutSeconds: 5
@@ -163,23 +116,55 @@ spec:
           readinessProbe:
             httpGet:
               path: /api/v1/health/ready
-              port: 8081
+              port: 8089
             initialDelaySeconds: 60  # Wait for initialization to complete
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 3
+
           envFrom:
             - configMapRef:
-                name: user-service-config
+                name: feed-service-config
             - secretRef:
-                name: user-service-secret
+                name: feed-service-secret
+
           volumeMounts:
             - name: tmp
               mountPath: /tmp
             - name: var-tmp
               mountPath: /var/tmp
+
       volumes:
         - name: tmp
           emptyDir: {}
         - name: var-tmp
           emptyDir: {}
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: feed-service
+  namespace: nova-feed
+  labels:
+    app: feed-service
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 8089
+      targetPort: 8089
+      protocol: TCP
+    - name: grpc
+      port: 9087
+      targetPort: 9087
+      protocol: TCP
+  selector:
+    app: feed-service
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: feed-service
+  namespace: nova-feed
