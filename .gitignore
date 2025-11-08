@@ -65,3 +65,12 @@ vendor/
 **/*.xcarchive/
 **/*.xcodeproj/xcshareddata/xcschemes/
 .backup/
+
+# Claude Code - Personal AI configuration (agents, skills vary per developer)
+.claude/
+
+# Serena - Personal memory system
+.serena/
+
+# Specify - Template system (local workflow tool)
+.specify/
