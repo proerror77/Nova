@@ -281,11 +281,12 @@ async fn main() -> io::Result<()> {
     };
     let health_checker = Arc::new(HealthChecker::new());
 
-    // Initialize gRPC clients with STRICT dependencies
-    // All critical services MUST be available for user-service to start
-    // This ensures no degraded mode operation - services are either fully operational or fail to start
+    // Initialize gRPC clients with graceful degradation
+    // **Graceful Degradation**: auth-service and media-service are optional dependencies.
+    // If unavailable, service starts with reduced functionality and logs warnings.
+    // content-service and feed-service remain strict dependencies for core features.
 
-    tracing::info!("Initializing critical gRPC service clients (strict dependencies)");
+    tracing::info!("Initializing gRPC service clients with graceful degradation");
 
     let content_client: Arc<ContentServiceClient> =
         match ContentServiceClient::new(&grpc_config, health_checker.clone()).await {
@@ -305,39 +306,45 @@ async fn main() -> io::Result<()> {
             }
         };
 
-    let auth_client: Arc<AuthServiceClient> =
+    let auth_client: Option<Arc<AuthServiceClient>> =
         match AuthServiceClient::new(&grpc_config, health_checker.clone()).await {
             Ok(client) => {
                 tracing::info!("✓ auth-service gRPC client initialized");
-                Arc::new(client)
+                Some(Arc::new(client))
             }
             Err(e) => {
-                tracing::error!(
-                    "✗ FATAL: auth-service gRPC client initialization failed: {:#}",
+                tracing::warn!(
+                    "⚠️  auth-service gRPC client initialization failed: {:#}",
                     e
                 );
-                tracing::error!(
-                    "  Ensure auth-service deployment exists and is healthy in Kubernetes"
+                tracing::warn!(
+                    "   Authentication features will be limited until auth-service is deployed"
                 );
-                std::process::exit(1);
+                tracing::warn!(
+                    "   Service will continue with reduced functionality"
+                );
+                None
             }
         };
 
-    let media_client: Arc<MediaServiceClient> =
+    let media_client: Option<Arc<MediaServiceClient>> =
         match MediaServiceClient::new(&grpc_config, health_checker.clone()).await {
             Ok(client) => {
                 tracing::info!("✓ media-service gRPC client initialized");
-                Arc::new(client)
+                Some(Arc::new(client))
             }
             Err(e) => {
-                tracing::error!(
-                    "✗ FATAL: media-service gRPC client initialization failed: {:#}",
+                tracing::warn!(
+                    "⚠️  media-service gRPC client initialization failed: {:#}",
                     e
                 );
-                tracing::error!(
-                    "  Ensure media-service deployment exists and is healthy in Kubernetes"
+                tracing::warn!(
+                    "   Media processing features will be unavailable until media-service is deployed"
                 );
-                std::process::exit(1);
+                tracing::warn!(
+                    "   Service will continue with reduced functionality"
+                );
+                None
             }
         };
 
@@ -359,12 +366,19 @@ async fn main() -> io::Result<()> {
             }
         };
 
-    tracing::info!("All critical gRPC services initialized successfully");
+    let available_services = vec![
+        "content-service",
+        if auth_client.is_some() { "auth-service" } else { "" },
+        if media_client.is_some() { "media-service" } else { "" },
+        "feed-service",
+    ].into_iter().filter(|s| !s.is_empty()).collect::<Vec<_>>().join(", ");
+
+    tracing::info!("✅ gRPC services initialized: {}", available_services);
 
     // Feed state moved to feed-service (port 8089)
     let content_client_data = web::Data::new(content_client.clone());
     let feed_client_data = web::Data::new(feed_client.clone());
-    let auth_client_data = web::Data::new(auth_client.clone());
+    let auth_client_data = web::Data::new(auth_client); // Now Option<Arc<AuthServiceClient>>
     let health_checker_data = web::Data::new(health_checker.clone());
 
     // Initialize Neo4j Graph service (optional)
