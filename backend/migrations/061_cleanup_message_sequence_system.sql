@@ -1,16 +1,21 @@
--- Cleanup legacy message sequence infrastructure after adopting conversation_counters
+-- DEPRECATED: This migration has been replaced by the expand-contract pattern
+-- DO NOT EXECUTE - This causes production outages by dropping columns while old code reads them
+--
+-- Original migration (REVERTED):
+-- - Dropped trigger/function on messages
+-- - Dropped legacy column on conversations
+-- - Dropped sequence on messages
+--
+-- The new migrations (062, 063) implement the correct expand-contract pattern:
+-- - Phase 1 (062): Mark columns as deprecated
+-- - Phase 2 (063): Remove columns only after application code is updated
+--
+-- See migrations/062_deprecate_message_sequence.sql and migrations/063_remove_message_sequence.sql
 
--- Drop trigger/function on messages
-DROP TRIGGER IF EXISTS set_message_sequence ON messages;
-DROP FUNCTION IF EXISTS assign_message_sequence();
+-- This migration has been deprecated in favor of gradual deprecation (see 062_deprecate_message_sequence.sql)
+-- No operations performed here - actual cleanup deferred to expand-contract pattern
 
--- Drop legacy column on conversations
-ALTER TABLE conversations
-    DROP COLUMN IF EXISTS last_sequence_number;
-
--- Ensure messages.sequence_number has no default sequence
-ALTER TABLE messages
-    ALTER COLUMN sequence_number DROP DEFAULT;
-
--- Drop auto sequence created by old BIGSERIAL definition if still present
-DROP SEQUENCE IF EXISTS messages_sequence_number_seq;
+-- If this migration was already executed in production, follow emergency rollback procedure:
+-- 1. Restore database from backup before this migration was applied
+-- 2. Deploy new application version that supports both old and new columns
+-- 3. Follow expand-contract pattern for gradual migration

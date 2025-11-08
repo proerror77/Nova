@@ -109,6 +109,12 @@ pub mod hash;
 pub mod correlation;
 pub mod kafka_correlation;
 
+// gRPC authentication and authorization
+pub mod grpc_auth;
+
+// Authorization context
+pub mod authorization;
+
 // =============================
 // C FFI (for iOS xcframework)
 // =============================

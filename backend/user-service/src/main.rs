@@ -639,25 +639,18 @@ async fn main() -> io::Result<()> {
         health
             .set_serving::<user_service::grpc::nova::user_service::user_service_server::UserServiceServer<UserServiceImpl>>()
             .await;
-        // Server-side correlation-id extractor interceptor
-        fn server_interceptor(
-            mut req: tonic::Request<()>,
-        ) -> Result<tonic::Request<()>, tonic::Status> {
-            // IMPORTANT: Clone the correlation ID before calling extensions_mut()
-            // to avoid BorrowMutError (req.metadata() holds immutable borrow)
-            if let Some(val) = req.metadata().get("correlation-id") {
-                if let Ok(s) = val.to_str() {
-                    let correlation_id = s.to_string();
-                    // Safe to call extensions_mut() now - no outstanding borrows
-                    req.extensions_mut().insert::<String>(correlation_id);
-                }
-            }
-            Ok(req)
-        }
+
+        // Apply authentication interceptor to gRPC service
+        let auth_interceptor = crypto_core::grpc_auth::GrpcAuthInterceptor::new();
+
+        let grpc_service_with_auth = user_service::grpc::nova::user_service::user_service_server::UserServiceServer::with_interceptor(
+            grpc_server_svc,
+            auth_interceptor,
+        );
 
         GrpcServer::builder()
             .add_service(health_service)
-            .add_service(grpc_server_svc)
+            .add_service(grpc_service_with_auth)
             // Video service removed - see media-service
             .serve_with_shutdown(grpc_addr_parsed, async {
                 let _ = grpc_shutdown_rx.await;

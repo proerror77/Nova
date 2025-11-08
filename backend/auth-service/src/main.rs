@@ -273,23 +273,21 @@ async fn start_servers(
             >>()
             .await;
 
-        // Server-side correlation-id extractor interceptor
-        fn server_interceptor(
-            mut req: tonic::Request<()>,
-        ) -> Result<tonic::Request<()>, tonic::Status> {
-            if let Some(val) = req.metadata().get("correlation-id") {
-                let correlation_id = val.to_str().map(|s| s.to_string()).ok();
-                if let Some(id) = correlation_id {
-                    req.extensions_mut().insert::<String>(id);
-                }
-            }
-            Ok(req)
-        }
+        // Apply authentication interceptor to gRPC service
+        let mut auth_interceptor = crypto_core::grpc_auth::GrpcAuthInterceptor::new()
+            // Allow public authentication methods
+            .with_public_method("/nova.auth_service.AuthService/Login")
+            .with_public_method("/nova.auth_service.AuthService/Register")
+            .with_public_method("/nova.auth_service.AuthService/RefreshToken");
 
-        // Wrap service with interceptor (rebuild from implementation not available here), so we rely on Server::builder add layer? As workaround, add without wrapping.
+        let grpc_service_with_auth = auth_service::nova::auth_service::auth_service_server::AuthServiceServer::with_interceptor(
+            grpc_service,
+            auth_interceptor,
+        );
+
         match GrpcServer::builder()
             .add_service(health_service)
-            .add_service(grpc_service)
+            .add_service(grpc_service_with_auth)
             .serve_with_shutdown(grpc_addr, async {
                 let _ = grpc_shutdown_rx.await;
             })

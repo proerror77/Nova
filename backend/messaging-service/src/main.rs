@@ -129,20 +129,12 @@ async fn main() -> Result<(), error::AppError> {
 
     // Build gRPC service
     let grpc_service = messaging_service::grpc::MessagingServiceImpl::new(state.clone());
-    // Server-side correlation-id extractor interceptor
-    fn grpc_server_interceptor(
-        mut req: tonic::Request<()>,
-    ) -> Result<tonic::Request<()>, tonic::Status> {
-        if let Some(val) = req.metadata().get("correlation-id") {
-            let correlation_id = val.to_str().map(|s| s.to_string()).ok();
-            if let Some(id) = correlation_id {
-                req.extensions_mut().insert::<String>(id);
-            }
-        }
-        Ok(req)
-    }
+
+    // Apply authentication interceptor to gRPC service
+    let auth_interceptor = crypto_core::grpc_auth::GrpcAuthInterceptor::new();
+
     let grpc_server =
-        MessagingServiceServer::with_interceptor(grpc_service, grpc_server_interceptor);
+        MessagingServiceServer::with_interceptor(grpc_service, auth_interceptor);
 
     // Start both REST and gRPC servers
     let rest_state = state.clone();

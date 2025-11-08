@@ -909,9 +909,17 @@ async fn main() -> std::io::Result<()> {
         };
 
         if let Some(svc) = svc {
+            // Apply authentication interceptor to gRPC service
+            let auth_interceptor = crypto_core::grpc_auth::GrpcAuthInterceptor::new();
+
+            let grpc_service_with_auth = search_service::grpc::nova::search_service::v1::search_service_server::SearchServiceServer::with_interceptor(
+                svc,
+                auth_interceptor,
+            );
+
             if let Err(e) = GrpcServer::builder()
                 .add_service(health_service)
-                .add_service(search_service::grpc::nova::search_service::v1::search_service_server::SearchServiceServer::new(svc))
+                .add_service(grpc_service_with_auth)
                 .serve(grpc_addr)
                 .await
             {
@@ -945,20 +953,30 @@ async fn main() -> std::io::Result<()> {
             // API endpoints (with auth middleware if needed)
             .service(
                 web::scope("/api/v1/search")
-                    // Unified search endpoint
+                    // Public search endpoints (no auth required)
                     .route("", web::get().to(unified_search))
                     // Type-specific search endpoints
                     .route("/users", web::get().to(search_users))
                     .route("/posts", web::get().to(search_posts))
                     .route("/hashtags", web::get().to(search_hashtags))
-                    // Cache management
-                    .route("/clear-cache", web::post().to(clear_search_cache))
-                    .route("/posts/reindex", web::post().to(reindex_posts))
-                    // Search suggestions and trends
-                    .route("/suggestions", web::get().to(get_search_suggestions))
+                    // Public trends endpoint
                     .route("/trending", web::get().to(get_trending_searches))
-                    // Search analytics
-                    .route("/clicks", web::post().to(record_search_click)),
+                    // Protected endpoints (require authentication)
+                    .service(
+                        web::scope("")
+                            .wrap(actix_middleware::jwt_auth::JwtAuthMiddleware::new())
+                            // Search suggestions (authenticated)
+                            .route("/suggestions", web::get().to(get_search_suggestions))
+                            // Search analytics (authenticated)
+                            .route("/clicks", web::post().to(record_search_click))
+                            // Admin-only endpoints (cache and reindex)
+                            .service(
+                                web::scope("")
+                                    .wrap(actix_middleware::admin_auth::AdminAuthMiddleware::new())
+                                    .route("/clear-cache", web::post().to(clear_search_cache))
+                                    .route("/posts/reindex", web::post().to(reindex_posts))
+                            )
+                    )
             )
     })
     .bind(("0.0.0.0", port))?
