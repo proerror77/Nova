@@ -74,3 +74,8 @@ vendor/
 
 # Specify - Template system (local workflow tool)
 .specify/
+
+# Kubernetes - Local secrets for development (templates are OK to commit)
+# Production uses External Secrets Operator + AWS Secrets Manager
+k8s/microservices/*-secret.local.yaml
+k8s/microservices/*-secret.dev.yaml
