@@ -31,7 +31,6 @@ spec:
       serviceAccountName: feed-service
       securityContext:
         runAsNonRoot: true
-        readOnlyRootFilesystem: true
         fsGroup: 1000
 
       # Feed service depends on content-service being ready
@@ -77,8 +76,8 @@ spec:
                       - backend
       containers:
         - name: feed-service
-          image: nova/feed-service:latest
-          imagePullPolicy: IfNotPresent
+          image: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/feed-service:latest
+          imagePullPolicy: Always
           ports:
             - name: http
               containerPort: 8089
