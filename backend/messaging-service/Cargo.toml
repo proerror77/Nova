@@ -19,7 +19,7 @@ fcm = "0.9"
 async-trait = "0.1"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
-sqlx = { version = "0.7", default-features = false, features = ["runtime-tokio-rustls", "postgres", "macros", "uuid", "chrono", "migrate"] }
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio-rustls", "postgres", "macros", "uuid", "chrono", "migrate"] }
 uuid = { version = "1", features = ["v4", "serde"] }
 redis = { version = "0.25", features = ["tokio-comp", "connection-manager", "streams"] }
 rdkafka = { version = "0.36", features = ["tokio"] }
