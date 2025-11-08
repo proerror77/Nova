@@ -120,8 +120,13 @@ pub mod authorization;
 // =============================
 
 #[no_mangle]
-/// SAFETY: Caller must ensure `out_buf` is a valid, properly aligned pointer to at least `out_len` bytes.
-/// If `out_len` < 24, returns 0 and does not write to the buffer.
+/// Generates a cryptographically secure random nonce.
+///
+/// # Safety
+///
+/// Caller must ensure:
+/// - `out_buf` is a valid, properly aligned pointer to at least `out_len` bytes
+/// - If `out_len` < 24, returns 0 and does not write to the buffer
 pub unsafe extern "C" fn cryptocore_generate_nonce(out_buf: *mut c_uchar, out_len: c_ulong) -> c_ulong {
     let len = out_len as usize;
     if out_buf.is_null() || len < 24 {
@@ -133,13 +138,18 @@ pub unsafe extern "C" fn cryptocore_generate_nonce(out_buf: *mut c_uchar, out_le
 }
 
 #[no_mangle]
-/// SAFETY: Caller must ensure:
+/// Encrypts data using recipient's public key and sender's secret key.
+///
+/// Returns allocated buffer that must be freed with `cryptocore_free()`.
+///
+/// # Safety
+///
+/// Caller must ensure:
 /// - All input pointers are valid for their specified lengths
 /// - `recipient_pk_len` == 32 (Ed25519 public key)
 /// - `sender_sk_len` == 32 (Ed25519 secret key)
 /// - `nonce_len` == 24 (XChaCha20 nonce)
 /// - `out_len_ptr` is null or points to valid u64 for output length
-/// Returns allocated buffer that must be freed with `cryptocore_free()`.
 pub unsafe extern "C" fn cryptocore_encrypt(
     plaintext_ptr: *const c_uchar,
     plaintext_len: c_ulong,
@@ -184,13 +194,18 @@ pub unsafe extern "C" fn cryptocore_encrypt(
 }
 
 #[no_mangle]
-/// SAFETY: Caller must ensure:
+/// Decrypts data using sender's public key and recipient's secret key.
+///
+/// Returns allocated buffer that must be freed with `cryptocore_free()`.
+///
+/// # Safety
+///
+/// Caller must ensure:
 /// - All input pointers are valid for their specified lengths
 /// - `sender_pk_len` == 32 (Ed25519 public key)
 /// - `recipient_sk_len` == 32 (Ed25519 secret key)
 /// - `nonce_len` == 24 (XChaCha20 nonce)
 /// - `out_len_ptr` is null or points to valid u64 for output length
-/// Returns allocated buffer that must be freed with `cryptocore_free()`.
 pub unsafe extern "C" fn cryptocore_decrypt(
     ciphertext_ptr: *const c_uchar,
     ciphertext_len: c_ulong,
@@ -235,7 +250,11 @@ pub unsafe extern "C" fn cryptocore_decrypt(
 }
 
 #[no_mangle]
-/// SAFETY: Caller must ensure:
+/// Frees memory allocated by `cryptocore_encrypt()` or `cryptocore_decrypt()`.
+///
+/// # Safety
+///
+/// Caller must ensure:
 /// - `buf_ptr` was allocated by `cryptocore_encrypt()` or `cryptocore_decrypt()`
 /// - `buf_len` matches the length returned by those functions
 /// - This function is called exactly once per allocated buffer

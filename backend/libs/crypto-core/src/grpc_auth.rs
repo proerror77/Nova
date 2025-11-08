@@ -43,10 +43,11 @@ impl GrpcAuthInterceptor {
 
     /// Check if method is in public whitelist
     fn is_public_method(&self, uri: &str) -> bool {
-        self.public_methods.iter().any(|&m| m == uri)
+        self.public_methods.contains(&uri)
     }
 
     /// Extract and validate JWT token from Authorization header
+    #[allow(clippy::result_large_err)]
     fn extract_and_validate_token(&self, req: &Request<()>) -> Result<TokenData<Claims>, Status> {
         let auth_header = req
             .metadata()
