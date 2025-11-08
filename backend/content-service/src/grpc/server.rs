@@ -1210,11 +1210,23 @@ pub async fn start_grpc_server(
 
     let service = ContentServiceImpl::new(db_pool, cache, feed_cache, feed_ranking, auth_client);
 
-    // Health service
+    // Health service - use timeout to prevent hanging
     let (mut health, health_service) = health_reporter();
-    health
-        .set_serving::<crate::grpc::nova::content::content_service_server::ContentServiceServer<ContentServiceImpl>>()
-        .await;
+
+    // Spawn health check in background with timeout to prevent startup blocking
+    tokio::spawn(async move {
+        match tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            health.set_serving::<crate::grpc::nova::content::content_service_server::ContentServiceServer<ContentServiceImpl>>()
+        ).await {
+            Ok(_) => {
+                tracing::debug!("Health check service marked as serving");
+            }
+            Err(_) => {
+                tracing::warn!("Health check setup timeout - service may not report as healthy");
+            }
+        }
+    });
 
     // Server-side correlation-id extractor interceptor
     fn server_interceptor(
@@ -1229,6 +1241,7 @@ pub async fn start_grpc_server(
         Ok(req)
     }
 
+    tracing::info!("Binding gRPC server to {}", addr);
     Server::builder()
         .add_service(health_service)
         .add_service(ContentServiceServer::with_interceptor(
