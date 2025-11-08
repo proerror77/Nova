@@ -114,20 +114,27 @@ pub mod kafka_correlation;
 // =============================
 
 #[no_mangle]
-pub extern "C" fn cryptocore_generate_nonce(out_buf: *mut c_uchar, out_len: c_ulong) -> c_ulong {
+/// SAFETY: Caller must ensure `out_buf` is a valid, properly aligned pointer to at least `out_len` bytes.
+/// If `out_len` < 24, returns 0 and does not write to the buffer.
+pub unsafe extern "C" fn cryptocore_generate_nonce(out_buf: *mut c_uchar, out_len: c_ulong) -> c_ulong {
     let len = out_len as usize;
     if out_buf.is_null() || len < 24 {
         return 0;
     }
     let nonce = generate_nonce();
-    unsafe {
-        ptr::copy_nonoverlapping(nonce.as_ptr(), out_buf, 24);
-    }
+    ptr::copy_nonoverlapping(nonce.as_ptr(), out_buf, 24);
     24
 }
 
 #[no_mangle]
-pub extern "C" fn cryptocore_encrypt(
+/// SAFETY: Caller must ensure:
+/// - All input pointers are valid for their specified lengths
+/// - `recipient_pk_len` == 32 (Ed25519 public key)
+/// - `sender_sk_len` == 32 (Ed25519 secret key)
+/// - `nonce_len` == 24 (XChaCha20 nonce)
+/// - `out_len_ptr` is null or points to valid u64 for output length
+/// Returns allocated buffer that must be freed with `cryptocore_free()`.
+pub unsafe extern "C" fn cryptocore_encrypt(
     plaintext_ptr: *const c_uchar,
     plaintext_len: c_ulong,
     recipient_pk_ptr: *const c_uchar,
@@ -138,29 +145,47 @@ pub extern "C" fn cryptocore_encrypt(
     nonce_len: c_ulong,
     out_len_ptr: *mut c_ulong,
 ) -> *mut c_uchar {
-    let pt = unsafe { slice::from_raw_parts(plaintext_ptr, plaintext_len as usize) };
-    let rpk = unsafe { slice::from_raw_parts(recipient_pk_ptr, recipient_pk_len as usize) };
-    let ssk = unsafe { slice::from_raw_parts(sender_sk_ptr, sender_sk_len as usize) };
-    let nonce = unsafe { slice::from_raw_parts(nonce_ptr, nonce_len as usize) };
+    // Validate key sizes before dereferencing
+    if recipient_pk_len != 32 || sender_sk_len != 32 || nonce_len != 24 {
+        if !out_len_ptr.is_null() {
+            *out_len_ptr = 0;
+        }
+        return ptr::null_mut();
+    }
+
+    let pt = slice::from_raw_parts(plaintext_ptr, plaintext_len as usize);
+    let rpk = slice::from_raw_parts(recipient_pk_ptr, recipient_pk_len as usize);
+    let ssk = slice::from_raw_parts(sender_sk_ptr, sender_sk_len as usize);
+    let nonce = slice::from_raw_parts(nonce_ptr, nonce_len as usize);
     match encrypt(pt, rpk, ssk, nonce) {
         Ok(ct) => {
             let mut v = ct;
             let len = v.len() as c_ulong;
-            unsafe {
-                if !out_len_ptr.is_null() {
-                    *out_len_ptr = len;
-                }
+            if !out_len_ptr.is_null() {
+                *out_len_ptr = len;
             }
             let ptr = v.as_mut_ptr();
             std::mem::forget(v);
             ptr
         }
-        Err(_) => ptr::null_mut(),
+        Err(_) => {
+            if !out_len_ptr.is_null() {
+                *out_len_ptr = 0;
+            }
+            ptr::null_mut()
+        }
     }
 }
 
 #[no_mangle]
-pub extern "C" fn cryptocore_decrypt(
+/// SAFETY: Caller must ensure:
+/// - All input pointers are valid for their specified lengths
+/// - `sender_pk_len` == 32 (Ed25519 public key)
+/// - `recipient_sk_len` == 32 (Ed25519 secret key)
+/// - `nonce_len` == 24 (XChaCha20 nonce)
+/// - `out_len_ptr` is null or points to valid u64 for output length
+/// Returns allocated buffer that must be freed with `cryptocore_free()`.
+pub unsafe extern "C" fn cryptocore_decrypt(
     ciphertext_ptr: *const c_uchar,
     ciphertext_len: c_ulong,
     sender_pk_ptr: *const c_uchar,
@@ -171,33 +196,47 @@ pub extern "C" fn cryptocore_decrypt(
     nonce_len: c_ulong,
     out_len_ptr: *mut c_ulong,
 ) -> *mut c_uchar {
-    let ct = unsafe { slice::from_raw_parts(ciphertext_ptr, ciphertext_len as usize) };
-    let spk = unsafe { slice::from_raw_parts(sender_pk_ptr, sender_pk_len as usize) };
-    let rsk = unsafe { slice::from_raw_parts(recipient_sk_ptr, recipient_sk_len as usize) };
-    let nonce = unsafe { slice::from_raw_parts(nonce_ptr, nonce_len as usize) };
+    // Validate key sizes before dereferencing
+    if sender_pk_len != 32 || recipient_sk_len != 32 || nonce_len != 24 {
+        if !out_len_ptr.is_null() {
+            *out_len_ptr = 0;
+        }
+        return ptr::null_mut();
+    }
+
+    let ct = slice::from_raw_parts(ciphertext_ptr, ciphertext_len as usize);
+    let spk = slice::from_raw_parts(sender_pk_ptr, sender_pk_len as usize);
+    let rsk = slice::from_raw_parts(recipient_sk_ptr, recipient_sk_len as usize);
+    let nonce = slice::from_raw_parts(nonce_ptr, nonce_len as usize);
     match decrypt(ct, spk, rsk, nonce) {
         Ok(pt) => {
             let mut v = pt;
             let len = v.len() as c_ulong;
-            unsafe {
-                if !out_len_ptr.is_null() {
-                    *out_len_ptr = len;
-                }
+            if !out_len_ptr.is_null() {
+                *out_len_ptr = len;
             }
             let ptr = v.as_mut_ptr();
             std::mem::forget(v);
             ptr
         }
-        Err(_) => ptr::null_mut(),
+        Err(_) => {
+            if !out_len_ptr.is_null() {
+                *out_len_ptr = 0;
+            }
+            ptr::null_mut()
+        }
     }
 }
 
 #[no_mangle]
-pub extern "C" fn cryptocore_free(buf_ptr: *mut c_uchar, buf_len: c_ulong) {
+/// SAFETY: Caller must ensure:
+/// - `buf_ptr` was allocated by `cryptocore_encrypt()` or `cryptocore_decrypt()`
+/// - `buf_len` matches the length returned by those functions
+/// - This function is called exactly once per allocated buffer
+pub unsafe extern "C" fn cryptocore_free(buf_ptr: *mut c_uchar, buf_len: c_ulong) {
     if buf_ptr.is_null() {
         return;
     }
-    unsafe {
-        let _ = Vec::from_raw_parts(buf_ptr, buf_len as usize, buf_len as usize);
-    }
+    // SAFETY: Caller guarantees buf_ptr was allocated with the correct len and capacity
+    let _ = Vec::from_raw_parts(buf_ptr, buf_len as usize, buf_len as usize);
 }

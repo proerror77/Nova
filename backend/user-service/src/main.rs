@@ -1,9 +1,5 @@
-// TODO: Fix clippy warnings and code quality issues in follow-up PR (tracked in GitHub issue)
-// TEMPORARY: Allow all warnings to unblock CRITICAL P0 BorrowMutError fix deployment
-// This prevents HTTP server from responding to ANY requests - production impact!
-// Revert this after deployment and fix warnings in separate PR
-#![allow(warnings)]
-#![allow(clippy::all)]
+// All code must compile with zero warnings
+// Clippy: cargo clippy --all -- -D warnings
 
 use actix_cors::Cors;
 use actix_web::{middleware::Logger, web, App, HttpResponse, HttpServer};
