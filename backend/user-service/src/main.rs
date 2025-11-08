@@ -281,69 +281,85 @@ async fn main() -> io::Result<()> {
     };
     let health_checker = Arc::new(HealthChecker::new());
 
-    // Initialize gRPC clients with graceful degradation (services may not be running)
-    // Clients are optional - if initialization fails, we log a warning and continue
-    let content_client: Option<Arc<ContentServiceClient>> = match ContentServiceClient::new(
-        &grpc_config,
-        health_checker.clone(),
-    )
-    .await
-    {
-        Ok(client) => {
-            tracing::info!("content-service gRPC client initialized");
-            Some(Arc::new(client))
-        }
-        Err(e) => {
-            tracing::warn!("content-service gRPC client initialization failed: {:#} (running in degraded mode)", e);
-            None
-        }
-    };
+    // Initialize gRPC clients with STRICT dependencies
+    // All critical services MUST be available for user-service to start
+    // This ensures no degraded mode operation - services are either fully operational or fail to start
 
-    let auth_client: Option<Arc<AuthServiceClient>> =
+    tracing::info!("Initializing critical gRPC service clients (strict dependencies)");
+
+    let content_client: Arc<ContentServiceClient> =
+        match ContentServiceClient::new(&grpc_config, health_checker.clone()).await {
+            Ok(client) => {
+                tracing::info!("✓ content-service gRPC client initialized");
+                Arc::new(client)
+            }
+            Err(e) => {
+                tracing::error!(
+                    "✗ FATAL: content-service gRPC client initialization failed: {:#}",
+                    e
+                );
+                tracing::error!(
+                    "  Ensure content-service deployment exists and is healthy in Kubernetes"
+                );
+                std::process::exit(1);
+            }
+        };
+
+    let auth_client: Arc<AuthServiceClient> =
         match AuthServiceClient::new(&grpc_config, health_checker.clone()).await {
             Ok(client) => {
-                tracing::info!("auth-service gRPC client initialized");
-                Some(Arc::new(client))
+                tracing::info!("✓ auth-service gRPC client initialized");
+                Arc::new(client)
             }
             Err(e) => {
-                tracing::warn!(
-                "auth-service gRPC client initialization failed: {:#} (running in degraded mode)",
-                e
-            );
-                None
+                tracing::error!(
+                    "✗ FATAL: auth-service gRPC client initialization failed: {:#}",
+                    e
+                );
+                tracing::error!(
+                    "  Ensure auth-service deployment exists and is healthy in Kubernetes"
+                );
+                std::process::exit(1);
             }
         };
 
-    // NOTE: media_client unused after video service migration to media-service
-    let _media_client: Option<Arc<MediaServiceClient>> =
+    let media_client: Arc<MediaServiceClient> =
         match MediaServiceClient::new(&grpc_config, health_checker.clone()).await {
             Ok(client) => {
-                tracing::info!("media-service gRPC client initialized");
-                Some(Arc::new(client))
+                tracing::info!("✓ media-service gRPC client initialized");
+                Arc::new(client)
             }
             Err(e) => {
-                tracing::warn!(
-                "media-service gRPC client initialization failed: {:#} (running in degraded mode)",
-                e
-            );
-                None
+                tracing::error!(
+                    "✗ FATAL: media-service gRPC client initialization failed: {:#}",
+                    e
+                );
+                tracing::error!(
+                    "  Ensure media-service deployment exists and is healthy in Kubernetes"
+                );
+                std::process::exit(1);
             }
         };
 
-    let feed_client: Option<Arc<FeedServiceClient>> =
+    let feed_client: Arc<FeedServiceClient> =
         match FeedServiceClient::new(&grpc_config, health_checker.clone()).await {
             Ok(client) => {
-                tracing::info!("feed-service gRPC client initialized");
-                Some(Arc::new(client))
+                tracing::info!("✓ feed-service gRPC client initialized");
+                Arc::new(client)
             }
             Err(e) => {
-                tracing::warn!(
-                "feed-service gRPC client initialization failed: {:#} (running in degraded mode)",
-                e
-            );
-                None
+                tracing::error!(
+                    "✗ FATAL: feed-service gRPC client initialization failed: {:#}",
+                    e
+                );
+                tracing::error!(
+                    "  Ensure feed-service deployment exists and is healthy in Kubernetes"
+                );
+                std::process::exit(1);
             }
         };
+
+    tracing::info!("All critical gRPC services initialized successfully");
 
     // Feed state moved to feed-service (port 8089)
     let content_client_data = web::Data::new(content_client.clone());
@@ -478,38 +494,28 @@ async fn main() -> io::Result<()> {
             max_concurrent_inserts: 5,
         };
 
-        // Events consumer requires content and feed service clients
-        let (events_handle, degraded_mode) = if content_client.is_some() && feed_client.is_some() {
-            match EventsConsumer::new(
-                events_config,
-                ch_writer.as_ref().clone(),
-                event_deduplicator,
-                content_client.clone().unwrap(),
-                feed_client.clone().unwrap(),
-            ) {
-                Ok(consumer) => {
-                    let handle = tokio::spawn(async move {
-                        if let Err(e) = consumer.run().await {
-                            tracing::error!("Events consumer error: {}", e);
-                        }
-                    });
-                    tracing::info!("Events consumer spawned");
-                    (Some(handle), false)
-                }
-                Err(e) => {
-                    tracing::warn!(
-                        "Events consumer initialization failed: {:#} (running in degraded mode)",
-                        e
-                    );
-                    (None, true)
-                }
+        // Events consumer requires content and feed service clients (always available with strict dependencies)
+        match EventsConsumer::new(
+            events_config,
+            ch_writer.as_ref().clone(),
+            event_deduplicator,
+            content_client.clone(),
+            feed_client.clone(),
+        ) {
+            Ok(consumer) => {
+                let handle = tokio::spawn(async move {
+                    if let Err(e) = consumer.run().await {
+                        tracing::error!("Events consumer error: {}", e);
+                    }
+                });
+                tracing::info!("✓ Events consumer spawned");
+                (Some(cdc_handle), Some(handle))
             }
-        } else {
-            tracing::warn!("Skipping events consumer - required gRPC services unavailable (running in degraded mode)");
-            (None, true)
-        };
-
-        (Some(cdc_handle), events_handle)
+            Err(e) => {
+                tracing::error!("✗ FATAL: Events consumer initialization failed: {:#}", e);
+                std::process::exit(1);
+            }
+        }
     } else {
         tracing::info!("Skipping CDC and events consumers (ClickHouse unavailable)");
         (None, None)
@@ -563,26 +569,25 @@ async fn main() -> io::Result<()> {
 
         let suggested_job = SuggestedUsersJob::new(SuggestionConfig::default());
 
-        // Cache warmer requires both content and feed service clients
-        let mut jobs_vec: Vec<(Arc<dyn jobs::CacheRefreshJob>, jobs::JobContext)> = vec![(
-            Arc::new(suggested_job) as Arc<dyn jobs::CacheRefreshJob>,
-            job_ctx,
-        )];
+        // Cache warmer requires both content and feed service clients (always available with strict dependencies)
+        let cache_warmer = jobs::cache_warmer::CacheWarmerJob::new(
+            jobs::cache_warmer::CacheWarmerConfig::default(),
+            content_client.clone(),
+            feed_client.clone(),
+        );
 
-        if content_client.is_some() && feed_client.is_some() {
-            let cache_warmer = jobs::cache_warmer::CacheWarmerJob::new(
-                jobs::cache_warmer::CacheWarmerConfig::default(),
-                content_client.clone().unwrap(),
-                feed_client.clone().unwrap(),
-            );
-            jobs_vec.push((
+        let jobs_vec: Vec<(Arc<dyn jobs::CacheRefreshJob>, jobs::JobContext)> = vec![
+            (
+                Arc::new(suggested_job) as Arc<dyn jobs::CacheRefreshJob>,
+                job_ctx,
+            ),
+            (
                 Arc::new(cache_warmer) as Arc<dyn jobs::CacheRefreshJob>,
                 job_ctx3,
-            ));
-            tracing::info!("Cache warmer job spawned");
-        } else {
-            tracing::warn!("Skipping cache warmer job - required gRPC services unavailable (running in degraded mode)");
-        }
+            ),
+        ];
+
+        tracing::info!("✓ Cache warmer job and suggested users job initialized");
 
         // Run jobs in background (suggested + cache warmup; trending moved to feed-service)
         let num_jobs = jobs_vec.len();
