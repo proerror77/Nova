@@ -1,14 +1,12 @@
-name: Build and Deploy to AWS ECS
+name: Build and Deploy to AWS ECS (DEPRECATED - Use EKS instead)
 
 on:
   push:
     branches:
-      - feature/phase1-grpc-migration  # Auto-deploy to staging
-      - main                           # Manual approval for production
+      - __disabled__  # DISABLED: Use Kubernetes/EKS instead of ECS
   pull_request:
     branches:
-      - main
-      - feature/phase1-grpc-migration
+      - __disabled__
 
 env:
   AWS_REGION: us-east-1

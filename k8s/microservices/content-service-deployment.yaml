@@ -31,7 +31,6 @@ spec:
       serviceAccountName: content-service
       securityContext:
         runAsNonRoot: true
-        readOnlyRootFilesystem: true
         fsGroup: 1000
 
       # No InitContainers - content-service has no upstream dependencies
@@ -58,8 +57,8 @@ spec:
                       - backend
       containers:
         - name: content-service
-          image: nova/content-service:latest
-          imagePullPolicy: IfNotPresent
+          image: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/content-service:latest
+          imagePullPolicy: Always
           ports:
             - name: http
               containerPort: 8085

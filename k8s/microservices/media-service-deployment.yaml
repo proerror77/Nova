@@ -31,7 +31,6 @@ spec:
       serviceAccountName: media-service
       securityContext:
         runAsNonRoot: true
-        readOnlyRootFilesystem: true
         fsGroup: 1000
 
       # No InitContainers - media-service has no upstream dependencies
@@ -58,8 +57,8 @@ spec:
                       - backend
       containers:
         - name: media-service
-          image: nova/media-service:latest
-          imagePullPolicy: IfNotPresent
+          image: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/media-service:latest
+          imagePullPolicy: Always
           ports:
             - name: http
               containerPort: 8082
