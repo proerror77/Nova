@@ -108,6 +108,8 @@ jobs:
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
+        env:
+          AWS_REGION: ap-northeast-1
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -151,13 +153,13 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
+          aws-region: ap-northeast-1
 
       - name: Update kubeconfig
         run: |
           aws eks update-kubeconfig \
             --name nova-staging \
-            --region ${{ env.AWS_REGION }}
+            --region ap-northeast-1
 
       - name: Verify cluster connectivity
         run: |
@@ -218,13 +220,13 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
+          aws-region: ap-northeast-1
 
       - name: Update kubeconfig
         run: |
           aws eks update-kubeconfig \
             --name nova-staging \
-            --region ${{ env.AWS_REGION }}
+            --region ap-northeast-1
 
       - name: Run smoke tests
         run: |
