@@ -348,21 +348,24 @@ async fn main() -> io::Result<()> {
             }
         };
 
-    let feed_client: Arc<FeedServiceClient> =
+    let feed_client: Option<Arc<FeedServiceClient>> =
         match FeedServiceClient::new(&grpc_config, health_checker.clone()).await {
             Ok(client) => {
                 tracing::info!("✓ feed-service gRPC client initialized");
-                Arc::new(client)
+                Some(Arc::new(client))
             }
             Err(e) => {
-                tracing::error!(
-                    "✗ FATAL: feed-service gRPC client initialization failed: {:#}",
+                tracing::warn!(
+                    "⚠️  feed-service gRPC client initialization failed: {:#}",
                     e
                 );
-                tracing::error!(
-                    "  Ensure feed-service deployment exists and is healthy in Kubernetes"
+                tracing::warn!(
+                    "   Feed recommendation features will be unavailable until feed-service is deployed"
                 );
-                std::process::exit(1);
+                tracing::warn!(
+                    "   Service will continue with reduced functionality"
+                );
+                None
             }
         };
 
@@ -370,7 +373,7 @@ async fn main() -> io::Result<()> {
         "content-service",
         if auth_client.is_some() { "auth-service" } else { "" },
         if media_client.is_some() { "media-service" } else { "" },
-        "feed-service",
+        if feed_client.is_some() { "feed-service" } else { "" },
     ].into_iter().filter(|s| !s.is_empty()).collect::<Vec<_>>().join(", ");
 
     tracing::info!("✅ gRPC services initialized: {}", available_services);
@@ -378,7 +381,7 @@ async fn main() -> io::Result<()> {
     // Feed state moved to feed-service (port 8089)
     let content_client_data = web::Data::new(content_client.clone());
     let feed_client_data = web::Data::new(feed_client.clone());
-    let auth_client_data = web::Data::new(auth_client); // Now Option<Arc<AuthServiceClient>>
+    let auth_client_data = web::Data::new(auth_client.clone()); // Now Option<Arc<AuthServiceClient>>
     let health_checker_data = web::Data::new(health_checker.clone());
 
     // Initialize Neo4j Graph service (optional)
@@ -508,27 +511,33 @@ async fn main() -> io::Result<()> {
             max_concurrent_inserts: 5,
         };
 
-        // Events consumer requires content and feed service clients (always available with strict dependencies)
-        match EventsConsumer::new(
-            events_config,
-            ch_writer.as_ref().clone(),
-            event_deduplicator,
-            content_client.clone(),
-            feed_client.clone(),
-        ) {
-            Ok(consumer) => {
-                let handle = tokio::spawn(async move {
-                    if let Err(e) = consumer.run().await {
-                        tracing::error!("Events consumer error: {}", e);
-                    }
-                });
-                tracing::info!("✓ Events consumer spawned");
-                (Some(cdc_handle), Some(handle))
+        // Events consumer requires content and feed service clients
+        if let Some(feed_client_arc) = feed_client.clone() {
+            match EventsConsumer::new(
+                events_config,
+                ch_writer.as_ref().clone(),
+                event_deduplicator,
+                content_client.clone(),
+                feed_client_arc,
+            ) {
+                Ok(consumer) => {
+                    let handle = tokio::spawn(async move {
+                        if let Err(e) = consumer.run().await {
+                            tracing::error!("Events consumer error: {}", e);
+                        }
+                    });
+                    tracing::info!("✓ Events consumer spawned");
+                    (Some(cdc_handle), Some(handle))
+                }
+                Err(e) => {
+                    tracing::warn!("⚠️  Events consumer initialization failed: {:#}", e);
+                    tracing::warn!("   Events processing will be unavailable until feed-service is deployed");
+                    (Some(cdc_handle), None)
+                }
             }
-            Err(e) => {
-                tracing::error!("✗ FATAL: Events consumer initialization failed: {:#}", e);
-                std::process::exit(1);
-            }
+        } else {
+            tracing::info!("Skipping events consumer (feed-service unavailable)");
+            (Some(cdc_handle), None)
         }
     } else {
         tracing::info!("Skipping CDC and events consumers (ClickHouse unavailable)");
@@ -583,25 +592,29 @@ async fn main() -> io::Result<()> {
 
         let suggested_job = SuggestedUsersJob::new(SuggestionConfig::default());
 
-        // Cache warmer requires both content and feed service clients (always available with strict dependencies)
-        let cache_warmer = jobs::cache_warmer::CacheWarmerJob::new(
-            jobs::cache_warmer::CacheWarmerConfig::default(),
-            content_client.clone(),
-            feed_client.clone(),
-        );
-
-        let jobs_vec: Vec<(Arc<dyn jobs::CacheRefreshJob>, jobs::JobContext)> = vec![
+        // Cache warmer requires both content and feed service clients
+        let mut jobs_vec: Vec<(Arc<dyn jobs::CacheRefreshJob>, jobs::JobContext)> = vec![
             (
                 Arc::new(suggested_job) as Arc<dyn jobs::CacheRefreshJob>,
                 job_ctx,
             ),
-            (
-                Arc::new(cache_warmer) as Arc<dyn jobs::CacheRefreshJob>,
-                job_ctx3,
-            ),
         ];
 
-        tracing::info!("✓ Cache warmer job and suggested users job initialized");
+        // Conditionally add cache warmer if feed-service is available
+        if let Some(feed_client_arc) = feed_client.clone() {
+            let cache_warmer = jobs::cache_warmer::CacheWarmerJob::new(
+                jobs::cache_warmer::CacheWarmerConfig::default(),
+                content_client.clone(),
+                feed_client_arc,
+            );
+            jobs_vec.push((
+                Arc::new(cache_warmer) as Arc<dyn jobs::CacheRefreshJob>,
+                job_ctx3,
+            ));
+            tracing::info!("✓ Cache warmer job and suggested users job initialized");
+        } else {
+            tracing::info!("✓ Suggested users job initialized (cache warmer skipped - feed-service unavailable)");
+        }
 
         // Run jobs in background (suggested + cache warmup; trending moved to feed-service)
         let num_jobs = jobs_vec.len();
