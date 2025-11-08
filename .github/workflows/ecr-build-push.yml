@@ -53,7 +53,6 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::025434362120:role/github-actions-role
-          source-account-id: '025434362120'
           aws-region: ${{ env.AWS_REGION }}
           audience: sts.amazonaws.com
           role-session-name: gha-ecr-${{ github.run_id }}
@@ -76,7 +75,9 @@ jobs:
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
             TAG="pr-${{ github.event.pull_request.number }}"
           else
+            # Replace / with - for valid Docker tag format
             TAG="${{ github.ref_name }}"
+            TAG="${TAG//\//-}"
           fi
           TAG="$TAG-${{ github.sha }}"
           echo "tag=$TAG" >> $GITHUB_OUTPUT
@@ -118,7 +119,6 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::025434362120:role/github-actions-role
-          source-account-id: '025434362120'
           aws-region: ${{ env.AWS_REGION }}
           audience: sts.amazonaws.com
           role-session-name: gha-ecr-verify-${{ github.run_id }}
