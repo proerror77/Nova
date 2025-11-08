@@ -387,27 +387,27 @@ async fn main() -> io::Result<()> {
         ch_cfg.query_timeout_ms,
     ));
 
-    ensure_feed_tables(ch_client.as_ref()).await.map_err(|e| {
-        io::Error::new(
-            io::ErrorKind::Other,
-            format!("Failed to ensure ClickHouse feed schema: {e}"),
-        )
-    })?;
+    // TODO: ClickHouse is currently optional for MVP deployment
+    // Make it required once infrastructure is fully deployed
+    match ensure_feed_tables(ch_client.as_ref()).await {
+        Ok(()) => {
+            tracing::info!("✅ ClickHouse feed tables initialized");
+        }
+        Err(e) => {
+            tracing::warn!("⚠️  ClickHouse feed tables initialization failed: {}", e);
+            tracing::warn!("    Feed ranking features will be unavailable until ClickHouse is deployed");
+            tracing::warn!("    Service will continue with reduced functionality");
+        }
+    }
 
     match ch_client.health_check().await {
         Ok(()) => {
             tracing::info!("✅ ClickHouse connection validated");
         }
         Err(e) => {
-            tracing::error!("❌ FATAL: ClickHouse health check failed - {}", e);
-            tracing::error!(
-                "   Fix: Ensure ClickHouse is running and accessible at {}",
-                ch_cfg.url
-            );
-            return Err(io::Error::new(
-                io::ErrorKind::ConnectionRefused,
-                format!("ClickHouse initialization failed: {}", e),
-            ));
+            tracing::warn!("⚠️  ClickHouse health check failed: {}", e);
+            tracing::warn!("    Ensure ClickHouse is deployed at {} for full functionality", ch_cfg.url);
+            tracing::warn!("    Service will continue with reduced functionality");
         }
     }
 
