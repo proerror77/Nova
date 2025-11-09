@@ -17,14 +17,14 @@ lazy_static::lazy_static! {
         "http_requests_total",
         "Total HTTP requests",
         &["method", "path", "status"]
-    ).unwrap();
+    ).expect("Prometheus metrics registration should succeed at startup");
 
     pub static ref HTTP_REQUEST_DURATION_SECONDS: HistogramVec = prometheus::register_histogram_vec!(
         "http_request_duration_seconds",
         "HTTP request latency",
         &["method", "path", "status"],
         vec![0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0]
-    ).unwrap();
+    ).expect("Prometheus metrics registration should succeed at startup");
 }
 
 impl<S, B> Transform<S, ServiceRequest> for MetricsMiddleware
@@ -89,11 +89,13 @@ use once_cell::sync::Lazy;
 use prometheus::{register_int_counter, IntCounter};
 
 pub static JWT_CACHE_HIT: Lazy<IntCounter> = Lazy::new(|| {
-    register_int_counter!("jwt_cache_hit_total", "Total number of JWT cache hits").unwrap()
+    register_int_counter!("jwt_cache_hit_total", "Total number of JWT cache hits")
+        .expect("Prometheus metrics registration should succeed at startup")
 });
 
 pub static JWT_CACHE_MISS: Lazy<IntCounter> = Lazy::new(|| {
-    register_int_counter!("jwt_cache_miss_total", "Total number of JWT cache misses").unwrap()
+    register_int_counter!("jwt_cache_miss_total", "Total number of JWT cache misses")
+        .expect("Prometheus metrics registration should succeed at startup")
 });
 
 pub static JWT_REVOKED: Lazy<IntCounter> = Lazy::new(|| {
@@ -101,5 +103,5 @@ pub static JWT_REVOKED: Lazy<IntCounter> = Lazy::new(|| {
         "jwt_revoked_total",
         "Total number of requests with revoked JWT"
     )
-    .unwrap()
+    .expect("Prometheus metrics registration should succeed at startup")
 });

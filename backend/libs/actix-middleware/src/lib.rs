@@ -21,5 +21,5 @@ pub use circuit_breaker::{CircuitBreaker, CircuitBreakerConfig};
 pub use correlation_id::{get_correlation_id, CorrelationIdMiddleware};
 pub use jwt_auth::{JwtAuthMiddleware, UserId};
 pub use metrics::MetricsMiddleware;
-pub use rate_limit::{RateLimitConfig, RateLimitMiddleware};
+pub use rate_limit::{FailureMode, RateLimitConfig, RateLimitMiddleware};
 pub use token_revocation::TokenRevocationMiddleware;
