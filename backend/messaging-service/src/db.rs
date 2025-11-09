@@ -5,7 +5,7 @@ use sqlx::{Pool, Postgres};
 pub static MIGRATOR: Migrator = sqlx::migrate!("./migrations");
 
 pub async fn init_pool(database_url: &str) -> Result<Pool<Postgres>, sqlx::Error> {
-    let mut cfg = DbPoolConfig::from_env().unwrap_or_default();
+    let mut cfg = DbPoolConfig::from_env("messaging-service").unwrap_or_default();
     if cfg.database_url.is_empty() {
         cfg.database_url = database_url.to_string();
     }

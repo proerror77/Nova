@@ -1,0 +1,114 @@
+---
+# CPU Stress Chaos - Stresses CPU to test performance degradation
+apiVersion: chaos-mesh.org/v1alpha1
+kind: StressChaos
+metadata:
+  name: cpu-stress-auth-service
+  namespace: default
+  annotations:
+    chaos.description: "Stress auth-service CPU to 80% to test rate limiting and throttling"
+spec:
+  mode: one
+  selector:
+    namespaces:
+      - default
+    labelSelectors:
+      app: auth-service
+  stressors:
+    cpu:
+      workers: 2        # Number of CPU workers
+      load: 80          # Target CPU load percentage
+  duration: "2m"
+
+---
+# Memory Stress Chaos - Stresses memory to test OOM handling
+apiVersion: chaos-mesh.org/v1alpha1
+kind: StressChaos
+metadata:
+  name: memory-stress-user-service
+  namespace: default
+  annotations:
+    chaos.description: "Stress user-service memory to test memory leak detection and OOM killer"
+spec:
+  mode: one
+  selector:
+    namespaces:
+      - default
+    labelSelectors:
+      app: user-service
+  stressors:
+    memory:
+      workers: 1
+      size: "512Mi"     # Allocate 512MB
+  duration: "1m"
+
+---
+# Combined CPU + Memory Stress
+apiVersion: chaos-mesh.org/v1alpha1
+kind: StressChaos
+metadata:
+  name: combined-stress-messaging-service
+  namespace: default
+  annotations:
+    chaos.description: "Combined CPU and memory stress to test resource limits"
+spec:
+  mode: one
+  selector:
+    namespaces:
+      - default
+    labelSelectors:
+      app: messaging-service
+  stressors:
+    cpu:
+      workers: 1
+      load: 50
+    memory:
+      workers: 1
+      size: "256Mi"
+  duration: "2m"
+
+---
+# Disk I/O Stress Chaos
+apiVersion: chaos-mesh.org/v1alpha1
+kind: IOChaos
+metadata:
+  name: io-delay-content-service
+  namespace: default
+  annotations:
+    chaos.description: "Inject I/O delays to test database timeout handling"
+spec:
+  action: latency
+  mode: one
+  selector:
+    namespaces:
+      - default
+    labelSelectors:
+      app: content-service
+  volumePath: /var/lib/postgresql/data  # Target database volume
+  path: "/var/lib/postgresql/data/**/*"
+  delay: "100ms"
+  percent: 50       # 50% of I/O operations
+  duration: "1m"
+
+---
+# Disk I/O Error Injection
+apiVersion: chaos-mesh.org/v1alpha1
+kind: IOChaos
+metadata:
+  name: io-errno-notification-service
+  namespace: default
+  annotations:
+    chaos.description: "Inject I/O errors to test error handling"
+spec:
+  action: fault
+  mode: one
+  selector:
+    namespaces:
+      - default
+    labelSelectors:
+      app: notification-service
+  volumePath: /tmp
+  path: "/tmp/**/*"
+  errno: 5          # EIO (I/O error)
+  percent: 10       # 10% of I/O operations
+  duration: "30s"

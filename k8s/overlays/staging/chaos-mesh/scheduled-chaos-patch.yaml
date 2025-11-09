@@ -1,0 +1,30 @@
+---
+# Staging: More frequent chaos experiments for faster feedback
+apiVersion: chaos-mesh.org/v1alpha1
+kind: Schedule
+metadata:
+  name: daily-network-latency
+  namespace: default
+spec:
+  schedule: "*/30 * * * *"  # Every 30 minutes (instead of daily)
+  historyLimit: 20
+
+---
+apiVersion: chaos-mesh.org/v1alpha1
+kind: Schedule
+metadata:
+  name: weekly-pod-resilience
+  namespace: default
+spec:
+  schedule: "0 */4 * * *"  # Every 4 hours (instead of weekly)
+  historyLimit: 10
+
+---
+apiVersion: chaos-mesh.org/v1alpha1
+kind: Schedule
+metadata:
+  name: daily-cpu-stress
+  namespace: default
+spec:
+  schedule: "0 */6 * * *"  # Every 6 hours (instead of daily)
+  historyLimit: 15

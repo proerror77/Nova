@@ -1,0 +1,221 @@
+---
+# Chaos Workflow - Orchestrates multiple chaos experiments in sequence
+# This simulates a realistic production incident: network issues → pod failure → resource exhaustion
+apiVersion: chaos-mesh.org/v1alpha1
+kind: Workflow
+metadata:
+  name: production-incident-simulation
+  namespace: default
+  annotations:
+    chaos.description: "Simulates a cascading failure scenario: network delay → pod kill → CPU stress"
+spec:
+  entry: network-delay-phase
+  templates:
+    # Phase 1: Network Delay (simulates upstream service slowdown)
+    - name: network-delay-phase
+      templateType: Serial
+      deadline: 5m
+      children:
+        - delay-auth-to-user
+      tasks:
+        - name: delay-auth-to-user
+          templateType: NetworkChaos
+          deadline: 2m
+          networkChaos:
+            action: delay
+            mode: one
+            selector:
+              namespaces:
+                - default
+              labelSelectors:
+                app: auth-service
+            delay:
+              latency: "200ms"
+              jitter: "50ms"
+            duration: "1m"
+
+    # Phase 2: Pod Failure (simulates cascading failure)
+    - name: pod-failure-phase
+      templateType: Serial
+      deadline: 3m
+      children:
+        - kill-user-pod
+      tasks:
+        - name: kill-user-pod
+          templateType: PodChaos
+          deadline: 1m
+          podChaos:
+            action: pod-kill
+            mode: one
+            selector:
+              namespaces:
+                - default
+              labelSelectors:
+                app: user-service
+            gracePeriod: 0
+
+    # Phase 3: Resource Stress (simulates resource exhaustion)
+    - name: stress-phase
+      templateType: Parallel  # Run CPU and memory stress in parallel
+      deadline: 3m
+      children:
+        - cpu-stress-messaging
+        - memory-stress-content
+      tasks:
+        - name: cpu-stress-messaging
+          templateType: StressChaos
+          deadline: 2m
+          stressChaos:
+            mode: one
+            selector:
+              namespaces:
+                - default
+              labelSelectors:
+                app: messaging-service
+            stressors:
+              cpu:
+                workers: 2
+                load: 70
+            duration: "1m"
+
+        - name: memory-stress-content
+          templateType: StressChaos
+          deadline: 2m
+          stressChaos:
+            mode: one
+            selector:
+              namespaces:
+                - default
+              labelSelectors:
+                app: content-service
+            stressors:
+              memory:
+                workers: 1
+                size: "512Mi"
+            duration: "1m"
+
+  # Sequential execution: network → pod → stress
+  entrypoint:
+    - network-delay-phase
+    - pod-failure-phase
+    - stress-phase
+
+---
+# High Availability Test Workflow
+# Tests multi-AZ failure scenario
+apiVersion: chaos-mesh.org/v1alpha1
+kind: Workflow
+metadata:
+  name: ha-multi-az-failure
+  namespace: default
+  annotations:
+    chaos.description: "Tests high availability by killing pods in multiple availability zones"
+spec:
+  entry: multi-az-pod-kill
+  templates:
+    - name: multi-az-pod-kill
+      templateType: Parallel
+      deadline: 5m
+      children:
+        - kill-az-a-pods
+        - kill-az-b-pods
+      tasks:
+        - name: kill-az-a-pods
+          templateType: PodChaos
+          deadline: 2m
+          podChaos:
+            action: pod-kill
+            mode: all
+            selector:
+              namespaces:
+                - default
+              labelSelectors:
+                app: auth-service
+                topology.kubernetes.io/zone: us-east-1a
+            duration: "30s"
+
+        - name: kill-az-b-pods
+          templateType: PodChaos
+          deadline: 2m
+          podChaos:
+            action: pod-kill
+            mode: all
+            selector:
+              namespaces:
+                - default
+              labelSelectors:
+                app: auth-service
+                topology.kubernetes.io/zone: us-east-1b
+            duration: "30s"
+
+---
+# Database Failure Simulation
+# Tests database connection pool exhaustion and recovery
+apiVersion: chaos-mesh.org/v1alpha1
+kind: Workflow
+metadata:
+  name: database-failure-simulation
+  namespace: default
+  annotations:
+    chaos.description: "Simulates database issues: network partition → I/O delay → pod kill"
+spec:
+  entry: db-network-partition
+  templates:
+    - name: db-network-partition
+      templateType: Serial
+      deadline: 5m
+      children:
+        - partition-db-connection
+        - io-delay-db
+        - kill-db-pod
+      tasks:
+        - name: partition-db-connection
+          templateType: NetworkChaos
+          deadline: 2m
+          networkChaos:
+            action: partition
+            mode: all
+            selector:
+              namespaces:
+                - default
+              labelSelectors:
+                app: user-service
+            direction: to
+            target:
+              mode: all
+              selector:
+                namespaces:
+                  - default
+                labelSelectors:
+                  app: postgresql
+            duration: "30s"
+
+        - name: io-delay-db
+          templateType: IOChaos
+          deadline: 2m
+          ioChaos:
+            action: latency
+            mode: one
+            selector:
+              namespaces:
+                - default
+              labelSelectors:
+                app: postgresql
+            volumePath: /var/lib/postgresql/data
+            path: "/var/lib/postgresql/data/**/*"
+            delay: "500ms"
+            percent: 100
+            duration: "1m"
+
+        - name: kill-db-pod
+          templateType: PodChaos
+          deadline: 1m
+          podChaos:
+            action: pod-kill
+            mode: one
+            selector:
+              namespaces:
+                - default
+              labelSelectors:
+                app: postgresql
+            gracePeriod: 10  # Allow graceful shutdown

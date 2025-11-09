@@ -12,6 +12,7 @@ members = [
     "backend/notification-service",
     "backend/cdn-service",
     "backend/events-service",
+    # "backend/graphql-gateway",  # TODO: Fix dependencies
     # Shared Libraries
     "backend/libs/actix-middleware",
     "backend/libs/crypto-core",
@@ -24,7 +25,9 @@ members = [
     "backend/libs/nova-fcm-shared",
     "backend/libs/grpc-clients",
     "backend/libs/redis-utils",
-    "backend/libs/video-core"
+    "backend/libs/video-core",
+    # "backend/libs/opentelemetry-config",  # TODO: Fix hyper dependencies
+    "backend/libs/event-store"
 ]
 resolver = "2"
 
@@ -147,6 +150,7 @@ utoipa-swagger-ui = "6.0"
 
 # Testing: Container fixtures for integration tests
 testcontainers = "0.17"
+serial_test = "3.0"
 
 [package]
 name = "nova"

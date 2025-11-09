@@ -21,7 +21,7 @@ pub mod webhook_repo;
 // All messaging operations moved to messaging-service crate
 
 pub async fn create_pool(database_url: &str, max_connections: u32) -> Result<PgPool, sqlx::Error> {
-    let mut cfg = DbPoolConfig::from_env().unwrap_or_default();
+    let mut cfg = DbPoolConfig::from_env("user-service").unwrap_or_default();
     if cfg.database_url.is_empty() {
         cfg.database_url = database_url.to_string();
     }

@@ -170,8 +170,10 @@ impl OAuthService {
             .await
             .map_err(|e| AuthError::Redis(e.to_string()))?;
 
-        serde_json::from_str::<OAuthStatePayload>(&data.unwrap())
-            .map_err(|_| AuthError::InvalidOAuthState)
+        serde_json::from_str::<OAuthStatePayload>(
+            &data.expect("data must be Some after is_none check above")
+        )
+        .map_err(|_| AuthError::InvalidOAuthState)
     }
 
     fn google_authorize_url(&self, redirect_uri: &str, state: &str) -> AuthResult<String> {
@@ -214,7 +216,8 @@ impl OAuthService {
             .facebook_app_id
             .as_ref()
             .ok_or_else(|| AuthError::OAuthError("Facebook app ID missing".into()))?;
-        let mut url = reqwest::Url::parse("https://www.facebook.com/v17.0/dialog/oauth").unwrap();
+        let mut url = reqwest::Url::parse("https://www.facebook.com/v17.0/dialog/oauth")
+            .expect("Hardcoded Facebook OAuth URL must be valid");
         url.query_pairs_mut()
             .append_pair("client_id", app_id)
             .append_pair("redirect_uri", redirect_uri)
@@ -230,7 +233,8 @@ impl OAuthService {
             .wechat_app_id
             .as_ref()
             .ok_or_else(|| AuthError::OAuthError("WeChat app ID missing".into()))?;
-        let mut url = reqwest::Url::parse("https://open.weixin.qq.com/connect/qrconnect").unwrap();
+        let mut url = reqwest::Url::parse("https://open.weixin.qq.com/connect/qrconnect")
+            .expect("Hardcoded WeChat OAuth URL must be valid");
         url.query_pairs_mut()
             .append_pair("appid", app_id)
             .append_pair("redirect_uri", redirect_uri)

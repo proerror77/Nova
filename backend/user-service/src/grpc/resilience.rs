@@ -59,19 +59,21 @@ impl CircuitBreaker {
 
     /// Get current circuit state (with auto-transition to half-open)
     pub fn state(&self) -> CircuitState {
-        let state = *self.state.read().unwrap();
+        let state = *self.state.read()
+            .expect("Circuit breaker lock poisoned - this should never happen in production");
 
         // Auto-transition from Open → HalfOpen after timeout
         if state == CircuitState::Open {
             let now = SystemTime::now()
                 .duration_since(SystemTime::UNIX_EPOCH)
-                .unwrap()
+                .expect("System time before UNIX_EPOCH - check system clock")
                 .as_secs();
             let last_failure = self.last_failure_time.load(Ordering::Relaxed);
 
             if now - last_failure >= self.timeout_secs {
                 debug!("Circuit breaker transitioning: Open → HalfOpen (timeout expired)");
-                *self.state.write().unwrap() = CircuitState::HalfOpen;
+                *self.state.write()
+                    .expect("Circuit breaker lock poisoned - this should never happen in production") = CircuitState::HalfOpen;
                 return CircuitState::HalfOpen;
             }
         }
@@ -86,7 +88,8 @@ impl CircuitBreaker {
 
     /// Record successful request
     pub fn record_success(&self) {
-        let mut state = self.state.write().unwrap();
+        let mut state = self.state.write()
+            .expect("Circuit breaker lock poisoned - this should never happen in production");
 
         match *state {
             CircuitState::HalfOpen => {
@@ -109,11 +112,12 @@ impl CircuitBreaker {
         let failures = self.failure_count.fetch_add(1, Ordering::Relaxed) + 1;
         let now = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
-            .unwrap()
+            .expect("System time before UNIX_EPOCH - check system clock")
             .as_secs();
         self.last_failure_time.store(now, Ordering::Relaxed);
 
-        let mut state = self.state.write().unwrap();
+        let mut state = self.state.write()
+            .expect("Circuit breaker lock poisoned - this should never happen in production");
 
         match *state {
             CircuitState::Closed => {
@@ -237,7 +241,7 @@ where
                         service_name, attempt
                     );
                     circuit_breaker.record_failure();
-                    return Err(last_error.unwrap());
+                    return Err(last_error.expect("last_error must be Some after retry loop"));
                 }
 
                 // Calculate backoff and retry

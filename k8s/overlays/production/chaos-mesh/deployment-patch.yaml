@@ -1,0 +1,79 @@
+---
+# Production environment: Maximum security, minimal chaos
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: chaos-controller-manager
+  namespace: chaos-mesh
+spec:
+  replicas: 2  # High availability in production
+  template:
+    spec:
+      containers:
+        - name: chaos-mesh
+          env:
+            - name: SECURITY_MODE
+              value: "true"  # Strict security mode
+            - name: ENABLE_FILTER_NAMESPACE
+              value: "true"  # Filter namespaces
+            - name: TARGET_NAMESPACE
+              value: "default"
+            - name: ALLOWED_NAMESPACES
+              value: "default"  # Only allow default namespace
+            - name: CLUSTER_SCOPED
+              value: "false"  # Prevent cluster-wide chaos
+          resources:
+            requests:
+              cpu: 200m
+              memory: 256Mi
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+
+---
+# Production dashboard: Shorter retention, better performance
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: chaos-dashboard
+  namespace: chaos-mesh
+spec:
+  replicas: 2  # High availability
+  template:
+    spec:
+      containers:
+        - name: chaos-dashboard
+          env:
+            - name: TTL_EVENT
+              value: "168h"  # 7 days only
+            - name: TTL_EXPERIMENT
+              value: "336h"  # 14 days only
+            - name: SECURITY_MODE
+              value: "true"
+          resources:
+            requests:
+              cpu: 200m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+
+---
+# Production daemon: Conservative resource limits
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: chaos-daemon
+  namespace: chaos-mesh
+spec:
+  template:
+    spec:
+      containers:
+        - name: chaos-daemon
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 300m  # Lower than staging
+              memory: 256Mi

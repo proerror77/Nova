@@ -1,0 +1,30 @@
+[package]
+name = "event-store"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+# Core
+tokio = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+
+# Database
+sqlx = { workspace = true, features = ["runtime-tokio", "postgres", "uuid", "chrono", "json"] }
+
+# Serialization
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+
+# Utilities
+uuid = { workspace = true, features = ["v4", "serde"] }
+chrono = { workspace = true, features = ["serde"] }
+
+# Async
+async-trait = "0.1"
+
+# Tracing
+tracing = { workspace = true }
+
+[dev-dependencies]
+serial_test = { workspace = true }

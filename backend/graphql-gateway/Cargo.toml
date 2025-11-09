@@ -1,0 +1,45 @@
+[package]
+name = "graphql-gateway"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+# Core
+tokio = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+
+# GraphQL
+async-graphql = { version = "7.0", features = ["tracing", "dataloader"] }
+async-graphql-actix-web = "7.0"
+
+# Web framework
+actix-web = { workspace = true }
+actix-cors = "0.7"
+
+# gRPC clients (to call backend services)
+tonic = { workspace = true }
+prost = { workspace = true }
+
+# Tracing
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["env-filter", "json"] }
+opentelemetry-config = { path = "../libs/opentelemetry-config" }
+
+# Configuration
+config = "0.14"
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+
+# Environment
+dotenv = "0.15"
+
+# Database pool (for caching/session)
+sqlx = { workspace = true, features = ["runtime-tokio", "postgres"] }
+db-pool = { path = "../libs/db-pool" }
+
+# Authentication
+jsonwebtoken = "9.3"
+
+[dev-dependencies]
+serial_test = { workspace = true }

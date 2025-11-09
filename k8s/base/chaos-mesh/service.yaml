@@ -1,0 +1,102 @@
+---
+# Service for Controller Manager (Webhook)
+apiVersion: v1
+kind: Service
+metadata:
+  name: chaos-controller-manager
+  namespace: chaos-mesh
+  labels:
+    app.kubernetes.io/name: chaos-mesh
+    app.kubernetes.io/component: controller-manager
+spec:
+  type: ClusterIP
+  ports:
+    - name: webhook
+      port: 443
+      targetPort: 9443
+      protocol: TCP
+    - name: metrics
+      port: 10080
+      targetPort: 10080
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: chaos-mesh
+    app.kubernetes.io/component: controller-manager
+
+---
+# Service for Chaos Daemon
+apiVersion: v1
+kind: Service
+metadata:
+  name: chaos-daemon
+  namespace: chaos-mesh
+  labels:
+    app.kubernetes.io/name: chaos-mesh
+    app.kubernetes.io/component: chaos-daemon
+spec:
+  type: ClusterIP
+  clusterIP: None  # Headless service
+  ports:
+    - name: grpc
+      port: 31767
+      targetPort: 31767
+      protocol: TCP
+    - name: http
+      port: 31766
+      targetPort: 31766
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: chaos-mesh
+    app.kubernetes.io/component: chaos-daemon
+
+---
+# Service for Dashboard
+apiVersion: v1
+kind: Service
+metadata:
+  name: chaos-dashboard
+  namespace: chaos-mesh
+  labels:
+    app.kubernetes.io/name: chaos-mesh
+    app.kubernetes.io/component: chaos-dashboard
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 2333
+      targetPort: 2333
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: chaos-mesh
+    app.kubernetes.io/component: chaos-dashboard
+
+---
+# Ingress for Dashboard (optional, for external access)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: chaos-dashboard
+  namespace: chaos-mesh
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    # Add authentication for production
+    nginx.ingress.kubernetes.io/auth-type: basic
+    nginx.ingress.kubernetes.io/auth-secret: chaos-dashboard-auth
+    nginx.ingress.kubernetes.io/auth-realm: "Chaos Mesh Dashboard - Authentication Required"
+spec:
+  tls:
+    - hosts:
+        - chaos.nova.com
+      secretName: chaos-dashboard-tls
+  rules:
+    - host: chaos.nova.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: chaos-dashboard
+                port:
+                  number: 2333

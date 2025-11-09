@@ -62,7 +62,7 @@ async fn main() -> io::Result<()> {
         .expect("Invalid PORT");
 
     // Initialize database pool
-    let mut cfg = DbPoolConfig::from_env().unwrap_or_default();
+    let mut cfg = DbPoolConfig::for_service("streaming-service");
     if cfg.database_url.is_empty() {
         cfg.database_url = database_url.clone();
     }

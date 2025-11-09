@@ -1,0 +1,147 @@
+groups:
+  - name: database.rules
+    interval: 30s
+    rules:
+      # Critical: Connection pool near exhaustion (>90% active)
+      - alert: DatabaseConnectionPoolExhausted
+        expr: |
+          (db_pool_connections{state="active"} /
+           db_pool_connections{state="max"}) > 0.9
+        for: 2m
+        labels:
+          severity: critical
+          component: database
+          team: platform
+        annotations:
+          summary: "Database connection pool near exhaustion"
+          description: |
+            Service {{ $labels.service }} is using {{ $value | humanizePercentage }} of its connection pool.
+            Active: {{ $labels.active }} / Max: {{ $labels.max }}
+            This may lead to request timeouts and service degradation.
+          runbook_url: "https://wiki.nova.com/runbooks/database-pool-exhaustion"
+
+      # Warning: Connection pool utilization high (>75%)
+      - alert: DatabaseConnectionPoolHighUtilization
+        expr: |
+          (db_pool_connections{state="active"} /
+           db_pool_connections{state="max"}) > 0.75
+        for: 5m
+        labels:
+          severity: warning
+          component: database
+          team: platform
+        annotations:
+          summary: "High database connection pool utilization"
+          description: |
+            Service {{ $labels.service }} is using {{ $value | humanizePercentage }} of its connection pool.
+            Consider scaling the service or optimizing connection usage.
+
+      # Warning: Slow connection acquisition (P95 > 1s)
+      - alert: DatabaseConnectionAcquireSlow
+        expr: |
+          histogram_quantile(0.95,
+            rate(db_pool_acquire_duration_seconds_bucket[5m])
+          ) > 1
+        for: 3m
+        labels:
+          severity: warning
+          component: database
+          team: platform
+        annotations:
+          summary: "Slow database connection acquisition"
+          description: |
+            Service {{ $labels.service }} P95 connection acquisition time is {{ $value }}s.
+            This indicates either pool exhaustion or network issues.
+
+      # Critical: Very slow connection acquisition (P95 > 5s)
+      - alert: DatabaseConnectionAcquireVerySlow
+        expr: |
+          histogram_quantile(0.95,
+            rate(db_pool_acquire_duration_seconds_bucket[5m])
+          ) > 5
+        for: 1m
+        labels:
+          severity: critical
+          component: database
+          team: platform
+        annotations:
+          summary: "Critical: Very slow database connection acquisition"
+          description: |
+            Service {{ $labels.service }} P95 connection acquisition time is {{ $value }}s.
+            This will cause request timeouts. Immediate action required.
+          runbook_url: "https://wiki.nova.com/runbooks/database-connection-timeout"
+
+      # Warning: Connection acquisition errors detected
+      - alert: DatabaseConnectionErrors
+        expr: |
+          rate(db_pool_connection_errors_total[5m]) > 0.01
+        for: 2m
+        labels:
+          severity: warning
+          component: database
+          team: platform
+        annotations:
+          summary: "Database connection errors detected"
+          description: |
+            Service {{ $labels.service }} is experiencing {{ $value }} connection errors/sec.
+            Error type: {{ $labels.error_type }}
+
+      # Critical: High connection error rate (>1 error/sec)
+      - alert: DatabaseConnectionErrorsHigh
+        expr: |
+          rate(db_pool_connection_errors_total[5m]) > 1
+        for: 1m
+        labels:
+          severity: critical
+          component: database
+          team: platform
+        annotations:
+          summary: "High database connection error rate"
+          description: |
+            Service {{ $labels.service }} is experiencing {{ $value }} connection errors/sec.
+            Error type: {{ $labels.error_type }}
+            This indicates severe database connectivity issues.
+          runbook_url: "https://wiki.nova.com/runbooks/database-connection-errors"
+
+      # Warning: Connection timeout errors
+      - alert: DatabaseConnectionTimeouts
+        expr: |
+          rate(db_pool_connection_errors_total{error_type="timeout"}[5m]) > 0.1
+        for: 2m
+        labels:
+          severity: warning
+          component: database
+          team: platform
+        annotations:
+          summary: "Database connection acquisition timeouts"
+          description: |
+            Service {{ $labels.service }} is experiencing connection timeouts at {{ $value }}/sec.
+            Pool may be undersized or database is overloaded.
+
+      # Info: No idle connections (may need to scale)
+      - alert: DatabaseConnectionPoolNoIdle
+        expr: |
+          db_pool_connections{state="idle"} == 0
+        for: 10m
+        labels:
+          severity: info
+          component: database
+          team: platform
+        annotations:
+          summary: "No idle database connections"
+          description: |
+            Service {{ $labels.service }} has no idle connections for 10 minutes.
+            Consider increasing pool size if traffic is sustained.
+
+      # Recording rule: Connection pool utilization percentage
+      - record: db_pool_utilization_percent
+        expr: |
+          (db_pool_connections{state="active"} /
+           db_pool_connections{state="max"}) * 100
+
+      # Recording rule: Connection acquisition P99 latency
+      - record: db_pool_acquire_p99_seconds
+        expr: |
+          histogram_quantile(0.99,
+            rate(db_pool_acquire_duration_seconds_bucket[5m])
+          )

@@ -24,14 +24,17 @@ pub async fn revoke_token(
     };
 
     let mut redis_conn = redis.lock().await.clone();
-    redis::cmd("SET")
-        .arg(&key)
-        .arg("1")
-        .arg("EX")
-        .arg(remaining_ttl)
-        .query_async::<_, ()>(&mut redis_conn)
-        .await
-        .map_err(|e| AuthError::Redis(e.to_string()))?;
+    redis_utils::with_timeout(async {
+        redis::cmd("SET")
+            .arg(&key)
+            .arg("1")
+            .arg("EX")
+            .arg(remaining_ttl)
+            .query_async::<_, ()>(&mut redis_conn)
+            .await
+    })
+    .await
+    .map_err(|e| AuthError::Redis(e.to_string()))?;
 
     tracing::info!(
         "Token revoked, blacklist entry will expire in {} seconds",
@@ -49,14 +52,17 @@ pub async fn revoke_all_user_tokens(
     let now_secs = chrono::Utc::now().timestamp();
 
     let mut redis_conn = redis.lock().await.clone();
-    redis::cmd("SET")
-        .arg(&key)
-        .arg(now_secs.to_string())
-        .arg("EX")
-        .arg(7 * 24 * 60 * 60) // 7 days
-        .query_async::<_, ()>(&mut redis_conn)
-        .await
-        .map_err(|e| AuthError::Redis(e.to_string()))?;
+    redis_utils::with_timeout(async {
+        redis::cmd("SET")
+            .arg(&key)
+            .arg(now_secs.to_string())
+            .arg("EX")
+            .arg(7 * 24 * 60 * 60) // 7 days
+            .query_async::<_, ()>(&mut redis_conn)
+            .await
+    })
+    .await
+    .map_err(|e| AuthError::Redis(e.to_string()))?;
 
     tracing::warn!("All tokens revoked for user: {}", user_id);
     Ok(())
@@ -68,11 +74,14 @@ pub async fn is_token_revoked(redis: &SharedConnectionManager, token: &str) -> A
     let key = format!("nova:revoked:token:{}", token_hash);
 
     let mut redis_conn = redis.lock().await.clone();
-    let exists: bool = redis::cmd("EXISTS")
-        .arg(&key)
-        .query_async(&mut redis_conn)
-        .await
-        .map_err(|e| AuthError::Redis(e.to_string()))?;
+    let exists: bool = redis_utils::with_timeout(async {
+        redis::cmd("EXISTS")
+            .arg(&key)
+            .query_async(&mut redis_conn)
+            .await
+    })
+    .await
+    .map_err(|e| AuthError::Redis(e.to_string()))?;
 
     Ok(exists)
 }
@@ -86,11 +95,14 @@ pub async fn check_user_token_revocation(
     let key = format!("nova:revoked:user:{}:ts", user_id);
 
     let mut redis_conn = redis.lock().await.clone();
-    let revocation_ts: Option<String> = redis::cmd("GET")
-        .arg(&key)
-        .query_async(&mut redis_conn)
-        .await
-        .map_err(|e| AuthError::Redis(e.to_string()))?;
+    let revocation_ts: Option<String> = redis_utils::with_timeout(async {
+        redis::cmd("GET")
+            .arg(&key)
+            .query_async(&mut redis_conn)
+            .await
+    })
+    .await
+    .map_err(|e| AuthError::Redis(e.to_string()))?;
 
     if let Some(ts_str) = revocation_ts {
         let revocation_secs: i64 = ts_str

@@ -31,7 +31,7 @@ async fn main() -> io::Result<()> {
     let db_url = std::env::var("DATABASE_URL")
         .unwrap_or_else(|_| "postgres://user:password@localhost/nova".to_string());
 
-    let mut cfg = DbPoolConfig::from_env().unwrap_or_default();
+    let mut cfg = DbPoolConfig::for_service("notification-service");
     if cfg.database_url.is_empty() {
         cfg.database_url = db_url.clone();
     }

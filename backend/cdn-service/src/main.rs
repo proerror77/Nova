@@ -21,7 +21,7 @@ async fn main() -> io::Result<()> {
     tracing::info!("Starting cdn-service");
 
     // Initialize database (standardized pool)
-    let mut cfg = DbPoolConfig::from_env().unwrap_or_default();
+    let mut cfg = DbPoolConfig::for_service("cdn-service");
     if cfg.database_url.is_empty() {
         cfg.database_url = std::env::var("DATABASE_URL")
             .unwrap_or_else(|_| "postgres://postgres:postgres@localhost/nova".into());

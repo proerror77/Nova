@@ -29,7 +29,7 @@ async fn main() -> io::Result<()> {
     tracing::info!("Starting video-service v{}", env!("CARGO_PKG_VERSION"));
     tracing::info!("Environment: {}", config.app.env);
 
-    let mut cfg = DbPoolConfig::from_env().unwrap_or_default();
+    let mut cfg = DbPoolConfig::for_service("video-service");
     if cfg.database_url.is_empty() { cfg.database_url = config.database.url.clone(); }
     cfg.max_connections = std::cmp::max(cfg.max_connections, config.database.max_connections);
     cfg.log_config();

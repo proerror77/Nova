@@ -1,0 +1,99 @@
+---
+# Pod Kill Chaos - Kills pod to test resilience
+apiVersion: chaos-mesh.org/v1alpha1
+kind: PodChaos
+metadata:
+  name: pod-kill-auth-service
+  namespace: default
+  annotations:
+    chaos.description: "Kill auth-service pod to test automatic recovery and circuit breaker"
+spec:
+  action: pod-kill
+  mode: one
+  selector:
+    namespaces:
+      - default
+    labelSelectors:
+      app: auth-service
+  duration: "30s"
+  scheduler:
+    cron: "@every 4h"  # Run every 4 hours
+
+---
+# Pod Failure Chaos - Makes pod unavailable (more graceful than kill)
+apiVersion: chaos-mesh.org/v1alpha1
+kind: PodChaos
+metadata:
+  name: pod-failure-user-service
+  namespace: default
+  annotations:
+    chaos.description: "Make user-service pod fail to test health check and auto-restart"
+spec:
+  action: pod-failure
+  mode: one
+  selector:
+    namespaces:
+      - default
+    labelSelectors:
+      app: user-service
+  duration: "1m"
+
+---
+# Container Kill Chaos - Kills specific container in pod
+apiVersion: chaos-mesh.org/v1alpha1
+kind: PodChaos
+metadata:
+  name: container-kill-messaging-service
+  namespace: default
+  annotations:
+    chaos.description: "Kill messaging-service container to test restart policy"
+spec:
+  action: container-kill
+  mode: one
+  selector:
+    namespaces:
+      - default
+    labelSelectors:
+      app: messaging-service
+  containerNames:
+    - messaging-service  # Specify container name
+  duration: "30s"
+
+---
+# Pod Delete Chaos - Deletes pod (tests StatefulSet recovery)
+apiVersion: chaos-mesh.org/v1alpha1
+kind: PodChaos
+metadata:
+  name: pod-delete-notification-service
+  namespace: default
+  annotations:
+    chaos.description: "Delete notification-service pod to test stateless recovery"
+spec:
+  action: pod-delete
+  mode: one
+  selector:
+    namespaces:
+      - default
+    labelSelectors:
+      app: notification-service
+  gracePeriod: 0  # Force delete (no graceful shutdown)
+
+---
+# Pod Failure with Multiple Pods - Tests multi-pod failure scenario
+apiVersion: chaos-mesh.org/v1alpha1
+kind: PodChaos
+metadata:
+  name: pod-failure-multi-content-service
+  namespace: default
+  annotations:
+    chaos.description: "Make 2 content-service pods fail to test load balancing"
+spec:
+  action: pod-failure
+  mode: fixed
+  value: "2"  # Affect 2 pods
+  selector:
+    namespaces:
+      - default
+    labelSelectors:
+      app: content-service
+  duration: "1m"

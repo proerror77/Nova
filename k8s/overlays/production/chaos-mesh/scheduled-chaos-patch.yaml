@@ -1,0 +1,55 @@
+---
+# Production: Very conservative schedule - only during maintenance windows
+apiVersion: chaos-mesh.org/v1alpha1
+kind: Schedule
+metadata:
+  name: daily-network-latency
+  namespace: default
+spec:
+  schedule: "0 3 * * 0"  # Sunday at 3 AM only (weekly)
+  historyLimit: 4
+  concurrencyPolicy: Forbid
+
+---
+apiVersion: chaos-mesh.org/v1alpha1
+kind: Schedule
+metadata:
+  name: weekly-pod-resilience
+  namespace: default
+spec:
+  schedule: "0 4 1 * *"  # First day of month at 4 AM (monthly)
+  historyLimit: 3
+  concurrencyPolicy: Forbid
+
+---
+apiVersion: chaos-mesh.org/v1alpha1
+kind: Schedule
+metadata:
+  name: daily-cpu-stress
+  namespace: default
+spec:
+  schedule: "0 5 * * 0"  # Sunday at 5 AM only (weekly)
+  historyLimit: 4
+  concurrencyPolicy: Forbid
+
+---
+# Disable business hours chaos in production
+apiVersion: chaos-mesh.org/v1alpha1
+kind: Schedule
+metadata:
+  name: business-hours-network-jitter
+  namespace: default
+spec:
+  schedule: "0 0 31 2 *"  # Never run (Feb 31st doesn't exist)
+  historyLimit: 1
+
+---
+# Disable monthly full chaos in production (too risky)
+apiVersion: chaos-mesh.org/v1alpha1
+kind: Schedule
+metadata:
+  name: monthly-full-chaos
+  namespace: default
+spec:
+  schedule: "0 0 31 2 *"  # Never run
+  historyLimit: 1

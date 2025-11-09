@@ -712,7 +712,7 @@ async fn docs() -> impl Responder {
 }
 
 async fn init_db_pool(database_url: &str) -> Result<PgPool, sqlx::Error> {
-    let mut cfg = db_pool::DbConfig::from_env().unwrap_or_default();
+    let mut cfg = db_pool::DbConfig::for_service("search-service");
     if cfg.database_url.is_empty() {
         cfg.database_url = database_url.to_string();
     }
