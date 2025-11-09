@@ -4,8 +4,18 @@
 
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
--- Remove legacy view so the real tables can be created safely
-DROP VIEW IF EXISTS user_profiles CASCADE;
+-- Remove legacy view/table so the real tables can be created safely
+-- Handle both VIEW (from migration 085) and TABLE (manually created)
+DO $$
+BEGIN
+    -- Drop if it's a view
+    EXECUTE 'DROP VIEW IF EXISTS user_profiles CASCADE';
+EXCEPTION
+    WHEN wrong_object_type THEN
+        -- It's a table, drop it instead
+        EXECUTE 'DROP TABLE IF EXISTS user_profiles CASCADE';
+END $$;
+
 DROP FUNCTION IF EXISTS user_profiles_update();
 
 -- User profile projection (owned by auth-service as single writer)
