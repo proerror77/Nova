@@ -58,7 +58,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let run_migrations = std::env::var("RUN_MIGRATIONS").unwrap_or_else(|_| "true".into());
     if run_migrations != "false" {
         tracing::info!("Running database migrations...");
-        if let Err(err) = sqlx::migrate!("../migrations").run(&db_pool).await {
+        if let Err(err) = sqlx::migrate!("./migrations").run(&db_pool).await {
             tracing::error!("Database migration failed: {:#}", err);
             return Err(err.into());
         }
