@@ -1,0 +1,186 @@
+---
+# Production Jaeger Configuration with Elasticsearch Backend
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: jaeger-config
+  namespace: observability
+data:
+  # Jaeger collector configuration
+  collector.yaml: |
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+      jaeger:
+        protocols:
+          thrift_http:
+            endpoint: 0.0.0.0:14268
+
+    processors:
+      batch:
+        timeout: 10s
+        send_batch_size: 1024
+
+    exporters:
+      elasticsearch:
+        endpoints:
+          - http://elasticsearch:9200
+        index: jaeger-span
+        num_shards: 5
+        num_replicas: 1
+
+    service:
+      pipelines:
+        traces:
+          receivers: [otlp, jaeger]
+          processors: [batch]
+          exporters: [elasticsearch]
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jaeger-collector
+  namespace: observability
+spec:
+  replicas: 3  # High availability
+  selector:
+    matchLabels:
+      app: jaeger
+      component: collector
+  template:
+    metadata:
+      labels:
+        app: jaeger
+        component: collector
+    spec:
+      containers:
+        - name: jaeger-collector
+          image: jaegertracing/jaeger-collector:1.54
+          env:
+            - name: SPAN_STORAGE_TYPE
+              value: "elasticsearch"
+            - name: ES_SERVER_URLS
+              value: "http://elasticsearch:9200"
+            - name: ES_NUM_SHARDS
+              value: "5"
+            - name: ES_NUM_REPLICAS
+              value: "1"
+            - name: COLLECTOR_OTLP_ENABLED
+              value: "true"
+            # Performance tuning
+            - name: COLLECTOR_QUEUE_SIZE
+              value: "5000"
+            - name: COLLECTOR_NUM_WORKERS
+              value: "100"
+          ports:
+            - containerPort: 4317
+              name: otlp-grpc
+            - containerPort: 4318
+              name: otlp-http
+            - containerPort: 14268
+              name: jaeger-http
+            - containerPort: 14269
+              name: admin
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: 2000m
+              memory: 4Gi
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 14269
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 14269
+            initialDelaySeconds: 5
+            periodSeconds: 5
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jaeger-query
+  namespace: observability
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: jaeger
+      component: query
+  template:
+    metadata:
+      labels:
+        app: jaeger
+        component: query
+    spec:
+      containers:
+        - name: jaeger-query
+          image: jaegertracing/jaeger-query:1.54
+          env:
+            - name: SPAN_STORAGE_TYPE
+              value: "elasticsearch"
+            - name: ES_SERVER_URLS
+              value: "http://elasticsearch:9200"
+          ports:
+            - containerPort: 16686
+              name: query-http
+            - containerPort: 16687
+              name: admin
+          resources:
+            requests:
+              cpu: 200m
+              memory: 512Mi
+            limits:
+              cpu: 1000m
+              memory: 2Gi
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 16687
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 16687
+            initialDelaySeconds: 5
+            periodSeconds: 5
+
+---
+# Horizontal Pod Autoscaler for Jaeger Collector
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: jaeger-collector-hpa
+  namespace: observability
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: jaeger-collector
+  minReplicas: 3
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80

@@ -1,0 +1,37 @@
+---
+# Staging environment: Enable all chaos experiments, less restrictive
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: chaos-controller-manager
+  namespace: chaos-mesh
+spec:
+  template:
+    spec:
+      containers:
+        - name: chaos-mesh
+          env:
+            - name: SECURITY_MODE
+              value: "false"  # Disable security mode in staging for easier testing
+            - name: ENABLE_FILTER_NAMESPACE
+              value: "false"  # Allow chaos in all namespaces
+            - name: TARGET_NAMESPACE
+              value: "default"
+
+---
+# Increase dashboard retention in staging for analysis
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: chaos-dashboard
+  namespace: chaos-mesh
+spec:
+  template:
+    spec:
+      containers:
+        - name: chaos-dashboard
+          env:
+            - name: TTL_EVENT
+              value: "336h"  # 14 days (more than production)
+            - name: TTL_EXPERIMENT
+              value: "720h"  # 30 days

@@ -3,7 +3,7 @@
 mod metrics;
 mod openapi;
 
-use actix_middleware::{JwtAuthMiddleware, MetricsMiddleware};
+use actix_middleware::{JwtAuthMiddleware, MetricsMiddleware, RateLimitConfig, RateLimitMiddleware};
 use actix_web::{web, App, HttpResponse, HttpServer, Responder};
 use db_pool::{create_pool as create_pg_pool, DbConfig as DbPoolConfig};
 use redis_utils::{RedisPool, SharedConnectionManager};
@@ -45,7 +45,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     // Initialize database connection pool
-    let mut pool_cfg = DbPoolConfig::from_env().unwrap_or_default();
+    let mut pool_cfg = DbPoolConfig::from_env("auth-service").unwrap_or_default();
     if pool_cfg.database_url.is_empty() {
         pool_cfg.database_url = config.database_url.clone();
     }
@@ -199,6 +199,18 @@ fn build_grpc_service(
 fn configure_routes(cfg: &mut web::ServiceConfig, redis: SharedConnectionManager) {
     let openapi = openapi::ApiDoc::openapi();
 
+    // Create strict rate limiter for auth endpoints (5 req/min, fail-closed)
+    let auth_rate_limiter = RateLimitMiddleware::new(
+        RateLimitConfig::auth_strict(),
+        redis.clone(),
+    );
+
+    // Create lenient rate limiter for general API (100 req/min, fail-open)
+    let api_rate_limiter = RateLimitMiddleware::new(
+        RateLimitConfig::api_lenient(),
+        redis.clone(),
+    );
+
     cfg.app_data(web::Data::new(openapi.clone()))
         .service(SwaggerUi::new("/swagger-ui/{_:.*}").url("/api/v1/openapi.json", openapi))
         .route("/api/v1/openapi.json", web::get().to(openapi_json))
@@ -206,22 +218,30 @@ fn configure_routes(cfg: &mut web::ServiceConfig, redis: SharedConnectionManager
             web::scope("/api/v1")
                 .service(
                     web::scope("/auth")
-                        .route("/register", web::post().to(register))
-                        .route("/login", web::post().to(login))
-                        .route("/refresh", web::post().to(refresh_token))
-                        .route(
-                            "/password-reset/request",
-                            web::post().to(request_password_reset),
+                        // Apply STRICT rate limiting to unauthenticated auth endpoints
+                        .service(
+                            web::scope("")
+                                .wrap(auth_rate_limiter.clone())
+                                .route("/register", web::post().to(register))
+                                .route("/login", web::post().to(login))
+                                .route("/refresh", web::post().to(refresh_token))
+                                .route(
+                                    "/password-reset/request",
+                                    web::post().to(request_password_reset),
+                                ),
                         )
+                        // Authenticated endpoints: JWT required, lenient rate limit
                         .service(
                             web::scope("")
                                 .wrap(JwtAuthMiddleware::with_cache(redis.clone(), 600))
+                                .wrap(api_rate_limiter.clone())
                                 .route("/logout", web::post().to(logout))
                                 .route("/change-password", web::post().to(change_password)),
                         ),
                 )
                 .service(
                     web::scope("/oauth")
+                        .wrap(auth_rate_limiter.clone())
                         .route("/start", web::post().to(start_oauth_flow))
                         .route("/complete", web::post().to(complete_oauth_flow)),
                 ),

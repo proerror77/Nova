@@ -1,9 +1,12 @@
 -- ============================================
--- Migration: 067_outbox_pattern_v2
+-- Migration: 083_outbox_pattern_v2
 --
--- Changes from v1:
+-- Supersedes: Migration 067 (CASCADE approach)
+--
+-- Changes from Migration 067:
+-- - REMOVE ON DELETE CASCADE (violates audit trail requirements)
+-- - ADD ON DELETE RESTRICT (forces proper soft-delete workflow)
 -- - Introduce Outbox table (guarantees atomicity)
--- - Do NOT use CASCADE (violates microservices philosophy)
 -- - Event-driven cascade delete via Kafka
 --
 -- Linus Principle: "Simple is better than complex"
@@ -11,12 +14,13 @@
 -- 1. Atomic database transaction
 -- 2. Event guaranteed to publish (can retry)
 -- 3. Distributed systems safety
+-- 4. Full audit trail (soft-delete + event log)
 --
 -- Do NOT use CASCADE constraints for microservices.
 -- Use event-driven deletion instead.
 --
 -- Author: Nova Team + Backend Architect Review
--- Date: 2025-11-02
+-- Date: 2025-11-06
 -- ============================================
 
 -- Step 1: Create Outbox table
@@ -126,21 +130,32 @@ COMMENT ON COLUMN outbox_events.published_at IS
 COMMENT ON COLUMN outbox_events.retry_count IS
     'How many times publishing was retried. Helps detect poison pill events that consistently fail.';
 
--- Step 10: Add NOT CASCADE constraint to messages.sender_id
--- We do NOT add CASCADE because we use event-driven deletion
--- If sender_id foreign key doesn't exist yet, create without CASCADE
-ALTER TABLE messages
-    DROP CONSTRAINT IF EXISTS messages_sender_id_fkey;
+-- Step 10: Clean up Migration 067 and enforce RESTRICT constraint
+-- Migration 067 may have created CASCADE constraint - we need to remove it
+-- This step is idempotent and handles both fresh installs and upgrades
 
--- Recreate FK without CASCADE
+-- Drop all possible foreign key constraint names
+ALTER TABLE messages
+    DROP CONSTRAINT IF EXISTS messages_sender_id_fkey;  -- Default name
+ALTER TABLE messages
+    DROP CONSTRAINT IF EXISTS fk_messages_sender_id_cascade;  -- Migration 067 name
+ALTER TABLE messages
+    DROP CONSTRAINT IF EXISTS fk_messages_sender_id;  -- Migration 083 name (idempotent)
+
+-- Create the correct RESTRICT constraint
+-- IMPORTANT: This is the ONLY correct constraint for messages.sender_id
 ALTER TABLE messages
     ADD CONSTRAINT fk_messages_sender_id
     FOREIGN KEY (sender_id) REFERENCES users(id)
-    ON DELETE RESTRICT;  -- RESTRICT: don't allow hard delete if messages exist
-    -- This forces proper soft-delete workflow
+    ON DELETE RESTRICT;  -- RESTRICT: Prevents hard deletes, enforces soft-delete workflow
 
 COMMENT ON CONSTRAINT fk_messages_sender_id ON messages IS
-    'FK to users.id with RESTRICT (no hard deletes). Soft deletes are handled via Outbox pattern + Kafka event listeners. Do not use CASCADE.';
+    'FK to users.id with ON DELETE RESTRICT (no hard deletes allowed).
+     Hard deletes are prevented to enforce soft-delete audit trail.
+     Cascade deletions are handled via Outbox pattern + Kafka event propagation.
+     NEVER change this to CASCADE - it would bypass the audit trail.
+
+     Supersedes Migration 067 CASCADE constraint (architectural decision reversal).';
 
 -- Step 11: Add similar pattern for other cascade scenarios
 -- Example: when message is deleted, update conversation.message_count

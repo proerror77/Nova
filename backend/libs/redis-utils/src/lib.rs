@@ -1,10 +1,11 @@
 use anyhow::{Context, Result};
+use once_cell::sync::OnceCell;
 use redis::aio::ConnectionManager;
 use redis::{Client, ConnectionAddr, ConnectionInfo, IntoConnectionInfo, RedisError};
 use std::sync::Arc;
 use tokio::sync::{watch, Mutex};
 use tokio::task::JoinHandle;
-use tokio::time::{sleep, Duration};
+use tokio::time::{sleep, timeout, Duration};
 use tracing::{error, info, warn};
 
 /// Shared Redis connection manager guarded by a Tokio mutex.
@@ -275,4 +276,52 @@ pub fn parse_sentinel_endpoints(raw: &str) -> Vec<String> {
             }
         })
         .collect()
+}
+
+// Redis command timeout configuration
+const DEFAULT_REDIS_COMMAND_TIMEOUT_MS: u64 = 3_000; // 3 seconds
+const MIN_REDIS_COMMAND_TIMEOUT_MS: u64 = 500; // 500ms minimum
+
+/// Get Redis command timeout from environment or default
+fn redis_command_timeout() -> Duration {
+    static TIMEOUT: OnceCell<Duration> = OnceCell::new();
+    *TIMEOUT.get_or_init(|| {
+        let ms = std::env::var("REDIS_COMMAND_TIMEOUT_MS")
+            .ok()
+            .and_then(|v| v.parse::<u64>().ok())
+            .unwrap_or(DEFAULT_REDIS_COMMAND_TIMEOUT_MS)
+            .max(MIN_REDIS_COMMAND_TIMEOUT_MS);
+
+        info!("Redis command timeout set to {}ms", ms);
+        Duration::from_millis(ms)
+    })
+}
+
+/// Wrap Redis command with timeout protection
+///
+/// **Usage**:
+/// ```no_run
+/// use redis_utils::with_timeout;
+///
+/// let result = with_timeout(async {
+///     redis::cmd("GET")
+///         .arg("key")
+///         .query_async(&mut conn)
+///         .await
+/// }).await?;
+/// ```
+pub async fn with_timeout<F, T>(future: F) -> Result<T, RedisError>
+where
+    F: std::future::Future<Output = Result<T, RedisError>>,
+{
+    match timeout(redis_command_timeout(), future).await {
+        Ok(res) => res,
+        Err(_) => {
+            error!("Redis command timed out after {:?}", redis_command_timeout());
+            Err(RedisError::from((
+                redis::ErrorKind::IoError,
+                "redis command timed out",
+            )))
+        }
+    }
 }

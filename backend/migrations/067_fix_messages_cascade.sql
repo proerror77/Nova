@@ -1,7 +1,25 @@
 -- ============================================
 -- Migration: 067_fix_messages_cascade
--- Description: Fix missing CASCADE on messages.sender_id foreign key
+-- ⚠️ STATUS: SUPERSEDED by Migration 083 (Outbox Pattern V2)
+-- ============================================
 --
+-- ARCHITECTURAL DECISION REVERSAL:
+-- This migration implemented ON DELETE CASCADE, which was later determined
+-- to violate soft-delete audit trail requirements for Nova's architecture.
+--
+-- Migration 083 replaces this with:
+-- - ON DELETE RESTRICT (forces soft-delete workflow)
+-- - Outbox pattern for event-driven cascade deletions
+-- - Kafka-based microservices cascade propagation
+--
+-- This migration is kept for historical reference and to maintain
+-- migration sequence integrity. If applied to a database, it will be
+-- automatically corrected by Migration 083.
+--
+-- DO NOT MANUALLY ROLL BACK THIS MIGRATION.
+-- Migration 083 is idempotent and handles cleanup.
+--
+-- Original rationale (now obsolete):
 -- Problem: messages.sender_id references users(id) but has NO DELETE ACTION.
 --          When a user is deleted (or soft-deleted), orphaned messages remain
 --          causing:
@@ -9,12 +27,11 @@
 --          2. GDPR compliance issues (data tied to deleted user)
 --          3. Data inconsistency (can't determine message author)
 --
--- Current state: messages.sender_id doesn't explicitly define ON DELETE behavior
---
--- Solution: Add explicit ON DELETE CASCADE with comment explaining the choice.
+-- Solution (SUPERSEDED): Add explicit ON DELETE CASCADE with comment explaining the choice.
 --
 -- Author: Nova Team (Linus-style architecture review)
 -- Date: 2025-11-02
+-- Superseded: 2025-11-06 by Migration 083 (Outbox Pattern V2)
 -- ============================================
 
 -- Step 1: Check if constraint already exists

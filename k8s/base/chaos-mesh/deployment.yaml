@@ -1,0 +1,191 @@
+---
+# Chaos Mesh Controller Manager Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: chaos-controller-manager
+  namespace: chaos-mesh
+  labels:
+    app.kubernetes.io/name: chaos-mesh
+    app.kubernetes.io/component: controller-manager
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: chaos-mesh
+      app.kubernetes.io/component: controller-manager
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: chaos-mesh
+        app.kubernetes.io/component: controller-manager
+    spec:
+      serviceAccountName: chaos-controller-manager
+      containers:
+        - name: chaos-mesh
+          image: ghcr.io/chaos-mesh/chaos-mesh:v2.6.3
+          imagePullPolicy: IfNotPresent
+          command:
+            - /usr/local/bin/chaos-controller-manager
+          env:
+            - name: NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: ENABLE_FILTER_NAMESPACE
+              value: "false"
+            - name: SECURITY_MODE
+              value: "true"  # Enable security mode for production
+            - name: TARGET_NAMESPACE
+              value: "default"  # Target namespace for chaos experiments
+          ports:
+            - name: webhook
+              containerPort: 9443
+            - name: metrics
+              containerPort: 10080
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 10080
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 10080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+
+---
+# Chaos Daemon DaemonSet (runs on each node)
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: chaos-daemon
+  namespace: chaos-mesh
+  labels:
+    app.kubernetes.io/name: chaos-mesh
+    app.kubernetes.io/component: chaos-daemon
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: chaos-mesh
+      app.kubernetes.io/component: chaos-daemon
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: chaos-mesh
+        app.kubernetes.io/component: chaos-daemon
+    spec:
+      serviceAccountName: chaos-daemon
+      hostNetwork: true
+      hostPID: true
+      containers:
+        - name: chaos-daemon
+          image: ghcr.io/chaos-mesh/chaos-daemon:v2.6.3
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            privileged: true
+            capabilities:
+              add:
+                - SYS_PTRACE
+          command:
+            - /usr/local/bin/chaos-daemon
+          env:
+            - name: RUNTIME
+              value: "containerd"  # or "docker" depending on your cluster
+            - name: SOCKET_PATH
+              value: "/run/containerd/containerd.sock"
+          ports:
+            - name: grpc
+              containerPort: 31767
+            - name: http
+              containerPort: 31766
+          volumeMounts:
+            - name: socket-path
+              mountPath: /run/containerd
+            - name: sys
+              mountPath: /sys
+            - name: cgroup
+              mountPath: /sys/fs/cgroup
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+      volumes:
+        - name: socket-path
+          hostPath:
+            path: /run/containerd
+        - name: sys
+          hostPath:
+            path: /sys
+        - name: cgroup
+          hostPath:
+            path: /sys/fs/cgroup
+
+---
+# Chaos Dashboard (Web UI)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: chaos-dashboard
+  namespace: chaos-mesh
+  labels:
+    app.kubernetes.io/name: chaos-mesh
+    app.kubernetes.io/component: chaos-dashboard
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: chaos-mesh
+      app.kubernetes.io/component: chaos-dashboard
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: chaos-mesh
+        app.kubernetes.io/component: chaos-dashboard
+    spec:
+      serviceAccountName: chaos-dashboard
+      containers:
+        - name: chaos-dashboard
+          image: ghcr.io/chaos-mesh/chaos-dashboard:v2.6.3
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: LISTEN_HOST
+              value: "0.0.0.0"
+            - name: LISTEN_PORT
+              value: "2333"
+            - name: DATABASE_DRIVER
+              value: "sqlite3"
+            - name: DATABASE_DATASOURCE
+              value: "/data/core.sqlite"
+            - name: TTL_EVENT
+              value: "168h"  # 7 days
+            - name: TTL_EXPERIMENT
+              value: "336h"  # 14 days
+          ports:
+            - name: http
+              containerPort: 2333
+          volumeMounts:
+            - name: storage
+              mountPath: /data
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+      volumes:
+        - name: storage
+          emptyDir: {}

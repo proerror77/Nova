@@ -1,0 +1,215 @@
+---
+# Scheduled Chaos - Automated chaos experiments for continuous resilience testing
+# These run automatically in staging environment
+
+# Daily Network Latency Test (every day at 2 AM)
+apiVersion: chaos-mesh.org/v1alpha1
+kind: Schedule
+metadata:
+  name: daily-network-latency
+  namespace: default
+  annotations:
+    chaos.description: "Daily network latency test to validate timeout configurations"
+spec:
+  schedule: "0 2 * * *"  # Cron format: 2 AM every day
+  historyLimit: 10       # Keep last 10 runs
+  concurrencyPolicy: Forbid  # Don't run if previous job is still running
+  type: NetworkChaos
+  networkChaos:
+    action: delay
+    mode: one
+    selector:
+      namespaces:
+        - default
+      labelSelectors:
+        app: auth-service
+    delay:
+      latency: "150ms"
+      jitter: "30ms"
+    duration: "5m"
+
+---
+# Weekly Pod Kill Test (every Monday at 3 AM)
+apiVersion: chaos-mesh.org/v1alpha1
+kind: Schedule
+metadata:
+  name: weekly-pod-resilience
+  namespace: default
+  annotations:
+    chaos.description: "Weekly pod kill test to validate auto-recovery and circuit breakers"
+spec:
+  schedule: "0 3 * * 1"  # Monday at 3 AM
+  historyLimit: 5
+  concurrencyPolicy: Forbid
+  type: PodChaos
+  podChaos:
+    action: pod-kill
+    mode: fixed-percent
+    value: "25"  # Kill 25% of pods
+    selector:
+      namespaces:
+        - default
+      labelSelectors:
+        tier: backend  # Target all backend services
+    duration: "2m"
+
+---
+# Hourly Network Jitter (every 2 hours during business hours)
+apiVersion: chaos-mesh.org/v1alpha1
+kind: Schedule
+metadata:
+  name: business-hours-network-jitter
+  namespace: default
+  annotations:
+    chaos.description: "Continuous network jitter during business hours to test real-world conditions"
+spec:
+  schedule: "0 */2 9-17 * * *"  # Every 2 hours between 9 AM - 5 PM
+  historyLimit: 20
+  concurrencyPolicy: Allow  # Can run concurrently
+  type: NetworkChaos
+  networkChaos:
+    action: delay
+    mode: all
+    selector:
+      namespaces:
+        - default
+      labelSelectors:
+        app: messaging-service
+    delay:
+      latency: "50ms"
+      correlation: "75"
+      jitter: "20ms"
+    duration: "10m"
+
+---
+# Daily CPU Stress Test (every day at 4 AM)
+apiVersion: chaos-mesh.org/v1alpha1
+kind: Schedule
+metadata:
+  name: daily-cpu-stress
+  namespace: default
+  annotations:
+    chaos.description: "Daily CPU stress to validate rate limiting and autoscaling"
+spec:
+  schedule: "0 4 * * *"
+  historyLimit: 7
+  concurrencyPolicy: Forbid
+  type: StressChaos
+  stressChaos:
+    mode: one
+    selector:
+      namespaces:
+        - default
+      labelSelectors:
+        app: user-service
+    stressors:
+      cpu:
+        workers: 2
+        load: 60
+    duration: "3m"
+
+---
+# Weekly Database Connection Test (every Sunday at 1 AM)
+apiVersion: chaos-mesh.org/v1alpha1
+kind: Schedule
+metadata:
+  name: weekly-db-connection-chaos
+  namespace: default
+  annotations:
+    chaos.description: "Weekly database connection test to validate connection pool resilience"
+spec:
+  schedule: "0 1 * * 0"  # Sunday at 1 AM
+  historyLimit: 4
+  concurrencyPolicy: Forbid
+  type: NetworkChaos
+  networkChaos:
+    action: partition
+    mode: all
+    selector:
+      namespaces:
+        - default
+      labelSelectors:
+        tier: backend
+    direction: to
+    target:
+      mode: all
+      selector:
+        namespaces:
+          - default
+        labelSelectors:
+          app: postgresql
+    duration: "1m"
+
+---
+# Monthly Full Chaos Workflow (first Monday of month at 5 AM)
+apiVersion: chaos-mesh.org/v1alpha1
+kind: Schedule
+metadata:
+  name: monthly-full-chaos
+  namespace: default
+  annotations:
+    chaos.description: "Monthly comprehensive chaos test simulating production incident"
+spec:
+  schedule: "0 5 1-7 * 1"  # First Monday of each month at 5 AM
+  historyLimit: 3
+  concurrencyPolicy: Forbid
+  type: Workflow
+  workflow:
+    entry: full-chaos-test
+    templates:
+      - name: full-chaos-test
+        templateType: Serial
+        deadline: 15m
+        children:
+          - network-chaos
+          - pod-chaos
+          - stress-chaos
+        tasks:
+          - name: network-chaos
+            templateType: NetworkChaos
+            deadline: 3m
+            networkChaos:
+              action: delay
+              mode: all
+              selector:
+                namespaces:
+                  - default
+                labelSelectors:
+                  tier: backend
+              delay:
+                latency: "100ms"
+                jitter: "20ms"
+              duration: "2m"
+
+          - name: pod-chaos
+            templateType: PodChaos
+            deadline: 2m
+            podChaos:
+              action: pod-kill
+              mode: fixed
+              value: "2"
+              selector:
+                namespaces:
+                  - default
+                labelSelectors:
+                  tier: backend
+              gracePeriod: 0
+
+          - name: stress-chaos
+            templateType: StressChaos
+            deadline: 5m
+            stressChaos:
+              mode: one
+              selector:
+                namespaces:
+                  - default
+                labelSelectors:
+                  tier: backend
+              stressors:
+                cpu:
+                  workers: 2
+                  load: 70
+                memory:
+                  workers: 1
+                  size: "512Mi"
+              duration: "3m"

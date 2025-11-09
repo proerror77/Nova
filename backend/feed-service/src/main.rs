@@ -138,7 +138,7 @@ async fn main() -> io::Result<()> {
     tracing::info!("Environment: {}", config.app.env);
 
     // Initialize database (standardized pool)
-    let mut db_cfg = db_pool::DbConfig::from_env().unwrap_or_default();
+    let mut db_cfg = db_pool::DbConfig::for_service("feed-service");
     if db_cfg.database_url.is_empty() {
         db_cfg.database_url = config.database.url.clone();
     }

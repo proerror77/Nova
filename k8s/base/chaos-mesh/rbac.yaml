@@ -1,0 +1,127 @@
+---
+# ServiceAccount for Controller Manager
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: chaos-controller-manager
+  namespace: chaos-mesh
+
+---
+# ServiceAccount for Chaos Daemon
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: chaos-daemon
+  namespace: chaos-mesh
+
+---
+# ServiceAccount for Dashboard
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: chaos-dashboard
+  namespace: chaos-mesh
+
+---
+# ClusterRole for Controller Manager
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: chaos-controller-manager
+rules:
+  # Permissions to manage chaos experiments
+  - apiGroups: ["chaos-mesh.org"]
+    resources: ["*"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # Permissions to watch and update pods
+  - apiGroups: [""]
+    resources: ["pods", "pods/log", "pods/exec"]
+    verbs: ["get", "list", "watch", "delete", "deletecollection"]
+  # Permissions for events
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["get", "list", "watch", "create", "patch"]
+  # Permissions for services
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get", "list", "watch"]
+  # Permissions for deployments
+  - apiGroups: ["apps"]
+    resources: ["deployments", "statefulsets", "daemonsets"]
+    verbs: ["get", "list", "watch"]
+
+---
+# ClusterRole for Chaos Daemon
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: chaos-daemon
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list", "watch"]
+
+---
+# ClusterRole for Dashboard
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: chaos-dashboard
+rules:
+  - apiGroups: [""]
+    resources: ["namespaces", "services", "pods"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["chaos-mesh.org"]
+    resources: ["*"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "statefulsets"]
+    verbs: ["get", "list", "watch"]
+
+---
+# ClusterRoleBinding for Controller Manager
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: chaos-controller-manager
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: chaos-controller-manager
+subjects:
+  - kind: ServiceAccount
+    name: chaos-controller-manager
+    namespace: chaos-mesh
+
+---
+# ClusterRoleBinding for Chaos Daemon
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: chaos-daemon
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: chaos-daemon
+subjects:
+  - kind: ServiceAccount
+    name: chaos-daemon
+    namespace: chaos-mesh
+
+---
+# ClusterRoleBinding for Dashboard
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: chaos-dashboard
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: chaos-dashboard
+subjects:
+  - kind: ServiceAccount
+    name: chaos-dashboard
+    namespace: chaos-mesh

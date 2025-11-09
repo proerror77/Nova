@@ -1,0 +1,96 @@
+---
+# Network Delay Chaos - Simulates network latency
+apiVersion: chaos-mesh.org/v1alpha1
+kind: NetworkChaos
+metadata:
+  name: network-delay-auth-service
+  namespace: default
+  annotations:
+    chaos.description: "Inject 100ms network latency to auth-service to test timeout handling"
+spec:
+  action: delay
+  mode: one  # Affects one random pod
+  selector:
+    namespaces:
+      - default
+    labelSelectors:
+      app: auth-service
+  delay:
+    latency: "100ms"
+    correlation: "50"  # 50% correlation between consecutive packets
+    jitter: "10ms"     # ±10ms jitter
+  duration: "30s"
+  scheduler:
+    cron: "@every 2h"  # Run every 2 hours in staging
+
+---
+# Network Loss Chaos - Simulates packet loss
+apiVersion: chaos-mesh.org/v1alpha1
+kind: NetworkChaos
+metadata:
+  name: network-loss-user-service
+  namespace: default
+  annotations:
+    chaos.description: "Inject 5% packet loss to user-service"
+spec:
+  action: loss
+  mode: one
+  selector:
+    namespaces:
+      - default
+    labelSelectors:
+      app: user-service
+  loss:
+    loss: "5"          # 5% packet loss
+    correlation: "25"
+  duration: "30s"
+
+---
+# Network Partition Chaos - Simulates network split
+apiVersion: chaos-mesh.org/v1alpha1
+kind: NetworkChaos
+metadata:
+  name: network-partition-messaging
+  namespace: default
+  annotations:
+    chaos.description: "Partition messaging-service from notification-service to test circuit breaker"
+spec:
+  action: partition
+  mode: one
+  selector:
+    namespaces:
+      - default
+    labelSelectors:
+      app: messaging-service
+  direction: to
+  target:
+    mode: one
+    selector:
+      namespaces:
+        - default
+      labelSelectors:
+        app: notification-service
+  duration: "1m"
+
+---
+# Network Bandwidth Chaos - Limits network bandwidth
+apiVersion: chaos-mesh.org/v1alpha1
+kind: NetworkChaos
+metadata:
+  name: network-bandwidth-content-service
+  namespace: default
+  annotations:
+    chaos.description: "Limit content-service bandwidth to 10mbps to test rate limiting"
+spec:
+  action: bandwidth
+  mode: one
+  selector:
+    namespaces:
+      - default
+    labelSelectors:
+      app: content-service
+  bandwidth:
+    rate: "10mbps"
+    limit: 20971520    # 20MB buffer
+    buffer: 10000      # 10KB buffer size
+  duration: "2m"

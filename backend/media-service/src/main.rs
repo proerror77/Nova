@@ -101,7 +101,7 @@ async fn main() -> io::Result<()> {
     }
 
     // Initialize database connection pool
-    let mut cfg = DbPoolConfig::from_env().unwrap_or_default();
+    let mut cfg = DbPoolConfig::for_service("media-service");
     if cfg.database_url.is_empty() {
         cfg.database_url = config.database.url.clone();
     }

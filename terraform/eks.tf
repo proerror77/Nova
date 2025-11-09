@@ -218,7 +218,7 @@ resource "aws_eks_node_group" "main" {
     min_size     = var.environment == "production" ? 2 : 1
   }
 
-  instance_types = var.environment == "production" ? ["t3.large"] : ["t3.medium"]
+  instance_types = ["t3.xlarge"]
 
   # Ensure proper ordering
   depends_on = [

@@ -329,7 +329,7 @@ async fn main() -> io::Result<()> {
     }
 
     // Initialize database connection pool (standardized)
-    let mut db_cfg = DbPoolConfig::from_env().unwrap_or_default();
+    let mut db_cfg = DbPoolConfig::for_service("content-service");
     if db_cfg.database_url.is_empty() {
         db_cfg.database_url = config.database.url.clone();
     }

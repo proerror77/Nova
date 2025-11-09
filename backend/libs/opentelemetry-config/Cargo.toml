@@ -1,0 +1,33 @@
+[package]
+name = "opentelemetry-config"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+# OpenTelemetry core
+opentelemetry = { version = "0.22", features = ["trace", "metrics"] }
+opentelemetry_sdk = { version = "0.22", features = ["trace", "metrics", "rt-tokio"] }
+opentelemetry-otlp = { version = "0.15", features = ["trace", "metrics", "grpc-tonic"] }
+
+# Jaeger exporter (legacy, for compatibility)
+opentelemetry-jaeger = { version = "0.21", features = ["rt-tokio"] }
+
+# Tracing integration
+tracing = "0.1"
+tracing-opentelemetry = "0.23"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+
+# Async runtime
+tokio.workspace = true
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+
+# Error handling
+thiserror = "1.0"
+anyhow = "1.0"
+
+[dev-dependencies]
+tokio-test = "0.4"
