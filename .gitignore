@@ -16,6 +16,8 @@
 .claude/
 .serena/
 .specify/
+AGENTS.md
+CLAUDE.md
 
 # Temporary files in root directory
 /*.txt
