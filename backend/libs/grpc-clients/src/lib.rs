@@ -163,7 +163,7 @@ impl GrpcClientPool {
                     // Create a placeholder endpoint that will fail at call-time
                     config
                         .make_endpoint("http://unavailable.local:1")
-                        .unwrap()
+                        .expect("Hardcoded placeholder URL must be valid")
                         .connect_lazy()
                 }
             }

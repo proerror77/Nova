@@ -43,3 +43,4 @@ tonic-build = "0.10"
 
 [dev-dependencies]
 tokio-test = "0.4"
+serial_test = "3.0"
