@@ -3,14 +3,40 @@ use actix_web::{
     Error, HttpMessage,
 };
 use futures::future::{ready, Ready};
+use lazy_static::lazy_static;
 use redis::{aio::ConnectionManager, AsyncCommands};
 use serde::Deserialize;
+use std::collections::HashMap;
 use std::future::Future;
 use std::pin::Pin;
 use std::rc::Rc;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
+use tokio::sync::Mutex;
 use tokio::time::timeout;
+
+/// Rate limit failure behavior when Redis is unavailable
+#[derive(Debug, Clone, Copy, Deserialize)]
+pub enum FailureMode {
+    /// Allow requests when Redis fails (prioritize availability)
+    FailOpen,
+    /// Deny requests when Redis fails (prioritize security)
+    FailClosed,
+}
+
+impl Default for FailureMode {
+    fn default() -> Self {
+        Self::FailOpen
+    }
+}
+
+// In-memory fallback rate limit counter (per-process, not distributed)
+// Used when Redis is unavailable and FailClosed mode is enabled
+// Structure: HashMap<key, (count, window_start_time)>
+lazy_static! {
+    static ref LOCAL_RATE_LIMIT: Arc<Mutex<HashMap<String, (u32, Instant)>>> =
+        Arc::new(Mutex::new(HashMap::new()));
+}
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct RateLimitConfig {
@@ -18,6 +44,12 @@ pub struct RateLimitConfig {
     pub window_seconds: u64,
     /// Redis operation timeout in milliseconds
     pub redis_timeout_ms: u64,
+    /// Include User-Agent in rate limit key (recommended for auth endpoints)
+    #[serde(default)]
+    pub include_user_agent: bool,
+    /// Failure mode when Redis is unavailable
+    #[serde(default)]
+    pub failure_mode: FailureMode,
 }
 
 impl Default for RateLimitConfig {
@@ -26,22 +58,49 @@ impl Default for RateLimitConfig {
             max_requests: 100,
             window_seconds: 900,   // 15 minutes
             redis_timeout_ms: 100, // Fast timeout to prevent blocking
+            include_user_agent: false,
+            failure_mode: FailureMode::FailOpen,
         }
     }
 }
 
+impl RateLimitConfig {
+    /// Preset for authentication endpoints (strict)
+    pub fn auth_strict() -> Self {
+        Self {
+            max_requests: 5,
+            window_seconds: 60,    // 5 attempts per minute
+            redis_timeout_ms: 100,
+            include_user_agent: true,
+            failure_mode: FailureMode::FailClosed, // Security > Availability
+        }
+    }
+
+    /// Preset for general API endpoints (lenient)
+    pub fn api_lenient() -> Self {
+        Self {
+            max_requests: 100,
+            window_seconds: 60,
+            redis_timeout_ms: 100,
+            include_user_agent: false,
+            failure_mode: FailureMode::FailOpen,
+        }
+    }
+}
+
+#[derive(Clone)]
 pub struct RateLimitMiddleware {
     config: RateLimitConfig,
-    redis: Arc<ConnectionManager>,
+    redis: Arc<Mutex<ConnectionManager>>,
 }
 
 impl RateLimitMiddleware {
-    pub fn new(config: RateLimitConfig, redis: Arc<ConnectionManager>) -> Self {
+    pub fn new(config: RateLimitConfig, redis: Arc<Mutex<ConnectionManager>>) -> Self {
         Self { config, redis }
     }
 
     /// Create with default config
-    pub fn with_default_config(redis: Arc<ConnectionManager>) -> Self {
+    pub fn with_default_config(redis: Arc<Mutex<ConnectionManager>>) -> Self {
         Self {
             config: RateLimitConfig::default(),
             redis,
@@ -73,7 +132,7 @@ where
 pub struct RateLimitMiddlewareService<S> {
     service: Rc<S>,
     config: RateLimitConfig,
-    redis: Arc<ConnectionManager>,
+    redis: Arc<Mutex<ConnectionManager>>,
 }
 
 impl<S, B> Service<ServiceRequest> for RateLimitMiddlewareService<S>
@@ -94,20 +153,30 @@ where
         let redis = self.redis.clone();
 
         Box::pin(async move {
-            // Get rate limit key (user_id or IP)
+            // Build rate limit key with IP + optional User-Agent
+            let ip = req
+                .connection_info()
+                .realip_remote_addr()
+                .unwrap_or("unknown")
+                .to_string();
+
             let key = if let Some(user_id) = req.extensions().get::<crate::jwt_auth::UserId>() {
+                // Authenticated users: rate limit by user_id
                 format!("rate_limit:user:{}", user_id.0)
+            } else if config.include_user_agent {
+                // Unauthenticated + User-Agent: better protection against distributed attacks
+                let user_agent = req
+                    .headers()
+                    .get("user-agent")
+                    .and_then(|v| v.to_str().ok())
+                    .unwrap_or("unknown");
+                format!("rate_limit:ip_ua:{}:{}", ip, user_agent)
             } else {
-                let ip = req
-                    .connection_info()
-                    .realip_remote_addr()
-                    .unwrap_or("unknown")
-                    .to_string();
+                // Unauthenticated: rate limit by IP only
                 format!("rate_limit:ip:{}", ip)
             };
 
             // Check rate limit with timeout protection
-            // If Redis is slow/unavailable, we allow the request rather than blocking
             let rate_limit_result = timeout(
                 Duration::from_millis(config.redis_timeout_ms),
                 check_rate_limit(&redis, &key, &config),
@@ -117,24 +186,121 @@ where
             match rate_limit_result {
                 Ok(Ok(exceeded)) => {
                     if exceeded {
-                        return Err(actix_web::error::ErrorTooManyRequests(format!(
-                            "Rate limit exceeded: {} requests per {} seconds",
-                            config.max_requests, config.window_seconds
-                        )));
+                        tracing::warn!(
+                            "Rate limit exceeded for key={} ({})",
+                            key,
+                            req.uri().path()
+                        );
+                        return Err(actix_web::error::ErrorTooManyRequests(
+                            serde_json::json!({
+                                "error": "Rate limit exceeded",
+                                "max_requests": config.max_requests,
+                                "window_seconds": config.window_seconds,
+                            })
+                            .to_string(),
+                        ));
                     }
                 }
                 Ok(Err(e)) => {
-                    // Log Redis errors but allow request to proceed
-                    // This prevents rate limiting from being a point of failure
-                    tracing::warn!("Rate limit Redis error (allowing request): {}", e);
+                    // Redis error: behavior depends on failure_mode
+                    match config.failure_mode {
+                        FailureMode::FailOpen => {
+                            tracing::warn!(
+                                "Rate limit Redis error (fail-open, allowing request): {}",
+                                e
+                            );
+                        }
+                        FailureMode::FailClosed => {
+                            // Use local fallback instead of blanket denial
+                            tracing::warn!(
+                                "Rate limit Redis error (fail-closed mode, using in-memory fallback): {}",
+                                e
+                            );
+
+                            match check_rate_limit_local(&key, &config).await {
+                                Ok(true) => {
+                                    tracing::warn!(
+                                        "Rate limit exceeded (local fallback) for key={} ({})",
+                                        key,
+                                        req.uri().path()
+                                    );
+                                    return Err(actix_web::error::ErrorTooManyRequests(
+                                        serde_json::json!({
+                                            "error": "Rate limit exceeded (fallback mode)",
+                                            "max_requests": config.max_requests,
+                                            "window_seconds": config.window_seconds,
+                                        })
+                                        .to_string(),
+                                    ));
+                                }
+                                Ok(false) => {
+                                    // Within limit - allow request
+                                    tracing::debug!("Request allowed (local fallback)");
+                                }
+                                Err(fallback_err) => {
+                                    // Even fallback failed - this is extremely rare
+                                    tracing::error!(
+                                        "Both Redis and local fallback failed: Redis={}, Fallback={}",
+                                        e,
+                                        fallback_err
+                                    );
+                                    return Err(actix_web::error::ErrorServiceUnavailable(
+                                        "Rate limiting service temporarily unavailable",
+                                    ));
+                                }
+                            }
+                        }
+                    }
                 }
                 Err(_) => {
-                    // Timeout: allow request but log it
-                    // This prevents Redis latency from blocking all requests
-                    tracing::warn!(
-                        "Rate limit Redis timeout ({}ms, allowing request)",
-                        config.redis_timeout_ms
-                    );
+                    // Timeout: behavior depends on failure_mode
+                    match config.failure_mode {
+                        FailureMode::FailOpen => {
+                            tracing::warn!(
+                                "Rate limit Redis timeout ({}ms, fail-open, allowing request)",
+                                config.redis_timeout_ms
+                            );
+                        }
+                        FailureMode::FailClosed => {
+                            // Use local fallback instead of blanket denial
+                            tracing::warn!(
+                                "Rate limit Redis timeout ({}ms, fail-closed mode, using in-memory fallback)",
+                                config.redis_timeout_ms
+                            );
+
+                            match check_rate_limit_local(&key, &config).await {
+                                Ok(true) => {
+                                    tracing::warn!(
+                                        "Rate limit exceeded (local fallback after timeout) for key={} ({})",
+                                        key,
+                                        req.uri().path()
+                                    );
+                                    return Err(actix_web::error::ErrorTooManyRequests(
+                                        serde_json::json!({
+                                            "error": "Rate limit exceeded (fallback mode)",
+                                            "max_requests": config.max_requests,
+                                            "window_seconds": config.window_seconds,
+                                        })
+                                        .to_string(),
+                                    ));
+                                }
+                                Ok(false) => {
+                                    // Within limit - allow request
+                                    tracing::debug!("Request allowed (local fallback after timeout)");
+                                }
+                                Err(fallback_err) => {
+                                    // Even fallback failed - this is extremely rare
+                                    tracing::error!(
+                                        "Redis timeout and local fallback failed: {}",
+                                        fallback_err
+                                    );
+                                    return Err(actix_web::error::ErrorServiceUnavailable(
+                                        "Rate limiting service timeout",
+                                    ));
+                                }
+                            }
+                        }
+                    }
                 }
             }
 
@@ -146,13 +312,15 @@ where
 /// Check rate limit for a given key
 /// Returns Ok(true) if limit exceeded, Ok(false) if within limit
 async fn check_rate_limit(
-    redis: &Arc<ConnectionManager>,
+    redis: &Arc<Mutex<ConnectionManager>>,
     key: &str,
     config: &RateLimitConfig,
 ) -> Result<bool, String> {
-    // Redis ConnectionManager implements Clone which creates a new handle
-    // that shares the same underlying connection pool
-    let mut conn = redis.as_ref().clone();
+    // Lock the connection manager and clone the connection
+    let mut conn = {
+        let guard = redis.lock().await;
+        guard.clone()
+    };
 
     let count: u32 = conn
         .incr(key, 1)
@@ -170,6 +338,37 @@ async fn check_rate_limit(
     Ok(count > config.max_requests)
 }
 
+/// Local in-memory rate limit check (fallback when Redis unavailable)
+/// Returns Ok(true) if limit exceeded, Ok(false) if within limit
+/// NOTE: This is per-process, not distributed across instances
+async fn check_rate_limit_local(key: &str, config: &RateLimitConfig) -> Result<bool, String> {
+    let mut map = LOCAL_RATE_LIMIT.lock().await;
+    let now = Instant::now();
+
+    // Get or create entry
+    let entry = map.entry(key.to_string()).or_insert((0, now));
+
+    // Reset window if expired
+    if now.duration_since(entry.1).as_secs() >= config.window_seconds {
+        entry.0 = 0;
+        entry.1 = now;
+    }
+
+    // Increment counter
+    entry.0 += 1;
+    let current_count = entry.0;
+
+    // Periodic cleanup: remove expired entries (simple approach)
+    // This prevents unbounded memory growth
+    if map.len() > 10000 {
+        map.retain(|_, (_, start)| {
+            now.duration_since(*start).as_secs() < config.window_seconds * 2
+        });
+    }
+
+    Ok(current_count > config.max_requests)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -180,6 +379,27 @@ mod tests {
         assert_eq!(config.max_requests, 100);
         assert_eq!(config.window_seconds, 900);
         assert_eq!(config.redis_timeout_ms, 100);
+        assert!(!config.include_user_agent);
+        assert!(matches!(config.failure_mode, FailureMode::FailOpen));
+    }
+
+    #[test]
+    fn test_rate_limit_config_auth_strict() {
+        let config = RateLimitConfig::auth_strict();
+        assert_eq!(config.max_requests, 5);
+        assert_eq!(config.window_seconds, 60);
+        assert_eq!(config.redis_timeout_ms, 100);
+        assert!(config.include_user_agent);
+        assert!(matches!(config.failure_mode, FailureMode::FailClosed));
+    }
+
+    #[test]
+    fn test_rate_limit_config_api_lenient() {
+        let config = RateLimitConfig::api_lenient();
+        assert_eq!(config.max_requests, 100);
+        assert_eq!(config.window_seconds, 60);
+        assert!(!config.include_user_agent);
+        assert!(matches!(config.failure_mode, FailureMode::FailOpen));
     }
 
     #[test]
@@ -188,60 +408,58 @@ mod tests {
             max_requests: 50,
             window_seconds: 300,
             redis_timeout_ms: 50,
+            include_user_agent: true,
+            failure_mode: FailureMode::FailClosed,
         };
         assert_eq!(config.max_requests, 50);
         assert_eq!(config.window_seconds, 300);
         assert_eq!(config.redis_timeout_ms, 50);
+        assert!(config.include_user_agent);
+        assert!(matches!(config.failure_mode, FailureMode::FailClosed));
     }
 
     #[test]
-    fn test_rate_limit_middleware_creation() {
-        // This test verifies that the middleware can be created
-        // In production, redis would be a real connection manager
-        // For unit testing, we just verify the API surface
-        let config = RateLimitConfig::default();
-        assert_eq!(config.max_requests, 100);
-        assert_eq!(config.redis_timeout_ms, 100);
+    fn test_failure_mode_default() {
+        let mode = FailureMode::default();
+        assert!(matches!(mode, FailureMode::FailOpen));
     }
 
     #[test]
     fn test_rate_limit_key_format_user() {
-        // Verify that user rate limit keys are formatted correctly
         let key = "rate_limit:user:12345";
         assert!(key.starts_with("rate_limit:user:"));
     }
 
     #[test]
     fn test_rate_limit_key_format_ip() {
-        // Verify that IP rate limit keys are formatted correctly
         let key = "rate_limit:ip:192.168.1.1";
         assert!(key.starts_with("rate_limit:ip:"));
     }
 
     #[test]
-    fn test_rate_limit_window_seconds() {
-        let config = RateLimitConfig::default();
-        // 15 minutes = 900 seconds
-        assert_eq!(config.window_seconds, 900);
+    fn test_rate_limit_key_format_ip_ua() {
+        let key = "rate_limit:ip_ua:192.168.1.1:Mozilla/5.0";
+        assert!(key.starts_with("rate_limit:ip_ua:"));
+        assert!(key.contains("Mozilla"));
+    }
+
+    #[test]
+    fn test_auth_strict_security_over_availability() {
+        let config = RateLimitConfig::auth_strict();
+        // Auth endpoints should fail closed
+        assert!(matches!(config.failure_mode, FailureMode::FailClosed));
+        // Auth endpoints should be very restrictive
+        assert!(config.max_requests <= 10);
+        assert!(config.window_seconds <= 60);
     }
 
     #[test]
     fn test_rate_limit_fast_timeout() {
         let config = RateLimitConfig::default();
-        // Redis operations should have a fast timeout (100ms)
-        // This prevents Redis slowness from blocking all requests
         assert_eq!(config.redis_timeout_ms, 100);
         assert!(
             config.redis_timeout_ms < 1000,
             "Timeout too long, will block requests"
         );
-    }
-
-    #[test]
-    fn test_with_default_config() {
-        let config = RateLimitConfig::default();
-        assert_eq!(config.max_requests, 100);
-        assert_eq!(config.window_seconds, 900);
-        assert_eq!(config.redis_timeout_ms, 100);
     }
 }
