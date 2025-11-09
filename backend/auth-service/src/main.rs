@@ -55,10 +55,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing::info!("Database connection pool initialized");
 
     // Run database migrations unless explicitly disabled
+    // Using runtime migration loading instead of compile-time macro to avoid cache issues
     let run_migrations = std::env::var("RUN_MIGRATIONS").unwrap_or_else(|_| "true".into());
     if run_migrations != "false" {
-        tracing::info!("Running database migrations...");
-        if let Err(err) = sqlx::migrate!("./migrations").run(&db_pool).await {
+        tracing::info!("Running database migrations from /app/migrations...");
+        let migrator = sqlx::migrate::Migrator::new(std::path::Path::new("/app/migrations"))
+            .await
+            .map_err(|e| format!("Failed to load migrations: {}", e))?;
+        if let Err(err) = migrator.run(&db_pool).await {
             tracing::error!("Database migration failed: {:#}", err);
             return Err(err.into());
         }
