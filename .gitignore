@@ -12,6 +12,11 @@
 # Test coverage
 # Swift/iOS
 
+# AI/Tool Configuration Directories (local only)
+.claude/
+.serena/
+.specify/
+
 # Temporary files in root directory
 /*.txt
 !README.txt
