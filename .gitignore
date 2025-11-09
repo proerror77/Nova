@@ -11,6 +11,18 @@
 # Temporary
 # Test coverage
 # Swift/iOS
+
+# Temporary files in root directory
+/*.txt
+!README.txt
+commit_message.txt
+*_index.txt
+*_SUMMARY.txt
+*_MARKER.txt
+
+# Swift files should not be in root (iOS projects are in separate repos)
+/*.swift
+
 *.db
 *.iml
 *.log
