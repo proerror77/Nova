@@ -9,6 +9,11 @@ on:
     # Run nightly to catch integration issues
     - cron: '0 2 * * *'
 
+# Prevent multiple runs for the same branch/PR
+concurrency:
+  group: integration-tests-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   integration-tests:
     runs-on: ubuntu-latest
