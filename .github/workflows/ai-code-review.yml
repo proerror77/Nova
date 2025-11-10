@@ -287,6 +287,9 @@ jobs:
     needs: [claude-security-review, claude-code-review]
     if: always()
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
       - name: Check all reviews passed
         run: |
           if [ "${{ needs.claude-security-review.result }}" = "failure" ]; then
