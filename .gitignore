@@ -27,6 +27,15 @@ commit_message.txt
 *_SUMMARY.txt
 *_MARKER.txt
 
+# Markdown files in root directory (除了 GitHub 必需的文件)
+/*.md
+!README.md
+!LICENSE.md
+!CONTRIBUTING.md
+!CODE_OF_CONDUCT.md
+!SECURITY.md
+!CHANGELOG.md
+
 # Swift files should not be in root (iOS projects are in separate repos)
 /*.swift
 
