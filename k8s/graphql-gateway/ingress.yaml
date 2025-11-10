@@ -1,0 +1,128 @@
+---
+# GraphQL Gateway Ingress
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: graphql-gateway-ingress
+  namespace: nova-gateway
+  annotations:
+    # Nginx Ingress Controller annotations
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/use-regex: "true"
+
+    # CORS configuration
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    nginx.ingress.kubernetes.io/cors-allow-origin: "*"
+    nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+    nginx.ingress.kubernetes.io/cors-allow-headers: "DNT,X-CustomHeader,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Authorization"
+    nginx.ingress.kubernetes.io/cors-max-age: "3600"
+    nginx.ingress.kubernetes.io/cors-allow-credentials: "true"
+
+    # Rate limiting
+    nginx.ingress.kubernetes.io/limit-rps: "100"
+    nginx.ingress.kubernetes.io/limit-burst-multiplier: "5"
+
+    # Security headers
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      add_header X-Frame-Options "SAMEORIGIN" always;
+      add_header X-Content-Type-Options "nosniff" always;
+      add_header X-XSS-Protection "1; mode=block" always;
+      add_header Referrer-Policy "no-referrer-when-downgrade" always;
+      add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+
+    # Timeouts
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+
+    # Client body size (for file uploads)
+    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
+
+    # WebSocket support
+    nginx.ingress.kubernetes.io/websocket-services: "graphql-gateway"
+
+    # SSL/TLS (uncomment when ready)
+    # cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    # nginx.ingress.kubernetes.io/ssl-redirect: "true"
+
+  labels:
+    app: nova-api
+    component: ingress
+
+spec:
+  ingressClassName: nginx
+
+  # TLS configuration (uncomment when ready)
+  # tls:
+  #   - hosts:
+  #       - api.nova.social
+  #     secretName: nova-api-tls
+
+  rules:
+    # HTTP rule (will be redirected to HTTPS in production)
+    - http:
+        paths:
+          # GraphQL endpoint
+          - path: /graphql
+            pathType: Prefix
+            backend:
+              service:
+                name: graphql-gateway
+                port:
+                  number: 8080
+
+          # GraphQL Playground
+          - path: /playground
+            pathType: Prefix
+            backend:
+              service:
+                name: graphql-gateway
+                port:
+                  number: 8080
+
+          # Health check
+          - path: /health
+            pathType: Exact
+            backend:
+              service:
+                name: graphql-gateway
+                port:
+                  number: 8080
+
+          # WebSocket endpoint
+          - path: /ws
+            pathType: Prefix
+            backend:
+              service:
+                name: graphql-gateway
+                port:
+                  number: 8080
+
+---
+# Optional: Domain-specific rule for production
+# apiVersion: networking.k8s.io/v1
+# kind: Ingress
+# metadata:
+#   name: graphql-gateway-ingress-domain
+#   namespace: nova-gateway
+#   annotations:
+#     cert-manager.io/cluster-issuer: "letsencrypt-prod"
+#     nginx.ingress.kubernetes.io/ssl-redirect: "true"
+#     nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+# spec:
+#   ingressClassName: nginx
+#   tls:
+#     - hosts:
+#         - api.nova.social
+#       secretName: nova-api-tls
+#   rules:
+#     - host: api.nova.social
+#       http:
+#         paths:
+#           - path: /
+#             pathType: Prefix
+#             backend:
+#               service:
+#                 name: graphql-gateway
+#                 port:
+#                   number: 8080
