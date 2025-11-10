@@ -1,0 +1,182 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: nova-gateway
+  labels:
+    app: nova
+    component: gateway
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: graphql-gateway-config
+  namespace: nova-gateway
+data:
+  SERVER_HOST: "0.0.0.0"
+  SERVER_PORT: "8080"
+  SERVER_WORKERS: "4"
+
+  # Service Endpoints (gRPC)
+  AUTH_SERVICE_URL: "http://auth-service.nova-auth.svc.cluster.local:50051"
+  USER_SERVICE_URL: "http://user-service.nova.svc.cluster.local:9052"
+  CONTENT_SERVICE_URL: "http://content-service.nova-content.svc.cluster.local:50053"
+  MESSAGING_SERVICE_URL: "http://messaging-service.nova-backend.svc.cluster.local:9085"
+  NOTIFICATION_SERVICE_URL: "http://notification-service.nova-backend.svc.cluster.local:9088"
+  FEED_SERVICE_URL: "http://feed-service.nova-feed.svc.cluster.local:50056"
+  VIDEO_SERVICE_URL: "http://video-service.nova-media.svc.cluster.local:50057"
+  MEDIA_SERVICE_URL: "http://media-service.nova-media.svc.cluster.local:50058"
+  STREAMING_SERVICE_URL: "http://streaming-service.nova-media.svc.cluster.local:50059"
+  SEARCH_SERVICE_URL: "http://search-service.nova.svc.cluster.local:50060"
+
+  # Database
+  DATABASE_URL: "postgres://postgres:password@postgres.nova.svc.cluster.local:5432/nova"
+  DB_MAX_CONNECTIONS: "20"
+  DB_MIN_CONNECTIONS: "5"
+
+  # JWT
+  JWT_ISSUER: "nova-graphql-gateway"
+  JWT_AUDIENCE: "nova-api"
+
+  # GraphQL
+  GRAPHQL_PLAYGROUND: "true"
+  GRAPHQL_MAX_DEPTH: "10"
+  GRAPHQL_MAX_COMPLEXITY: "1000"
+  GRAPHQL_INTROSPECTION: "true"
+
+  # Logging
+  RUST_LOG: "info,graphql_gateway=debug"
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: graphql-gateway-secret
+  namespace: nova-gateway
+type: Opaque
+stringData:
+  JWT_SECRET: "your-super-secret-jwt-key-change-in-production"
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: graphql-gateway
+  namespace: nova-gateway
+  labels:
+    app: graphql-gateway
+    component: gateway
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: graphql-gateway
+  template:
+    metadata:
+      labels:
+        app: graphql-gateway
+        component: gateway
+    spec:
+      containers:
+      - name: graphql-gateway
+        image: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova-graphql-gateway:latest
+        imagePullPolicy: Always
+        ports:
+        - name: http
+          containerPort: 8080
+          protocol: TCP
+        envFrom:
+        - configMapRef:
+            name: graphql-gateway-config
+        - secretRef:
+            name: graphql-gateway-secret
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 2
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 0
+          periodSeconds: 10
+          timeoutSeconds: 3
+          failureThreshold: 30
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: graphql-gateway
+  namespace: nova-gateway
+  labels:
+    app: graphql-gateway
+    component: gateway
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8080
+    targetPort: 8080
+    protocol: TCP
+    name: http
+  selector:
+    app: graphql-gateway
+
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: graphql-gateway-hpa
+  namespace: nova-gateway
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: graphql-gateway
+  minReplicas: 3
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: graphql-gateway-pdb
+  namespace: nova-gateway
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: graphql-gateway

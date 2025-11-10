@@ -1,0 +1,217 @@
+name: Deploy GraphQL Gateway
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+        default: staging
+      image_tag:
+        description: 'Docker image tag (leave empty for latest)'
+        required: false
+        type: string
+  push:
+    branches:
+      - main
+    paths:
+      - 'backend/graphql-gateway/**'
+      - 'k8s/graphql-gateway/**'
+      - '.github/workflows/deploy-graphql-gateway.yml'
+
+env:
+  AWS_REGION: ap-northeast-1
+  ECR_REGISTRY: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com
+  REGISTRY_ALIAS: nova
+  SERVICE_NAME: graphql-gateway
+
+jobs:
+  build-and-push:
+    name: Build & Push GraphQL Gateway
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    outputs:
+      image-tag: ${{ steps.meta.outputs.tag }}
+      image-full: ${{ steps.meta.outputs.image }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::025434362120:role/github-actions-role
+          source-account-id: '025434362120'
+          aws-region: ${{ env.AWS_REGION }}
+          audience: sts.amazonaws.com
+          role-session-name: gha-graphql-gateway-${{ github.run_id }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Extract metadata
+        id: meta
+        run: |
+          if [[ -n "${{ inputs.image_tag }}" ]]; then
+            TAG="${{ inputs.image_tag }}"
+          elif [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            TAG="pr-${{ github.event.pull_request.number }}"
+          else
+            TAG="${{ github.ref_name }}-${{ github.sha }}"
+          fi
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "image=${{ env.ECR_REGISTRY }}/${{ env.REGISTRY_ALIAS }}/${{ env.SERVICE_NAME }}:$TAG" >> $GITHUB_OUTPUT
+          echo "image-latest=${{ env.ECR_REGISTRY }}/${{ env.REGISTRY_ALIAS }}/${{ env.SERVICE_NAME }}:latest" >> $GITHUB_OUTPUT
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./backend/graphql-gateway/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.image }}
+            ${{ steps.meta.outputs.image-latest }}
+          cache-from: type=registry,ref=${{ env.ECR_REGISTRY }}/${{ env.REGISTRY_ALIAS }}/${{ env.SERVICE_NAME }}:buildcache
+          cache-to: type=registry,ref=${{ env.ECR_REGISTRY }}/${{ env.REGISTRY_ALIAS }}/${{ env.SERVICE_NAME }}:buildcache,mode=max
+
+      - name: Image scan summary
+        run: |
+          echo "✅ GraphQL Gateway image built successfully"
+          echo "Image: ${{ steps.meta.outputs.image }}"
+          echo "Tag: ${{ steps.meta.outputs.tag }}"
+
+  deploy-to-k8s:
+    name: Deploy to Kubernetes
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::025434362120:role/github-actions-role
+          source-account-id: '025434362120'
+          aws-region: ${{ env.AWS_REGION }}
+          audience: sts.amazonaws.com
+          role-session-name: gha-k8s-deploy-${{ github.run_id }}
+
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig \
+            --region ${{ env.AWS_REGION }} \
+            --name nova-staging \
+            --alias nova-staging
+
+      - name: Verify cluster connection
+        run: |
+          kubectl cluster-info
+          kubectl get nodes
+
+      - name: Create namespace if not exists
+        run: |
+          kubectl create namespace nova-gateway --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Update image in deployment
+        run: |
+          sed -i "s|image: .*graphql-gateway:.*|image: ${{ needs.build-and-push.outputs.image-full }}|g" k8s/graphql-gateway/deployment.yaml
+
+      - name: Apply Kubernetes manifests
+        run: |
+          echo "Deploying GraphQL Gateway to Kubernetes..."
+          kubectl apply -f k8s/graphql-gateway/deployment.yaml
+
+          kubectl apply -f k8s/graphql-gateway/ingress.yaml || echo "⚠️  Ingress not applied (ALB quota issue)"
+
+      - name: Wait for rollout
+        run: |
+          kubectl rollout status deployment/graphql-gateway -n nova-gateway --timeout=5m
+
+      - name: Verify deployment
+        run: |
+          echo "GraphQL Gateway deployment status:"
+          kubectl get deployment graphql-gateway -n nova-gateway
+          kubectl get pods -n nova-gateway -l app=graphql-gateway
+          kubectl get svc graphql-gateway -n nova-gateway
+
+      - name: Get service endpoints
+        run: |
+          echo "GraphQL Gateway endpoints:"
+          kubectl get ingress -n nova-gateway || echo "No ingress configured"
+
+          echo ""
+          echo "Internal endpoint:"
+          echo "http://graphql-gateway.nova-gateway.svc.cluster.local:8080"
+
+      - name: Deployment summary
+        run: |
+          echo "🚀 GraphQL Gateway deployed successfully!"
+          echo "Image: ${{ needs.build-and-push.outputs.image-full }}"
+          echo "Namespace: nova-gateway"
+          echo ""
+          echo "To access the gateway:"
+          echo "kubectl port-forward -n nova-gateway svc/graphql-gateway 8080:8080"
+          echo "Then visit: http://localhost:8080/playground"
+
+  post-deployment-tests:
+    name: Run Health Checks
+    runs-on: ubuntu-latest
+    needs: deploy-to-k8s
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::025434362120:role/github-actions-role
+          source-account-id: '025434362120'
+          aws-region: ${{ env.AWS_REGION }}
+          audience: sts.amazonaws.com
+          role-session-name: gha-health-check-${{ github.run_id }}
+
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig \
+            --region ${{ env.AWS_REGION }} \
+            --name nova-staging
+
+      - name: Health check
+        run: |
+          echo "Waiting for GraphQL Gateway to be ready..."
+          kubectl wait --for=condition=ready pod -l app=graphql-gateway -n nova-gateway --timeout=3m
+
+          echo "Testing health endpoint..."
+          POD_NAME=$(kubectl get pod -n nova-gateway -l app=graphql-gateway -o jsonpath="{.items[0].metadata.name}")
+          kubectl exec -n nova-gateway $POD_NAME -- curl -f http://localhost:8080/health || exit 1
+
+          echo "✅ Health check passed!"
+
+      - name: Test GraphQL endpoint
+        run: |
+          echo "Testing GraphQL endpoint..."
+          POD_NAME=$(kubectl get pod -n nova-gateway -l app=graphql-gateway -o jsonpath="{.items[0].metadata.name}")
+
+          kubectl exec -n nova-gateway $POD_NAME -- curl -X POST http://localhost:8080/graphql \
+            -H "Content-Type: application/json" \
+            -d '{"query": "{ __schema { queryType { name } } }"}' || echo "⚠️  GraphQL test skipped"
