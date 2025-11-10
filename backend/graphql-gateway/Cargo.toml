@@ -10,7 +10,7 @@ anyhow = { workspace = true }
 thiserror = { workspace = true }
 
 # GraphQL
-async-graphql = { version = "7.0", features = ["tracing", "dataloader"] }
+async-graphql = { version = "7.0", features = ["dataloader"] }
 async-graphql-actix-web = "7.0"
 
 # Web framework
@@ -24,7 +24,6 @@ prost = { workspace = true }
 # Tracing
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter", "json"] }
-opentelemetry-config = { path = "../libs/opentelemetry-config" }
 
 # Configuration
 config = "0.14"
@@ -40,6 +39,13 @@ db-pool = { path = "../libs/db-pool" }
 
 # Authentication
 jsonwebtoken = "9.3"
+
+# Utilities
+chrono = { workspace = true }
+num_cpus = "1.16"
+
+[build-dependencies]
+tonic-build = "0.10"
 
 [dev-dependencies]
 serial_test = { workspace = true }

@@ -18,17 +18,16 @@ data:
   SERVER_PORT: "8080"
   SERVER_WORKERS: "4"
 
-  # Service Endpoints (gRPC)
-  AUTH_SERVICE_URL: "http://auth-service.nova-auth.svc.cluster.local:50051"
-  USER_SERVICE_URL: "http://user-service.nova.svc.cluster.local:9052"
-  CONTENT_SERVICE_URL: "http://content-service.nova-content.svc.cluster.local:50053"
+  # Service Endpoints (gRPC) - All in nova-backend namespace
+  AUTH_SERVICE_URL: "http://auth-service.nova-backend.svc.cluster.local:9083"
+  USER_SERVICE_URL: "http://user-service.nova-backend.svc.cluster.local:9080"
+  CONTENT_SERVICE_URL: "http://content-service.nova-backend.svc.cluster.local:9081"
+  FEED_SERVICE_URL: "http://feed-service.nova-backend.svc.cluster.local:9084"
   MESSAGING_SERVICE_URL: "http://messaging-service.nova-backend.svc.cluster.local:9085"
   NOTIFICATION_SERVICE_URL: "http://notification-service.nova-backend.svc.cluster.local:9088"
-  FEED_SERVICE_URL: "http://feed-service.nova-feed.svc.cluster.local:50056"
-  VIDEO_SERVICE_URL: "http://video-service.nova-media.svc.cluster.local:50057"
-  MEDIA_SERVICE_URL: "http://media-service.nova-media.svc.cluster.local:50058"
-  STREAMING_SERVICE_URL: "http://streaming-service.nova-media.svc.cluster.local:50059"
-  SEARCH_SERVICE_URL: "http://search-service.nova.svc.cluster.local:50060"
+  SEARCH_SERVICE_URL: "http://search-service.nova-backend.svc.cluster.local:9090"
+  STREAMING_SERVICE_URL: "http://streaming-service.nova-backend.svc.cluster.local:9087"
+  MEDIA_SERVICE_URL: "http://media-service.nova-backend.svc.cluster.local:9086"
 
   # Database
   DATABASE_URL: "postgres://postgres:password@postgres.nova.svc.cluster.local:5432/nova"
@@ -80,7 +79,7 @@ spec:
     spec:
       containers:
       - name: graphql-gateway
-        image: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova-graphql-gateway:latest
+        image: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/graphql-gateway:latest
         imagePullPolicy: Always
         ports:
         - name: http

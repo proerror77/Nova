@@ -12,7 +12,7 @@ members = [
     "backend/notification-service",
     "backend/cdn-service",
     "backend/events-service",
-    # "backend/graphql-gateway",  # TODO: Fix dependencies
+    "backend/graphql-gateway",
     # Shared Libraries
     "backend/libs/actix-middleware",
     "backend/libs/crypto-core",

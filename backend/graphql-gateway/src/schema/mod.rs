@@ -4,9 +4,7 @@ pub mod user;
 pub mod content;
 pub mod auth;
 
-use async_graphql::{
-    Context, EmptySubscription, MergedObject, Object, Schema, SchemaBuilder,
-};
+use async_graphql::{EmptySubscription, MergedObject, Schema};
 
 use crate::clients::ServiceClients;
 
@@ -18,8 +16,11 @@ pub struct QueryRoot(user::UserQuery, content::ContentQuery, auth::AuthQuery);
 #[derive(MergedObject, Default)]
 pub struct MutationRoot(user::UserMutation, content::ContentMutation, auth::AuthMutation);
 
+/// GraphQL App Schema type
+pub type AppSchema = Schema<QueryRoot, MutationRoot, EmptySubscription>;
+
 /// Build federated GraphQL schema
-pub fn build_schema(clients: ServiceClients) -> Schema<QueryRoot, MutationRoot, EmptySubscription> {
+pub fn build_schema(clients: ServiceClients) -> AppSchema {
     Schema::build(
         QueryRoot::default(),
         MutationRoot::default(),
