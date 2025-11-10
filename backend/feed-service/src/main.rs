@@ -236,7 +236,11 @@ async fn main() -> io::Result<()> {
     info!("✅ Feed cleaner background job started");
 
     // Start gRPC server for RecommendationService in addition to HTTP server
-    let grpc_addr: std::net::SocketAddr = format!("0.0.0.0:{}", config.app.port + 1000)
+    let grpc_port: u16 = std::env::var("GRPC_PORT")
+        .unwrap_or_else(|_| "9084".to_string())
+        .parse()
+        .expect("Invalid GRPC_PORT");
+    let grpc_addr: std::net::SocketAddr = format!("0.0.0.0:{}", grpc_port)
         .parse()
         .expect("Invalid gRPC bind address");
     let grpc_pool = db_pool.get_ref().clone();

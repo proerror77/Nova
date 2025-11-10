@@ -74,7 +74,7 @@ impl Config {
         Ok(Config {
             app: AppConfig {
                 env: std::env::var("APP_ENV").unwrap_or_else(|_| "development".to_string()),
-                port: std::env::var("APP_PORT")
+                port: std::env::var("SERVER_PORT")
                     .unwrap_or_else(|_| "8000".to_string())
                     .parse()?,
                 log_level: std::env::var("LOG_LEVEL").unwrap_or_else(|_| "info".to_string()),
