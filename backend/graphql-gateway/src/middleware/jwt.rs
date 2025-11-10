@@ -100,9 +100,7 @@ where
             });
         }
 
-        let auth_str = match auth_header
-            .ok_or_else(|| actix_web::error::ErrorUnauthorized("Missing Authorization header"))?
-            .to_str()
+        let auth_str = match auth_header.unwrap().to_str()
         {
             Ok(s) => s,
             Err(_) => {

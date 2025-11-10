@@ -51,6 +51,7 @@ pub fn check_user_authorization(
 pub fn require_auth(ctx: &Context<'_>) -> Result<AuthenticatedUser, String> {
     ctx
         .data::<AuthenticatedUser>()
+        .map(|user| *user)  // Dereference to copy the value
         .map_err(|_| "Unauthorized: authentication required".to_string())
 }
 
@@ -68,6 +69,7 @@ pub fn get_authenticated_user_id(ctx: &Context<'_>) -> Result<Uuid, String> {
 pub fn get_authenticated_claims(ctx: &Context<'_>) -> Result<Claims, String> {
     ctx
         .data::<Claims>()
+        .map(|claims| claims.clone())  // Clone the Claims
         .map_err(|_| "Unauthorized: authentication required".to_string())
 }
 
