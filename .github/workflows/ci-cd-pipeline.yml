@@ -44,7 +44,7 @@ jobs:
           protoc --version
 
       - name: Cache Cargo dependencies
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/bin/
@@ -100,21 +100,21 @@ jobs:
           sudo apt-get install -y protobuf-compiler
 
       - name: Cache Cargo registry
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: ~/.cargo/registry
           key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-registry-
 
       - name: Cache Cargo index
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: ~/.cargo/git
           key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-index-
 
       - name: Cache Cargo build
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: backend/target
           key: ${{ runner.os }}-cargo-build-${{ matrix.service }}-${{ hashFiles('**/Cargo.lock') }}
@@ -151,7 +151,7 @@ jobs:
         run: cargo install cargo-tarpaulin --version 0.8.3
 
       - name: Cache Cargo dependencies
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/bin/
@@ -212,7 +212,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Cache Cargo dependencies
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/bin/
@@ -259,7 +259,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Cache Cargo dependencies
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/bin/
@@ -336,7 +336,7 @@ jobs:
           sudo apt-get install -y protobuf-compiler
 
       - name: Cache Cargo dependencies
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/bin/
@@ -402,7 +402,7 @@ jobs:
           sudo apt-get install -y protobuf-compiler
 
       - name: Cache Cargo dependencies
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/bin/
@@ -463,7 +463,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Build and push Docker image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: ./backend/Dockerfile.template
@@ -597,7 +597,140 @@ jobs:
 
           echo "✅ Smoke tests completed"
 
-  # ============ Stage 11: Quality Report ============
+  # ============ Stage 11: E2E Tests on AWS ============
+  e2e-tests-aws:
+    timeout-minutes: 30
+    name: E2E Tests on AWS
+    runs-on: ubuntu-latest
+    needs: deploy-staging
+    if: github.ref == 'refs/heads/feature/phase1-grpc-migration' || github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push E2E test image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./tests/Dockerfile.e2e
+          push: true
+          tags: |
+            ${{ env.ECR_REGISTRY }}/nova/e2e-tests:${{ github.sha }}
+            ${{ env.ECR_REGISTRY }}/nova/e2e-tests:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig \
+            --name nova-staging \
+            --region ${{ env.AWS_REGION }}
+
+      - name: Ensure seed data is initialized
+        run: |
+          echo "🌱 Ensuring seed data is present..."
+
+          # Check if seed-data-init job already completed successfully
+          if kubectl get job -n nova seed-data-init -o jsonpath='{.status.succeeded}' 2>/dev/null | grep -q "1"; then
+            echo "✓ Seed data already initialized"
+          else
+            echo "Running seed data initialization..."
+            kubectl apply -f k8s/infrastructure/overlays/staging/seed-data-job.yaml
+
+            # Wait for seed data job to complete (max 5 minutes)
+            kubectl wait --for=condition=complete --timeout=300s job/seed-data-init -n nova || {
+              echo "⚠️ Seed data job did not complete in time, continuing anyway..."
+              kubectl logs -n nova -l app=seed-data-init --tail=50
+            }
+          fi
+
+      - name: Update E2E test job image
+        run: |
+          # Update the job manifest with the new image
+          sed -i "s|image:.*e2e-tests:.*|image: ${{ env.ECR_REGISTRY }}/nova/e2e-tests:${{ github.sha }}|g" \
+            k8s/infrastructure/overlays/staging/e2e-tests-job.yaml
+
+      - name: Run E2E tests in Kubernetes
+        run: |
+          echo "🧪 Running E2E tests in Kubernetes..."
+
+          # Delete previous test job if exists
+          kubectl delete job e2e-tests -n nova --ignore-not-found=true
+
+          # Apply the E2E test job
+          kubectl apply -f k8s/infrastructure/overlays/staging/e2e-tests-job.yaml
+
+          # Wait for job to start
+          echo "Waiting for E2E test pod to start..."
+          kubectl wait --for=condition=ready --timeout=120s pod -l app=e2e-tests -n nova || {
+            echo "⚠️ Pod not ready yet, checking status..."
+            kubectl get pods -n nova -l app=e2e-tests
+            kubectl describe pod -n nova -l app=e2e-tests
+          }
+
+      - name: Stream E2E test logs
+        run: |
+          echo "📋 Streaming E2E test logs..."
+
+          # Stream logs from the test pod
+          kubectl logs -n nova -l app=e2e-tests -f --timestamps || true
+
+      - name: Wait for E2E tests to complete
+        run: |
+          echo "⏳ Waiting for E2E tests to complete (max 25 minutes)..."
+
+          # Wait for the job to complete or fail
+          if kubectl wait --for=condition=complete --timeout=1500s job/e2e-tests -n nova; then
+            echo "✅ E2E tests completed successfully"
+
+            # Show final logs
+            echo ""
+            echo "Final test logs:"
+            kubectl logs -n nova -l app=e2e-tests --tail=100
+
+            exit 0
+          else
+            echo "❌ E2E tests failed or timed out"
+
+            # Show job status
+            kubectl describe job e2e-tests -n nova
+
+            # Show pod logs
+            echo ""
+            echo "E2E test logs:"
+            kubectl logs -n nova -l app=e2e-tests --tail=200
+
+            # Show pod status
+            echo ""
+            echo "Pod status:"
+            kubectl get pods -n nova -l app=e2e-tests -o wide
+            kubectl describe pod -n nova -l app=e2e-tests
+
+            exit 1
+          fi
+
+      - name: Cleanup E2E test job
+        if: always()
+        run: |
+          echo "🧹 Cleaning up E2E test job..."
+          kubectl delete job e2e-tests -n nova --ignore-not-found=true || true
+
+  # ============ Stage 12: Quality Report ============
   quality-report:
     timeout-minutes: 5
     name: Quality Report
@@ -648,12 +781,12 @@ jobs:
           echo ""
           echo "════════════════════════════════════════════════════"
 
-  # ============ Stage 12: Notification ============
+  # ============ Stage 13: Notification ============
   notify:
     timeout-minutes: 5
     name: Notify Deployment Status
     runs-on: ubuntu-latest
-    needs: [build-and-push, deploy-staging, smoke-test, quality-report]
+    needs: [build-and-push, deploy-staging, smoke-test, e2e-tests-aws, quality-report]
     if: always()
 
     steps:
@@ -686,6 +819,7 @@ jobs:
           echo "  Build & Push: ${{ needs.build-and-push.result }}"
           echo "  Deploy: ${{ needs.deploy-staging.result }}"
           echo "  Smoke Tests: ${{ needs.smoke-test.result }}"
+          echo "  E2E Tests: ${{ needs.e2e-tests-aws.result }}"
           echo ""
           echo "${{ steps.status.outputs.message }}"
           echo ""

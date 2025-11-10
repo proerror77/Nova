@@ -23,6 +23,11 @@ on:
       - 'k8s/graphql-gateway/**'
       - '.github/workflows/deploy-graphql-gateway.yml'
 
+# Prevent concurrent deployments to the same environment
+concurrency:
+  group: deploy-graphql-${{ github.workflow }}-${{ inputs.environment || 'staging' }}-${{ github.ref }}
+  cancel-in-progress: false  # Don't cancel in-progress deployments
+
 env:
   AWS_REGION: ap-northeast-1
   ECR_REGISTRY: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com
