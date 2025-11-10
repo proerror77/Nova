@@ -1,0 +1,69 @@
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: graphql-gateway
+  namespace: nova-staging
+  labels:
+    app: graphql-gateway
+    tier: api
+
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: graphql-gateway
+
+  minReplicas: 2  # Minimum: 2 for redundancy
+  maxReplicas: 4  # Maximum: 4 in staging
+
+  metrics:
+    # Scale based on CPU usage
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70  # Scale up when CPU > 70%
+
+    # Scale based on memory usage
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80  # Scale up when memory > 80%
+
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300  # Wait 5 min before scaling down
+      policies:
+        - type: Percent
+          value: 50  # Scale down by 50%
+          periodSeconds: 60
+
+    scaleUp:
+      stabilizationWindowSeconds: 0  # Scale up immediately
+      policies:
+        - type: Percent
+          value: 50  # Scale up by 50%
+          periodSeconds: 15
+        - type: Pods
+          value: 1  # Or add 1 pod
+          periodSeconds: 15
+      selectPolicy: Max  # Use the policy that scales up the most
+
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: graphql-gateway
+  namespace: nova-staging
+  labels:
+    app: graphql-gateway
+    tier: api
+
+spec:
+  minAvailable: 1  # At least 1 replica must be available
+  selector:
+    matchLabels:
+      app: graphql-gateway

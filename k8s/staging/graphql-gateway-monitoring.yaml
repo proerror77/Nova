@@ -1,0 +1,197 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: graphql-gateway
+  namespace: nova-staging
+  labels:
+    app: graphql-gateway
+    tier: api
+
+spec:
+  selector:
+    matchLabels:
+      app: graphql-gateway
+
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: 30s
+      scrapeTimeout: 10s
+
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: graphql-gateway
+  namespace: nova-staging
+  labels:
+    app: graphql-gateway
+    tier: api
+
+spec:
+  groups:
+    - name: graphql-gateway.rules
+      interval: 30s
+      rules:
+        # Alert: High error rate
+        - alert: HighGraphQLErrorRate
+          expr: |
+            (rate(graphql_errors_total[5m]) / rate(graphql_requests_total[5m])) > 0.05
+          for: 5m
+          labels:
+            severity: warning
+            service: graphql-gateway
+          annotations:
+            summary: "High GraphQL error rate ({{ $value | humanizePercentage }})"
+            description: "GraphQL Gateway error rate exceeded 5% for 5 minutes"
+
+        # Alert: High latency
+        - alert: HighGraphQLLatency
+          expr: |
+            histogram_quantile(0.95, rate(graphql_request_duration_seconds_bucket[5m])) > 1
+          for: 5m
+          labels:
+            severity: warning
+            service: graphql-gateway
+          annotations:
+            summary: "High GraphQL latency (p95: {{ $value }}s)"
+            description: "GraphQL Gateway p95 latency exceeded 1s for 5 minutes"
+
+        # Alert: Rate limit exceeded too often
+        - alert: HighRateLimitViolations
+          expr: |
+            rate(rate_limit_exceeded_total[5m]) > 10
+          for: 5m
+          labels:
+            severity: warning
+            service: graphql-gateway
+          annotations:
+            summary: "High rate limit violations ({{ $value }} per second)"
+            description: "Rate limit exceeded >10 times per second"
+
+        # Alert: High query complexity
+        - alert: HighQueryComplexity
+          expr: |
+            rate(query_complexity_violations_total[5m]) > 5
+          for: 5m
+          labels:
+            severity: info
+            service: graphql-gateway
+          annotations:
+            summary: "High query complexity violations ({{ $value }} per second)"
+            description: "Queries exceeding complexity limits: {{ $value }}/sec"
+
+        # Alert: Subscription backpressure
+        - alert: SubscriptionBackpressureCritical
+          expr: |
+            backpressure_status == 3
+          for: 2m
+          labels:
+            severity: critical
+            service: graphql-gateway
+          annotations:
+            summary: "Subscription backpressure overflow"
+            description: "Subscription queue overflow - may lose events"
+
+        # Alert: Kafka consumer lag
+        - alert: HighKafkaConsumerLag
+          expr: |
+            kafka_consumer_lag > 10000
+          for: 5m
+          labels:
+            severity: warning
+            service: graphql-gateway
+          annotations:
+            summary: "High Kafka consumer lag ({{ $value }} messages behind)"
+            description: "Subscription consumer lagging behind: {{ $value }} messages"
+
+        # Alert: Redis connectivity
+        - alert: RedisConnectionFailure
+          expr: |
+            redis_connection_errors_total > 0
+          for: 1m
+          labels:
+            severity: critical
+            service: graphql-gateway
+          annotations:
+            summary: "Redis connection failures"
+            description: "Cannot connect to Redis cache - subscriptions may fail"
+
+        # Alert: Database connectivity
+        - alert: DatabaseConnectionFailure
+          expr: |
+            pg_up == 0
+          for: 1m
+          labels:
+            severity: critical
+            service: graphql-gateway
+          annotations:
+            summary: "Database connection failure"
+            description: "Cannot connect to PostgreSQL database"
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: graphql-gateway-prometheus-rules
+  namespace: nova-staging
+  labels:
+    app: graphql-gateway
+    tier: api
+
+data:
+  alerts.yaml: |
+    groups:
+      - name: graphql-gateway
+        interval: 30s
+        rules:
+          # Application metrics
+          - metric: graphql_requests_total
+            help: Total GraphQL requests
+            type: counter
+
+          - metric: graphql_errors_total
+            help: Total GraphQL errors
+            type: counter
+
+          - metric: graphql_request_duration_seconds
+            help: GraphQL request duration in seconds
+            type: histogram
+
+          - metric: rate_limit_exceeded_total
+            help: Rate limit violations
+            type: counter
+
+          - metric: query_complexity_violations_total
+            help: Query complexity limit violations
+            type: counter
+
+          - metric: backpressure_status
+            help: Subscription backpressure status (0=normal, 1=warning, 2=critical, 3=overflow)
+            type: gauge
+
+          # Infrastructure metrics
+          - metric: kafka_consumer_lag
+            help: Kafka consumer lag (messages behind)
+            type: gauge
+
+          - metric: redis_connection_errors_total
+            help: Redis connection errors
+            type: counter
+
+          - metric: pg_up
+            help: PostgreSQL connectivity (1=up, 0=down)
+            type: gauge
+
+          # WebSocket metrics
+          - metric: ws_active_connections
+            help: Active WebSocket connections
+            type: gauge
+
+          - metric: ws_messages_sent_total
+            help: Total WebSocket messages sent
+            type: counter
+
+          - metric: ws_messages_received_total
+            help: Total WebSocket messages received
+            type: counter
