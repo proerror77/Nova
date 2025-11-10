@@ -1,0 +1,77 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: graphql-gateway-config
+  namespace: nova-staging
+  labels:
+    app: graphql-gateway
+    tier: api
+
+data:
+  # ✅ P0-5: Staging-specific configuration
+  RUST_LOG: "info,graphql_gateway=debug,async_graphql=debug"
+
+  # Subscription configuration
+  SUBSCRIPTION_BACKPRESSURE_QUEUE_SIZE: "10000"
+  SUBSCRIPTION_WARNING_THRESHOLD: "75"
+  SUBSCRIPTION_CRITICAL_THRESHOLD: "95"
+
+  # Query complexity limits (staging: more permissive than production)
+  MAX_QUERY_COMPLEXITY: "1000"
+  MAX_QUERY_DEPTH: "10"
+  MAX_QUERY_WIDTH: "50"
+
+  # Rate limiting (staging: higher than production)
+  RATE_LIMIT_RPS: "200"
+  RATE_LIMIT_BURST: "20"
+
+  # Caching (Redis)
+  REDIS_POOL_SIZE: "10"
+  CACHE_TTL_FEED: "300"      # 5 minutes
+  CACHE_TTL_USER: "600"      # 10 minutes
+  CACHE_TTL_POST: "600"      # 10 minutes
+
+  # Kafka configuration
+  KAFKA_CONSUMER_THREADS: "4"
+  KAFKA_BATCH_SIZE: "100"
+  KAFKA_BATCH_TIMEOUT_MS: "1000"
+
+  # GraphQL configuration
+  GRAPHQL_PLAYGROUND_ENABLED: "true"
+  GRAPHQL_INTROSPECTION_ENABLED: "true"
+  GRAPHQL_SUBSCRIBE_TIMEOUT_MS: "30000"  # 30 seconds
+
+  # CORS configuration
+  CORS_MAX_AGE: "3600"
+  CORS_ALLOW_CREDENTIALS: "true"
+
+  # Database connection pool
+  DATABASE_POOL_SIZE: "20"
+  DATABASE_POOL_TIMEOUT_SECS: "10"
+  DATABASE_IDLE_TIMEOUT_SECS: "600"
+
+  # Monitoring
+  METRICS_ENABLED: "true"
+  TRACING_ENABLED: "true"
+  TRACING_SAMPLE_RATE: "0.1"  # Sample 10% of traces in staging
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: graphql-gateway-secrets
+  namespace: nova-staging
+  labels:
+    app: graphql-gateway
+    tier: api
+  type: Opaque
+
+data:
+  # These are base64 encoded examples - replace with actual values
+  # Use: echo -n 'value' | base64
+
+  # DATABASE_URL format: postgres://user:password@host:port/database
+  database-url: cG9zdGdyZXM6Ly91c2VyOnBhc3NAcG9zdGdyZXMtZGIuY2x1c3Rlci5sb2NhbDo1NDMyL25vdmE=
+
+  # JWT_SECRET for token signing (replace with actual secret)
+  jwt-secret: c3RhZ2luZ19qd3Rfc2VjcmV0X2tleV9kb19ub3RfdXNlX2luX3Byb2R1Y3Rpb24=

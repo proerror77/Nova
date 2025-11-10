@@ -1,0 +1,76 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: graphql-gateway
+  namespace: nova-staging
+  labels:
+    app: graphql-gateway
+    tier: api
+  annotations:
+    description: "Service for GraphQL Gateway"
+
+spec:
+  type: ClusterIP
+  selector:
+    app: graphql-gateway
+
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      protocol: TCP
+
+    - name: metrics
+      port: 9090
+      targetPort: metrics
+      protocol: TCP
+
+  sessionAffinity: ClientIP  # WebSocket subscriptions benefit from sticky sessions
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 3600  # 1 hour
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: graphql-gateway
+  namespace: nova-staging
+  labels:
+    app: graphql-gateway
+    tier: api
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: graphql-gateway
+  namespace: nova-staging
+
+rules:
+  # Allow reading configmaps for configuration
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch"]
+
+  # Allow reading secrets
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: graphql-gateway
+  namespace: nova-staging
+
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: graphql-gateway
+
+subjects:
+  - kind: ServiceAccount
+    name: graphql-gateway
+    namespace: nova-staging
