@@ -7,6 +7,9 @@ RUN apt-get update && \
     pkg-config \
     libssl-dev \
     protobuf-compiler \
+    cmake \
+    librdkafka-dev \
+    build-essential \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
