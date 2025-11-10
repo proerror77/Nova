@@ -4,6 +4,7 @@ struct HomeView: View {
     @Environment(\.dismiss) var dismiss
     @State private var showReportView = false
     @State private var showThankYouView = false
+    @State private var selectedTab = 0  // 0: Home, 1: Message, 2: NewPost, 3: Alice, 4: Account
 
     var body: some View {
         ZStack {
@@ -15,8 +16,10 @@ struct HomeView: View {
                 VStack(spacing: 0) {
                 // MARK: - 顶部导航栏
                 HStack {
-                    Button(action: { dismiss() }) {
-                        Image("Back-icon")
+                    Button(action: {
+                        print("Search tapped")
+                    }) {
+                        Image(systemName: "magnifyingglass")
                             .resizable()
                             .scaledToFit()
                             .frame(width: 24, height: 24)
@@ -28,7 +31,9 @@ struct HomeView: View {
                         .scaledToFit()
                         .frame(height: 18)
                     Spacer()
-                    Button(action: {}) {
+                    Button(action: {
+                        print("Notification tapped")
+                    }) {
                         Image("Notice-icon")
                             .resizable()
                             .scaledToFit()
@@ -157,60 +162,85 @@ struct HomeView: View {
                 // MARK: - 底部导航栏
                 HStack(spacing: -20) {
                     // Home
-                    VStack(spacing: 2) {
-                        Image("home-icon")
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 32, height: 22)
-                        Text("Home")
-                            .font(.system(size: 9, weight: .medium))
-                            .foregroundColor(Color(red: 0.87, green: 0.11, blue: 0.26))
+                    Button(action: {
+                        selectedTab = 0
+                        print("Home tapped")
+                    }) {
+                        VStack(spacing: 2) {
+                            Image("home-icon")
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 32, height: 22)
+                            Text("Home")
+                                .font(.system(size: 9, weight: .medium))
+                                .foregroundColor(Color(red: 0.87, green: 0.11, blue: 0.26))
+                        }
                     }
                     .frame(maxWidth: .infinity)
 
                     // Message
-                    VStack(spacing: 4) {
-                        Image("Message-icon")
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 22, height: 22)
-                        Text("Message")
-                            .font(.system(size: 9))
-                            .foregroundColor(.black)
+                    Button(action: {
+                        selectedTab = 1
+                        print("Message tapped")
+                    }) {
+                        VStack(spacing: 4) {
+                            Image("Message-icon")
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 22, height: 22)
+                            Text("Message")
+                                .font(.system(size: 9))
+                                .foregroundColor(selectedTab == 1 ? Color(red: 0.87, green: 0.11, blue: 0.26) : .black)
+                        }
                     }
                     .frame(maxWidth: .infinity)
 
                     // New Post
-                    VStack(spacing: -10) {
-                        Image("Newpost-icon")
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 48, height: 48)
-                        Text("")
-                            .font(.system(size: 9))
+                    Button(action: {
+                        selectedTab = 2
+                        print("New Post tapped")
+                    }) {
+                        VStack(spacing: -10) {
+                            Image("Newpost-icon")
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 48, height: 48)
+                            Text("")
+                                .font(.system(size: 9))
+                        }
                     }
                     .frame(maxWidth: .infinity)
 
                     // Alice
-                    VStack(spacing: -12) {
-                        Image("alice-icon")
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 36, height: 36)
-                        Text("")
-                            .font(.system(size: 9))
+                    Button(action: {
+                        selectedTab = 3
+                        print("Alice tapped")
+                    }) {
+                        VStack(spacing: -12) {
+                            Image("alice-icon")
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 36, height: 36)
+                            Text("")
+                                .font(.system(size: 9))
+                        }
                     }
                     .frame(maxWidth: .infinity)
 
                     // Account
-                    VStack(spacing: 4) {
-                        Image("Account-icon")
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 24, height: 24)
-                        Text("Account")
-                            .font(.system(size: 9))
-                            .foregroundColor(.black)
+                    Button(action: {
+                        selectedTab = 4
+                        print("Account tapped")
+                    }) {
+                        VStack(spacing: 4) {
+                            Image("Account-icon")
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 24, height: 24)
+                            Text("Account")
+                                .font(.system(size: 9))
+                                .foregroundColor(selectedTab == 4 ? Color(red: 0.87, green: 0.11, blue: 0.26) : .black)
+                        }
                     }
                     .frame(maxWidth: .infinity)
                 }
@@ -364,47 +394,67 @@ struct CommentCardItem: View {
 
             // MARK: - 交互按钮
             HStack(spacing: 16) {
-                HStack(spacing: 6) {
-                    Image(systemName: "arrowtriangle.up.fill")
-                        .font(.system(size: 10))
-                        .foregroundColor(.black)
-                    Text("0")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundColor(.black)
+                Button(action: {
+                    print("Upvote tapped")
+                }) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "arrowtriangle.up.fill")
+                            .font(.system(size: 10))
+                            .foregroundColor(.black)
+                        Text("0")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundColor(.black)
+                    }
                 }
 
-                HStack(spacing: 6) {
-                    Image(systemName: "arrowtriangle.down.fill")
-                        .font(.system(size: 10))
-                        .foregroundColor(.black)
-                    Text("0")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundColor(.black)
+                Button(action: {
+                    print("Downvote tapped")
+                }) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "arrowtriangle.down.fill")
+                            .font(.system(size: 10))
+                            .foregroundColor(.black)
+                        Text("0")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundColor(.black)
+                    }
                 }
 
-                HStack(spacing: 6) {
-                    Image(systemName: "bubble.right")
-                        .font(.system(size: 10))
-                        .foregroundColor(.black)
-                    Text("0")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundColor(.black)
+                Button(action: {
+                    print("Comment tapped")
+                }) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "bubble.right")
+                            .font(.system(size: 10))
+                            .foregroundColor(.black)
+                        Text("0")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundColor(.black)
+                    }
                 }
 
-                HStack(spacing: 6) {
-                    Image(systemName: "square.and.arrow.up")
-                        .font(.system(size: 10))
-                        .foregroundColor(.black)
-                    Text("Share")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundColor(.black)
+                Button(action: {
+                    print("Share tapped")
+                }) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "square.and.arrow.up")
+                            .font(.system(size: 10))
+                            .foregroundColor(.black)
+                        Text("Share")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundColor(.black)
+                    }
                 }
 
                 Spacer()
 
-                Image(systemName: "bookmark")
-                    .font(.system(size: 12))
-                    .foregroundColor(.black)
+                Button(action: {
+                    print("Bookmark tapped")
+                }) {
+                    Image(systemName: "bookmark")
+                        .font(.system(size: 12))
+                        .foregroundColor(.black)
+                }
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
