@@ -3,11 +3,6 @@ name: Phase 4 - GraphQL Gateway Staging Deployment
 on:
   workflow_dispatch:
     inputs:
-      run_load_tests:
-        description: 'Run k6 load tests after deployment'
-        required: false
-        type: boolean
-        default: true
       environment:
         description: 'Deployment environment'
         required: true
@@ -15,6 +10,11 @@ on:
         options:
           - staging
         default: staging
+      run_load_tests:
+        description: 'Run k6 load tests after deployment'
+        required: false
+        type: boolean
+        default: true
 
 env:
   AWS_REGION: ap-northeast-1
@@ -25,7 +25,7 @@ env:
 
 jobs:
   build-and-push:
-    name: Build & Push GraphQL Gateway Image
+    name: Build & Push GraphQL Gateway
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -60,7 +60,6 @@ jobs:
           TAG="phase4-staging-${{ github.sha }}"
           echo "tag=$TAG" >> $GITHUB_OUTPUT
           echo "image=${{ env.ECR_REGISTRY }}/${{ env.REGISTRY_ALIAS }}/${{ env.SERVICE_NAME }}:$TAG" >> $GITHUB_OUTPUT
-          echo "image-latest=${{ env.ECR_REGISTRY }}/${{ env.REGISTRY_ALIAS }}/${{ env.SERVICE_NAME }}:phase4-latest" >> $GITHUB_OUTPUT
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
@@ -69,20 +68,24 @@ jobs:
           file: ./backend/graphql-gateway/Dockerfile
           platforms: linux/amd64
           push: true
-          tags: |
-            ${{ steps.meta.outputs.image }}
-            ${{ steps.meta.outputs.image-latest }}
+          tags: ${{ steps.meta.outputs.image }}
           cache-from: type=registry,ref=${{ env.ECR_REGISTRY }}/${{ env.REGISTRY_ALIAS }}/${{ env.SERVICE_NAME }}:buildcache
           cache-to: type=registry,ref=${{ env.ECR_REGISTRY }}/${{ env.REGISTRY_ALIAS }}/${{ env.SERVICE_NAME }}:buildcache,mode=max
 
-      - name: Image scan summary
+      - name: Upload image info to artifact
         run: |
-          echo "✅ GraphQL Gateway image built successfully"
-          echo "Image: ${{ steps.meta.outputs.image }}"
-          echo "Tag: ${{ steps.meta.outputs.tag }}"
+          mkdir -p /tmp/phase4-artifacts
+          echo "${{ steps.meta.outputs.image }}" > /tmp/phase4-artifacts/image-tag.txt
+          echo "${{ steps.meta.outputs.tag }}" > /tmp/phase4-artifacts/tag.txt
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-info
+          path: /tmp/phase4-artifacts/
 
   deploy-to-k8s:
-    name: Deploy to Kubernetes Staging
+    name: Deploy to Kubernetes
     runs-on: ubuntu-latest
     needs: build-and-push
     permissions:
@@ -108,88 +111,34 @@ jobs:
             --name nova-staging \
             --alias nova-staging
 
-      - name: Verify cluster connection
-        run: |
-          echo "🔍 Cluster Information:"
-          kubectl cluster-info
-          echo ""
-          echo "🔍 Cluster Nodes:"
-          kubectl get nodes
-
-      - name: Create namespace if not exists
+      - name: Create namespace
         run: |
           kubectl create namespace ${{ env.K8S_NAMESPACE }} --dry-run=client -o yaml | kubectl apply -f -
-          echo "✅ Namespace '${{ env.K8S_NAMESPACE }}' ready"
 
-      - name: Apply ConfigMap and Secrets
+      - name: Apply Kubernetes manifests
         run: |
-          echo "📝 Applying ConfigMap and Secrets..."
           kubectl apply -f k8s/staging/graphql-gateway-configmap.yaml
-          echo "✅ ConfigMap and Secrets applied"
-
-      - name: Apply RBAC and Service
-        run: |
-          echo "🔐 Applying RBAC and Service..."
           kubectl apply -f k8s/staging/graphql-gateway-service.yaml
-          echo "✅ RBAC and Service applied"
-
-      - name: Apply Network Policies
-        run: |
-          echo "🔒 Applying Network Policies..."
           kubectl apply -f k8s/staging/graphql-gateway-networkpolicy.yaml
-          echo "✅ Network Policies applied"
-
-      - name: Apply HPA and PDB
-        run: |
-          echo "📊 Applying HPA and PDB..."
           kubectl apply -f k8s/staging/graphql-gateway-hpa.yaml
-          echo "✅ HPA and PDB applied"
 
-      - name: Update image in deployment
+      - name: Update deployment image
         run: |
-          echo "🖼️  Updating deployment image..."
           sed -i "s|image: nova/graphql-gateway:.*|image: ${{ needs.build-and-push.outputs.image-full }}|g" k8s/staging/graphql-gateway-deployment.yaml
-          cat k8s/staging/graphql-gateway-deployment.yaml | grep "image:"
 
-      - name: Apply Deployment
+      - name: Apply deployment
         run: |
-          echo "🚀 Deploying GraphQL Gateway..."
           kubectl apply -f k8s/staging/graphql-gateway-deployment.yaml
-          echo "✅ Deployment manifest applied"
 
       - name: Wait for rollout
         run: |
-          echo "⏳ Waiting for deployment rollout (5 min timeout)..."
-          kubectl rollout status deployment/graphql-gateway -n ${{ env.K8S_NAMESPACE }} --timeout=5m || {
-            echo "❌ Rollout failed. Checking pod status..."
-            kubectl describe pod -n ${{ env.K8S_NAMESPACE }} -l app=graphql-gateway
-            kubectl logs -n ${{ env.K8S_NAMESPACE }} -l app=graphql-gateway --tail=50
-            exit 1
-          }
-          echo "✅ Deployment rollout complete"
+          kubectl rollout status deployment/graphql-gateway -n ${{ env.K8S_NAMESPACE }} --timeout=5m
 
       - name: Verify deployment
         run: |
-          echo "🔍 Deployment Status:"
           kubectl get deployment graphql-gateway -n ${{ env.K8S_NAMESPACE }}
-          echo ""
-          echo "🔍 Pod Status:"
           kubectl get pods -n ${{ env.K8S_NAMESPACE }} -l app=graphql-gateway -o wide
-          echo ""
-          echo "🔍 Service Status:"
           kubectl get svc graphql-gateway -n ${{ env.K8S_NAMESPACE }}
-
-      - name: Deployment summary
-        run: |
-          echo "✅ GraphQL Gateway deployed successfully!"
-          echo ""
-          echo "📦 Image Details:"
-          echo "  Tag: ${{ needs.build-and-push.outputs.image-tag }}"
-          echo "  Full: ${{ needs.build-and-push.outputs.image-full }}"
-          echo ""
-          echo "🔗 Access Instructions:"
-          echo "  kubectl port-forward -n ${{ env.K8S_NAMESPACE }} svc/graphql-gateway 8080:80"
-          echo "  http://localhost:8080/graphql"
 
   smoke-tests:
     name: Run Smoke Tests
@@ -200,9 +149,6 @@ jobs:
       id-token: write
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -219,72 +165,15 @@ jobs:
 
       - name: Wait for pod readiness
         run: |
-          echo "⏳ Waiting for pods to be ready (3 min timeout)..."
           kubectl wait --for=condition=ready pod \
             -l app=graphql-gateway \
             -n ${{ env.K8S_NAMESPACE }} \
-            --timeout=3m || {
-            echo "❌ Pods not ready. Checking status..."
-            kubectl describe pod -n ${{ env.K8S_NAMESPACE }} -l app=graphql-gateway
-            exit 1
-          }
-          echo "✅ All pods are ready"
+            --timeout=3m
 
-      - name: Health check test
+      - name: Health check
         run: |
-          echo "🏥 Running health check..."
           POD_NAME=$(kubectl get pod -n ${{ env.K8S_NAMESPACE }} -l app=graphql-gateway -o jsonpath="{.items[0].metadata.name}")
-          echo "Target pod: $POD_NAME"
-
-          kubectl exec -n ${{ env.K8S_NAMESPACE }} $POD_NAME -- curl -v http://localhost:8080/health || {
-            echo "❌ Health check failed"
-            exit 1
-          }
-          echo "✅ Health check passed"
-
-      - name: GraphQL schema test
-        run: |
-          echo "📋 Testing GraphQL schema endpoint..."
-          POD_NAME=$(kubectl get pod -n ${{ env.K8S_NAMESPACE }} -l app=graphql-gateway -o jsonpath="{.items[0].metadata.name}")
-
-          kubectl exec -n ${{ env.K8S_NAMESPACE }} $POD_NAME -- curl -X GET http://localhost:8080/schema || {
-            echo "⚠️  Schema endpoint not available (expected for some setups)"
-          }
-          echo "✅ Schema test completed"
-
-      - name: GraphQL query test
-        run: |
-          echo "🔍 Testing GraphQL introspection query..."
-          POD_NAME=$(kubectl get pod -n ${{ env.K8S_NAMESPACE }} -l app=graphql-gateway -o jsonpath="{.items[0].metadata.name}")
-
-          QUERY='{"query": "{ __schema { queryType { name } } }"}'
-          kubectl exec -n ${{ env.K8S_NAMESPACE }} $POD_NAME -- \
-            curl -X POST http://localhost:8080/graphql \
-            -H "Content-Type: application/json" \
-            -d "$QUERY" || {
-            echo "⚠️  GraphQL query endpoint not available (expected for some setups)"
-          }
-          echo "✅ GraphQL query test completed"
-
-      - name: Metrics endpoint test
-        run: |
-          echo "📊 Testing Prometheus metrics endpoint..."
-          POD_NAME=$(kubectl get pod -n ${{ env.K8S_NAMESPACE }} -l app=graphql-gateway -o jsonpath="{.items[0].metadata.name}")
-
-          kubectl exec -n ${{ env.K8S_NAMESPACE }} $POD_NAME -- curl -s http://localhost:8080/metrics | head -20 || {
-            echo "⚠️  Metrics endpoint not available"
-          }
-          echo "✅ Metrics endpoint test completed"
-
-      - name: Smoke tests summary
-        run: |
-          echo "✅ Smoke tests completed successfully!"
-          echo ""
-          echo "🎯 Next Steps:"
-          echo "  1. Verify service availability"
-          echo "  2. Check Kafka connectivity"
-          echo "  3. Check Redis connectivity"
-          echo "  4. Run load tests (if enabled)"
+          kubectl exec -n ${{ env.K8S_NAMESPACE }} $POD_NAME -- curl -f http://localhost:8080/health
 
   load-tests:
     name: Run k6 Load Tests
@@ -293,7 +182,6 @@ jobs:
     if: ${{ inputs.run_load_tests == true }}
     permissions:
       contents: read
-      id-token: write
 
     steps:
       - name: Checkout repository
@@ -324,44 +212,25 @@ jobs:
 
       - name: Set up port-forward
         run: |
-          echo "🔌 Setting up port-forward..."
           kubectl port-forward -n ${{ env.K8S_NAMESPACE }} svc/graphql-gateway 8080:80 &
-          PF_PID=$!
-          echo "PF_PID=$PF_PID" >> $GITHUB_ENV
           sleep 2
-          echo "✅ Port-forward established"
 
       - name: Run GraphQL load test
         run: |
-          echo "🔥 Running GraphQL load test..."
           k6 run k6/load-test-graphql.js \
             --vus 10 \
             --duration 30s \
-            -e BASE_URL=http://localhost:8080 || {
-            echo "⚠️  Load test encountered issues"
-          }
+            -e BASE_URL=http://localhost:8080 || true
 
       - name: Run subscription load test
         run: |
-          echo "🔥 Running subscription load test..."
           k6 run k6/load-test-subscriptions.js \
             --vus 5 \
             --duration 30s \
-            -e WS_ENDPOINT=ws://localhost:8080/graphql || {
-            echo "⚠️  Subscription test encountered issues"
-          }
+            -e WS_ENDPOINT=ws://localhost:8080/graphql || true
 
-      - name: Load tests summary
-        run: |
-          echo "✅ Load tests completed!"
-          echo ""
-          echo "📊 Performance Validation:"
-          echo "  - Check k6 output above for latency percentiles"
-          echo "  - Verify p95 latency < 500ms"
-          echo "  - Verify error rate < 1%"
-
-  deployment-report:
-    name: Generate Deployment Report
+  summary:
+    name: Deployment Summary
     runs-on: ubuntu-latest
     needs: [build-and-push, deploy-to-k8s, smoke-tests]
     if: always()
@@ -370,13 +239,34 @@ jobs:
       id-token: write
 
     steps:
+      - name: Generate summary
+        run: |
+          echo "## 🎉 Phase 4 Staging Deployment Status" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Build & Push" >> $GITHUB_STEP_SUMMARY
+          echo "- Status: ${{ needs.build-and-push.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Image: \`${{ needs.build-and-push.outputs.image-full }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Deploy to Kubernetes" >> $GITHUB_STEP_SUMMARY
+          echo "- Status: ${{ needs.deploy-to-k8s.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Namespace: \`${{ env.K8S_NAMESPACE }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Smoke Tests" >> $GITHUB_STEP_SUMMARY
+          echo "- Status: ${{ needs.smoke-tests.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Access Instructions" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+          echo "kubectl port-forward -n ${{ env.K8S_NAMESPACE }} svc/graphql-gateway 8080:80" >> $GITHUB_STEP_SUMMARY
+          echo "curl http://localhost:8080/health" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::025434362120:role/github-actions-role
           aws-region: ${{ env.AWS_REGION }}
           audience: sts.amazonaws.com
-          role-session-name: gha-report-phase4-${{ github.run_id }}
+          role-session-name: gha-summary-phase4-${{ github.run_id }}
 
       - name: Update kubeconfig
         run: |
@@ -384,51 +274,11 @@ jobs:
             --region ${{ env.AWS_REGION }} \
             --name nova-staging
 
-      - name: Generate deployment report
+      - name: Get deployment status
         run: |
-          echo "📋 Phase 4 Staging Deployment Report"
-          echo "======================================"
-          echo ""
-          echo "🎯 Deployment Details:"
-          echo "  Date: $(date -u)"
-          echo "  Image Tag: ${{ needs.build-and-push.outputs.image-tag }}"
-          echo "  Namespace: ${{ env.K8S_NAMESPACE }}"
-          echo "  Environment: staging"
-          echo ""
-          echo "📊 Cluster Status:"
-          kubectl cluster-info || echo "Cluster info unavailable"
-          echo ""
-          echo "🚀 Deployment Status:"
-          kubectl get deployment graphql-gateway -n ${{ env.K8S_NAMESPACE }} || echo "Deployment not found"
-          echo ""
-          echo "📦 Pod Status:"
-          kubectl get pods -n ${{ env.K8S_NAMESPACE }} -l app=graphql-gateway || echo "Pods not found"
-          echo ""
-          echo "🔗 Service Endpoints:"
-          kubectl get svc graphql-gateway -n ${{ env.K8S_NAMESPACE }} || echo "Service not found"
-          echo ""
-          echo "✅ Deployment Report Complete"
-
-      - name: Job summary
-        run: |
-          echo "## 🎉 Phase 4 Staging Deployment Complete" >> $GITHUB_STEP_SUMMARY
+          echo "## Kubernetes Deployment Status" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Build & Push" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ Status: ${{ needs.build-and-push.result }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Image Tag: \`${{ needs.build-and-push.outputs.image-tag }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Deploy to Kubernetes" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ Status: ${{ needs.deploy-to-k8s.result }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Namespace: \`${{ env.K8S_NAMESPACE }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Smoke Tests" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ Status: ${{ needs.smoke-tests.result }}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Load Tests" >> $GITHUB_STEP_SUMMARY
-          echo "- Status: ${{ needs.load-tests.result }}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Access Instructions" >> $GITHUB_STEP_SUMMARY
-          echo "```bash" >> $GITHUB_STEP_SUMMARY
-          echo "kubectl port-forward -n ${{ env.K8S_NAMESPACE }} svc/graphql-gateway 8080:80" >> $GITHUB_STEP_SUMMARY
-          echo "curl http://localhost:8080/health" >> $GITHUB_STEP_SUMMARY
-          echo "```" >> $GITHUB_STEP_SUMMARY
+          echo "### Pods" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          kubectl get pods -n ${{ env.K8S_NAMESPACE }} -l app=graphql-gateway >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
