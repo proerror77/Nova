@@ -66,8 +66,19 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Cache Cargo tools
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/
+          key: ${{ runner.os }}-cargo-tools-${{ hashFiles('.github/workflows/security-scanning.yml') }}
+
       - name: Install Cargo Deny
-        run: cargo install cargo-deny
+        run: |
+          if ! command -v cargo-deny &> /dev/null; then
+            cargo install cargo-deny
+          else
+            echo "cargo-deny already installed"
+          fi
 
       - name: Check advisories
         working-directory: backend
@@ -98,8 +109,22 @@ jobs:
         with:
           components: clippy
 
-      - name: Security audit with cargo-audit
-        run: cargo install cargo-audit && cargo audit --deny warnings
+      - name: Cache Cargo tools
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/
+          key: ${{ runner.os }}-cargo-tools-${{ hashFiles('.github/workflows/security-scanning.yml') }}
+
+      - name: Install cargo-audit
+        run: |
+          if ! command -v cargo-audit &> /dev/null; then
+            cargo install cargo-audit
+          else
+            echo "cargo-audit already installed"
+          fi
+
+      - name: Run security audit
+        run: cargo audit --deny warnings
         continue-on-error: false
 
       - name: Run clippy with security focus

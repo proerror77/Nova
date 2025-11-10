@@ -12,6 +12,7 @@ jobs:
   build-and-test:
     name: Build User Service
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     steps:
       - name: Checkout code
@@ -58,6 +59,7 @@ jobs:
   notify:
     name: Notify Build Status
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     needs: build-and-test
     if: always()
 
