@@ -19,7 +19,7 @@ COPY backend/ ./backend/
 
 # Build GraphQL Gateway
 WORKDIR /app/backend/graphql-gateway
-RUN cargo build --release
+RUN cargo build --release && ls -lah target/release/
 
 # Runtime stage
 FROM debian:bookworm-slim
