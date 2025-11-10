@@ -1,53 +1,108 @@
-use actix_web::{web, App, HttpServer};
-use async_graphql::{EmptyMutation, EmptySubscription, Schema};
+use actix_web::{web, App, HttpServer, middleware::Logger};
 use async_graphql_actix_web::{GraphQLRequest, GraphQLResponse};
 use tracing::info;
+use std::env;
 
 mod config;
+mod clients;
+mod schema;
 
-// Temporary empty query root until full implementation
-#[derive(Default)]
-struct QueryRoot;
-
-#[async_graphql::Object]
-impl QueryRoot {
-    async fn health(&self) -> &str {
-        "ok"
-    }
-}
-
-type AppSchema = Schema<QueryRoot, EmptyMutation, EmptySubscription>;
+use clients::ServiceClients;
+use schema::build_schema;
 
 async fn graphql_handler(
-    schema: web::Data<AppSchema>,
+    schema: web::Data<schema::AppSchema>,
     req: GraphQLRequest,
 ) -> GraphQLResponse {
     schema.execute(req.into_inner()).await.into()
+}
+
+async fn health_handler() -> &'static str {
+    "ok"
+}
+
+async fn playground_handler() -> actix_web::HttpResponse {
+    actix_web::HttpResponse::Ok()
+        .content_type("text/html")
+        .body(r#"
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Apollo Sandbox</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: ui-monospace, Menlo, Consolas, "Roboto Mono", "Ubuntu Monospace", monospace;
+        }
+        sandbox-ui {
+            height: 100vh;
+            width: 100vw;
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <script src="https://embeddable-sandbox.cdn.apollographql.com/_latest/embeddable-sandbox.umd.production.min.js"></script>
+    <sandbox-ui initial-state='{"document":"{ __typename }","variables":{},"headers":{},"url":"http://localhost:8080/graphql"}'></sandbox-ui>
+</body>
+</html>
+        "#)
 }
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     // Initialize tracing
     tracing_subscriber::fmt()
-        .with_env_filter("info")
+        .with_env_filter(
+            env::var("RUST_LOG")
+                .unwrap_or_else(|_| "info,graphql_gateway=debug".to_string())
+        )
         .init();
 
     info!("Starting GraphQL Gateway...");
 
-    // Build GraphQL schema
-    let schema = Schema::build(QueryRoot::default(), EmptyMutation, EmptySubscription)
-        .finish();
+    // Initialize service clients from environment variables
+    let auth_endpoint = env::var("AUTH_SERVICE_URL")
+        .unwrap_or_else(|_| "http://auth-service.nova-backend.svc.cluster.local:9083".to_string());
+    let user_endpoint = env::var("USER_SERVICE_URL")
+        .unwrap_or_else(|_| "http://user-service.nova-backend.svc.cluster.local:9080".to_string());
+    let content_endpoint = env::var("CONTENT_SERVICE_URL")
+        .unwrap_or_else(|_| "http://content-service.nova-backend.svc.cluster.local:9081".to_string());
+    let feed_endpoint = env::var("FEED_SERVICE_URL")
+        .unwrap_or_else(|_| "http://feed-service.nova-backend.svc.cluster.local:9084".to_string());
 
-    info!("GraphQL Gateway starting on http://0.0.0.0:8080");
+    let clients = ServiceClients::new(
+        auth_endpoint,
+        user_endpoint,
+        content_endpoint,
+        feed_endpoint,
+    );
+
+    info!("Service clients initialized");
+
+    // Build GraphQL schema with service clients
+    let schema = build_schema(clients);
+
+    let server_host = env::var("SERVER_HOST").unwrap_or_else(|_| "0.0.0.0".to_string());
+    let server_port = env::var("SERVER_PORT")
+        .unwrap_or_else(|_| "8080".to_string())
+        .parse::<u16>()
+        .expect("SERVER_PORT must be a valid u16");
+
+    let bind_addr = format!("{}:{}", server_host, server_port);
+    info!("GraphQL Gateway starting on http://{}", bind_addr);
 
     // Start HTTP server
     HttpServer::new(move || {
         App::new()
+            .wrap(Logger::default())
             .app_data(web::Data::new(schema.clone()))
             .route("/graphql", web::post().to(graphql_handler))
-            .route("/health", web::get().to(|| async { "ok" }))
+            .route("/playground", web::get().to(playground_handler))
+            .route("/health", web::get().to(health_handler))
     })
-    .bind("0.0.0.0:8080")?
+    .bind(&bind_addr)?
     .run()
     .await
 }
