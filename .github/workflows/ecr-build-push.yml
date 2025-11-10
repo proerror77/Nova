@@ -8,6 +8,11 @@ on:
       - 'backend/**'
       - '.github/workflows/ecr-build-push.yml'
 
+
+# Prevent concurrent ECR builds
+concurrency:
+  group: ecr-build-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 env:
   AWS_REGION: ap-northeast-1
   ECR_REGISTRY: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com

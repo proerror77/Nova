@@ -10,6 +10,11 @@ on:
       - '.github/workflows/staging-deploy-optimized.yml'
   workflow_dispatch:
 
+
+# Prevent concurrent staging deployments
+concurrency:
+  group: staging-deploy-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
 env:
   AWS_REGION: ap-northeast-1
   REGISTRY: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com
