@@ -3360,6 +3360,7 @@ dependencies = [
  "config",
  "db-pool",
  "dotenv",
+ "futures-util",
  "jsonwebtoken",
  "num_cpus",
  "prost 0.12.6",

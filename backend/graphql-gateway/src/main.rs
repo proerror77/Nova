@@ -6,9 +6,11 @@ use std::env;
 mod config;
 mod clients;
 mod schema;
+mod middleware;
 
 use clients::ServiceClients;
 use schema::build_schema;
+use middleware::JwtMiddleware;
 
 async fn graphql_handler(
     schema: web::Data<schema::AppSchema>,
@@ -73,16 +75,21 @@ async fn main() -> std::io::Result<()> {
         .unwrap_or_else(|_| "http://feed-service.nova-backend.svc.cluster.local:9084".to_string());
 
     let clients = ServiceClients::new(
-        auth_endpoint,
-        user_endpoint,
-        content_endpoint,
-        feed_endpoint,
+        &auth_endpoint,
+        &user_endpoint,
+        &content_endpoint,
+        &feed_endpoint,
     );
 
     info!("Service clients initialized");
 
     // Build GraphQL schema with service clients
     let schema = build_schema(clients);
+
+    // JWT configuration
+    let jwt_secret = env::var("JWT_SECRET")
+        .expect("JWT_SECRET environment variable must be set");
+    info!("JWT authentication enabled");
 
     let server_host = env::var("SERVER_HOST").unwrap_or_else(|_| "0.0.0.0".to_string());
     let server_port = env::var("SERVER_PORT")
@@ -97,6 +104,7 @@ async fn main() -> std::io::Result<()> {
     HttpServer::new(move || {
         App::new()
             .wrap(Logger::default())
+            .wrap(JwtMiddleware::new(jwt_secret.clone()))
             .app_data(web::Data::new(schema.clone()))
             .route("/graphql", web::post().to(graphql_handler))
             .route("/playground", web::get().to(playground_handler))

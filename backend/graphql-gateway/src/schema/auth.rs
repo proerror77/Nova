@@ -46,10 +46,7 @@ impl AuthMutation {
             .data::<ServiceClients>()
             .map_err(|_| "Service clients not available")?;
 
-        let mut client = clients
-            .auth_client()
-            .await
-            .map_err(|e| format!("Failed to connect to auth service: {}", e))?;
+        let mut client = clients.auth_client();
 
         let request = tonic::Request::new(crate::clients::proto::auth::LoginRequest { email, password });
 
@@ -78,10 +75,7 @@ impl AuthMutation {
             .data::<ServiceClients>()
             .map_err(|_| "Service clients not available")?;
 
-        let mut client = clients
-            .auth_client()
-            .await
-            .map_err(|e| format!("Failed to connect to auth service: {}", e))?;
+        let mut client = clients.auth_client();
 
         let request = tonic::Request::new(crate::clients::proto::auth::RegisterRequest {
             email,

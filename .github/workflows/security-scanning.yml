@@ -1,0 +1,367 @@
+name: Security Scanning Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+  schedule:
+    - cron: '0 2 * * *'  # Daily at 2 AM
+
+env:
+  AWS_REGION: ap-northeast-1
+  ECR_REGISTRY: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com
+  REGISTRY_ALIAS: nova
+
+jobs:
+  # ============ Stage 1: Secret Detection ============
+  secrets-scanning:
+    name: Secrets Detection
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install gitleaks
+        run: |
+          wget https://github.com/gitleaks/gitleaks/releases/download/v8.18.0/gitleaks_8.18.0_linux_x64.tar.gz
+          tar xzf gitleaks_8.18.0_linux_x64.tar.gz
+          chmod +x gitleaks
+
+      - name: Scan for secrets in history
+        run: |
+          ./gitleaks detect --source git --verbose --exit-code 1 || {
+            echo "⚠️ Secrets detected in git history"
+            echo "Remediation: git filter-branch or BFG Repo-Cleaner"
+            exit 1
+          }
+
+      - name: Scan for secrets in current files
+        run: |
+          ./gitleaks protect --installation-id 0 --staged
+
+  # ============ Stage 2: Dependency Scanning ============
+  dependency-scan:
+    name: Dependency Vulnerabilities
+    runs-on: ubuntu-latest
+    needs: secrets-scanning
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Cargo Deny
+        run: cargo install cargo-deny
+
+      - name: Check advisories
+        working-directory: backend
+        run: cargo deny check advisories --all-features
+        continue-on-error: false
+
+      - name: Check licenses
+        working-directory: backend
+        run: cargo deny check licenses --all-features
+
+      - name: Check bans
+        working-directory: backend
+        run: cargo deny check bans --all-features
+
+  # ============ Stage 3: SAST (Static Application Security Testing) ============
+  sast-scan:
+    name: SAST Analysis
+    runs-on: ubuntu-latest
+    needs: secrets-scanning
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Security audit with cargo-audit
+        run: cargo install cargo-audit && cargo audit --deny warnings
+        continue-on-error: false
+
+      - name: Run clippy with security focus
+        run: |
+          cd backend
+          cargo clippy --all-targets --all-features -- \
+            -W clippy::unchecked_duration_subtraction \
+            -W clippy::unimplemented \
+            -W clippy::todo \
+            -W clippy::panic \
+            -D warnings
+
+  # ============ Stage 4: Container Image Scanning ============
+  container-scan:
+    name: Container Vulnerability Scanning
+    runs-on: ubuntu-latest
+    needs: [sast-scan, dependency-scan]
+    if: github.event_name == 'push'
+
+    strategy:
+      matrix:
+        service:
+          - user-service
+          - auth-service
+          - content-service
+          - feed-service
+          - media-service
+          - messaging-service
+          - search-service
+          - streaming-service
+          - graphql-gateway
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build container image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./backend/${{ matrix.service }}/Dockerfile
+          push: false
+          load: true
+          tags: |
+            ${{ env.ECR_REGISTRY }}/${{ env.REGISTRY_ALIAS }}/${{ matrix.service }}:scan
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Scan with Trivy (CRITICAL only)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.ECR_REGISTRY }}/${{ env.REGISTRY_ALIAS }}/${{ matrix.service }}:scan
+          format: table
+          exit-code: 1
+          severity: CRITICAL
+
+      - name: Scan with Trivy (HIGH)
+        uses: aquasecurity/trivy-action@master
+        continue-on-error: true
+        with:
+          image-ref: ${{ env.ECR_REGISTRY }}/${{ env.REGISTRY_ALIAS }}/${{ matrix.service }}:scan
+          format: sarif
+          output: trivy-${{ matrix.service }}-results.sarif
+          severity: HIGH
+
+      - name: Upload Trivy results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v2
+        if: always()
+        with:
+          sarif_file: trivy-${{ matrix.service }}-results.sarif
+          category: trivy-${{ matrix.service }}
+
+  # ============ Stage 5: SBOM Generation ============
+  sbom-generation:
+    name: Generate SBOM
+    runs-on: ubuntu-latest
+    needs: container-scan
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    strategy:
+      matrix:
+        service:
+          - user-service
+          - auth-service
+          - content-service
+          - feed-service
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install syft
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
+          syft --version
+
+      - name: Generate SBOM for ${{ matrix.service }}
+        run: |
+          syft docker:${{ env.ECR_REGISTRY }}/${{ env.REGISTRY_ALIAS }}/${{ matrix.service }}:${{ github.sha }} \
+            -o spdx-json \
+            > sbom-${{ matrix.service }}-spdx.json
+          syft docker:${{ env.ECR_REGISTRY }}/${{ env.REGISTRY_ALIAS }}/${{ matrix.service }}:${{ github.sha }} \
+            -o cyclonedx-json \
+            > sbom-${{ matrix.service }}-cyclonedx.json
+
+      - name: Upload SBOMs
+        uses: actions/upload-artifact@v3
+        with:
+          name: sbom-${{ matrix.service }}
+          path: sbom-${{ matrix.service }}-*.json
+
+  # ============ Stage 6: Supply Chain Security (Sigstore/Cosign) ============
+  sign-artifacts:
+    name: Sign Container Images
+    runs-on: ubuntu-latest
+    needs: sbom-generation
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    permissions:
+      id-token: write
+      contents: read
+
+    strategy:
+      matrix:
+        service:
+          - user-service
+          - auth-service
+          - content-service
+          - feed-service
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v4
+        with:
+          cosign-release: 'v2.2.0'
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Sign image with Cosign (Keyless)
+        env:
+          COSIGN_EXPERIMENTAL: 1
+        run: |
+          cosign sign --yes \
+            ${{ env.ECR_REGISTRY }}/${{ env.REGISTRY_ALIAS }}/${{ matrix.service }}:${{ github.sha }}
+
+      - name: Verify signature
+        env:
+          COSIGN_EXPERIMENTAL: 1
+        run: |
+          cosign verify \
+            ${{ env.ECR_REGISTRY }}/${{ env.REGISTRY_ALIAS }}/${{ matrix.service }}:${{ github.sha }} \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            --certificate-identity-regexp https://github.com/proerror/nova/
+
+  # ============ Stage 7: Kubernetes Configuration Scanning ============
+  k8s-config-scan:
+    name: Kubernetes Configuration Scanning
+    runs-on: ubuntu-latest
+    needs: secrets-scanning
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Kube-score
+        run: |
+          curl -L https://github.com/zegl/kube-score/releases/latest/download/kube-score_linux_amd64 -o kube-score
+          chmod +x kube-score
+
+      - name: Scan K8s manifests with Kube-score
+        run: |
+          find k8s -name "*.yaml" -type f | while read manifest; do
+            echo "Scanning: $manifest"
+            ./kube-score score "$manifest" || true
+          done
+
+      - name: Install Kubewarden
+        run: |
+          curl -L https://github.com/kubewarden/kubewarden-controller/releases/latest/download/kubewarden-controller.yaml -o kubewarden.yaml
+          echo "Kubewarden config ready for deployment"
+
+      - name: Check for dangerous patterns
+        run: |
+          echo "Checking for security anti-patterns..."
+
+          # Check for privileged containers
+          grep -r "privileged: true" k8s/ && echo "❌ Found privileged container" || echo "✅ No privileged containers"
+
+          # Check for missing securityContext
+          grep -r "securityContext:" k8s/ || echo "⚠️ No securityContext found"
+
+          # Check for hardcoded passwords
+          grep -r "password:" k8s/ | grep -v "secretRef" && echo "❌ Found hardcoded password" || echo "✅ No hardcoded passwords"
+
+  # ============ Stage 8: Infrastructure Security ============
+  infrastructure-scan:
+    name: Infrastructure Security
+    runs-on: ubuntu-latest
+    needs: k8s-config-scan
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Checkov
+        run: pip install checkov
+
+      - name: Scan Terraform/K8s with Checkov
+        run: |
+          checkov -d k8s/ \
+            --framework kubernetes \
+            --exit-code 0 \
+            --output cli \
+            --soft-fail
+
+  # ============ Stage 9: Security Report ============
+  security-report:
+    name: Security Report
+    runs-on: ubuntu-latest
+    needs: [secrets-scanning, dependency-scan, sast-scan, container-scan]
+    if: always()
+
+    steps:
+      - name: Generate security summary
+        run: |
+          echo "════════════════════════════════════════════════════"
+          echo "🔒 SECURITY SCAN REPORT"
+          echo "════════════════════════════════════════════════════"
+          echo ""
+          echo "📋 Scans Completed:"
+          echo "  ✓ Secrets Detection: ${{ needs.secrets-scanning.result }}"
+          echo "  ✓ Dependency Audit: ${{ needs.dependency-scan.result }}"
+          echo "  ✓ SAST Analysis: ${{ needs.sast-scan.result }}"
+          echo "  ✓ Container Scanning: ${{ needs.container-scan.result }}"
+          echo ""
+          echo "🎯 Next Steps:"
+          echo "  1. Review SARIF uploads in Security tab"
+          echo "  2. Check container scan results"
+          echo "  3. Verify dependency licenses"
+          echo ""
+          echo "════════════════════════════════════════════════════"
+
+      - name: Fail if security checks failed
+        if: |
+          needs.secrets-scanning.result == 'failure' ||
+          needs.sast-scan.result == 'failure'
+        run: |
+          echo "❌ Security checks failed. Fix issues before merging."
+          exit 1
