@@ -10,6 +10,7 @@ pub mod subscription;
 pub mod pagination;
 pub mod loaders;
 pub mod complexity;
+pub mod backpressure;
 
 use async_graphql::{MergedObject, Schema, dataloader::DataLoader};
 
