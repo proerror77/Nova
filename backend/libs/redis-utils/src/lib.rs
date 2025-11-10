@@ -317,7 +317,10 @@ where
     match timeout(redis_command_timeout(), future).await {
         Ok(res) => res,
         Err(_) => {
-            error!("Redis command timed out after {:?}", redis_command_timeout());
+            error!(
+                "Redis command timed out after {:?}",
+                redis_command_timeout()
+            );
             Err(RedisError::from((
                 redis::ErrorKind::IoError,
                 "redis command timed out",

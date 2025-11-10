@@ -101,23 +101,23 @@ impl DbConfig {
         // Total new allocation: 75 connections (vs old 263, previous 111)
         let (max, min) = match service_name {
             // High-traffic services: 16% of total each
-            "auth-service" => (12, 4),      // was 16 (30 originally)
-            "user-service" => (12, 4),      // was 18 (35 originally)
-            "content-service" => (12, 4),   // was 18 (40 originally)
+            "auth-service" => (12, 4),    // was 16 (30 originally)
+            "user-service" => (12, 4),    // was 18 (35 originally)
+            "content-service" => (12, 4), // was 18 (40 originally)
 
             // Medium-high traffic: 10-11% of total
-            "feed-service" => (8, 3),       // was 12 (30 originally)
-            "search-service" => (8, 3),     // was 12 (28 originally)
+            "feed-service" => (8, 3),   // was 12 (30 originally)
+            "search-service" => (8, 3), // was 12 (28 originally)
 
             // Medium traffic: 6-7% of total
-            "media-service" => (5, 2),      // was 8 (25 originally)
+            "media-service" => (5, 2),        // was 8 (25 originally)
             "notification-service" => (5, 2), // was 8 (20 originally)
-            "events-service" => (5, 2),     // was 8 (18 originally)
+            "events-service" => (5, 2),       // was 8 (18 originally)
 
             // Light traffic: 3-4% of total
-            "video-service" => (3, 1),      // was 4 (15 originally)
-            "streaming-service" => (3, 1),  // was 4 (12 originally)
-            "cdn-service" => (2, 1),        // was 3 (10 originally)
+            "video-service" => (3, 1),     // was 4 (15 originally)
+            "streaming-service" => (3, 1), // was 4 (12 originally)
+            "cdn-service" => (2, 1),       // was 3 (10 originally)
 
             // Default for unknown services (very conservative)
             _ => (2, 1),
@@ -174,8 +174,11 @@ pub async fn create_pool(config: DbConfig) -> Result<PgPool, sqlx::Error> {
     debug!(
         "Creating database pool: service={}, max={}, min={}, \
          acquire_timeout={}s, verify_timeout={}s, idle_timeout={}s",
-        config.service_name, config.max_connections, config.min_connections,
-        config.acquire_timeout_secs, config.connect_timeout_secs,
+        config.service_name,
+        config.max_connections,
+        config.min_connections,
+        config.acquire_timeout_secs,
+        config.connect_timeout_secs,
         config.idle_timeout_secs
     );
 
@@ -296,8 +299,14 @@ mod tests {
         assert_eq!(config.service_name, "test-service");
 
         // Should use defaults since we removed all overrides
-        assert_eq!(config.max_connections, 20, "Expected default max_connections=20");
-        assert_eq!(config.min_connections, 5, "Expected default min_connections=5");
+        assert_eq!(
+            config.max_connections, 20,
+            "Expected default max_connections=20"
+        );
+        assert_eq!(
+            config.min_connections, 5,
+            "Expected default min_connections=5"
+        );
         assert_eq!(config.connect_timeout_secs, 5);
         assert_eq!(config.acquire_timeout_secs, 10);
 
@@ -387,17 +396,17 @@ mod tests {
         // PostgreSQL default max_connections = 100
         // Strategy: Reserve 25 for system/overhead, allocate 75 to services
         let services = vec![
-            "auth-service",        // 12
-            "user-service",        // 12
-            "content-service",     // 12
-            "feed-service",        // 8
-            "search-service",      // 8
-            "media-service",       // 5
+            "auth-service",         // 12
+            "user-service",         // 12
+            "content-service",      // 12
+            "feed-service",         // 8
+            "search-service",       // 8
+            "media-service",        // 5
             "notification-service", // 5
-            "events-service",      // 5
-            "video-service",       // 3
-            "streaming-service",   // 3
-            "cdn-service",         // 2
+            "events-service",       // 5
+            "video-service",        // 3
+            "streaming-service",    // 3
+            "cdn-service",          // 2
         ];
 
         let total: u32 = services

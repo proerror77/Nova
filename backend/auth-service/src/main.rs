@@ -3,7 +3,9 @@
 mod metrics;
 mod openapi;
 
-use actix_middleware::{JwtAuthMiddleware, MetricsMiddleware, RateLimitConfig, RateLimitMiddleware};
+use actix_middleware::{
+    JwtAuthMiddleware, MetricsMiddleware, RateLimitConfig, RateLimitMiddleware,
+};
 use actix_web::{web, App, HttpResponse, HttpServer, Responder};
 use db_pool::{create_pool as create_pg_pool, DbConfig as DbPoolConfig};
 use redis_utils::{RedisPool, SharedConnectionManager};
@@ -200,16 +202,10 @@ fn configure_routes(cfg: &mut web::ServiceConfig, redis: SharedConnectionManager
     let openapi = openapi::ApiDoc::openapi();
 
     // Create strict rate limiter for auth endpoints (5 req/min, fail-closed)
-    let auth_rate_limiter = RateLimitMiddleware::new(
-        RateLimitConfig::auth_strict(),
-        redis.clone(),
-    );
+    let auth_rate_limiter = RateLimitMiddleware::new(RateLimitConfig::auth_strict(), redis.clone());
 
     // Create lenient rate limiter for general API (100 req/min, fail-open)
-    let api_rate_limiter = RateLimitMiddleware::new(
-        RateLimitConfig::api_lenient(),
-        redis.clone(),
-    );
+    let api_rate_limiter = RateLimitMiddleware::new(RateLimitConfig::api_lenient(), redis.clone());
 
     cfg.app_data(web::Data::new(openapi.clone()))
         .service(SwaggerUi::new("/swagger-ui/{_:.*}").url("/api/v1/openapi.json", openapi))

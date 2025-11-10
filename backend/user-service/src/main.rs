@@ -320,61 +320,79 @@ async fn main() -> io::Result<()> {
                 tracing::warn!(
                     "   Authentication features will be limited until auth-service is deployed"
                 );
-                tracing::warn!(
-                    "   Service will continue with reduced functionality"
-                );
+                tracing::warn!("   Service will continue with reduced functionality");
                 None
             }
         };
 
-    let media_client: Option<Arc<MediaServiceClient>> =
-        match MediaServiceClient::new(&grpc_config, health_checker.clone()).await {
-            Ok(client) => {
-                tracing::info!("✓ media-service gRPC client initialized");
-                Some(Arc::new(client))
-            }
-            Err(e) => {
-                tracing::warn!(
-                    "⚠️  media-service gRPC client initialization failed: {:#}",
-                    e
-                );
-                tracing::warn!(
-                    "   Media processing features will be unavailable until media-service is deployed"
-                );
-                tracing::warn!(
-                    "   Service will continue with reduced functionality"
-                );
-                None
-            }
-        };
+    let media_client: Option<Arc<MediaServiceClient>> = match MediaServiceClient::new(
+        &grpc_config,
+        health_checker.clone(),
+    )
+    .await
+    {
+        Ok(client) => {
+            tracing::info!("✓ media-service gRPC client initialized");
+            Some(Arc::new(client))
+        }
+        Err(e) => {
+            tracing::warn!(
+                "⚠️  media-service gRPC client initialization failed: {:#}",
+                e
+            );
+            tracing::warn!(
+                "   Media processing features will be unavailable until media-service is deployed"
+            );
+            tracing::warn!("   Service will continue with reduced functionality");
+            None
+        }
+    };
 
-    let feed_client: Option<Arc<FeedServiceClient>> =
-        match FeedServiceClient::new(&grpc_config, health_checker.clone()).await {
-            Ok(client) => {
-                tracing::info!("✓ feed-service gRPC client initialized");
-                Some(Arc::new(client))
-            }
-            Err(e) => {
-                tracing::warn!(
-                    "⚠️  feed-service gRPC client initialization failed: {:#}",
-                    e
-                );
-                tracing::warn!(
+    let feed_client: Option<Arc<FeedServiceClient>> = match FeedServiceClient::new(
+        &grpc_config,
+        health_checker.clone(),
+    )
+    .await
+    {
+        Ok(client) => {
+            tracing::info!("✓ feed-service gRPC client initialized");
+            Some(Arc::new(client))
+        }
+        Err(e) => {
+            tracing::warn!(
+                "⚠️  feed-service gRPC client initialization failed: {:#}",
+                e
+            );
+            tracing::warn!(
                     "   Feed recommendation features will be unavailable until feed-service is deployed"
                 );
-                tracing::warn!(
-                    "   Service will continue with reduced functionality"
-                );
-                None
-            }
-        };
+            tracing::warn!("   Service will continue with reduced functionality");
+            None
+        }
+    };
 
     let available_services = vec![
         "content-service",
-        if auth_client.is_some() { "auth-service" } else { "" },
-        if media_client.is_some() { "media-service" } else { "" },
-        if feed_client.is_some() { "feed-service" } else { "" },
-    ].into_iter().filter(|s| !s.is_empty()).collect::<Vec<_>>().join(", ");
+        if auth_client.is_some() {
+            "auth-service"
+        } else {
+            ""
+        },
+        if media_client.is_some() {
+            "media-service"
+        } else {
+            ""
+        },
+        if feed_client.is_some() {
+            "feed-service"
+        } else {
+            ""
+        },
+    ]
+    .into_iter()
+    .filter(|s| !s.is_empty())
+    .collect::<Vec<_>>()
+    .join(", ");
 
     tracing::info!("✅ gRPC services initialized: {}", available_services);
 
@@ -531,7 +549,9 @@ async fn main() -> io::Result<()> {
                 }
                 Err(e) => {
                     tracing::warn!("⚠️  Events consumer initialization failed: {:#}", e);
-                    tracing::warn!("   Events processing will be unavailable until feed-service is deployed");
+                    tracing::warn!(
+                        "   Events processing will be unavailable until feed-service is deployed"
+                    );
                     (Some(cdc_handle), None)
                 }
             }
@@ -593,12 +613,10 @@ async fn main() -> io::Result<()> {
         let suggested_job = SuggestedUsersJob::new(SuggestionConfig::default());
 
         // Cache warmer requires both content and feed service clients
-        let mut jobs_vec: Vec<(Arc<dyn jobs::CacheRefreshJob>, jobs::JobContext)> = vec![
-            (
-                Arc::new(suggested_job) as Arc<dyn jobs::CacheRefreshJob>,
-                job_ctx,
-            ),
-        ];
+        let mut jobs_vec: Vec<(Arc<dyn jobs::CacheRefreshJob>, jobs::JobContext)> = vec![(
+            Arc::new(suggested_job) as Arc<dyn jobs::CacheRefreshJob>,
+            job_ctx,
+        )];
 
         // Conditionally add cache warmer if feed-service is available
         if let Some(feed_client_arc) = feed_client.clone() {

@@ -395,7 +395,9 @@ async fn main() -> io::Result<()> {
         }
         Err(e) => {
             tracing::warn!("⚠️  ClickHouse feed tables initialization failed: {}", e);
-            tracing::warn!("    Feed ranking features will be unavailable until ClickHouse is deployed");
+            tracing::warn!(
+                "    Feed ranking features will be unavailable until ClickHouse is deployed"
+            );
             tracing::warn!("    Service will continue with reduced functionality");
         }
     }
@@ -406,7 +408,10 @@ async fn main() -> io::Result<()> {
         }
         Err(e) => {
             tracing::warn!("⚠️  ClickHouse health check failed: {}", e);
-            tracing::warn!("    Ensure ClickHouse is deployed at {} for full functionality", ch_cfg.url);
+            tracing::warn!(
+                "    Ensure ClickHouse is deployed at {} for full functionality",
+                ch_cfg.url
+            );
             tracing::warn!("    Service will continue with reduced functionality");
         }
     }
