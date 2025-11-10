@@ -1,5 +1,5 @@
 use actix_web::{web, App, HttpServer, middleware::Logger};
-use async_graphql_actix_web::{GraphQLRequest, GraphQLResponse};
+use async_graphql_actix_web::{GraphQLRequest, GraphQLResponse, GraphQLSubscription};
 use tracing::info;
 use std::env;
 
@@ -11,7 +11,7 @@ mod cache;
 
 use clients::ServiceClients;
 use schema::build_schema;
-use middleware::JwtMiddleware;
+use middleware::{JwtMiddleware, RateLimitMiddleware, RateLimitConfig};
 use cache::CacheConfig;
 
 async fn graphql_handler(
@@ -21,8 +21,25 @@ async fn graphql_handler(
     schema.execute(req.into_inner()).await.into()
 }
 
+async fn graphql_subscription_handler(
+    schema: web::Data<schema::AppSchema>,
+    req: actix_web::HttpRequest,
+    payload: web::Payload,
+) -> actix_web::Result<actix_web::HttpResponse> {
+    GraphQLSubscription::new(schema.as_ref().clone())
+        .start(&req, payload)
+}
+
 async fn health_handler() -> &'static str {
     "ok"
+}
+
+/// SDL (Schema Definition Language) endpoint for schema introspection
+/// Enables automatic client code generation and documentation
+async fn schema_handler(schema: web::Data<schema::AppSchema>) -> actix_web::HttpResponse {
+    actix_web::HttpResponse::Ok()
+        .content_type("text/plain")
+        .body(schema.sdl())
 }
 
 async fn playground_handler() -> actix_web::HttpResponse {
@@ -102,13 +119,30 @@ async fn main() -> std::io::Result<()> {
     let bind_addr = format!("{}:{}", server_host, server_port);
     info!("GraphQL Gateway starting on http://{}", bind_addr);
 
-    // Start HTTP server
+    // ✅ P0-3: Initialize rate limiting (100 req/sec per IP, burst of 10)
+    let rate_limit_config = RateLimitConfig {
+        req_per_second: 100,
+        burst_size: 10,
+    };
+    let rate_limiter = RateLimitMiddleware::new(rate_limit_config);
+    info!("Rate limiting enabled: 100 req/sec per IP with burst capacity of 10");
+
+    // Start HTTP server with GraphQL, WebSocket subscriptions, and SDL
     HttpServer::new(move || {
         App::new()
             .wrap(Logger::default())
+            .wrap(rate_limiter.clone())  // ✅ P0-3: Apply rate limiting before JWT auth
             .wrap(JwtMiddleware::new(jwt_secret.clone()))
             .app_data(web::Data::new(schema.clone()))
+            // ✅ P0-4: GraphQL endpoints
             .route("/graphql", web::post().to(graphql_handler))
+            // ✅ P0-4: WebSocket subscriptions (real-time updates)
+            .route("/graphql", web::get().to(graphql_subscription_handler))
+            .route("/ws", web::get().to(graphql_subscription_handler))
+            // ✅ P0-4: Schema SDL endpoint for autodoc and code generation
+            .route("/graphql/schema", web::get().to(schema_handler))
+            .route("/schema", web::get().to(schema_handler))
+            // Developer tools
             .route("/playground", web::get().to(playground_handler))
             .route("/health", web::get().to(health_handler))
     })
