@@ -11,6 +11,11 @@ on:
   schedule:
     - cron: '0 2 * * *'  # Daily at 2 AM
 
+# Prevent redundant security scans
+concurrency:
+  group: security-scan-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   AWS_REGION: ap-northeast-1
   ECR_REGISTRY: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com
@@ -19,6 +24,7 @@ env:
 jobs:
   # ============ Stage 1: Secret Detection ============
   secrets-scanning:
+    timeout-minutes: 10
     name: Secrets Detection
     runs-on: ubuntu-latest
 
@@ -48,6 +54,7 @@ jobs:
 
   # ============ Stage 2: Dependency Scanning ============
   dependency-scan:
+    timeout-minutes: 15
     name: Dependency Vulnerabilities
     runs-on: ubuntu-latest
     needs: secrets-scanning
@@ -77,6 +84,7 @@ jobs:
 
   # ============ Stage 3: SAST (Static Application Security Testing) ============
   sast-scan:
+    timeout-minutes: 15
     name: SAST Analysis
     runs-on: ubuntu-latest
     needs: secrets-scanning
@@ -106,6 +114,7 @@ jobs:
 
   # ============ Stage 4: Container Image Scanning ============
   container-scan:
+    timeout-minutes: 45
     name: Container Vulnerability Scanning
     runs-on: ubuntu-latest
     needs: [sast-scan, dependency-scan]
@@ -179,6 +188,7 @@ jobs:
 
   # ============ Stage 5: SBOM Generation ============
   sbom-generation:
+    timeout-minutes: 20
     name: Generate SBOM
     runs-on: ubuntu-latest
     needs: container-scan
@@ -218,6 +228,7 @@ jobs:
 
   # ============ Stage 6: Supply Chain Security (Sigstore/Cosign) ============
   sign-artifacts:
+    timeout-minutes: 15
     name: Sign Container Images
     runs-on: ubuntu-latest
     needs: sbom-generation
@@ -272,6 +283,7 @@ jobs:
 
   # ============ Stage 7: Kubernetes Configuration Scanning ============
   k8s-config-scan:
+    timeout-minutes: 10
     name: Kubernetes Configuration Scanning
     runs-on: ubuntu-latest
     needs: secrets-scanning
@@ -312,6 +324,7 @@ jobs:
 
   # ============ Stage 8: Infrastructure Security ============
   infrastructure-scan:
+    timeout-minutes: 15
     name: Infrastructure Security
     runs-on: ubuntu-latest
     needs: k8s-config-scan
@@ -333,6 +346,7 @@ jobs:
 
   # ============ Stage 9: Security Report ============
   security-report:
+    timeout-minutes: 5
     name: Security Report
     runs-on: ubuntu-latest
     needs: [secrets-scanning, dependency-scan, sast-scan, container-scan]
