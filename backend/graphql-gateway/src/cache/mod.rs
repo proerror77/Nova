@@ -2,6 +2,11 @@
 //!
 //! Provides distributed caching to reduce N+1 queries and improve response times.
 //! Integrates with DataLoader for batch query optimization.
+//! ✅ P0-5: Subscription-specific caching via redis_cache module
+
+pub mod redis_cache;
+
+pub use redis_cache::{SubscriptionCache, FeedItem, Notification, SubscriptionMetadata};
 
 use anyhow::{Result, Context as _};
 use redis::aio::{ConnectionManager, MultiplexedConnection};
