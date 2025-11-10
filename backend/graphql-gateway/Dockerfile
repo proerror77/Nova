@@ -18,10 +18,8 @@ COPY Cargo.toml Cargo.lock ./
 COPY backend/ ./backend/
 
 # Build GraphQL Gateway
-WORKDIR /app/backend/graphql-gateway
-RUN cargo build --release
-RUN ls -lah /app/backend/graphql-gateway/target/release/ || echo "Directory not found, checking /app..."
-RUN find /app -name "graphql-gateway" -type f 2>/dev/null || echo "Binary not found"
+WORKDIR /app
+RUN cargo build --release -p graphql-gateway
 
 # Runtime stage
 FROM debian:bookworm-slim
@@ -35,8 +33,8 @@ RUN apt-get update && \
 
 WORKDIR /app
 
-# Copy binary from builder
-COPY --from=builder /app/backend/graphql-gateway/target/release/graphql-gateway /app/graphql-gateway
+# Copy binary from builder (binary is in workspace target dir)
+COPY --from=builder /app/target/release/graphql-gateway /app/graphql-gateway
 
 # Create non-root user
 RUN useradd -m -u 1000 appuser && \
