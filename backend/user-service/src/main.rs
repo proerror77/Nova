@@ -325,28 +325,24 @@ async fn main() -> io::Result<()> {
             }
         };
 
-    let media_client: Option<Arc<MediaServiceClient>> = match MediaServiceClient::new(
-        &grpc_config,
-        health_checker.clone(),
-    )
-    .await
-    {
-        Ok(client) => {
-            tracing::info!("✓ media-service gRPC client initialized");
-            Some(Arc::new(client))
-        }
-        Err(e) => {
-            tracing::warn!(
-                "⚠️  media-service gRPC client initialization failed: {:#}",
-                e
-            );
-            tracing::warn!(
+    let media_client: Option<Arc<MediaServiceClient>> =
+        match MediaServiceClient::new(&grpc_config, health_checker.clone()).await {
+            Ok(client) => {
+                tracing::info!("✓ media-service gRPC client initialized");
+                Some(Arc::new(client))
+            }
+            Err(e) => {
+                tracing::warn!(
+                    "⚠️  media-service gRPC client initialization failed: {:#}",
+                    e
+                );
+                tracing::warn!(
                 "   Media processing features will be unavailable until media-service is deployed"
             );
-            tracing::warn!("   Service will continue with reduced functionality");
-            None
-        }
-    };
+                tracing::warn!("   Service will continue with reduced functionality");
+                None
+            }
+        };
 
     let feed_client: Option<Arc<FeedServiceClient>> = match FeedServiceClient::new(
         &grpc_config,
