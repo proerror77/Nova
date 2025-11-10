@@ -101,7 +101,7 @@ pub async fn get_user(
                 }
             }
 
-            let include_email = requester_id.map_or(false, |rid| rid == id);
+            let include_email = requester_id == Some(id);
 
             HttpResponse::Ok().json(PublicUser {
                 id: u.id,
@@ -153,7 +153,7 @@ pub async fn upsert_my_public_key(
     body: web::Json<UpsertPublicKeyRequest>,
 ) -> impl Responder {
     // Validate format: base64-encoded 32 bytes (NaCl public key)
-    if let Err(_) = general_purpose::STANDARD.decode(&body.public_key) {
+    if general_purpose::STANDARD.decode(&body.public_key).is_err() {
         return HttpResponse::BadRequest().json(serde_json::json!({
             "error": "Invalid public key format - must be valid base64"
         }));
@@ -335,8 +335,8 @@ fn map_proto_profile(profile: &ProtoUserProfile) -> UserProfile {
 }
 
 fn to_rfc3339(ts: i64) -> String {
-    if let Some(naive) = chrono::NaiveDateTime::from_timestamp_opt(ts, 0) {
-        chrono::DateTime::<chrono::Utc>::from_utc(naive, chrono::Utc).to_rfc3339()
+    if let Some(dt) = chrono::DateTime::from_timestamp(ts, 0) {
+        dt.to_rfc3339()
     } else {
         chrono::Utc::now().to_rfc3339()
     }

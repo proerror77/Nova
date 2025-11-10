@@ -128,7 +128,7 @@ impl ResponseError for AppError {
         };
 
         let response = ErrorResponse::new(
-            &match status_code {
+            match status_code {
                 StatusCode::BAD_REQUEST => "Bad Request",
                 StatusCode::UNAUTHORIZED => "Unauthorized",
                 StatusCode::FORBIDDEN => "Forbidden",

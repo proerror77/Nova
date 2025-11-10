@@ -144,7 +144,7 @@ where
                 .arg(key)
                 .arg(&entry_json)
                 .arg("EX")
-                .arg(ttl_secs as usize)
+                .arg(ttl_secs)
                 .query_async::<_, ()>(&mut redis_conn),
         )
         .await?;
