@@ -77,7 +77,7 @@ spec:
             - |
               echo "Waiting for Redis to be ready..."
               for i in $(seq 1 60); do
-                if nc -z redis.nova-staging.svc.cluster.local 6379; then
+                if nc -z redis.nova-media.svc.cluster.local 6379; then
                   echo "✓ Redis is ready"
                   exit 0
                 fi
@@ -160,7 +160,7 @@ spec:
 
             # Redis configuration
             - name: REDIS_URL
-              value: "redis://redis.nova-staging.svc.cluster.local:6379"
+              value: "redis://redis.nova-media.svc.cluster.local:6379"
 
             # GraphQL configuration
             - name: GRAPHQL_PLAYGROUND_ENABLED
