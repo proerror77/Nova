@@ -69,7 +69,9 @@ async fn main() -> io::Result<()> {
     let grpc_port: u16 = http_port + 1000;
 
     // Start gRPC server in background on http_port + 1000
-    let grpc_addr: std::net::SocketAddr = format!("0.0.0.0:{}", grpc_port).parse().unwrap();
+    let grpc_addr: std::net::SocketAddr = format!("0.0.0.0:{}", grpc_port)
+        .parse()
+        .expect("Failed to parse gRPC address - this is a configuration error and should never happen with valid port number");
 
     let grpc_asset_manager = asset_manager.clone();
     let grpc_cache_invalidator = cache_invalidator.clone();

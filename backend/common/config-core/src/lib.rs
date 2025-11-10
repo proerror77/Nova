@@ -165,10 +165,14 @@ impl BaseConfig {
             }
 
             // Add environment-specific configuration
+            let env_name = serde_json::to_string(&environment)
+                .map_err(|e| ConfigError::Message(format!("Failed to serialize environment: {}", e)))?
+                .trim_matches('"')
+                .to_string();
             let env_specific = path
                 .parent()
                 .unwrap_or_else(|| Path::new("."))
-                .join(format!("config.{}.toml", serde_json::to_string(&environment).unwrap().trim_matches('"')));
+                .join(format!("config.{}.toml", env_name));
 
             if env_specific.exists() {
                 builder = builder.add_source(config::File::from(env_specific));
