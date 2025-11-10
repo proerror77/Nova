@@ -116,13 +116,20 @@ async fn main() -> std::io::Result<()> {
 
     info!("Service clients initialized");
 
+    // Initialize JWT keys (RS256 only) from environment
+    // SECURITY: Must use RS256 asymmetric encryption, never HS256
+    let jwt_private_key = env::var("JWT_PRIVATE_KEY_PEM")
+        .expect("JWT_PRIVATE_KEY_PEM environment variable must be set");
+    let jwt_public_key = env::var("JWT_PUBLIC_KEY_PEM")
+        .expect("JWT_PUBLIC_KEY_PEM environment variable must be set");
+
+    crypto_core::jwt::initialize_jwt_keys(&jwt_private_key, &jwt_public_key)
+        .expect("Failed to initialize JWT keys - check PEM format");
+
+    info!("JWT authentication enabled with RS256 algorithm");
+
     // Build GraphQL schema with service clients
     let schema = build_schema(clients);
-
-    // JWT configuration
-    let jwt_secret = env::var("JWT_SECRET")
-        .expect("JWT_SECRET environment variable must be set");
-    info!("JWT authentication enabled");
 
     let server_host = env::var("SERVER_HOST").unwrap_or_else(|_| "0.0.0.0".to_string());
     let server_port = env::var("SERVER_PORT")
@@ -146,7 +153,7 @@ async fn main() -> std::io::Result<()> {
         App::new()
             .wrap(Logger::default())
             .wrap(rate_limiter.clone())  // ✅ P0-3: Apply rate limiting before JWT auth
-            .wrap(JwtMiddleware::new(jwt_secret.clone()))
+            .wrap(JwtMiddleware::new())  // ✅ P0-1: Fixed - Now uses RS256 from crypto-core
             .app_data(web::Data::new(schema.clone()))
             // ✅ P0-4: GraphQL endpoints
             .route("/graphql", web::post().to(graphql_handler))

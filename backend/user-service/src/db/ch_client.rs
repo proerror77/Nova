@@ -222,6 +222,7 @@ impl ClickHouseClient {
     /// Health check - verifies ClickHouse connection is alive
     pub async fn health_check(&self) -> Result<()> {
         #[derive(clickhouse::Row, serde::Deserialize)]
+        #[allow(dead_code)] // Field used by ClickHouse deserialization
         struct HealthCheck {
             result: u32,
         }

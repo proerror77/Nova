@@ -43,6 +43,8 @@ jsonwebtoken = "9.3"
 # Caching
 redis = { version = "0.25", features = ["aio", "tokio-comp", "connection-manager"] }
 md5 = "0.7"
+dashmap = "6.1"  # ✅ Quick Win #5: Concurrent in-memory cache for GraphQL queries
+bytes = "1.9"    # ✅ Quick Win #5: Zero-copy buffer for cached responses
 
 # Utilities
 chrono = { workspace = true }
@@ -57,6 +59,10 @@ lru = "0.12"  # LRU cache for per-IP rate limiters
 
 # Kafka
 rdkafka = { version = "0.36", features = ["cmake-build"] }  # ✅ P0-5: For subscription event streaming
+
+# Metrics
+prometheus = { workspace = true }  # ✅ Quick Win #5: Cache performance metrics
+lazy_static = "1.5"  # ✅ Quick Win #5: For static metric registry
 
 [build-dependencies]
 tonic-build = "0.10"
