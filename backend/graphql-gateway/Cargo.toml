@@ -40,6 +40,10 @@ db-pool = { path = "../libs/db-pool" }
 # Authentication
 jsonwebtoken = "9.3"
 
+# Caching
+redis = { version = "0.25", features = ["aio", "tokio-comp", "connection-manager"] }
+md5 = "0.7"
+
 # Utilities
 chrono = { workspace = true }
 num_cpus = "1.16"

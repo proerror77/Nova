@@ -7,10 +7,12 @@ mod config;
 mod clients;
 mod schema;
 mod middleware;
+mod cache;
 
 use clients::ServiceClients;
 use schema::build_schema;
 use middleware::JwtMiddleware;
+use cache::CacheConfig;
 
 async fn graphql_handler(
     schema: web::Data<schema::AppSchema>,
