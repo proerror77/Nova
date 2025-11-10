@@ -310,12 +310,10 @@ impl GrpcConfig {
                 })
             }
             (None, None) => None,
-            _ => {
-                return Err(
-                    "Both GRPC_TLS_CLIENT_CERT_PATH and GRPC_TLS_CLIENT_KEY_PATH must be set for mTLS"
-                        .into(),
-                )
-            }
+            _ => return Err(
+                "Both GRPC_TLS_CLIENT_CERT_PATH and GRPC_TLS_CLIENT_KEY_PATH must be set for mTLS"
+                    .into(),
+            ),
         };
 
         tracing::info!(
@@ -542,7 +540,11 @@ mod tests {
         // Create temp files for CA cert
         let temp_dir = std::env::temp_dir();
         let ca_path = temp_dir.join("test_ca.pem");
-        std::fs::write(&ca_path, "-----BEGIN CERTIFICATE-----\nfake\n-----END CERTIFICATE-----").unwrap();
+        std::fs::write(
+            &ca_path,
+            "-----BEGIN CERTIFICATE-----\nfake\n-----END CERTIFICATE-----",
+        )
+        .unwrap();
 
         env::set_var("GRPC_TLS_ENABLED", "true");
         env::set_var("GRPC_TLS_DOMAIN_NAME", "example.com");

@@ -69,7 +69,7 @@ impl RateLimitConfig {
     pub fn auth_strict() -> Self {
         Self {
             max_requests: 5,
-            window_seconds: 60,    // 5 attempts per minute
+            window_seconds: 60, // 5 attempts per minute
             redis_timeout_ms: 100,
             include_user_agent: true,
             failure_mode: FailureMode::FailClosed, // Security > Availability
@@ -286,7 +286,9 @@ where
                                 }
                                 Ok(false) => {
                                     // Within limit - allow request
-                                    tracing::debug!("Request allowed (local fallback after timeout)");
+                                    tracing::debug!(
+                                        "Request allowed (local fallback after timeout)"
+                                    );
                                 }
                                 Err(fallback_err) => {
                                     // Even fallback failed - this is extremely rare

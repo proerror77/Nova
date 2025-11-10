@@ -68,7 +68,8 @@ pub trait EventStore: Send + Sync {
     async fn load_events(&self, aggregate_id: &str) -> Result<Vec<Event>>;
 
     /// Load events after a specific version
-    async fn load_events_after(&self, aggregate_id: &str, after_version: i64) -> Result<Vec<Event>>;
+    async fn load_events_after(&self, aggregate_id: &str, after_version: i64)
+        -> Result<Vec<Event>>;
 
     /// Get all events globally (for projections)
     async fn get_all_events(&self, after_sequence: i64, limit: i64) -> Result<Vec<Event>>;
@@ -97,12 +98,11 @@ impl EventStore for PostgresEventStore {
         let mut tx = self.pool.begin().await?;
 
         // Check current version (optimistic locking)
-        let current_version: Option<i64> = sqlx::query_scalar(
-            "SELECT MAX(version) FROM events WHERE aggregate_id = $1"
-        )
-        .bind(aggregate_id)
-        .fetch_optional(&mut *tx)
-        .await?;
+        let current_version: Option<i64> =
+            sqlx::query_scalar("SELECT MAX(version) FROM events WHERE aggregate_id = $1")
+                .bind(aggregate_id)
+                .fetch_optional(&mut *tx)
+                .await?;
 
         let current_version = current_version.unwrap_or(0);
 
@@ -161,7 +161,11 @@ impl EventStore for PostgresEventStore {
         Ok(events)
     }
 
-    async fn load_events_after(&self, aggregate_id: &str, after_version: i64) -> Result<Vec<Event>> {
+    async fn load_events_after(
+        &self,
+        aggregate_id: &str,
+        after_version: i64,
+    ) -> Result<Vec<Event>> {
         let events = sqlx::query_as::<_, EventRow>(
             r#"
             SELECT
@@ -259,11 +263,12 @@ mod tests {
 
     #[test]
     fn test_event_with_metadata() {
-        let event = Event::new("user-123", "UserCreated", 1, serde_json::json!({}))
-            .with_metadata(serde_json::json!({
+        let event = Event::new("user-123", "UserCreated", 1, serde_json::json!({})).with_metadata(
+            serde_json::json!({
                 "correlation_id": "abc-123",
                 "user_id": "admin"
-            }));
+            }),
+        );
 
         assert!(event.metadata.is_some());
     }

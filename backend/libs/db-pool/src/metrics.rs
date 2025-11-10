@@ -2,9 +2,7 @@
 //!
 //! Tracks pool size, connection acquisition latency, and errors
 
-use prometheus::{
-    register_histogram_vec, register_int_gauge_vec, HistogramVec, IntGaugeVec,
-};
+use prometheus::{register_histogram_vec, register_int_gauge_vec, HistogramVec, IntGaugeVec};
 use sqlx::{pool::PoolConnection, PgPool, Postgres};
 use std::time::Instant;
 

@@ -171,7 +171,7 @@ impl OAuthService {
             .map_err(|e| AuthError::Redis(e.to_string()))?;
 
         serde_json::from_str::<OAuthStatePayload>(
-            &data.expect("data must be Some after is_none check above")
+            &data.expect("data must be Some after is_none check above"),
         )
         .map_err(|_| AuthError::InvalidOAuthState)
     }
