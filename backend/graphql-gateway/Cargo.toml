@@ -39,6 +39,8 @@ db-pool = { path = "../libs/db-pool" }
 
 # Authentication
 jsonwebtoken = "9.3"
+crypto-core = { path = "../libs/crypto-core" }
+uuid = { workspace = true }
 
 # Caching
 redis = { version = "0.25", features = ["aio", "tokio-comp", "connection-manager"] }
