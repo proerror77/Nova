@@ -157,8 +157,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_health_query() {
-        let schema = Schema::build(QueryRoot::default(), EmptyMutation, EmptySubscription)
-            .finish();
+        let clients = crate::clients::ServiceClients::default();
+        let schema = crate::schema::build_schema(clients);
 
         let query = "{ health }";
         let result = schema.execute(query).await;
