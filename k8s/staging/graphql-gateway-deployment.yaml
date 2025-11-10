@@ -201,6 +201,16 @@ spec:
                 secretKeyRef:
                   name: graphql-gateway-secrets
                   key: jwt-secret
+            - name: JWT_PRIVATE_KEY_PEM
+              valueFrom:
+                secretKeyRef:
+                  name: graphql-gateway-secrets
+                  key: jwt-private-key-pem
+            - name: JWT_PUBLIC_KEY_PEM
+              valueFrom:
+                secretKeyRef:
+                  name: graphql-gateway-secrets
+                  key: jwt-public-key-pem
 
           resources:
             requests:
