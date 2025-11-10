@@ -29,8 +29,8 @@ data:
   STREAMING_SERVICE_URL: "http://streaming-service.nova-backend.svc.cluster.local:9087"
   MEDIA_SERVICE_URL: "http://media-service.nova-backend.svc.cluster.local:9086"
 
-  # Database
-  DATABASE_URL: "postgres://postgres:password@postgres.nova.svc.cluster.local:5432/nova"
+  # Database (value injected from AWS Secrets via ExternalSecrets)
+  # Actual DATABASE_URL comes from graphql-gateway-db-credentials secret
   DB_MAX_CONNECTIONS: "20"
   DB_MIN_CONNECTIONS: "5"
 
@@ -38,24 +38,19 @@ data:
   JWT_ISSUER: "nova-graphql-gateway"
   JWT_AUDIENCE: "nova-api"
 
-  # GraphQL
-  GRAPHQL_PLAYGROUND: "true"
+  # GraphQL (SECURITY: Should be 'false' in production)
+  GRAPHQL_PLAYGROUND: "true"    # Only for staging/development
   GRAPHQL_MAX_DEPTH: "10"
   GRAPHQL_MAX_COMPLEXITY: "1000"
-  GRAPHQL_INTROSPECTION: "true"
+  GRAPHQL_INTROSPECTION: "true" # Only for staging/development
 
   # Logging
   RUST_LOG: "info,graphql_gateway=debug"
 
 ---
-apiVersion: v1
-kind: Secret
-metadata:
-  name: graphql-gateway-secret
-  namespace: nova-gateway
-type: Opaque
-stringData:
-  JWT_SECRET: "your-super-secret-jwt-key-change-in-production"
+# NOTE: Secrets are now managed by External Secrets Operator
+# This secret is auto-synced from AWS Secrets Manager
+# No manual secret management needed here
 
 ---
 apiVersion: apps/v1
@@ -89,7 +84,9 @@ spec:
         - configMapRef:
             name: graphql-gateway-config
         - secretRef:
-            name: graphql-gateway-secret
+            name: graphql-gateway-db-credentials    # From ExternalSecrets
+        - secretRef:
+            name: graphql-gateway-jwt-credentials   # From ExternalSecrets
         resources:
           requests:
             memory: "256Mi"
