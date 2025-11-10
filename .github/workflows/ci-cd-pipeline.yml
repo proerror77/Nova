@@ -147,14 +147,24 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y protobuf-compiler
 
+      - name: Cache Cargo tools
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/
+          key: ${{ runner.os }}-cargo-tools-${{ hashFiles('.github/workflows/ci-cd-pipeline.yml') }}
+
       - name: Install cargo-tarpaulin
-        run: cargo install cargo-tarpaulin --version 0.8.3
+        run: |
+          if ! command -v cargo-tarpaulin &> /dev/null; then
+            cargo install cargo-tarpaulin --version 0.8.3
+          else
+            echo "cargo-tarpaulin already installed"
+          fi
 
       - name: Cache Cargo dependencies
         uses: actions/cache@v4
         with:
           path: |
-            ~/.cargo/bin/
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
@@ -211,11 +221,16 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Cache Cargo tools
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/
+          key: ${{ runner.os }}-cargo-tools-${{ hashFiles('.github/workflows/ci-cd-pipeline.yml') }}
+
       - name: Cache Cargo dependencies
         uses: actions/cache@v4
         with:
           path: |
-            ~/.cargo/bin/
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
@@ -224,7 +239,12 @@ jobs:
           restore-keys: ${{ runner.os }}-cargo-
 
       - name: Install cargo-audit
-        run: cargo install cargo-audit
+        run: |
+          if ! command -v cargo-audit &> /dev/null; then
+            cargo install cargo-audit
+          else
+            echo "cargo-audit already installed"
+          fi
 
       - name: Run cargo audit
         working-directory: backend
@@ -232,7 +252,12 @@ jobs:
         continue-on-error: true
 
       - name: Install cargo-deny
-        run: cargo install cargo-deny
+        run: |
+          if ! command -v cargo-deny &> /dev/null; then
+            cargo install cargo-deny
+          else
+            echo "cargo-deny already installed"
+          fi
 
       - name: Run cargo deny (advisories)
         working-directory: backend
@@ -258,11 +283,16 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Cache Cargo tools
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/
+          key: ${{ runner.os }}-cargo-tools-${{ hashFiles('.github/workflows/ci-cd-pipeline.yml') }}
+
       - name: Cache Cargo dependencies
         uses: actions/cache@v4
         with:
           path: |
-            ~/.cargo/bin/
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
@@ -271,7 +301,12 @@ jobs:
           restore-keys: ${{ runner.os }}-cargo-
 
       - name: Install cargo-outdated
-        run: cargo install cargo-outdated
+        run: |
+          if ! command -v cargo-outdated &> /dev/null; then
+            cargo install cargo-outdated
+          else
+            echo "cargo-outdated already installed"
+          fi
 
       - name: Check for outdated dependencies
         working-directory: backend
@@ -335,11 +370,16 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y protobuf-compiler
 
+      - name: Cache Cargo tools
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/
+          key: ${{ runner.os }}-cargo-tools-${{ hashFiles('.github/workflows/ci-cd-pipeline.yml') }}
+
       - name: Cache Cargo dependencies
         uses: actions/cache@v4
         with:
           path: |
-            ~/.cargo/bin/
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
@@ -348,7 +388,12 @@ jobs:
           restore-keys: ${{ runner.os }}-cargo-
 
       - name: Install sqlx-cli
-        run: cargo install sqlx-cli --no-default-features --features postgres
+        run: |
+          if ! command -v sqlx &> /dev/null; then
+            cargo install sqlx-cli --no-default-features --features postgres
+          else
+            echo "sqlx-cli already installed"
+          fi
 
       - name: Wait for PostgreSQL
         timeout-minutes: 2
@@ -730,7 +775,150 @@ jobs:
           echo "🧹 Cleaning up E2E test job..."
           kubectl delete job e2e-tests -n nova --ignore-not-found=true || true
 
-  # ============ Stage 12: Quality Report ============
+  # ============ Stage 12: E2E User Journey Tests ============
+  e2e-user-journeys:
+    timeout-minutes: 20
+    name: E2E User Journey Tests
+    runs-on: ubuntu-latest
+    needs: deploy-staging
+    if: github.ref == 'refs/heads/feature/phase1-grpc-migration' || github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install k6
+        run: |
+          sudo gpg -k
+          sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg \
+            --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | \
+            sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update
+          sudo apt-get install k6
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig \
+            --name nova-staging \
+            --region ${{ env.AWS_REGION }}
+
+      - name: Wait for GraphQL Gateway to be ready
+        run: |
+          echo "⏳ Waiting for GraphQL Gateway to be ready..."
+          kubectl wait --for=condition=ready pod -l app=graphql-gateway -n nova --timeout=300s || {
+            echo "⚠️ GraphQL Gateway not ready, checking status..."
+            kubectl get pods -n nova -l app=graphql-gateway
+            kubectl describe pod -n nova -l app=graphql-gateway
+            exit 1
+          }
+          echo "✅ GraphQL Gateway is ready"
+
+      - name: Port forward GraphQL Gateway
+        run: |
+          echo "🔌 Setting up port forward to GraphQL Gateway..."
+          kubectl port-forward -n nova svc/graphql-gateway 8000:8080 &
+          PORT_FORWARD_PID=$!
+          echo "PORT_FORWARD_PID=$PORT_FORWARD_PID" >> $GITHUB_ENV
+
+          # Wait for port forward to be ready
+          for i in {1..30}; do
+            if curl -s http://localhost:8000/health > /dev/null 2>&1; then
+              echo "✅ Port forward established"
+              exit 0
+            fi
+            echo "Waiting for port forward... ($i/30)"
+            sleep 2
+          done
+
+          echo "❌ Port forward failed to establish"
+          exit 1
+
+      - name: Run E2E User Journey Tests
+        run: |
+          echo "🧪 Running E2E User Journey Tests..."
+
+          k6 run k6/e2e-user-journeys.js \
+            --env BASE_URL=http://localhost:8000 \
+            --out json=e2e-results.json \
+            --summary-export=e2e-summary.json
+
+      - name: Display test summary
+        if: always()
+        run: |
+          echo ""
+          echo "======================================"
+          echo "  E2E USER JOURNEY TEST RESULTS"
+          echo "======================================"
+          echo ""
+
+          if [ -f e2e-summary.json ]; then
+            # Extract key metrics using jq
+            echo "Journey Success Rate: $(jq -r '.metrics.journey_success_rate.values.rate * 100' e2e-summary.json)%"
+            echo "  Successful Journeys: $(jq -r '.metrics.journey_success_rate.values.passes // 0' e2e-summary.json)"
+            echo "  Failed Journeys: $(jq -r '.metrics.journey_success_rate.values.fails // 0' e2e-summary.json)"
+            echo ""
+            echo "Performance Metrics (P95):"
+            echo "  Login Duration: $(jq -r '.metrics.login_duration.values["p(95)"] // 0' e2e-summary.json)ms"
+            echo "  Post Creation: $(jq -r '.metrics.post_creation_duration.values["p(95)"] // 0' e2e-summary.json)ms"
+            echo "  Feed Load: $(jq -r '.metrics.feed_load_duration.values["p(95)"] // 0' e2e-summary.json)ms"
+            echo ""
+            echo "HTTP Metrics:"
+            echo "  Total Requests: $(jq -r '.metrics.http_reqs.values.count // 0' e2e-summary.json)"
+            echo "  Failed Requests: $(jq -r '.metrics.http_req_failed.values.rate * 100 // 0' e2e-summary.json)%"
+            echo ""
+          else
+            echo "⚠️ No test summary found"
+          fi
+
+          echo "======================================"
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-user-journey-results
+          path: |
+            e2e-results.json
+            e2e-summary.json
+
+      - name: Cleanup port forward
+        if: always()
+        run: |
+          echo "🧹 Cleaning up port forward..."
+          if [ -n "$PORT_FORWARD_PID" ]; then
+            kill $PORT_FORWARD_PID || true
+          fi
+          pkill -f "port-forward" || true
+
+      - name: Check test results
+        if: always()
+        run: |
+          if [ -f e2e-summary.json ]; then
+            # Check if journey success rate is above threshold (95%)
+            SUCCESS_RATE=$(jq -r '.metrics.journey_success_rate.values.rate // 0' e2e-summary.json)
+            THRESHOLD=0.95
+
+            if (( $(echo "$SUCCESS_RATE >= $THRESHOLD" | bc -l) )); then
+              echo "✅ E2E User Journey tests passed (success rate: $(echo "$SUCCESS_RATE * 100" | bc)%)"
+              exit 0
+            else
+              echo "❌ E2E User Journey tests failed (success rate: $(echo "$SUCCESS_RATE * 100" | bc)% < 95%)"
+              exit 1
+            fi
+          else
+            echo "❌ No test results found"
+            exit 1
+          fi
+
+  # ============ Stage 13: Quality Report ============
   quality-report:
     timeout-minutes: 5
     name: Quality Report
@@ -781,12 +969,12 @@ jobs:
           echo ""
           echo "════════════════════════════════════════════════════"
 
-  # ============ Stage 13: Notification ============
+  # ============ Stage 14: Notification ============
   notify:
     timeout-minutes: 5
     name: Notify Deployment Status
     runs-on: ubuntu-latest
-    needs: [build-and-push, deploy-staging, smoke-test, e2e-tests-aws, quality-report]
+    needs: [build-and-push, deploy-staging, smoke-test, e2e-tests-aws, e2e-user-journeys, quality-report]
     if: always()
 
     steps:
@@ -819,7 +1007,8 @@ jobs:
           echo "  Build & Push: ${{ needs.build-and-push.result }}"
           echo "  Deploy: ${{ needs.deploy-staging.result }}"
           echo "  Smoke Tests: ${{ needs.smoke-test.result }}"
-          echo "  E2E Tests: ${{ needs.e2e-tests-aws.result }}"
+          echo "  E2E Service Tests: ${{ needs.e2e-tests-aws.result }}"
+          echo "  E2E User Journeys: ${{ needs.e2e-user-journeys.result }}"
           echo ""
           echo "${{ steps.status.outputs.message }}"
           echo ""
