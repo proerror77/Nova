@@ -75,7 +75,7 @@ pub async fn ensure_legacy_video_migration_marker(pool: &PgPool) -> Result<(), s
         let ignore_duplicate_type = e
             .as_database_error()
             .and_then(|err| err.code().map(|code| code.to_string()))
-            .map_or(false, |code| code == "23505");
+            .is_some_and(|code| code == "23505");
 
         if !ignore_duplicate_type {
             return Err(e);

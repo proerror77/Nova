@@ -66,7 +66,7 @@ impl ClickHouseClient {
             .with_database(database)
             .with_user(username)
             .with_password(password)
-            .with_option("max_execution_time", &(query_timeout_ms / 1000).to_string());
+            .with_option("max_execution_time", (query_timeout_ms / 1000).to_string());
 
         // Do not force `readonly` via session setting here.
         // Some ClickHouse deployments run in readonly mode at the user/profile level,

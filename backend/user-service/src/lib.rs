@@ -1,10 +1,3 @@
-// TODO: Fix clippy warnings and code quality issues in follow-up PR (tracked in GitHub issue)
-// TEMPORARY: Allow all warnings to unblock CRITICAL P0 BorrowMutError fix deployment
-// This prevents HTTP server from responding to ANY requests - production impact!
-// Revert this after deployment and fix warnings in separate PR
-#![allow(warnings)]
-#![allow(clippy::all)]
-
 pub mod cache;
 
 pub mod config;

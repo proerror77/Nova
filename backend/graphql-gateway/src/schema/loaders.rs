@@ -32,15 +32,15 @@ impl Loader<String> for IdCountLoader {
     type Value = i32;
     type Error = String;
 
-    async fn load(&self, keys: Vec<String>) -> Result<HashMap<String, Self::Value>, Self::Error> {
+    async fn load(&self, keys: &[String]) -> Result<HashMap<String, Self::Value>, Self::Error> {
         // In production: would query database like:
         // SELECT id, COUNT(*) as count FROM table WHERE id IN (keys) GROUP BY id
         //
         // For demo: simulate with enumeration
         let counts: HashMap<String, i32> = keys
-            .into_iter()
+            .iter()
             .enumerate()
-            .map(|(idx, id)| (id, (idx as i32 + 1) * 10))
+            .map(|(idx, id)| (id.clone(), (idx as i32 + 1) * 10))
             .collect();
 
         Ok(counts)
@@ -63,13 +63,13 @@ impl Loader<String> for UserIdLoader {
     type Value = String;
     type Error = String;
 
-    async fn load(&self, keys: Vec<String>) -> Result<HashMap<String, Self::Value>, Self::Error> {
+    async fn load(&self, keys: &[String]) -> Result<HashMap<String, Self::Value>, Self::Error> {
         // In production:
         // SELECT id, name FROM users WHERE id IN (keys)
         //
         // For demo: generate names
         let users: HashMap<String, String> = keys
-            .into_iter()
+            .iter()
             .map(|id| (id.clone(), format!("User {}", id)))
             .collect();
 
@@ -93,13 +93,13 @@ impl Loader<String> for PostIdLoader {
     type Value = String;
     type Error = String;
 
-    async fn load(&self, keys: Vec<String>) -> Result<HashMap<String, Self::Value>, Self::Error> {
+    async fn load(&self, keys: &[String]) -> Result<HashMap<String, Self::Value>, Self::Error> {
         // In production:
         // SELECT id, content FROM posts WHERE id IN (keys)
         //
         // For demo: generate content
         let posts: HashMap<String, String> = keys
-            .into_iter()
+            .iter()
             .map(|id| (id.clone(), format!("Post content for {}", id)))
             .collect();
 
@@ -123,16 +123,16 @@ impl Loader<String> for LikeCountLoader {
     type Value = i32;
     type Error = String;
 
-    async fn load(&self, keys: Vec<String>) -> Result<HashMap<String, Self::Value>, Self::Error> {
+    async fn load(&self, keys: &[String]) -> Result<HashMap<String, Self::Value>, Self::Error> {
         // In production:
         // SELECT post_id, COUNT(*) as like_count
         // FROM likes WHERE post_id IN (keys) GROUP BY post_id
         //
         // For demo: simulate with enumeration
         let counts: HashMap<String, i32> = keys
-            .into_iter()
+            .iter()
             .enumerate()
-            .map(|(idx, id)| (id, (idx as i32 + 1) * 50))
+            .map(|(idx, id)| (id.clone(), (idx as i32 + 1) * 50))
             .collect();
 
         Ok(counts)
@@ -155,16 +155,16 @@ impl Loader<String> for FollowCountLoader {
     type Value = i32;
     type Error = String;
 
-    async fn load(&self, keys: Vec<String>) -> Result<HashMap<String, Self::Value>, Self::Error> {
+    async fn load(&self, keys: &[String]) -> Result<HashMap<String, Self::Value>, Self::Error> {
         // In production:
         // SELECT user_id, COUNT(*) as follow_count
         // FROM followers WHERE user_id IN (keys) GROUP BY user_id
         //
         // For demo: simulate with enumeration
         let counts: HashMap<String, i32> = keys
-            .into_iter()
+            .iter()
             .enumerate()
-            .map(|(idx, id)| (id, (idx as i32 + 1) * 200))
+            .map(|(idx, id)| (id.clone(), (idx as i32 + 1) * 200))
             .collect();
 
         Ok(counts)

@@ -102,7 +102,7 @@ pub async fn update_feed_preferences(
 
     // Validate inputs
     if let Some(level) = payload.safety_filter_level {
-        if level < 0 || level > 2 {
+        if !(0..=2).contains(&level) {
             return Err(AppError::BadRequest(
                 "safety_filter_level must be 0, 1, or 2".to_string(),
             ));

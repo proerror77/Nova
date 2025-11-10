@@ -1,6 +1,7 @@
 use actix_web::{web, App, HttpServer, middleware::Logger};
 use async_graphql_actix_web::{GraphQLRequest, GraphQLResponse, GraphQLSubscription};
 use tracing::info;
+use tracing_subscriber::prelude::*;
 use std::env;
 
 mod config;
@@ -74,11 +75,23 @@ async fn playground_handler() -> actix_web::HttpResponse {
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    // Initialize tracing
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            env::var("RUST_LOG")
-                .unwrap_or_else(|_| "info,graphql_gateway=debug".to_string())
+    // Initialize structured logging with JSON format for production-grade observability
+    // Includes: timestamp, level, target, thread IDs, line numbers, and structured fields
+    tracing_subscriber::registry()
+        .with(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| "info,graphql_gateway=debug".into()),
+        )
+        .with(
+            tracing_subscriber::fmt::layer()
+                .json() // ✅ JSON format for log aggregation (CloudWatch, Datadog, ELK)
+                .with_current_span(true) // Include span context for distributed tracing
+                .with_span_list(true) // Include all parent spans
+                .with_thread_ids(true) // Include thread IDs for debugging
+                .with_thread_names(true) // Include thread names
+                .with_line_number(true) // Include source line numbers
+                .with_file(true) // Include source file paths
+                .with_target(true) // Include target module path
         )
         .init();
 

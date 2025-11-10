@@ -152,7 +152,7 @@ fn generate_totp_code(secret: &[u8], counter: u64) -> Result<String> {
     ]);
 
     // 4. 生成 6 位码
-    let code = (p % 1_000_000) as u32;
+    let code = p % 1_000_000;
     Ok(format!("{:06}", code))
 }
 

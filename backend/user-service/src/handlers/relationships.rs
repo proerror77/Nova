@@ -348,14 +348,14 @@ pub async fn get_followers(
                 AppError::Internal(msg) if msg.contains("Circuit breaker is OPEN") => {
                     warn!("PostgreSQL circuit is OPEN for followers query");
                     // Graceful degradation: return empty followers list
-                    return HttpResponse::Ok().json(
+                    HttpResponse::Ok().json(
                         serde_json::json!({"users": Vec::<RelationshipUser>::new(), "count": 0}),
-                    );
+                    )
                 }
                 _ => {
                     error!("Failed to fetch followers: {}", e);
-                    return HttpResponse::InternalServerError()
-                        .json(serde_json::json!({"error": e.to_string()}));
+                    HttpResponse::InternalServerError()
+                        .json(serde_json::json!({"error": e.to_string()}))
                 }
             }
         }
@@ -433,14 +433,14 @@ pub async fn get_following(
                 AppError::Internal(msg) if msg.contains("Circuit breaker is OPEN") => {
                     warn!("PostgreSQL circuit is OPEN for following query");
                     // Graceful degradation: return empty following list
-                    return HttpResponse::Ok().json(
+                    HttpResponse::Ok().json(
                         serde_json::json!({"users": Vec::<RelationshipUser>::new(), "count": 0}),
-                    );
+                    )
                 }
                 _ => {
                     error!("Failed to fetch following: {}", e);
-                    return HttpResponse::InternalServerError()
-                        .json(serde_json::json!({"error": e.to_string()}));
+                    HttpResponse::InternalServerError()
+                        .json(serde_json::json!({"error": e.to_string()}))
                 }
             }
         }
