@@ -92,7 +92,7 @@ jobs:
           REDIS_URL: redis://localhost:6379
 
       - name: Run content-service gRPC tests (requires running services - skipped in CI)
-        run: echo "Note: content-service gRPC tests require running services. Use docker-compose.dev.yml locally."
+        run: 'echo "Note: content-service gRPC tests require running services. Use docker-compose.dev.yml locally."'
 
       - name: Generate coverage report
         run: |
