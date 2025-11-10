@@ -114,7 +114,7 @@ pub mod kafka_correlation;
 // =============================
 
 #[no_mangle]
-pub extern "C" fn cryptocore_generate_nonce(out_buf: *mut c_uchar, out_len: c_ulong) -> c_ulong {
+pub unsafe extern "C" fn cryptocore_generate_nonce(out_buf: *mut c_uchar, out_len: c_ulong) -> c_ulong {
     let len = out_len as usize;
     if out_buf.is_null() || len < 24 {
         return 0;
@@ -127,7 +127,7 @@ pub extern "C" fn cryptocore_generate_nonce(out_buf: *mut c_uchar, out_len: c_ul
 }
 
 #[no_mangle]
-pub extern "C" fn cryptocore_encrypt(
+pub unsafe extern "C" fn cryptocore_encrypt(
     plaintext_ptr: *const c_uchar,
     plaintext_len: c_ulong,
     recipient_pk_ptr: *const c_uchar,
@@ -160,7 +160,7 @@ pub extern "C" fn cryptocore_encrypt(
 }
 
 #[no_mangle]
-pub extern "C" fn cryptocore_decrypt(
+pub unsafe extern "C" fn cryptocore_decrypt(
     ciphertext_ptr: *const c_uchar,
     ciphertext_len: c_ulong,
     sender_pk_ptr: *const c_uchar,
@@ -193,7 +193,7 @@ pub extern "C" fn cryptocore_decrypt(
 }
 
 #[no_mangle]
-pub extern "C" fn cryptocore_free(buf_ptr: *mut c_uchar, buf_len: c_ulong) {
+pub unsafe extern "C" fn cryptocore_free(buf_ptr: *mut c_uchar, buf_len: c_ulong) {
     if buf_ptr.is_null() {
         return;
     }

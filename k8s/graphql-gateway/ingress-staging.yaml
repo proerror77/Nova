@@ -1,0 +1,83 @@
+---
+# Staging Ingress - 临时访问（不需要域名）
+# 用于在 ALB 配额问题解决前进行测试
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: graphql-gateway-ingress-staging
+  namespace: nova-gateway
+  annotations:
+    # Nginx Ingress Controller annotations
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/use-regex: "true"
+
+    # CORS configuration
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    nginx.ingress.kubernetes.io/cors-allow-origin: "*"
+    nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+    nginx.ingress.kubernetes.io/cors-allow-headers: "DNT,X-CustomHeader,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Authorization"
+    nginx.ingress.kubernetes.io/cors-max-age: "3600"
+    nginx.ingress.kubernetes.io/cors-allow-credentials: "true"
+
+    # Rate limiting
+    nginx.ingress.kubernetes.io/limit-rps: "100"
+    nginx.ingress.kubernetes.io/limit-burst-multiplier: "5"
+
+    # Timeouts
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+
+    # Client body size (for file uploads)
+    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
+
+    # WebSocket support
+    nginx.ingress.kubernetes.io/websocket-services: "graphql-gateway"
+
+  labels:
+    app: nova-api
+    component: ingress
+    environment: staging
+
+spec:
+  ingressClassName: nginx
+
+  rules:
+    # 不指定 host，接受所有请求
+    - http:
+        paths:
+          # GraphQL endpoint
+          - path: /graphql
+            pathType: Prefix
+            backend:
+              service:
+                name: graphql-gateway
+                port:
+                  number: 8080
+
+          # GraphQL Playground
+          - path: /playground
+            pathType: Prefix
+            backend:
+              service:
+                name: graphql-gateway
+                port:
+                  number: 8080
+
+          # Health check
+          - path: /health
+            pathType: Exact
+            backend:
+              service:
+                name: graphql-gateway
+                port:
+                  number: 8080
+
+          # WebSocket endpoint
+          - path: /ws
+            pathType: Prefix
+            backend:
+              service:
+                name: graphql-gateway
+                port:
+                  number: 8080

@@ -1,0 +1,43 @@
+---
+# Let's Encrypt Staging Issuer (用于测试)
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-staging
+spec:
+  acme:
+    # Let's Encrypt staging server
+    server: https://acme-staging-v02.api.letsencrypt.org/directory
+    email: support@nova.social
+    privateKeySecretRef:
+      name: letsencrypt-staging
+    solvers:
+    - http01:
+        ingress:
+          class: alb
+    - dns01:
+        route53:
+          region: ap-northeast-1
+
+---
+# Let's Encrypt Production Issuer (用于生产)
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+spec:
+  acme:
+    # Let's Encrypt production server
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: support@nova.social
+    privateKeySecretRef:
+      name: letsencrypt-prod
+    solvers:
+    # HTTP-01 challenge (需要公网访问 ALB)
+    - http01:
+        ingress:
+          class: alb
+    # DNS-01 challenge (通过 Route53，无需公网访问)
+    - dns01:
+        route53:
+          region: ap-northeast-1
