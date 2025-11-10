@@ -64,7 +64,7 @@ metadata:
   labels:
     app: graphql-gateway
     tier: api
-  type: Opaque
+type: Opaque
 
 data:
   # These are base64 encoded examples - replace with actual values
