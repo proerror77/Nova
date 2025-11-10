@@ -55,6 +55,9 @@ async-trait = "0.1"  # ✅ P0-5: For DataLoader trait implementations
 governor = { workspace = true }  # ✅ P0-3: Added for GraphQL Gateway rate limiting
 lru = "0.12"  # LRU cache for per-IP rate limiters
 
+# Kafka
+rdkafka = { version = "0.36", features = ["cmake-build"] }  # ✅ P0-5: For subscription event streaming
+
 [build-dependencies]
 tonic-build = "0.10"
 
