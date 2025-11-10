@@ -27,25 +27,23 @@ impl IdCountLoader {
     }
 }
 
+#[async_trait::async_trait]
 impl Loader<String> for IdCountLoader {
     type Value = i32;
     type Error = String;
 
-    fn load(&self, keys: &[String]) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<HashMap<String, Self::Value>, Self::Error>> + Send>> {
-        let keys = keys.to_vec();
-        Box::pin(async move {
-            // In production: would query database like:
-            // SELECT id, COUNT(*) as count FROM table WHERE id IN (keys) GROUP BY id
-            //
-            // For demo: simulate with enumeration
-            let counts: HashMap<String, i32> = keys
-                .into_iter()
-                .enumerate()
-                .map(|(idx, id)| (id, (idx as i32 + 1) * 10))
-                .collect();
+    async fn load(&self, keys: Vec<String>) -> Result<HashMap<String, Self::Value>, Self::Error> {
+        // In production: would query database like:
+        // SELECT id, COUNT(*) as count FROM table WHERE id IN (keys) GROUP BY id
+        //
+        // For demo: simulate with enumeration
+        let counts: HashMap<String, i32> = keys
+            .into_iter()
+            .enumerate()
+            .map(|(idx, id)| (id, (idx as i32 + 1) * 10))
+            .collect();
 
-            Ok(counts)
-        })
+        Ok(counts)
     }
 }
 
@@ -60,24 +58,22 @@ impl UserIdLoader {
     }
 }
 
+#[async_trait::async_trait]
 impl Loader<String> for UserIdLoader {
     type Value = String;
     type Error = String;
 
-    fn load(&self, keys: &[String]) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<HashMap<String, Self::Value>, Self::Error>> + Send>> {
-        let keys = keys.to_vec();
-        Box::pin(async move {
-            // In production:
-            // SELECT id, name FROM users WHERE id IN (keys)
-            //
-            // For demo: generate names
-            let users: HashMap<String, String> = keys
-                .into_iter()
-                .map(|id| (id.clone(), format!("User {}", id)))
-                .collect();
+    async fn load(&self, keys: Vec<String>) -> Result<HashMap<String, Self::Value>, Self::Error> {
+        // In production:
+        // SELECT id, name FROM users WHERE id IN (keys)
+        //
+        // For demo: generate names
+        let users: HashMap<String, String> = keys
+            .into_iter()
+            .map(|id| (id.clone(), format!("User {}", id)))
+            .collect();
 
-            Ok(users)
-        })
+        Ok(users)
     }
 }
 
@@ -92,24 +88,22 @@ impl PostIdLoader {
     }
 }
 
+#[async_trait::async_trait]
 impl Loader<String> for PostIdLoader {
     type Value = String;
     type Error = String;
 
-    fn load(&self, keys: &[String]) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<HashMap<String, Self::Value>, Self::Error>> + Send>> {
-        let keys = keys.to_vec();
-        Box::pin(async move {
-            // In production:
-            // SELECT id, content FROM posts WHERE id IN (keys)
-            //
-            // For demo: generate content
-            let posts: HashMap<String, String> = keys
-                .into_iter()
-                .map(|id| (id.clone(), format!("Post content for {}", id)))
-                .collect();
+    async fn load(&self, keys: Vec<String>) -> Result<HashMap<String, Self::Value>, Self::Error> {
+        // In production:
+        // SELECT id, content FROM posts WHERE id IN (keys)
+        //
+        // For demo: generate content
+        let posts: HashMap<String, String> = keys
+            .into_iter()
+            .map(|id| (id.clone(), format!("Post content for {}", id)))
+            .collect();
 
-            Ok(posts)
-        })
+        Ok(posts)
     }
 }
 
@@ -124,26 +118,24 @@ impl LikeCountLoader {
     }
 }
 
+#[async_trait::async_trait]
 impl Loader<String> for LikeCountLoader {
     type Value = i32;
     type Error = String;
 
-    fn load(&self, keys: &[String]) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<HashMap<String, Self::Value>, Self::Error>> + Send>> {
-        let keys = keys.to_vec();
-        Box::pin(async move {
-            // In production:
-            // SELECT post_id, COUNT(*) as like_count
-            // FROM likes WHERE post_id IN (keys) GROUP BY post_id
-            //
-            // For demo: simulate with enumeration
-            let counts: HashMap<String, i32> = keys
-                .into_iter()
-                .enumerate()
-                .map(|(idx, id)| (id, (idx as i32 + 1) * 50))
-                .collect();
+    async fn load(&self, keys: Vec<String>) -> Result<HashMap<String, Self::Value>, Self::Error> {
+        // In production:
+        // SELECT post_id, COUNT(*) as like_count
+        // FROM likes WHERE post_id IN (keys) GROUP BY post_id
+        //
+        // For demo: simulate with enumeration
+        let counts: HashMap<String, i32> = keys
+            .into_iter()
+            .enumerate()
+            .map(|(idx, id)| (id, (idx as i32 + 1) * 50))
+            .collect();
 
-            Ok(counts)
-        })
+        Ok(counts)
     }
 }
 
@@ -158,26 +150,24 @@ impl FollowCountLoader {
     }
 }
 
+#[async_trait::async_trait]
 impl Loader<String> for FollowCountLoader {
     type Value = i32;
     type Error = String;
 
-    fn load(&self, keys: &[String]) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<HashMap<String, Self::Value>, Self::Error>> + Send>> {
-        let keys = keys.to_vec();
-        Box::pin(async move {
-            // In production:
-            // SELECT user_id, COUNT(*) as follow_count
-            // FROM followers WHERE user_id IN (keys) GROUP BY user_id
-            //
-            // For demo: simulate with enumeration
-            let counts: HashMap<String, i32> = keys
-                .into_iter()
-                .enumerate()
-                .map(|(idx, id)| (id, (idx as i32 + 1) * 200))
-                .collect();
+    async fn load(&self, keys: Vec<String>) -> Result<HashMap<String, Self::Value>, Self::Error> {
+        // In production:
+        // SELECT user_id, COUNT(*) as follow_count
+        // FROM followers WHERE user_id IN (keys) GROUP BY user_id
+        //
+        // For demo: simulate with enumeration
+        let counts: HashMap<String, i32> = keys
+            .into_iter()
+            .enumerate()
+            .map(|(idx, id)| (id, (idx as i32 + 1) * 200))
+            .collect();
 
-            Ok(counts)
-        })
+        Ok(counts)
     }
 }
 
