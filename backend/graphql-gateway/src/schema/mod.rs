@@ -1,6 +1,7 @@
 //! GraphQL Schema with Federation support
 //! ✅ P0-4: Full schema implementation with subscriptions and pagination
 //! ✅ P0-5: DataLoader for N+1 query prevention
+//! ✅ P0-5: Query complexity analysis
 
 pub mod user;
 pub mod content;
@@ -8,6 +9,7 @@ pub mod auth;
 pub mod subscription;
 pub mod pagination;
 pub mod loaders;
+pub mod complexity;
 
 use async_graphql::{MergedObject, Schema, dataloader::DataLoader};
 
