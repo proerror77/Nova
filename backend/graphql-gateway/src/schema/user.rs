@@ -65,10 +65,7 @@ impl UserQuery {
             .data::<ServiceClients>()
             .map_err(|_| "Service clients not available")?;
 
-        let mut client = clients
-            .user_client()
-            .await
-            .map_err(|e| format!("Failed to connect to user service: {}", e))?;
+        let mut client = clients.user_client();
 
         let request = tonic::Request::new(crate::clients::proto::user::GetUserProfileRequest {
             user_id: id,
@@ -104,10 +101,7 @@ impl UserMutation {
             .data::<ServiceClients>()
             .map_err(|_| "Service clients not available")?;
 
-        let mut client = clients
-            .user_client()
-            .await
-            .map_err(|e| format!("Failed to connect to user service: {}", e))?;
+        let mut client = clients.user_client();
 
         // Get current user from context (would normally come from JWT token)
         let follower_id = ctx
