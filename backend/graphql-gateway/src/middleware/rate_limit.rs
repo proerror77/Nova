@@ -19,11 +19,10 @@ use actix_web::{
     Error, HttpMessage,
 };
 use futures_util::future::LocalBoxFuture;
-use governor::{Quota, RateLimiter};
+use governor::Quota;
 use std::net::IpAddr;
 use std::num::NonZeroU32;
 use std::sync::Arc;
-use tracing::{debug, warn};
 
 /// Rate limiter configuration
 #[derive(Clone, Debug)]
@@ -118,18 +117,36 @@ where
     forward_ready!(service);
 
     fn call(&self, req: ServiceRequest) -> Self::Future {
+        let start = std::time::Instant::now();
+        let method = req.method().to_string();
+        let path = req.path().to_string();
+
         // Extract IP address from request for logging
         let ip = extract_client_ip(&req);
 
         // Check rate limit
         if !(self.state.check_limit)() {
-            warn!("Rate limit exceeded for IP: {}", ip);
+            tracing::warn!(
+                ip_address = %ip,
+                method = %method,
+                path = %path,
+                error = "rate_limit_exceeded",
+                error_type = "rate_limit_error",
+                elapsed_ms = start.elapsed().as_millis() as u32,
+                "Rate limit exceeded"
+            );
             return Box::pin(async move {
                 Err(ErrorTooManyRequests("Rate limit exceeded").into())
             });
         }
 
-        debug!("Rate limit check passed for IP: {}", ip);
+        tracing::debug!(
+            ip_address = %ip,
+            method = %method,
+            path = %path,
+            elapsed_ms = start.elapsed().as_millis() as u32,
+            "Rate limit check passed"
+        );
 
         let fut = self.service.call(req);
 

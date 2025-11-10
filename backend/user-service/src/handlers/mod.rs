@@ -37,7 +37,8 @@ pub use relationships::*;
 pub use moderation::*;
 // pub use oauth::*; // REMOVED - moved to auth-service (port 8084) [DELETED]
 // pub use password_reset::*; // REMOVED - moved to auth-service (port 8084) [DELETED]
-pub use preferences::*;
+// Re-export from preferences except for block_user and unblock_user which come from relationships
+pub use preferences::{get_feed_preferences, update_feed_preferences};
 // pub use posts::*; // REMOVED - moved to content-service (port 8081) [DELETED]
 // pub use stories::*; // REMOVED - moved to content-service (port 8081) [DELETED]
 // pub use streams::*; // REMOVED - moved to streaming-service (port 8088) [DELETED]

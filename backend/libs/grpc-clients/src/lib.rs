@@ -13,6 +13,9 @@ pub mod config;
 pub mod middleware;
 pub mod pool;
 
+// Re-export connection pool for external use
+pub use pool::GrpcConnectionPool;
+
 // Re-export AuthClient for easier access
 pub use auth_client::AuthClient;
 

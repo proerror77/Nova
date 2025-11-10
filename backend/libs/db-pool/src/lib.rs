@@ -4,7 +4,9 @@
 
 mod metrics;
 
-pub use metrics::acquire_with_metrics;
+pub use metrics::{
+    acquire_with_backpressure, acquire_with_metrics, BackpressureConfig, PoolExhaustedError,
+};
 use metrics::update_pool_metrics;
 
 use sqlx::postgres::{PgPool, PgPoolOptions};
@@ -434,5 +436,52 @@ mod tests {
 
         // Log for verification
         println!("Total DB connections across 11 services: {}", total);
+    }
+
+    #[test]
+    fn test_backpressure_config_default() {
+        let config = BackpressureConfig::default();
+        assert_eq!(config.threshold, 0.85);
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn test_backpressure_config_from_env() {
+        // Test default
+        std::env::remove_var("DB_POOL_BACKPRESSURE_THRESHOLD");
+        let config = BackpressureConfig::from_env();
+        assert_eq!(config.threshold, 0.85);
+
+        // Test custom threshold
+        std::env::set_var("DB_POOL_BACKPRESSURE_THRESHOLD", "0.90");
+        let config = BackpressureConfig::from_env();
+        assert_eq!(config.threshold, 0.90);
+
+        // Test invalid threshold (should use default)
+        std::env::set_var("DB_POOL_BACKPRESSURE_THRESHOLD", "1.5");
+        let config = BackpressureConfig::from_env();
+        assert_eq!(config.threshold, 0.85);
+
+        // Test invalid threshold (should use default)
+        std::env::set_var("DB_POOL_BACKPRESSURE_THRESHOLD", "invalid");
+        let config = BackpressureConfig::from_env();
+        assert_eq!(config.threshold, 0.85);
+
+        // Clean up
+        std::env::remove_var("DB_POOL_BACKPRESSURE_THRESHOLD");
+    }
+
+    #[test]
+    fn test_pool_exhausted_error_display() {
+        let error = PoolExhaustedError {
+            service: "test-service".to_string(),
+            utilization: 0.92,
+            threshold: 0.85,
+        };
+
+        let msg = error.to_string();
+        assert!(msg.contains("test-service"));
+        assert!(msg.contains("92.00%"));
+        assert!(msg.contains("85.00%"));
     }
 }
