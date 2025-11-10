@@ -19,7 +19,9 @@ COPY backend/ ./backend/
 
 # Build GraphQL Gateway
 WORKDIR /app/backend/graphql-gateway
-RUN cargo build --release && ls -lah target/release/
+RUN cargo build --release
+RUN ls -lah /app/backend/graphql-gateway/target/release/ || echo "Directory not found, checking /app..."
+RUN find /app -name "graphql-gateway" -type f 2>/dev/null || echo "Binary not found"
 
 # Runtime stage
 FROM debian:bookworm-slim
