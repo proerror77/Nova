@@ -6,7 +6,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 use crate::clients::ServiceClients;
-use crate::middleware::check_user_authorization;
+use crate::middleware::{check_user_authorization, get_authenticated_user_id};
 use crate::schema::pagination::{Connection, PaginationArgs};
 
 #[derive(SimpleObject, Clone, Debug, Serialize, Deserialize)]
@@ -196,11 +196,8 @@ impl ContentMutation {
         let mut client = clients.content_client();
 
         // Get current user from context (from JWT token)
-        let current_user_id = ctx
-            .data::<String>()
-            .ok()
-            .cloned()
-            .ok_or("Unauthorized: user not authenticated")?;
+        let current_user_id = get_authenticated_user_id(ctx)
+            .map_err(|e| async_graphql::Error::new(e))?;
 
         // Step 1: Get post to verify ownership
         let get_req = tonic::Request::new(crate::clients::proto::content::GetPostRequest {
@@ -218,13 +215,17 @@ impl ContentMutation {
             .ok_or("Post not found")?;
 
         // Step 2: Check authorization - user must be post owner
-        check_user_authorization(ctx, &post.creator_id, "delete")
+        // Parse creator_id as UUID
+        let creator_uuid = uuid::Uuid::parse_str(&post.creator_id)
+            .map_err(|_| async_graphql::Error::new("Invalid post creator ID format"))?;
+
+        check_user_authorization(ctx, creator_uuid, "delete")
             .map_err(|e| async_graphql::Error::new(e))?;
 
         // Step 3: Proceed with deletion
         let del_req = tonic::Request::new(crate::clients::proto::content::DeletePostRequest {
             post_id: id,
-            deleted_by_id: current_user_id,
+            deleted_by_id: current_user_id.to_string(),
         });
 
         client
