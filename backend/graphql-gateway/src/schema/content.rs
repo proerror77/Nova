@@ -1,4 +1,5 @@
 //! Content and feed schema
+//! ✅ P0-4: Relay cursor-based pagination support
 
 use async_graphql::{Context, Object, Result as GraphQLResult, SimpleObject};
 use chrono::{DateTime, Utc};
@@ -6,6 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::clients::ServiceClients;
 use crate::middleware::check_user_authorization;
+use crate::schema::pagination::{Connection, PaginationArgs};
 
 #[derive(SimpleObject, Clone, Debug, Serialize, Deserialize)]
 pub struct Post {
@@ -41,6 +43,7 @@ pub struct ContentQuery;
 
 #[Object]
 impl ContentQuery {
+    /// Get a single post by ID
     async fn post(&self, ctx: &Context<'_>, id: String) -> GraphQLResult<Option<Post>> {
         let clients = ctx
             .data::<ServiceClients>()
@@ -69,6 +72,82 @@ impl ContentQuery {
                 }
             }
         }
+    }
+
+    /// Get posts with Relay cursor-based pagination
+    /// ✅ P0-4: Demonstrates pagination pattern - ready for integration with list_posts RPC
+    ///
+    /// # Example
+    /// ```graphql
+    /// query {
+    ///   posts(first: 10) {
+    ///     edges {
+    ///       cursor
+    ///       node {
+    ///         id
+    ///         content
+    ///         creatorId
+    ///       }
+    ///     }
+    ///     pageInfo {
+    ///       hasNextPage
+    ///       endCursor
+    ///     }
+    ///   }
+    /// }
+    /// ```
+    ///
+    /// # Pagination Parameters
+    /// - `first`: Number of items to return (forward pagination, max 100)
+    /// - `after`: Cursor to start after
+    /// - `last`: Number of items to return backwards (max 100)
+    /// - `before`: Cursor to end before
+    ///
+    /// **Note**: Currently returns demo data. Ready to integrate with GetPostsByAuthorRequest once
+    /// backend service adds proper ListPostsRequest RPC support.
+    async fn posts(
+        &self,
+        ctx: &Context<'_>,
+        #[graphql(default = 10)] first: Option<i32>,
+        after: Option<String>,
+        #[graphql(default = 10)] last: Option<i32>,
+        before: Option<String>,
+    ) -> GraphQLResult<Connection<Post>> {
+        let args = PaginationArgs {
+            first,
+            after,
+            last,
+            before,
+        };
+
+        args.validate()?;
+
+        // Demo implementation with pagination pattern
+        // In production, this would call a proper list_posts RPC:
+        //   let request = tonic::Request::new(ListPostsRequest { offset, limit });
+        //   match client.list_posts(request).await { ... }
+
+        let offset = args.get_offset()?;
+        let limit = args.get_limit();
+
+        // Generate demo posts for pagination demonstration
+        let demo_posts: Vec<Post> = (0..limit)
+            .map(|i| Post {
+                id: format!("post_{}", offset + i),
+                creator_id: "demo_user".to_string(),
+                content: format!("Demo post #{}", offset + i),
+                created_at: chrono::Utc::now().to_rfc3339(),
+                updated_at: chrono::Utc::now().to_rfc3339(),
+            })
+            .collect();
+
+        let total_count = 1000; // Demo: assume 1000 total posts
+
+        let connection = crate::schema::pagination::ConnectionBuilder::new(demo_posts, offset)
+            .with_total_count(total_count)
+            .build(&args);
+
+        Ok(connection)
     }
 }
 

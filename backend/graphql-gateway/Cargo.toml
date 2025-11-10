@@ -48,6 +48,11 @@ md5 = "0.7"
 chrono = { workspace = true }
 num_cpus = "1.16"
 futures-util = "0.3"
+base64 = "0.22"
+
+# Rate limiting
+governor = { workspace = true }  # ✅ P0-3: Added for GraphQL Gateway rate limiting
+lru = "0.12"  # LRU cache for per-IP rate limiters
 
 [build-dependencies]
 tonic-build = "0.10"

@@ -1,10 +1,13 @@
 //! GraphQL Schema with Federation support
+//! ✅ P0-4: Full schema implementation with subscriptions and pagination
 
 pub mod user;
 pub mod content;
 pub mod auth;
+pub mod subscription;
+pub mod pagination;
 
-use async_graphql::{EmptySubscription, MergedObject, Schema};
+use async_graphql::{MergedObject, Schema};
 
 use crate::clients::ServiceClients;
 
@@ -16,15 +19,15 @@ pub struct QueryRoot(user::UserQuery, content::ContentQuery, auth::AuthQuery);
 #[derive(MergedObject, Default)]
 pub struct MutationRoot(user::UserMutation, content::ContentMutation, auth::AuthMutation);
 
-/// GraphQL App Schema type
-pub type AppSchema = Schema<QueryRoot, MutationRoot, EmptySubscription>;
+/// GraphQL App Schema type with WebSocket subscriptions
+pub type AppSchema = Schema<QueryRoot, MutationRoot, subscription::SubscriptionRoot>;
 
-/// Build federated GraphQL schema
+/// Build federated GraphQL schema with subscriptions
 pub fn build_schema(clients: ServiceClients) -> AppSchema {
     Schema::build(
         QueryRoot::default(),
         MutationRoot::default(),
-        EmptySubscription,
+        subscription::SubscriptionRoot::default(),
     )
     .data(clients)
     .enable_federation()
