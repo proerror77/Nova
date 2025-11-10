@@ -1,5 +1,5 @@
 # Multi-stage build for GraphQL Gateway
-FROM rust:1.75-slim as builder
+FROM rust:latest as builder
 
 # Install build dependencies
 RUN apt-get update && \
