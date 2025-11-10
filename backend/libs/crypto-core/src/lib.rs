@@ -113,6 +113,14 @@ pub mod kafka_correlation;
 // C FFI (for iOS xcframework)
 // =============================
 
+/// Generates a random 24-byte nonce for encryption.
+///
+/// # Safety
+///
+/// - `out_buf` must be a valid pointer to a writable buffer
+/// - `out_len` must be at least 24 bytes
+/// - The buffer at `out_buf` must remain valid for the duration of this call
+/// - Returns 24 on success, 0 on invalid input
 #[no_mangle]
 pub extern "C" fn cryptocore_generate_nonce(out_buf: *mut c_uchar, out_len: c_ulong) -> c_ulong {
     let len = out_len as usize;
@@ -120,12 +128,22 @@ pub extern "C" fn cryptocore_generate_nonce(out_buf: *mut c_uchar, out_len: c_ul
         return 0;
     }
     let nonce = generate_nonce();
-    unsafe {
-        ptr::copy_nonoverlapping(nonce.as_ptr(), out_buf, 24);
-    }
+    ptr::copy_nonoverlapping(nonce.as_ptr(), out_buf, 24);
     24
 }
 
+/// Encrypts plaintext using Curve25519XSalsa20Poly1305 (NaCl box).
+///
+/// # Safety
+///
+/// - All pointer parameters must be valid and non-null
+/// - `plaintext_ptr` must point to a readable buffer of `plaintext_len` bytes
+/// - `recipient_pk_ptr` must point to a 32-byte public key
+/// - `sender_sk_ptr` must point to a 32-byte secret key
+/// - `nonce_ptr` must point to a 24-byte nonce
+/// - `out_len_ptr` must be a valid pointer to write the ciphertext length
+/// - Returns a pointer to the ciphertext (caller must free with `cryptocore_free`)
+/// - Returns null on encryption failure
 #[no_mangle]
 pub extern "C" fn cryptocore_encrypt(
     plaintext_ptr: *const c_uchar,
@@ -138,18 +156,16 @@ pub extern "C" fn cryptocore_encrypt(
     nonce_len: c_ulong,
     out_len_ptr: *mut c_ulong,
 ) -> *mut c_uchar {
-    let pt = unsafe { slice::from_raw_parts(plaintext_ptr, plaintext_len as usize) };
-    let rpk = unsafe { slice::from_raw_parts(recipient_pk_ptr, recipient_pk_len as usize) };
-    let ssk = unsafe { slice::from_raw_parts(sender_sk_ptr, sender_sk_len as usize) };
-    let nonce = unsafe { slice::from_raw_parts(nonce_ptr, nonce_len as usize) };
+    let pt = slice::from_raw_parts(plaintext_ptr, plaintext_len as usize);
+    let rpk = slice::from_raw_parts(recipient_pk_ptr, recipient_pk_len as usize);
+    let ssk = slice::from_raw_parts(sender_sk_ptr, sender_sk_len as usize);
+    let nonce = slice::from_raw_parts(nonce_ptr, nonce_len as usize);
     match encrypt(pt, rpk, ssk, nonce) {
         Ok(ct) => {
             let mut v = ct;
             let len = v.len() as c_ulong;
-            unsafe {
-                if !out_len_ptr.is_null() {
-                    *out_len_ptr = len;
-                }
+            if !out_len_ptr.is_null() {
+                *out_len_ptr = len;
             }
             let ptr = v.as_mut_ptr();
             std::mem::forget(v);
@@ -159,6 +175,18 @@ pub extern "C" fn cryptocore_encrypt(
     }
 }
 
+/// Decrypts ciphertext using Curve25519XSalsa20Poly1305 (NaCl box).
+///
+/// # Safety
+///
+/// - All pointer parameters must be valid and non-null
+/// - `ciphertext_ptr` must point to a readable buffer of `ciphertext_len` bytes
+/// - `sender_pk_ptr` must point to a 32-byte public key
+/// - `recipient_sk_ptr` must point to a 32-byte secret key
+/// - `nonce_ptr` must point to a 24-byte nonce (same nonce used for encryption)
+/// - `out_len_ptr` must be a valid pointer to write the plaintext length
+/// - Returns a pointer to the plaintext (caller must free with `cryptocore_free`)
+/// - Returns null on decryption failure (invalid ciphertext, wrong keys, or tampered data)
 #[no_mangle]
 pub extern "C" fn cryptocore_decrypt(
     ciphertext_ptr: *const c_uchar,
@@ -171,18 +199,16 @@ pub extern "C" fn cryptocore_decrypt(
     nonce_len: c_ulong,
     out_len_ptr: *mut c_ulong,
 ) -> *mut c_uchar {
-    let ct = unsafe { slice::from_raw_parts(ciphertext_ptr, ciphertext_len as usize) };
-    let spk = unsafe { slice::from_raw_parts(sender_pk_ptr, sender_pk_len as usize) };
-    let rsk = unsafe { slice::from_raw_parts(recipient_sk_ptr, recipient_sk_len as usize) };
-    let nonce = unsafe { slice::from_raw_parts(nonce_ptr, nonce_len as usize) };
+    let ct = slice::from_raw_parts(ciphertext_ptr, ciphertext_len as usize);
+    let spk = slice::from_raw_parts(sender_pk_ptr, sender_pk_len as usize);
+    let rsk = slice::from_raw_parts(recipient_sk_ptr, recipient_sk_len as usize);
+    let nonce = slice::from_raw_parts(nonce_ptr, nonce_len as usize);
     match decrypt(ct, spk, rsk, nonce) {
         Ok(pt) => {
             let mut v = pt;
             let len = v.len() as c_ulong;
-            unsafe {
-                if !out_len_ptr.is_null() {
-                    *out_len_ptr = len;
-                }
+            if !out_len_ptr.is_null() {
+                *out_len_ptr = len;
             }
             let ptr = v.as_mut_ptr();
             std::mem::forget(v);
@@ -192,12 +218,19 @@ pub extern "C" fn cryptocore_decrypt(
     }
 }
 
+/// Frees memory allocated by `cryptocore_encrypt` or `cryptocore_decrypt`.
+///
+/// # Safety
+///
+/// - `buf_ptr` must be a pointer returned by `cryptocore_encrypt` or `cryptocore_decrypt`
+/// - `buf_len` must be the length value written to `out_len_ptr` by those functions
+/// - The pointer must not have been freed already
+/// - The pointer must not be used after calling this function (use-after-free)
+/// - Calling this function with an invalid pointer or incorrect length is undefined behavior
 #[no_mangle]
 pub extern "C" fn cryptocore_free(buf_ptr: *mut c_uchar, buf_len: c_ulong) {
     if buf_ptr.is_null() {
         return;
     }
-    unsafe {
-        let _ = Vec::from_raw_parts(buf_ptr, buf_len as usize, buf_len as usize);
-    }
+    let _ = Vec::from_raw_parts(buf_ptr, buf_len as usize, buf_len as usize);
 }
