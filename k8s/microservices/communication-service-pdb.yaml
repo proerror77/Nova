@@ -1,0 +1,14 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: communication-service-pdb
+  namespace: nova
+  labels:
+    app: communication-service
+    version: v2
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: communication-service
+  maxUnavailable: 1

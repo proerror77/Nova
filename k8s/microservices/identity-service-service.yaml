@@ -1,0 +1,48 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: identity-service
+  namespace: nova
+  labels:
+    app: identity-service
+    version: v2
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8080"
+    prometheus.io/path: "/metrics"
+spec:
+  type: ClusterIP
+  selector:
+    app: identity-service
+  ports:
+    # REST API port
+    - name: http
+      port: 8080
+      targetPort: 8080
+      protocol: TCP
+    # gRPC port (HTTP/2)
+    - name: grpc
+      port: 50051
+      targetPort: 50051
+      protocol: TCP
+  sessionAffinity: None
+---
+# Headless service for gRPC load balancing
+apiVersion: v1
+kind: Service
+metadata:
+  name: identity-service-headless
+  namespace: nova
+  labels:
+    app: identity-service
+    version: v2
+spec:
+  type: ClusterIP
+  clusterIP: None  # Headless service for gRPC client-side load balancing
+  selector:
+    app: identity-service
+  ports:
+    - name: grpc
+      port: 50051
+      targetPort: 50051
+      protocol: TCP

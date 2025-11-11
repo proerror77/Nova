@@ -1,0 +1,118 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: identity-service-network-policy
+  namespace: nova
+  labels:
+    app: identity-service
+    version: v2
+spec:
+  podSelector:
+    matchLabels:
+      app: identity-service
+
+  # Policy types: Ingress and Egress
+  policyTypes:
+  - Ingress
+  - Egress
+
+  # Ingress rules: Allow traffic FROM
+  ingress:
+  # Allow from GraphQL Gateway
+  - from:
+    - podSelector:
+        matchLabels:
+          app: graphql-gateway
+    ports:
+    - protocol: TCP
+      port: 8080  # REST API
+    - protocol: TCP
+      port: 50051  # gRPC
+
+  # Allow from Ingress Controller
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: 8080
+
+  # Allow from other V2 services (gRPC inter-service communication)
+  - from:
+    - podSelector:
+        matchLabels:
+          tier: backend
+    ports:
+    - protocol: TCP
+      port: 50051  # gRPC port
+
+  # Allow from prometheus (metrics scraping)
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: prometheus
+    ports:
+    - protocol: TCP
+      port: 8080
+
+  # Egress rules: Allow traffic TO
+  egress:
+  # Allow DNS for service discovery
+  - to:
+    - namespaceSelector: {}
+    ports:
+    - protocol: UDP
+      port: 53
+
+  # Allow to PostgreSQL database
+  - to:
+    - podSelector:
+        matchLabels:
+          app: postgres
+    ports:
+    - protocol: TCP
+      port: 5432
+
+  # Allow to Redis
+  - to:
+    - podSelector:
+        matchLabels:
+          app: redis
+    ports:
+    - protocol: TCP
+      port: 6379
+
+  # Allow to Kafka brokers
+  - to:
+    - podSelector:
+        matchLabels:
+          app: kafka
+    ports:
+    - protocol: TCP
+      port: 9092
+
+  # Allow to events-service for outbox pattern
+  - to:
+    - podSelector:
+        matchLabels:
+          app: events-service
+    ports:
+    - protocol: TCP
+      port: 50058
+
+  # Allow egress to HTTPS for external OAuth providers
+  - to:
+    - namespaceSelector: {}
+    ports:
+    - protocol: TCP
+      port: 443
+
+  # Allow to SMTP relay for email
+  - to:
+    - podSelector:
+        matchLabels:
+          app: smtp-relay
+    ports:
+    - protocol: TCP
+      port: 587

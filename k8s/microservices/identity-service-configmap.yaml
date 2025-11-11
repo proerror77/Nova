@@ -1,0 +1,75 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: identity-service-configmap
+  namespace: nova
+  labels:
+    app: identity-service
+    version: v2
+data:
+  # Redis configuration (internal cluster service)
+  redis-url: "redis://redis-cluster:6379"
+
+  # Kafka brokers for event streaming
+  kafka-brokers: "kafka-broker-0.kafka-headless.kafka:9092,kafka-broker-1.kafka-headless.kafka:9092,kafka-broker-2.kafka-headless.kafka:9092"
+
+  # Logging level
+  log-level: "info"
+
+  # gRPC configuration
+  grpc-port: "50051"
+  grpc-max-concurrent-streams: "1000"
+  grpc-keepalive-interval: "30s"
+  grpc-keepalive-timeout: "10s"
+
+  # Database connection pool settings (PgBouncer aware)
+  db-pool-min: "5"
+  db-pool-max: "12"  # Lower than V1 due to PgBouncer transaction pooling
+  db-acquire-timeout: "10s"
+  db-idle-timeout: "300s"
+  db-max-lifetime: "1800s"
+
+  # JWT configuration
+  jwt-algorithm: "RS256"
+  jwt-access-token-expiry: "900"    # 15 minutes
+  jwt-refresh-token-expiry: "604800" # 7 days
+
+  # Rate limiting configuration
+  rate-limit-window: "1m"
+  rate-limit-max-requests: "1000"
+
+  # Session configuration
+  session-timeout: "3600" # 1 hour
+  session-cleanup-interval: "3600"
+
+  # 2FA configuration
+  totp-window-size: "1"
+  totp-time-step: "30"
+
+  # OAuth configuration
+  oauth-state-expiry: "600" # 10 minutes
+
+  # Outbox pattern configuration (V2)
+  outbox-poll-interval: "5000" # milliseconds
+  outbox-batch-size: "100"
+  outbox-max-retries: "3"
+  outbox-retry-backoff: "1000" # milliseconds
+
+  # Circuit breaker configuration (V2)
+  circuit-breaker-failure-threshold: "5"
+  circuit-breaker-success-threshold: "2"
+  circuit-breaker-timeout: "60s"
+
+  # Timeout configuration (V2)
+  db-timeout: "5s"
+  redis-timeout: "2s"
+  kafka-timeout: "10s"
+
+  # Security configuration
+  max-login-attempts: "5"
+  lockout-duration-minutes: "30"
+  password-min-length: "8"
+  password-require-uppercase: "true"
+  password-require-lowercase: "true"
+  password-require-digits: "true"
+  password-require-special: "true"

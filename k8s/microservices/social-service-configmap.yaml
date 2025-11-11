@@ -1,0 +1,64 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: social-service-configmap
+  namespace: nova
+  labels:
+    app: social-service
+    version: v2
+data:
+  # Redis configuration
+  redis-url: "redis://redis-cluster:6379"
+
+  # Kafka brokers for event streaming
+  kafka-brokers: "kafka-broker-0.kafka-headless.kafka:9092,kafka-broker-1.kafka-headless.kafka:9092,kafka-broker-2.kafka-headless.kafka:9092"
+
+  # Logging level
+  log-level: "info"
+
+  # gRPC configuration
+  grpc-port: "50052"
+  grpc-max-concurrent-streams: "1000"
+  grpc-keepalive-interval: "30s"
+  grpc-keepalive-timeout: "10s"
+
+  # Database connection pool settings (PgBouncer aware)
+  db-pool-min: "5"
+  db-pool-max: "12"
+  db-acquire-timeout: "10s"
+  db-idle-timeout: "300s"
+  db-max-lifetime: "1800s"
+
+  # Rate limiting configuration
+  rate-limit-window: "1m"
+  rate-limit-max-requests: "2000"
+
+  # Feed configuration
+  feed-page-size: "20"
+  feed-max-pages: "100"
+  feed-cache-ttl: "300"  # 5 minutes
+
+  # Social graph configuration
+  max-follows-per-user: "5000"
+  max-followers-per-user: "1000000"
+
+  # Outbox pattern configuration
+  outbox-poll-interval: "5000"
+  outbox-batch-size: "100"
+  outbox-max-retries: "3"
+  outbox-retry-backoff: "1000"
+
+  # Circuit breaker configuration
+  circuit-breaker-failure-threshold: "5"
+  circuit-breaker-success-threshold: "2"
+  circuit-breaker-timeout: "60s"
+
+  # Timeout configuration
+  db-timeout: "5s"
+  redis-timeout: "2s"
+  kafka-timeout: "10s"
+
+  # Cache configuration
+  cache-feed-ttl: "300"
+  cache-social-graph-ttl: "600"
+  cache-likes-ttl: "60"
