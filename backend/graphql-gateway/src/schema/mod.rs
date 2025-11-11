@@ -1,10 +1,18 @@
 //! GraphQL Schema with Federation support
+//! ✅ P0-4: Full schema implementation with subscriptions and pagination
+//! ✅ P0-5: DataLoader for N+1 query prevention
+//! ✅ P0-5: Query complexity analysis
 
 pub mod user;
 pub mod content;
 pub mod auth;
+pub mod subscription;
+pub mod pagination;
+pub mod loaders;
+pub mod complexity;
+pub mod backpressure;
 
-use async_graphql::{EmptySubscription, MergedObject, Schema};
+use async_graphql::{MergedObject, Schema, dataloader::DataLoader};
 
 use crate::clients::ServiceClients;
 
@@ -16,17 +24,25 @@ pub struct QueryRoot(user::UserQuery, content::ContentQuery, auth::AuthQuery);
 #[derive(MergedObject, Default)]
 pub struct MutationRoot(user::UserMutation, content::ContentMutation, auth::AuthMutation);
 
-/// GraphQL App Schema type
-pub type AppSchema = Schema<QueryRoot, MutationRoot, EmptySubscription>;
+/// GraphQL App Schema type with WebSocket subscriptions
+pub type AppSchema = Schema<QueryRoot, MutationRoot, subscription::SubscriptionRoot>;
 
-/// Build federated GraphQL schema
+/// Build federated GraphQL schema with subscriptions and DataLoaders
+/// ✅ P0-5: DataLoaders prevent N+1 queries by batching database loads
 pub fn build_schema(clients: ServiceClients) -> AppSchema {
     Schema::build(
         QueryRoot::default(),
         MutationRoot::default(),
-        EmptySubscription,
+        subscription::SubscriptionRoot::default(),
     )
     .data(clients)
+    // ✅ P0-5: Add DataLoaders for batch loading
+    // DataLoaders prevent N+1 queries by batching database requests
+    .data(DataLoader::new(loaders::UserIdLoader::new(), tokio::task::spawn))
+    .data(DataLoader::new(loaders::PostIdLoader::new(), tokio::task::spawn))
+    .data(DataLoader::new(loaders::IdCountLoader::new(), tokio::task::spawn))
+    .data(DataLoader::new(loaders::LikeCountLoader::new(), tokio::task::spawn))
+    .data(DataLoader::new(loaders::FollowCountLoader::new(), tokio::task::spawn))
     .enable_federation()
     .finish()
 }

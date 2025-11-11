@@ -8,6 +8,11 @@ on:
       - '.gitignore'
       - 'docs/**'
 
+# Prevent multiple reviews for the same PR
+concurrency:
+  group: ai-review-${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
   pull-requests: write
@@ -75,7 +80,7 @@ jobs:
           findings = []
           high_risk_patterns = [
               (r'\.unwrap\(\)', 'unwrap() in code - may panic'),
-              (r'password|secret|key.*=.*["\'']', 'Possible credential in code'),
+              (r"password|secret|key.*=.*[\"']", 'Possible credential in code'),
               (r'println!.*secret|println!.*password', 'Logging sensitive data'),
               (r'eval\(|exec\(|system\(', 'Dynamic code execution'),
           ]
@@ -287,6 +292,9 @@ jobs:
     needs: [claude-security-review, claude-code-review]
     if: always()
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
       - name: Check all reviews passed
         run: |
           if [ "${{ needs.claude-security-review.result }}" = "failure" ]; then

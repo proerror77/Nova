@@ -9,9 +9,15 @@ on:
     # Run nightly to catch integration issues
     - cron: '0 2 * * *'
 
+# Prevent multiple runs for the same branch/PR
+concurrency:
+  group: integration-tests-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   integration-tests:
     runs-on: ubuntu-latest
+    timeout-minutes: 30  # Prevent workflows from hanging indefinitely
 
     services:
       postgres:
@@ -64,28 +70,44 @@ jobs:
           key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Wait for Postgres to be ready
+        timeout-minutes: 2
         run: |
-          until pg_isready -h localhost -p 5432; do
-            echo 'waiting for postgres...'
-            sleep 1
+          for i in {1..60}; do
+            if pg_isready -h localhost -p 5432; then
+              echo "Postgres is ready!"
+              exit 0
+            fi
+            echo "Waiting for postgres... ($i/60)"
+            sleep 2
           done
+          echo "Postgres failed to become ready"
+          exit 1
         env:
           PGPASSWORD: nova_password
 
       - name: Wait for Redis to be ready
+        timeout-minutes: 2
         run: |
-          until redis-cli -h localhost ping; do
-            echo 'waiting for redis...'
-            sleep 1
+          for i in {1..60}; do
+            if redis-cli -h localhost ping; then
+              echo "Redis is ready!"
+              exit 0
+            fi
+            echo "Waiting for redis... ($i/60)"
+            sleep 2
           done
+          echo "Redis failed to become ready"
+          exit 1
 
       - name: Run integration tests for auth-service
+        timeout-minutes: 10
         run: cargo test --manifest-path backend/auth-service/Cargo.toml --test grpc_integration_tests -- --nocapture --test-threads=1
         env:
           DATABASE_URL: postgresql://nova:nova_password@localhost:5432/postgres
           REDIS_URL: redis://localhost:6379
 
       - name: Run integration tests for user-service
+        timeout-minutes: 10
         run: cargo test --manifest-path backend/user-service/Cargo.toml --test neo4j_suggest_tests -- --nocapture --test-threads=1
         env:
           DATABASE_URL: postgresql://nova:nova_password@localhost:5432/postgres
@@ -95,6 +117,7 @@ jobs:
         run: 'echo "Note: content-service gRPC tests require running services. Use docker-compose.dev.yml locally."'
 
       - name: Generate coverage report
+        timeout-minutes: 10
         run: |
           cargo tarpaulin --manifest-path Cargo.toml \
             --timeout 300 \

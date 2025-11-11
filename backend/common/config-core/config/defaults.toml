@@ -1,0 +1,110 @@
+# Default configuration for Nova services
+# These values are used as defaults and can be overridden by:
+# 1. Service-specific configuration files
+# 2. Environment-specific files (e.g., config.production.toml)
+# 3. Environment variables (NOVA_* prefix)
+
+app_name = "nova-service"
+app_version = "1.0.0"
+environment = "development"
+
+[http]
+host = "0.0.0.0"
+port = 8080
+request_timeout_secs = 30
+keepalive_timeout_secs = 75
+max_body_size = 10485760 # 10MB
+workers = 0 # 0 = number of CPU cores
+enable_compression = true
+
+[http.cors]
+enabled = false
+allowed_origins = []
+allowed_methods = ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+allowed_headers = ["Content-Type", "Authorization", "Accept"]
+exposed_headers = []
+allow_credentials = false
+max_age_secs = 3600
+
+[grpc]
+host = "0.0.0.0"
+port = 50051
+max_message_size = 4194304 # 4MB
+connection_idle_timeout_secs = 300
+max_connection_age_secs = 3600
+keepalive_interval_secs = 60
+keepalive_timeout_secs = 20
+enable_reflection = false
+enable_health_service = true
+
+[grpc.rate_limit]
+enabled = false
+requests_per_second = 1000
+burst_size = 100
+
+[security.jwt]
+algorithm = "RS256"
+public_key = ""
+private_key = ""
+expiry_secs = 3600 # 1 hour
+refresh_expiry_secs = 604800 # 7 days
+issuer = "nova-auth"
+audience = "nova-api"
+leeway_secs = 60
+
+[security.rate_limiting]
+enabled = true
+global_limit = 10000
+per_ip_limit = 100
+per_user_limit = 1000
+burst_multiplier = 10
+window_secs = 60
+whitelist_ips = []
+
+[security.encryption]
+kdf_iterations = 100000
+algorithm = "AES_256_GCM"
+
+[observability.logging]
+level = "info"
+format = "json"
+output = "stdout"
+enable_colors = false
+include_location = true
+include_thread_ids = false
+include_thread_names = false
+
+[observability.logging.fields]
+service_name = true
+service_version = true
+environment = true
+instance_id = true
+hostname = false
+
+[observability.metrics]
+enabled = true
+export_interval_secs = 10
+histogram_buckets = [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0]
+runtime_metrics = true
+
+[observability.metrics.exporter]
+prometheus = { port = 9090, path = "/metrics" }
+
+[observability.tracing]
+enabled = false
+
+[observability.tracing.sampling]
+strategy = "probabilistic"
+rate = 0.1
+parent_based = true
+
+[observability.tracing.propagation]
+format = "w3c"
+
+[observability.health]
+enabled = true
+path = "/health"
+readiness_path = "/ready"
+liveness_path = "/live"
+include_details = false
+timeout_secs = 5

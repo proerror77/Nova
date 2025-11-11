@@ -73,7 +73,7 @@ impl EventDeduplicator {
     ///
     /// # Returns
     /// * `Result<bool>` - true if this is the first time marking (success),
-    ///                    false if already marked (race condition)
+    ///   false if already marked (race condition)
     ///
     /// # Note
     /// Uses SET NX (set if not exists) for atomic operation.

@@ -14,6 +14,7 @@ jobs:
   build-and-push:
     name: Build and Push User Service Docker Image
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     steps:
       - name: Checkout code
@@ -77,6 +78,7 @@ jobs:
   deploy:
     name: Deploy to EKS
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     needs: build-and-push
     if: github.ref == 'refs/heads/feature/phase1-grpc-migration'
 
@@ -133,6 +135,7 @@ jobs:
   notify:
     name: Notify Status
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     needs: [deploy]
     if: always()
 

@@ -22,6 +22,7 @@ jobs:
   smoke-test:
     name: Run Staging Smoke Tests
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     if: >
       (github.event_name != 'workflow_run') ||
       (github.event.workflow_run.conclusion == 'success')

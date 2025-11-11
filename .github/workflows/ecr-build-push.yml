@@ -8,6 +8,11 @@ on:
       - 'backend/**'
       - '.github/workflows/ecr-build-push.yml'
 
+
+# Prevent concurrent ECR builds
+concurrency:
+  group: ecr-build-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 env:
   AWS_REGION: ap-northeast-1
   ECR_REGISTRY: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com
@@ -33,6 +38,9 @@ jobs:
           - search-service
           - streaming-service
           - graphql-gateway
+          - notification-service
+          - events-service
+          - cdn-service
       max-parallel: 2
 
     steps:
@@ -128,7 +136,7 @@ jobs:
       - name: Verify all images in ECR
         run: |
           echo "Verifying all service images in ECR..."
-          for service in auth-service user-service content-service feed-service media-service messaging-service search-service streaming-service graphql-gateway; do
+          for service in auth-service user-service content-service feed-service media-service messaging-service search-service streaming-service graphql-gateway notification-service events-service cdn-service; do
             IMAGE="${{ env.ECR_REGISTRY }}/${{ env.REGISTRY_ALIAS }}/$service:${{ github.ref_name }}-${{ github.sha }}"
             if aws ecr describe-images --repository-name "${{ env.REGISTRY_ALIAS }}/$service" --region ${{ env.AWS_REGION }} --query "imageDetails[?contains(imageTags, '${{ github.ref_name }}-${{ github.sha }}')]" | grep -q "."; then
               echo "OK: $service image found in ECR"

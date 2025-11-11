@@ -1,0 +1,48 @@
+[package]
+name = "error-types"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# Core error handling
+thiserror = "1.0"
+anyhow = "1.0"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# gRPC support
+tonic = "0.12"
+
+# HTTP error codes
+http = "1.0"
+
+# Validation
+validator = { version = "0.18", features = ["derive"] }
+regex = "1.10"  # For email validation
+
+# Async
+async-trait = "0.1"
+
+# Tracing
+tracing = "0.2"
+
+# UUID support
+uuid = { version = "1.10", features = ["v4", "serde"] }
+
+# Time
+chrono = { version = "0.4", features = ["serde"] }
+
+[features]
+default = []
+# Optional sqlx integration
+sqlx = ["dep:sqlx"]
+
+[dependencies.sqlx]
+version = "0.8"
+optional = true
+features = ["runtime-tokio", "postgres", "uuid", "chrono"]
+
+[dev-dependencies]
+tokio = { version = "1.40", features = ["full"] }

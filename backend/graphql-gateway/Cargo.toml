@@ -10,7 +10,7 @@ anyhow = { workspace = true }
 thiserror = { workspace = true }
 
 # GraphQL
-async-graphql = { version = "7.0", features = ["dataloader"] }
+async-graphql = { version = "7.0", features = ["dataloader", "boxed-trait"] }
 async-graphql-actix-web = "7.0"
 
 # Web framework
@@ -39,11 +39,32 @@ db-pool = { path = "../libs/db-pool" }
 
 # Authentication
 jsonwebtoken = "9.3"
+crypto-core = { path = "../libs/crypto-core" }
+uuid = { workspace = true }
+
+# Caching
+redis = { version = "0.25", features = ["aio", "tokio-comp", "connection-manager"] }
+md5 = "0.7"
+dashmap = "6.1"  # ✅ Quick Win #5: Concurrent in-memory cache for GraphQL queries
+bytes = "1.9"    # ✅ Quick Win #5: Zero-copy buffer for cached responses
 
 # Utilities
 chrono = { workspace = true }
 num_cpus = "1.16"
 futures-util = "0.3"
+base64 = "0.22"
+async-trait = "0.1"  # ✅ P0-5: For DataLoader trait implementations
+
+# Rate limiting
+governor = { workspace = true }  # ✅ P0-3: Added for GraphQL Gateway rate limiting
+lru = "0.12"  # LRU cache for per-IP rate limiters
+
+# Kafka
+rdkafka = { version = "0.36", features = ["cmake-build"] }  # ✅ P0-5: For subscription event streaming
+
+# Metrics
+prometheus = { workspace = true }  # ✅ Quick Win #5: Cache performance metrics
+lazy_static = "1.5"  # ✅ Quick Win #5: For static metric registry
 
 [build-dependencies]
 tonic-build = "0.10"

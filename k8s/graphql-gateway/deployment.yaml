@@ -72,6 +72,13 @@ spec:
         app: graphql-gateway
         component: gateway
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: graphql-gateway
         image: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/graphql-gateway:latest
@@ -94,6 +101,12 @@ spec:
           limits:
             memory: "512Mi"
             cpu: "500m"
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: false
         livenessProbe:
           httpGet:
             path: /health
