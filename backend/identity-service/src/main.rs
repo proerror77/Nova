@@ -25,7 +25,7 @@ async fn main() -> Result<()> {
     info!("Starting Identity Service v2.0.0");
 
     // Load configuration
-    let settings = Settings::load()?;
+    let settings = Settings::load().await?;
 
     // Initialize database pool with proper timeouts
     let db_pool = DatabasePool::new(&settings.database)
