@@ -1,0 +1,63 @@
+# cert-manager ClusterIssuer for gRPC mTLS (P0-1)
+#
+# Self-signed CA for development/testing
+# Production: Replace with real CA (Let's Encrypt, Venafi, AWS PCA, etc.)
+#
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: nova-ca-issuer
+spec:
+  # Self-signed issuer (development only)
+  # Generates a self-signed root CA certificate
+  selfSigned: {}
+
+---
+# Production example: Let's Encrypt ACME issuer
+# Uncomment for production use with public certificates
+#
+# apiVersion: cert-manager.io/v1
+# kind: ClusterIssuer
+# metadata:
+#   name: letsencrypt-prod
+# spec:
+#   acme:
+#     server: https://acme-v02.api.letsencrypt.org/directory
+#     email: ops@nova-platform.com  # Replace with actual email
+#     privateKeySecretRef:
+#       name: letsencrypt-prod-account-key
+#     solvers:
+#     - http01:
+#         ingress:
+#           class: nginx
+
+---
+# Production example: Venafi issuer (enterprise PKI)
+# Uncomment for production use with enterprise CA
+#
+# apiVersion: cert-manager.io/v1
+# kind: ClusterIssuer
+# metadata:
+#   name: venafi-prod
+# spec:
+#   venafi:
+#     zone: "Nova Platform\\gRPC Services"
+#     tpp:
+#       url: https://venafi.company.com/vedsdk
+#       credentialsRef:
+#         name: venafi-credentials
+
+---
+# Production example: AWS Private CA issuer
+# Uncomment for production use with AWS PCA
+#
+# apiVersion: cert-manager.io/v1
+# kind: ClusterIssuer
+# metadata:
+#   name: aws-pca
+# spec:
+#   acmepca:
+#     arn: arn:aws:acm-pca:us-east-1:123456789012:certificate-authority/abc123
+#     region: us-east-1
+#     secretRef:
+#       name: aws-pca-credentials
