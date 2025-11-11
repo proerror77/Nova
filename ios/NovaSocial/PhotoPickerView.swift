@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct PhotoPickerView: View {
-    @Environment(\.dismiss) var dismiss
+    @Binding var showPhotoPicker: Bool
 
     var body: some View {
         ZStack {
@@ -12,14 +12,12 @@ struct PhotoPickerView: View {
                 // MARK: - 顶部导航栏
                 HStack(spacing: 16) {
                     // 关闭按钮
-                    Button(action: { dismiss() }) {
+                    Button(action: { showPhotoPicker = false }) {
                         Image(systemName: "xmark")
-                            .font(.system(size: 18, weight: .semibold))
+                            .font(.system(size: 24, weight: .semibold))
                             .foregroundColor(.white)
                     }
                     .frame(width: 24, height: 24)
-
-                    Spacer()
 
                     // 标题和筛选
                     HStack(spacing: 8) {
@@ -34,9 +32,9 @@ struct PhotoPickerView: View {
 
                     Spacer()
                 }
-                .frame(height: 47)
+                .frame(height: DesignTokens.topBarHeight)
                 .padding(.horizontal, 16)
-                .background(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
+                .background(Color.black)
 
                 // MARK: - 标签栏（All, Video, Photos）
                 HStack(spacing: 57) {
@@ -57,55 +55,18 @@ struct PhotoPickerView: View {
                 .padding(.horizontal, 28)
                 .padding(.vertical, 20)
 
-                // MARK: - 相册网格区域
-                ScrollView {
-                    VStack(spacing: 2) {
-                        // 第 1 行
-                        HStack(spacing: 2) {
-                            PhotoGridItem()
-                            PhotoGridItem()
-                            PhotoGridItem()
-                        }
-
-                        // 第 2 行
-                        HStack(spacing: 2) {
-                            PhotoGridItem()
-                            PhotoGridItem()
-                            PhotoGridItem()
-                        }
-
-                        // 第 3 行
-                        HStack(spacing: 2) {
-                            PhotoGridItem()
-                            PhotoGridItem()
-                            PhotoGridItem()
-                        }
-
-                        // 第 4 行
-                        HStack(spacing: 2) {
-                            PhotoGridItem()
-                            PhotoGridItem()
-                            PhotoGridItem()
-                        }
-
-                        // 第 5 行
-                        HStack(spacing: 2) {
-                            PhotoGridItem()
-                            PhotoGridItem()
-                            PhotoGridItem()
-                        }
-
-                        // 第 6 行
-                        HStack(spacing: 2) {
-                            PhotoGridItem()
-                            PhotoGridItem()
+                // MARK: - 相册网格区域（仅此部分可滚动）
+                ScrollView(showsIndicators: false) {
+                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 2), count: 3), spacing: 2) {
+                        // 生成 18 个网格项目（6 行 × 3 列）
+                        ForEach(0..<18, id: \.self) { _ in
                             PhotoGridItem()
                         }
                     }
                     .padding(0)
-                }
-                .safeAreaInset(edge: .bottom) {
-                    Color.clear.frame(height: 20)
+                    .safeAreaInset(edge: .bottom) {
+                        Color.clear.frame(height: 20)
+                    }
                 }
 
                 Spacer()
@@ -124,5 +85,6 @@ struct PhotoGridItem: View {
 }
 
 #Preview {
-    PhotoPickerView()
+    @Previewable @State var showPhotoPicker = true
+    PhotoPickerView(showPhotoPicker: $showPhotoPicker)
 }

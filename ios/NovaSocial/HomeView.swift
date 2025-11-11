@@ -4,8 +4,26 @@ struct HomeView: View {
     @Environment(\.dismiss) var dismiss
     @State private var showReportView = false
     @State private var showThankYouView = false
+    @State private var showNewPost = false
 
     var body: some View {
+        ZStack {
+            // 条件渲染：根据状态即时切换视图
+            if showNewPost {
+                NewPostView(showNewPost: $showNewPost)
+                    .transition(.identity)
+            } else {
+                homeContent
+            }
+        }
+        .animation(.none, value: showNewPost)
+        .navigationBarBackButtonHidden(true)
+        .sheet(isPresented: $showReportView) {
+            ReportView(isPresented: $showReportView, showThankYouView: $showThankYouView)
+        }
+    }
+
+    var homeContent: some View {
         ZStack {
             // 背景色
             Color(red: 0.97, green: 0.96, blue: 0.96)
@@ -36,7 +54,8 @@ struct HomeView: View {
                             .foregroundColor(.black)
                     }
                 }
-                .padding()
+                .frame(height: DesignTokens.topBarHeight)
+                .padding(.horizontal, 16)
                 .background(Color.white)
 
                 Divider()
@@ -150,8 +169,9 @@ struct HomeView: View {
                     .padding(.vertical, 16)
                     .padding(.horizontal)
                 }
+                .padding(.bottom, -43)
                 .safeAreaInset(edge: .bottom) {
-                    Color.clear.frame(height: 100)
+                    Color.clear.frame(height: 0)
                 }
 
                 // MARK: - 底部导航栏
@@ -166,7 +186,7 @@ struct HomeView: View {
                             .font(.system(size: 9, weight: .medium))
                             .foregroundColor(Color(red: 0.87, green: 0.11, blue: 0.26))
                     }
-                    .frame(maxWidth: .infinity)
+                     .frame(maxWidth: .infinity)
 
                     // Message
                     VStack(spacing: 4) {
@@ -181,15 +201,7 @@ struct HomeView: View {
                     .frame(maxWidth: .infinity)
 
                     // New Post
-                    VStack(spacing: -10) {
-                        Image("Newpost-icon")
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 48, height: 48)
-                        Text("")
-                            .font(.system(size: 9))
-                    }
-                    .frame(maxWidth: .infinity)
+                    NewPostButtonComponent(showNewPost: $showNewPost)
 
                     // Alice
                     VStack(spacing: -12) {
@@ -221,10 +233,6 @@ struct HomeView: View {
                 .offset(y: 35)
                 }
             }
-        }
-        .navigationBarBackButtonHidden(true)
-        .sheet(isPresented: $showReportView) {
-            ReportView(isPresented: $showReportView, showThankYouView: $showThankYouView)
         }
     }
 }
@@ -411,6 +419,41 @@ struct CommentCardItem: View {
         }
         .background(Color.white)
         .cornerRadius(12)
+    }
+}
+
+// MARK: - New Post Button Component
+struct NewPostButtonComponent: View {
+    @State private var isPressed = false
+    @Binding var showNewPost: Bool
+
+    var body: some View {
+        VStack(spacing: -10) {
+            Image("Newpost-icon")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 48, height: 48)
+                .opacity(isPressed ? 0.5 : 1.0)
+                .animation(.easeInOut(duration: 0.15), value: isPressed)
+            Text("")
+                .font(.system(size: 9))
+        }
+        .frame(maxWidth: .infinity)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            // 点击时淡出动画
+            isPressed = true
+
+            // 动画结束后即时切换（无过渡动画）
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                showNewPost = true
+            }
+
+            // 重置状态
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                isPressed = false
+            }
+        }
     }
 }
 
