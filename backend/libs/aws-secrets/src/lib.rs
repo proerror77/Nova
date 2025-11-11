@@ -82,6 +82,7 @@ impl JwtSecretConfig {
 }
 
 /// AWS Secrets Manager client with caching
+#[derive(Clone)]
 pub struct SecretManager {
     client: SecretsClient,
     cache: Cache<String, CachedSecret>,
