@@ -8,6 +8,7 @@
 
 use actix_cors::Cors;
 use actix_web::{middleware::Logger, web, App, HttpResponse, HttpServer};
+use anyhow::{Context, Result};
 use redis_utils::RedisPool;
 use std::io;
 use std::net::SocketAddr;
@@ -17,6 +18,7 @@ use std::sync::{
 };
 use tonic::transport::Server as GrpcServer;
 use tonic_health::server::health_reporter;
+use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use user_service::grpc::{
@@ -701,7 +703,44 @@ async fn main() -> io::Result<()> {
             Ok(req)
         }
 
-        GrpcServer::builder()
+        // ✅ P0-1: Load mTLS configuration
+        let tls_config = match grpc_tls::GrpcServerTlsConfig::from_env() {
+            Ok(config) => {
+                info!("mTLS enabled - service-to-service authentication active");
+                Some(config)
+            }
+            Err(e) => {
+                tracing::warn!("mTLS disabled - TLS config not found: {}. Using development mode for testing only.", e);
+                if cfg!(debug_assertions) {
+                    info!("Development mode: Starting without TLS (NOT FOR PRODUCTION)");
+                    None
+                } else {
+                    tracing::error!("Production requires mTLS - GRPC_SERVER_CERT_PATH must be set: {}", e);
+                    return Err(());
+                }
+            }
+        };
+
+        let mut server_builder = GrpcServer::builder();
+        if let Some(tls_cfg) = tls_config {
+            let server_tls = match tls_cfg.build_server_tls() {
+                Ok(tls) => tls,
+                Err(e) => {
+                    tracing::error!("Failed to build server TLS config: {:#}", e);
+                    return Err(());
+                }
+            };
+            server_builder = match server_builder.tls_config(server_tls) {
+                Ok(builder) => builder,
+                Err(e) => {
+                    tracing::error!("Failed to configure TLS on gRPC server: {}", e);
+                    return Err(());
+                }
+            };
+            info!("gRPC server TLS configured successfully");
+        }
+
+        server_builder
             .add_service(health_service)
             .add_service(grpc_server_svc)
             // Video service removed - see media-service

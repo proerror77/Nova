@@ -1,4 +1,5 @@
 // gRPC service implementation for media service
+use anyhow::Context;
 use sqlx::PgPool;
 use std::sync::Arc;
 use tonic::{Request, Response, Status};
@@ -605,9 +606,40 @@ pub async fn start_grpc_server(
 
     tracing::info!("Starting gRPC server at {}", addr);
 
+    // ✅ P0-1: Load mTLS configuration
+    let tls_config = match grpc_tls::GrpcServerTlsConfig::from_env() {
+        Ok(config) => {
+            tracing::info!("mTLS enabled - service-to-service authentication active");
+            Some(config)
+        }
+        Err(e) => {
+            tracing::warn!(
+                "mTLS disabled - TLS config not found: {}. Using development mode for testing only.",
+                e
+            );
+            if cfg!(debug_assertions) {
+                tracing::info!("Development mode: Starting without TLS (NOT FOR PRODUCTION)");
+                None
+            } else {
+                return Err(e).context("Production requires mTLS - GRPC_SERVER_CERT_PATH must be set");
+            }
+        }
+    };
+
+    let mut server_builder = Server::builder();
+    if let Some(tls_cfg) = tls_config {
+        let server_tls = tls_cfg
+            .build_server_tls()
+            .context("Failed to build server TLS config")?;
+        server_builder = server_builder
+            .tls_config(server_tls)
+            .context("Failed to configure TLS on gRPC server")?;
+        tracing::info!("gRPC server TLS configured successfully");
+    }
+
     let reel_pipeline = ReelTranscodePipeline::new(db_pool.clone());
     let service = MediaServiceImpl::new(db_pool, reel_pipeline, cache);
-    Server::builder()
+    server_builder
         .add_service(MediaServiceServer::new(service))
         .serve_with_shutdown(addr, async move {
             let _ = shutdown.recv().await;

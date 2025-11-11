@@ -3,6 +3,7 @@ use actix_web::{
     web::{self, Data, Json, Query},
     App, HttpResponse, HttpServer, Responder,
 };
+use anyhow::{Context, Result};
 use error_types::ErrorResponse;
 use redis::aio::ConnectionManager;
 use search_service::events::consumers::EventContext;
@@ -909,7 +910,49 @@ async fn main() -> std::io::Result<()> {
         };
 
         if let Some(svc) = svc {
-            if let Err(e) = GrpcServer::builder()
+            // ✅ P0-1: Load mTLS configuration
+            let tls_config = match grpc_tls::GrpcServerTlsConfig::from_env() {
+                Ok(config) => {
+                    tracing::info!("mTLS enabled - service-to-service authentication active");
+                    Some(config)
+                }
+                Err(e) => {
+                    tracing::warn!("mTLS disabled - TLS config not found: {}. Using development mode for testing only.", e);
+                    if cfg!(debug_assertions) {
+                        tracing::info!("Development mode: Starting without TLS (NOT FOR PRODUCTION)");
+                        None
+                    } else {
+                        tracing::error!("Production requires mTLS - GRPC_SERVER_CERT_PATH must be set");
+                        return;
+                    }
+                }
+            };
+
+            // Build server with optional TLS
+            let mut server_builder = GrpcServer::builder();
+
+            if let Some(tls_cfg) = tls_config {
+                match tls_cfg.build_server_tls() {
+                    Ok(server_tls) => {
+                        match server_builder.tls_config(server_tls) {
+                            Ok(builder) => {
+                                server_builder = builder;
+                                tracing::info!("gRPC server TLS configured successfully");
+                            }
+                            Err(e) => {
+                                tracing::error!("Failed to configure TLS on gRPC server: {}", e);
+                                return;
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        tracing::error!("Failed to build server TLS config: {}", e);
+                        return;
+                    }
+                }
+            }
+
+            if let Err(e) = server_builder
                 .add_service(health_service)
                 .add_service(search_service::grpc::nova::search_service::v1::search_service_server::SearchServiceServer::new(svc))
                 .serve(grpc_addr)
