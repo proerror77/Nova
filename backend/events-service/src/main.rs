@@ -1,4 +1,5 @@
 use actix_web::{web, App, HttpServer};
+use anyhow::{Context, Result};
 use db_pool::{create_pool as create_pg_pool, DbConfig as DbPoolConfig};
 use events_service::services::{OutboxConfig, OutboxPublisher};
 use std::io;
@@ -8,7 +9,7 @@ use tonic_health::server::health_reporter;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[actix_web::main]
-async fn main() -> io::Result<()> {
+async fn main() -> Result<()> {
     // Initialize tracing
     tracing_subscriber::registry()
         .with(
@@ -30,10 +31,9 @@ async fn main() -> io::Result<()> {
     }
     cfg.log_config();
 
-    let db_pool = create_pg_pool(cfg).await.map_err(|e| {
-        tracing::error!("Failed to create database pool: {}", e);
-        std::io::Error::new(std::io::ErrorKind::Other, e)
-    })?;
+    let db_pool = create_pg_pool(cfg)
+        .await
+        .context("Failed to create database pool")?;
 
     tracing::info!("Database pool created successfully");
 
@@ -42,10 +42,7 @@ async fn main() -> io::Result<()> {
     sqlx::migrate!("./migrations")
         .run(&db_pool)
         .await
-        .map_err(|e| {
-            tracing::error!("Failed to run migrations: {}", e);
-            std::io::Error::new(std::io::ErrorKind::Other, e)
-        })?;
+        .context("Failed to run migrations")?;
     tracing::info!("Migrations completed successfully");
 
     // Create AppState for gRPC service
@@ -110,11 +107,53 @@ async fn main() -> io::Result<()> {
             Ok(req)
         }
 
+        // ✅ P0-1: Load mTLS configuration
+        let tls_config = match grpc_tls::GrpcServerTlsConfig::from_env() {
+            Ok(config) => {
+                tracing::info!("mTLS enabled - service-to-service authentication active");
+                Some(config)
+            }
+            Err(e) => {
+                tracing::warn!("mTLS disabled - TLS config not found: {}. Using development mode for testing only.", e);
+                if cfg!(debug_assertions) {
+                    tracing::info!("Development mode: Starting without TLS (NOT FOR PRODUCTION)");
+                    None
+                } else {
+                    tracing::error!("Production requires mTLS - GRPC_SERVER_CERT_PATH must be set");
+                    return;
+                }
+            }
+        };
+
+        // Build server with optional TLS
+        let mut server_builder = GrpcServer::builder();
+
+        if let Some(tls_cfg) = tls_config {
+            match tls_cfg.build_server_tls() {
+                Ok(server_tls) => {
+                    match server_builder.tls_config(server_tls) {
+                        Ok(builder) => {
+                            server_builder = builder;
+                            tracing::info!("gRPC server TLS configured successfully");
+                        }
+                        Err(e) => {
+                            tracing::error!("Failed to configure TLS on gRPC server: {}", e);
+                            return;
+                        }
+                    }
+                }
+                Err(e) => {
+                    tracing::error!("Failed to build server TLS config: {}", e);
+                    return;
+                }
+            }
+        }
+
         let svc = events_service::grpc::EventsServiceImpl::new(app_state_clone);
 
         tracing::info!("Starting gRPC server on {}", grpc_addr);
 
-        if let Err(e) = GrpcServer::builder()
+        if let Err(e) = server_builder
             .add_service(health_service)
             .add_service(
                 events_service::grpc::nova::events_service::v1::events_service_server::EventsServiceServer::with_interceptor(
@@ -137,7 +176,9 @@ async fn main() -> io::Result<()> {
             .route("/health", web::get().to(|| async { "OK" }))
             .route("/ready", web::get().to(|| async { "READY" }))
     })
-    .bind(("0.0.0.0", http_port))?
+    .bind(("0.0.0.0", http_port))
+    .context("Failed to bind HTTP server")?
     .run()
     .await
+    .context("HTTP server error")
 }
