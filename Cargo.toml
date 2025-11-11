@@ -23,6 +23,7 @@ members = [
     "backend/libs/grpc-metrics",
     "backend/libs/grpc-tls",
     "backend/libs/resilience",
+    "backend/libs/aws-secrets",
     "backend/libs/nova-apns-shared",
     "backend/libs/nova-fcm-shared",
     "backend/libs/grpc-clients",
