@@ -1,0 +1,299 @@
+syntax = "proto3";
+package nova.social.v1;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/empty.proto";
+
+// ============================================================================
+// Social Service - Relationships & Engagement
+//
+// Owns: relationships, feeds, likes, shares
+// Responsibilities:
+//   - Follow/Unfollow
+//   - Like/Unlike content
+//   - Share content
+//   - Feed generation and caching
+//   - Relationship queries
+//
+// Reads from: user-service, content-service
+// ============================================================================
+
+service SocialService {
+  // ========== Relationships ==========
+  rpc FollowUser(FollowUserRequest) returns (google.protobuf.Empty);
+  rpc UnfollowUser(UnfollowUserRequest) returns (google.protobuf.Empty);
+  rpc BlockUser(BlockUserRequest) returns (google.protobuf.Empty);
+  rpc UnblockUser(UnblockUserRequest) returns (google.protobuf.Empty);
+  rpc GetFollowers(GetFollowersRequest) returns (GetFollowersResponse);
+  rpc GetFollowing(GetFollowingRequest) returns (GetFollowingResponse);
+  rpc GetRelationship(GetRelationshipRequest) returns (GetRelationshipResponse);
+
+  // ========== Engagement ==========
+  rpc LikeContent(LikeContentRequest) returns (google.protobuf.Empty);
+  rpc UnlikeContent(UnlikeContentRequest) returns (google.protobuf.Empty);
+  rpc ShareContent(ShareContentRequest) returns (ShareContentResponse);
+  rpc GetContentLikes(GetContentLikesRequest) returns (GetContentLikesResponse);
+
+  // ========== Feed ==========
+  rpc GetUserFeed(GetUserFeedRequest) returns (GetUserFeedResponse);
+  rpc GetExploreFeed(GetExploreFeedRequest) returns (GetExploreFeedResponse);
+  rpc RefreshFeed(RefreshFeedRequest) returns (google.protobuf.Empty);
+}
+
+// ============================================================================
+// Messages
+// ============================================================================
+
+// -------- Relationship Model --------
+message Relationship {
+  string id = 1;
+  string follower_id = 2;         // User who follows
+  string followee_id = 3;         // User being followed
+  RelationshipType type = 4;
+  RelationshipStatus status = 5;
+  google.protobuf.Timestamp created_at = 6;
+  google.protobuf.Timestamp updated_at = 7;
+}
+
+enum RelationshipType {
+  RELATIONSHIP_TYPE_UNSPECIFIED = 0;
+  RELATIONSHIP_TYPE_FOLLOW = 1;
+  RELATIONSHIP_TYPE_BLOCK = 2;
+  RELATIONSHIP_TYPE_MUTE = 3;
+}
+
+enum RelationshipStatus {
+  RELATIONSHIP_STATUS_UNSPECIFIED = 0;
+  RELATIONSHIP_STATUS_ACTIVE = 1;
+  RELATIONSHIP_STATUS_PENDING = 2;   // For private accounts
+  RELATIONSHIP_STATUS_REJECTED = 3;
+}
+
+// -------- Like Model --------
+message Like {
+  string id = 1;
+  string user_id = 2;
+  string content_id = 3;
+  ContentType content_type = 4;
+  google.protobuf.Timestamp created_at = 5;
+}
+
+enum ContentType {
+  CONTENT_TYPE_UNSPECIFIED = 0;
+  CONTENT_TYPE_POST = 1;
+  CONTENT_TYPE_COMMENT = 2;
+  CONTENT_TYPE_ARTICLE = 3;
+}
+
+// -------- Share Model --------
+message Share {
+  string id = 1;
+  string user_id = 2;             // User who shared
+  string content_id = 3;          // Original content ID
+  ContentType content_type = 4;
+  string caption = 5;             // Optional share caption
+  google.protobuf.Timestamp created_at = 6;
+}
+
+// -------- Feed Item Model --------
+message FeedItem {
+  string id = 1;
+  string content_id = 2;          // Post/Article ID
+  ContentType content_type = 3;
+  string author_id = 4;           // Content author
+  FeedItemReason reason = 5;      // Why it's in feed
+  double relevance_score = 6;     // For ranking
+  google.protobuf.Timestamp created_at = 7;
+  google.protobuf.Timestamp added_to_feed_at = 8;
+}
+
+enum FeedItemReason {
+  FEED_ITEM_REASON_UNSPECIFIED = 0;
+  FEED_ITEM_REASON_FOLLOWING = 1;     // From followed user
+  FEED_ITEM_REASON_LIKED = 2;         // Liked by followed user
+  FEED_ITEM_REASON_SHARED = 3;        // Shared by followed user
+  FEED_ITEM_REASON_TRENDING = 4;      // Trending content
+  FEED_ITEM_REASON_RECOMMENDED = 5;   // Algorithm recommendation
+}
+
+// -------- Follow User --------
+message FollowUserRequest {
+  string follower_id = 1;
+  string followee_id = 2;
+}
+
+// -------- Unfollow User --------
+message UnfollowUserRequest {
+  string follower_id = 1;
+  string followee_id = 2;
+}
+
+// -------- Block User --------
+message BlockUserRequest {
+  string blocker_id = 1;
+  string blocked_id = 2;
+}
+
+// -------- Unblock User --------
+message UnblockUserRequest {
+  string blocker_id = 1;
+  string blocked_id = 2;
+}
+
+// -------- Get Followers --------
+message GetFollowersRequest {
+  string user_id = 1;
+  int32 limit = 2;
+  int32 offset = 3;
+}
+
+message GetFollowersResponse {
+  repeated string follower_ids = 1;
+  int32 total_count = 2;
+  bool has_more = 3;
+}
+
+// -------- Get Following --------
+message GetFollowingRequest {
+  string user_id = 1;
+  int32 limit = 2;
+  int32 offset = 3;
+}
+
+message GetFollowingResponse {
+  repeated string followee_ids = 1;
+  int32 total_count = 2;
+  bool has_more = 3;
+}
+
+// -------- Get Relationship --------
+message GetRelationshipRequest {
+  string user_id = 1;
+  string target_id = 2;
+}
+
+message GetRelationshipResponse {
+  bool is_following = 1;
+  bool is_followed_by = 2;
+  bool is_blocking = 3;
+  bool is_blocked_by = 4;
+  bool is_muting = 5;
+  RelationshipStatus follow_status = 6;  // pending, active, etc.
+}
+
+// -------- Like Content --------
+message LikeContentRequest {
+  string user_id = 1;
+  string content_id = 2;
+  ContentType content_type = 3;
+}
+
+// -------- Unlike Content --------
+message UnlikeContentRequest {
+  string user_id = 1;
+  string content_id = 2;
+  ContentType content_type = 3;
+}
+
+// -------- Share Content --------
+message ShareContentRequest {
+  string user_id = 1;
+  string content_id = 2;
+  ContentType content_type = 3;
+  string caption = 4;             // Optional
+}
+
+message ShareContentResponse {
+  Share share = 1;
+}
+
+// -------- Get Content Likes --------
+message GetContentLikesRequest {
+  string content_id = 1;
+  ContentType content_type = 2;
+  int32 limit = 3;
+  int32 offset = 4;
+}
+
+message GetContentLikesResponse {
+  repeated string user_ids = 1;   // Users who liked
+  int32 total_count = 2;
+  bool has_more = 3;
+}
+
+// -------- Get User Feed --------
+message GetUserFeedRequest {
+  string user_id = 1;
+  int32 limit = 2;                // Default 20
+  string cursor = 3;              // For cursor-based pagination
+  FeedAlgorithm algorithm = 4;
+}
+
+enum FeedAlgorithm {
+  FEED_ALGORITHM_UNSPECIFIED = 0;
+  FEED_ALGORITHM_CHRONOLOGICAL = 1;   // Simple time-based
+  FEED_ALGORITHM_RANKED = 2;          // ML-based ranking
+  FEED_ALGORITHM_BALANCED = 3;        // Mix of both
+}
+
+message GetUserFeedResponse {
+  repeated FeedItem items = 1;
+  string next_cursor = 2;         // For pagination
+  bool has_more = 3;
+}
+
+// -------- Get Explore Feed --------
+message GetExploreFeedRequest {
+  string user_id = 1;             // Optional, for personalization
+  int32 limit = 2;
+  string cursor = 3;
+}
+
+message GetExploreFeedResponse {
+  repeated FeedItem items = 1;
+  string next_cursor = 2;
+  bool has_more = 3;
+}
+
+// -------- Refresh Feed --------
+message RefreshFeedRequest {
+  string user_id = 1;
+}
+
+// ============================================================================
+// Events Published by Social Service
+// ============================================================================
+
+// Kafka Topic: social.follow.created
+message FollowCreatedEvent {
+  string follower_id = 1;
+  string followee_id = 2;
+  RelationshipStatus status = 3;
+  google.protobuf.Timestamp created_at = 4;
+}
+
+// Kafka Topic: social.like.created
+message LikeCreatedEvent {
+  string user_id = 1;
+  string content_id = 2;
+  ContentType content_type = 3;
+  string content_author_id = 4;   // For notification
+  google.protobuf.Timestamp created_at = 5;
+}
+
+// Kafka Topic: social.share.created
+message ShareCreatedEvent {
+  string user_id = 1;
+  string content_id = 2;
+  ContentType content_type = 3;
+  string content_author_id = 4;
+  string caption = 5;
+  google.protobuf.Timestamp created_at = 6;
+}
+
+// Kafka Topic: social.feed.updated
+message FeedUpdatedEvent {
+  string user_id = 1;
+  int32 new_items_count = 2;
+  google.protobuf.Timestamp updated_at = 3;
+}
