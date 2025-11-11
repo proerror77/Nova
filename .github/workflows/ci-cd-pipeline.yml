@@ -5,10 +5,22 @@ on:
     branches:
       - feature/phase1-grpc-migration  # Auto-deploy to staging
       - main                           # Deploy to production
+    paths:
+      - 'backend/**'
+      - 'k8s/**'
+      - 'infrastructure/**'
+      - 'Dockerfile*'
+      - '.github/workflows/ci-cd-pipeline.yml'
   pull_request:
     branches:
       - main
       - feature/phase1-grpc-migration
+    paths:
+      - 'backend/**'
+      - 'k8s/**'
+      - 'infrastructure/**'
+      - 'Dockerfile*'
+      - '.github/workflows/ci-cd-pipeline.yml'
 
 # Prevent deployment conflicts - cancel in-progress for non-main branches only
 concurrency:

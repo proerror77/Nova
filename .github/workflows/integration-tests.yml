@@ -3,8 +3,16 @@ name: Integration Tests with Docker Compose
 on:
   push:
     branches: [ main, develop ]
+    paths:
+      - 'backend/**'
+      - 'docker-compose*.yml'
+      - '.github/workflows/integration-tests.yml'
   pull_request:
     branches: [ main, develop ]
+    paths:
+      - 'backend/**'
+      - 'docker-compose*.yml'
+      - '.github/workflows/integration-tests.yml'
   schedule:
     # Run nightly to catch integration issues
     - cron: '0 2 * * *'
