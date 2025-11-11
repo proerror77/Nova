@@ -104,8 +104,11 @@ jobs:
           tags: |
             ${{ steps.meta.outputs.image }}
             ${{ github.event_name != 'pull_request' && steps.meta.outputs.image-latest || '' }}
-          cache-from: ${{ github.event_name != 'pull_request' && format('type=registry,ref={0}/{1}/{2}:buildcache', env.ECR_REGISTRY, env.REGISTRY_ALIAS, matrix.service) || 'type=gha' }}
-          cache-to: ${{ github.event_name != 'pull_request' && format('type=registry,ref={0}/{1}/{2}:buildcache,mode=max', env.ECR_REGISTRY, env.REGISTRY_ALIAS, matrix.service) || 'type=gha,mode=max' }}
+          # TEMPORARY: Disable ALL caching to force fresh build with BorrowMutError fix
+          # Restore caching after fix is verified in production
+          no-cache: true
+          # cache-from: ${{ github.event_name != 'pull_request' && format('type=registry,ref={0}/{1}/{2}:buildcache', env.ECR_REGISTRY, env.REGISTRY_ALIAS, matrix.service) || 'type=gha' }}
+          # cache-to: ${{ github.event_name != 'pull_request' && format('type=registry,ref={0}/{1}/{2}:buildcache,mode=max', env.ECR_REGISTRY, env.REGISTRY_ALIAS, matrix.service) || 'type=gha,mode=max' }}
           build-args: |
             SERVICE_NAME=${{ matrix.service }}
 
