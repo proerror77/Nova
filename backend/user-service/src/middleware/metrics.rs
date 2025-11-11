@@ -46,17 +46,16 @@ where
 
     forward_ready!(service);
 
-    fn call(&self, req: ServiceRequest) -> Self::Future {
+    fn call(&self, mut req: ServiceRequest) -> Self::Future {
         let start_time = Instant::now();
 
         // CRITICAL FIX for actix-web 4.11.0 BorrowMutError:
-        // Extract all immutable data FIRST, before ANY mutable access
+        // Extract all immutable data FIRST, before ANY mutable access (extensions_mut)
         // This ensures no RefCell borrows are active when we call extensions_mut()
         let path = req.path().to_string();
         let method = req.method().to_string();
 
         // Now safe to mutably borrow - all prior immutable borrows are dropped
-        let mut req = req;
         req.extensions_mut().insert(start_time);
 
         let fut = self.service.call(req);
