@@ -762,8 +762,8 @@ async fn main() -> io::Result<()> {
             .wrap(cors)
             .wrap(Logger::default())
             .wrap(tracing_actix_web::TracingLogger::default())
-            .wrap(MetricsMiddleware) // Add metrics middleware
-            .wrap(global_rate_limit) // Add global rate limiting middleware
+            .wrap(global_rate_limit) // Add global rate limiting middleware FIRST
+            .wrap(MetricsMiddleware) // Add metrics middleware AFTER rate limit
             // Prometheus metrics endpoint
             .route(
                 "/metrics",
