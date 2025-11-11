@@ -28,7 +28,7 @@ tokio-tungstenite = "0.21"
 
 # Push notifications
 fcm = "0.9"  # Firebase Cloud Messaging
-apns = "0.10"  # Apple Push Notification Service
+a2 = "0.9"  # Apple Push Notification Service (apns crate was renamed to a2)
 
 # Email
 lettre = "0.11"

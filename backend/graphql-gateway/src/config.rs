@@ -1,7 +1,15 @@
 //! Configuration for GraphQL Gateway
+//!
+//! Loads settings from:
+//! 1. AWS Secrets Manager (production)
+//! 2. Environment variables (development fallback)
+//! 3. .env file (local development)
 
+use anyhow::{Context, Result};
+use aws_secrets::SecretManager;
 use serde::{Deserialize, Serialize};
 use std::env;
+use tracing::{info, warn};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
@@ -51,9 +59,12 @@ pub struct DatabaseConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JwtConfig {
-    pub secret: String,
+    pub signing_key: String,
+    pub validation_key: Option<String>,
+    pub algorithm: String,
     pub issuer: String,
-    pub audience: String,
+    pub audience: Vec<String>,
+    pub expiry_seconds: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -69,9 +80,16 @@ pub struct GraphQLConfig {
 }
 
 impl Config {
-    /// Load configuration from environment variables
-    pub fn from_env() -> Result<Self, anyhow::Error> {
+    /// Load configuration from environment variables and AWS Secrets Manager
+    ///
+    /// Priority:
+    /// 1. AWS Secrets Manager (if AWS_SECRETS_JWT_NAME is set)
+    /// 2. Environment variables (fallback)
+    /// 3. .env file (local development)
+    pub async fn from_env() -> Result<Self> {
         dotenv::dotenv().ok();
+
+        let jwt = Self::load_jwt_config().await?;
 
         Ok(Self {
             server: ServerConfig {
@@ -119,14 +137,7 @@ impl Config {
                     .and_then(|c| c.parse().ok())
                     .unwrap_or(2),
             },
-            jwt: JwtConfig {
-                secret: env::var("JWT_SECRET")
-                    .expect("JWT_SECRET must be set"),
-                issuer: env::var("JWT_ISSUER")
-                    .unwrap_or_else(|_| "nova-graphql-gateway".to_string()),
-                audience: env::var("JWT_AUDIENCE")
-                    .unwrap_or_else(|_| "nova-api".to_string()),
-            },
+            jwt,
             graphql: GraphQLConfig {
                 playground: env::var("GRAPHQL_PLAYGROUND")
                     .ok()
@@ -147,16 +158,138 @@ impl Config {
             },
         })
     }
+
+    /// Load JWT configuration from AWS Secrets Manager or environment variables
+    ///
+    /// Priority:
+    /// 1. AWS Secrets Manager (if AWS_SECRETS_JWT_NAME is set)
+    /// 2. Environment variables (development mode)
+    /// 3. Error if neither is available
+    async fn load_jwt_config() -> Result<JwtConfig> {
+        // Try AWS Secrets Manager first
+        if let Ok(secret_name) = env::var("AWS_SECRETS_JWT_NAME") {
+            info!(
+                secret_name = %secret_name,
+                "Loading JWT configuration from AWS Secrets Manager"
+            );
+
+            match Self::jwt_from_aws_secrets(&secret_name).await {
+                Ok(config) => {
+                    info!("Successfully loaded JWT config from AWS Secrets Manager");
+                    return Ok(config);
+                }
+                Err(e) => {
+                    warn!(
+                        error = %e,
+                        "Failed to load JWT config from AWS Secrets Manager, falling back to environment variables"
+                    );
+                }
+            }
+        }
+
+        // Fallback to environment variables
+        info!("Loading JWT configuration from environment variables (development mode)");
+        Self::jwt_from_env()
+    }
+
+    /// Load JWT configuration from AWS Secrets Manager
+    async fn jwt_from_aws_secrets(secret_name: &str) -> Result<JwtConfig> {
+        let manager = SecretManager::new()
+            .await
+            .context("Failed to initialize AWS Secrets Manager client")?;
+
+        let aws_config = manager
+            .get_jwt_config(secret_name)
+            .await
+            .context("Failed to fetch JWT config from AWS Secrets Manager")?;
+
+        Ok(JwtConfig {
+            signing_key: aws_config.signing_key,
+            validation_key: aws_config.validation_key,
+            algorithm: aws_config.algorithm,
+            issuer: aws_config.issuer,
+            audience: aws_config.audience,
+            expiry_seconds: aws_config.expiry_seconds,
+        })
+    }
+
+    /// Load JWT configuration from environment variables
+    fn jwt_from_env() -> Result<JwtConfig> {
+        let signing_key = env::var("JWT_SECRET")
+            .context("JWT_SECRET must be set when AWS_SECRETS_JWT_NAME is not available")?;
+
+        let algorithm = env::var("JWT_ALGORITHM")
+            .unwrap_or_else(|_| "HS256".to_string());
+
+        let issuer = env::var("JWT_ISSUER")
+            .unwrap_or_else(|_| "nova-graphql-gateway".to_string());
+
+        let audience_str = env::var("JWT_AUDIENCE")
+            .unwrap_or_else(|_| "nova-api".to_string());
+        let audience = audience_str
+            .split(',')
+            .map(|s| s.trim().to_string())
+            .collect();
+
+        let expiry_seconds = env::var("JWT_EXPIRY_SECONDS")
+            .unwrap_or_else(|_| "3600".to_string())
+            .parse()
+            .context("Invalid JWT_EXPIRY_SECONDS")?;
+
+        // Validation key is optional (only for asymmetric algorithms)
+        let validation_key = env::var("JWT_VALIDATION_KEY").ok();
+
+        Ok(JwtConfig {
+            signing_key,
+            validation_key,
+            algorithm,
+            issuer,
+            audience,
+            expiry_seconds,
+        })
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_config_defaults() {
+    #[tokio::test]
+    async fn test_config_defaults() {
+        // Set required JWT_SECRET for test
+        env::set_var("JWT_SECRET", "test-secret-key");
+
         // This will use defaults for missing env vars
-        let config = Config::from_env();
+        let config = Config::from_env().await;
         assert!(config.is_ok());
+
+        // Clean up
+        env::remove_var("JWT_SECRET");
+    }
+
+    #[test]
+    fn test_jwt_config_from_env() {
+        // Set test environment variables
+        env::set_var("JWT_SECRET", "test-secret-key");
+        env::set_var("JWT_ALGORITHM", "HS256");
+        env::set_var("JWT_ISSUER", "test-issuer");
+        env::set_var("JWT_AUDIENCE", "api,web,mobile");
+        env::set_var("JWT_EXPIRY_SECONDS", "7200");
+
+        let config = Config::jwt_from_env().unwrap();
+
+        assert_eq!(config.signing_key, "test-secret-key");
+        assert_eq!(config.algorithm, "HS256");
+        assert_eq!(config.issuer, "test-issuer");
+        assert_eq!(config.audience, vec!["api", "web", "mobile"]);
+        assert_eq!(config.expiry_seconds, 7200);
+        assert!(config.validation_key.is_none());
+
+        // Clean up
+        env::remove_var("JWT_SECRET");
+        env::remove_var("JWT_ALGORITHM");
+        env::remove_var("JWT_ISSUER");
+        env::remove_var("JWT_AUDIENCE");
+        env::remove_var("JWT_EXPIRY_SECONDS");
     }
 }

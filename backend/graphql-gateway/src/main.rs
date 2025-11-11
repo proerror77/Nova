@@ -98,31 +98,40 @@ async fn main() -> std::io::Result<()> {
 
     info!("Starting GraphQL Gateway...");
 
-    // Initialize service clients from environment variables
-    let auth_endpoint = env::var("AUTH_SERVICE_URL")
-        .unwrap_or_else(|_| "http://auth-service.nova-backend.svc.cluster.local:9083".to_string());
-    let user_endpoint = env::var("USER_SERVICE_URL")
-        .unwrap_or_else(|_| "http://user-service.nova-backend.svc.cluster.local:9080".to_string());
-    let content_endpoint = env::var("CONTENT_SERVICE_URL")
-        .unwrap_or_else(|_| "http://content-service.nova-backend.svc.cluster.local:9081".to_string());
-    let feed_endpoint = env::var("FEED_SERVICE_URL")
-        .unwrap_or_else(|_| "http://feed-service.nova-backend.svc.cluster.local:9084".to_string());
+    // Load configuration (includes JWT config from AWS Secrets Manager or env)
+    let config = config::Config::from_env()
+        .await
+        .map_err(|e| format!("Failed to load configuration: {}", e))?;
 
+    info!(
+        algorithm = %config.jwt.algorithm,
+        issuer = %config.jwt.issuer,
+        "JWT configuration loaded successfully"
+    );
+
+    // Initialize service clients from configuration
     let clients = ServiceClients::new(
-        &auth_endpoint,
-        &user_endpoint,
-        &content_endpoint,
-        &feed_endpoint,
+        &config.services.auth_service,
+        &config.services.user_service,
+        &config.services.content_service,
+        &config.services.feed_service,
     );
 
     info!("Service clients initialized");
 
-    // Initialize JWT keys (RS256 only) from environment
+    // Initialize JWT keys for crypto-core (RS256 only)
     // SECURITY: Must use RS256 asymmetric encryption, never HS256
-    let jwt_private_key = env::var("JWT_PRIVATE_KEY_PEM")
-        .map_err(|_| "JWT_PRIVATE_KEY_PEM environment variable must be set")?;
-    let jwt_public_key = env::var("JWT_PUBLIC_KEY_PEM")
-        .map_err(|_| "JWT_PUBLIC_KEY_PEM environment variable must be set")?;
+    // Note: For RS256, signing_key is the private key, validation_key is the public key
+    let jwt_private_key = if config.jwt.algorithm == "RS256" || config.jwt.algorithm == "ES256" {
+        config.jwt.signing_key.clone()
+    } else {
+        env::var("JWT_PRIVATE_KEY_PEM")
+            .map_err(|_| "JWT_PRIVATE_KEY_PEM required for RS256 tokens")?
+    };
+
+    let jwt_public_key = config.jwt.validation_key.clone()
+        .or_else(|| env::var("JWT_PUBLIC_KEY_PEM").ok())
+        .ok_or("JWT public key (validation_key or JWT_PUBLIC_KEY_PEM) required for RS256")?;
 
     crypto_core::jwt::initialize_jwt_keys(&jwt_private_key, &jwt_public_key)
         .map_err(|e| format!("Failed to initialize JWT keys - check PEM format: {}", e))?;
@@ -132,13 +141,7 @@ async fn main() -> std::io::Result<()> {
     // Build GraphQL schema with service clients
     let schema = build_schema(clients);
 
-    let server_host = env::var("SERVER_HOST").unwrap_or_else(|_| "0.0.0.0".to_string());
-    let server_port = env::var("SERVER_PORT")
-        .unwrap_or_else(|_| "8080".to_string())
-        .parse::<u16>()
-        .map_err(|e| format!("SERVER_PORT must be a valid u16: {}", e))?;
-
-    let bind_addr = format!("{}:{}", server_host, server_port);
+    let bind_addr = format!("{}:{}", config.server.host, config.server.port);
     info!("GraphQL Gateway starting on http://{}", bind_addr);
 
     // ✅ P0-3: Initialize rate limiting (100 req/sec per IP, burst of 10)
