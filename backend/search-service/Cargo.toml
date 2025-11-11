@@ -21,6 +21,8 @@ uuid = { version = "1", features = ["v4", "serde"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
+# Resilience (P0-5)
+resilience = { path = "../libs/resilience" }
 # Utilities
 chrono = { version = "0.4", features = ["serde"] }
 dotenvy = "0.15"

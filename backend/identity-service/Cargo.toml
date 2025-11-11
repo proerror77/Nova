@@ -45,6 +45,9 @@ prometheus = { version = "0.13", features = ["process"] }
 config = "0.14"
 dotenv = "0.15"
 
+# Resilience (P0-5)
+resilience = { path = "../libs/resilience" }
+
 # Utilities
 chrono = { version = "0.4", features = ["serde"] }
 futures-util = "0.3"

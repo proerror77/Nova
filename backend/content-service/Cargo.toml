@@ -55,6 +55,9 @@ clickhouse.workspace = true
 utoipa.workspace = true
 utoipa-swagger-ui = { version = "5", features = ["actix-web"] }
 
+# Resilience (P0-5)
+resilience = { path = "../libs/resilience" }
+
 # Shared libraries
 crypto-core = { path = "../libs/crypto-core" }
 error-types = { path = "../libs/error-types" }
