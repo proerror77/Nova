@@ -15,6 +15,11 @@ on:
         description: 'Docker image tag (leave empty for latest)'
         required: false
         type: string
+      run_load_tests:
+        description: 'Run k6 load tests after deployment'
+        required: false
+        type: boolean
+        default: false
   push:
     branches:
       - main
@@ -217,3 +222,87 @@ jobs:
           kubectl exec -n nova-gateway $POD_NAME -- curl -X POST http://localhost:8080/graphql \
             -H "Content-Type: application/json" \
             -d '{"query": "{ __schema { queryType { name } } }"}' || echo "⚠️  GraphQL test skipped"
+
+  load-tests:
+    name: Run k6 Load Tests
+    runs-on: ubuntu-latest
+    needs: post-deployment-tests
+    if: ${{ inputs.run_load_tests == true }}
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up k6
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y apt-transport-https
+          sudo apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3232A
+          echo "deb https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update
+          sudo apt-get install -y k6
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::025434362120:role/github-actions-role
+          aws-region: ${{ env.AWS_REGION }}
+          audience: sts.amazonaws.com
+          role-session-name: gha-load-tests-${{ github.run_id }}
+
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig \
+            --region ${{ env.AWS_REGION }} \
+            --name nova-staging
+
+      - name: Set up port-forward
+        run: |
+          kubectl port-forward -n nova-gateway svc/graphql-gateway 8080:8080 &
+          sleep 2
+
+      - name: Run GraphQL load test
+        run: |
+          k6 run k6/load-test-graphql.js \
+            --vus 10 \
+            --duration 30s \
+            -e BASE_URL=http://localhost:8080 || true
+
+      - name: Run subscription load test
+        run: |
+          k6 run k6/load-test-subscriptions.js \
+            --vus 5 \
+            --duration 30s \
+            -e WS_ENDPOINT=ws://localhost:8080/graphql || true
+
+  summary:
+    name: Deployment Summary
+    runs-on: ubuntu-latest
+    needs: [build-and-push, deploy-to-k8s, post-deployment-tests]
+    if: always()
+
+    steps:
+      - name: Generate summary
+        run: |
+          echo "## 🎉 GraphQL Gateway Deployment Status" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Build & Push" >> $GITHUB_STEP_SUMMARY
+          echo "- Status: ${{ needs.build-and-push.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Image: \`${{ needs.build-and-push.outputs.image-full }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Deploy to Kubernetes" >> $GITHUB_STEP_SUMMARY
+          echo "- Status: ${{ needs.deploy-to-k8s.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Environment: \`${{ inputs.environment || 'staging' }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Health Checks" >> $GITHUB_STEP_SUMMARY
+          echo "- Status: ${{ needs.post-deployment-tests.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Access Instructions" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+          echo "kubectl port-forward -n nova-gateway svc/graphql-gateway 8080:8080" >> $GITHUB_STEP_SUMMARY
+          echo "curl http://localhost:8080/health" >> $GITHUB_STEP_SUMMARY
+          echo "echo 'Visit http://localhost:8080/playground for GraphQL IDE'" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
