@@ -2,6 +2,7 @@
 // TEMPORARY: Allow all warnings to unblock CRITICAL P0 BorrowMutError fix deployment
 // This prevents HTTP server from responding to ANY requests - production impact!
 // Revert this after deployment and fix warnings in separate PR
+// Build timestamp: 2025-11-11T12:15 - Force rebuild to include BorrowMutError fix
 #![allow(warnings)]
 #![allow(clippy::all)]
 
