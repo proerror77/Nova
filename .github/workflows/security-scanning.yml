@@ -5,9 +5,19 @@ on:
     branches:
       - main
       - develop
+    paths:
+      - 'backend/**'
+      - 'infrastructure/**'
+      - 'k8s/**'
+      - '.github/workflows/security-scanning.yml'
   pull_request:
     branches:
       - main
+    paths:
+      - 'backend/**'
+      - 'infrastructure/**'
+      - 'k8s/**'
+      - '.github/workflows/security-scanning.yml'
   schedule:
     - cron: '0 2 * * *'  # Daily at 2 AM
 
