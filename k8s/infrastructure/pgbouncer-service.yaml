@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: pgbouncer
+  namespace: nova
+  labels:
+    app: pgbouncer
+    component: database
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "9127"
+    prometheus.io/path: "/metrics"
+spec:
+  type: ClusterIP
+  sessionAffinity: None
+  ports:
+  - name: pgbouncer
+    port: 5432
+    targetPort: 5432
+    protocol: TCP
+  - name: metrics
+    port: 9127
+    targetPort: 9127
+    protocol: TCP
+  selector:
+    app: pgbouncer
