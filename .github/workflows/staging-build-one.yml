@@ -47,28 +47,9 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Compute build context
-        run: |
-          svc='${{ inputs.service }}'
-          if [ "$svc" = "search-service" ]; then
-            echo "CONTEXT=./" >> $GITHUB_ENV
-          else
-            echo "CONTEXT=./" >> $GITHUB_ENV
-          fi
-          echo "Using context: ${CONTEXT}"
-
-      - name: Build and push ${{ inputs.service }}
-        uses: docker/build-push-action@v6
+      - uses: ./.github/actions/build-push-ecr
         with:
-          context: ${{ env.CONTEXT }}
-          file: ./backend/${{ inputs.service }}/Dockerfile
-          platforms: linux/amd64
-          push: true
-          tags: |
-            ${{ env.REGISTRY }}/${{ env.REGISTRY_ALIAS }}/${{ inputs.service }}:${{ github.sha }}
-            ${{ env.REGISTRY }}/${{ env.REGISTRY_ALIAS }}/${{ inputs.service }}:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          service-name: ${{ inputs.service }}
+          image-tag: ${{ github.sha }}
+          ecr-registry: ${{ env.REGISTRY }}
+          registry-alias: ${{ env.REGISTRY_ALIAS }}
