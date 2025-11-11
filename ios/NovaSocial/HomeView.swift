@@ -4,9 +4,26 @@ struct HomeView: View {
     @Environment(\.dismiss) var dismiss
     @State private var showReportView = false
     @State private var showThankYouView = false
-    @State private var selectedTab = 0  // 0: Home, 1: Message, 2: NewPost, 3: Alice, 4: Account
+    @State private var showNewPost = false
 
     var body: some View {
+        ZStack {
+            // 条件渲染：根据状态即时切换视图
+            if showNewPost {
+                NewPostView(showNewPost: $showNewPost)
+                    .transition(.identity)
+            } else {
+                homeContent
+            }
+        }
+        .animation(.none, value: showNewPost)
+        .navigationBarBackButtonHidden(true)
+        .sheet(isPresented: $showReportView) {
+            ReportView(isPresented: $showReportView, showThankYouView: $showThankYouView)
+        }
+    }
+
+    var homeContent: some View {
         ZStack {
             // 背景色
             Color(red: 0.97, green: 0.96, blue: 0.96)
@@ -16,10 +33,8 @@ struct HomeView: View {
                 VStack(spacing: 0) {
                 // MARK: - 顶部导航栏
                 HStack {
-                    Button(action: {
-                        print("Search tapped")
-                    }) {
-                        Image(systemName: "magnifyingglass")
+                    Button(action: { dismiss() }) {
+                        Image("Back-icon")
                             .resizable()
                             .scaledToFit()
                             .frame(width: 24, height: 24)
@@ -31,9 +46,7 @@ struct HomeView: View {
                         .scaledToFit()
                         .frame(height: 18)
                     Spacer()
-                    Button(action: {
-                        print("Notification tapped")
-                    }) {
+                    Button(action: {}) {
                         Image("Notice-icon")
                             .resizable()
                             .scaledToFit()
@@ -41,7 +54,8 @@ struct HomeView: View {
                             .foregroundColor(.black)
                     }
                 }
-                .padding()
+                .frame(height: DesignTokens.topBarHeight)
+                .padding(.horizontal, 16)
                 .background(Color.white)
 
                 Divider()
@@ -155,92 +169,60 @@ struct HomeView: View {
                     .padding(.vertical, 16)
                     .padding(.horizontal)
                 }
+                .padding(.bottom, -43)
                 .safeAreaInset(edge: .bottom) {
-                    Color.clear.frame(height: 100)
+                    Color.clear.frame(height: 0)
                 }
 
                 // MARK: - 底部导航栏
                 HStack(spacing: -20) {
                     // Home
-                    Button(action: {
-                        selectedTab = 0
-                        print("Home tapped")
-                    }) {
-                        VStack(spacing: 2) {
-                            Image("home-icon")
-                                .resizable()
-                                .scaledToFit()
-                                .frame(width: 32, height: 22)
-                            Text("Home")
-                                .font(.system(size: 9, weight: .medium))
-                                .foregroundColor(Color(red: 0.87, green: 0.11, blue: 0.26))
-                        }
+                    VStack(spacing: 2) {
+                        Image("home-icon")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 32, height: 22)
+                        Text("Home")
+                            .font(.system(size: 9, weight: .medium))
+                            .foregroundColor(Color(red: 0.87, green: 0.11, blue: 0.26))
                     }
-                    .frame(maxWidth: .infinity)
+                     .frame(maxWidth: .infinity)
 
                     // Message
-                    Button(action: {
-                        selectedTab = 1
-                        print("Message tapped")
-                    }) {
-                        VStack(spacing: 4) {
-                            Image("Message-icon")
-                                .resizable()
-                                .scaledToFit()
-                                .frame(width: 22, height: 22)
-                            Text("Message")
-                                .font(.system(size: 9))
-                                .foregroundColor(selectedTab == 1 ? Color(red: 0.87, green: 0.11, blue: 0.26) : .black)
-                        }
+                    VStack(spacing: 4) {
+                        Image("Message-icon")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 22, height: 22)
+                        Text("Message")
+                            .font(.system(size: 9))
+                            .foregroundColor(.black)
                     }
                     .frame(maxWidth: .infinity)
 
                     // New Post
-                    Button(action: {
-                        selectedTab = 2
-                        print("New Post tapped")
-                    }) {
-                        VStack(spacing: -10) {
-                            Image("Newpost-icon")
-                                .resizable()
-                                .scaledToFit()
-                                .frame(width: 48, height: 48)
-                            Text("")
-                                .font(.system(size: 9))
-                        }
-                    }
-                    .frame(maxWidth: .infinity)
+                    NewPostButtonComponent(showNewPost: $showNewPost)
 
                     // Alice
-                    Button(action: {
-                        selectedTab = 3
-                        print("Alice tapped")
-                    }) {
-                        VStack(spacing: -12) {
-                            Image("alice-icon")
-                                .resizable()
-                                .scaledToFit()
-                                .frame(width: 36, height: 36)
-                            Text("")
-                                .font(.system(size: 9))
-                        }
+                    VStack(spacing: -12) {
+                        Image("alice-icon")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 36, height: 36)
+                        Text("")
+                            .font(.system(size: 9))
                     }
                     .frame(maxWidth: .infinity)
 
                     // Account
-                    Button(action: {
-                        selectedTab = 4
-                        print("Account tapped")
-                    }) {
-                        VStack(spacing: 4) {
-                            Image("Account-icon")
-                                .resizable()
-                                .scaledToFit()
-                                .frame(width: 24, height: 24)
-                            Text("Account")
-                                .font(.system(size: 9))
-                                .foregroundColor(selectedTab == 4 ? Color(red: 0.87, green: 0.11, blue: 0.26) : .black)
-                        }
+                    VStack(spacing: 4) {
+                        Image("Account-icon")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 24, height: 24)
+                        Text("Account")
+                            .font(.system(size: 9))
+                            .foregroundColor(.black)
                     }
                     .frame(maxWidth: .infinity)
                 }
@@ -251,10 +233,6 @@ struct HomeView: View {
                 .offset(y: 35)
                 }
             }
-        }
-        .navigationBarBackButtonHidden(true)
-        .sheet(isPresented: $showReportView) {
-            ReportView(isPresented: $showReportView, showThankYouView: $showThankYouView)
         }
     }
 }
@@ -394,73 +372,88 @@ struct CommentCardItem: View {
 
             // MARK: - 交互按钮
             HStack(spacing: 16) {
-                Button(action: {
-                    print("Upvote tapped")
-                }) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "arrowtriangle.up.fill")
-                            .font(.system(size: 10))
-                            .foregroundColor(.black)
-                        Text("0")
-                            .font(.system(size: 12, weight: .bold))
-                            .foregroundColor(.black)
-                    }
+                HStack(spacing: 6) {
+                    Image(systemName: "arrowtriangle.up.fill")
+                        .font(.system(size: 10))
+                        .foregroundColor(.black)
+                    Text("0")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundColor(.black)
                 }
 
-                Button(action: {
-                    print("Downvote tapped")
-                }) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "arrowtriangle.down.fill")
-                            .font(.system(size: 10))
-                            .foregroundColor(.black)
-                        Text("0")
-                            .font(.system(size: 12, weight: .bold))
-                            .foregroundColor(.black)
-                    }
+                HStack(spacing: 6) {
+                    Image(systemName: "arrowtriangle.down.fill")
+                        .font(.system(size: 10))
+                        .foregroundColor(.black)
+                    Text("0")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundColor(.black)
                 }
 
-                Button(action: {
-                    print("Comment tapped")
-                }) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "bubble.right")
-                            .font(.system(size: 10))
-                            .foregroundColor(.black)
-                        Text("0")
-                            .font(.system(size: 12, weight: .bold))
-                            .foregroundColor(.black)
-                    }
+                HStack(spacing: 6) {
+                    Image(systemName: "bubble.right")
+                        .font(.system(size: 10))
+                        .foregroundColor(.black)
+                    Text("0")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundColor(.black)
                 }
 
-                Button(action: {
-                    print("Share tapped")
-                }) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "square.and.arrow.up")
-                            .font(.system(size: 10))
-                            .foregroundColor(.black)
-                        Text("Share")
-                            .font(.system(size: 12, weight: .bold))
-                            .foregroundColor(.black)
-                    }
+                HStack(spacing: 6) {
+                    Image(systemName: "square.and.arrow.up")
+                        .font(.system(size: 10))
+                        .foregroundColor(.black)
+                    Text("Share")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundColor(.black)
                 }
 
                 Spacer()
 
-                Button(action: {
-                    print("Bookmark tapped")
-                }) {
-                    Image(systemName: "bookmark")
-                        .font(.system(size: 12))
-                        .foregroundColor(.black)
-                }
+                Image(systemName: "bookmark")
+                    .font(.system(size: 12))
+                    .foregroundColor(.black)
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
         }
         .background(Color.white)
         .cornerRadius(12)
+    }
+}
+
+// MARK: - New Post Button Component
+struct NewPostButtonComponent: View {
+    @State private var isPressed = false
+    @Binding var showNewPost: Bool
+
+    var body: some View {
+        VStack(spacing: -10) {
+            Image("Newpost-icon")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 48, height: 48)
+                .opacity(isPressed ? 0.5 : 1.0)
+                .animation(.easeInOut(duration: 0.15), value: isPressed)
+            Text("")
+                .font(.system(size: 9))
+        }
+        .frame(maxWidth: .infinity)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            // 点击时淡出动画
+            isPressed = true
+
+            // 动画结束后即时切换（无过渡动画）
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                showNewPost = true
+            }
+
+            // 重置状态
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                isPressed = false
+            }
+        }
     }
 }
 

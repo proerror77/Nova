@@ -14,7 +14,7 @@ struct ThankYouView: View {
                 HStack {
                     Button(action: { dismiss() }) {
                         Image(systemName: "xmark")
-                            .font(.system(size: 18, weight: .semibold))
+                            .font(.system(size: 24, weight: .semibold))
                             .foregroundColor(.black)
                     }
                     Spacer()

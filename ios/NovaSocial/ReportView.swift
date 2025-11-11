@@ -21,7 +21,7 @@ struct ReportView: View {
                         isPresented = false
                     } label: {
                         Image(systemName: "xmark")
-                            .font(.system(size: 14, weight: .semibold))
+                            .font(.system(size: 24, weight: .semibold))
                             .foregroundColor(.black)
                     }
                     .contentShape(Rectangle())
@@ -40,7 +40,7 @@ struct ReportView: View {
                     Color.clear
                         .frame(width: 20)
                 }
-                .frame(height: 64)
+                .frame(height: DesignTokens.topBarHeight)
                 .padding(.horizontal, 16)
                 .background(Color(red: 0.98, green: 0.98, blue: 0.98))
 

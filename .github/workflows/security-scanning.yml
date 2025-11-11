@@ -52,7 +52,7 @@ jobs:
 
       - name: Scan for secrets in history
         run: |
-          ./gitleaks detect --source git --verbose --exit-code 1 || {
+          ./gitleaks detect --source . --verbose --exit-code 1 || {
             echo "⚠️ Secrets detected in git history"
             echo "Remediation: git filter-branch or BFG Repo-Cleaner"
             exit 1
