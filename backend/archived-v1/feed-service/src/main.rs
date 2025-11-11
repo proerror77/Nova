@@ -1,0 +1,368 @@
+mod openapi;
+
+use actix_web::{dev::Service, web, App, HttpServer};
+use std::io;
+use std::sync::Arc;
+use std::time::Instant;
+use tonic::transport::Server as GrpcServer;
+use tonic_health::server::health_reporter;
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+use utoipa_swagger_ui::SwaggerUi;
+
+use rdkafka::config::ClientConfig;
+use rdkafka::consumer::{Consumer, StreamConsumer};
+use rdkafka::Message;
+use recommendation_service::config::Config;
+use recommendation_service::handlers::{
+    get_model_info, get_recommendations, rank_candidates, semantic_search,
+    RecommendationHandlerState,
+};
+use recommendation_service::services::{RecommendationEventConsumer, RecommendationServiceV2};
+use serde_json::from_slice;
+use tracing::{error, info, warn};
+
+use grpc_clients::{config::GrpcConfig, AuthClient, GrpcClientPool};
+
+async fn openapi_json(
+    doc: web::Data<utoipa::openapi::OpenApi>,
+) -> actix_web::Result<actix_web::HttpResponse> {
+    let body = serde_json::to_string(&*doc).map_err(|e| {
+        tracing::error!("OpenAPI serialization failed: {}", e);
+        actix_web::error::ErrorInternalServerError("OpenAPI serialization error")
+    })?;
+
+    Ok(actix_web::HttpResponse::Ok()
+        .content_type("application/json")
+        .body(body))
+}
+
+/// Start Kafka consumer for recommendation events
+async fn start_kafka_consumer(
+    service: Arc<RecommendationServiceV2>,
+    config: &Config,
+) -> Result<(), Box<dyn std::error::Error>> {
+    info!("Starting Kafka consumer for recommendation events");
+
+    // Create Kafka consumer with configuration
+    let consumer: StreamConsumer = ClientConfig::new()
+        .set("bootstrap.servers", &config.kafka.bootstrap_servers)
+        .set("group.id", "recommendation-service-group")
+        .set("auto.offset.reset", "earliest")
+        .set("enable.auto.commit", "true")
+        .set("auto.commit.interval.ms", "5000")
+        .set("session.timeout.ms", "10000")
+        .create()?;
+
+    // Subscribe to recommendation event topics
+    let topics = [
+        "recommendations.model_updates",
+        "recommendations.feedback",
+        "experiments.config",
+    ];
+    consumer.subscribe(&topics)?;
+    info!("Subscribed to topics: {:?}", topics);
+
+    // Create recommendation event consumer for batch processing
+    let mut event_consumer = RecommendationEventConsumer::new(Arc::clone(&service));
+
+    // Periodic flush interval: 5 seconds
+    let mut flush_interval = tokio::time::interval(tokio::time::Duration::from_secs(5));
+
+    // Consume messages from Kafka with periodic flushing
+    loop {
+        tokio::select! {
+            // Handle incoming Kafka messages
+            msg_result = consumer.recv() => {
+                match msg_result {
+                    Ok(msg) => {
+                        // Parse message payload as RecommendationKafkaEvent
+                        if let Some(payload) = msg.payload() {
+                            match from_slice::<recommendation_service::services::RecommendationKafkaEvent>(
+                                payload,
+                            ) {
+                                Ok(event) => {
+                                    // Process event through consumer
+                                    if let Err(e) = event_consumer.handle_event(event).await {
+                                        error!("Failed to handle recommendation event: {:?}", e);
+                                        // Continue processing next event
+                                    }
+                                }
+                                Err(e) => {
+                                    warn!("Failed to deserialize Kafka message: {:?}", e);
+                                }
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        error!("Kafka consumer error: {:?}", e);
+                        // Implement exponential backoff or circuit breaker here
+                        tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+                    }
+                }
+            }
+            // Handle periodic flush
+            _ = flush_interval.tick() => {
+                if let Err(e) = event_consumer.flush().await {
+                    error!("Failed to flush event batch: {:?}", e);
+                }
+            }
+        }
+    }
+}
+
+#[actix_web::main]
+async fn main() -> io::Result<()> {
+    // Initialize structured logging with JSON format for production-grade observability
+    // Includes: timestamp, level, target, thread IDs, line numbers, and structured fields
+    tracing_subscriber::registry()
+        .with(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| "info,actix_web=debug".into()),
+        )
+        .with(
+            tracing_subscriber::fmt::layer()
+                .json() // ✅ JSON format for log aggregation (CloudWatch, Datadog, ELK)
+                .with_current_span(true) // Include span context for distributed tracing
+                .with_span_list(true) // Include all parent spans
+                .with_thread_ids(true) // Include thread IDs for debugging
+                .with_thread_names(true) // Include thread names
+                .with_line_number(true) // Include source line numbers
+                .with_file(true) // Include source file paths
+                .with_target(true) // Include target module path
+        )
+        .init();
+
+    // Load configuration
+    let config = match Config::from_env() {
+        Ok(cfg) => cfg,
+        Err(e) => {
+            tracing::error!("Configuration loading failed: {:#}", e);
+            eprintln!("ERROR: Failed to load configuration: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    tracing::info!(
+        "Starting recommendation-service v{}",
+        env!("CARGO_PKG_VERSION")
+    );
+    tracing::info!("Environment: {}", config.app.env);
+
+    // Initialize database (standardized pool)
+    let mut db_cfg = db_pool::DbConfig::for_service("feed-service");
+    if db_cfg.database_url.is_empty() {
+        db_cfg.database_url = config.database.url.clone();
+    }
+    db_cfg.max_connections = std::cmp::max(db_cfg.max_connections, config.database.max_connections);
+    let db_pool = match db_pool::create_pool(db_cfg).await {
+        Ok(pool) => pool,
+        Err(e) => {
+            tracing::error!("Database pool creation failed: {:#}", e);
+            eprintln!("ERROR: Failed to create database pool: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    let db_pool = web::Data::new(db_pool.clone());
+
+    // Initialize gRPC client pool with connection pooling
+    let grpc_config = match GrpcConfig::from_env() {
+        Ok(cfg) => cfg,
+        Err(e) => {
+            tracing::error!("Failed to load gRPC config: {:#}", e);
+            eprintln!("ERROR: Failed to load gRPC config: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    let grpc_pool = match GrpcClientPool::new(&grpc_config).await {
+        Ok(pool) => {
+            tracing::info!("gRPC client pool initialized successfully");
+            Arc::new(pool)
+        }
+        Err(e) => {
+            tracing::error!("Failed to create gRPC client pool: {:#}", e);
+            eprintln!("ERROR: Failed to create gRPC client pool: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    // Initialize AuthService gRPC client from connection pool
+    let auth_client = Arc::new(AuthClient::from_pool(grpc_pool.clone()));
+    tracing::info!("AuthService gRPC client initialized from pool");
+
+    // Initialize recommendation service
+    let rec_config = recommendation_service::services::RecommendationConfig {
+        collaborative_model_path: config.recommendation.collaborative_model_path.clone(),
+        content_model_path: config.recommendation.content_model_path.clone(),
+        onnx_model_path: config.recommendation.onnx_model_path.clone(),
+        hybrid_weights: recommendation_service::services::HybridWeights::balanced(),
+        enable_ab_testing: config.recommendation.enable_ab_testing,
+    };
+
+    let recommendation_svc = match RecommendationServiceV2::new(
+        rec_config,
+        db_pool.get_ref().clone(),
+        auth_client.clone(),
+    )
+    .await
+    {
+        Ok(service) => {
+            tracing::info!("Recommendation service initialized successfully");
+            Arc::new(service)
+        }
+        Err(e) => {
+            tracing::error!("Failed to initialize recommendation service: {:?}", e);
+            // Continue without recommendation service (fallback to v1.0)
+            // For now, we'll still fail startup since this is critical
+            return Err(io::Error::new(
+                io::ErrorKind::Other,
+                format!("Failed to initialize recommendation service: {:?}", e),
+            ));
+        }
+    };
+
+    let rec_handler_state = web::Data::new(RecommendationHandlerState {
+        service: Arc::clone(&recommendation_svc),
+    });
+
+    // Start Kafka consumer in background task
+    let kafka_svc = Arc::clone(&recommendation_svc);
+    let kafka_config = config.clone();
+    tokio::spawn(async move {
+        if let Err(e) = start_kafka_consumer(kafka_svc, &kafka_config).await {
+            error!("Kafka consumer failed: {:?}", e);
+        }
+    });
+    info!("Kafka consumer task spawned");
+
+    // Phase 3: Spec 007 - Feed cleaner background job
+    // Cleans up experiment data from soft-deleted users after 30-day retention period
+    let cleaner_db = db_pool.get_ref().clone();
+    let cleaner_auth = auth_client.clone();
+    tokio::spawn(async move {
+        recommendation_service::jobs::feed_cleaner::start_feed_cleaner(cleaner_db, cleaner_auth)
+            .await;
+    });
+    info!("✅ Feed cleaner background job started");
+
+    // Start gRPC server for RecommendationService in addition to HTTP server
+    let grpc_port: u16 = std::env::var("GRPC_PORT")
+        .unwrap_or_else(|_| "9084".to_string())
+        .parse()
+        .expect("Invalid GRPC_PORT");
+    let grpc_addr: std::net::SocketAddr = format!("0.0.0.0:{}", grpc_port)
+        .parse()
+        .expect("Invalid gRPC bind address");
+    let grpc_pool = db_pool.get_ref().clone();
+    tokio::spawn(async move {
+        let svc =
+            match recommendation_service::grpc::RecommendationServiceImpl::new(grpc_pool).await {
+                Ok(svc) => svc,
+                Err(e) => {
+                    tracing::error!("Failed to initialize RecommendationService: {}", e);
+                    return;
+                }
+            };
+        tracing::info!("gRPC server listening on {}", grpc_addr);
+
+        // Server-side correlation-id extractor interceptor
+        fn server_interceptor(
+            mut req: tonic::Request<()>,
+        ) -> Result<tonic::Request<()>, tonic::Status> {
+            // Extract correlation-id from metadata if present
+            let correlation_id = req
+                .metadata()
+                .get("correlation-id")
+                .and_then(|val| val.to_str().ok())
+                .map(|s| s.to_string());
+
+            if let Some(id) = correlation_id {
+                // Store in extensions for logging and tracing
+                req.extensions_mut().insert::<String>(id);
+            }
+            Ok(req)
+        }
+
+        // Health service
+        let (mut health, health_service) = health_reporter();
+        health
+            .set_serving::<recommendation_service::grpc::recommendation_service_server::RecommendationServiceServer<recommendation_service::grpc::RecommendationServiceImpl>>()
+            .await;
+
+        if let Err(e) = GrpcServer::builder()
+            .add_service(health_service)
+            .add_service(
+                recommendation_service::grpc::recommendation_service_server::RecommendationServiceServer::with_interceptor(
+                    svc,
+                    server_interceptor,
+                ),
+            )
+            .serve(grpc_addr)
+            .await
+        {
+            tracing::error!("gRPC server error: {}", e);
+        }
+    });
+
+    // Start HTTP server
+    let http_server = HttpServer::new(move || {
+        let openapi_doc = openapi::doc();
+
+        App::new()
+            .app_data(web::Data::new(openapi_doc.clone()))
+            .service(
+                SwaggerUi::new("/swagger-ui/{_:.*}")
+                    .url("/api/v1/openapi.json", openapi_doc.clone()),
+            )
+            .route("/api/v1/openapi.json", web::get().to(openapi_json))
+            .app_data(db_pool.clone())
+            .app_data(rec_handler_state.clone())
+            .route("/health", web::get().to(|| async { "OK" }))
+            .route(
+                "/metrics",
+                web::get().to(recommendation_service::metrics::serve_metrics),
+            )
+            .wrap_fn(|req, srv| {
+                let method = req.method().to_string();
+                let path = req
+                    .match_pattern()
+                    .map(|p| p.to_string())
+                    .unwrap_or_else(|| req.path().to_string());
+                let start = Instant::now();
+
+                let fut = srv.call(req);
+                async move {
+                    match fut.await {
+                        Ok(res) => {
+                            recommendation_service::metrics::observe_http_request(
+                                &method,
+                                &path,
+                                res.status().as_u16(),
+                                start.elapsed(),
+                            );
+                            Ok(res)
+                        }
+                        Err(err) => {
+                            recommendation_service::metrics::observe_http_request(
+                                &method,
+                                &path,
+                                500,
+                                start.elapsed(),
+                            );
+                            Err(err)
+                        }
+                    }
+                }
+            })
+            .service(get_recommendations)
+            .service(get_model_info)
+            .service(rank_candidates)
+            .service(semantic_search)
+    })
+    .bind(format!("0.0.0.0:{}", config.app.port))?
+    .run()
+    .await;
+
+    http_server
+}

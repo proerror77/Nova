@@ -1,0 +1,397 @@
+syntax = "proto3";
+package nova.content.v1;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/empty.proto";
+import "google/protobuf/wrappers.proto";
+
+// ============================================================================
+// Content Service - Content Creation & Management
+//
+// Owns: posts, articles, comments, content_versions
+// Responsibilities:
+//   - Post and article creation
+//   - Content editing and versioning
+//   - Comment management
+//   - Content moderation
+//
+// Reads from: user-service (author info), media-service (media URLs)
+// ============================================================================
+
+service ContentService {
+  // ========== Post Management ==========
+  rpc CreatePost(CreatePostRequest) returns (CreatePostResponse);
+  rpc GetPost(GetPostRequest) returns (GetPostResponse);
+  rpc GetPostsByIds(GetPostsByIdsRequest) returns (GetPostsByIdsResponse);
+  rpc GetUserPosts(GetUserPostsRequest) returns (GetUserPostsResponse);
+  rpc UpdatePost(UpdatePostRequest) returns (UpdatePostResponse);
+  rpc DeletePost(DeletePostRequest) returns (google.protobuf.Empty);
+
+  // ========== Comment Management ==========
+  rpc CreateComment(CreateCommentRequest) returns (CreateCommentResponse);
+  rpc GetComments(GetCommentsRequest) returns (GetCommentsResponse);
+  rpc UpdateComment(UpdateCommentRequest) returns (UpdateCommentResponse);
+  rpc DeleteComment(DeleteCommentRequest) returns (google.protobuf.Empty);
+
+  // ========== Article Management ==========
+  rpc CreateArticle(CreateArticleRequest) returns (CreateArticleResponse);
+  rpc GetArticle(GetArticleRequest) returns (GetArticleResponse);
+  rpc UpdateArticle(UpdateArticleRequest) returns (UpdateArticleResponse);
+  rpc DeleteArticle(DeleteArticleRequest) returns (google.protobuf.Empty);
+
+  // ========== Content Moderation ==========
+  rpc ReportContent(ReportContentRequest) returns (google.protobuf.Empty);
+  rpc ModerateContent(ModerateContentRequest) returns (google.protobuf.Empty);
+
+  // ========== Versioning ==========
+  rpc GetContentVersions(GetContentVersionsRequest) returns (GetContentVersionsResponse);
+}
+
+// ============================================================================
+// Messages
+// ============================================================================
+
+// -------- Post Model --------
+message Post {
+  string id = 1;                  // UUID
+  string author_id = 2;           // User ID (from user-service)
+  string content = 3;             // Post text content
+  ContentType content_type = 4;   // text, image, video, link
+  repeated string media_ids = 5;  // Media file IDs (from media-service)
+  string link_url = 6;            // External link (if type=link)
+  string link_title = 7;          // Link preview title
+  string link_description = 8;    // Link preview description
+  string link_image = 9;          // Link preview image
+  Visibility visibility = 10;     // public, followers, private
+  bool comments_enabled = 11;     // Allow comments
+  int32 comment_count = 12;       // Number of comments
+  int32 like_count = 13;          // Number of likes (from social-service)
+  int32 share_count = 14;         // Number of shares (from social-service)
+  int32 view_count = 15;          // Number of views
+  bool is_pinned = 16;            // Pinned to profile
+  bool is_edited = 17;            // Has been edited
+  ContentStatus status = 18;      // draft, published, moderated
+  google.protobuf.Timestamp created_at = 19;
+  google.protobuf.Timestamp updated_at = 20;
+  google.protobuf.Timestamp deleted_at = 21;
+}
+
+enum ContentType {
+  CONTENT_TYPE_UNSPECIFIED = 0;
+  CONTENT_TYPE_TEXT = 1;
+  CONTENT_TYPE_IMAGE = 2;
+  CONTENT_TYPE_VIDEO = 3;
+  CONTENT_TYPE_LINK = 4;
+  CONTENT_TYPE_POLL = 5;
+}
+
+enum Visibility {
+  VISIBILITY_UNSPECIFIED = 0;
+  VISIBILITY_PUBLIC = 1;
+  VISIBILITY_FOLLOWERS = 2;
+  VISIBILITY_PRIVATE = 3;
+}
+
+enum ContentStatus {
+  CONTENT_STATUS_UNSPECIFIED = 0;
+  CONTENT_STATUS_DRAFT = 1;
+  CONTENT_STATUS_PUBLISHED = 2;
+  CONTENT_STATUS_MODERATED = 3;
+  CONTENT_STATUS_DELETED = 4;
+}
+
+// -------- Comment Model --------
+message Comment {
+  string id = 1;
+  string post_id = 2;             // Parent post ID
+  string parent_comment_id = 3;   // Parent comment (for threaded replies)
+  string author_id = 4;           // User ID
+  string content = 5;             // Comment text
+  int32 like_count = 6;           // Likes on comment
+  int32 reply_count = 7;          // Number of replies
+  bool is_edited = 8;
+  ContentStatus status = 9;
+  google.protobuf.Timestamp created_at = 10;
+  google.protobuf.Timestamp updated_at = 11;
+  google.protobuf.Timestamp deleted_at = 12;
+}
+
+// -------- Article Model --------
+message Article {
+  string id = 1;
+  string author_id = 2;
+  string title = 3;
+  string slug = 4;                // URL-friendly identifier
+  string content = 5;             // Markdown or HTML content
+  string excerpt = 6;             // Short description
+  string cover_image = 7;         // Cover image URL
+  repeated string tags = 8;       // Article tags
+  int32 read_time = 9;            // Estimated read time (minutes)
+  int32 view_count = 10;
+  int32 like_count = 11;
+  int32 comment_count = 12;
+  bool comments_enabled = 13;
+  ContentStatus status = 14;
+  google.protobuf.Timestamp published_at = 15;
+  google.protobuf.Timestamp created_at = 16;
+  google.protobuf.Timestamp updated_at = 17;
+}
+
+// -------- Create Post --------
+message CreatePostRequest {
+  string author_id = 1;
+  string content = 2;
+  ContentType content_type = 3;
+  repeated string media_ids = 4;
+  string link_url = 5;
+  Visibility visibility = 6;
+  bool comments_enabled = 7;
+}
+
+message CreatePostResponse {
+  Post post = 1;
+}
+
+// -------- Get Post --------
+message GetPostRequest {
+  string post_id = 1;
+}
+
+message GetPostResponse {
+  Post post = 1;
+}
+
+// -------- Get Posts by IDs (Batch) --------
+message GetPostsByIdsRequest {
+  repeated string post_ids = 1;
+}
+
+message GetPostsByIdsResponse {
+  repeated Post posts = 1;
+  repeated string not_found_ids = 2;
+}
+
+// -------- Get User Posts --------
+message GetUserPostsRequest {
+  string user_id = 1;
+  int32 limit = 2;                // Default 20
+  int32 offset = 3;
+  ContentStatus status = 4;       // Filter by status
+}
+
+message GetUserPostsResponse {
+  repeated Post posts = 1;
+  int32 total_count = 2;
+  bool has_more = 3;
+}
+
+// -------- Update Post --------
+message UpdatePostRequest {
+  string post_id = 1;
+  google.protobuf.StringValue content = 2;
+  Visibility visibility = 3;
+  google.protobuf.BoolValue comments_enabled = 4;
+}
+
+message UpdatePostResponse {
+  Post post = 1;
+}
+
+// -------- Delete Post --------
+message DeletePostRequest {
+  string post_id = 1;
+  string user_id = 2;             // For authorization
+}
+
+// -------- Create Comment --------
+message CreateCommentRequest {
+  string post_id = 1;
+  string author_id = 2;
+  string content = 3;
+  string parent_comment_id = 4;   // Optional, for threaded replies
+}
+
+message CreateCommentResponse {
+  Comment comment = 1;
+}
+
+// -------- Get Comments --------
+message GetCommentsRequest {
+  string post_id = 1;
+  int32 limit = 2;
+  int32 offset = 3;
+  SortOrder sort = 4;             // newest, oldest, popular
+}
+
+enum SortOrder {
+  SORT_ORDER_UNSPECIFIED = 0;
+  SORT_ORDER_NEWEST = 1;
+  SORT_ORDER_OLDEST = 2;
+  SORT_ORDER_POPULAR = 3;
+}
+
+message GetCommentsResponse {
+  repeated Comment comments = 1;
+  int32 total_count = 2;
+  bool has_more = 3;
+}
+
+// -------- Update Comment --------
+message UpdateCommentRequest {
+  string comment_id = 1;
+  string content = 2;
+}
+
+message UpdateCommentResponse {
+  Comment comment = 1;
+}
+
+// -------- Delete Comment --------
+message DeleteCommentRequest {
+  string comment_id = 1;
+  string user_id = 2;
+}
+
+// -------- Create Article --------
+message CreateArticleRequest {
+  string author_id = 1;
+  string title = 2;
+  string content = 3;
+  string excerpt = 4;
+  string cover_image = 5;
+  repeated string tags = 6;
+  bool comments_enabled = 7;
+}
+
+message CreateArticleResponse {
+  Article article = 1;
+}
+
+// -------- Get Article --------
+message GetArticleRequest {
+  oneof identifier {
+    string article_id = 1;
+    string slug = 2;
+  }
+}
+
+message GetArticleResponse {
+  Article article = 1;
+}
+
+// -------- Update Article --------
+message UpdateArticleRequest {
+  string article_id = 1;
+  google.protobuf.StringValue title = 2;
+  google.protobuf.StringValue content = 3;
+  google.protobuf.StringValue excerpt = 4;
+  google.protobuf.StringValue cover_image = 5;
+  repeated string tags = 6;
+}
+
+message UpdateArticleResponse {
+  Article article = 1;
+}
+
+// -------- Delete Article --------
+message DeleteArticleRequest {
+  string article_id = 1;
+  string user_id = 2;
+}
+
+// -------- Content Moderation --------
+message ReportContentRequest {
+  string content_id = 1;
+  ContentTypeEnum content_type = 2;
+  string reporter_id = 3;
+  string reason = 4;
+  string details = 5;
+}
+
+enum ContentTypeEnum {
+  CONTENT_TYPE_ENUM_UNSPECIFIED = 0;
+  CONTENT_TYPE_ENUM_POST = 1;
+  CONTENT_TYPE_ENUM_COMMENT = 2;
+  CONTENT_TYPE_ENUM_ARTICLE = 3;
+}
+
+message ModerateContentRequest {
+  string content_id = 1;
+  ContentTypeEnum content_type = 2;
+  string moderator_id = 3;
+  ModerationAction action = 4;
+  string reason = 5;
+}
+
+enum ModerationAction {
+  MODERATION_ACTION_UNSPECIFIED = 0;
+  MODERATION_ACTION_APPROVE = 1;
+  MODERATION_ACTION_HIDE = 2;
+  MODERATION_ACTION_DELETE = 3;
+  MODERATION_ACTION_BAN_AUTHOR = 4;
+}
+
+// -------- Versioning --------
+message GetContentVersionsRequest {
+  string content_id = 1;
+  ContentTypeEnum content_type = 2;
+}
+
+message ContentVersion {
+  string id = 1;
+  string content_id = 2;
+  int32 version_number = 3;
+  string content = 4;
+  string editor_id = 5;
+  google.protobuf.Timestamp created_at = 6;
+}
+
+message GetContentVersionsResponse {
+  repeated ContentVersion versions = 1;
+}
+
+// ============================================================================
+// Events Published by Content Service
+// ============================================================================
+
+// Kafka Topic: content.post.created
+message PostCreatedEvent {
+  string post_id = 1;
+  string author_id = 2;
+  ContentType content_type = 3;
+  Visibility visibility = 4;
+  google.protobuf.Timestamp created_at = 5;
+}
+
+// Kafka Topic: content.post.updated
+message PostUpdatedEvent {
+  string post_id = 1;
+  string author_id = 2;
+  repeated string changed_fields = 3;
+  google.protobuf.Timestamp updated_at = 4;
+}
+
+// Kafka Topic: content.post.deleted
+message PostDeletedEvent {
+  string post_id = 1;
+  string author_id = 2;
+  google.protobuf.Timestamp deleted_at = 3;
+}
+
+// Kafka Topic: content.comment.created
+message CommentCreatedEvent {
+  string comment_id = 1;
+  string post_id = 2;
+  string author_id = 3;
+  google.protobuf.Timestamp created_at = 4;
+}
+
+// Kafka Topic: content.article.published
+message ArticlePublishedEvent {
+  string article_id = 1;
+  string author_id = 2;
+  string title = 3;
+  string slug = 4;
+  repeated string tags = 5;
+  google.protobuf.Timestamp published_at = 6;
+}

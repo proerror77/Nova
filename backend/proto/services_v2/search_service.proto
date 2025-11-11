@@ -1,0 +1,313 @@
+syntax = "proto3";
+package nova.search.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// ============================================================================
+// Search Service - Full-Text Search & Discovery
+//
+// Owns: search_index (read-only projection)
+// Responsibilities:
+//   - Full-text search across content
+//   - User search
+//   - Hashtag indexing
+//   - Trending topics
+//   - Search suggestions
+//
+// Data Source: Event-driven projections (subscribes to all domain events)
+// Storage: Elasticsearch/Meilisearch/TypeSense
+//
+// This service NEVER writes to other services' databases.
+// It maintains its own search index by listening to events.
+// ============================================================================
+
+service SearchService {
+  // ========== Search ==========
+  rpc SearchContent(SearchContentRequest) returns (SearchContentResponse);
+  rpc SearchUsers(SearchUsersRequest) returns (SearchUsersResponse);
+  rpc SearchHashtags(SearchHashtagsRequest) returns (SearchHashtagsResponse);
+  rpc SearchAll(SearchAllRequest) returns (SearchAllResponse);
+
+  // ========== Suggestions ==========
+  rpc GetSearchSuggestions(GetSearchSuggestionsRequest) returns (GetSearchSuggestionsResponse);
+  rpc GetTrendingTopics(GetTrendingTopicsRequest) returns (GetTrendingTopicsResponse);
+
+  // ========== Indexing (Internal - called by event handlers) ==========
+  rpc IndexContent(IndexContentRequest) returns (IndexContentResponse);
+  rpc IndexUser(IndexUserRequest) returns (IndexUserResponse);
+  rpc RemoveFromIndex(RemoveFromIndexRequest) returns (RemoveFromIndexResponse);
+
+  // ========== Admin ==========
+  rpc RebuildIndex(RebuildIndexRequest) returns (RebuildIndexResponse);
+  rpc GetIndexStats(GetIndexStatsRequest) returns (GetIndexStatsResponse);
+}
+
+// ============================================================================
+// Messages
+// ============================================================================
+
+// -------- Search Result Models --------
+message ContentSearchResult {
+  string id = 1;
+  SearchResultType type = 2;      // post, article, comment
+  string title = 3;               // Article title or empty
+  string content = 4;             // Text content
+  string author_id = 5;
+  string author_username = 6;
+  string author_avatar = 7;
+  repeated string media_urls = 8;
+  int32 like_count = 9;
+  int32 comment_count = 10;
+  double relevance_score = 11;    // Search ranking score
+  google.protobuf.Timestamp created_at = 12;
+}
+
+enum SearchResultType {
+  SEARCH_RESULT_TYPE_UNSPECIFIED = 0;
+  SEARCH_RESULT_TYPE_POST = 1;
+  SEARCH_RESULT_TYPE_ARTICLE = 2;
+  SEARCH_RESULT_TYPE_COMMENT = 3;
+  SEARCH_RESULT_TYPE_USER = 4;
+  SEARCH_RESULT_TYPE_HASHTAG = 5;
+}
+
+message UserSearchResult {
+  string id = 1;
+  string username = 2;
+  string display_name = 3;
+  string bio = 4;
+  string avatar_url = 5;
+  bool is_verified = 6;
+  int32 follower_count = 7;
+  double relevance_score = 8;
+}
+
+message HashtagSearchResult {
+  string tag = 1;
+  int64 post_count = 2;
+  int64 usage_count_24h = 3;      // Trending indicator
+  bool is_trending = 4;
+}
+
+// -------- Search Content --------
+message SearchContentRequest {
+  string query = 1;
+  SearchFilter filter = 2;
+  SearchSort sort = 3;
+  int32 limit = 4;                // Default 20
+  int32 offset = 5;
+}
+
+message SearchFilter {
+  repeated SearchResultType types = 1;  // Filter by type
+  repeated string author_ids = 2;       // Filter by authors
+  repeated string hashtags = 3;         // Filter by hashtags
+  google.protobuf.Timestamp from = 4;   // Date range
+  google.protobuf.Timestamp to = 5;
+  bool verified_only = 6;               // Only verified authors
+}
+
+message SearchSort {
+  SortField field = 1;
+  SortOrder order = 2;
+}
+
+enum SortField {
+  SORT_FIELD_UNSPECIFIED = 0;
+  SORT_FIELD_RELEVANCE = 1;       // Default
+  SORT_FIELD_CREATED_AT = 2;
+  SORT_FIELD_POPULARITY = 3;      // likes + comments
+  SORT_FIELD_TRENDING = 4;        // Recent engagement
+}
+
+enum SortOrder {
+  SORT_ORDER_UNSPECIFIED = 0;
+  SORT_ORDER_DESC = 1;            // Default
+  SORT_ORDER_ASC = 2;
+}
+
+message SearchContentResponse {
+  repeated ContentSearchResult results = 1;
+  int32 total_count = 2;
+  bool has_more = 3;
+  double search_time_ms = 4;
+}
+
+// -------- Search Users --------
+message SearchUsersRequest {
+  string query = 1;
+  UserSearchFilter filter = 2;
+  int32 limit = 3;
+  int32 offset = 4;
+}
+
+message UserSearchFilter {
+  bool verified_only = 1;
+  int32 min_followers = 2;
+  string location = 3;
+}
+
+message SearchUsersResponse {
+  repeated UserSearchResult results = 1;
+  int32 total_count = 2;
+  bool has_more = 3;
+}
+
+// -------- Search Hashtags --------
+message SearchHashtagsRequest {
+  string query = 1;               // Partial hashtag
+  int32 limit = 2;
+  bool trending_only = 3;
+}
+
+message SearchHashtagsResponse {
+  repeated HashtagSearchResult results = 1;
+}
+
+// -------- Search All --------
+message SearchAllRequest {
+  string query = 1;
+  int32 limit_per_type = 2;       // Default 5
+}
+
+message SearchAllResponse {
+  repeated ContentSearchResult content = 1;
+  repeated UserSearchResult users = 2;
+  repeated HashtagSearchResult hashtags = 3;
+  int32 total_results = 4;
+}
+
+// -------- Suggestions --------
+message GetSearchSuggestionsRequest {
+  string query = 1;               // Partial query
+  int32 limit = 2;                // Default 10
+}
+
+message SearchSuggestion {
+  string text = 1;
+  SearchSuggestionType type = 2;
+  int64 frequency = 3;            // How often searched
+}
+
+enum SearchSuggestionType {
+  SEARCH_SUGGESTION_TYPE_UNSPECIFIED = 0;
+  SEARCH_SUGGESTION_TYPE_QUERY = 1;       // Query suggestion
+  SEARCH_SUGGESTION_TYPE_USER = 2;        // User suggestion
+  SEARCH_SUGGESTION_TYPE_HASHTAG = 3;     // Hashtag suggestion
+}
+
+message GetSearchSuggestionsResponse {
+  repeated SearchSuggestion suggestions = 1;
+}
+
+// -------- Trending Topics --------
+message GetTrendingTopicsRequest {
+  int32 limit = 1;                // Default 10
+  string location = 2;            // Optional geo filtering
+}
+
+message TrendingTopic {
+  string tag = 1;
+  int64 post_count = 2;
+  int64 usage_count_24h = 3;
+  double trend_score = 4;         // Growth rate
+}
+
+message GetTrendingTopicsResponse {
+  repeated TrendingTopic topics = 1;
+  google.protobuf.Timestamp as_of = 2;
+}
+
+// -------- Indexing (Internal) --------
+message IndexContentRequest {
+  string id = 1;
+  SearchResultType type = 2;
+  string title = 3;
+  string content = 4;
+  string author_id = 5;
+  repeated string hashtags = 6;
+  repeated string media_ids = 7;
+  google.protobuf.Timestamp created_at = 8;
+}
+
+message IndexContentResponse {
+  bool success = 1;
+  string index_id = 2;
+}
+
+message IndexUserRequest {
+  string id = 1;
+  string username = 2;
+  string display_name = 3;
+  string bio = 4;
+  bool is_verified = 5;
+  int32 follower_count = 6;
+}
+
+message IndexUserResponse {
+  bool success = 1;
+  string index_id = 2;
+}
+
+message RemoveFromIndexRequest {
+  string id = 1;
+  SearchResultType type = 2;
+}
+
+message RemoveFromIndexResponse {
+  bool success = 1;
+}
+
+// -------- Admin --------
+message RebuildIndexRequest {
+  SearchResultType type = 1;      // Which index to rebuild
+  bool force = 2;                 // Force rebuild even if healthy
+}
+
+message RebuildIndexResponse {
+  bool started = 1;
+  string job_id = 2;
+  int64 estimated_documents = 3;
+}
+
+message GetIndexStatsRequest {
+  SearchResultType type = 1;      // Optional filter
+}
+
+message IndexStats {
+  SearchResultType type = 1;
+  int64 document_count = 2;
+  int64 size_bytes = 3;
+  google.protobuf.Timestamp last_updated = 4;
+  double avg_search_time_ms = 5;
+  int64 total_searches_24h = 6;
+}
+
+message GetIndexStatsResponse {
+  repeated IndexStats stats = 1;
+}
+
+// ============================================================================
+// Event Subscriptions
+// ============================================================================
+//
+// This service subscribes to the following events to maintain its index:
+//
+// Content Events:
+// - content.post.created → Index new post
+// - content.post.updated → Update post in index
+// - content.post.deleted → Remove post from index
+// - content.article.published → Index new article
+// - content.comment.created → Index comment
+//
+// User Events:
+// - user.profile.updated → Update user in index
+// - user.deleted → Remove user from index
+// - user.verified → Update verification status
+//
+// Social Events:
+// - social.like.created → Update popularity score
+// - social.share.created → Update trending score
+//
+// All indexing happens asynchronously via event handlers.
+// This service NEVER makes gRPC calls to other services to fetch data.
