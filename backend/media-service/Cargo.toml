@@ -30,6 +30,7 @@ anyhow = { workspace = true }
 thiserror = { workspace = true }
 tonic = { workspace = true }
 prost = { workspace = true }
+tonic-health = "0.10"  # P0-4: gRPC health check protocol
 utoipa = { workspace = true }
 utoipa-swagger-ui = { version = "5", features = ["actix-web"] }
 prometheus = { workspace = true }

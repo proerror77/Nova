@@ -1,6 +1,7 @@
 use anyhow::Result;
 use std::sync::Arc;
 use tonic::transport::Server;
+use tonic_health::server::{health_reporter, HealthReporter};
 use tracing::{info, warn};
 
 mod config;
@@ -90,7 +91,17 @@ async fn main() -> Result<()> {
 
     info!("Identity Service listening on {}", addr);
 
-    // Start health check endpoint
+    // ✅ P0-4: Create gRPC health reporter
+    let (mut health_reporter, health_service) = health_reporter();
+
+    // Mark service as SERVING
+    health_reporter
+        .set_serving::<grpc::identity_service_server::IdentityServiceServer<grpc::IdentityServiceImpl>>()
+        .await;
+
+    info!("gRPC health check enabled (tonic-health protocol)");
+
+    // Start health check endpoint (HTTP)
     tokio::spawn(health_check_server(settings.server.health_port));
 
     // Start metrics endpoint
@@ -98,6 +109,7 @@ async fn main() -> Result<()> {
 
     // Start gRPC server with graceful shutdown
     Server::builder()
+        .add_service(health_service)  // ✅ P0-4: Add health service
         .add_service(grpc::identity_service_server::IdentityServiceServer::new(identity_impl))
         .add_service(tonic_reflection::server::Builder::configure()
             .register_encoded_file_descriptor_set(grpc::FILE_DESCRIPTOR_SET)

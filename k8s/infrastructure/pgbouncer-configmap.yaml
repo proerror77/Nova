@@ -1,0 +1,108 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pgbouncer-config
+  namespace: nova
+  labels:
+    app: pgbouncer
+    component: database
+data:
+  pgbouncer.ini: |
+    [databases]
+    ; V2 Service Databases
+    nova_identity = host=postgres port=5432 dbname=nova_identity
+    nova_user = host=postgres port=5432 dbname=nova_user
+    nova_content = host=postgres port=5432 dbname=nova_content
+    nova_social = host=postgres port=5432 dbname=nova_social
+    nova_media = host=postgres port=5432 dbname=nova_media
+    nova_communication = host=postgres port=5432 dbname=nova_communication
+    nova_search = host=postgres port=5432 dbname=nova_search
+    nova_events = host=postgres port=5432 dbname=nova_events
+
+    ; Fallback wildcard for any other database
+    * = host=postgres port=5432
+
+    [pgbouncer]
+    ; Listen on all interfaces
+    listen_addr = 0.0.0.0
+    listen_port = 5432
+
+    ; Authentication
+    auth_type = md5
+    auth_file = /etc/pgbouncer/userlist.txt
+
+    ; ✅ P0-3: Transaction pooling mode (Codex GPT-5 recommendation)
+    ; - Most efficient for microservices with short transactions
+    ; - Allows high connection multiplexing
+    ; - Transactions cannot span multiple client connections
+    pool_mode = transaction
+
+    ; ✅ P0-3: Connection limits (per Codex recommendations)
+    ; Total client connections allowed
+    max_client_conn = 1000
+
+    ; Default pool size per database/user combo
+    ; Codex: "cap pools tightly per service" + "pool size modest (8–16) per replica"
+    ; With 8 services × 3 replicas × 12 conns = 288 total Postgres connections
+    default_pool_size = 25
+
+    ; Reserve pool for urgent requests
+    reserve_pool_size = 5
+    reserve_pool_timeout = 3
+
+    ; ✅ P0-3: Server connection management
+    ; Close server connection after this time (prevents stale connections)
+    server_lifetime = 3600
+
+    ; Close server connection if idle for this time
+    server_idle_timeout = 600
+
+    ; Close server connection if unused for this time
+    server_connect_timeout = 15
+
+    ; ✅ P0-3: Query timeout protection
+    ; Cancel query if running longer than this (Codex: "statement_timeout ~30s")
+    query_timeout = 30
+
+    ; Wait for query result for this time
+    query_wait_timeout = 120
+
+    ; ✅ P0-3: Client connection timeouts
+    ; Close client connection if idle
+    client_idle_timeout = 0  # 0 = disabled, let application handle
+
+    ; Login timeout
+    client_login_timeout = 60
+
+    ; ✅ P0-3: DNS and health checks
+    ; DNS refresh interval
+    dns_max_ttl = 15
+    dns_zone_check_period = 0
+
+    ; ✅ P0-3: Logging
+    ; Log level: 0=quiet, 1=error, 2=warning, 3=info, 4=debug
+    log_connections = 1
+    log_disconnections = 1
+    log_pooler_errors = 1
+    log_stats = 1
+    stats_period = 60
+
+    ; ✅ P0-3: TCP settings
+    tcp_keepalive = 1
+    tcp_keepcnt = 3
+    tcp_keepidle = 60
+    tcp_keepintvl = 10
+
+    ; Admin console
+    admin_users = postgres
+    stats_users = stats, postgres
+
+  userlist.txt: |
+    ; Format: "username" "md5hash"
+    ; Generate with: echo -n "passwordusername" | md5sum
+    ; Example: "nova_user" "md5" + md5("passwordnova_user")
+    ;
+    ; NOTE: In production, use Kubernetes Secrets for this file
+    ; This is a template that should be replaced with actual credentials
+    "postgres" "PLACEHOLDER_MD5_HASH"
+    "nova_user" "PLACEHOLDER_MD5_HASH"

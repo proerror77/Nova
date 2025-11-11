@@ -1,0 +1,139 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pgbouncer
+  namespace: nova
+  labels:
+    app: pgbouncer
+    component: database
+    version: v1.21
+spec:
+  replicas: 2  # High availability
+  selector:
+    matchLabels:
+      app: pgbouncer
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app: pgbouncer
+        component: database
+        version: v1.21
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9127"
+    spec:
+      containers:
+      - name: pgbouncer
+        image: pgbouncer/pgbouncer:1.21.0
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: pgbouncer
+          containerPort: 5432
+          protocol: TCP
+        - name: metrics
+          containerPort: 9127
+          protocol: TCP
+        env:
+        - name: DATABASES_HOST
+          value: "postgres"
+        - name: DATABASES_PORT
+          value: "5432"
+        - name: PGBOUNCER_AUTH_TYPE
+          value: "md5"
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        livenessProbe:
+          tcpSocket:
+            port: 5432
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          tcpSocket:
+            port: 5432
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 2
+        volumeMounts:
+        - name: pgbouncer-config
+          mountPath: /etc/pgbouncer
+          readOnly: true
+        - name: pgbouncer-secret
+          mountPath: /etc/pgbouncer/secrets
+          readOnly: true
+        lifecycle:
+          preStop:
+            exec:
+              command: ["/bin/sh", "-c", "killall -INT pgbouncer && sleep 5"]
+
+      # Prometheus exporter sidecar for PgBouncer metrics
+      - name: pgbouncer-exporter
+        image: prometheuscommunity/pgbouncer-exporter:v0.7.0
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: metrics
+          containerPort: 9127
+          protocol: TCP
+        env:
+        - name: PGBOUNCER_HOST
+          value: "localhost"
+        - name: PGBOUNCER_PORT
+          value: "5432"
+        - name: PGBOUNCER_USER
+          value: "postgres"
+        - name: PGBOUNCER_PASS
+          valueFrom:
+            secretKeyRef:
+              name: pgbouncer-secret
+              key: postgres-password
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 100m
+            memory: 128Mi
+
+      volumes:
+      - name: pgbouncer-config
+        configMap:
+          name: pgbouncer-config
+      - name: pgbouncer-secret
+        secret:
+          secretName: pgbouncer-secret
+          defaultMode: 0600
+
+      affinity:
+        # Prefer spreading across nodes for HA
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - pgbouncer
+              topologyKey: kubernetes.io/hostname
+
+      # Security context
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        fsGroup: 999
+
+      # Termination grace period
+      terminationGracePeriodSeconds: 30
