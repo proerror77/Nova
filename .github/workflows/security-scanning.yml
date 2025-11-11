@@ -63,14 +63,9 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache Cargo tools
-        uses: actions/cache@v4
+      - uses: ./.github/actions/setup-rust-env
         with:
-          path: ~/.cargo/bin/
-          key: ${{ runner.os }}-cargo-tools-${{ hashFiles('.github/workflows/security-scanning.yml') }}
+          cache-key-suffix: security-deps
 
       - name: Install Cargo Deny
         run: |
@@ -104,16 +99,9 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+      - uses: ./.github/actions/setup-rust-env
         with:
-          components: clippy
-
-      - name: Cache Cargo tools
-        uses: actions/cache@v4
-        with:
-          path: ~/.cargo/bin/
-          key: ${{ runner.os }}-cargo-tools-${{ hashFiles('.github/workflows/security-scanning.yml') }}
+          cache-key-suffix: sast
 
       - name: Install cargo-audit
         run: |

@@ -1,0 +1,39 @@
+name: Reusable AWS Setup
+description: Centralized AWS credentials and ECR login setup
+
+on:
+  workflow_call:
+    inputs:
+      aws-region:
+        description: AWS region
+        required: false
+        type: string
+        default: ap-northeast-1
+      role-session-name:
+        description: IAM role session name
+        required: true
+        type: string
+    secrets:
+      AWS_ACCESS_KEY_ID:
+        required: false
+      AWS_SECRET_ACCESS_KEY:
+        required: false
+
+jobs:
+  aws-setup:
+    name: Configure AWS Credentials
+    runs-on: ubuntu-latest
+    outputs:
+      ecr-registry: ${{ steps.login-ecr.outputs.registry }}
+    steps:
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::025434362120:role/github-actions-role
+          aws-region: ${{ inputs.aws-region }}
+          audience: sts.amazonaws.com
+          role-session-name: ${{ inputs.role-session-name }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2

@@ -32,28 +32,9 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+      - uses: ./.github/actions/setup-rust-env
         with:
-          components: rustfmt, clippy
-
-      - name: Install protoc
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y protobuf-compiler
-          protoc --version
-
-      - name: Cache Cargo dependencies
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            backend/target/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-
+          cache-key-suffix: format-lint
 
       - name: Run cargo fmt (check all code)
         run: cargo fmt --all -- --check
@@ -91,34 +72,9 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Install protoc
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y protobuf-compiler
-
-      - name: Cache Cargo registry
-        uses: actions/cache@v4
+      - uses: ./.github/actions/setup-rust-env
         with:
-          path: ~/.cargo/registry
-          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-registry-
-
-      - name: Cache Cargo index
-        uses: actions/cache@v4
-        with:
-          path: ~/.cargo/git
-          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-index-
-
-      - name: Cache Cargo build
-        uses: actions/cache@v4
-        with:
-          path: backend/target
-          key: ${{ runner.os }}-cargo-build-${{ matrix.service }}-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-build-${{ matrix.service }}-
+          cache-key-suffix: ${{ matrix.service }}
 
       - name: Run cargo test (${{ matrix.service }})
         working-directory: backend/${{ matrix.service }}
@@ -139,19 +95,9 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Install protoc
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y protobuf-compiler
-
-      - name: Cache Cargo tools
-        uses: actions/cache@v4
+      - uses: ./.github/actions/setup-rust-env
         with:
-          path: ~/.cargo/bin/
-          key: ${{ runner.os }}-cargo-tools-${{ hashFiles('.github/workflows/ci-cd-pipeline.yml') }}
+          cache-key-suffix: coverage
 
       - name: Install cargo-tarpaulin
         run: |
@@ -160,17 +106,6 @@ jobs:
           else
             echo "cargo-tarpaulin already installed"
           fi
-
-      - name: Cache Cargo dependencies
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            backend/target/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-
 
       - name: Generate coverage report
         working-directory: backend
@@ -218,25 +153,9 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache Cargo tools
-        uses: actions/cache@v4
+      - uses: ./.github/actions/setup-rust-env
         with:
-          path: ~/.cargo/bin/
-          key: ${{ runner.os }}-cargo-tools-${{ hashFiles('.github/workflows/ci-cd-pipeline.yml') }}
-
-      - name: Cache Cargo dependencies
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            backend/target/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-
+          cache-key-suffix: security
 
       - name: Install cargo-audit
         run: |
@@ -280,25 +199,9 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache Cargo tools
-        uses: actions/cache@v4
+      - uses: ./.github/actions/setup-rust-env
         with:
-          path: ~/.cargo/bin/
-          key: ${{ runner.os }}-cargo-tools-${{ hashFiles('.github/workflows/ci-cd-pipeline.yml') }}
-
-      - name: Cache Cargo dependencies
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            backend/target/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-
+          cache-key-suffix: dependencies
 
       - name: Install cargo-outdated
         run: |
@@ -362,30 +265,9 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Install protoc
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y protobuf-compiler
-
-      - name: Cache Cargo tools
-        uses: actions/cache@v4
+      - uses: ./.github/actions/setup-rust-env
         with:
-          path: ~/.cargo/bin/
-          key: ${{ runner.os }}-cargo-tools-${{ hashFiles('.github/workflows/ci-cd-pipeline.yml') }}
-
-      - name: Cache Cargo dependencies
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            backend/target/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-
+          cache-key-suffix: integration
 
       - name: Install sqlx-cli
         run: |
@@ -438,36 +320,30 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Install protoc
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y protobuf-compiler
-
-      - name: Cache Cargo dependencies
-        uses: actions/cache@v4
+      - uses: ./.github/actions/setup-rust-env
         with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            backend/target/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-
+          cache-key-suffix: release
 
       - name: Build all services (release)
         working-directory: backend
         run: cargo build --workspace --release
+
+  # ============ Stage 8: Setup AWS & ECR ============
+  setup-aws:
+    name: Setup AWS Credentials
+    if: github.event_name == 'push'
+    uses: ./.github/workflows/_reusable-aws-setup.yml
+    needs: [build-release, code-coverage, security-audit, integration-tests]
+    secrets:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
   # ============ Stage 8: Build & Push Docker Images ============
   build-and-push:
     timeout-minutes: 60
     name: Build and Push Docker Images
     runs-on: ubuntu-latest
-    needs: [build-release, code-coverage, security-audit, integration-tests]
+    needs: setup-aws
     if: github.event_name == 'push'
 
     strategy:
@@ -501,24 +377,13 @@ jobs:
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
-        env:
-          AWS_REGION: ap-northeast-1
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v6
+      - uses: ./.github/actions/build-push-ecr
         with:
-          context: .
-          file: ./backend/Dockerfile.template
-          build-args: SERVICE_NAME=${{ matrix.service }}
-          push: true
-          tags: |
-            ${{ env.ECR_REGISTRY }}/${{ env.REGISTRY_ALIAS }}/${{ matrix.service }}:${{ github.sha }}
-            ${{ env.ECR_REGISTRY }}/${{ env.REGISTRY_ALIAS }}/${{ matrix.service }}:${{ github.ref_name }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          service-name: ${{ matrix.service }}
+          image-tag: ${{ github.sha }}
+          ecr-registry: ${{ env.ECR_REGISTRY }}
+          registry-alias: ${{ env.REGISTRY_ALIAS }}
 
       - name: Verify image pushed
         run: |
@@ -547,13 +412,13 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ap-northeast-1
+          aws-region: ${{ env.AWS_REGION }}
 
       - name: Update kubeconfig
         run: |
           aws eks update-kubeconfig \
             --name nova-staging \
-            --region ap-northeast-1
+            --region ${{ env.AWS_REGION }}
 
       - name: Verify cluster connectivity
         run: |
@@ -615,13 +480,13 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ap-northeast-1
+          aws-region: ${{ env.AWS_REGION }}
 
       - name: Update kubeconfig
         run: |
           aws eks update-kubeconfig \
             --name nova-staging \
-            --region ap-northeast-1
+            --region ${{ env.AWS_REGION }}
 
       - name: Run smoke tests
         run: |
