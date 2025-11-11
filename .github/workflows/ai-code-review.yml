@@ -75,7 +75,7 @@ jobs:
           findings = []
           high_risk_patterns = [
               (r'\.unwrap\(\)', 'unwrap() in code - may panic'),
-              (r'password|secret|key.*=.*["\'']', 'Possible credential in code'),
+              (r'password|secret|key.*=.*["\']', 'Possible credential in code'),
               (r'println!.*secret|println!.*password', 'Logging sensitive data'),
               (r'eval\(|exec\(|system\(', 'Dynamic code execution'),
           ]

@@ -17,10 +17,36 @@ env:
   REGISTRY_ALIAS: nova
 
 jobs:
+  # ============ Stage 0: Detect changed files ============
+  detect-changes:
+    name: Detect Changes
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      ios: ${{ steps.filter.outputs.ios }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check file changes
+        uses: dorny/paths-filter@v2
+        id: filter
+        with:
+          filters: |
+            backend:
+              - 'backend/**'
+              - 'Cargo.toml'
+              - 'Cargo.lock'
+            ios:
+              - 'ios/**'
+              - '**.swift'
+
   # ============ Stage 1: Format & Lint (All Services) ============
   format-and-lint:
     name: Format and Lint
     runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.backend == 'true'
 
     steps:
       - name: Checkout code
@@ -61,7 +87,8 @@ jobs:
   test-services:
     name: Test Services
     runs-on: ubuntu-latest
-    needs: format-and-lint
+    needs: [detect-changes, format-and-lint]
+    if: needs.detect-changes.outputs.backend == 'true' && (success() || needs.format-and-lint.result == 'skipped')
     strategy:
       matrix:
         service:
@@ -125,7 +152,8 @@ jobs:
   code-coverage:
     name: Code Coverage
     runs-on: ubuntu-latest
-    needs: test-services
+    needs: [detect-changes, test-services]
+    if: needs.detect-changes.outputs.backend == 'true' && (success() || needs.test-services.result == 'skipped')
 
     steps:
       - name: Checkout code
@@ -193,7 +221,8 @@ jobs:
   security-audit:
     name: Security Audit
     runs-on: ubuntu-latest
-    needs: format-and-lint
+    needs: [detect-changes, format-and-lint]
+    if: needs.detect-changes.outputs.backend == 'true' && (success() || needs.format-and-lint.result == 'skipped')
 
     steps:
       - name: Checkout code
@@ -239,7 +268,8 @@ jobs:
   dependency-check:
     name: Dependency Check
     runs-on: ubuntu-latest
-    needs: format-and-lint
+    needs: [detect-changes, format-and-lint]
+    if: needs.detect-changes.outputs.backend == 'true' && (success() || needs.format-and-lint.result == 'skipped')
 
     steps:
       - name: Checkout code
@@ -285,7 +315,8 @@ jobs:
   integration-tests:
     name: Integration Tests
     runs-on: ubuntu-latest
-    needs: test-services
+    needs: [detect-changes, test-services]
+    if: needs.detect-changes.outputs.backend == 'true' && (success() || needs.test-services.result == 'skipped')
 
     services:
       postgres:
@@ -368,7 +399,8 @@ jobs:
   build-release:
     name: Build Release
     runs-on: ubuntu-latest
-    needs: [format-and-lint, test-services, security-audit]
+    needs: [detect-changes, format-and-lint, test-services, security-audit]
+    if: needs.detect-changes.outputs.backend == 'true' && github.event_name == 'push'
 
     steps:
       - name: Checkout code
@@ -579,8 +611,8 @@ jobs:
   quality-report:
     name: Quality Report
     runs-on: ubuntu-latest
-    needs: [test-services, code-coverage, security-audit]
-    if: always()
+    needs: [detect-changes, test-services, code-coverage, security-audit]
+    if: always() && needs.detect-changes.outputs.backend == 'true'
 
     steps:
       - name: Checkout code
@@ -629,8 +661,8 @@ jobs:
   notify:
     name: Notify Deployment Status
     runs-on: ubuntu-latest
-    needs: [build-and-push, deploy-staging, smoke-test, quality-report]
-    if: always()
+    needs: [detect-changes, build-and-push, deploy-staging, smoke-test, quality-report]
+    if: always() && needs.detect-changes.outputs.backend == 'true' && github.event_name == 'push'
 
     steps:
       - name: Determine status
