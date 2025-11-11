@@ -10,6 +10,7 @@ mod schema;
 mod middleware;
 mod cache;
 mod kafka;  // ✅ P0-5: Kafka integration for subscriptions
+mod security; // ✅ P0-2: GraphQL security extensions
 
 use clients::ServiceClients;
 use schema::build_schema;
