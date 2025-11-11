@@ -1,0 +1,214 @@
+# AWS IAM Policy and Role configuration for EKS IRSA (IAM Roles for Service Accounts)
+# This file contains Terraform/CloudFormation-style configurations for AWS resources
+#
+# ============================================================================
+# STEP 1: Create IAM Policy for Secrets Manager Access
+# ============================================================================
+# AWS CLI command:
+# aws iam create-policy \
+#   --policy-name NovaSecretsManagerPolicy \
+#   --policy-document file://iam-policy.json
+#
+# Save this JSON as iam-policy.json:
+---
+# iam-policy.json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "secretsmanager:GetSecretValue",
+        "secretsmanager:DescribeSecret"
+      ],
+      "Resource": [
+        "arn:aws:secretsmanager:<REGION>:<ACCOUNT_ID>:secret:prod/nova/jwt-config-*",
+        "arn:aws:secretsmanager:<REGION>:<ACCOUNT_ID>:secret:prod/nova/*"
+      ]
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "kms:Decrypt"
+      ],
+      "Resource": [
+        "arn:aws:kms:<REGION>:<ACCOUNT_ID>:key/*"
+      ],
+      "Condition": {
+        "StringEquals": {
+          "kms:ViaService": "secretsmanager.<REGION>.amazonaws.com"
+        }
+      }
+    }
+  ]
+}
+
+# ============================================================================
+# STEP 2: Create IAM Role with Trust Relationship to EKS OIDC Provider
+# ============================================================================
+# Prerequisites:
+# 1. Get your EKS cluster's OIDC provider URL:
+#    aws eks describe-cluster --name <CLUSTER_NAME> --query "cluster.identity.oidc.issuer" --output text
+#    Example output: https://oidc.eks.us-west-2.amazonaws.com/id/EXAMPLED539D4633E53DE1B71EXAMPLE
+#
+# 2. Ensure OIDC provider is associated with your account:
+#    eksctl utils associate-iam-oidc-provider --cluster <CLUSTER_NAME> --approve
+#
+# AWS CLI command to create role:
+# aws iam create-role \
+#   --role-name nova-secrets-manager-role \
+#   --assume-role-policy-document file://trust-policy.json
+#
+# Save this JSON as trust-policy.json (replace placeholders):
+---
+# trust-policy.json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": {
+        "Federated": "arn:aws:iam::<ACCOUNT_ID>:oidc-provider/oidc.eks.<REGION>.amazonaws.com/id/<OIDC_ID>"
+      },
+      "Action": "sts:AssumeRoleWithWebIdentity",
+      "Condition": {
+        "StringEquals": {
+          "oidc.eks.<REGION>.amazonaws.com/id/<OIDC_ID>:sub": "system:serviceaccount:nova:aws-secrets-manager",
+          "oidc.eks.<REGION>.amazonaws.com/id/<OIDC_ID>:aud": "sts.amazonaws.com"
+        }
+      }
+    }
+  ]
+}
+
+# ============================================================================
+# STEP 3: Attach Policy to Role
+# ============================================================================
+# AWS CLI command:
+# aws iam attach-role-policy \
+#   --role-name nova-secrets-manager-role \
+#   --policy-arn arn:aws:iam::<ACCOUNT_ID>:policy/NovaSecretsManagerPolicy
+
+# ============================================================================
+# STEP 4: Verify IRSA Setup
+# ============================================================================
+# 1. Apply ServiceAccount (serviceaccount.yaml)
+# 2. Deploy a test pod:
+#
+# kubectl run aws-cli --rm -it --image=amazon/aws-cli --serviceaccount=aws-secrets-manager -- \
+#   secretsmanager get-secret-value --secret-id prod/nova/jwt-config --region us-west-2
+#
+# Expected output: JSON with secret value
+#
+# If you see "AccessDeniedException", check:
+# - OIDC provider is correctly configured
+# - Trust policy Condition matches exactly
+# - IAM role ARN in ServiceAccount annotation is correct
+
+# ============================================================================
+# Terraform Configuration (Alternative to AWS CLI)
+# ============================================================================
+# Save as terraform/irsa.tf:
+---
+# terraform/irsa.tf
+data "aws_eks_cluster" "nova" {
+  name = var.cluster_name
+}
+
+data "aws_iam_policy_document" "secrets_manager_assume_role" {
+  statement {
+    effect = "Allow"
+
+    principals {
+      type        = "Federated"
+      identifiers = [data.aws_eks_cluster.nova.identity[0].oidc[0].issuer]
+    }
+
+    actions = ["sts:AssumeRoleWithWebIdentity"]
+
+    condition {
+      test     = "StringEquals"
+      variable = "${replace(data.aws_eks_cluster.nova.identity[0].oidc[0].issuer, "https://", "")}:sub"
+      values   = ["system:serviceaccount:nova:aws-secrets-manager"]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "${replace(data.aws_eks_cluster.nova.identity[0].oidc[0].issuer, "https://", "")}:aud"
+      values   = ["sts.amazonaws.com"]
+    }
+  }
+}
+
+data "aws_iam_policy_document" "secrets_manager_policy" {
+  statement {
+    effect = "Allow"
+
+    actions = [
+      "secretsmanager:GetSecretValue",
+      "secretsmanager:DescribeSecret",
+    ]
+
+    resources = [
+      "arn:aws:secretsmanager:${var.region}:${var.account_id}:secret:prod/nova/jwt-config-*",
+      "arn:aws:secretsmanager:${var.region}:${var.account_id}:secret:prod/nova/*",
+    ]
+  }
+
+  statement {
+    effect = "Allow"
+
+    actions = [
+      "kms:Decrypt",
+    ]
+
+    resources = ["arn:aws:kms:${var.region}:${var.account_id}:key/*"]
+
+    condition {
+      test     = "StringEquals"
+      variable = "kms:ViaService"
+      values   = ["secretsmanager.${var.region}.amazonaws.com"]
+    }
+  }
+}
+
+resource "aws_iam_policy" "secrets_manager" {
+  name        = "NovaSecretsManagerPolicy"
+  description = "Policy for Nova services to access JWT secrets via AWS Secrets Manager"
+  policy      = data.aws_iam_policy_document.secrets_manager_policy.json
+}
+
+resource "aws_iam_role" "secrets_manager" {
+  name               = "nova-secrets-manager-role"
+  assume_role_policy = data.aws_iam_policy_document.secrets_manager_assume_role.json
+}
+
+resource "aws_iam_role_policy_attachment" "secrets_manager" {
+  policy_arn = aws_iam_policy.secrets_manager.arn
+  role       = aws_iam_role.secrets_manager.name
+}
+
+output "irsa_role_arn" {
+  value       = aws_iam_role.secrets_manager.arn
+  description = "IAM role ARN for IRSA - add this to ServiceAccount annotation"
+}
+
+# ============================================================================
+# Variables (terraform/variables.tf)
+# ============================================================================
+variable "cluster_name" {
+  description = "EKS cluster name"
+  type        = string
+  default     = "nova-production"
+}
+
+variable "region" {
+  description = "AWS region"
+  type        = string
+  default     = "us-west-2"
+}
+
+variable "account_id" {
+  description = "AWS account ID"
+  type        = string
+}
