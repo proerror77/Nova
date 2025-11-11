@@ -58,10 +58,14 @@ where
         let service = self.service.clone();
 
         Box::pin(async move {
-            // Extract Authorization header
+            // CRITICAL FIX for actix-web 4.11.0 BorrowMutError:
+            // Extract all immutable data (headers) FIRST, before ANY mutable access (extensions_mut)
+            // This ensures no RefCell borrows are active when we call extensions_mut()
+
+            // Extract Authorization header (creates immutable borrow)
             let auth_header = match req.headers().get("Authorization") {
                 Some(header) => match header.to_str() {
-                    Ok(h) => h,
+                    Ok(h) => h.to_string(), // Clone to owned String to drop borrow
                     Err(_) => {
                         return Err(ErrorUnauthorized("Invalid Authorization header"));
                     }
@@ -71,7 +75,7 @@ where
                 }
             };
 
-            // Extract Bearer token
+            // Extract Bearer token (works on owned String, no borrow)
             let token = match auth_header.strip_prefix("Bearer ") {
                 Some(t) => t,
                 None => {
@@ -81,7 +85,7 @@ where
                 }
             };
 
-            // Validate token and extract user_id
+            // Validate token and extract user_id (no req access)
             let user_id = match jwt::validate_token(token) {
                 Ok(token_data) => match Uuid::parse_str(&token_data.claims.sub) {
                     Ok(id) => id,
@@ -95,7 +99,7 @@ where
                 }
             };
 
-            // Add user_id to request extensions
+            // Now safe to mutably borrow - all prior immutable borrows are dropped
             req.extensions_mut().insert(UserId(user_id));
 
             // Continue to next middleware/handler
