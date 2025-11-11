@@ -19,6 +19,7 @@ members = [
     "libs/resilience",        # NEW - Timeouts & Circuit Breakers
     "libs/aws-secrets",       # AWS Secrets Manager integration
     "libs/grpc-metrics",      # gRPC metrics middleware
+    "libs/transactional-outbox", # Transactional Outbox pattern for reliable event publishing
 ]
 
 # Note: Removed services (archived in archived-v1/):
