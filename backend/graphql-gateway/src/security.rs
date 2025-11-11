@@ -400,3 +400,39 @@ impl Default for SecurityConfig {
         }
     }
 }
+
+impl SecurityConfig {
+    /// Load security config from environment variables
+    pub fn from_env() -> Result<Self, std::env::VarError> {
+        Ok(Self {
+            max_complexity: std::env::var("GRAPHQL_MAX_COMPLEXITY")
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(1000),
+            max_depth: std::env::var("GRAPHQL_MAX_DEPTH")
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(10),
+            max_backend_calls: std::env::var("GRAPHQL_MAX_BACKEND_CALLS")
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(10),
+            max_queries_per_minute: std::env::var("GRAPHQL_MAX_QUERIES_PER_MINUTE")
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(100),
+            max_mutations_per_minute: std::env::var("GRAPHQL_MAX_MUTATIONS_PER_MINUTE")
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(20),
+            allow_introspection: std::env::var("GRAPHQL_ALLOW_INTROSPECTION")
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(false),
+            use_persisted_queries: std::env::var("GRAPHQL_USE_PERSISTED_QUERIES")
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(true),
+        })
+    }
+}
