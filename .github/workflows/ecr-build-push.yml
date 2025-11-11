@@ -29,18 +29,20 @@ jobs:
     strategy:
       matrix:
         service:
-          - auth-service
           - user-service
-          - content-service
-          - feed-service
-          - media-service
-          - messaging-service
-          - search-service
-          - streaming-service
-          - graphql-gateway
-          - notification-service
-          - events-service
-          - cdn-service
+          # TEMPORARY: Building only user-service to fix BorrowMutError
+          # Other services commented out to prevent matrix cancellation
+          # - auth-service
+          # - content-service
+          # - feed-service
+          # - media-service
+          # - messaging-service
+          # - search-service
+          # - streaming-service
+          # - graphql-gateway
+          # - notification-service
+          # - events-service
+          # - cdn-service
       max-parallel: 2
 
     steps:
