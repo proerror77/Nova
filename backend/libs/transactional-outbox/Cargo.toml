@@ -1,0 +1,36 @@
+[package]
+name = "transactional-outbox"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# Async runtime
+tokio = { workspace = true, features = ["full"] }
+
+# Database
+sqlx = { workspace = true, features = ["runtime-tokio", "postgres", "chrono", "uuid", "json"] }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Kafka
+rdkafka = { workspace = true }
+
+# Error handling
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+
+# Utilities
+uuid = { workspace = true }
+chrono = { workspace = true }
+
+# Background task scheduling
+async-trait = { workspace = true }
+
+[dev-dependencies]
+tokio-test = "0.4"
