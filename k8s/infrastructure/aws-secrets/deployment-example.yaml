@@ -1,0 +1,389 @@
+# Example: identity-service Deployment with IRSA configuration
+# This shows how to update existing service deployments to use AWS Secrets Manager via IRSA
+#
+# Key changes from original deployment:
+# 1. Add serviceAccountName: aws-secrets-manager
+# 2. Add AWS_SECRETS_JWT_NAME environment variable
+# 3. Add AWS_REGION environment variable
+# 4. Remove JWT_SECRET environment variable (now loaded from AWS Secrets Manager)
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: identity-service
+  namespace: nova
+  labels:
+    app: identity-service
+    version: v2
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: identity-service
+  template:
+    metadata:
+      labels:
+        app: identity-service
+        version: v2
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        prometheus.io/path: "/metrics"
+    spec:
+      # ============================================================
+      # KEY CHANGE: Use ServiceAccount with IRSA annotation
+      # ============================================================
+      serviceAccountName: aws-secrets-manager
+
+      containers:
+      - name: identity-service
+        image: nova/identity-service:v2.0.0
+        ports:
+        - name: grpc
+          containerPort: 50051
+          protocol: TCP
+        - name: metrics
+          containerPort: 9090
+          protocol: TCP
+
+        env:
+        # ============================================================
+        # AWS Secrets Manager Configuration
+        # ============================================================
+        - name: AWS_SECRETS_JWT_NAME
+          value: "prod/nova/jwt-config"
+
+        - name: AWS_REGION
+          value: "us-west-2"
+
+        # Optional: Override default cache TTL (default: 300 seconds)
+        - name: AWS_SECRETS_CACHE_TTL_SECONDS
+          value: "300"
+
+        # ============================================================
+        # Database Configuration
+        # ============================================================
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: postgres-credentials
+              key: connection-string
+
+        - name: DATABASE_MAX_CONNECTIONS
+          value: "25"  # PgBouncer handles pooling
+
+        - name: DATABASE_CONNECT_TIMEOUT
+          value: "5"
+
+        - name: DATABASE_ACQUIRE_TIMEOUT
+          value: "10"
+
+        # ============================================================
+        # Redis Configuration
+        # ============================================================
+        - name: REDIS_URL
+          value: "redis://redis-master.nova.svc.cluster.local:6379"
+
+        - name: REDIS_MAX_CONNECTIONS
+          value: "20"
+
+        - name: REDIS_CONNECTION_TIMEOUT
+          value: "5"
+
+        # ============================================================
+        # Kafka Configuration
+        # ============================================================
+        - name: KAFKA_BROKERS
+          value: "kafka-0.kafka-headless.nova.svc.cluster.local:9092,kafka-1.kafka-headless.nova.svc.cluster.local:9092,kafka-2.kafka-headless.nova.svc.cluster.local:9092"
+
+        - name: KAFKA_TOPIC_USER_EVENTS
+          value: "user.events"
+
+        # ============================================================
+        # gRPC Server Configuration
+        # ============================================================
+        - name: GRPC_PORT
+          value: "50051"
+
+        - name: GRPC_MAX_MESSAGE_SIZE
+          value: "4194304"  # 4MB
+
+        # mTLS Configuration (see P0-1)
+        - name: GRPC_SERVER_CERT_PATH
+          value: /etc/grpc-tls/tls.crt
+
+        - name: GRPC_SERVER_KEY_PATH
+          value: /etc/grpc-tls/tls.key
+
+        - name: GRPC_CLIENT_CA_CERT_PATH
+          value: /etc/grpc-tls/ca.crt
+
+        # ============================================================
+        # Observability
+        # ============================================================
+        - name: RUST_LOG
+          value: "identity_service=info,warn"
+
+        - name: OTEL_SERVICE_NAME
+          value: "identity-service"
+
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: "http://jaeger-collector.observability.svc.cluster.local:4317"
+
+        # ============================================================
+        # Resilience Configuration (see P0-5)
+        # ============================================================
+        - name: RESILIENCE_DB_TIMEOUT_SECONDS
+          value: "10"
+
+        - name: RESILIENCE_CACHE_TIMEOUT_SECONDS
+          value: "5"
+
+        - name: RESILIENCE_GRPC_TIMEOUT_SECONDS
+          value: "10"
+
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+
+        # ============================================================
+        # Health Checks (tonic-health - see P0-4)
+        # ============================================================
+        livenessProbe:
+          exec:
+            command:
+            - grpc_health_probe
+            - -addr=:50051
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+
+        readinessProbe:
+          exec:
+            command:
+            - grpc_health_probe
+            - -addr=:50051
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 2
+
+        # ============================================================
+        # Volume Mounts (mTLS certificates - see P0-1)
+        # ============================================================
+        volumeMounts:
+        - name: grpc-tls-certs
+          mountPath: /etc/grpc-tls
+          readOnly: true
+
+      volumes:
+      - name: grpc-tls-certs
+        secret:
+          secretName: grpc-tls-certs
+          items:
+          - key: tls.crt
+            path: tls.crt
+          - key: tls.key
+            path: tls.key
+          - key: ca.crt
+            path: ca.crt
+
+      # ============================================================
+      # Security Context
+      # ============================================================
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+
+      # ============================================================
+      # Pod Disruption Budget
+      # ============================================================
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - identity-service
+              topologyKey: kubernetes.io/hostname
+
+---
+# Example: graphql-gateway Deployment with IRSA configuration
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: graphql-gateway
+  namespace: nova
+  labels:
+    app: graphql-gateway
+    version: v1
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: graphql-gateway
+  template:
+    metadata:
+      labels:
+        app: graphql-gateway
+        version: v1
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        prometheus.io/path: "/metrics"
+    spec:
+      # ============================================================
+      # KEY CHANGE: Use ServiceAccount with IRSA annotation
+      # ============================================================
+      serviceAccountName: aws-secrets-manager
+
+      containers:
+      - name: graphql-gateway
+        image: nova/graphql-gateway:v1.0.0
+        ports:
+        - name: http
+          containerPort: 8080
+          protocol: TCP
+        - name: metrics
+          containerPort: 9090
+          protocol: TCP
+
+        env:
+        # ============================================================
+        # AWS Secrets Manager Configuration
+        # ============================================================
+        - name: AWS_SECRETS_JWT_NAME
+          value: "prod/nova/jwt-config"
+
+        - name: AWS_REGION
+          value: "us-west-2"
+
+        # ============================================================
+        # GraphQL Configuration
+        # ============================================================
+        - name: GRAPHQL_PLAYGROUND_ENABLED
+          value: "false"  # Disable in production
+
+        - name: GRAPHQL_QUERY_COMPLEXITY_LIMIT
+          value: "1000"
+
+        - name: GRAPHQL_DEPTH_LIMIT
+          value: "10"
+
+        # ============================================================
+        # gRPC Client Configuration (to backend services)
+        # ============================================================
+        - name: IDENTITY_SERVICE_URL
+          value: "http://identity-service.nova.svc.cluster.local:50051"
+
+        - name: USER_SERVICE_URL
+          value: "http://user-service.nova.svc.cluster.local:50051"
+
+        - name: CONTENT_SERVICE_URL
+          value: "http://content-service.nova.svc.cluster.local:50051"
+
+        # gRPC client mTLS configuration
+        - name: GRPC_CLIENT_CERT_PATH
+          value: /etc/grpc-tls/tls.crt
+
+        - name: GRPC_CLIENT_KEY_PATH
+          value: /etc/grpc-tls/tls.key
+
+        - name: GRPC_SERVER_CA_CERT_PATH
+          value: /etc/grpc-tls/ca.crt
+
+        # ============================================================
+        # Rate Limiting
+        # ============================================================
+        - name: RATE_LIMIT_REQUESTS_PER_SECOND
+          value: "100"
+
+        - name: RATE_LIMIT_BURST_SIZE
+          value: "200"
+
+        resources:
+          requests:
+            cpu: 200m
+            memory: 256Mi
+          limits:
+            cpu: 1000m
+            memory: 1Gi
+
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 10
+
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+
+        volumeMounts:
+        - name: grpc-tls-certs
+          mountPath: /etc/grpc-tls
+          readOnly: true
+
+      volumes:
+      - name: grpc-tls-certs
+        secret:
+          secretName: grpc-tls-certs
+
+---
+# NetworkPolicy: Allow graphql-gateway to access backend gRPC services
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: graphql-gateway-egress
+  namespace: nova
+spec:
+  podSelector:
+    matchLabels:
+      app: graphql-gateway
+  policyTypes:
+  - Egress
+  egress:
+  # Allow DNS
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: kube-system
+    ports:
+    - protocol: UDP
+      port: 53
+
+  # Allow gRPC services
+  - to:
+    - podSelector:
+        matchLabels:
+          app: identity-service
+    - podSelector:
+        matchLabels:
+          app: user-service
+    - podSelector:
+        matchLabels:
+          app: content-service
+    ports:
+    - protocol: TCP
+      port: 50051
+
+  # Allow AWS Secrets Manager API
+  - to:
+    - namespaceSelector: {}
+    ports:
+    - protocol: TCP
+      port: 443
