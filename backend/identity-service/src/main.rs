@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use std::sync::Arc;
 use tonic::transport::Server;
 use tonic_health::server::{health_reporter, HealthReporter};
@@ -107,8 +107,40 @@ async fn main() -> Result<()> {
     // Start metrics endpoint
     tokio::spawn(metrics_server(settings.server.metrics_port));
 
+    // ✅ P0-1: Load mTLS configuration
+    let tls_config = match grpc_tls::GrpcServerTlsConfig::from_env() {
+        Ok(config) => {
+            info!("mTLS enabled - service-to-service authentication active");
+            Some(config)
+        }
+        Err(e) => {
+            warn!("mTLS disabled - TLS config not found: {}. Using development mode for testing only.", e);
+            // In development, allow non-TLS for testing
+            // In production, this should fail hard
+            if cfg!(debug_assertions) {
+                info!("Development mode: Starting without TLS (NOT FOR PRODUCTION)");
+                None
+            } else {
+                return Err(e).context("Production requires mTLS - GRPC_SERVER_CERT_PATH must be set");
+            }
+        }
+    };
+
+    // Build server with optional TLS
+    let mut server_builder = Server::builder();
+
+    if let Some(tls_cfg) = tls_config {
+        let server_tls = tls_cfg
+            .build_server_tls()
+            .context("Failed to build server TLS config")?;
+        server_builder = server_builder
+            .tls_config(server_tls)
+            .context("Failed to configure TLS on gRPC server")?;
+        info!("gRPC server TLS configured successfully");
+    }
+
     // Start gRPC server with graceful shutdown
-    Server::builder()
+    server_builder
         .add_service(health_service)  // ✅ P0-4: Add health service
         .add_service(grpc::identity_service_server::IdentityServiceServer::new(identity_impl))
         .add_service(tonic_reflection::server::Builder::configure()
