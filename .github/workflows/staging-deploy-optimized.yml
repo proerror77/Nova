@@ -96,26 +96,12 @@ jobs:
       - name: Login to ECR
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      # 优化: 增强缓存策略
-      - name: Build and push ${{ matrix.service }}
-        uses: docker/build-push-action@v6
+      - uses: ./.github/actions/build-push-ecr
         with:
-          context: .
-          file: ./backend/${{ matrix.service }}/Dockerfile
-          platforms: linux/amd64
-          push: true
-          # 优化: 只推 SHA tag,不推 latest
-          tags: ${{ env.REGISTRY }}/${{ env.REGISTRY_ALIAS }}/${{ matrix.service }}:${{ github.sha }}
-          # 优化: 多层缓存 (GHA + Registry)
-          cache-from: |
-            type=gha
-            type=registry,ref=${{ env.REGISTRY }}/${{ env.REGISTRY_ALIAS }}/${{ matrix.service }}:buildcache
-          cache-to: |
-            type=gha,mode=max
-            type=registry,ref=${{ env.REGISTRY }}/${{ env.REGISTRY_ALIAS }}/${{ matrix.service }}:buildcache,mode=max
+          service-name: ${{ matrix.service }}
+          image-tag: ${{ github.sha }}
+          ecr-registry: ${{ env.REGISTRY }}
+          registry-alias: ${{ env.REGISTRY_ALIAS }}
 
       - name: Verify image
         run: |
