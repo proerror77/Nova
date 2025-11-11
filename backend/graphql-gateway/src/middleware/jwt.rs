@@ -100,10 +100,9 @@ where
             });
         }
 
-        let auth_str = match auth_header.unwrap().to_str()
-        {
-            Ok(s) => s,
-            Err(_) => {
+        let auth_str = match auth_header.and_then(|h| h.to_str().ok()) {
+            Some(s) => s,
+            None => {
                 tracing::warn!(
                     method = %method,
                     path = %path,
