@@ -106,6 +106,9 @@ once_cell = "1.19"
 # Swagger/OpenAPI
 utoipa.workspace = true
 
+# Resilience (P0-5)
+resilience = { path = "../libs/resilience" }
+
 # Shared libraries
 error-types = { path = "../libs/error-types" }
 nova-fcm-shared = { path = "../libs/nova-fcm-shared" }
