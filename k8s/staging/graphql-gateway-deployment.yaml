@@ -1,0 +1,269 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: graphql-gateway
+  namespace: nova-staging
+  labels:
+    app: graphql-gateway
+    tier: api
+    version: staging
+  annotations:
+    description: "GraphQL Gateway with Kafka subscriptions, Redis caching, and rate limiting"
+
+spec:
+  replicas: 2  # Staging: 2 replicas for basic redundancy
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+
+  selector:
+    matchLabels:
+      app: graphql-gateway
+
+  template:
+    metadata:
+      labels:
+        app: graphql-gateway
+        tier: api
+        version: staging
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/metrics"
+
+    spec:
+      serviceAccountName: graphql-gateway
+      securityContext:
+        runAsNonRoot: true
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+
+      # ✅ P0-5: Wait for Kafka cluster to be ready
+      initContainers:
+        - name: wait-for-kafka
+          image: busybox:1.35
+          securityContext:
+            runAsUser: 0
+            runAsNonRoot: false
+          command:
+            - sh
+            - -c
+            - |
+              echo "Waiting for Kafka cluster to be ready..."
+              for i in $(seq 1 300); do
+                if nc -z kafka-broker-0.kafka-headless.nova-staging.svc.cluster.local 9092 && \
+                   nc -z kafka-broker-1.kafka-headless.nova-staging.svc.cluster.local 9092 && \
+                   nc -z kafka-broker-2.kafka-headless.nova-staging.svc.cluster.local 9092; then
+                  echo "✓ Kafka cluster is ready"
+                  exit 0
+                fi
+                echo "Attempt $i/300 - Kafka not ready yet, retrying in 1s..."
+                sleep 1
+              done
+              echo "⚠ Warning: Kafka not ready after 5 minutes, continuing with startup..."
+              exit 0
+
+        - name: wait-for-redis
+          image: busybox:1.35
+          securityContext:
+            runAsUser: 0
+            runAsNonRoot: false
+          command:
+            - sh
+            - -c
+            - |
+              echo "Waiting for Redis to be ready..."
+              for i in $(seq 1 60); do
+                if nc -z redis.nova-media.svc.cluster.local 6379; then
+                  echo "✓ Redis is ready"
+                  exit 0
+                fi
+                echo "Attempt $i/60 - Redis not ready yet, retrying in 1s..."
+                sleep 1
+              done
+              echo "✗ FATAL: Redis not ready after 1 minute"
+              exit 1
+
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - graphql-gateway
+                topologyKey: kubernetes.io/hostname
+
+        # Prefer nodes labeled as api tier
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 50
+              preference:
+                matchExpressions:
+                  - key: tier
+                    operator: In
+                    values:
+                      - api
+
+      # Pod Disruption Budget: ensure at least 1 replica running
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app: graphql-gateway
+
+      containers:
+        - name: graphql-gateway
+          image: nova/graphql-gateway:v0.1.0  # Update with actual image
+          imagePullPolicy: Always
+
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 1000
+            capabilities:
+              drop:
+                - ALL
+
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+            - name: metrics
+              containerPort: 9090
+              protocol: TCP
+
+          # ✅ P0-5: Environment configuration for subscriptions
+          env:
+            # Service discovery
+            - name: RUST_LOG
+              value: "info,graphql_gateway=debug"
+
+            # Server configuration
+            - name: SERVER_HOST
+              value: "0.0.0.0"
+            - name: SERVER_PORT
+              value: "8080"
+
+            # Kafka configuration
+            - name: KAFKA_BROKERS
+              value: "kafka-broker-0.kafka-headless.nova-staging.svc.cluster.local:9092,kafka-broker-1.kafka-headless.nova-staging.svc.cluster.local:9092,kafka-broker-2.kafka-headless.nova-staging.svc.cluster.local:9092"
+            - name: KAFKA_GROUP_ID
+              value: "graphql-gateway-staging"
+            - name: KAFKA_TIMEOUT_MS
+              value: "5000"
+            - name: KAFKA_AUTO_OFFSET_RESET
+              value: "earliest"
+
+            # Redis configuration
+            - name: REDIS_URL
+              value: "redis://redis.nova-media.svc.cluster.local:6379"
+
+            # GraphQL configuration
+            - name: GRAPHQL_PLAYGROUND_ENABLED
+              value: "true"
+            - name: GRAPHQL_INTROSPECTION_ENABLED
+              value: "true"
+
+            # Rate limiting
+            - name: RATE_LIMIT_RPS
+              value: "100"
+            - name: RATE_LIMIT_BURST
+              value: "10"
+
+            # Query complexity
+            - name: MAX_QUERY_COMPLEXITY
+              value: "1000"
+
+            # CORS
+            - name: ALLOWED_ORIGINS
+              value: "http://localhost:3000,http://staging.example.com"
+
+            # Database
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: graphql-gateway-secrets
+                  key: database-url
+
+            # JWT
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: graphql-gateway-secrets
+                  key: jwt-secret
+            - name: JWT_PRIVATE_KEY_PEM
+              valueFrom:
+                secretKeyRef:
+                  name: graphql-gateway-secrets
+                  key: jwt-private-key-pem
+            - name: JWT_PUBLIC_KEY_PEM
+              valueFrom:
+                secretKeyRef:
+                  name: graphql-gateway-secrets
+                  key: jwt-public-key-pem
+
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: 500m
+              memory: 1Gi
+
+          # Health checks
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 2
+
+          # Startup probe (important for slow startups)
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 0
+            periodSeconds: 1
+            timeoutSeconds: 5
+            failureThreshold: 30  # Allow 30 seconds to start
+
+          # Volume mounts
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: cache
+              mountPath: /var/cache
+
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: cache
+          emptyDir: {}
+
+      # Termination
+      terminationGracePeriodSeconds: 30
+
+      # DNS policy for service discovery
+      dnsPolicy: ClusterFirst

@@ -182,10 +182,11 @@ impl GraphService {
                     .param("b", b.to_string()),
             )
             .await?;
-        while let Ok(Some(row)) = res.next().await {
+        if let Ok(Some(row)) = res.next().await {
             let mutuals: i64 = row.get("mutuals").unwrap_or(0);
-            return Ok(mutuals as u64);
+            Ok(mutuals as u64)
+        } else {
+            Ok(0)
         }
-        Ok(0)
     }
 }

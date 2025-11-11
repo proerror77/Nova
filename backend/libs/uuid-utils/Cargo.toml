@@ -1,0 +1,25 @@
+[package]
+name = "uuid-utils"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+uuid = { version = "1.7", features = ["v4", "serde"] }
+thiserror = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+
+# Optional: For actix-web integration
+actix-web = { version = "4.4", optional = true }
+
+# Optional: For tonic/gRPC integration
+tonic = { version = "0.10", optional = true }
+
+[features]
+default = []
+actix = ["actix-web"]
+grpc = ["tonic"]
+
+[dev-dependencies]
+tokio = { version = "1", features = ["full"] }

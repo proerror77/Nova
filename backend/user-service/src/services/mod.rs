@@ -15,6 +15,7 @@ pub mod graph;
 // pub mod image_processing; // REMOVED - moved to media-service (port 8082) [DELETED]
 // pub mod job_queue; // REMOVED - moved to content-service (port 8081) [DELETED]
 // pub mod jwt_key_rotation; // REMOVED - moved to auth-service (port 8084) [DELETED]
+pub mod kafka;
 pub mod kafka_producer;
 pub mod moderation_service;
 // pub mod notifications; // REMOVED - moved to notification-service (port 8090) [DELETED]

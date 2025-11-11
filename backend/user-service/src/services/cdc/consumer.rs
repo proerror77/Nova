@@ -1,4 +1,4 @@
-use chrono::{DateTime, NaiveDateTime, Utc};
+use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
 use rdkafka::config::ClientConfig;
 use rdkafka::consumer::{Consumer, StreamConsumer};
 use rdkafka::message::Message;
@@ -140,7 +140,7 @@ impl CdcConsumer {
                     topic, partition, offset
                 );
                 tpl.add_partition_offset(topic, partition, Offset::Offset(offset))
-                    .map_err(|e| AppError::Kafka(e))?;
+                    .map_err(AppError::Kafka)?;
             }
         }
 
@@ -258,7 +258,7 @@ impl CdcConsumer {
         // Then commit to Kafka (for consumer group coordination)
         let mut tpl = TopicPartitionList::new();
         tpl.add_partition_offset(topic, partition, Offset::Offset(offset))
-            .map_err(|e| AppError::Kafka(e))?;
+            .map_err(AppError::Kafka)?;
 
         self.consumer
             .commit(&tpl, rdkafka::consumer::CommitMode::Async)
@@ -522,10 +522,10 @@ impl CdcConsumer {
             return Ok(dt.with_timezone(&Utc));
         }
         if let Ok(ndt) = NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S%.f") {
-            return Ok(DateTime::<Utc>::from_utc(ndt, Utc));
+            return Ok(Utc.from_utc_datetime(&ndt));
         }
         if let Ok(ndt) = NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S") {
-            return Ok(DateTime::<Utc>::from_utc(ndt, Utc));
+            return Ok(Utc.from_utc_datetime(&ndt));
         }
         Err(AppError::Validation(format!(
             "Unsupported datetime format: {}",

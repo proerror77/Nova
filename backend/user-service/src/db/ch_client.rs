@@ -66,7 +66,7 @@ impl ClickHouseClient {
             .with_database(database)
             .with_user(username)
             .with_password(password)
-            .with_option("max_execution_time", &(query_timeout_ms / 1000).to_string());
+            .with_option("max_execution_time", (query_timeout_ms / 1000).to_string());
 
         // Do not force `readonly` via session setting here.
         // Some ClickHouse deployments run in readonly mode at the user/profile level,
@@ -222,6 +222,7 @@ impl ClickHouseClient {
     /// Health check - verifies ClickHouse connection is alive
     pub async fn health_check(&self) -> Result<()> {
         #[derive(clickhouse::Row, serde::Deserialize)]
+        #[allow(dead_code)] // Field used by ClickHouse deserialization
         struct HealthCheck {
             result: u32,
         }

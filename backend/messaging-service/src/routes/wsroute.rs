@@ -42,6 +42,8 @@ struct WsSession {
     redis: RedisClient,
     db: Pool<Postgres>,
     hb: Instant,
+    // Store full AppState for event handling
+    app_state: AppState,
 }
 
 impl WsSession {
@@ -53,6 +55,7 @@ impl WsSession {
         registry: ConnectionRegistry,
         redis: RedisClient,
         db: Pool<Postgres>,
+        app_state: AppState,
     ) -> Self {
         Self {
             conversation_id,
@@ -63,6 +66,7 @@ impl WsSession {
             redis,
             db,
             hb: Instant::now(),
+            app_state,
         }
     }
 
@@ -328,17 +332,8 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsSession {
                         });
                     }
                     Ok(evt) => {
-                        // Handle other events
-                        let state = AppState {
-                            db: self.db.clone(),
-                            registry: self.registry.clone(),
-                            redis: self.redis.clone(),
-                            config: todo!(), // Will be fixed in handler
-                            apns: None,
-                            encryption: todo!(),
-                            key_exchange_service: None,
-                            auth_client: todo!(), // Phase 1: Will be fixed in handler
-                        };
+                        // Handle other events - use the stored app_state
+                        let state = self.app_state.clone();
 
                         actix::spawn(async move {
                             self.handle_ws_event(&evt, &state).await;
@@ -458,7 +453,7 @@ pub async fn ws_handler(
     // Register subscriber
     let (subscriber_id, mut rx) = state.registry.add_subscriber(params.conversation_id).await;
 
-    // Create WebSocket session
+    // Create WebSocket session with full AppState
     let session = WsSession::new(
         params.conversation_id,
         params.user_id,
@@ -467,6 +462,7 @@ pub async fn ws_handler(
         state.registry.clone(),
         state.redis.clone(),
         state.db.clone(),
+        state.as_ref().clone(),  // Pass the full AppState
     );
 
     let resp = ws::start(session, &req, stream)?;

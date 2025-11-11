@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: nova-staging
+  labels:
+    environment: staging
+    tier: platform
+  annotations:
+    description: "Nova staging environment for GraphQL Gateway and dependent services"

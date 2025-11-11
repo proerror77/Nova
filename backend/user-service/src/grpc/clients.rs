@@ -79,7 +79,7 @@ async fn connect_with_retry(
                 last_err = Some(err);
                 if attempt + 1 < max_attempts {
                     let sleep_duration =
-                        backoff.checked_mul((attempt + 1) as u32).unwrap_or(backoff);
+                        backoff.checked_mul(attempt + 1).unwrap_or(backoff);
                     tracing::warn!(
                         attempt = attempt + 1,
                         max_attempts,
@@ -680,7 +680,7 @@ impl AuthServiceClient {
                     if attempt + 1 < attempts {
                         let delay = self
                             .retry_backoff
-                            .checked_mul((attempt + 1) as u32)
+                            .checked_mul(attempt + 1)
                             .unwrap_or(self.retry_backoff);
                         sleep(delay).await;
                     }
@@ -724,7 +724,7 @@ impl AuthServiceClient {
                     if attempt + 1 < attempts {
                         let delay = self
                             .retry_backoff
-                            .checked_mul((attempt + 1) as u32)
+                            .checked_mul(attempt + 1)
                             .unwrap_or(self.retry_backoff);
                         sleep(delay).await;
                     }

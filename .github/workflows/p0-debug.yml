@@ -9,6 +9,7 @@ jobs:
   debug:
     name: Debug CI Environment
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
       - name: Step 1 - Checkout

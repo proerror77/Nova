@@ -1,6 +1,7 @@
 use actix_web::{web, App, HttpServer, middleware::Logger};
-use async_graphql_actix_web::{GraphQLRequest, GraphQLResponse};
+use async_graphql_actix_web::{GraphQLRequest, GraphQLResponse, GraphQLSubscription};
 use tracing::info;
+use tracing_subscriber::prelude::*;
 use std::env;
 
 mod config;
@@ -8,10 +9,11 @@ mod clients;
 mod schema;
 mod middleware;
 mod cache;
+mod kafka;  // ✅ P0-5: Kafka integration for subscriptions
 
 use clients::ServiceClients;
 use schema::build_schema;
-use middleware::JwtMiddleware;
+use middleware::{JwtMiddleware, RateLimitMiddleware, RateLimitConfig};
 use cache::CacheConfig;
 
 async fn graphql_handler(
@@ -21,8 +23,25 @@ async fn graphql_handler(
     schema.execute(req.into_inner()).await.into()
 }
 
+async fn graphql_subscription_handler(
+    schema: web::Data<schema::AppSchema>,
+    req: actix_web::HttpRequest,
+    payload: web::Payload,
+) -> actix_web::Result<actix_web::HttpResponse> {
+    GraphQLSubscription::new(schema.as_ref().clone())
+        .start(&req, payload)
+}
+
 async fn health_handler() -> &'static str {
     "ok"
+}
+
+/// SDL (Schema Definition Language) endpoint for schema introspection
+/// Enables automatic client code generation and documentation
+async fn schema_handler(schema: web::Data<schema::AppSchema>) -> actix_web::HttpResponse {
+    actix_web::HttpResponse::Ok()
+        .content_type("text/plain")
+        .body(schema.sdl())
 }
 
 async fn playground_handler() -> actix_web::HttpResponse {
@@ -56,11 +75,23 @@ async fn playground_handler() -> actix_web::HttpResponse {
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    // Initialize tracing
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            env::var("RUST_LOG")
-                .unwrap_or_else(|_| "info,graphql_gateway=debug".to_string())
+    // Initialize structured logging with JSON format for production-grade observability
+    // Includes: timestamp, level, target, thread IDs, line numbers, and structured fields
+    tracing_subscriber::registry()
+        .with(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| "info,graphql_gateway=debug".into()),
+        )
+        .with(
+            tracing_subscriber::fmt::layer()
+                .json() // ✅ JSON format for log aggregation (CloudWatch, Datadog, ELK)
+                .with_current_span(true) // Include span context for distributed tracing
+                .with_span_list(true) // Include all parent spans
+                .with_thread_ids(true) // Include thread IDs for debugging
+                .with_thread_names(true) // Include thread names
+                .with_line_number(true) // Include source line numbers
+                .with_file(true) // Include source file paths
+                .with_target(true) // Include target module path
         )
         .init();
 
@@ -85,30 +116,54 @@ async fn main() -> std::io::Result<()> {
 
     info!("Service clients initialized");
 
+    // Initialize JWT keys (RS256 only) from environment
+    // SECURITY: Must use RS256 asymmetric encryption, never HS256
+    let jwt_private_key = env::var("JWT_PRIVATE_KEY_PEM")
+        .map_err(|_| "JWT_PRIVATE_KEY_PEM environment variable must be set")?;
+    let jwt_public_key = env::var("JWT_PUBLIC_KEY_PEM")
+        .map_err(|_| "JWT_PUBLIC_KEY_PEM environment variable must be set")?;
+
+    crypto_core::jwt::initialize_jwt_keys(&jwt_private_key, &jwt_public_key)
+        .map_err(|e| format!("Failed to initialize JWT keys - check PEM format: {}", e))?;
+
+    info!("JWT authentication enabled with RS256 algorithm");
+
     // Build GraphQL schema with service clients
     let schema = build_schema(clients);
-
-    // JWT configuration
-    let jwt_secret = env::var("JWT_SECRET")
-        .expect("JWT_SECRET environment variable must be set");
-    info!("JWT authentication enabled");
 
     let server_host = env::var("SERVER_HOST").unwrap_or_else(|_| "0.0.0.0".to_string());
     let server_port = env::var("SERVER_PORT")
         .unwrap_or_else(|_| "8080".to_string())
         .parse::<u16>()
-        .expect("SERVER_PORT must be a valid u16");
+        .map_err(|e| format!("SERVER_PORT must be a valid u16: {}", e))?;
 
     let bind_addr = format!("{}:{}", server_host, server_port);
     info!("GraphQL Gateway starting on http://{}", bind_addr);
 
-    // Start HTTP server
+    // ✅ P0-3: Initialize rate limiting (100 req/sec per IP, burst of 10)
+    let rate_limit_config = RateLimitConfig {
+        req_per_second: 100,
+        burst_size: 10,
+    };
+    let rate_limiter = RateLimitMiddleware::new(rate_limit_config);
+    info!("Rate limiting enabled: 100 req/sec per IP with burst capacity of 10");
+
+    // Start HTTP server with GraphQL, WebSocket subscriptions, and SDL
     HttpServer::new(move || {
         App::new()
             .wrap(Logger::default())
-            .wrap(JwtMiddleware::new(jwt_secret.clone()))
+            .wrap(rate_limiter.clone())  // ✅ P0-3: Apply rate limiting before JWT auth
+            .wrap(JwtMiddleware::new())  // ✅ P0-1: Fixed - Now uses RS256 from crypto-core
             .app_data(web::Data::new(schema.clone()))
+            // ✅ P0-4: GraphQL endpoints
             .route("/graphql", web::post().to(graphql_handler))
+            // ✅ P0-4: WebSocket subscriptions (real-time updates)
+            .route("/graphql", web::get().to(graphql_subscription_handler))
+            .route("/ws", web::get().to(graphql_subscription_handler))
+            // ✅ P0-4: Schema SDL endpoint for autodoc and code generation
+            .route("/graphql/schema", web::get().to(schema_handler))
+            .route("/schema", web::get().to(schema_handler))
+            // Developer tools
             .route("/playground", web::get().to(playground_handler))
             .route("/health", web::get().to(health_handler))
     })
@@ -123,8 +178,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_health_query() {
-        let schema = Schema::build(QueryRoot::default(), EmptyMutation, EmptySubscription)
-            .finish();
+        let clients = crate::clients::ServiceClients::default();
+        let schema = crate::schema::build_schema(clients);
 
         let query = "{ health }";
         let result = schema.execute(query).await;

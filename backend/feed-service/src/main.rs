@@ -112,13 +112,24 @@ async fn start_kafka_consumer(
 
 #[actix_web::main]
 async fn main() -> io::Result<()> {
-    // Initialize tracing
+    // Initialize structured logging with JSON format for production-grade observability
+    // Includes: timestamp, level, target, thread IDs, line numbers, and structured fields
     tracing_subscriber::registry()
         .with(
             tracing_subscriber::EnvFilter::try_from_default_env()
                 .unwrap_or_else(|_| "info,actix_web=debug".into()),
         )
-        .with(tracing_subscriber::fmt::layer())
+        .with(
+            tracing_subscriber::fmt::layer()
+                .json() // ✅ JSON format for log aggregation (CloudWatch, Datadog, ELK)
+                .with_current_span(true) // Include span context for distributed tracing
+                .with_span_list(true) // Include all parent spans
+                .with_thread_ids(true) // Include thread IDs for debugging
+                .with_thread_names(true) // Include thread names
+                .with_line_number(true) // Include source line numbers
+                .with_file(true) // Include source file paths
+                .with_target(true) // Include target module path
+        )
         .init();
 
     // Load configuration

@@ -2360,6 +2360,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "dashmap"
+version = "6.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5041cc499144891f3790297212f32a74fb938e5136a14943f338ef9e0ae276cf"
+dependencies = [
+ "cfg-if 1.0.4",
+ "crossbeam-utils",
+ "hashbrown 0.14.5",
+ "lock_api",
+ "once_cell",
+ "parking_lot_core",
+]
+
+[[package]]
 name = "data-encoding"
 version = "2.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3334,7 +3348,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "68a7f542ee6b35af73b06abc0dad1c1bae89964e4e253bc4b587b91c9637867b"
 dependencies = [
  "cfg-if 1.0.4",
- "dashmap",
+ "dashmap 5.5.3",
  "futures",
  "futures-timer",
  "no-std-compat",
@@ -3356,14 +3370,26 @@ dependencies = [
  "anyhow",
  "async-graphql",
  "async-graphql-actix-web",
+ "async-trait",
+ "base64 0.22.1",
+ "bytes",
  "chrono",
  "config",
+ "crypto-core",
+ "dashmap 6.1.0",
  "db-pool",
  "dotenv",
  "futures-util",
+ "governor",
  "jsonwebtoken",
+ "lazy_static",
+ "lru",
+ "md5",
  "num_cpus",
+ "prometheus",
  "prost 0.12.6",
+ "rdkafka",
+ "redis 0.25.4",
  "serde",
  "serde_json",
  "serial_test",
@@ -3374,6 +3400,7 @@ dependencies = [
  "tonic-build 0.10.2",
  "tracing",
  "tracing-subscriber",
+ "uuid 1.18.1",
 ]
 
 [[package]]
@@ -3398,6 +3425,7 @@ dependencies = [
  "hyper 1.7.0",
  "lazy_static",
  "once_cell",
+ "prometheus",
  "prost 0.12.6",
  "serde",
  "serde_json",
@@ -5735,7 +5763,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "22505a5c94da8e3b7c2996394d1c933236c4d743e81a410bcca4e6989fc066a4"
 dependencies = [
  "bytes",
- "heck 0.4.1",
+ "heck 0.5.0",
  "itertools 0.12.1",
  "log",
  "multimap",
@@ -8552,6 +8580,7 @@ dependencies = [
  "base64 0.21.7",
  "chrono",
  "clickhouse",
+ "dashmap 5.5.3",
  "db-pool",
  "dotenv",
  "envy",

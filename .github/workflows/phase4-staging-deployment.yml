@@ -1,0 +1,289 @@
+name: Phase 4 - GraphQL Gateway Staging Deployment
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        type: choice
+        options:
+          - staging
+        default: staging
+      run_load_tests:
+        description: 'Run k6 load tests after deployment'
+        required: false
+        type: boolean
+        default: true
+
+
+# Prevent concurrent Phase 4 deployments
+concurrency:
+  group: phase4-deploy-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+env:
+  AWS_REGION: ap-northeast-1
+  ECR_REGISTRY: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com
+  REGISTRY_ALIAS: nova
+  SERVICE_NAME: graphql-gateway
+  K8S_NAMESPACE: nova-staging
+
+jobs:
+  build-and-push:
+    name: Build & Push GraphQL Gateway
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    outputs:
+      image-tag: ${{ steps.meta.outputs.tag }}
+      image-full: ${{ steps.meta.outputs.image }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::025434362120:role/github-actions-role
+          aws-region: ${{ env.AWS_REGION }}
+          audience: sts.amazonaws.com
+          role-session-name: gha-graphql-gateway-phase4-${{ github.run_id }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Extract metadata
+        id: meta
+        run: |
+          TAG="phase4-staging-${{ github.sha }}"
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "image=${{ env.ECR_REGISTRY }}/${{ env.REGISTRY_ALIAS }}/${{ env.SERVICE_NAME }}:$TAG" >> $GITHUB_OUTPUT
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./backend/graphql-gateway/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta.outputs.image }}
+          cache-from: type=registry,ref=${{ env.ECR_REGISTRY }}/${{ env.REGISTRY_ALIAS }}/${{ env.SERVICE_NAME }}:buildcache
+          cache-to: type=registry,ref=${{ env.ECR_REGISTRY }}/${{ env.REGISTRY_ALIAS }}/${{ env.SERVICE_NAME }}:buildcache,mode=max
+
+      - name: Upload image info to artifact
+        run: |
+          mkdir -p /tmp/phase4-artifacts
+          echo "${{ steps.meta.outputs.image }}" > /tmp/phase4-artifacts/image-tag.txt
+          echo "${{ steps.meta.outputs.tag }}" > /tmp/phase4-artifacts/tag.txt
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-info
+          path: /tmp/phase4-artifacts/
+
+  deploy-to-k8s:
+    name: Deploy to Kubernetes
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::025434362120:role/github-actions-role
+          aws-region: ${{ env.AWS_REGION }}
+          audience: sts.amazonaws.com
+          role-session-name: gha-k8s-deploy-phase4-${{ github.run_id }}
+
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig \
+            --region ${{ env.AWS_REGION }} \
+            --name nova-staging \
+            --alias nova-staging
+
+      - name: Create namespace
+        run: |
+          kubectl create namespace ${{ env.K8S_NAMESPACE }} --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Apply Kubernetes manifests
+        run: |
+          kubectl apply -f k8s/staging/graphql-gateway-configmap.yaml
+          kubectl apply -f k8s/staging/graphql-gateway-service.yaml
+          kubectl apply -f k8s/staging/graphql-gateway-networkpolicy.yaml
+          kubectl apply -f k8s/staging/graphql-gateway-hpa.yaml
+
+      - name: Update deployment image
+        run: |
+          sed -i "s|image: nova/graphql-gateway:.*|image: ${{ needs.build-and-push.outputs.image-full }}|g" k8s/staging/graphql-gateway-deployment.yaml
+
+      - name: Apply deployment
+        run: |
+          kubectl apply -f k8s/staging/graphql-gateway-deployment.yaml
+
+      - name: Wait for rollout
+        run: |
+          kubectl rollout status deployment/graphql-gateway -n ${{ env.K8S_NAMESPACE }} --timeout=5m
+
+      - name: Verify deployment
+        run: |
+          kubectl get deployment graphql-gateway -n ${{ env.K8S_NAMESPACE }}
+          kubectl get pods -n ${{ env.K8S_NAMESPACE }} -l app=graphql-gateway -o wide
+          kubectl get svc graphql-gateway -n ${{ env.K8S_NAMESPACE }}
+
+  smoke-tests:
+    name: Run Smoke Tests
+    runs-on: ubuntu-latest
+    needs: deploy-to-k8s
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::025434362120:role/github-actions-role
+          aws-region: ${{ env.AWS_REGION }}
+          audience: sts.amazonaws.com
+          role-session-name: gha-smoke-tests-phase4-${{ github.run_id }}
+
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig \
+            --region ${{ env.AWS_REGION }} \
+            --name nova-staging
+
+      - name: Wait for pod readiness
+        run: |
+          kubectl wait --for=condition=ready pod \
+            -l app=graphql-gateway \
+            -n ${{ env.K8S_NAMESPACE }} \
+            --timeout=3m
+
+      - name: Health check
+        run: |
+          POD_NAME=$(kubectl get pod -n ${{ env.K8S_NAMESPACE }} -l app=graphql-gateway -o jsonpath="{.items[0].metadata.name}")
+          kubectl exec -n ${{ env.K8S_NAMESPACE }} $POD_NAME -- curl -f http://localhost:8080/health
+
+  load-tests:
+    name: Run k6 Load Tests
+    runs-on: ubuntu-latest
+    needs: smoke-tests
+    if: ${{ inputs.run_load_tests == true }}
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up k6
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y apt-transport-https
+          sudo apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3232A
+          echo "deb https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update
+          sudo apt-get install -y k6
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::025434362120:role/github-actions-role
+          aws-region: ${{ env.AWS_REGION }}
+          audience: sts.amazonaws.com
+          role-session-name: gha-load-tests-phase4-${{ github.run_id }}
+
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig \
+            --region ${{ env.AWS_REGION }} \
+            --name nova-staging
+
+      - name: Set up port-forward
+        run: |
+          kubectl port-forward -n ${{ env.K8S_NAMESPACE }} svc/graphql-gateway 8080:80 &
+          sleep 2
+
+      - name: Run GraphQL load test
+        run: |
+          k6 run k6/load-test-graphql.js \
+            --vus 10 \
+            --duration 30s \
+            -e BASE_URL=http://localhost:8080 || true
+
+      - name: Run subscription load test
+        run: |
+          k6 run k6/load-test-subscriptions.js \
+            --vus 5 \
+            --duration 30s \
+            -e WS_ENDPOINT=ws://localhost:8080/graphql || true
+
+  summary:
+    name: Deployment Summary
+    runs-on: ubuntu-latest
+    needs: [build-and-push, deploy-to-k8s, smoke-tests]
+    if: always()
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Generate summary
+        run: |
+          echo "## 🎉 Phase 4 Staging Deployment Status" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Build & Push" >> $GITHUB_STEP_SUMMARY
+          echo "- Status: ${{ needs.build-and-push.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Image: \`${{ needs.build-and-push.outputs.image-full }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Deploy to Kubernetes" >> $GITHUB_STEP_SUMMARY
+          echo "- Status: ${{ needs.deploy-to-k8s.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Namespace: \`${{ env.K8S_NAMESPACE }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Smoke Tests" >> $GITHUB_STEP_SUMMARY
+          echo "- Status: ${{ needs.smoke-tests.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Access Instructions" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+          echo "kubectl port-forward -n ${{ env.K8S_NAMESPACE }} svc/graphql-gateway 8080:80" >> $GITHUB_STEP_SUMMARY
+          echo "curl http://localhost:8080/health" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::025434362120:role/github-actions-role
+          aws-region: ${{ env.AWS_REGION }}
+          audience: sts.amazonaws.com
+          role-session-name: gha-summary-phase4-${{ github.run_id }}
+
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig \
+            --region ${{ env.AWS_REGION }} \
+            --name nova-staging
+
+      - name: Get deployment status
+        run: |
+          echo "## Kubernetes Deployment Status" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Pods" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          kubectl get pods -n ${{ env.K8S_NAMESPACE }} -l app=graphql-gateway >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY

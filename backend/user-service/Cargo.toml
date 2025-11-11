@@ -90,6 +90,7 @@ regex = "1"
 redis-utils = { path = "../libs/redis-utils" }
 db-pool = { path = "../libs/db-pool" }
 url = "2"
+dashmap = "5.5"
 
 # Phase 4: Video Processing & gRPC
 tonic.workspace = true

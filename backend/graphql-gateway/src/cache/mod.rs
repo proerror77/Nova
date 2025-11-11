@@ -1,7 +1,17 @@
-//! Redis caching layer for GraphQL gateway (P0-7)
+//! Caching layer for GraphQL gateway
 //!
-//! Provides distributed caching to reduce N+1 queries and improve response times.
-//! Integrates with DataLoader for batch query optimization.
+//! **Multi-tier caching architecture**:
+//! - L1 (query_cache): In-memory process-local cache (nanosecond latency)
+//! - L2 (redis_cache): Distributed Redis cache (millisecond latency)
+//!
+//! **P0-7**: Distributed Redis caching to reduce N+1 queries
+//! **Quick Win #5**: In-memory query response caching
+
+pub mod query_cache;
+pub mod redis_cache;
+
+pub use query_cache::{CachePolicy, CacheStats as QueryCacheStats, GraphqlQueryCache, QueryHash};
+pub use redis_cache::{FeedItem, Notification, SubscriptionCache, SubscriptionMetadata};
 
 use anyhow::{Result, Context as _};
 use redis::aio::{ConnectionManager, MultiplexedConnection};
