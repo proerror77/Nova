@@ -1,0 +1,14 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: social-service-pdb
+  namespace: nova
+  labels:
+    app: social-service
+    version: v2
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: social-service
+  maxUnavailable: 1
