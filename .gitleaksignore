@@ -1,0 +1,19 @@
+# Ignore all test secrets in archived-v1 directory (test fixtures only)
+b5766cbd170453bb406e95dba0e3ede8405d7708:backend/archived-v1/auth-service/README.md:private-key:35
+b5766cbd170453bb406e95dba0e3ede8405d7708:backend/archived-v1/auth-service/src/tests/auth_tests.rs:private-key:569
+b5766cbd170453bb406e95dba0e3ede8405d7708:backend/archived-v1/auth-service/src/tests/unit_tests.rs:private-key:438
+b5766cbd170453bb406e95dba0e3ede8405d7708:backend/archived-v1/auth-service/tests/performance_jwt_test.rs:private-key:18
+b5766cbd170453bb406e95dba0e3ede8405d7708:backend/archived-v1/feed-service/src/security/jwt.rs:generic-api-key:365
+b5766cbd170453bb406e95dba0e3ede8405d7708:backend/archived-v1/feed-service/src/security/jwt.rs:private-key:243
+b5766cbd170453bb406e95dba0e3ede8405d7708:backend/archived-v1/graphql-gateway/tests/security_logging_tests.rs:generic-api-key:94
+b5766cbd170453bb406e95dba0e3ede8405d7708:backend/archived-v1/graphql-gateway/tests/security_auth_tests.rs:generic-api-key:64
+b5766cbd170453bb406e95dba0e3ede8405d7708:backend/archived-v1/graphql-gateway/tests/security_auth_tests.rs:generic-api-key:173
+b5766cbd170453bb406e95dba0e3ede8405d7708:backend/archived-v1/graphql-gateway/tests/security_integration_tests.rs:generic-api-key:302
+b5766cbd170453bb406e95dba0e3ede8405d7708:backend/archived-v1/graphql-gateway/tests/security_integration_tests.rs:generic-api-key:303
+b5766cbd170453bb406e95dba0e3ede8405d7708:backend/archived-v1/messaging-service/GRPC_SERVICE.md:generic-api-key:248
+b5766cbd170453bb406e95dba0e3ede8405d7708:backend/archived-v1/messaging-service/tests/group_call_integration_test.rs:jwt:31
+b5766cbd170453bb406e95dba0e3ede8405d7708:backend/archived-v1/messaging-service/tests/group_call_integration_test.rs:jwt:32
+b5766cbd170453bb406e95dba0e3ede8405d7708:backend/archived-v1/messaging-service/tests/group_call_integration_test.rs:jwt:33
+b5766cbd170453bb406e95dba0e3ede8405d7708:backend/archived-v1/messaging-service/tests/grpc_phase1a_test.rs:generic-api-key:107
+b5766cbd170453bb406e95dba0e3ede8405d7708:backend/archived-v1/messaging-service/tests/test_ws_jwt_auth.rs:jwt:55
+b5766cbd170453bb406e95dba0e3ede8405d7708:backend/archived-v1/notification-service/src/services/apns_client.rs:generic-api-key:240
