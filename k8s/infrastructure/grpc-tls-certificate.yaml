@@ -1,0 +1,99 @@
+# cert-manager Certificate for gRPC mTLS (P0-1)
+#
+# Prerequisites:
+#   1. Install cert-manager: kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.14.0/cert-manager.yaml
+#   2. Create ClusterIssuer or Issuer (see cert-manager-issuer.yaml)
+#
+# This creates a wildcard certificate for all Nova services: *.nova.svc.cluster.local
+# cert-manager automatically rotates certificates before expiration
+#
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: grpc-tls-cert
+  namespace: nova
+  labels:
+    app.kubernetes.io/name: grpc-tls
+    app.kubernetes.io/component: security
+spec:
+  # Secret where cert-manager stores the generated certificate
+  secretName: grpc-tls-certs
+
+  # Certificate duration and renewal
+  duration: 2160h  # 90 days
+  renewBefore: 360h  # Renew 15 days before expiration
+
+  # Subject information
+  subject:
+    organizations:
+      - Nova Platform
+
+  # Common Name (primary domain)
+  commonName: "*.nova.svc.cluster.local"
+
+  # Subject Alternative Names (SANs)
+  dnsNames:
+    - "*.nova.svc.cluster.local"
+    - "identity-service.nova.svc.cluster.local"
+    - "user-service.nova.svc.cluster.local"
+    - "content-service.nova.svc.cluster.local"
+    - "social-service.nova.svc.cluster.local"
+    - "media-service.nova.svc.cluster.local"
+    - "communication-service.nova.svc.cluster.local"
+    - "search-service.nova.svc.cluster.local"
+    - "events-service.nova.svc.cluster.local"
+    - "localhost"  # For local development
+
+  # Private key configuration
+  privateKey:
+    algorithm: RSA
+    size: 4096
+    rotationPolicy: Always  # Rotate key with certificate
+
+  # Usage constraints
+  usages:
+    - digital signature
+    - key encipherment
+    - server auth
+    - client auth  # Enable for mTLS
+
+  # Issuer reference
+  issuerRef:
+    name: nova-ca-issuer  # Self-signed CA for development, use real CA in production
+    kind: ClusterIssuer
+    group: cert-manager.io
+
+---
+# Optional: Separate client certificate for mTLS
+# Use if you want distinct client/server certificates
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: grpc-client-cert
+  namespace: nova
+  labels:
+    app.kubernetes.io/name: grpc-client
+    app.kubernetes.io/component: security
+spec:
+  secretName: grpc-client-certs
+  duration: 2160h  # 90 days
+  renewBefore: 360h
+
+  commonName: "nova-client"
+
+  dnsNames:
+    - "nova-client"
+
+  privateKey:
+    algorithm: RSA
+    size: 4096
+
+  usages:
+    - digital signature
+    - key encipherment
+    - client auth
+
+  issuerRef:
+    name: nova-ca-issuer
+    kind: ClusterIssuer
+    group: cert-manager.io

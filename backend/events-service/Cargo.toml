@@ -47,6 +47,9 @@ tonic-health = "0.10"
 # Resilience (P0-5)
 resilience = { path = "../libs/resilience" }
 
+# TLS/mTLS (P0-1)
+grpc-tls = { path = "../libs/grpc-tls" }
+
 # Shared libraries
 error-types = { path = "../libs/error-types" }
 db-pool = { path = "../libs/db-pool" }

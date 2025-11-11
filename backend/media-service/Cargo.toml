@@ -45,6 +45,9 @@ bytes = "1.5"
 # Resilience (P0-5)
 resilience = { path = "../libs/resilience" }
 
+# TLS/mTLS (P0-1)
+grpc-tls = { path = "../libs/grpc-tls" }
+
 # Shared libraries
 crypto-core = { path = "../libs/crypto-core" }
 error-types = { path = "../libs/error-types" }

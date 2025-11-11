@@ -48,6 +48,9 @@ dotenv = "0.15"
 # Resilience (P0-5)
 resilience = { path = "../libs/resilience" }
 
+# TLS/mTLS (P0-1)
+grpc-tls = { path = "../libs/grpc-tls" }
+
 # Utilities
 chrono = { version = "0.4", features = ["serde"] }
 futures-util = "0.3"
