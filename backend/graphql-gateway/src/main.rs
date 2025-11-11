@@ -119,12 +119,12 @@ async fn main() -> std::io::Result<()> {
     // Initialize JWT keys (RS256 only) from environment
     // SECURITY: Must use RS256 asymmetric encryption, never HS256
     let jwt_private_key = env::var("JWT_PRIVATE_KEY_PEM")
-        .expect("JWT_PRIVATE_KEY_PEM environment variable must be set");
+        .map_err(|_| "JWT_PRIVATE_KEY_PEM environment variable must be set")?;
     let jwt_public_key = env::var("JWT_PUBLIC_KEY_PEM")
-        .expect("JWT_PUBLIC_KEY_PEM environment variable must be set");
+        .map_err(|_| "JWT_PUBLIC_KEY_PEM environment variable must be set")?;
 
     crypto_core::jwt::initialize_jwt_keys(&jwt_private_key, &jwt_public_key)
-        .expect("Failed to initialize JWT keys - check PEM format");
+        .map_err(|e| format!("Failed to initialize JWT keys - check PEM format: {}", e))?;
 
     info!("JWT authentication enabled with RS256 algorithm");
 
@@ -135,7 +135,7 @@ async fn main() -> std::io::Result<()> {
     let server_port = env::var("SERVER_PORT")
         .unwrap_or_else(|_| "8080".to_string())
         .parse::<u16>()
-        .expect("SERVER_PORT must be a valid u16");
+        .map_err(|e| format!("SERVER_PORT must be a valid u16: {}", e))?;
 
     let bind_addr = format!("{}:{}", server_host, server_port);
     info!("GraphQL Gateway starting on http://{}", bind_addr);

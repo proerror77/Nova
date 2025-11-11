@@ -93,7 +93,7 @@ async fn main() -> Result<(), error::AppError> {
     let grpc_pool = Arc::new(
         GrpcClientPool::new(&grpc_config)
             .await
-            .expect("Failed to create gRPC client pool"),
+            .map_err(|e| error::AppError::StartServer(format!("Failed to create gRPC client pool: {}", e)))?,
     );
 
     // Initialize AuthClient from connection pool
