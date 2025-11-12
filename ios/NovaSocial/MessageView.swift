@@ -3,17 +3,23 @@ import SwiftUI
 struct MessageView: View {
     @Binding var currentPage: AppPage
     @State private var showNewPost = false
+    @State private var showChat = false
 
     var body: some View {
         ZStack {
             // 条件渲染：根据状态即时切换视图
-            if showNewPost {
+            if showChat {
+                ChatView(showChat: $showChat)
+                    .transition(.identity)
+            } else if showNewPost {
                 NewPostView(showNewPost: $showNewPost)
                     .transition(.identity)
             } else {
                 messageContent
             }
         }
+        .animation(.none, value: showChat)
+        .animation(.none, value: showNewPost)
     }
 
     // MARK: - 消息页面内容
@@ -73,6 +79,9 @@ struct MessageView: View {
                     VStack(spacing: 2) {
                         ForEach(0..<9, id: \.self) { index in
                             MessageListItem()
+                                .onTapGesture {
+                                    showChat = true
+                                }
 
                             if index < 8 {
                                 Divider()
@@ -138,6 +147,9 @@ struct MessageView: View {
                             .foregroundColor(.black)
                     }
                     .frame(maxWidth: .infinity)
+                    .onTapGesture {
+                        currentPage = .account
+                    }
                 }
                 .frame(height: 60)
                 .padding(.bottom, 20)

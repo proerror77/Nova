@@ -8,11 +8,15 @@ struct FigmaDesignAppApp: App {
         WindowGroup {
             ZStack {
                 // 根据状态即时切换页面（无过渡动画）
-                if currentPage == .home {
+                switch currentPage {
+                case .home:
                     HomeView(currentPage: $currentPage)
                         .transition(.identity)
-                } else {
+                case .message:
                     MessageView(currentPage: $currentPage)
+                        .transition(.identity)
+                case .account:
+                    AccountView(currentPage: $currentPage)
                         .transition(.identity)
                 }
             }
@@ -25,4 +29,5 @@ struct FigmaDesignAppApp: App {
 enum AppPage {
     case home
     case message
+    case account
 }
