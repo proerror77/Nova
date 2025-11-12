@@ -14,7 +14,7 @@ static CIRCUIT_BREAKER_STATE_TRANSITIONS: Lazy<IntCounterVec> = Lazy::new(|| {
         "Total number of circuit breaker state transitions",
         &["from", "to"]
     )
-    .unwrap()
+    .expect("Failed to register circuit breaker state transitions metric")
 });
 
 #[cfg(feature = "metrics")]
@@ -24,7 +24,7 @@ static CIRCUIT_BREAKER_CALLS: Lazy<IntCounterVec> = Lazy::new(|| {
         "Total number of circuit breaker calls",
         &["state", "result"]
     )
-    .unwrap()
+    .expect("Failed to register circuit breaker calls metric")
 });
 
 #[cfg(feature = "metrics")]
@@ -33,7 +33,7 @@ static CIRCUIT_BREAKER_OPEN_DURATION: Lazy<Histogram> = Lazy::new(|| {
         "resilience_circuit_breaker_open_duration_seconds",
         "Duration circuit breaker remained open"
     )
-    .unwrap()
+    .expect("Failed to register circuit breaker open duration metric")
 });
 
 #[cfg(feature = "metrics")]
@@ -43,7 +43,7 @@ static TIMEOUT_OPERATIONS: Lazy<IntCounterVec> = Lazy::new(|| {
         "Total number of timeout operations",
         &["result"]
     )
-    .unwrap()
+    .expect("Failed to register timeout operations metric")
 });
 
 #[cfg(feature = "metrics")]
@@ -53,7 +53,7 @@ static RETRY_ATTEMPTS: Lazy<HistogramVec> = Lazy::new(|| {
         "Number of retry attempts before success or failure",
         &["result"]
     )
-    .unwrap()
+    .expect("Failed to register retry attempts metric")
 });
 
 /// Metrics collector for circuit breaker
