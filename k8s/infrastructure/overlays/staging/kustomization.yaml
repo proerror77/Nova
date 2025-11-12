@@ -15,12 +15,17 @@ patchesStrategicMerge:
 - user-service-env-patch.yaml
 - user-service-probes-patch.yaml
 - feed-service-env-patch.yaml
+- feed-service-probes-patch.yaml
 - messaging-service-env-patch.yaml
 - messaging-service-env-port-patch.yaml
 - messaging-service-probes-patch.yaml
 - content-service-env-patch.yaml
+- content-service-probes-patch.yaml
 - streaming-service-env-patch.yaml
 - search-service-env-patch.yaml
+- auth-service-probes-patch.yaml
+- identity-service-probes-patch.yaml
+- notification-service-probes-patch.yaml
 - elasticsearch-replicas-patch.yaml
 - s3-env-patch.yaml
 - hpa-min1-patch.yaml
@@ -91,3 +96,5 @@ resources:
 - external-secrets-store.yaml
 - external-secrets.yaml
 - seed-data-job.yaml
+# PgBouncer connection pooling (P1 Priority)
+- ../../pgbouncer

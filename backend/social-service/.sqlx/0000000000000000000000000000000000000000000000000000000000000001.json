@@ -1,0 +1,9 @@
+{
+  "db": "Postgres",
+  "query": "DELETE FROM likes\n WHERE user_id = $1 AND post_id = $2\n RETURNING id",
+  "describe": {
+    "columns": [],
+    "nullable": [],
+    "return_type": "unknown"
+  }
+}

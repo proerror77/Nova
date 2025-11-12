@@ -2,8 +2,7 @@
 use crate::cache::{ContentCache, FeedCache};
 use crate::error::AppError;
 use crate::grpc::AuthClient;
-use crate::models::{Comment, Post};
-use crate::services::comments::CommentService;
+use crate::models::Post;
 use crate::services::feed_ranking::FeedRankingService;
 use crate::services::posts::PostService;
 use grpc_metrics::layer::RequestGuard;
@@ -21,12 +20,14 @@ pub mod nova {
         }
         pub use v1::*;
     }
-    pub mod content {
+    pub mod content_service {
         pub mod v1 {
             tonic::include_proto!("nova.content_service.v1");
         }
         pub use v1::*;
     }
+    // Re-export content_service as content for backward compatibility
+    pub use content_service as content;
 }
 
 use nova::common::ErrorStatus;
@@ -52,15 +53,8 @@ fn convert_post_to_proto(post: &Post) -> crate::grpc::nova::content::Post {
     }
 }
 
-fn convert_comment_to_proto(comment: &Comment) -> crate::grpc::nova::content::Comment {
-    crate::grpc::nova::content::Comment {
-        id: comment.id.to_string(),
-        post_id: comment.post_id.to_string(),
-        creator_id: comment.user_id.to_string(),
-        content: comment.content.clone(),
-        created_at: comment.created_at.timestamp(),
-    }
-}
+// Note: Comment operations have been moved to social-service.
+// These gRPC methods now return Unimplemented status.
 
 #[inline]
 fn ok_error() -> Option<ErrorStatus> {
@@ -169,144 +163,74 @@ impl ContentService for ContentServiceImpl {
         }
     }
 
-    /// Get comments for a post
+    /// Get comments for a post (DEPRECATED - use social-service)
     async fn get_comments(
         &self,
-        request: Request<GetCommentsRequest>,
+        _request: Request<GetCommentsRequest>,
     ) -> Result<Response<GetCommentsResponse>, Status> {
-        let guard = RequestGuard::new("content-service", "GetComments");
-        let req = request.into_inner();
-
-        tracing::info!(
-            "gRPC: Getting comments for post: {} (limit: {}, offset: {})",
-            req.post_id,
-            req.limit,
-            req.offset
-        );
-
-        // Parse post ID
-        let post_id = match Uuid::parse_str(&req.post_id) {
-            Ok(id) => id,
-            Err(_) => {
-                guard.complete("3");
-                return Err(Status::invalid_argument("Invalid post ID format"));
-            }
-        };
-
-        // Get comments using CommentService
-        let comment_service = CommentService::new(self.db_pool.clone());
-        match comment_service
-            .get_post_comments(post_id, req.limit as i64, req.offset as i64)
-            .await
-        {
-            Ok(comments) => {
-                let total = comments.len() as i32;
-                let comment_list = comments
-                    .into_iter()
-                    .map(|c| convert_comment_to_proto(&c))
-                    .collect();
-
-                let response = GetCommentsResponse {
-                    comments: comment_list,
-                    total,
-                    error: ok_error(),
-                };
-                guard.complete("0");
-                Ok(Response::new(response))
-            }
-            Err(e) => {
-                tracing::error!("Error fetching comments: {}", e);
-                guard.complete("13");
-                Err(Status::internal("Failed to fetch comments"))
-            }
-        }
+        Err(Status::unimplemented(
+            "Comment operations moved to social-service. Call social_service.ListComments instead"
+        ))
     }
 
-    /// Like a post
+    /// Create a comment (DEPRECATED - use social-service)
+    async fn create_comment(
+        &self,
+        _request: Request<CreateCommentRequest>,
+    ) -> Result<Response<CreateCommentResponse>, Status> {
+        Err(Status::unimplemented(
+            "Comment operations moved to social-service. Call social_service.CreateComment instead"
+        ))
+    }
+
+    /// Update a comment (DEPRECATED - use social-service)
+    async fn update_comment(
+        &self,
+        _request: Request<UpdateCommentRequest>,
+    ) -> Result<Response<UpdateCommentResponse>, Status> {
+        Err(Status::unimplemented(
+            "Comment operations moved to social-service. Call social_service.UpdateComment instead"
+        ))
+    }
+
+    /// Delete a comment (DEPRECATED - use social-service)
+    async fn delete_comment(
+        &self,
+        _request: Request<DeleteCommentRequest>,
+    ) -> Result<Response<DeleteCommentResponse>, Status> {
+        Err(Status::unimplemented(
+            "Comment operations moved to social-service. Call social_service.DeleteComment instead"
+        ))
+    }
+
+    /// Like a post (DEPRECATED - use social-service)
     async fn like_post(
         &self,
-        request: Request<LikePostRequest>,
+        _request: Request<LikePostRequest>,
     ) -> Result<Response<LikePostResponse>, Status> {
-        let guard = RequestGuard::new("content-service", "LikePost");
-        let req = request.into_inner();
+        Err(Status::unimplemented(
+            "Like operations moved to social-service. Call social_service.CreateLike instead"
+        ))
+    }
 
-        tracing::info!("gRPC: User {} liking post {}", req.user_id, req.post_id);
+    /// Unlike a post (DEPRECATED - use social-service)
+    async fn unlike_post(
+        &self,
+        _request: Request<UnlikePostRequest>,
+    ) -> Result<Response<UnlikePostResponse>, Status> {
+        Err(Status::unimplemented(
+            "Like operations moved to social-service. Call social_service.DeleteLike instead"
+        ))
+    }
 
-        let user_id = match Uuid::parse_str(&req.user_id) {
-            Ok(id) => id,
-            Err(_) => {
-                guard.complete("3");
-                return Err(Status::invalid_argument("Invalid user ID format"));
-            }
-        };
-        let post_id = match Uuid::parse_str(&req.post_id) {
-            Ok(id) => id,
-            Err(_) => {
-                guard.complete("3");
-                return Err(Status::invalid_argument("Invalid post ID format"));
-            }
-        };
-
-        // Ensure the post exists and is not soft-deleted
-        let post_exists = match sqlx::query_scalar::<_, i64>(
-            "SELECT 1 FROM posts WHERE id = $1 AND deleted_at IS NULL",
-        )
-        .bind(post_id)
-        .fetch_optional(&self.db_pool)
-        .await
-        {
-            Ok(r) => r,
-            Err(e) => {
-                tracing::error!("Database error checking post existence: {}", e);
-                guard.complete("13");
-                return Err(Status::internal("Failed to validate post"));
-            }
-        };
-
-        if post_exists.is_none() {
-            guard.complete("5");
-            return Err(Status::not_found("Post not found"));
-        }
-
-        let insert_result = sqlx::query(
-            r#"
-            INSERT INTO likes (user_id, post_id)
-            VALUES ($1, $2)
-            ON CONFLICT (user_id, post_id) DO NOTHING
-            "#,
-        )
-        .bind(user_id)
-        .bind(post_id)
-        .execute(&self.db_pool)
-        .await;
-
-        match insert_result {
-            Ok(result) => {
-                // If a new like was inserted, invalidate the post cache to ensure
-                // the like_count is refreshed on next read
-                if result.rows_affected() > 0 {
-                    // Invalidate post cache to force refresh on next get_post call
-                    let _ = self.cache.invalidate_post(post_id).await;
-                    tracing::debug!("Invalidated cache for post {} after new like", post_id);
-                }
-
-                guard.complete("0");
-                Ok(Response::new(LikePostResponse {
-                    success: true,
-                    error: ok_error(),
-                }))
-            }
-            Err(err) => {
-                tracing::error!(
-                    "Error inserting like (user={} post={}): {}",
-                    user_id,
-                    post_id,
-                    err
-                );
-                guard.complete("13");
-                Err(Status::internal("Failed to like post"))
-            }
-        }
+    /// Get users who liked a post (DEPRECATED - use social-service)
+    async fn get_post_likes(
+        &self,
+        _request: Request<GetPostLikesRequest>,
+    ) -> Result<Response<GetPostLikesResponse>, Status> {
+        Err(Status::unimplemented(
+            "Like operations moved to social-service. Call social_service.ListLikes instead"
+        ))
     }
 
     /// Get multiple posts by IDs (batch operation)
@@ -803,374 +727,9 @@ impl ContentService for ContentServiceImpl {
         Ok(Response::new(response))
     }
 
-    /// Create a new comment on a post
-    async fn create_comment(
-        &self,
-        request: Request<CreateCommentRequest>,
-    ) -> Result<Response<CreateCommentResponse>, Status> {
-        let guard = RequestGuard::new("content-service", "CreateComment");
-        let req = request.into_inner();
-
-        tracing::info!(
-            "gRPC: Creating comment on post {} by user {}",
-            req.post_id,
-            req.user_id
-        );
-
-        // Parse IDs
-        let post_id = match Uuid::parse_str(&req.post_id) {
-            Ok(id) => id,
-            Err(_) => {
-                guard.complete("3");
-                return Err(Status::invalid_argument("Invalid post ID format"));
-            }
-        };
-        let user_id = match Uuid::parse_str(&req.user_id) {
-            Ok(id) => id,
-            Err(_) => {
-                guard.complete("3");
-                return Err(Status::invalid_argument("Invalid user ID format"));
-            }
-        };
-
-        // Parse optional parent comment ID
-        let parent_comment_id = if req.parent_comment_id.is_empty() {
-            None
-        } else {
-            match Uuid::parse_str(&req.parent_comment_id) {
-                Ok(id) => Some(id),
-                Err(_) => {
-                    guard.complete("3");
-                    return Err(Status::invalid_argument("Invalid parent comment ID format"));
-                }
-            }
-        };
-
-        // Validate content is not empty
-        if req.content.trim().is_empty() {
-            guard.complete("3");
-            return Ok(Response::new(CreateCommentResponse {
-                comment: None,
-                error: make_error("VALIDATION_ERROR", "Comment content cannot be empty"),
-            }));
-        }
-
-        // Ensure the post exists and is not soft-deleted
-        let post_exists = match sqlx::query_scalar::<_, bool>(
-            "SELECT EXISTS(SELECT 1 FROM posts WHERE id = $1 AND deleted_at IS NULL)",
-        )
-        .bind(post_id)
-        .fetch_one(&self.db_pool)
-        .await
-        {
-            Ok(exists) => exists,
-            Err(e) => {
-                tracing::error!("Database error checking post existence: {}", e);
-                guard.complete("13");
-                return Err(Status::internal("Failed to validate post"));
-            }
-        };
-
-        if !post_exists {
-            guard.complete("5");
-            return Ok(Response::new(CreateCommentResponse {
-                comment: None,
-                error: make_error("NOT_FOUND", "Post not found"),
-            }));
-        }
-
-        // Create comment using CommentService
-        let comment_service = CommentService::new(self.db_pool.clone());
-        match comment_service
-            .create_comment(post_id, user_id, &req.content, parent_comment_id)
-            .await
-        {
-            Ok(comment) => {
-                // Invalidate post cache to refresh comment count
-                let _ = self.cache.invalidate_post(post_id).await;
-                tracing::debug!("Invalidated cache for post {} after new comment", post_id);
-
-                guard.complete("0");
-                Ok(Response::new(CreateCommentResponse {
-                    comment: Some(convert_comment_to_proto(&comment)),
-                    error: ok_error(),
-                }))
-            }
-            Err(e) => {
-                tracing::error!("Error creating comment: {}", e);
-                guard.complete("13");
-                Err(Status::internal("Failed to create comment"))
-            }
-        }
-    }
-
-    /// Update an existing comment
-    async fn update_comment(
-        &self,
-        request: Request<UpdateCommentRequest>,
-    ) -> Result<Response<UpdateCommentResponse>, Status> {
-        let req = request.into_inner();
-
-        tracing::info!(
-            "gRPC: Updating comment {} by user {}",
-            req.comment_id,
-            req.user_id
-        );
-
-        // Parse IDs
-        let comment_id = Uuid::parse_str(&req.comment_id)
-            .map_err(|_| Status::invalid_argument("Invalid comment ID format"))?;
-        let user_id = Uuid::parse_str(&req.user_id)
-            .map_err(|_| Status::invalid_argument("Invalid user ID format"))?;
-
-        // Validate content is not empty
-        if req.content.trim().is_empty() {
-            return Ok(Response::new(UpdateCommentResponse {
-                comment: None,
-                error: make_error("VALIDATION_ERROR", "Comment content cannot be empty"),
-            }));
-        }
-
-        // Update comment using CommentService
-        let comment_service = CommentService::new(self.db_pool.clone());
-        match comment_service
-            .update_comment(comment_id, user_id, &req.content)
-            .await
-        {
-            Ok(true) => {
-                // Fetch the updated comment
-                match comment_service.get_comment(comment_id).await {
-                    Ok(Some(comment)) => Ok(Response::new(UpdateCommentResponse {
-                        comment: Some(convert_comment_to_proto(&comment)),
-                        error: ok_error(),
-                    })),
-                    Ok(None) => Ok(Response::new(UpdateCommentResponse {
-                        comment: None,
-                        error: make_error("NOT_FOUND", "Comment not found after update"),
-                    })),
-                    Err(e) => {
-                        tracing::error!("Error fetching updated comment: {}", e);
-                        Err(Status::internal("Failed to fetch updated comment"))
-                    }
-                }
-            }
-            Ok(false) => Ok(Response::new(UpdateCommentResponse {
-                comment: None,
-                error: make_error(
-                    "NOT_FOUND",
-                    "Comment not found or user not authorized to update",
-                ),
-            })),
-            Err(e) => {
-                tracing::error!("Error updating comment: {}", e);
-                Err(Status::internal("Failed to update comment"))
-            }
-        }
-    }
-
-    /// Delete (soft delete) a comment
-    async fn delete_comment(
-        &self,
-        request: Request<DeleteCommentRequest>,
-    ) -> Result<Response<DeleteCommentResponse>, Status> {
-        let req = request.into_inner();
-
-        tracing::info!(
-            "gRPC: Deleting comment {} by user {}",
-            req.comment_id,
-            req.user_id
-        );
-
-        // Parse IDs
-        let comment_id = Uuid::parse_str(&req.comment_id)
-            .map_err(|_| Status::invalid_argument("Invalid comment ID format"))?;
-        let user_id = Uuid::parse_str(&req.user_id)
-            .map_err(|_| Status::invalid_argument("Invalid user ID format"))?;
-
-        // Delete comment using CommentService
-        let comment_service = CommentService::new(self.db_pool.clone());
-        match comment_service.delete_comment(comment_id, user_id).await {
-            Ok(true) => {
-                // Get the deleted_at timestamp
-                let deleted_at = sqlx::query_scalar::<_, chrono::DateTime<chrono::Utc>>(
-                    "SELECT soft_delete FROM comments WHERE id = $1",
-                )
-                .bind(comment_id)
-                .fetch_one(&self.db_pool)
-                .await
-                .map_err(|e| {
-                    tracing::error!("Database error fetching deleted_at: {}", e);
-                    Status::internal("Failed to fetch deleted timestamp")
-                })?;
-
-                // Invalidate post cache to refresh comment count
-                if let Ok(Some(comment)) = comment_service.get_comment(comment_id).await {
-                    let _ = self.cache.invalidate_post(comment.post_id).await;
-                    tracing::debug!(
-                        "Invalidated cache for post {} after comment deletion",
-                        comment.post_id
-                    );
-                }
-
-                Ok(Response::new(DeleteCommentResponse {
-                    comment_id: comment_id.to_string(),
-                    deleted_at: deleted_at.timestamp(),
-                }))
-            }
-            Ok(false) => Err(Status::not_found(
-                "Comment not found or user not authorized to delete",
-            )),
-            Err(e) => {
-                tracing::error!("Error deleting comment: {}", e);
-                Err(Status::internal("Failed to delete comment"))
-            }
-        }
-    }
-
-    /// Unlike a post (remove like)
-    async fn unlike_post(
-        &self,
-        request: Request<UnlikePostRequest>,
-    ) -> Result<Response<UnlikePostResponse>, Status> {
-        let req = request.into_inner();
-
-        tracing::info!("gRPC: User {} unliking post {}", req.user_id, req.post_id);
-
-        let user_id = Uuid::parse_str(&req.user_id)
-            .map_err(|_| Status::invalid_argument("Invalid user ID format"))?;
-        let post_id = Uuid::parse_str(&req.post_id)
-            .map_err(|_| Status::invalid_argument("Invalid post ID format"))?;
-
-        // Ensure the post exists and is not soft-deleted
-        let post_exists = sqlx::query_scalar::<_, bool>(
-            "SELECT EXISTS(SELECT 1 FROM posts WHERE id = $1 AND deleted_at IS NULL)",
-        )
-        .bind(post_id)
-        .fetch_one(&self.db_pool)
-        .await
-        .map_err(|e| {
-            tracing::error!("Database error checking post existence: {}", e);
-            Status::internal("Failed to validate post")
-        })?;
-
-        if !post_exists {
-            return Ok(Response::new(UnlikePostResponse {
-                success: false,
-                error: make_error("NOT_FOUND", "Post not found"),
-            }));
-        }
-
-        // Delete the like record
-        let delete_result = sqlx::query("DELETE FROM likes WHERE user_id = $1 AND post_id = $2")
-            .bind(user_id)
-            .bind(post_id)
-            .execute(&self.db_pool)
-            .await;
-
-        match delete_result {
-            Ok(result) => {
-                // If a like was deleted, invalidate the post cache
-                if result.rows_affected() > 0 {
-                    let _ = self.cache.invalidate_post(post_id).await;
-                    tracing::debug!("Invalidated cache for post {} after unlike", post_id);
-                }
-
-                Ok(Response::new(UnlikePostResponse {
-                    success: true,
-                    error: ok_error(),
-                }))
-            }
-            Err(err) => {
-                tracing::error!(
-                    "Error deleting like (user={} post={}): {}",
-                    user_id,
-                    post_id,
-                    err
-                );
-                Err(Status::internal("Failed to unlike post"))
-            }
-        }
-    }
-
-    /// Get users who liked a post
-    async fn get_post_likes(
-        &self,
-        request: Request<GetPostLikesRequest>,
-    ) -> Result<Response<GetPostLikesResponse>, Status> {
-        let req = request.into_inner();
-
-        tracing::info!(
-            "gRPC: Getting likes for post {} (limit: {}, offset: {})",
-            req.post_id,
-            req.limit,
-            req.offset
-        );
-
-        let post_id = Uuid::parse_str(&req.post_id)
-            .map_err(|_| Status::invalid_argument("Invalid post ID format"))?;
-
-        let limit = req.limit.clamp(1, 100) as i64;
-        let offset = req.offset.max(0) as i64;
-
-        // Fetch likes from the database
-        #[derive(sqlx::FromRow)]
-        struct LikeRow {
-            user_id: Uuid,
-            created_at: chrono::DateTime<chrono::Utc>,
-        }
-
-        let likes = sqlx::query_as::<_, LikeRow>(
-            r#"
-            SELECT user_id, created_at
-            FROM likes
-            WHERE post_id = $1
-            ORDER BY created_at DESC
-            LIMIT $2 OFFSET $3
-            "#,
-        )
-        .bind(post_id)
-        .bind(limit)
-        .bind(offset)
-        .fetch_all(&self.db_pool)
-        .await
-        .map_err(|e| {
-            tracing::error!("Database error fetching likes: {}", e);
-            Status::internal("Failed to fetch likes")
-        })?;
-
-        // Fetch total count
-        let total_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM likes WHERE post_id = $1")
-            .bind(post_id)
-            .fetch_one(&self.db_pool)
-            .await
-            .map_err(|e| {
-                tracing::error!("Database error counting likes: {}", e);
-                Status::internal("Failed to count likes")
-            })?;
-
-        let proto_likes = likes
-            .into_iter()
-            .map(|like| crate::grpc::nova::content::PostLike {
-                user_id: like.user_id.to_string(),
-                liked_at: like.created_at.timestamp(),
-            })
-            .collect();
-
-        let total_count_i32 = i32::try_from(total_count).unwrap_or_else(|_| {
-            tracing::warn!(
-                "Like count exceeded i32::MAX for post {}: {}",
-                post_id,
-                total_count
-            );
-            i32::MAX
-        });
-
-        Ok(Response::new(GetPostLikesResponse {
-            likes: proto_likes,
-            total_count: total_count_i32,
-            error: ok_error(),
-        }))
-    }
+    // Note: Social operations (create_comment, update_comment, delete_comment,
+    // like_post, unlike_post, get_post_likes) have been moved to social-service.
+    // The stub implementations above return Unimplemented status.
 }
 
 impl ContentServiceImpl {
@@ -1229,7 +788,46 @@ pub async fn start_grpc_server(
         Ok(req)
     }
 
-    Server::builder()
+    // ✅ P0: Load mTLS configuration
+    let tls_config = match grpc_tls::GrpcServerTlsConfig::from_env() {
+        Ok(config) => {
+            tracing::info!("mTLS enabled - service-to-service authentication active");
+            Some(config)
+        }
+        Err(e) => {
+            tracing::warn!(
+                "mTLS disabled - TLS config not found: {}. Using development mode for testing only.",
+                e
+            );
+            // In development, allow non-TLS for testing
+            // In production, this should fail hard
+            if cfg!(debug_assertions) {
+                tracing::info!("Development mode: Starting without TLS (NOT FOR PRODUCTION)");
+                None
+            } else {
+                return Err(format!(
+                    "Production requires mTLS - GRPC_SERVER_CERT_PATH must be set: {}",
+                    e
+                )
+                .into());
+            }
+        }
+    };
+
+    // ✅ P0: Build server with optional TLS
+    let mut server_builder = Server::builder();
+
+    if let Some(tls_cfg) = tls_config {
+        let server_tls = tls_cfg
+            .build_server_tls()
+            .map_err(|e| format!("Failed to build server TLS config: {}", e))?;
+        server_builder = server_builder
+            .tls_config(server_tls)
+            .map_err(|e| format!("Failed to configure TLS on gRPC server: {}", e))?;
+        tracing::info!("gRPC server TLS configured successfully");
+    }
+
+    server_builder
         .add_service(health_service)
         .add_service(ContentServiceServer::with_interceptor(
             service,

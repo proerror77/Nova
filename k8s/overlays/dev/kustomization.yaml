@@ -1,0 +1,217 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Development environment configuration
+# Single replica, minimal resources, local docker registry
+# Used for local development and testing
+
+namespace: nova-dev
+
+# Base from production manifests
+bases:
+  - ../../base/
+
+# Common labels for all resources in dev environment
+commonLabels:
+  app.kubernetes.io/environment: development
+  app.kubernetes.io/managed-by: kustomize
+
+# Common annotations
+commonAnnotations:
+  description: "Nova Development Environment"
+  environment: "dev"
+  managed-by: "kustomize"
+
+# Development-specific image overrides
+# Use local docker registry for faster development iteration
+images:
+  # Tier 1: Foundation
+  - name: identity-service
+    newName: localhost:5000/nova/identity-service
+    newTag: dev
+  
+  # Tier 2: User Management
+  - name: user-service
+    newName: localhost:5000/nova/user-service
+    newTag: dev
+  
+  # Tier 3: Content Platform
+  - name: content-service
+    newName: localhost:5000/nova/content-service
+    newTag: dev
+  
+  # Tier 4: Social & Graph
+  - name: social-service
+    newName: localhost:5000/nova/social-service
+    newTag: dev
+  
+  - name: graph-service
+    newName: localhost:5000/nova/graph-service
+    newTag: dev
+  
+  # Tier 5: Advanced Features
+  - name: feed-service
+    newName: localhost:5000/nova/feed-service
+    newTag: dev
+  
+  - name: ranking-service
+    newName: localhost:5000/nova/ranking-service
+    newTag: dev
+  
+  - name: analytics-service
+    newName: localhost:5000/nova/analytics-service
+    newTag: dev
+  
+  - name: notification-service
+    newName: localhost:5000/nova/notification-service
+    newTag: dev
+  
+  - name: realtime-chat-service
+    newName: localhost:5000/nova/realtime-chat-service
+    newTag: dev
+  
+  - name: search-service
+    newName: localhost:5000/nova/search-service
+    newTag: dev
+  
+  - name: media-service
+    newName: localhost:5000/nova/media-service
+    newTag: dev
+  
+  - name: trust-safety-service
+    newName: localhost:5000/nova/trust-safety-service
+    newTag: dev
+  
+  # Tier 6: API Gateway
+  - name: graphql-gateway
+    newName: localhost:5000/nova/graphql-gateway
+    newTag: dev
+
+# Replica overrides for development (all services scaled to 1)
+replicas:
+  - name: identity-service
+    count: 1
+  - name: user-service
+    count: 1
+  - name: content-service
+    count: 1
+  - name: social-service
+    count: 1
+  - name: graph-service
+    count: 1
+  - name: feed-service
+    count: 1
+  - name: ranking-service
+    count: 1
+  - name: analytics-service
+    count: 1
+  - name: notification-service
+    count: 1
+  - name: realtime-chat-service
+    count: 1
+  - name: search-service
+    count: 1
+  - name: media-service
+    count: 1
+  - name: trust-safety-service
+    count: 1
+  - name: graphql-gateway
+    count: 1
+
+# Resource limits for development (minimal)
+# CPU: 100m-200m, Memory: 128Mi-256Mi
+patches:
+  - target:
+      kind: Deployment
+      apiVersion: apps/v1
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/cpu
+        value: "100m"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/memory
+        value: "128Mi"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/cpu
+        value: "200m"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/memory
+        value: "256Mi"
+      # Disable resource limits for faster iteration
+      - op: replace
+        path: /spec/template/spec/containers/0/livenessProbe/initialDelaySeconds
+        value: 30
+      - op: replace
+        path: /spec/template/spec/containers/0/readinessProbe/initialDelaySeconds
+        value: 10
+
+# Development-specific ConfigMap
+configMapGenerator:
+  - name: nova-config
+    behavior: merge
+    literals:
+      - ENVIRONMENT=development
+      - LOG_LEVEL=debug
+      - DEBUG_MODE=true
+      - ENABLE_TRACING=true
+      - DATABASE_POOL_SIZE=5
+      - CACHE_ENABLED=true
+      - ENABLE_METRICS=true
+      - TRACE_SAMPLE_RATE=1.0
+      - API_RATE_LIMIT_ENABLED=false
+      - CORS_ALLOWED_ORIGINS="*"
+
+# Image pull policy for development (Always for faster iteration)
+patchesJson6902:
+  - target:
+      kind: Deployment
+      apiVersion: apps/v1
+    patch: |-
+      - op: add
+        path: /spec/template/spec/imagePullPolicy
+        value: Always
+
+# Environment-specific secrets
+secretGenerator:
+  - name: nova-secrets-dev
+    behavior: create
+    literals:
+      - JWT_SECRET=dev-secret-key-change-in-production
+      - DATABASE_URL=postgresql://nova_dev:dev_password@postgres:5432/nova_dev
+      - REDIS_URL=redis://redis:6379/0
+      - OAUTH_GITHUB_CLIENT_SECRET=dev-github-secret
+      - OAUTH_GOOGLE_CLIENT_SECRET=dev-google-secret
+      - AWS_REGION=us-east-1
+      - AWS_ACCESS_KEY_ID=dev-access-key
+      - AWS_SECRET_ACCESS_KEY=dev-secret-key
+
+# Service account for development
+serviceAccount:
+  name: nova-dev-sa
+
+# Network policy relaxed for development
+networkPolicy:
+  name: nova-dev-network-policy
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/environment: development
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/environment: development
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/environment: development
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 53
+        - protocol: UDP
+          port: 53

@@ -4,6 +4,23 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-tokio = { version = "1.35", features = ["full"] }
-anyhow = "1.0"
-tower = { version = "0.4", features = ["limit", "timeout", "buffer"] }
+tokio = { workspace = true, features = ["time", "macros", "rt"] }
+tower = { version = "0.4", features = ["timeout", "limit", "retry", "buffer"] }
+tower-layer = "0.3"
+tonic = { workspace = true }
+futures-util = "0.3"
+thiserror = { workspace = true }
+tracing = { workspace = true }
+parking_lot = "0.12"
+prometheus = { version = "0.13", optional = true }
+once_cell = { version = "1.19", optional = true }
+rand = "0.8"
+
+[dev-dependencies]
+tokio-test = "0.4"
+mockall = "0.12"
+criterion = "0.5"
+
+[features]
+default = []
+metrics = ["prometheus", "once_cell"]

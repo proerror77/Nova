@@ -16,9 +16,5 @@ pub use cache::{CacheConfig, CachedFeedPost, FeedCache};
 pub use config::Config;
 pub use error::{AppError, Result};
 
-// Re-export recommendation service components
-pub use services::{
-    ABTestingFramework, CollaborativeFilteringModel, ContentBasedModel, HybridRanker,
-    HybridWeights, ModelInfo, ONNXModelServer, RankedPost, RankingStrategy, RecommendationConfig,
-    RecommendationServiceV2, UserContext, Variant,
-};
+// Re-export trending service components (ML recommendation moved to ranking-service)
+// Keeping only services needed for feed assembly and caching

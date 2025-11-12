@@ -18,6 +18,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 /// Query complexity analyzer
+#[derive(Clone, Copy)]
 pub struct ComplexityAnalyzer {
     max_complexity: usize,
     max_depth: usize,
@@ -37,8 +38,8 @@ impl ComplexityAnalyzer {
         // In production, use visitor pattern to traverse AST
         let mut complexity = 0;
 
-        for operation in document.operations.iter() {
-            complexity += self.calculate_operation_complexity(operation);
+        for (_name, operation) in document.operations.iter() {
+            complexity += self.calculate_operation_complexity(&operation.node);
         }
 
         complexity
@@ -50,7 +51,7 @@ impl ComplexityAnalyzer {
 
         // Add complexity for each selection
         for selection in &operation.selection_set.node.items {
-            complexity += self.calculate_selection_complexity(selection, 1);
+            complexity += self.calculate_selection_complexity(&selection.node, 1);
         }
 
         complexity
@@ -64,19 +65,17 @@ impl ComplexityAnalyzer {
                 let mut complexity = 1;
 
                 // Check for list multipliers
-                if let Some(args) = &field.node.arguments {
-                    for (name, value) in args {
-                        if name.node.as_str() == "first" || name.node.as_str() == "limit" {
-                            // Extract limit value and multiply complexity
-                            // Simplified - in production parse value properly
-                            complexity *= 10;
-                        }
+                for (name, _value) in &field.node.arguments {
+                    if name.node.as_str() == "first" || name.node.as_str() == "limit" {
+                        // Extract limit value and multiply complexity
+                        // Simplified - in production parse value properly
+                        complexity *= 10;
                     }
                 }
 
                 // Recurse into sub-selections
                 for sub_selection in &field.node.selection_set.node.items {
-                    complexity += self.calculate_selection_complexity(sub_selection, depth + 1);
+                    complexity += self.calculate_selection_complexity(&sub_selection.node, depth + 1);
                 }
 
                 complexity
@@ -85,7 +84,7 @@ impl ComplexityAnalyzer {
             Selection::InlineFragment(fragment) => {
                 let mut complexity = 1;
                 for selection in &fragment.node.selection_set.node.items {
-                    complexity += self.calculate_selection_complexity(selection, depth + 1);
+                    complexity += self.calculate_selection_complexity(&selection.node, depth + 1);
                 }
                 complexity
             }
@@ -96,8 +95,8 @@ impl ComplexityAnalyzer {
     fn calculate_depth(&self, document: &ExecutableDocument) -> usize {
         let mut max_depth = 0;
 
-        for operation in document.operations.iter() {
-            let depth = self.calculate_operation_depth(operation);
+        for (_name, operation) in document.operations.iter() {
+            let depth = self.calculate_operation_depth(&operation.node);
             if depth > max_depth {
                 max_depth = depth;
             }
@@ -110,7 +109,7 @@ impl ComplexityAnalyzer {
         let mut max_depth = 0;
 
         for selection in &operation.selection_set.node.items {
-            let depth = self.calculate_selection_depth(selection, 1);
+            let depth = self.calculate_selection_depth(&selection.node, 1);
             if depth > max_depth {
                 max_depth = depth;
             }
@@ -127,7 +126,7 @@ impl ComplexityAnalyzer {
                 let mut max_depth = current_depth;
 
                 for sub_selection in &field.node.selection_set.node.items {
-                    let depth = self.calculate_selection_depth(sub_selection, current_depth + 1);
+                    let depth = self.calculate_selection_depth(&sub_selection.node, current_depth + 1);
                     if depth > max_depth {
                         max_depth = depth;
                     }
@@ -140,7 +139,7 @@ impl ComplexityAnalyzer {
                 let mut max_depth = current_depth;
 
                 for selection in &fragment.node.selection_set.node.items {
-                    let depth = self.calculate_selection_depth(selection, current_depth + 1);
+                    let depth = self.calculate_selection_depth(&selection.node, current_depth + 1);
                     if depth > max_depth {
                         max_depth = depth;
                     }
@@ -186,7 +185,7 @@ impl Extension for ComplexityLimitExtension {
         query: &str,
         variables: &Variables,
         next: NextParseQuery<'_>,
-    ) -> async_graphql::Result<ExecutableDocument> {
+    ) -> async_graphql::ServerResult<ExecutableDocument> {
         let document = next.run(ctx, query, variables).await?;
 
         // Check complexity
@@ -198,8 +197,7 @@ impl Extension for ComplexityLimitExtension {
                     complexity, self.analyzer.max_complexity
                 ),
                 None,
-            )
-            .into());
+            ));
         }
 
         // Check depth
@@ -211,48 +209,82 @@ impl Extension for ComplexityLimitExtension {
                     depth, self.analyzer.max_depth
                 ),
                 None,
-            )
-            .into());
+            ));
         }
 
         Ok(document)
     }
 }
 
-/// Persisted queries support
+/// Persisted queries support with APQ (Automatic Persisted Queries)
+/// Implements SHA-256 hash-based query caching to prevent arbitrary queries
 pub struct PersistedQueries {
     queries: Arc<RwLock<HashMap<String, String>>>,
     allow_arbitrary: bool,
+    enable_apq: bool,
 }
 
 impl PersistedQueries {
-    pub fn new(allow_arbitrary: bool) -> Self {
+    pub fn new(allow_arbitrary: bool, enable_apq: bool) -> Self {
         Self {
             queries: Arc::new(RwLock::new(HashMap::new())),
             allow_arbitrary,
+            enable_apq,
         }
     }
 
+    /// Register a query with its hash ID
     pub async fn register(&self, id: String, query: String) {
         let mut queries = self.queries.write().await;
         queries.insert(id, query);
     }
 
+    /// Get a query by its hash ID
     pub async fn get(&self, id: &str) -> Option<String> {
         let queries = self.queries.read().await;
         queries.get(id).cloned()
     }
 
+    /// Load persisted queries from a JSON file
+    /// Expected format: { "query_hash": "query string", ... }
     pub async fn load_from_file(&self, path: &str) -> anyhow::Result<()> {
         let content = tokio::fs::read_to_string(path).await?;
         let queries: HashMap<String, String> = serde_json::from_str(&content)?;
+
+        tracing::info!(
+            count = queries.len(),
+            path = path,
+            "Loaded persisted queries from file"
+        );
 
         let mut stored = self.queries.write().await;
         *stored = queries;
 
         Ok(())
     }
+
+    /// Compute SHA-256 hash of a query string (for APQ)
+    pub fn compute_hash(query: &str) -> String {
+        use sha2::{Sha256, Digest};
+        let mut hasher = Sha256::new();
+        hasher.update(query.as_bytes());
+        let result = hasher.finalize();
+        format!("{:x}", result)
+    }
+
+    /// Check if arbitrary queries are allowed
+    pub fn allows_arbitrary(&self) -> bool {
+        self.allow_arbitrary
+    }
+
+    /// Check if APQ is enabled
+    pub fn is_apq_enabled(&self) -> bool {
+        self.enable_apq
+    }
 }
+
+// Note: Persisted Queries enforcement is implemented at the actix-web middleware level
+// See middleware/persisted_queries.rs for the full implementation
 
 /// Request budget enforcement
 pub struct RequestBudget {
@@ -385,6 +417,9 @@ pub struct SecurityConfig {
     pub max_mutations_per_minute: usize,
     pub allow_introspection: bool,
     pub use_persisted_queries: bool,
+    pub allow_arbitrary_queries: bool,
+    pub enable_apq: bool,
+    pub persisted_queries_path: Option<String>,
 }
 
 impl Default for SecurityConfig {
@@ -397,6 +432,9 @@ impl Default for SecurityConfig {
             max_mutations_per_minute: 20,
             allow_introspection: false, // Disable in production
             use_persisted_queries: true,
+            allow_arbitrary_queries: false, // Block arbitrary queries in production
+            enable_apq: true, // Enable Automatic Persisted Queries
+            persisted_queries_path: None, // Load from file if provided
         }
     }
 }
@@ -433,6 +471,15 @@ impl SecurityConfig {
                 .ok()
                 .and_then(|s| s.parse().ok())
                 .unwrap_or(true),
+            allow_arbitrary_queries: std::env::var("GRAPHQL_ALLOW_ARBITRARY_QUERIES")
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(false),
+            enable_apq: std::env::var("GRAPHQL_ENABLE_APQ")
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(true),
+            persisted_queries_path: std::env::var("GRAPHQL_PERSISTED_QUERIES_PATH").ok(),
         })
     }
 }

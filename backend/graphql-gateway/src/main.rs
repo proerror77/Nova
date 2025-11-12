@@ -37,6 +37,48 @@ async fn health_handler() -> &'static str {
     "ok"
 }
 
+/// Circuit breaker health endpoint for monitoring
+/// Returns the current state of all circuit breakers
+/// ✅ P0: Circuit breaker observability for operations team
+async fn circuit_breaker_health_handler(
+    clients: web::Data<ServiceClients>,
+) -> actix_web::Result<actix_web::HttpResponse> {
+    use resilience::circuit_breaker::CircuitState;
+
+    // Get ServiceClients from app data
+    let clients = clients.get_ref();
+
+    let health_status = clients.health_status();
+
+    // Convert to JSON response
+    let status_json: Vec<serde_json::Value> = health_status
+        .into_iter()
+        .map(|(service, state)| {
+            let state_str = match state {
+                CircuitState::Closed => "closed",
+                CircuitState::Open => "open",
+                CircuitState::HalfOpen => "half_open",
+            };
+            serde_json::json!({
+                "service": service,
+                "state": state_str,
+                "healthy": state == CircuitState::Closed || state == CircuitState::HalfOpen,
+            })
+        })
+        .collect();
+
+    let all_healthy = status_json.iter().all(|s| s["healthy"].as_bool().unwrap_or(false));
+
+    let response = serde_json::json!({
+        "status": if all_healthy { "healthy" } else { "degraded" },
+        "circuit_breakers": status_json,
+    });
+
+    Ok(actix_web::HttpResponse::Ok()
+        .content_type("application/json")
+        .json(response))
+}
+
 /// SDL (Schema Definition Language) endpoint for schema introspection
 /// Enables automatic client code generation and documentation
 async fn schema_handler(schema: web::Data<schema::AppSchema>) -> actix_web::HttpResponse {
@@ -101,7 +143,7 @@ async fn main() -> std::io::Result<()> {
     // Load configuration (includes JWT config from AWS Secrets Manager or env)
     let config = config::Config::from_env()
         .await
-        .map_err(|e| format!("Failed to load configuration: {}", e))?;
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, format!("Failed to load configuration: {}", e)))?;
 
     info!(
         algorithm = %config.jwt.algorithm,
@@ -126,20 +168,20 @@ async fn main() -> std::io::Result<()> {
         config.jwt.signing_key.clone()
     } else {
         env::var("JWT_PRIVATE_KEY_PEM")
-            .map_err(|_| "JWT_PRIVATE_KEY_PEM required for RS256 tokens")?
+            .map_err(|_| std::io::Error::new(std::io::ErrorKind::NotFound, "JWT_PRIVATE_KEY_PEM required for RS256 tokens"))?
     };
 
     let jwt_public_key = config.jwt.validation_key.clone()
         .or_else(|| env::var("JWT_PUBLIC_KEY_PEM").ok())
-        .ok_or("JWT public key (validation_key or JWT_PUBLIC_KEY_PEM) required for RS256")?;
+        .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "JWT public key (validation_key or JWT_PUBLIC_KEY_PEM) required for RS256"))?;
 
     crypto_core::jwt::initialize_jwt_keys(&jwt_private_key, &jwt_public_key)
-        .map_err(|e| format!("Failed to initialize JWT keys - check PEM format: {}", e))?;
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, format!("Failed to initialize JWT keys - check PEM format: {}", e)))?;
 
     info!("JWT authentication enabled with RS256 algorithm");
 
     // Build GraphQL schema with service clients
-    let schema = build_schema(clients);
+    let schema = build_schema(clients.clone());
 
     let bind_addr = format!("{}:{}", config.server.host, config.server.port);
     info!("GraphQL Gateway starting on http://{}", bind_addr);
@@ -159,6 +201,7 @@ async fn main() -> std::io::Result<()> {
             .wrap(rate_limiter.clone())  // ✅ P0-3: Apply rate limiting before JWT auth
             .wrap(JwtMiddleware::new())  // ✅ P0-1: Fixed - Now uses RS256 from crypto-core
             .app_data(web::Data::new(schema.clone()))
+            .app_data(web::Data::new(clients.clone()))
             // ✅ P0-4: GraphQL endpoints
             .route("/graphql", web::post().to(graphql_handler))
             // ✅ P0-4: WebSocket subscriptions (real-time updates)
@@ -170,6 +213,8 @@ async fn main() -> std::io::Result<()> {
             // Developer tools
             .route("/playground", web::get().to(playground_handler))
             .route("/health", web::get().to(health_handler))
+            // ✅ P0: Circuit breaker monitoring endpoint
+            .route("/health/circuit-breakers", web::get().to(circuit_breaker_health_handler))
     })
     .bind(&bind_addr)?
     .run()

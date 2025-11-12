@@ -66,7 +66,7 @@ macro_rules! publish_event {
             retry_count: 0,
             last_error: None,
         };
-        $repo.insert($tx, &event).await?;
+        $repo.insert($tx, &event).await
     }};
 }
 
@@ -142,7 +142,7 @@ macro_rules! publish_event_with_metadata {
             retry_count: 0,
             last_error: None,
         };
-        $repo.insert($tx, &event).await?;
+        $repo.insert($tx, &event).await
     }};
 }
 

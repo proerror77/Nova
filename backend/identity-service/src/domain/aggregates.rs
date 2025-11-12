@@ -1,38 +1,23 @@
-use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 
-use super::value_objects::{Email, HashedPassword, UserId};
-use super::events::IdentityEvent;
-use super::errors::IdentityError;
+// TODO: These modules need to be implemented
+// use super::value_objects::{Email, HashedPassword, UserId};
+// use super::events::IdentityEvent;
+// use super::errors::IdentityError;
 
 /// User Aggregate Root - The core identity entity
 ///
 /// This aggregate owns all authentication-related data.
 /// Profile data is NOT stored here - it belongs to user-service.
+///
+/// TODO: Placeholder awaiting implementation of value_objects, events, and errors modules
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct User {
-    // Identity fields (owned by this service)
-    pub id: UserId,
-    pub email: Email,
-    pub password_hash: HashedPassword,
-    pub email_verified: bool,
-    pub is_active: bool,
-    pub is_locked: bool,
-    pub failed_login_attempts: i32,
-    pub locked_until: Option<DateTime<Utc>>,
-
-    // Metadata
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-    pub last_login_at: Option<DateTime<Utc>>,
-    pub password_changed_at: DateTime<Utc>,
-
-    // Event tracking
-    #[serde(skip)]
-    pending_events: Vec<IdentityEvent>,
+    // Placeholder - actual fields depend on missing modules
 }
 
+/*
 impl User {
     /// Create a new user with email and password
     pub fn create(email: Email, password: &str) -> Result<Self, IdentityError> {
@@ -211,3 +196,5 @@ impl User {
         });
     }
 }
+*/
+// End of commented-out impl block - awaiting domain module implementation

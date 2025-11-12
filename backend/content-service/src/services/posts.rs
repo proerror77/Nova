@@ -4,22 +4,41 @@ use crate::error::Result;
 use crate::models::Post;
 use sqlx::PgPool;
 use std::sync::Arc;
+use transactional_outbox::{publish_event, SqlxOutboxRepository};
 use uuid::Uuid;
 
 pub struct PostService {
     pool: PgPool,
     cache: Option<Arc<ContentCache>>,
+    outbox_repo: Option<Arc<SqlxOutboxRepository>>,
 }
 
 impl PostService {
     pub fn new(pool: PgPool) -> Self {
-        Self { pool, cache: None }
+        Self {
+            pool,
+            cache: None,
+            outbox_repo: None,
+        }
     }
 
     pub fn with_cache(pool: PgPool, cache: Arc<ContentCache>) -> Self {
         Self {
             pool,
             cache: Some(cache),
+            outbox_repo: None,
+        }
+    }
+
+    pub fn with_outbox(
+        pool: PgPool,
+        cache: Arc<ContentCache>,
+        outbox_repo: Arc<SqlxOutboxRepository>,
+    ) -> Self {
+        Self {
+            pool,
+            cache: Some(cache),
+            outbox_repo: Some(outbox_repo),
         }
     }
 
@@ -90,6 +109,9 @@ impl PostService {
         image_key: &str,
         content_type: &str,
     ) -> Result<Post> {
+        // Start transaction for atomic post creation + event publishing
+        let mut tx = self.pool.begin().await?;
+
         let post = sqlx::query_as::<_, Post>(
             r#"
             INSERT INTO posts (user_id, caption, image_key, status, content_type)
@@ -102,9 +124,32 @@ impl PostService {
         .bind(caption)
         .bind(image_key)
         .bind(content_type)
-        .fetch_one(&self.pool)
+        .fetch_one(&mut *tx)
         .await?;
 
+        // Publish event to outbox (same transaction)
+        if let Some(outbox) = &self.outbox_repo {
+            publish_event!(
+                &mut tx,
+                outbox.as_ref(),
+                "content",
+                post.id,
+                "content.post.created",
+                serde_json::json!({
+                    "post_id": post.id.to_string(),
+                    "user_id": user_id.to_string(),
+                    "caption": caption,
+                    "content_type": content_type,
+                    "status": "published",
+                    "created_at": post.created_at,
+                })
+            )?;
+        }
+
+        // Commit transaction (both post and event committed atomically)
+        tx.commit().await?;
+
+        // Cache post after successful commit (fire-and-forget, not transactional)
         if let Some(cache) = self.cache() {
             if let Err(err) = cache.cache_post(&post).await {
                 tracing::debug!(post_id = %post.id, "post cache set failed: {}", err);
@@ -121,6 +166,9 @@ impl PostService {
         user_id: Uuid,
         status: &str,
     ) -> Result<bool> {
+        // Start transaction for atomic status update + event publishing
+        let mut tx = self.pool.begin().await?;
+
         let result = sqlx::query(
             r#"
             UPDATE posts
@@ -131,11 +179,34 @@ impl PostService {
         .bind(status)
         .bind(post_id)
         .bind(user_id)
-        .execute(&self.pool)
+        .execute(&mut *tx)
         .await?;
 
         let updated = result.rows_affected() > 0;
 
+        if updated {
+            // Publish event to outbox (same transaction)
+            if let Some(outbox) = &self.outbox_repo {
+                publish_event!(
+                    &mut tx,
+                    outbox.as_ref(),
+                    "content",
+                    post_id,
+                    "content.post.status_updated",
+                    serde_json::json!({
+                        "post_id": post_id.to_string(),
+                        "user_id": user_id.to_string(),
+                        "new_status": status,
+                        "updated_at": chrono::Utc::now(),
+                    })
+                )?;
+            }
+        }
+
+        // Commit transaction (both update and event committed atomically)
+        tx.commit().await?;
+
+        // Invalidate cache after successful commit (fire-and-forget, not transactional)
         if updated {
             if let Some(cache) = self.cache() {
                 if let Err(err) = cache.invalidate_post(post_id).await {
@@ -149,6 +220,9 @@ impl PostService {
 
     /// Soft delete a post
     pub async fn delete_post(&self, post_id: Uuid, user_id: Uuid) -> Result<bool> {
+        // Start transaction for atomic soft delete + event publishing
+        let mut tx = self.pool.begin().await?;
+
         let result = sqlx::query(
             r#"
             UPDATE posts
@@ -158,11 +232,33 @@ impl PostService {
         )
         .bind(post_id)
         .bind(user_id)
-        .execute(&self.pool)
+        .execute(&mut *tx)
         .await?;
 
         let deleted = result.rows_affected() > 0;
 
+        if deleted {
+            // Publish event to outbox (same transaction)
+            if let Some(outbox) = &self.outbox_repo {
+                publish_event!(
+                    &mut tx,
+                    outbox.as_ref(),
+                    "content",
+                    post_id,
+                    "content.post.deleted",
+                    serde_json::json!({
+                        "post_id": post_id.to_string(),
+                        "user_id": user_id.to_string(),
+                        "deleted_at": chrono::Utc::now(),
+                    })
+                )?;
+            }
+        }
+
+        // Commit transaction (both delete and event committed atomically)
+        tx.commit().await?;
+
+        // Invalidate cache after successful commit (fire-and-forget, not transactional)
         if deleted {
             if let Some(cache) = self.cache() {
                 if let Err(err) = cache.invalidate_post(post_id).await {

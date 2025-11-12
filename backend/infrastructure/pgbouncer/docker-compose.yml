@@ -1,0 +1,141 @@
+version: '3.8'
+
+##############################################################################
+# PgBouncer Docker Compose Configuration
+# Purpose: Connection pooling for PostgreSQL microservices
+# 
+# Problem Solved:
+# - 12+ services × 3 replicas × 16 pool_size = 576 connections
+# - PostgreSQL max_connections = 200 → exhaustion
+# 
+# Solution:
+# - PgBouncer multiplexes 500+ client connections to 50 backend connections
+# - Transaction mode: optimal for microservices (1 transaction = 1 connection)
+# 
+# Usage:
+#   docker-compose up -d
+#   psql postgresql://nova_user:password@localhost:6432/nova
+##############################################################################
+
+services:
+  pgbouncer:
+    image: pgbouncer/pgbouncer:1.21
+    container_name: nova-pgbouncer
+    restart: always
+    
+    # Expose PgBouncer port
+    ports:
+      - "6432:6432"
+    
+    # Environment configuration
+    # These are for the Docker image startup script
+    # Main configuration is in pgbouncer.ini volume mount
+    environment:
+      # PostgreSQL connection details
+      DATABASES_HOST: postgres
+      DATABASES_PORT: "5432"
+      DATABASES_DBNAME: nova
+      
+      # PgBouncer settings
+      PGBOUNCER_LISTEN_PORT: "6432"
+      PGBOUNCER_AUTH_TYPE: scram-sha-256
+      PGBOUNCER_POOL_MODE: transaction
+      PGBOUNCER_MAX_CLIENT_CONN: "500"
+      PGBOUNCER_DEFAULT_POOL_SIZE: "50"
+      PGBOUNCER_MIN_POOL_SIZE: "10"
+    
+    # Configuration files
+    volumes:
+      # Main PgBouncer configuration
+      - ./pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini:ro
+      
+      # User authentication list
+      - ./userlist.txt:/etc/pgbouncer/userlist.txt:ro
+      
+      # Log directory (optional)
+      - pgbouncer-logs:/var/log/pgbouncer
+    
+    # Network configuration
+    networks:
+      - nova-network
+    
+    # Depends on PostgreSQL being available
+    depends_on:
+      postgres:
+        condition: service_healthy
+    
+    # Health check to ensure PgBouncer is ready
+    healthcheck:
+      # Check that PgBouncer is responding on port 6432
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-p", "6432", "-U", "admin"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.1'
+          memory: 256M
+    
+    # Security options
+    security_opt:
+      - no-new-privileges:true
+    
+    # Read-only root filesystem (optional, may need to adjust if logging needed)
+    # read_only: true
+
+  # PostgreSQL service (reference - should already exist in your setup)
+  postgres:
+    image: postgres:16-alpine
+    container_name: nova-postgres
+    restart: always
+    
+    environment:
+      POSTGRES_DB: nova
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_INITDB_ARGS: "-c max_connections=200"
+    
+    ports:
+      - "5432:5432"
+    
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./init-scripts:/docker-entrypoint-initdb.d:ro
+    
+    networks:
+      - nova-network
+    
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '1'
+          memory: 1G
+
+# Network definition
+networks:
+  nova-network:
+    driver: bridge
+
+# Volumes for persistent data
+volumes:
+  postgres-data:
+    driver: local
+  pgbouncer-logs:
+    driver: local

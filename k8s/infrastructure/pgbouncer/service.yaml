@@ -1,0 +1,83 @@
+##############################################################################
+# PgBouncer Kubernetes Service
+# Exposes PgBouncer to pods in the cluster
+#
+# Two service types:
+# 1. pgbouncer (ClusterIP) - for regular application access
+# 2. pgbouncer-metrics (ClusterIP) - for Prometheus metrics
+##############################################################################
+
+---
+# Main PgBouncer service for application connections
+apiVersion: v1
+kind: Service
+metadata:
+  name: pgbouncer
+  namespace: nova
+  labels:
+    app: pgbouncer
+    component: database-proxy
+spec:
+  type: ClusterIP
+  
+  # Keep session affinity disabled for better connection distribution
+  sessionAffinity: None
+  
+  selector:
+    app: pgbouncer
+  
+  ports:
+  - name: pgbouncer
+    port: 6432
+    targetPort: pgbouncer
+    protocol: TCP
+  
+  # Don't publish endpoints - we want load balancing across all pods
+  publishNotReadyAddresses: false
+
+---
+# Service for Prometheus metrics scraping
+# Allows monitoring of PgBouncer from external Prometheus
+apiVersion: v1
+kind: Service
+metadata:
+  name: pgbouncer-metrics
+  namespace: nova
+  labels:
+    app: pgbouncer
+    component: database-proxy
+spec:
+  type: ClusterIP
+  
+  selector:
+    app: pgbouncer
+  
+  ports:
+  - name: metrics
+    port: 9127
+    targetPort: 9127
+    protocol: TCP
+
+---
+# Headless service for direct pod access (StatefulSet style)
+# Useful for special cases where you need to connect to specific replicas
+apiVersion: v1
+kind: Service
+metadata:
+  name: pgbouncer-headless
+  namespace: nova
+  labels:
+    app: pgbouncer
+    component: database-proxy
+spec:
+  type: ClusterIP
+  clusterIP: None  # Headless service
+  
+  selector:
+    app: pgbouncer
+  
+  ports:
+  - name: pgbouncer
+    port: 6432
+    targetPort: pgbouncer
+    protocol: TCP

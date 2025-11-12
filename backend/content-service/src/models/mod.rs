@@ -152,55 +152,9 @@ pub struct FeedMetrics {
     pub final_count: usize,
 }
 
-// ============================================
-// Comment Models
-// ============================================
-
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
-pub struct Comment {
-    pub id: Uuid,
-    pub post_id: Uuid,
-    pub user_id: Uuid,
-    pub content: String,
-    pub parent_comment_id: Option<Uuid>, // For nested comments/replies
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-    pub soft_delete: Option<DateTime<Utc>>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CommentResponse {
-    pub id: String,
-    pub post_id: String,
-    pub user_id: String,
-    pub username: Option<String>,
-    pub avatar_url: Option<String>,
-    pub content: String,
-    pub parent_comment_id: Option<String>,
-    pub created_at: String,
-    pub updated_at: String,
-    pub is_edited: bool,
-}
-
-// ============================================
-// Like Models
-// ============================================
-
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
-pub struct Like {
-    pub id: Uuid,
-    pub post_id: Uuid,
-    pub user_id: Uuid,
-    pub created_at: DateTime<Utc>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LikeResponse {
-    pub id: String,
-    pub post_id: String,
-    pub user_id: String,
-    pub created_at: String,
-}
+// Note: Comment, Like, and Share models are defined in social-service.
+// PostMetadata still contains like_count/comment_count for display purposes,
+// but these values are fetched from social-service via gRPC.
 
 // ============================================
 // Bookmark Models
@@ -222,26 +176,3 @@ pub struct BookmarkResponse {
     pub bookmarked_at: String,
 }
 
-// ============================================
-// Post Share Models
-// ============================================
-
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
-pub struct PostShare {
-    pub id: Uuid,
-    pub post_id: Uuid,
-    pub user_id: Uuid,
-    pub share_via: Option<String>,
-    pub shared_with_user_id: Option<Uuid>,
-    pub shared_at: DateTime<Utc>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PostShareResponse {
-    pub id: String,
-    pub post_id: String,
-    pub user_id: String,
-    pub share_via: Option<String>,
-    pub shared_with_user_id: Option<String>,
-    pub shared_at: String,
-}

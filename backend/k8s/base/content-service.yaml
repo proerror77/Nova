@@ -25,20 +25,20 @@ spec:
         imagePullPolicy: Always
         ports:
         - name: http
-          containerPort: 8081
+          containerPort: 8082
           protocol: TCP
         - name: grpc
-          containerPort: 9081
+          containerPort: 9082
           protocol: TCP
         env:
         - name: HTTP_PORT
-          value: "8081"
+          value: "8082"
         - name: SERVER_HOST
           value: "0.0.0.0"
         - name: SERVER_PORT
-          value: "8081"
+          value: "8082"
         - name: GRPC_PORT
-          value: "9081"
+          value: "9082"
         - name: RUST_LOG
           value: "info"
         envFrom:
@@ -56,7 +56,7 @@ spec:
         livenessProbe:
           httpGet:
             path: /api/v1/health/live
-            port: 8081
+            port: 8082
           initialDelaySeconds: 30
           periodSeconds: 10
           timeoutSeconds: 5
@@ -64,7 +64,7 @@ spec:
         readinessProbe:
           httpGet:
             path: /api/v1/health/ready
-            port: 8081
+            port: 8082
           initialDelaySeconds: 10
           periodSeconds: 5
           timeoutSeconds: 3
@@ -73,7 +73,7 @@ spec:
         startupProbe:
           httpGet:
             path: /api/v1/health
-            port: 8081
+            port: 8082
           initialDelaySeconds: 0
           periodSeconds: 5
           timeoutSeconds: 3
@@ -92,12 +92,12 @@ spec:
   type: ClusterIP
   ports:
   - name: http
-    port: 8081
-    targetPort: 8081
+    port: 8082
+    targetPort: 8082
     protocol: TCP
   - name: grpc
-    port: 9081
-    targetPort: 9081
+    port: 9082
+    targetPort: 9082
     protocol: TCP
   selector:
     app: content-service

@@ -1,0 +1,6 @@
+{
+  "4f3d2f0c87e37a7a8e5e7aa4c69f8e90a5d3c1b7e6f8a9d0e2c4f7b8a1d3e6f9": "query GetUser($id: ID!) { user(id: $id) { id name email } }",
+  "7a8e9f0c1b2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8": "query GetPost($id: ID!) { post(id: $id) { id title content author { id name } } }",
+  "1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2": "mutation CreatePost($input: CreatePostInput!) { createPost(input: $input) { id title } }",
+  "9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0": "query ListPosts($first: Int!, $after: String) { posts(first: $first, after: $after) { edges { node { id title } } pageInfo { hasNextPage endCursor } } }"
+}

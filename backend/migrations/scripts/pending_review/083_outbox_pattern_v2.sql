@@ -1,0 +1,256 @@
+-- ============================================
+-- Migration: 083_outbox_pattern_v2
+--
+-- Supersedes: Migration 067 (CASCADE approach)
+--
+-- Changes from Migration 067:
+-- - REMOVE ON DELETE CASCADE (violates audit trail requirements)
+-- - ADD ON DELETE RESTRICT (forces proper soft-delete workflow)
+-- - Introduce Outbox table (guarantees atomicity)
+-- - Event-driven cascade delete via Kafka
+--
+-- Linus Principle: "Simple is better than complex"
+-- Outbox pattern ensures:
+-- 1. Atomic database transaction
+-- 2. Event guaranteed to publish (can retry)
+-- 3. Distributed systems safety
+-- 4. Full audit trail (soft-delete + event log)
+--
+-- Do NOT use CASCADE constraints for microservices.
+-- Use event-driven deletion instead.
+--
+-- Author: Nova Team + Backend Architect Review
+-- Date: 2025-11-06
+-- ============================================
+
+-- Step 1: Create Outbox table (compatible with transactional-outbox library)
+-- This table captures all events that need to be published to Kafka
+CREATE TABLE IF NOT EXISTS outbox_events (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    aggregate_type VARCHAR(255) NOT NULL,     -- 'user', 'message', 'post'
+    aggregate_id UUID NOT NULL,               -- user_id, message_id, post_id
+    event_type VARCHAR(255) NOT NULL,         -- 'user.deleted', 'message.created'
+    payload JSONB NOT NULL,                   -- Event data (user_id, timestamp, etc.)
+    metadata JSONB,                           -- correlation_id, trace_id, etc.
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    published_at TIMESTAMPTZ,                 -- When Kafka confirmed receipt
+    retry_count INT NOT NULL DEFAULT 0,
+    last_error TEXT,                          -- Last error message for debugging
+
+    -- Constraints
+    CONSTRAINT chk_retry_count CHECK (retry_count >= 0),
+    CONSTRAINT chk_published_at CHECK (published_at IS NULL OR published_at >= created_at)
+);
+
+-- Step 2: Create index for unpublished events (Kafka consumer polls this)
+-- Partial index to only index unpublished events for efficiency
+CREATE INDEX IF NOT EXISTS idx_outbox_unpublished
+    ON outbox_events (created_at, retry_count)
+    WHERE published_at IS NULL;
+
+-- Step 3: Create index for event retry and monitoring (by aggregate)
+CREATE INDEX IF NOT EXISTS idx_outbox_aggregate
+    ON outbox_events (aggregate_type, aggregate_id, created_at);
+
+-- Step 3b: Create index for querying by event type (useful for metrics/monitoring)
+CREATE INDEX IF NOT EXISTS idx_outbox_event_type
+    ON outbox_events (event_type, created_at);
+
+-- Step 4: Create trigger function for UserDeleted event
+-- When a user is soft-deleted, emit an event
+CREATE OR REPLACE FUNCTION emit_user_deletion_event()
+RETURNS TRIGGER AS $$
+BEGIN
+    -- Only emit when user transitions from active to deleted
+    IF NEW.deleted_at IS NOT NULL AND OLD.deleted_at IS NULL THEN
+        INSERT INTO outbox_events (aggregate_type, aggregate_id, event_type, payload)
+        VALUES (
+            'User',
+            NEW.id,
+            'UserDeleted',
+            jsonb_build_object(
+                'user_id', NEW.id,
+                'deleted_at', NEW.deleted_at,
+                'deleted_by', NEW.deleted_by,
+                'timestamp', NOW()
+            )
+        );
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Step 5: Create trigger on users table
+-- This ensures EVERY user deletion creates an Outbox event (atomically)
+CREATE TRIGGER IF NOT EXISTS trg_user_deletion
+AFTER UPDATE OF deleted_at ON users
+FOR EACH ROW
+EXECUTE FUNCTION emit_user_deletion_event();
+
+-- Step 6: Soft-delete trigger for messages (when user is deleted)
+-- Messaging service will listen to Outbox events and soft-delete user's messages
+CREATE OR REPLACE FUNCTION cascade_delete_user_messages()
+RETURNS TRIGGER AS $$
+BEGIN
+    -- If user is soft-deleted, also soft-delete their messages
+    -- (for audit trail while cascade delete is in progress)
+    IF NEW.deleted_at IS NOT NULL AND OLD.deleted_at IS NULL THEN
+        UPDATE messages
+        SET deleted_at = NEW.deleted_at,
+            deleted_by = NEW.deleted_by
+        WHERE sender_id = NEW.id
+            AND deleted_at IS NULL;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Step 7: Create trigger for soft-delete cascade
+-- This provides immediate cascade for backward compatibility
+-- But the authoritative cascade happens via Kafka (from messaging-service consumer)
+CREATE TRIGGER IF NOT EXISTS trg_cascade_delete_user_messages
+AFTER UPDATE OF deleted_at ON users
+FOR EACH ROW
+EXECUTE FUNCTION cascade_delete_user_messages();
+
+-- Step 8: Create helper function to get user messages (for manual cascading if needed)
+CREATE OR REPLACE FUNCTION get_user_messages_for_deletion(p_user_id UUID)
+RETURNS TABLE (
+    message_id UUID,
+    conversation_id UUID,
+    created_at TIMESTAMP WITH TIME ZONE
+) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT m.id, m.conversation_id, m.created_at
+    FROM messages m
+    WHERE m.sender_id = p_user_id
+        AND m.deleted_at IS NULL
+    ORDER BY m.created_at DESC;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Step 9: Add comment explaining Outbox pattern
+COMMENT ON TABLE outbox_events IS
+    'Outbox pattern for guaranteed event delivery. Events are inserted atomically with business logic changes. Kafka consumer polls this table and publishes to Kafka topics.';
+
+COMMENT ON COLUMN outbox_events.published_at IS
+    'Timestamp when event was successfully published to Kafka. NULL = not yet published. Used to detect stale/stuck events.';
+
+COMMENT ON COLUMN outbox_events.retry_count IS
+    'How many times publishing was retried. Helps detect poison pill events that consistently fail.';
+
+-- Step 10: Clean up Migration 067 and enforce RESTRICT constraint
+-- Migration 067 may have created CASCADE constraint - we need to remove it
+-- This step is idempotent and handles both fresh installs and upgrades
+
+-- Drop all possible foreign key constraint names
+ALTER TABLE messages
+    DROP CONSTRAINT IF EXISTS messages_sender_id_fkey;  -- Default name
+ALTER TABLE messages
+    DROP CONSTRAINT IF EXISTS fk_messages_sender_id_cascade;  -- Migration 067 name
+ALTER TABLE messages
+    DROP CONSTRAINT IF EXISTS fk_messages_sender_id;  -- Migration 083 name (idempotent)
+
+-- Create the correct RESTRICT constraint
+-- IMPORTANT: This is the ONLY correct constraint for messages.sender_id
+ALTER TABLE messages
+    ADD CONSTRAINT fk_messages_sender_id
+    FOREIGN KEY (sender_id) REFERENCES users(id)
+    ON DELETE RESTRICT;  -- RESTRICT: Prevents hard deletes, enforces soft-delete workflow
+
+COMMENT ON CONSTRAINT fk_messages_sender_id ON messages IS
+    'FK to users.id with ON DELETE RESTRICT (no hard deletes allowed).
+     Hard deletes are prevented to enforce soft-delete audit trail.
+     Cascade deletions are handled via Outbox pattern + Kafka event propagation.
+     NEVER change this to CASCADE - it would bypass the audit trail.
+
+     Supersedes Migration 067 CASCADE constraint (architectural decision reversal).';
+
+-- Step 11: Add similar pattern for other cascade scenarios
+-- Example: when message is deleted, update conversation.message_count
+CREATE OR REPLACE FUNCTION emit_message_deletion_event()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.deleted_at IS NOT NULL AND OLD.deleted_at IS NULL THEN
+        INSERT INTO outbox_events (aggregate_type, aggregate_id, event_type, payload)
+        VALUES (
+            'Message',
+            NEW.id,
+            'MessageDeleted',
+            jsonb_build_object(
+                'message_id', NEW.id,
+                'conversation_id', NEW.conversation_id,
+                'deleted_at', NEW.deleted_at,
+                'deleted_by', NEW.deleted_by
+            )
+        );
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER IF NOT EXISTS trg_message_deletion
+AFTER UPDATE OF deleted_at ON messages
+FOR EACH ROW
+EXECUTE FUNCTION emit_message_deletion_event();
+
+-- Step 12: Log migration
+INSERT INTO schema_migrations_log (migration_number, table_name, change_description)
+VALUES (
+    '067',
+    'outbox_events,messages,users',
+    'Added Outbox pattern for event-driven cascade deletes. Emit UserDeleted event when user is soft-deleted. Kafka consumers handle cascade deletions. DO NOT use CASCADE constraints for microservices.'
+)
+ON CONFLICT DO NOTHING;
+
+-- Step 13: Add monitoring view for Outbox backlog
+CREATE OR REPLACE VIEW outbox_status AS
+SELECT
+    COUNT(*) as total_events,
+    COUNT(CASE WHEN published_at IS NULL THEN 1 END) as unpublished_events,
+    COUNT(CASE WHEN published_at IS NULL AND retry_count > 0 THEN 1 END) as failed_events,
+    MIN(created_at) as oldest_unpublished,
+    MAX(created_at) as newest_event,
+    ROUND(EXTRACT(EPOCH FROM (NOW() - MIN(created_at)))) as oldest_age_seconds
+FROM outbox_events;
+
+COMMENT ON VIEW outbox_status IS
+    'Monitor Outbox table health. Used to detect if Kafka consumer is behind or failing.';
+
+-- Step 14: Add alert function for stale events
+CREATE OR REPLACE FUNCTION check_outbox_health()
+RETURNS TABLE (
+    health_status VARCHAR(20),
+    message TEXT,
+    unpublished_count BIGINT,
+    oldest_age_seconds BIGINT
+) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT
+        CASE
+            WHEN COUNT(CASE WHEN published_at IS NULL THEN 1 END) > 1000
+                THEN 'CRITICAL'::VARCHAR(20)
+            WHEN COUNT(CASE WHEN published_at IS NULL THEN 1 END) > 100
+                THEN 'WARNING'::VARCHAR(20)
+            ELSE 'OK'::VARCHAR(20)
+        END as health_status,
+        CASE
+            WHEN COUNT(CASE WHEN published_at IS NULL THEN 1 END) > 1000
+                THEN 'Kafka consumer is severely behind. Check messaging-service logs.'
+            WHEN COUNT(CASE WHEN published_at IS NULL THEN 1 END) > 100
+                THEN 'Kafka consumer is behind. Monitor progress.'
+            ELSE 'All events publishing normally'
+        END as message,
+        COUNT(CASE WHEN published_at IS NULL THEN 1 END) as unpublished_count,
+        ROUND(EXTRACT(EPOCH FROM (NOW() - MIN(created_at)))) as oldest_age_seconds
+    FROM outbox_events
+    WHERE published_at IS NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Step 15: Analyze new tables
+ANALYZE outbox_events;
+ANALYZE messages;
+ANALYZE users;

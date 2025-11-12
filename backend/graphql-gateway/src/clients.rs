@@ -4,13 +4,14 @@
 //! - Connection pooling via `connect_lazy()` - HTTP/2 multiplexing handles concurrency
 //! - Timeout configuration (connect + request)
 //! - Keep-alive for long-lived connections
-//! - Retry logic with exponential backoff
+//! - ✅ P0: Circuit breaker protection for all gRPC clients
 //! - Proper error types
 
 use std::sync::Arc;
 use std::time::Duration;
 use tonic::transport::{Channel, Endpoint};
 use tonic::Status;
+use resilience::circuit_breaker::{CircuitBreaker, CircuitBreakerConfig, CircuitState};
 
 // Common protos - must be at crate root so generated code can find it
 pub mod common {
@@ -44,13 +45,19 @@ use proto::user::user_service_client::UserServiceClient;
 use proto::content::content_service_client::ContentServiceClient;
 use proto::feed::recommendation_service_client::RecommendationServiceClient;
 
-/// Service client manager with pooled gRPC connections
+/// Service client manager with pooled gRPC connections and circuit breaker protection
 ///
 /// # Performance characteristics:
 /// - Each `Channel` uses HTTP/2 multiplexing (handles ~100 concurrent streams)
 /// - Connection is lazy-initialized on first use
 /// - Connection is reused across all requests
-/// - No connection overhead after initialization
+/// - ✅ P0: Circuit breaker for each service prevents cascading failures
+///
+/// # Circuit Breaker Protection:
+/// - Tracks error rate and consecutive failures per service
+/// - Opens circuit after 5 consecutive failures or 50% error rate
+/// - Auto-recovery after 60s timeout
+/// - Fast-fail when circuit is open (< 1ms vs 10s timeout)
 ///
 /// # Example:
 /// ```rust
@@ -64,6 +71,11 @@ pub struct ServiceClients {
     user_channel: Arc<Channel>,
     content_channel: Arc<Channel>,
     feed_channel: Arc<Channel>,
+    // Circuit breakers (one per service)
+    auth_cb: Arc<CircuitBreaker>,
+    user_cb: Arc<CircuitBreaker>,
+    content_cb: Arc<CircuitBreaker>,
+    feed_cb: Arc<CircuitBreaker>,
 }
 
 impl Default for ServiceClients {
@@ -78,7 +90,7 @@ impl Default for ServiceClients {
 }
 
 impl ServiceClients {
-    /// Create a new ServiceClients instance with custom endpoints
+    /// Create a new ServiceClients instance with custom endpoints and circuit breakers
     ///
     /// # Arguments:
     /// - `auth_endpoint`: Auth service URL (e.g., "http://auth-service:9083")
@@ -87,12 +99,19 @@ impl ServiceClients {
     /// - `feed_endpoint`: Feed/recommendation service URL
     ///
     /// # Configuration:
+    /// **Channel-level**:
     /// - **Connect timeout**: 5 seconds
     /// - **Request timeout**: 10 seconds
     /// - **Keep-alive**: 60 seconds (prevents connection drops by proxies/LBs)
     /// - **Keep-alive timeout**: 20 seconds
     /// - **Keep-alive while idle**: Enabled (sends pings even without traffic)
     /// - **Connection mode**: Lazy (connects on first use, not during construction)
+    ///
+    /// **Circuit Breaker** (per service):
+    /// - **Failure threshold**: 5 consecutive failures
+    /// - **Error rate threshold**: 50% (over 100-request window)
+    /// - **Recovery timeout**: 60 seconds
+    /// - **Success threshold**: 2 (HalfOpen → Closed)
     ///
     /// # Panics:
     /// Panics if any endpoint URL is malformed. In production, endpoints are
@@ -103,11 +122,24 @@ impl ServiceClients {
         content_endpoint: &str,
         feed_endpoint: &str,
     ) -> Self {
+        // Circuit breaker configuration
+        let cb_config = CircuitBreakerConfig {
+            failure_threshold: 5,
+            success_threshold: 2,
+            timeout: Duration::from_secs(60),
+            error_rate_threshold: 0.5,  // 50%
+            window_size: 100,
+        };
+
         Self {
             auth_channel: Arc::new(Self::create_channel(auth_endpoint)),
             user_channel: Arc::new(Self::create_channel(user_endpoint)),
             content_channel: Arc::new(Self::create_channel(content_endpoint)),
             feed_channel: Arc::new(Self::create_channel(feed_endpoint)),
+            auth_cb: Arc::new(CircuitBreaker::new(cb_config.clone())),
+            user_cb: Arc::new(CircuitBreaker::new(cb_config.clone())),
+            content_cb: Arc::new(CircuitBreaker::new(cb_config.clone())),
+            feed_cb: Arc::new(CircuitBreaker::new(cb_config)),
         }
     }
 
@@ -138,11 +170,21 @@ impl ServiceClients {
             .connect_lazy()
     }
 
-    /// Get auth service client
+    /// Get auth service client with circuit breaker protection
     ///
     /// # Performance:
     /// - First call: Establishes connection (5-10ms)
     /// - Subsequent calls: Reuses connection (<1ms)
+    ///
+    /// # Circuit Breaker:
+    /// Wrap gRPC calls with `call_with_circuit_breaker()` to get protection:
+    ///
+    /// ```rust
+    /// let mut client = clients.auth_client();
+    /// let result = clients.call_auth(|| async move {
+    ///     client.validate_token(request).await
+    /// }).await?;
+    /// ```
     ///
     /// # Returns:
     /// A lightweight client that shares the underlying connection.
@@ -151,24 +193,185 @@ impl ServiceClients {
         AuthServiceClient::new((*self.auth_channel).clone())
     }
 
-    /// Get user service client
+    /// Execute auth service call with circuit breaker protection
+    ///
+    /// # Example:
+    /// ```rust
+    /// let mut client = clients.auth_client();
+    /// let result = clients.call_auth(|| async move {
+    ///     client.validate_token(request).await
+    /// }).await?;
+    /// ```
+    pub async fn call_auth<F, Fut, T>(&self, f: F) -> Result<T, ServiceError>
+    where
+        F: FnOnce() -> Fut,
+        Fut: std::future::Future<Output = Result<tonic::Response<T>, Status>>,
+    {
+        self.auth_cb
+            .call(f)
+            .await
+            .map(|response| response.into_inner())
+            .map_err(|e| match e {
+                resilience::circuit_breaker::CircuitBreakerError::Open => {
+                    ServiceError::Unavailable {
+                        service: "auth-service".to_string(),
+                    }
+                }
+                resilience::circuit_breaker::CircuitBreakerError::CallFailed(msg) => {
+                    ServiceError::ConnectionError(msg)
+                }
+            })
+    }
+
+    /// Get user service client with circuit breaker protection
+    ///
+    /// # Circuit Breaker:
+    /// Use `call_user()` to wrap gRPC calls with circuit breaker protection.
     pub fn user_client(&self) -> UserServiceClient<Channel> {
         UserServiceClient::new((*self.user_channel).clone())
     }
 
-    /// Get content service client
+    /// Execute user service call with circuit breaker protection
+    ///
+    /// # Example:
+    /// ```rust
+    /// let mut client = clients.user_client();
+    /// let result = clients.call_user(|| async move {
+    ///     client.get_user(request).await
+    /// }).await?;
+    /// ```
+    pub async fn call_user<F, Fut, T>(&self, f: F) -> Result<T, ServiceError>
+    where
+        F: FnOnce() -> Fut,
+        Fut: std::future::Future<Output = Result<tonic::Response<T>, Status>>,
+    {
+        self.user_cb
+            .call(f)
+            .await
+            .map(|response| response.into_inner())
+            .map_err(|e| match e {
+                resilience::circuit_breaker::CircuitBreakerError::Open => {
+                    ServiceError::Unavailable {
+                        service: "user-service".to_string(),
+                    }
+                }
+                resilience::circuit_breaker::CircuitBreakerError::CallFailed(msg) => {
+                    ServiceError::ConnectionError(msg)
+                }
+            })
+    }
+
+    /// Get content service client with circuit breaker protection
+    ///
+    /// # Circuit Breaker:
+    /// Use `call_content()` to wrap gRPC calls with circuit breaker protection.
     pub fn content_client(&self) -> ContentServiceClient<Channel> {
         ContentServiceClient::new((*self.content_channel).clone())
     }
 
-    /// Get recommendation service client (feed service)
+    /// Execute content service call with circuit breaker protection
+    ///
+    /// # Example:
+    /// ```rust
+    /// let mut client = clients.content_client();
+    /// let result = clients.call_content(|| async move {
+    ///     client.get_post(request).await
+    /// }).await?;
+    /// ```
+    pub async fn call_content<F, Fut, T>(&self, f: F) -> Result<T, ServiceError>
+    where
+        F: FnOnce() -> Fut,
+        Fut: std::future::Future<Output = Result<tonic::Response<T>, Status>>,
+    {
+        self.content_cb
+            .call(f)
+            .await
+            .map(|response| response.into_inner())
+            .map_err(|e| match e {
+                resilience::circuit_breaker::CircuitBreakerError::Open => {
+                    ServiceError::Unavailable {
+                        service: "content-service".to_string(),
+                    }
+                }
+                resilience::circuit_breaker::CircuitBreakerError::CallFailed(msg) => {
+                    ServiceError::ConnectionError(msg)
+                }
+            })
+    }
+
+    /// Get recommendation service client (feed service) with circuit breaker protection
+    ///
+    /// # Circuit Breaker:
+    /// Use `call_feed()` to wrap gRPC calls with circuit breaker protection.
     pub fn recommendation_client(&self) -> RecommendationServiceClient<Channel> {
         RecommendationServiceClient::new((*self.feed_channel).clone())
+    }
+
+    /// Execute feed service call with circuit breaker protection
+    ///
+    /// # Example:
+    /// ```rust
+    /// let mut client = clients.feed_client();
+    /// let result = clients.call_feed(|| async move {
+    ///     client.get_recommendations(request).await
+    /// }).await?;
+    /// ```
+    pub async fn call_feed<F, Fut, T>(&self, f: F) -> Result<T, ServiceError>
+    where
+        F: FnOnce() -> Fut,
+        Fut: std::future::Future<Output = Result<tonic::Response<T>, Status>>,
+    {
+        self.feed_cb
+            .call(f)
+            .await
+            .map(|response| response.into_inner())
+            .map_err(|e| match e {
+                resilience::circuit_breaker::CircuitBreakerError::Open => {
+                    ServiceError::Unavailable {
+                        service: "feed-service".to_string(),
+                    }
+                }
+                resilience::circuit_breaker::CircuitBreakerError::CallFailed(msg) => {
+                    ServiceError::ConnectionError(msg)
+                }
+            })
     }
 
     /// Alias for recommendation_client for backward compatibility
     pub fn feed_client(&self) -> RecommendationServiceClient<Channel> {
         self.recommendation_client()
+    }
+
+    /// Get circuit breaker health status for monitoring
+    ///
+    /// Returns a list of (service_name, circuit_state) tuples for all services.
+    /// Use this for health checks and observability.
+    ///
+    /// # Example:
+    /// ```rust
+    /// let status = clients.health_status();
+    /// for (service, state) in status {
+    ///     println!("{}: {:?}", service, state);
+    /// }
+    /// ```
+    pub fn health_status(&self) -> Vec<(&'static str, CircuitState)> {
+        vec![
+            ("auth-service", self.auth_cb.state()),
+            ("user-service", self.user_cb.state()),
+            ("content-service", self.content_cb.state()),
+            ("feed-service", self.feed_cb.state()),
+        ]
+    }
+
+    /// Get circuit breaker for a specific service (for direct access)
+    pub fn get_circuit_breaker(&self, service: &str) -> Option<&CircuitBreaker> {
+        match service {
+            "auth" => Some(&self.auth_cb),
+            "user" => Some(&self.user_cb),
+            "content" => Some(&self.content_cb),
+            "feed" => Some(&self.feed_cb),
+            _ => None,
+        }
     }
 }
 

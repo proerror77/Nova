@@ -5,7 +5,8 @@
 use actix_web::{error::ErrorForbidden, Error};
 use uuid::Uuid;
 
-use crate::models::{Bookmark, Comment, Like, Post, PostShare};
+use crate::models::{Bookmark, Post};
+// Note: Comment, Like, PostShare ownership checks moved to social-service
 
 /// Result type for permission checks
 pub type PermissionResult = Result<(), Error>;
@@ -21,28 +22,6 @@ pub fn check_post_ownership(user_id: Uuid, post: &Post) -> PermissionResult {
     }
 }
 
-/// Check if a user owns a comment
-pub fn check_comment_ownership(user_id: Uuid, comment: &Comment) -> PermissionResult {
-    if comment.user_id == user_id {
-        Ok(())
-    } else {
-        Err(ErrorForbidden(
-            "You don't have permission to modify this comment",
-        ))
-    }
-}
-
-/// Check if a user owns a like
-pub fn check_like_ownership(user_id: Uuid, like: &Like) -> PermissionResult {
-    if like.user_id == user_id {
-        Ok(())
-    } else {
-        Err(ErrorForbidden(
-            "You don't have permission to delete this like",
-        ))
-    }
-}
-
 /// Check if a user owns a bookmark
 pub fn check_bookmark_ownership(user_id: Uuid, bookmark: &Bookmark) -> PermissionResult {
     if bookmark.user_id == user_id {
@@ -50,17 +29,6 @@ pub fn check_bookmark_ownership(user_id: Uuid, bookmark: &Bookmark) -> Permissio
     } else {
         Err(ErrorForbidden(
             "You don't have permission to delete this bookmark",
-        ))
-    }
-}
-
-/// Check if a user owns a post share
-pub fn check_post_share_ownership(user_id: Uuid, share: &PostShare) -> PermissionResult {
-    if share.user_id == user_id {
-        Ok(())
-    } else {
-        Err(ErrorForbidden(
-            "You don't have permission to delete this share",
         ))
     }
 }
@@ -77,14 +45,5 @@ pub fn check_post_update(user_id: Uuid, post: &Post) -> PermissionResult {
     check_post_ownership(user_id, post)
 }
 
-/// Verify user has access to delete a comment
-/// Only the owner can delete their own comments
-pub fn check_comment_deletion(user_id: Uuid, comment: &Comment) -> PermissionResult {
-    check_comment_ownership(user_id, comment)
-}
-
-/// Verify user has access to update a comment
-/// Only the owner can update their own comments
-pub fn check_comment_update(user_id: Uuid, comment: &Comment) -> PermissionResult {
-    check_comment_ownership(user_id, comment)
-}
+// Note: check_comment_ownership, check_like_ownership, check_share_ownership
+// moved to social-service

@@ -9,17 +9,12 @@ use tonic_health::server::health_reporter;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use utoipa_swagger_ui::SwaggerUi;
 
-use rdkafka::config::ClientConfig;
-use rdkafka::consumer::{Consumer, StreamConsumer};
-use rdkafka::Message;
 use recommendation_service::config::Config;
 use recommendation_service::handlers::{
     get_model_info, get_recommendations, rank_candidates, semantic_search,
     RecommendationHandlerState,
 };
-use recommendation_service::services::{RecommendationEventConsumer, RecommendationServiceV2};
-use serde_json::from_slice;
-use tracing::{error, info, warn};
+use tracing::info;
 
 use grpc_clients::{config::GrpcConfig, AuthClient, GrpcClientPool};
 
@@ -36,79 +31,7 @@ async fn openapi_json(
         .body(body))
 }
 
-/// Start Kafka consumer for recommendation events
-async fn start_kafka_consumer(
-    service: Arc<RecommendationServiceV2>,
-    config: &Config,
-) -> Result<(), Box<dyn std::error::Error>> {
-    info!("Starting Kafka consumer for recommendation events");
-
-    // Create Kafka consumer with configuration
-    let consumer: StreamConsumer = ClientConfig::new()
-        .set("bootstrap.servers", &config.kafka.bootstrap_servers)
-        .set("group.id", "recommendation-service-group")
-        .set("auto.offset.reset", "earliest")
-        .set("enable.auto.commit", "true")
-        .set("auto.commit.interval.ms", "5000")
-        .set("session.timeout.ms", "10000")
-        .create()?;
-
-    // Subscribe to recommendation event topics
-    let topics = [
-        "recommendations.model_updates",
-        "recommendations.feedback",
-        "experiments.config",
-    ];
-    consumer.subscribe(&topics)?;
-    info!("Subscribed to topics: {:?}", topics);
-
-    // Create recommendation event consumer for batch processing
-    let mut event_consumer = RecommendationEventConsumer::new(Arc::clone(&service));
-
-    // Periodic flush interval: 5 seconds
-    let mut flush_interval = tokio::time::interval(tokio::time::Duration::from_secs(5));
-
-    // Consume messages from Kafka with periodic flushing
-    loop {
-        tokio::select! {
-            // Handle incoming Kafka messages
-            msg_result = consumer.recv() => {
-                match msg_result {
-                    Ok(msg) => {
-                        // Parse message payload as RecommendationKafkaEvent
-                        if let Some(payload) = msg.payload() {
-                            match from_slice::<recommendation_service::services::RecommendationKafkaEvent>(
-                                payload,
-                            ) {
-                                Ok(event) => {
-                                    // Process event through consumer
-                                    if let Err(e) = event_consumer.handle_event(event).await {
-                                        error!("Failed to handle recommendation event: {:?}", e);
-                                        // Continue processing next event
-                                    }
-                                }
-                                Err(e) => {
-                                    warn!("Failed to deserialize Kafka message: {:?}", e);
-                                }
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        error!("Kafka consumer error: {:?}", e);
-                        // Implement exponential backoff or circuit breaker here
-                        tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
-                    }
-                }
-            }
-            // Handle periodic flush
-            _ = flush_interval.tick() => {
-                if let Err(e) = event_consumer.flush().await {
-                    error!("Failed to flush event batch: {:?}", e);
-                }
-            }
-        }
-    }
-}
+// Kafka consumer removed - recommendation events now handled by ranking-service
 
 #[actix_web::main]
 async fn main() -> io::Result<()> {
@@ -191,50 +114,17 @@ async fn main() -> io::Result<()> {
     let auth_client = Arc::new(AuthClient::from_pool(grpc_pool.clone()));
     tracing::info!("AuthService gRPC client initialized from pool");
 
-    // Initialize recommendation service
-    let rec_config = recommendation_service::services::RecommendationConfig {
-        collaborative_model_path: config.recommendation.collaborative_model_path.clone(),
-        content_model_path: config.recommendation.content_model_path.clone(),
-        onnx_model_path: config.recommendation.onnx_model_path.clone(),
-        hybrid_weights: recommendation_service::services::HybridWeights::balanced(),
-        enable_ab_testing: config.recommendation.enable_ab_testing,
-    };
-
-    let recommendation_svc = match RecommendationServiceV2::new(
-        rec_config,
-        db_pool.get_ref().clone(),
-        auth_client.clone(),
-    )
-    .await
-    {
-        Ok(service) => {
-            tracing::info!("Recommendation service initialized successfully");
-            Arc::new(service)
-        }
-        Err(e) => {
-            tracing::error!("Failed to initialize recommendation service: {:?}", e);
-            // Continue without recommendation service (fallback to v1.0)
-            // For now, we'll still fail startup since this is critical
-            return Err(io::Error::new(
-                io::ErrorKind::Other,
-                format!("Failed to initialize recommendation service: {:?}", e),
-            ));
-        }
-    };
+    // Initialize RankingServiceClient from gRPC pool
+    let ranking_client = Arc::new(grpc_pool.ranking());
+    tracing::info!("RankingService gRPC client initialized from pool");
 
     let rec_handler_state = web::Data::new(RecommendationHandlerState {
-        service: Arc::clone(&recommendation_svc),
+        ranking_client,
+        db_pool: db_pool.get_ref().clone(),
     });
 
-    // Start Kafka consumer in background task
-    let kafka_svc = Arc::clone(&recommendation_svc);
-    let kafka_config = config.clone();
-    tokio::spawn(async move {
-        if let Err(e) = start_kafka_consumer(kafka_svc, &kafka_config).await {
-            error!("Kafka consumer failed: {:?}", e);
-        }
-    });
-    info!("Kafka consumer task spawned");
+    // Kafka consumer removed - recommendation events now handled by ranking-service
+    info!("Feed-service simplified - ranking delegated to ranking-service");
 
     // Phase 3: Spec 007 - Feed cleaner background job
     // Cleans up experiment data from soft-deleted users after 30-day retention period
@@ -290,7 +180,52 @@ async fn main() -> io::Result<()> {
             .set_serving::<recommendation_service::grpc::recommendation_service_server::RecommendationServiceServer<recommendation_service::grpc::RecommendationServiceImpl>>()
             .await;
 
-        if let Err(e) = GrpcServer::builder()
+        // ✅ P0: Load mTLS configuration
+        let tls_config = match grpc_tls::GrpcServerTlsConfig::from_env() {
+            Ok(config) => {
+                tracing::info!("mTLS enabled - service-to-service authentication active");
+                Some(config)
+            }
+            Err(e) => {
+                tracing::warn!(
+                    "mTLS disabled - TLS config not found: {}. Using development mode for testing only.",
+                    e
+                );
+                if cfg!(debug_assertions) {
+                    tracing::info!("Development mode: Starting without TLS (NOT FOR PRODUCTION)");
+                    None
+                } else {
+                    tracing::error!("Production requires mTLS - GRPC_SERVER_CERT_PATH must be set: {}", e);
+                    return;
+                }
+            }
+        };
+
+        // ✅ P0: Build server with optional TLS
+        let mut server_builder = GrpcServer::builder();
+
+        if let Some(tls_cfg) = tls_config {
+            match tls_cfg.build_server_tls() {
+                Ok(server_tls) => {
+                    match server_builder.tls_config(server_tls) {
+                        Ok(builder) => {
+                            server_builder = builder;
+                            tracing::info!("gRPC server TLS configured successfully");
+                        }
+                        Err(e) => {
+                            tracing::error!("Failed to configure TLS on gRPC server: {}", e);
+                            return;
+                        }
+                    }
+                }
+                Err(e) => {
+                    tracing::error!("Failed to build server TLS config: {}", e);
+                    return;
+                }
+            }
+        }
+
+        if let Err(e) = server_builder
             .add_service(health_service)
             .add_service(
                 recommendation_service::grpc::recommendation_service_server::RecommendationServiceServer::with_interceptor(

@@ -1,0 +1,172 @@
+syntax = "proto3";
+
+package graph.v1;
+
+// Graph Service - 關係圖服務
+// 管理 Follow/Mute/Block 有向邊
+service GraphService {
+  // 創建 Follow 邊
+  rpc CreateFollow(CreateFollowRequest) returns (CreateFollowResponse);
+
+  // 刪除 Follow 邊
+  rpc DeleteFollow(DeleteFollowRequest) returns (DeleteFollowResponse);
+
+  // 創建 Mute 邊
+  rpc CreateMute(CreateMuteRequest) returns (CreateMuteResponse);
+
+  // 刪除 Mute 邊
+  rpc DeleteMute(DeleteMuteRequest) returns (DeleteMuteResponse);
+
+  // 創建 Block 邊
+  rpc CreateBlock(CreateBlockRequest) returns (CreateBlockResponse);
+
+  // 刪除 Block 邊
+  rpc DeleteBlock(DeleteBlockRequest) returns (DeleteBlockResponse);
+
+  // 獲取用戶的粉絲列表（誰關注了這個用戶）
+  rpc GetFollowers(GetFollowersRequest) returns (GetFollowersResponse);
+
+  // 獲取用戶關注的人列表（這個用戶關注了誰）
+  rpc GetFollowing(GetFollowingRequest) returns (GetFollowingResponse);
+
+  // 檢查是否關注
+  rpc IsFollowing(IsFollowingRequest) returns (IsFollowingResponse);
+
+  // 檢查是否靜音
+  rpc IsMuted(IsMutedRequest) returns (IsMutedResponse);
+
+  // 檢查是否封鎖
+  rpc IsBlocked(IsBlockedRequest) returns (IsBlockedResponse);
+
+  // 批量檢查關注關係
+  rpc BatchCheckFollowing(BatchCheckFollowingRequest) returns (BatchCheckFollowingResponse);
+}
+
+// Follow 邊
+message CreateFollowRequest {
+  string follower_id = 1;  // 關注者
+  string followee_id = 2;  // 被關注者
+}
+
+message CreateFollowResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message DeleteFollowRequest {
+  string follower_id = 1;
+  string followee_id = 2;
+}
+
+message DeleteFollowResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// Mute 邊
+message CreateMuteRequest {
+  string muter_id = 1;    // 靜音者
+  string mutee_id = 2;    // 被靜音者
+}
+
+message CreateMuteResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message DeleteMuteRequest {
+  string muter_id = 1;
+  string mutee_id = 2;
+}
+
+message DeleteMuteResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// Block 邊
+message CreateBlockRequest {
+  string blocker_id = 1;  // 封鎖者
+  string blocked_id = 2;  // 被封鎖者
+}
+
+message CreateBlockResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message DeleteBlockRequest {
+  string blocker_id = 1;
+  string blocked_id = 2;
+}
+
+message DeleteBlockResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// 查詢粉絲
+message GetFollowersRequest {
+  string user_id = 1;
+  int32 limit = 2;   // 默認 1000，最大 10000
+  int32 offset = 3;
+}
+
+message GetFollowersResponse {
+  repeated string user_ids = 1;
+  int32 total_count = 2;
+  bool has_more = 3;
+}
+
+// 查詢關注列表
+message GetFollowingRequest {
+  string user_id = 1;
+  int32 limit = 2;
+  int32 offset = 3;
+}
+
+message GetFollowingResponse {
+  repeated string user_ids = 1;
+  int32 total_count = 2;
+  bool has_more = 3;
+}
+
+// 檢查是否關注
+message IsFollowingRequest {
+  string follower_id = 1;
+  string followee_id = 2;
+}
+
+message IsFollowingResponse {
+  bool is_following = 1;
+}
+
+// 檢查是否靜音
+message IsMutedRequest {
+  string muter_id = 1;
+  string mutee_id = 2;
+}
+
+message IsMutedResponse {
+  bool is_muted = 1;
+}
+
+// 檢查是否封鎖
+message IsBlockedRequest {
+  string blocker_id = 1;
+  string blocked_id = 2;
+}
+
+message IsBlockedResponse {
+  bool is_blocked = 1;
+}
+
+// 批量檢查關注關係
+message BatchCheckFollowingRequest {
+  string follower_id = 1;
+  repeated string followee_ids = 2;  // 最多 100 個
+}
+
+message BatchCheckFollowingResponse {
+  map<string, bool> results = 1;  // followee_id -> is_following
+}

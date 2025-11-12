@@ -50,7 +50,7 @@ pub struct RecommendationServiceV2 {
     pub hybrid_ranker: HybridRanker,
     pub ab_framework: ABTestingFramework,
     pub onnx_server: ONNXModelServer,
-    pub vector_search: Option<crate::services::VectorSearchService>,
+    pub vector_search: Option<crate::services::vector_search::VectorSearchService>,
     db_pool: PgPool,
     config: RecommendationConfig,
     model_loaded_at: DateTime<Utc>,
@@ -75,7 +75,7 @@ impl RecommendationServiceV2 {
         // Initialize vector search service with Milvus
         let vector_search = match std::env::var("MILVUS_URL") {
             Ok(milvus_url) => {
-                let vs = crate::services::VectorSearchService::new(milvus_url, 768);
+                let vs = crate::services::vector_search::VectorSearchService::new(milvus_url, 768);
                 if let Err(e) = vs.initialize_collection().await {
                     warn!("Failed to initialize Milvus collection: {:?}", e);
                     None
@@ -245,7 +245,7 @@ impl RecommendationServiceV2 {
         &self,
         post_id: Uuid,
         limit: usize,
-    ) -> Result<Vec<crate::services::VectorSearchResult>> {
+    ) -> Result<Vec<crate::services::vector_search::VectorSearchResult>> {
         if let Some(ref vector_search) = self.vector_search {
             vector_search
                 .search_similar_by_post(post_id, limit, 0.5)
@@ -259,7 +259,7 @@ impl RecommendationServiceV2 {
     /// Index a post embedding for semantic search
     pub async fn index_post_embedding(
         &self,
-        embedding: crate::services::PostEmbedding,
+        embedding: crate::services::vector_search::PostEmbedding,
     ) -> Result<()> {
         if let Some(ref vector_search) = self.vector_search {
             vector_search.index_embedding(embedding).await
@@ -272,7 +272,7 @@ impl RecommendationServiceV2 {
     /// Batch index multiple post embeddings
     pub async fn batch_index_embeddings(
         &self,
-        embeddings: Vec<crate::services::PostEmbedding>,
+        embeddings: Vec<crate::services::vector_search::PostEmbedding>,
     ) -> Result<usize> {
         if let Some(ref vector_search) = self.vector_search {
             vector_search.batch_index_embeddings(embeddings).await

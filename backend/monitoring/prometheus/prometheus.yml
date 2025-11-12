@@ -1,11 +1,11 @@
 # ==============================================
 # Prometheus Configuration for Nova Backend
 # ==============================================
-# Scrapes metrics from 11 microservices + infrastructure
+# Scrapes metrics from 14 microservices + infrastructure
 
 global:
-  scrape_interval: 15s
-  evaluation_interval: 15s
+  scrape_interval: 10s
+  evaluation_interval: 10s
   external_labels:
     cluster: 'nova-production'
     environment: 'production'
@@ -24,12 +24,18 @@ rule_files:
 # Scrape configurations
 scrape_configs:
   # ==============================================
-  # Microservices (11 services)
+  # Microservices (14 services)
   # ==============================================
 
-  - job_name: 'auth-service'
+  - job_name: 'graphql-gateway'
     static_configs:
-      - targets: ['auth-service:8083']
+      - targets: ['graphql-gateway:8000']
+    metrics_path: /metrics
+    scrape_interval: 10s
+
+  - job_name: 'identity-service'
+    static_configs:
+      - targets: ['identity-service:8081']
     metrics_path: /metrics
     scrape_interval: 10s
 
@@ -41,7 +47,7 @@ scrape_configs:
 
   - job_name: 'content-service'
     static_configs:
-      - targets: ['content-service:8081']
+      - targets: ['content-service:8082']
     metrics_path: /metrics
     scrape_interval: 10s
 
@@ -53,25 +59,19 @@ scrape_configs:
 
   - job_name: 'media-service'
     static_configs:
-      - targets: ['media-service:8082']
+      - targets: ['media-service:8085']
     metrics_path: /metrics
     scrape_interval: 10s
 
-  - job_name: 'messaging-service'
+  - job_name: 'realtime-chat-service'
     static_configs:
-      - targets: ['messaging-service:8085']
+      - targets: ['realtime-chat-service:8086']
     metrics_path: /metrics
     scrape_interval: 10s
 
   - job_name: 'search-service'
     static_configs:
-      - targets: ['search-service:8086']
-    metrics_path: /metrics
-    scrape_interval: 10s
-
-  - job_name: 'streaming-service'
-    static_configs:
-      - targets: ['streaming-service:8087']
+      - targets: ['search-service:8087']
     metrics_path: /metrics
     scrape_interval: 10s
 
@@ -81,15 +81,33 @@ scrape_configs:
     metrics_path: /metrics
     scrape_interval: 10s
 
-  - job_name: 'cdn-service'
+  - job_name: 'graph-service'
     static_configs:
-      - targets: ['cdn-service:8089']
+      - targets: ['graph-service:8091']
     metrics_path: /metrics
     scrape_interval: 10s
 
-  - job_name: 'events-service'
+  - job_name: 'ranking-service'
     static_configs:
-      - targets: ['events-service:8090']
+      - targets: ['ranking-service:8092']
+    metrics_path: /metrics
+    scrape_interval: 10s
+
+  - job_name: 'social-service'
+    static_configs:
+      - targets: ['social-service:8093']
+    metrics_path: /metrics
+    scrape_interval: 10s
+
+  - job_name: 'analytics-service'
+    static_configs:
+      - targets: ['analytics-service:8094']
+    metrics_path: /metrics
+    scrape_interval: 10s
+
+  - job_name: 'trust-safety-service'
+    static_configs:
+      - targets: ['trust-safety-service:8095']
     metrics_path: /metrics
     scrape_interval: 10s
 
@@ -115,6 +133,16 @@ scrape_configs:
   - job_name: 'clickhouse'
     static_configs:
       - targets: ['clickhouse:9363']
+    scrape_interval: 30s
+
+  - job_name: 'elasticsearch'
+    static_configs:
+      - targets: ['elasticsearch:9200']
+    scrape_interval: 30s
+
+  - job_name: 'neo4j'
+    static_configs:
+      - targets: ['neo4j:7474']
     scrape_interval: 30s
 
   # ==============================================

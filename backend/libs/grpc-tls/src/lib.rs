@@ -1,22 +1,46 @@
-//! gRPC TLS Configuration Library with mTLS Support
+//! gRPC TLS Configuration Library with Production mTLS Support
 //!
-//! **Security Features**:
-//! - Server TLS with certificate validation
-//! - Mutual TLS (mTLS) for service-to-service authentication
-//! - Certificate rotation without downtime
-//! - Development self-signed cert generation
+//! ## Security Features
+//! - **Production mTLS**: Mandatory client certificate verification
+//! - **Certificate Rotation**: Hot reload without downtime
+//! - **SAN Validation**: Prevent MITM attacks
+//! - **Certificate Monitoring**: Expiration warnings
+//! - **TLS 1.3 Enforcement**: Modern crypto standards
 //!
-//! **CVSS 8.5 Mitigation**: Encrypts gRPC traffic and authenticates services
+//! ## Modules
+//! - `mtls`: Production-grade mutual TLS configuration
+//! - `san_validation`: Subject Alternative Name validation
+//! - `cert_generation`: Development certificate generation
+//! - `error`: Structured error types
+//!
+//! ## Usage Example
+//! ```rust,no_run
+//! use grpc_tls::mtls::{MtlsServerConfig, TlsConfigPaths};
+//!
+//! # async fn example() -> anyhow::Result<()> {
+//! let paths = TlsConfigPaths::from_env()?;
+//! let mtls_config = MtlsServerConfig::from_paths(paths).await?;
+//! let tls_config = mtls_config.build_server_tls()?;
+//! # Ok(())
+//! # }
+//! ```
 
-use anyhow::{anyhow, Context, Result};
-use rcgen::{generate_simple_self_signed, CertifiedKey};
+use anyhow::{Context, Result};
 use std::fs;
-use std::path::Path;
 use tonic::transport::{Certificate, ClientTlsConfig, Identity, ServerTlsConfig};
 use tracing::{info, warn};
 
+// Core modules
+pub mod error;
+pub mod mtls;
+pub mod san_validation;
 pub mod cert_generation;
+
+// Re-exports for convenience
 pub use cert_generation::{generate_dev_certificates, CertificateBundle};
+pub use error::{TlsError, TlsResult};
+pub use mtls::{MtlsClientConfig, MtlsServerConfig, TlsConfigPaths};
+pub use san_validation::{extract_san_entries, validate_san, SanEntry};
 
 /// TLS configuration for gRPC server
 #[derive(Clone)]
@@ -199,14 +223,17 @@ impl GrpcClientTlsConfig {
 }
 
 /// Validate certificate expiration
-pub fn validate_cert_expiration(cert_pem: &str, warn_days_before: u64) -> Result<()> {
+pub fn validate_cert_expiration(cert_pem: &str, warn_days_before: u64) -> TlsResult<()> {
     use x509_parser::prelude::*;
 
-    let pem = pem::parse(cert_pem)
-        .map_err(|e| anyhow!("Failed to parse PEM: {}", e))?;
+    let pem = ::pem::parse(cert_pem.as_bytes())?;
 
-    let (_, cert) = X509Certificate::from_der(&pem.contents())
-        .map_err(|e| anyhow!("Failed to parse X.509 certificate: {}", e))?;
+    let (_, cert) = X509Certificate::from_der(pem.contents()).map_err(|e| {
+        TlsError::CertificateParseError {
+            path: "memory".into(),
+            reason: format!("X.509 parse failed: {}", e),
+        }
+    })?;
 
     let not_after = cert.validity().not_after;
     let expiry_timestamp = not_after.timestamp();
@@ -215,7 +242,9 @@ pub fn validate_cert_expiration(cert_pem: &str, warn_days_before: u64) -> Result
     let days_until_expiry = (expiry_timestamp - now) / 86400;
 
     if days_until_expiry < 0 {
-        return Err(anyhow!("Certificate has expired"));
+        return Err(TlsError::CertificateExpiredError {
+            expiry_date: not_after.to_string(),
+        });
     }
 
     if days_until_expiry < warn_days_before as i64 {

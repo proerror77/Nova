@@ -1,0 +1,9 @@
+{
+  "db": "Postgres",
+  "query": "SELECT id, user_id, share_type, created_at FROM shares\n WHERE post_id = $1\n ORDER BY created_at DESC\n LIMIT $2 OFFSET $3",
+  "describe": {
+    "columns": [],
+    "nullable": [],
+    "return_type": "unknown"
+  }
+}

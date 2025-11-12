@@ -60,7 +60,7 @@ grpc-metrics = { path = "../libs/grpc-metrics" }
 grpc-clients = { path = "../libs/grpc-clients" }
 
 [build-dependencies]
-tonic-build = "0.11"
+tonic-build = "0.12"
 
 [dev-dependencies]
 tokio-test = "0.4"

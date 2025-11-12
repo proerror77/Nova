@@ -1,0 +1,106 @@
+##############################################################################
+# PgBouncer ConfigMap
+# Stores the main pgbouncer.ini configuration file
+#
+# Key Configuration Parameters:
+# - Pool Mode: transaction (optimal for microservices)
+# - Max Client Connections: 500 (total across 2 replicas = 250 each)
+# - Default Pool Size: 50 (actual PostgreSQL connections per replica)
+# - Min Pool Size: 10 (keep-alive connections)
+#
+# This ConfigMap is mounted read-only into PgBouncer pods
+##############################################################################
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pgbouncer-config
+  namespace: nova
+  labels:
+    app: pgbouncer
+    component: database-proxy
+
+data:
+  pgbouncer.ini: |
+    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+    ;; PgBouncer Configuration (Kubernetes)
+    ;; Auto-generated from ConfigMap - do not edit directly
+    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+    [databases]
+    ; Main Nova database
+    ; All microservices connect through this pool
+    nova = host=postgres-service port=5432 dbname=nova pool_size=25 min_pool_size=5
+
+    ; Health check database for monitoring
+    pgbouncer = host=postgres-service port=5432 dbname=postgres pool_size=2
+
+    [pgbouncer]
+
+    ;;; NETWORKING
+    listen_addr = 0.0.0.0
+    listen_port = 6432
+    listen_backlog = 1024
+
+    ;;; BACKEND CONNECTION SETTINGS
+    server_connect_timeout = 15
+    server_lifetime = 3600
+    server_idle_timeout = 600
+    server_idle_in_transaction_session_timeout = 0
+    server_check_delay = 30
+    server_check_query = SELECT 1
+
+    ;;; CLIENT CONNECTION LIMITS
+    ; Note: These are per-replica limits
+    ; Total = 250 (per pod) × 2 (replicas) = 500
+    max_client_conn = 250
+    min_pool_size = 5
+    default_pool_size = 25
+    reserve_pool_size = 3
+    reserve_pool_timeout = 3
+    max_db_connections = 50
+    max_user_connections = 50
+
+    ;;; POOL MANAGEMENT
+    pool_mode = transaction
+    connection_lifetime = 3600
+
+    ;;; AUTHENTICATION
+    auth_type = scram-sha-256
+    auth_file = /etc/pgbouncer/userlist.txt
+    auth_user = nobody
+
+    ;;; LOGGING
+    syslog_facility = LOCAL0
+    syslog = 0
+    logfile = /var/log/pgbouncer/pgbouncer.log
+    verbose = 2
+    log_connections = 1
+    log_disconnections = 1
+    log_pooler_errors = 1
+    log_client_events = 1
+    log_server_events = 1
+    syslog_prefix = "pgbouncer"
+    application_name = pgbouncer
+
+    ;;; TIMEOUTS
+    query_timeout = 60
+    query_wait_timeout = 120
+    client_idle_timeout = 900
+    login_timeout = 15
+    server_connect_timeout = 15
+
+    ;;; PERFORMANCE
+    pkt_buf = 4096
+    max_clientaddr_conn = 0
+
+    ;;; SECURITY
+    ssl = disable
+    disable_pqexec = 1
+
+    ;;; ADMIN INTERFACE
+    admin_users = admin
+    stats_users = admin, stats_user
+
+    ;;; CONSOLE
+    console_login = on

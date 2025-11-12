@@ -1,0 +1,103 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: social-service
+  namespace: nova-backend
+  labels:
+    app: social-service
+    component: backend
+    version: v1
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: social-service
+  template:
+    metadata:
+      labels:
+        app: social-service
+        version: v1
+    spec:
+      containers:
+      - name: social-service
+        image: nova-social-service:latest
+        imagePullPolicy: Always
+        ports:
+        - name: http
+          containerPort: 8093
+          protocol: TCP
+        - name: grpc
+          containerPort: 9093
+          protocol: TCP
+        env:
+        - name: HTTP_PORT
+          value: "8093"
+        - name: SERVER_HOST
+          value: "0.0.0.0"
+        - name: SERVER_PORT
+          value: "8093"
+        - name: GRPC_PORT
+          value: "9093"
+        - name: RUST_LOG
+          value: "info"
+        envFrom:
+        - configMapRef:
+            name: nova-backend-config
+        - secretRef:
+            name: nova-backend-secrets
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /api/v1/health/live
+            port: 8093
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /api/v1/health/ready
+            port: 8093
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          successThreshold: 1
+          failureThreshold: 3
+        startupProbe:
+          httpGet:
+            path: /api/v1/health
+            port: 8093
+          initialDelaySeconds: 0
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 30
+      restartPolicy: Always
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: social-service
+  namespace: nova-backend
+  labels:
+    app: social-service
+spec:
+  type: ClusterIP
+  ports:
+  - name: http
+    port: 8093
+    targetPort: 8093
+    protocol: TCP
+  - name: grpc
+    port: 9093
+    targetPort: 9093
+    protocol: TCP
+  selector:
+    app: social-service

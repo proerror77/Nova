@@ -1,0 +1,62 @@
+[package]
+name = "graph-service"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "graph-service"
+path = "src/main.rs"
+
+[[bin]]
+name = "migrate_follows_to_neo4j"
+path = "migrations/migrate_follows_to_neo4j.rs"
+
+[lib]
+name = "graph_service"
+path = "src/lib.rs"
+
+[dependencies]
+# Workspace dependencies
+actix-web.workspace = true
+actix-rt.workspace = true
+tokio.workspace = true
+sqlx.workspace = true
+redis.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+uuid.workspace = true
+chrono.workspace = true
+dotenv.workspace = true
+envy.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+tracing-actix-web.workspace = true
+thiserror.workspace = true
+anyhow.workspace = true
+async-trait.workspace = true
+prometheus.workspace = true
+
+# gRPC
+tonic.workspace = true
+tonic-health.workspace = true
+prost.workspace = true
+
+# Neo4j
+neo4rs = "0.8"
+
+# Shared libraries
+error-types = { path = "../libs/error-types" }
+transactional-outbox = { path = "../libs/transactional-outbox" }
+grpc-metrics = { path = "../libs/grpc-metrics" }
+grpc-health = { path = "../libs/grpc-health" }
+grpc-tls = { path = "../libs/grpc-tls" }
+
+[build-dependencies]
+tonic-build = "0.12"
+
+[dev-dependencies]
+tokio-test = "0.4"
+mockall = "0.12"

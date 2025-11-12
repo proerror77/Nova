@@ -1,9 +1,7 @@
 /// Input validation utilities for auth service
-use validator::ValidateEmail;
-
 /// Validates email format according to RFC 5322
 pub fn validate_email(email: &str) -> bool {
-    email.validate_email()
+    validator::validate_email(email)
 }
 
 /// Validates password strength

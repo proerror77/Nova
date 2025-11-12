@@ -1,0 +1,33 @@
+[package]
+name = "cache-invalidation"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# Async runtime
+tokio = { workspace = true, features = ["full"] }
+
+# Redis
+redis = { workspace = true, features = ["tokio-comp", "connection-manager"] }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Error handling
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+
+# Utilities
+uuid = { workspace = true }
+chrono = { workspace = true }
+async-trait = { workspace = true }
+futures-util = "0.3"
+
+[dev-dependencies]
+tokio-test = "0.4"
+testcontainers = { workspace = true }

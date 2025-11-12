@@ -4,9 +4,9 @@ use std::sync::Arc;
 use tracing::{debug, error, warn};
 
 use crate::error::{AppError, Result};
+use crate::grpc::clients::GraphServiceClient;
 use crate::middleware::jwt_auth::UserId;
 use crate::middleware::CircuitBreaker;
-use crate::services::graph::GraphService;
 use crate::utils::redis_timeout::run_with_timeout;
 
 /// Discover handler state with Circuit Breaker protection
@@ -57,7 +57,7 @@ pub struct SuggestedUsersResponse {
 pub async fn get_suggested_users(
     query: web::Query<std::collections::HashMap<String, String>>,
     redis_manager: web::Data<redis::aio::ConnectionManager>,
-    graph: web::Data<GraphService>,
+    graph: web::Data<GraphServiceClient>,
     http_req: HttpRequest,
     state: web::Data<DiscoverHandlerState>,
 ) -> Result<HttpResponse> {

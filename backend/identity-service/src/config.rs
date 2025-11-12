@@ -32,6 +32,8 @@ pub struct Settings {
     pub kafka: KafkaSettings,
     pub jwt: JwtSettings,
     pub server: ServerSettings,
+    pub email: EmailSettings,
+    pub oauth: OAuthSettings,
 }
 
 impl Settings {
@@ -56,6 +58,8 @@ impl Settings {
             kafka: KafkaSettings::from_env()?,
             jwt,
             server: ServerSettings::from_env()?,
+            email: EmailSettings::from_env()?,
+            oauth: OAuthSettings::from_env()?,
         })
     }
 }
@@ -288,6 +292,85 @@ impl ServerSettings {
                 .unwrap_or_else(|_| "9090".to_string())
                 .parse()
                 .context("Invalid SERVER_METRICS_PORT")?,
+        })
+    }
+}
+
+/// Email service configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EmailSettings {
+    pub smtp_host: String,
+    pub smtp_port: u16,
+    pub smtp_username: Option<String>,
+    pub smtp_password: Option<String>,
+    pub smtp_from: String,
+    pub use_starttls: bool,
+    pub verification_base_url: Option<String>,
+    pub password_reset_base_url: Option<String>,
+}
+
+impl EmailSettings {
+    fn from_env() -> Result<Self> {
+        Ok(Self {
+            smtp_host: env::var("SMTP_HOST")
+                .unwrap_or_else(|_| "localhost".to_string()),
+            smtp_port: env::var("SMTP_PORT")
+                .unwrap_or_else(|_| "1025".to_string())
+                .parse()
+                .context("Invalid SMTP_PORT")?,
+            smtp_username: env::var("SMTP_USERNAME").ok(),
+            smtp_password: env::var("SMTP_PASSWORD").ok(),
+            smtp_from: env::var("SMTP_FROM")
+                .unwrap_or_else(|_| "noreply@nova.dev".to_string()),
+            use_starttls: env::var("SMTP_USE_STARTTLS")
+                .unwrap_or_else(|_| "false".to_string())
+                .parse()
+                .unwrap_or(false),
+            verification_base_url: env::var("EMAIL_VERIFICATION_BASE_URL").ok(),
+            password_reset_base_url: env::var("EMAIL_PASSWORD_RESET_BASE_URL").ok(),
+        })
+    }
+}
+
+/// OAuth provider configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OAuthSettings {
+    pub google_client_id: Option<String>,
+    pub google_client_secret: Option<String>,
+    pub google_redirect_uri: Option<String>,
+    pub apple_team_id: Option<String>,
+    pub apple_client_id: Option<String>,
+    pub apple_key_id: Option<String>,
+    pub apple_private_key: Option<String>,
+    pub apple_redirect_uri: Option<String>,
+    pub facebook_app_id: Option<String>,
+    pub facebook_app_secret: Option<String>,
+    pub facebook_redirect_uri: Option<String>,
+    pub wechat_app_id: Option<String>,
+    pub wechat_app_secret: Option<String>,
+    pub wechat_redirect_uri: Option<String>,
+    pub default_scope: String,
+}
+
+impl OAuthSettings {
+    fn from_env() -> Result<Self> {
+        Ok(Self {
+            google_client_id: env::var("OAUTH_GOOGLE_CLIENT_ID").ok(),
+            google_client_secret: env::var("OAUTH_GOOGLE_CLIENT_SECRET").ok(),
+            google_redirect_uri: env::var("OAUTH_GOOGLE_REDIRECT_URI").ok(),
+            apple_team_id: env::var("OAUTH_APPLE_TEAM_ID").ok(),
+            apple_client_id: env::var("OAUTH_APPLE_CLIENT_ID").ok(),
+            apple_key_id: env::var("OAUTH_APPLE_KEY_ID").ok(),
+            apple_private_key: env::var("OAUTH_APPLE_PRIVATE_KEY").ok(),
+            apple_redirect_uri: env::var("OAUTH_APPLE_REDIRECT_URI").ok(),
+            facebook_app_id: env::var("OAUTH_FACEBOOK_APP_ID").ok(),
+            facebook_app_secret: env::var("OAUTH_FACEBOOK_APP_SECRET").ok(),
+            facebook_redirect_uri: env::var("OAUTH_FACEBOOK_REDIRECT_URI").ok(),
+            wechat_app_id: env::var("OAUTH_WECHAT_APP_ID").ok(),
+            wechat_app_secret: env::var("OAUTH_WECHAT_APP_SECRET").ok(),
+            wechat_redirect_uri: env::var("OAUTH_WECHAT_REDIRECT_URI").ok(),
+            default_scope: env::var("OAUTH_DEFAULT_SCOPE")
+                .unwrap_or_else(|_| "email profile".to_string()),
         })
     }
 }

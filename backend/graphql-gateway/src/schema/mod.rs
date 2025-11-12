@@ -22,15 +22,19 @@ use crate::security::{ComplexityLimit, RequestBudget, SecurityConfig};
 pub struct QueryRoot(user::UserQuery, content::ContentQuery, auth::AuthQuery);
 
 /// Root mutation object (federated)
+/// Each mutation type (UserMutation, ContentMutation, AuthMutation) must:
+/// 1. Implement #[Object] on their impl block
+/// 2. Have #[derive(Default)] on the struct
+/// 3. Be owned types (not references) in the MergedObject tuple
 #[derive(MergedObject, Default)]
-pub struct MutationRoot(user::UserMutation, content::ContentMutation, auth::AuthMutation);
+pub struct MutationRoot(auth::AuthMutation, content::ContentMutation, user::UserMutation);
 
 /// GraphQL App Schema type with WebSocket subscriptions
 pub type AppSchema = Schema<QueryRoot, MutationRoot, subscription::SubscriptionRoot>;
 
 /// Build federated GraphQL schema with subscriptions and DataLoaders
 /// ✅ P0-5: DataLoaders prevent N+1 queries by batching database loads
-/// ✅ P0-2: Security extensions (complexity limits, request budget)
+/// ✅ P0-2: Security extensions (complexity limits, request budget, persisted queries)
 pub fn build_schema(clients: ServiceClients) -> AppSchema {
     // Load security config from environment
     let security_config = SecurityConfig::from_env().unwrap_or_default();
@@ -40,10 +44,13 @@ pub fn build_schema(clients: ServiceClients) -> AppSchema {
         max_depth = security_config.max_depth,
         max_backend_calls = security_config.max_backend_calls,
         allow_introspection = security_config.allow_introspection,
+        use_persisted_queries = security_config.use_persisted_queries,
+        allow_arbitrary_queries = security_config.allow_arbitrary_queries,
+        enable_apq = security_config.enable_apq,
         "GraphQL security extensions enabled"
     );
 
-    Schema::build(
+    let schema_builder = Schema::build(
         QueryRoot::default(),
         MutationRoot::default(),
         subscription::SubscriptionRoot::default(),
@@ -61,17 +68,24 @@ pub fn build_schema(clients: ServiceClients) -> AppSchema {
         security_config.max_complexity,
         security_config.max_depth,
     ))
-    .extension(RequestBudget::new(security_config.max_backend_calls))
+    .extension(RequestBudget::new(security_config.max_backend_calls));
+
+    // Note: Persisted Queries are implemented as actix-web middleware
+    // See middleware/persisted_queries.rs for implementation
+
     // Disable introspection in production
-    .enable_federation()
-    .disable_introspection(if !security_config.allow_introspection {
+    if !security_config.allow_introspection {
         tracing::warn!("GraphQL introspection DISABLED for production security");
-        true
+        schema_builder
+            .enable_federation()
+            .disable_introspection()
+            .finish()
     } else {
         tracing::warn!("GraphQL introspection ENABLED (development only)");
-        false
-    })
-    .finish()
+        schema_builder
+            .enable_federation()
+            .finish()
+    }
 }
 
 #[cfg(test)]

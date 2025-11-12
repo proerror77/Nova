@@ -84,7 +84,7 @@ futures-util = "0.3"
 lazy_static = "1.4"
 actix-multipart = "0.4"
 num_cpus = "1.16"
-neo4rs = "0.8"
+# neo4rs = "0.8"  # REMOVED - graph logic moved to graph-service (port 9080)
 tokio-stream = "0.1"
 regex = "1"
 redis-utils = { path = "../libs/redis-utils" }
@@ -117,9 +117,11 @@ error-types = { path = "../libs/error-types" }
 nova-fcm-shared = { path = "../libs/nova-fcm-shared" }
 grpc-metrics = { path = "../libs/grpc-metrics" }
 grpc-clients = { path = "../libs/grpc-clients" }
+transactional-outbox = { path = "../libs/transactional-outbox" }
+grpc-health = { path = "../libs/grpc-health" }
 
 [build-dependencies]
-tonic-build = "0.11"
+tonic-build = "0.12"
 
 [dev-dependencies]
 tokio-test = "0.4"

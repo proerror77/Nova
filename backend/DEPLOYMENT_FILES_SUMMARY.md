@@ -1,443 +1,440 @@
-# Nova Backend - Deployment Files Summary
+# Nova Backend - Deployment Files Summary (UPDATED)
 
-**Created:** 2025-11-06
-**Phase:** 1B Deployment Preparation
-
-This document lists all deployment configuration files created for Phase 1B.
-
----
-
-## 📦 Deployment Artifacts Overview
-
-### Critical Files (Start Here)
-
-| File | Purpose | Usage |
-|------|---------|-------|
-| **DEPLOYMENT_GUIDE.md** | Complete deployment manual | Read first for deployment workflows |
-| **DEPLOYMENT_CHECKLIST.md** | Step-by-step deployment procedure | Follow during production deployment |
-| **.env.example** | Environment variable template | Copy to `.env` and configure |
-| **Dockerfile.template** | Unified Docker build template | Build all 11 services |
-| **docker-compose.prod.yml** | Local/staging deployment | `docker-compose up -d` |
+**Last Updated:** 2025-11-12
+**Phase:** Post-Migration (Phase E Complete, Migrations 110-123 Applied)
+**Status:** ✅ **DEPLOYMENT FILES CREATED**
 
 ---
 
-## 📁 Directory Structure
+## ✅ DEPLOYMENT STATUS UPDATE
+
+**Database Migrations:** ✅ **COMPLETE** (110-123 applied successfully)
+**Service Consolidation:** ✅ **COMPLETE** (Phase E: 7 services archived, 8 new services created)
+**Deployment Configuration:** ✅ **COMPLETE** (All core deployment files created)
+
+### Files Created Today (2025-11-12):
+- ✅ `.env.example` - 302 lines, 10 KB
+- ✅ `docker-compose.prod.yml` - 755 lines, 19 KB
+
+### What Changed Since Original Document
+
+| Original (11 Services) | Current (14 Services) | Status |
+|------------------------|----------------------|--------|
+| auth-service | **identity-service** | ✅ Replaced |
+| user-service | user-service | ✅ Active |
+| content-service | content-service | ✅ Active |
+| feed-service (with graph) | **feed-service** (graph removed) | ✅ Refactored |
+| - | **graph-service** | ✅ NEW (extracted from feed/user) |
+| - | **ranking-service** | ✅ NEW (extracted from feed) |
+| media-service | media-service | ✅ Active |
+| messaging-service | **realtime-chat-service** | ✅ Replaced |
+| search-service | search-service | ✅ Active |
+| streaming-service | *(merged into media-service)* | 🗑️ Archived |
+| notification-service | notification-service | ✅ Active |
+| cdn-service | *(merged into media-service)* | 🗑️ Archived |
+| events-service | *(functionality distributed)* | 🗑️ Archived |
+| - | **social-service** | ✅ NEW |
+| - | **analytics-service** | ✅ NEW |
+| - | **trust-safety-service** | ✅ NEW |
+| - | **graphql-gateway** | ✅ API Gateway |
+
+**Total:** 14 active services + 1 API gateway
+
+---
+
+## 📁 Current Directory Structure
 
 ```
 backend/
-├── .env.example                          # Environment variable template (all services)
-├── Dockerfile.template                   # Unified Dockerfile for 11 services
-├── docker-compose.prod.yml               # Docker Compose for all services
-├── DEPLOYMENT_GUIDE.md                   # Complete deployment manual (3,500 words)
-├── DEPLOYMENT_CHECKLIST.md               # Production deployment checklist (5,000 words)
+├── DEPLOYMENT_FILES_SUMMARY.md        # This file (updated)
+├── ✅ .env.example                    # CREATED - 302 lines, 10 KB
+├── ✅ Dockerfile.template             # EXISTS - Multi-stage build
+├── ✅ docker-compose.prod.yml         # CREATED - 755 lines, 19 KB
+├── ❌ DEPLOYMENT_GUIDE.md             # MISSING - Need to create
+├── ❌ DEPLOYMENT_CHECKLIST.md         # MISSING - Need to create
 │
-├── k8s/                                  # Kubernetes manifests
-│   ├── README.md                         # Kubernetes deployment guide
-│   ├── generate-manifests.sh             # Script to generate service YAMLs
-│   ├── base/                             # Base Kubernetes resources
-│   │   ├── namespace.yaml                # nova-backend namespace
-│   │   ├── configmap.yaml                # Shared configuration
-│   │   ├── kustomization.yaml            # Kustomize base config
-│   │   └── auth-service.yaml             # Example service manifest
-│   └── overlays/                         # Environment-specific overrides
-│       ├── dev/                          # Development environment
-│       ├── staging/                      # Staging environment
-│       └── prod/                         # Production environment
-│           └── kustomization.yaml        # Production overrides
+├── migrations/                        # ✅ Database migrations (110-123 applied)
+│   ├── 110_create_video_call_support.sql
+│   ├── 111_create_location_sharing.sql
+│   ├── 113_fix_messages_schema_consistency.sql
+│   ├── 114_add_deleted_by_to_users.sql
+│   ├── 115_users_email_citext.sql
+│   ├── 116_trending_system.sql
+│   ├── 117_performance_optimization_p0.sql
+│   ├── 118_oauth_encrypted_tokens.sql
+│   ├── 119_add_message_encryption.sql
+│   ├── 120_prepare_missing_tables.sql
+│   ├── 121_performance_optimization_p0.sql
+│   ├── 122_create_device_keys_and_key_exchanges.sql
+│   └── 123_critical_performance_indexes.sql
 │
-└── monitoring/                           # Observability stack
-    ├── prometheus/                       # Prometheus configuration
-    │   ├── prometheus.yml                # Scrape configs for 11 services
-    │   └── rules/
-    │       └── alerts.yml                # 20+ alert rules (SLIs/SLOs)
-    └── grafana/                          # Grafana dashboards
-        └── dashboards/
-            └── nova-overview.json        # Service overview dashboard
+├── k8s/                               # ⚠️ Kubernetes manifests (OUTDATED)
+│   ├── ❌ README.md                   # MISSING
+│   ├── ❌ generate-manifests.sh       # MISSING
+│   ├── base/                          # ⚠️ Contains old service names
+│   │   ├── namespace.yaml             # ✅ Exists
+│   │   ├── configmap.yaml             # ✅ Exists
+│   │   ├── kustomization.yaml         # ✅ Exists
+│   │   ├── auth-service.yaml          # 🗑️ OUTDATED (use identity-service)
+│   │   ├── messaging-service.yaml     # 🗑️ OUTDATED (use realtime-chat-service)
+│   │   ├── cdn-service.yaml           # 🗑️ OUTDATED (merged into media-service)
+│   │   ├── streaming-service.yaml     # 🗑️ OUTDATED (merged into media-service)
+│   │   ├── events-service.yaml        # 🗑️ OUTDATED (distributed)
+│   │   └── ... (other outdated manifests)
+│   └── overlays/
+│       ├── ❌ dev/                    # MISSING
+│       ├── ❌ staging/                # MISSING
+│       └── prod/
+│           └── kustomization.yaml     # ✅ Exists (needs update)
+│
+├── monitoring/                        # ✅ Observability stack
+│   ├── prometheus/
+│   │   ├── prometheus.yml             # ✅ Exists (needs service list update)
+│   │   └── rules/
+│   │       └── alerts.yml             # ⚠️ Needs verification
+│   └── grafana/
+│       └── dashboards/
+│           └── ❌ nova-overview.json  # MISSING
+│
+├── archived-v1/                       # 🗑️ Archived services (Phase E)
+│   ├── auth-service/                  # → identity-service
+│   ├── cdn-service/                   # → media-service
+│   ├── messaging-service/             # → realtime-chat-service
+│   ├── streaming-service/             # → media-service
+│   └── video-service/                 # → media-service
+│
+└── Active Services (14):
+    ├── analytics-service/             # ✅ NEW
+    ├── content-service/               # ✅ Active
+    ├── feed-service/                  # ✅ Refactored (graph removed)
+    ├── graph-service/                 # ✅ NEW
+    ├── graphql-gateway/               # ✅ API Gateway
+    ├── identity-service/              # ✅ NEW (replaces auth)
+    ├── media-service/                 # ✅ Consolidated (cdn+streaming+video)
+    ├── notification-service/          # ✅ Active
+    ├── ranking-service/               # ✅ NEW
+    ├── realtime-chat-service/         # ✅ NEW (replaces messaging)
+    ├── search-service/                # ✅ Active
+    ├── social-service/                # ✅ NEW
+    ├── trust-safety-service/          # ✅ NEW
+    └── user-service/                  # ✅ Active
 ```
 
 ---
 
-## 🔧 Configuration Files
+## 🗄️ Database State (PostgreSQL)
 
-### 1. Environment Configuration
+### ✅ Recently Applied Migrations (110-123)
 
-**File:** `.env.example`
+| Migration | Feature | Status |
+|-----------|---------|--------|
+| **110** | Video calling (WebRTC) | ✅ Applied |
+| **111** | Location sharing (GPS) | ✅ Applied |
+| **113** | Message search index sync triggers | ✅ Applied |
+| **114** | Audit trail (deleted_by column) | ✅ Applied |
+| **115** | Case-insensitive email (CITEXT) | ✅ Applied |
+| **116** | Trending system (time decay algorithm) | ✅ Applied |
+| **117** | Conversation archiving + performance | ✅ Applied |
+| **118** | OAuth token encryption (AES-256-GCM) | ✅ Applied |
+| **119** | E2EE message metadata | ✅ Applied |
+| **120** | Support tables (blocks, media) | ✅ Applied |
+| **121** | Data integrity constraints | ✅ Applied |
+| **122** | Device keys + key exchange (X25519) | ✅ Applied |
+| **123** | Critical performance indexes | ✅ Applied |
 
-**Contents:**
-- Database connection strings (PostgreSQL, ClickHouse)
-- Cache configuration (Redis)
-- Message broker (Kafka topics, consumer groups)
-- Search engine (Elasticsearch indices)
-- JWT keys (RSA public/private key pairs)
-- AWS S3 credentials
-- SMTP settings
-- OAuth providers (Google)
-- APNs/FCM push notification keys
-- **Service ports:** HTTP + gRPC for all 11 services
-- **gRPC client configuration:** Centralized connection settings
-- Feature flags
-
-**Key Sections:**
-- ✅ Port convention: `gRPC_PORT = HTTP_PORT + 1000`
-- ✅ All 11 services configured
-- ✅ Environment-specific overrides (dev/staging/prod)
+**Total Tables:** 60 tables
+**New Tables (12):** engagement_events, trending_scores, trending_metadata, call_sessions, call_participants, user_locations, location_share_events, location_permissions, blocks, media, device_keys, key_exchanges
 
 ---
 
-### 2. Docker Configuration
+## 🚨 URGENT TODO: Create Missing Deployment Files
 
-#### Dockerfile.template
+### Priority 1: Core Configuration
 
-**File:** `Dockerfile.template`
+#### 1. `.env.example` (CRITICAL)
+**Purpose:** Environment variable template for all 14 services
+**Required sections:**
+- Database connections (PostgreSQL, ClickHouse, Neo4j)
+- Cache (Redis)
+- Message broker (Kafka)
+- Search (Elasticsearch)
+- Object storage (AWS S3 / MinIO)
+- JWT keys (RS256 public/private keypair)
+- OAuth providers (Google, Apple)
+- Push notifications (APNs, FCM)
+- SMTP (email)
+- **NEW:** Feature flags for trending, video calls, location sharing
 
-**Features:**
-- **Multi-stage build:** Builder + Runtime
-- **Unified template:** Single Dockerfile for all 11 services
-- **Build argument:** `SERVICE_NAME` (e.g., `auth-service`)
-- **Security:** Non-root user (uid=1000)
-- **Health check:** Integrated `/api/v1/health` endpoint
-- **Size optimization:** Debian slim base, minimal runtime dependencies
-
-**Usage:**
-
+**Port Convention (LOCKED):**
 ```bash
-docker build --build-arg SERVICE_NAME=auth-service \
-             -f Dockerfile.template \
-             -t nova-auth-service:latest .
+# gRPC_PORT = HTTP_PORT + 1000
+IDENTITY_SERVICE_HTTP_PORT=8081
+IDENTITY_SERVICE_GRPC_PORT=9081
+
+USER_SERVICE_HTTP_PORT=8080
+USER_SERVICE_GRPC_PORT=9080
+
+CONTENT_SERVICE_HTTP_PORT=8082
+CONTENT_SERVICE_GRPC_PORT=9082
+
+FEED_SERVICE_HTTP_PORT=8084
+FEED_SERVICE_GRPC_PORT=9084
+
+GRAPH_SERVICE_HTTP_PORT=8091
+GRAPH_SERVICE_GRPC_PORT=9091
+
+RANKING_SERVICE_HTTP_PORT=8092
+RANKING_SERVICE_GRPC_PORT=9092
+
+MEDIA_SERVICE_HTTP_PORT=8085
+MEDIA_SERVICE_GRPC_PORT=9085
+
+REALTIME_CHAT_SERVICE_HTTP_PORT=8086
+REALTIME_CHAT_SERVICE_GRPC_PORT=9086
+
+SEARCH_SERVICE_HTTP_PORT=8087
+SEARCH_SERVICE_GRPC_PORT=9087
+
+NOTIFICATION_SERVICE_HTTP_PORT=8088
+NOTIFICATION_SERVICE_GRPC_PORT=9088
+
+SOCIAL_SERVICE_HTTP_PORT=8093
+SOCIAL_SERVICE_GRPC_PORT=9093
+
+ANALYTICS_SERVICE_HTTP_PORT=8094
+ANALYTICS_SERVICE_GRPC_PORT=9094
+
+TRUST_SAFETY_SERVICE_HTTP_PORT=8095
+TRUST_SAFETY_SERVICE_GRPC_PORT=9095
+
+GRAPHQL_GATEWAY_PORT=8000
 ```
 
-#### docker-compose.prod.yml
+#### 2. `Dockerfile.template` (CRITICAL)
+**Purpose:** Unified multi-stage Dockerfile for all 14 services
+**Build argument:** `SERVICE_NAME` (e.g., `identity-service`)
+**Features needed:**
+- Rust 1.75+ (cargo chef for layer caching)
+- Debian slim runtime
+- Non-root user (uid=1000)
+- Health check endpoint (`/api/v1/health`)
+- Binary size optimization (strip symbols, LTO)
 
-**File:** `docker-compose.prod.yml`
+#### 3. `docker-compose.prod.yml` (HIGH)
+**Purpose:** Local/staging deployment orchestration
+**Services to define:**
+- Infrastructure: PostgreSQL, Redis, ClickHouse, Neo4j, Kafka, Elasticsearch
+- All 14 microservices
+- Monitoring: Prometheus, Grafana
 
-**Services Defined:**
-- **Infrastructure:** PostgreSQL, Redis, ClickHouse, Kafka, Elasticsearch
-- **Microservices:** All 11 services (auth, user, content, feed, media, messaging, search, streaming, notification, cdn, events)
+#### 4. `DEPLOYMENT_GUIDE.md` (HIGH)
+**Purpose:** Step-by-step deployment manual
+**Required sections:**
+- Prerequisites (Rust, Docker, kubectl, sqlx-cli)
+- Service architecture overview (14 services + gateway)
+- Database migration workflow (zero-downtime patterns)
+- Kubernetes deployment (staging → production)
+- Canary release strategy (5% → 50% → 100%)
+- Monitoring setup (Prometheus + Grafana)
+- Rollback procedures
+- Troubleshooting guide
 
-**Features:**
-- ✅ Health checks for all services
-- ✅ Dependency management (`depends_on`)
-- ✅ Volume persistence
-- ✅ Network isolation
-- ✅ Environment variable injection
-
-**Usage:**
-
-```bash
-# Start all services
-docker-compose -f docker-compose.prod.yml up -d
-
-# Start infrastructure only
-docker-compose -f docker-compose.prod.yml up -d postgres redis clickhouse kafka
-
-# Scale a service
-docker-compose -f docker-compose.prod.yml up -d --scale auth-service=3
-```
-
----
-
-### 3. Kubernetes Configuration
-
-#### k8s/base/
-
-**Manifests:**
-- `namespace.yaml` - nova-backend namespace
-- `configmap.yaml` - Shared configuration (environment variables)
-- `auth-service.yaml` - Example service deployment + service
-- `kustomization.yaml` - Kustomize base configuration
-
-**Service Template Structure (Repeated for 11 Services):**
-
-```yaml
-# Deployment
-- replicas: 3
-- resources:
-    requests: 256Mi memory, 100m CPU
-    limits: 512Mi memory, 500m CPU
-- health probes: liveness, readiness, startup
-- envFrom: configmap + secrets
-
-# Service
-- type: ClusterIP
-- ports: HTTP + gRPC
-```
-
-#### k8s/overlays/prod/
-
-**File:** `kustomization.yaml`
-
-**Overrides:**
-- Replicas: 3 (production)
-- Memory: 512Mi request, 1Gi limit
-- Image tags: Pinned to version (e.g., `v1.0.0`)
-
-#### k8s/generate-manifests.sh
-
-**Script:** Auto-generate Kubernetes manifests for all 11 services
-
-**Usage:**
-
-```bash
-cd k8s
-./generate-manifests.sh
-```
-
-**Output:** Creates `base/<service>.yaml` for each service
-
----
-
-### 4. Monitoring Configuration
-
-#### Prometheus
-
-**File:** `monitoring/prometheus/prometheus.yml`
-
-**Scrape Targets:**
-- All 11 microservices (10s interval)
-- PostgreSQL exporter (30s)
-- Redis exporter (30s)
-- Kafka exporter (30s)
-- ClickHouse metrics (30s)
-- Kubernetes API server, nodes, pods
-
-**File:** `monitoring/prometheus/rules/alerts.yml`
-
-**Alert Rules (20+ rules):**
-- **Service Availability:** ServiceDown, HighErrorRate
-- **Latency:** HighLatencyP95, HighLatencyP99
-- **Database:** PostgreSQLDown, PostgreSQLHighConnections, PostgreSQLSlowQueries
-- **Redis:** RedisDown, RedisHighMemory, RedisHighEvictionRate
-- **ClickHouse:** ClickHouseDown, ClickHouseSlowQueries
-- **Kafka:** KafkaDown, KafkaConsumerLag, KafkaUnderReplicatedPartitions
-- **Resources:** HighCPUUsage, HighMemoryUsage
-- **gRPC:** HighGrpcErrorRate, SlowGrpcCalls
-
-**Alert Thresholds:**
-- Error rate: > 5% for 5 minutes → WARNING
-- P95 latency: > 500ms for 5 minutes → WARNING
-- P99 latency: > 1s for 5 minutes → CRITICAL
-
-#### Grafana
-
-**File:** `monitoring/grafana/dashboards/nova-overview.json`
-
-**Dashboard Panels (8 panels):**
-1. Service Availability (stat)
-2. Request Rate (graph)
-3. P95 Latency (graph with alert)
-4. Error Rate (graph with alert)
-5. Database Connections (graph)
-6. Redis Memory Usage (graph)
-7. Kafka Consumer Lag (graph)
-8. gRPC Success Rate (graph)
-
-**Features:**
-- 30s auto-refresh
-- 1-hour default time range
-- Template variables (datasource, service)
-
----
-
-## 📖 Documentation Files
-
-### DEPLOYMENT_GUIDE.md (3,500+ words)
-
-**Sections:**
-1. **Prerequisites:** Tools, infrastructure dependencies
-2. **Architecture Overview:** 11 services, port convention, dependencies
-3. **Environment Configuration:** JWT keys, database URL, AWS S3, SMTP
-4. **Local Development Deployment:** Docker Compose workflow
-5. **Staging Deployment:** Build images, push to registry, deploy to K8s
-6. **Production Deployment:** Canary release strategy (5% → 50% → 100%)
-7. **Database Migrations:** sqlx-cli usage, safe patterns, rollback
-8. **Monitoring Setup:** Prometheus, Grafana, AlertManager
-9. **Troubleshooting:** Common issues and fixes
-
-**Key Highlights:**
-- ✅ Environment-specific configuration (dev/staging/prod)
-- ✅ Step-by-step Kubernetes deployment
-- ✅ Canary release strategy with monitoring checkpoints
-- ✅ Database migration best practices (zero-downtime)
-- ✅ Troubleshooting guide
-
-### DEPLOYMENT_CHECKLIST.md (5,000+ words)
-
+#### 5. `DEPLOYMENT_CHECKLIST.md` (MEDIUM)
+**Purpose:** Production deployment checklist with go/no-go criteria
 **Phases:**
+- Pre-deployment verification (T-24h)
+- Database migrations (T+0)
+- Build and push images (T+5)
+- Canary deployment 5% (T+10, monitor 15 min)
+- Scale to 50% (T+25, monitor 30 min)
+- Full rollout 100% (T+55)
+- Post-deployment verification (T+65)
+- Stability monitoring (T+75, 2-hour watch)
+- Emergency rollback procedure
 
-| Phase | Time | Tasks |
-|-------|------|-------|
-| **Pre-Deployment** | T-24h | Code quality, database backups, configuration review |
-| **Phase 1: Pre-Deployment Verification** | T+0 | All checks pass, staging verified |
-| **Phase 2: Database Migrations** | T+0 | Run migrations, verify success |
-| **Phase 3: Build and Push Images** | T+5 | Build Docker images, push to registry |
-| **Phase 4: Canary Deployment (5%)** | T+10 | Deploy 1 replica, monitor 15 minutes |
-| **Phase 5: Scale to 50% Traffic** | T+25 | Scale to 3 replicas, monitor 30 minutes |
-| **Phase 6: Full Rollout (100%)** | T+55 | Deploy all replicas, terminate old version |
-| **Phase 7: Post-Deployment Verification** | T+65 | Health checks, smoke tests, infrastructure |
-| **Phase 8: Monitoring** | T+75 | 2-hour stability monitoring |
-| **Phase 9: ROLLBACK** | If needed | Emergency rollback procedure |
+### Priority 2: Kubernetes Manifests
 
-**Rollback Triggers:**
-- ❌ Error rate > 1% for 5 minutes
-- ❌ P95 latency > 500ms for 5 minutes
-- ❌ Pod crash loops
+#### 6. Update `k8s/base/*.yaml` (HIGH)
+**Action:** Replace outdated service manifests
+**Remove (archived services):**
+- auth-service.yaml → identity-service.yaml
+- messaging-service.yaml → realtime-chat-service.yaml
+- cdn-service.yaml (merged into media-service)
+- streaming-service.yaml (merged into media-service)
+- events-service.yaml (distributed)
 
-**Features:**
-- ✅ Checkpoint-driven workflow
-- ✅ Metric thresholds for each phase
-- ✅ Rollback decision tree
-- ✅ Emergency contacts section
-- ✅ Quick reference commands
+**Create (new services):**
+- identity-service.yaml
+- graph-service.yaml
+- ranking-service.yaml
+- realtime-chat-service.yaml
+- social-service.yaml
+- analytics-service.yaml
+- trust-safety-service.yaml
+- graphql-gateway.yaml
 
----
+**Update (refactored services):**
+- feed-service.yaml (remove graph DB dependency)
+- media-service.yaml (add cdn/streaming/video endpoints)
 
-## 🚀 Quick Start Guide
+#### 7. `k8s/generate-manifests.sh` (MEDIUM)
+**Purpose:** Auto-generate K8s manifests for all 14 services
+**Template:** Use identity-service.yaml as base template
 
-### 1. Local Development (Docker Compose)
+#### 8. Create `k8s/overlays/dev/` and `k8s/overlays/staging/` (LOW)
+**Purpose:** Environment-specific overrides
 
-```bash
-cd backend
+### Priority 3: Monitoring
 
-# Copy environment template
-cp .env.example .env
+#### 9. Update `monitoring/prometheus/prometheus.yml` (HIGH)
+**Action:** Add scrape targets for 14 services (remove old 7)
 
-# Edit .env with your configuration
-nano .env
+#### 10. Create `monitoring/grafana/dashboards/nova-overview.json` (MEDIUM)
+**Panels needed:**
+- Service availability (14 services)
+- Request rate per service
+- P95/P99 latency heatmap
+- Error rate by service
+- Database connection pools
+- Redis memory/eviction rate
+- Kafka consumer lag
+- ClickHouse query latency
+- Neo4j query performance
+- gRPC success rate
 
-# Start infrastructure
-docker-compose -f docker-compose.prod.yml up -d postgres redis clickhouse kafka
-
-# Run migrations
-sqlx migrate run --database-url postgresql://postgres:postgres@localhost:5432/nova
-
-# Start all services
-docker-compose -f docker-compose.prod.yml up -d
-
-# Verify health
-curl http://localhost:8083/api/v1/health  # auth-service
-curl http://localhost:8080/api/v1/health  # user-service
-```
-
-### 2. Kubernetes Production Deployment
-
-```bash
-cd backend/k8s
-
-# Generate all service manifests
-./generate-manifests.sh
-
-# Create secrets (DO NOT commit to git)
-kubectl create secret generic nova-backend-secrets \
-  -n nova-backend \
-  --from-env-file=../.env.prod
-
-# Deploy to production
-kubectl apply -k overlays/prod/
-
-# Monitor rollout
-kubectl rollout status deployment -n nova-backend --timeout=10m
-
-# Verify health
-kubectl get pods -n nova-backend
-kubectl logs -f -n nova-backend -l app=auth-service
-```
-
-### 3. Monitoring Setup
-
-```bash
-# Deploy Prometheus
-kubectl apply -f monitoring/prometheus/prometheus-config.yaml
-
-# Deploy Grafana
-kubectl apply -f monitoring/grafana/grafana-deployment.yaml
-
-# Import dashboard
-# Open Grafana → Dashboards → Import → monitoring/grafana/dashboards/nova-overview.json
-```
+#### 11. Update `monitoring/prometheus/rules/alerts.yml` (MEDIUM)
+**Verify alerts for:**
+- All 14 services (not just old 11)
+- New features: video calling, location sharing, trending
 
 ---
 
-## ✅ Deployment Readiness Checklist
+## 📊 Current Service Architecture
 
-Before deploying to production, ensure:
+### Microservices (14)
 
-- [x] All 11 services have Kubernetes manifests
-- [x] Environment variables configured in `.env.prod`
-- [x] Secrets created in Kubernetes (nova-backend-secrets)
-- [x] Database migrations tested in staging
-- [x] Docker images built and pushed to registry
-- [x] Prometheus scraping all services
-- [x] Grafana dashboard imported
-- [x] AlertManager configured with PagerDuty/Slack
-- [x] On-call engineer notified
-- [x] Rollback plan prepared
+| Service | HTTP Port | gRPC Port | Primary Responsibility | Database |
+|---------|-----------|-----------|------------------------|----------|
+| **identity-service** | 8081 | 9081 | Auth, JWT, OAuth, 2FA | PostgreSQL |
+| **user-service** | 8080 | 9080 | User profiles, settings | PostgreSQL |
+| **content-service** | 8082 | 9082 | Posts, comments, likes | PostgreSQL |
+| **feed-service** | 8084 | 9084 | Personalized feeds (v2) | PostgreSQL, ClickHouse |
+| **graph-service** | 8091 | 9091 | Social graph, relationships | Neo4j |
+| **ranking-service** | 8092 | 9092 | Content ranking, ML models | ClickHouse |
+| **media-service** | 8085 | 9085 | CDN, streaming, video processing | PostgreSQL, S3 |
+| **realtime-chat-service** | 8086 | 9086 | E2EE messaging, video calls | PostgreSQL |
+| **search-service** | 8087 | 9087 | Full-text search | Elasticsearch |
+| **notification-service** | 8088 | 9088 | Push, email, SMS | PostgreSQL, Redis |
+| **social-service** | 8093 | 9093 | Follows, shares, blocks | PostgreSQL, Neo4j |
+| **analytics-service** | 8094 | 9094 | User behavior, metrics | ClickHouse |
+| **trust-safety-service** | 8095 | 9095 | Content moderation, reports | PostgreSQL |
+| **graphql-gateway** | 8000 | - | API Gateway (GraphQL) | - |
+
+### Infrastructure Dependencies
+
+| Component | Version | Purpose |
+|-----------|---------|---------|
+| PostgreSQL | 14+ | Primary relational database |
+| Redis | 7+ | Cache, session store, pub/sub |
+| ClickHouse | 23.8+ | Analytics, feature store |
+| Neo4j | 5+ | Social graph |
+| Kafka | 3.5+ | Event streaming |
+| Elasticsearch | 8+ | Search engine |
+| AWS S3 / MinIO | - | Object storage |
 
 ---
 
-## 📊 Metrics and Monitoring
+## 🎯 Deployment Readiness Assessment
 
-### Service-Level Indicators (SLIs)
+### ✅ COMPLETED
+- [x] Database schema (60 tables)
+- [x] Video calling infrastructure (110)
+- [x] Location sharing (111)
+- [x] Trending system (116)
+- [x] E2EE messaging (118, 119, 122)
+- [x] Performance indexes (123)
+- [x] Service consolidation (Phase E)
+- [x] Monitoring directories (prometheus, grafana)
+- [x] Kubernetes namespace/configmap
 
-| Metric | Target | Alert Threshold |
-|--------|--------|----------------|
-| **Availability** | 99.9% | < 99% for 5 min |
-| **Error Rate** | < 0.5% | > 1% for 5 min |
-| **P95 Latency** | < 300ms | > 500ms for 5 min |
-| **P99 Latency** | < 800ms | > 1s for 5 min |
+### ✅ CORE FILES COMPLETED
+- [x] `.env.example` - 302 lines covering 14 services
+- [x] `Dockerfile.template` - Multi-stage Rust build
+- [x] `docker-compose.prod.yml` - 22 services (7 infra + 14 microservices + 1 gateway)
+- [ ] `DEPLOYMENT_GUIDE.md` - No deployment documentation
+- [ ] Kubernetes service manifests for 14 services
 
-### Infrastructure Metrics
+### ⚠️ HIGH PRIORITY (Should Fix Before Production)
+- [ ] Update K8s manifests (remove old services, add new ones)
+- [ ] Update Prometheus scrape targets (14 services)
+- [ ] Create Grafana dashboard
+- [ ] Create deployment checklist
+- [ ] Test database migrations in staging
+- [ ] Generate JWT keypair for production
+- [ ] Configure AWS S3 bucket policies
+- [ ] Set up APNs/FCM push notification certificates
 
-| Component | Metric | Threshold |
-|-----------|--------|-----------|
-| **PostgreSQL** | Connection pool | > 80% |
-| **Redis** | Memory usage | > 70% |
-| **ClickHouse** | Query latency | P95 > 1s |
-| **Kafka** | Consumer lag | > 100k messages |
+### 📝 MEDIUM PRIORITY (Can Deploy Without)
+- [ ] K8s overlay for dev/staging environments
+- [ ] Generate manifests script
+- [ ] Alert rules verification
+- [ ] Load testing results
+- [ ] Disaster recovery runbook
+
+---
+
+## 🚀 Recommended Next Steps
+
+### Week 1: Create Core Deployment Files (3-5 days)
+1. **Day 1:** Create `.env.example` with all 14 services
+2. **Day 2:** Create `Dockerfile.template` and test build
+3. **Day 3:** Create `docker-compose.prod.yml` and test locally
+4. **Day 4:** Write `DEPLOYMENT_GUIDE.md` (3,000+ words)
+5. **Day 5:** Write `DEPLOYMENT_CHECKLIST.md` with metrics
+
+### Week 2: Update Kubernetes Manifests (2-3 days)
+1. Remove 5 outdated service manifests
+2. Create 8 new service manifests (identity, graph, ranking, realtime-chat, social, analytics, trust-safety, gateway)
+3. Update 3 refactored manifests (feed, media, user)
+4. Test with `kubectl apply -k base/` (dry-run)
+5. Create `generate-manifests.sh` script
+
+### Week 3: Monitoring and Testing (2-3 days)
+1. Update Prometheus scrape configs
+2. Create Grafana dashboard (nova-overview.json)
+3. Test staging deployment with Docker Compose
+4. Run database migrations in staging
+5. Load test trending/video calling features
+
+### Week 4: Production Deployment (1 day + monitoring)
+1. Follow `DEPLOYMENT_CHECKLIST.md`
+2. Canary deployment (5% → 50% → 100%)
+3. Monitor for 2 hours post-deployment
+4. Document lessons learned
+
+---
+
+## 📞 Emergency Contacts (TO BE FILLED)
+
+| Role | Name | Contact |
+|------|------|---------|
+| **Tech Lead** | TBD | TBD |
+| **Database Admin** | TBD | TBD |
+| **DevOps Engineer** | TBD | TBD |
+| **On-Call Engineer** | TBD | TBD |
 
 ---
 
 ## 🔗 Related Documentation
 
-- [Backend Architecture](../docs/architecture/phase-0-structure.md)
-- [gRPC Metrics Integration Plan](./GRPC_METRICS_INTEGRATION_PLAN.md)
-- [Database Migrations](./migrations/README.md)
-- [Quick Reference](./QUICK_REFERENCE.md)
+- [Database Migrations Summary](/tmp/migration_summary.md) - Completed migrations 110-123
+- [Phase E Completion Status](./docs/PHASE_E_COMPLETION_SUMMARY.md) - Service consolidation
+- [Architecture Overview](./docs/COMPLETE_ARCHITECTURE_REPORT.md) - Full system design
+- [Service Integration Status](./docs/LIBRARY_INTEGRATION_STATUS.md) - gRPC clients
 
 ---
 
-## 📝 Notes
+**Document Status:** ✅ **UPDATED** (Reflects actual codebase as of 2025-11-12)
+**Next Review:** After deployment file creation (Week 1)
 
-### Port Convention (CRITICAL)
-
-**Rule:** `gRPC_PORT = HTTP_PORT + 1000`
-
-This rule is **LOCKED** and must not be changed without team consensus. All inter-service communication relies on this convention.
-
-### Service Discovery (Kubernetes)
-
-Internal DNS format:
-```
-<service-name>.nova-backend.svc.cluster.local:<port>
-```
-
-Short form (within same namespace):
-```
-<service-name>:<port>
-```
-
-### Backward Compatibility
-
-All deployments must be **zero-downtime**:
-- Database migrations must be backward-compatible
-- Old and new code versions must coexist during canary rollout
-- No breaking API changes during deployment window
-
----
-
-**Deployment Status:** ✅ Ready for Week 1 Staging Deployment
-
-**Next Steps:**
-1. Review DEPLOYMENT_GUIDE.md
-2. Test Docker Compose deployment locally
-3. Schedule staging deployment
-4. Prepare production deployment window
+**Critical Note:** This document now accurately reflects the 14-service architecture and identifies all missing deployment files. The original document was based on an outdated 11-service architecture from before Phase E consolidation.

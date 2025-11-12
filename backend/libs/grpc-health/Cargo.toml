@@ -1,0 +1,39 @@
+[package]
+name = "grpc-health"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# gRPC and Health Check
+tonic = { workspace = true }
+tonic-health = { workspace = true }
+
+# Async runtime
+tokio = { workspace = true, features = ["sync", "time", "macros"] }
+async-trait = { workspace = true }
+
+# Database
+sqlx = { workspace = true, features = ["postgres", "runtime-tokio-rustls"] }
+
+# Redis
+redis = { workspace = true, features = ["tokio-comp", "connection-manager"] }
+
+# Kafka
+rdkafka = { workspace = true }
+
+# Error handling
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+
+[dev-dependencies]
+tokio-test = "0.4"
+mockall = "0.13"
+tracing-subscriber = { workspace = true }
+
+[[example]]
+name = "basic_usage"
+path = "examples/basic_usage.rs"
+required-features = []

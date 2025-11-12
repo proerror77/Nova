@@ -36,6 +36,7 @@ pub struct RecommendationConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GrpcConfig {
     pub user_service_url: String,
+    pub ranking_service_url: String,
     #[serde(default = "default_grpc_timeout_secs")]
     pub timeout_secs: u64,
 }
@@ -99,6 +100,8 @@ impl Config {
             grpc: GrpcConfig {
                 user_service_url: std::env::var("USER_SERVICE_GRPC_URL")
                     .unwrap_or_else(|_| "http://127.0.0.1:50051".to_string()),
+                ranking_service_url: std::env::var("RANKING_SERVICE_GRPC_URL")
+                    .unwrap_or_else(|_| "http://127.0.0.1:9088".to_string()),
                 timeout_secs: std::env::var("USER_SERVICE_GRPC_TIMEOUT_SECS")
                     .ok()
                     .and_then(|v| v.parse().ok())
