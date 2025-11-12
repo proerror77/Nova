@@ -17,11 +17,21 @@ inputs:
   dockerfile-path:
     description: Path to Dockerfile
     required: false
-    default: ./backend/${{ inputs.service-name }}/Dockerfile
+    default: ""
 
 runs:
   using: composite
   steps:
+    - name: Determine Dockerfile path
+      id: dockerfile
+      shell: bash
+      run: |
+        if [ -n "${{ inputs.dockerfile-path }}" ]; then
+          echo "path=${{ inputs.dockerfile-path }}" >> "$GITHUB_OUTPUT"
+        else
+          echo "path=./backend/${{ inputs.service-name }}/Dockerfile" >> "$GITHUB_OUTPUT"
+        fi
+
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
 
@@ -29,7 +39,7 @@ runs:
       uses: docker/build-push-action@v6
       with:
         context: .
-        file: ${{ inputs.dockerfile-path }}
+        file: ${{ steps.dockerfile.outputs.path }}
         platforms: linux/amd64
         push: true
         tags: |
