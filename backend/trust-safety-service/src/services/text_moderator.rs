@@ -129,8 +129,15 @@ impl TextModerator {
 
     /// Check for repeated characters (e.g., "hellooooo")
     fn has_repeated_chars(&self, text: &str) -> bool {
-        let pattern = Regex::new(r"(.)\1{4,}").expect("Repeated character regex pattern is valid");
-        pattern.is_match(text)
+        // Check for 5+ consecutive identical characters
+        // (regex crate doesn't support backreferences like \1)
+        let chars: Vec<char> = text.chars().collect();
+        for window in chars.windows(5) {
+            if window.iter().all(|&c| c == window[0]) {
+                return true;
+            }
+        }
+        false
     }
 
     /// Calculate toxicity score (0.0 - 1.0)

@@ -139,7 +139,10 @@ impl ABTestingFramework {
 
         // Compute bucket and get variant
         let variant_name = self.assign_bucket(user_id, experiment_name)?;
-        let experiment = self.experiments.get(experiment_name).unwrap();
+        let experiment = self
+            .experiments
+            .get(experiment_name)
+            .expect("Experiment validated in assign_bucket");
         let variant = experiment
             .variants
             .iter()

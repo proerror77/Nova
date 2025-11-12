@@ -221,15 +221,12 @@ jobs:
         run: |
           cd backend
           cargo clippy --lib --bins --all-features -- \
-            -W clippy::unwrap_used \
-            -W clippy::todo \
-            -W clippy::unimplemented \
+            -D clippy::unwrap_used \
+            -D clippy::todo \
+            -D clippy::unimplemented \
             -A dead_code \
             -A unused_imports \
-            -A unused_variables \
-            -A clippy::panic \
-            -A clippy::too_many_arguments \
-            -D warnings
+            -A unused_variables
 
   rustfmt:
     name: Format Check

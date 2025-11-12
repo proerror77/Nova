@@ -886,7 +886,7 @@ pub async fn get_audio_presigned_url(
     // Generate unique S3 key with user ID and timestamp to prevent collisions
     let timestamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
+        .expect("System time should be after Unix epoch")
         .as_secs();
 
     let s3_key = format!("audio/{}/{}/{}", conversation_id, user.id, timestamp);

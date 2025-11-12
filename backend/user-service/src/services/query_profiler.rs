@@ -19,7 +19,7 @@ lazy_static! {
         vec![10.0, 50.0, 100.0, 250.0, 500.0, 1000.0, 2500.0, 5000.0, 10000.0],
         REGISTRY
     )
-    .unwrap();
+    .expect("Failed to register ClickHouse query duration metric");
 
     /// Total slow queries detected (labels: query_type)
     /// Slow query threshold: > 500ms
@@ -29,7 +29,7 @@ lazy_static! {
         &["query_type"],
         REGISTRY
     )
-    .unwrap();
+    .expect("Failed to register ClickHouse slow queries metric");
 
     /// Total ClickHouse query errors (labels: query_type, error_type)
     pub static ref CLICKHOUSE_QUERY_ERRORS: CounterVec = register_counter_vec_with_registry!(
@@ -38,7 +38,7 @@ lazy_static! {
         &["query_type", "error_type"],
         REGISTRY
     )
-    .unwrap();
+    .expect("Failed to register ClickHouse query errors metric");
 
     /// Rows scanned per query (labels: query_type)
     pub static ref CLICKHOUSE_ROWS_SCANNED: HistogramVec = register_histogram_vec_with_registry!(
@@ -48,7 +48,7 @@ lazy_static! {
         vec![100.0, 1000.0, 10000.0, 100000.0, 1000000.0],
         REGISTRY
     )
-    .unwrap();
+    .expect("Failed to register ClickHouse rows scanned metric");
 }
 
 /// Query profiler for automatic timing and logging

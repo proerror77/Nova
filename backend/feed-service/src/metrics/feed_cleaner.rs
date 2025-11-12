@@ -15,7 +15,7 @@ static CLEANUP_RUNS_TOTAL: Lazy<IntCounterVec> = Lazy::new(|| {
         "Total feed cleanup cycles (success/error)",
         &["status"]
     )
-    .unwrap()
+    .expect("Failed to register feed cleaner runs metric")
 });
 
 static CLEANUP_DURATION_SECONDS: Lazy<HistogramVec> = Lazy::new(|| {
@@ -25,7 +25,7 @@ static CLEANUP_DURATION_SECONDS: Lazy<HistogramVec> = Lazy::new(|| {
         &["operation"],
         vec![0.001, 0.01, 0.1, 0.5, 1.0, 5.0, 10.0, 30.0, 60.0]
     )
-    .unwrap()
+    .expect("Failed to register feed cleaner duration metric")
 });
 
 static USERS_CHECKED: Lazy<IntGauge> = Lazy::new(|| {
@@ -33,7 +33,7 @@ static USERS_CHECKED: Lazy<IntGauge> = Lazy::new(|| {
         "feed_cleaner_users_checked",
         "Number of users checked in last cleanup cycle"
     )
-    .unwrap()
+    .expect("Failed to register feed cleaner users checked metric")
 });
 
 static CONTENT_DELETED_TOTAL: Lazy<IntCounterVec> = Lazy::new(|| {
@@ -42,7 +42,7 @@ static CONTENT_DELETED_TOTAL: Lazy<IntCounterVec> = Lazy::new(|| {
         "Total content deleted from deleted users",
         &["content_type"]
     )
-    .unwrap()
+    .expect("Failed to register feed cleaner content deleted metric")
 });
 
 /// Record cleanup run result (success/error)

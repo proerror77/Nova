@@ -87,8 +87,8 @@ impl<T: Clone + Send + 'static> BackpressureQueue<T> {
     /// Send event to queue
     /// Returns Backpressure status
     pub async fn send(&self, event: T) -> Result<BackpressureStatus> {
-        let mut queue = self.queue.lock().unwrap();
-        let mut stats = self.stats.lock().unwrap();
+        let mut queue = self.queue.lock().expect("Mutex should not be poisoned");
+        let mut stats = self.stats.lock().expect("Mutex should not be poisoned");
 
         let queue_size = queue.len();
 
@@ -147,7 +147,10 @@ impl<T: Clone + Send + 'static> BackpressureQueue<T> {
 
     /// Get current queue size
     pub fn size(&self) -> usize {
-        self.queue.lock().unwrap().len()
+        self.queue
+            .lock()
+            .expect("Mutex should not be poisoned")
+            .len()
     }
 
     /// Get queue status
@@ -167,24 +170,31 @@ impl<T: Clone + Send + 'static> BackpressureQueue<T> {
 
     /// Get backpressure statistics
     pub fn stats(&self) -> BackpressureStats {
-        self.stats.lock().unwrap().clone()
+        self.stats
+            .lock()
+            .expect("Mutex should not be poisoned")
+            .clone()
     }
 
     /// Reset statistics
     pub fn reset_stats(&self) {
-        let mut stats = self.stats.lock().unwrap();
+        let mut stats = self.stats.lock().expect("Mutex should not be poisoned");
         *stats = BackpressureStats {
-            current_queue_size: self.queue.lock().unwrap().len(),
+            current_queue_size: self
+                .queue
+                .lock()
+                .expect("Mutex should not be poisoned")
+                .len(),
             ..Default::default()
         };
     }
 
     /// Drain queue for high-priority processing
     pub fn drain_all(&self) -> Vec<T> {
-        let mut queue = self.queue.lock().unwrap();
+        let mut queue = self.queue.lock().expect("Mutex should not be poisoned");
         let items: Vec<T> = queue.drain(..).collect();
 
-        let mut stats = self.stats.lock().unwrap();
+        let mut stats = self.stats.lock().expect("Mutex should not be poisoned");
         stats.current_queue_size = 0;
 
         items

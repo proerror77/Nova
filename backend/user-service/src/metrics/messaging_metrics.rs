@@ -16,7 +16,7 @@ lazy_static! {
         "Total number of WebSocket connections",
         &["status"]
     )
-    .unwrap();
+    .expect("Failed to register metric");
 
     /// Total WebSocket message sends (labels: type=message|typing|ping|pong)
     pub static ref WS_MESSAGES_SENT_TOTAL: CounterVec = register_counter_vec!(
@@ -24,7 +24,7 @@ lazy_static! {
         "Total WebSocket messages sent",
         &["message_type"]
     )
-    .unwrap();
+    .expect("Failed to register metric");
 
     /// Total WebSocket message receives (labels: type=message|typing|ping|pong)
     pub static ref WS_MESSAGES_RECEIVED_TOTAL: CounterVec = register_counter_vec!(
@@ -32,7 +32,7 @@ lazy_static! {
         "Total WebSocket messages received",
         &["message_type"]
     )
-    .unwrap();
+    .expect("Failed to register metric");
 
     /// WebSocket errors (labels: error_type=timeout|decode|send_failed|connection_lost)
     pub static ref WS_ERRORS_TOTAL: CounterVec = register_counter_vec!(
@@ -40,7 +40,7 @@ lazy_static! {
         "Total WebSocket errors",
         &["error_type"]
     )
-    .unwrap();
+    .expect("Failed to register metric");
 
     /// WebSocket reconnections (labels: reason=connection_lost|heartbeat_timeout)
     pub static ref WS_RECONNECTIONS_TOTAL: CounterVec = register_counter_vec!(
@@ -48,7 +48,7 @@ lazy_static! {
         "Total WebSocket reconnection attempts",
         &["reason"]
     )
-    .unwrap();
+    .expect("Failed to register metric");
 
     // ======================
     // Messaging API Counters
@@ -60,7 +60,7 @@ lazy_static! {
         "Total messages sent",
         &["status"]
     )
-    .unwrap();
+    .expect("Failed to register metric");
 
     /// Total messages received (labels: status=success|failed)
     pub static ref MESSAGES_RECEIVED_TOTAL: CounterVec = register_counter_vec!(
@@ -68,7 +68,7 @@ lazy_static! {
         "Total messages received",
         &["status"]
     )
-    .unwrap();
+    .expect("Failed to register metric");
 
     /// Message delivery failures (labels: error_type=network|timeout|invalid|other)
     pub static ref MESSAGE_DELIVERY_FAILURES_TOTAL: CounterVec = register_counter_vec!(
@@ -76,7 +76,7 @@ lazy_static! {
         "Total message delivery failures",
         &["error_type"]
     )
-    .unwrap();
+    .expect("Failed to register metric");
 
     /// Total conversation creations (labels: status=success|failed)
     pub static ref CONVERSATIONS_CREATED_TOTAL: CounterVec = register_counter_vec!(
@@ -84,7 +84,7 @@ lazy_static! {
         "Total conversations created",
         &["status"]
     )
-    .unwrap();
+    .expect("Failed to register metric");
 
     /// Total message searches (labels: index=fulltext|bm25, status=success|failed)
     pub static ref MESSAGE_SEARCHES_TOTAL: CounterVec = register_counter_vec!(
@@ -92,7 +92,7 @@ lazy_static! {
         "Total message searches",
         &["index_type", "status"]
     )
-    .unwrap();
+    .expect("Failed to register metric");
 
     // ======================
     // WebSocket Gauges
@@ -106,7 +106,7 @@ lazy_static! {
         "ws_active_connections",
         "Current active WebSocket connections (total across all conversations)"
     )
-    .unwrap();
+    .expect("Failed to register metric");
 
     /// Current active conversations
     pub static ref ACTIVE_CONVERSATIONS: GaugeVec = register_gauge_vec!(
@@ -114,7 +114,7 @@ lazy_static! {
         "Current active conversations",
         &["status"]  // status=idle|active
     )
-    .unwrap();
+    .expect("Failed to register metric");
 
     /// Message queue depth (labels: queue_type=pending|failed|retry)
     pub static ref MESSAGE_QUEUE_DEPTH: GaugeVec = register_gauge_vec!(
@@ -122,7 +122,7 @@ lazy_static! {
         "Current message queue depth",
         &["queue_type"]
     )
-    .unwrap();
+    .expect("Failed to register metric");
 
     // ======================
     // Latency Histograms
@@ -135,7 +135,7 @@ lazy_static! {
         &["message_type"],
         vec![0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1.0, 5.0]
     )
-    .unwrap();
+    .expect("Failed to register metric");
 
     /// REST API message endpoint latency (labels: endpoint=send|receive|list|search)
     pub static ref MESSAGE_API_LATENCY_SECONDS: HistogramVec = register_histogram_vec!(
@@ -144,7 +144,7 @@ lazy_static! {
         &["endpoint"],
         vec![0.01, 0.05, 0.1, 0.5, 1.0, 2.0, 5.0, 10.0]
     )
-    .unwrap();
+    .expect("Failed to register metric");
 
     /// Message search latency (labels: index_type=fulltext|bm25)
     pub static ref MESSAGE_SEARCH_LATENCY_SECONDS: HistogramVec = register_histogram_vec!(
@@ -153,7 +153,7 @@ lazy_static! {
         &["index_type"],
         vec![0.01, 0.05, 0.1, 0.5, 1.0, 2.0, 5.0]
     )
-    .unwrap();
+    .expect("Failed to register metric");
 
     /// Message delivery latency (time from send to broadcast)
     pub static ref MESSAGE_DELIVERY_LATENCY_SECONDS: HistogramVec = register_histogram_vec!(
@@ -161,7 +161,7 @@ lazy_static! {
         "Message delivery latency in seconds",
         &["delivery_type"]  // direct|queue|broadcast
     )
-    .unwrap();
+    .expect("Failed to register metric");
 
     // ======================
     // P0: Database Metrics
@@ -172,21 +172,21 @@ lazy_static! {
         "db_connections_active",
         "Current active database connections"
     )
-    .unwrap();
+    .expect("Failed to register metric");
 
     /// Current idle database connections
     pub static ref DB_CONNECTIONS_IDLE: Gauge = register_gauge!(
         "db_connections_idle",
         "Current idle database connections"
     )
-    .unwrap();
+    .expect("Failed to register metric");
 
     /// Requests waiting for available database connection
     pub static ref DB_CONNECTIONS_WAITING: Gauge = register_gauge!(
         "db_connections_waiting",
         "Requests waiting for available database connection"
     )
-    .unwrap();
+    .expect("Failed to register metric");
 
     /// Time to acquire a database connection (in seconds)
     pub static ref DB_CONNECTION_ACQUIRE_SECONDS: Histogram = register_histogram!(
@@ -194,7 +194,7 @@ lazy_static! {
         "Time to acquire a database connection",
         vec![0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1.0]
     )
-    .unwrap();
+    .expect("Failed to register metric");
 
     /// Database query execution time (in seconds, labels: query_type=select|insert|update|delete)
     pub static ref DB_QUERY_DURATION_SECONDS: HistogramVec = register_histogram_vec!(
@@ -203,7 +203,7 @@ lazy_static! {
         &["query_type"],
         vec![0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1.0, 5.0]
     )
-    .unwrap();
+    .expect("Failed to register metric");
 
     // ======================
     // P0: Redis Metrics
@@ -215,7 +215,7 @@ lazy_static! {
         "Redis cache hits by key prefix",
         &["cache_key_prefix"]
     )
-    .unwrap();
+    .expect("Failed to register metric");
 
     /// Redis cache misses (labels: cache_key_prefix=user|conversation|message)
     pub static ref REDIS_CACHE_MISSES_TOTAL: CounterVec = register_counter_vec!(
@@ -223,14 +223,14 @@ lazy_static! {
         "Redis cache misses by key prefix",
         &["cache_key_prefix"]
     )
-    .unwrap();
+    .expect("Failed to register metric");
 
     /// Total keys evicted from Redis due to memory pressure
     pub static ref REDIS_EVICTIONS_TOTAL: Gauge = register_gauge!(
         "redis_evictions_total",
         "Total keys evicted from Redis due to memory pressure"
     )
-    .unwrap();
+    .expect("Failed to register metric");
 
     /// Redis GET operation latency (in seconds)
     pub static ref REDIS_GET_LATENCY_SECONDS: Histogram = register_histogram!(
@@ -238,7 +238,7 @@ lazy_static! {
         "Redis GET operation latency in seconds",
         vec![0.0001, 0.0005, 0.001, 0.005, 0.01]
     )
-    .unwrap();
+    .expect("Failed to register metric");
 
     /// Redis SET operation latency (in seconds)
     pub static ref REDIS_SET_LATENCY_SECONDS: Histogram = register_histogram!(
@@ -246,14 +246,14 @@ lazy_static! {
         "Redis SET operation latency in seconds",
         vec![0.0001, 0.0005, 0.001, 0.005, 0.01]
     )
-    .unwrap();
+    .expect("Failed to register metric");
 
     /// Redis memory usage in bytes
     pub static ref REDIS_MEMORY_USED_BYTES: Gauge = register_gauge!(
         "redis_memory_used_bytes",
         "Redis memory usage in bytes"
     )
-    .unwrap();
+    .expect("Failed to register metric");
 
     // ======================
     // P0: Message Size Metrics
@@ -265,7 +265,7 @@ lazy_static! {
         "WebSocket message payload size in bytes",
         vec![100.0, 1000.0, 10000.0, 100000.0, 1000000.0, 10000000.0]
     )
-    .unwrap();
+    .expect("Failed to register metric");
 
     /// Messages exceeding size limits (labels: size_category=medium|large|huge)
     pub static ref OVERSIZED_MESSAGE_TOTAL: CounterVec = register_counter_vec!(
@@ -273,7 +273,7 @@ lazy_static! {
         "Messages exceeding size limits",
         &["size_category"]
     )
-    .unwrap();
+    .expect("Failed to register metric");
 
     // ======================
     // P1: Rate & Queue Metrics
@@ -284,21 +284,21 @@ lazy_static! {
         "global_message_rate_per_second",
         "Global message rate in messages per second"
     )
-    .unwrap();
+    .expect("Failed to register metric");
 
     /// Count of times message rate exceeded threshold
     pub static ref MESSAGE_RATE_SPIKE_TOTAL: Counter = register_counter!(
         "message_rate_spike_total",
         "Number of times message rate exceeded threshold"
     )
-    .unwrap();
+    .expect("Failed to register metric");
 
     /// Count of users exceeding per-user rate limit
     pub static ref HIGH_RATE_USERS_TOTAL: Counter = register_counter!(
         "high_rate_users_total",
         "Number of users exceeding rate limit"
     )
-    .unwrap();
+    .expect("Failed to register metric");
 
     /// Time message spent in processing queue (in seconds)
     pub static ref MESSAGE_AGE_IN_QUEUE_SECONDS: Histogram = register_histogram!(
@@ -306,21 +306,21 @@ lazy_static! {
         "Time message spent in processing queue in seconds",
         vec![0.1, 0.5, 1.0, 5.0, 10.0, 30.0, 60.0]
     )
-    .unwrap();
+    .expect("Failed to register metric");
 
     /// Number of messages behind in queue processing
     pub static ref QUEUE_PROCESSING_LAG_MESSAGES: Gauge = register_gauge!(
         "queue_processing_lag_messages",
         "Number of messages behind in queue processing"
     )
-    .unwrap();
+    .expect("Failed to register metric");
 
     /// Current message consumption rate (messages per second)
     pub static ref QUEUE_CONSUMER_RATE_PER_SECOND: Gauge = register_gauge!(
         "queue_consumer_rate_per_second",
         "Current message consumption rate in messages per second"
     )
-    .unwrap();
+    .expect("Failed to register metric");
 
     /// Total time from send to delivery completion (labels: delivery_path=direct|queue_consumed|broadcast)
     pub static ref MESSAGE_TOTAL_DELIVERY_LATENCY_SECONDS: HistogramVec = register_histogram_vec!(
@@ -329,7 +329,7 @@ lazy_static! {
         &["delivery_path"],
         vec![0.01, 0.05, 0.1, 0.5, 1.0, 5.0, 10.0]
     )
-    .unwrap();
+    .expect("Failed to register metric");
 }
 
 /// Initialize all messaging metrics
