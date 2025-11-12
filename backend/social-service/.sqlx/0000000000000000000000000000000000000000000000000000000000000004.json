@@ -1,0 +1,9 @@
+{
+  "db": "Postgres",
+  "query": "SELECT user_id, created_at FROM likes\n WHERE post_id = $1\n ORDER BY created_at DESC\n LIMIT $2 OFFSET $3",
+  "describe": {
+    "columns": [],
+    "nullable": [],
+    "return_type": "unknown"
+  }
+}

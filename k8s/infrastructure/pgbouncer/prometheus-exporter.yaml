@@ -1,0 +1,163 @@
+##############################################################################
+# PgBouncer Prometheus Exporter Deployment
+# 
+# Purpose: Export PgBouncer metrics for Prometheus monitoring
+# 
+# Key Metrics:
+# - pgbouncer_pools_* (connection pool status)
+# - pgbouncer_clients_* (client connection stats)
+# - pgbouncer_servers_* (server connection stats)
+# - pgbouncer_queries_* (query statistics)
+#
+# Usage:
+# 1. Deploy this exporter
+# 2. Configure Prometheus to scrape http://pgbouncer-exporter:9127/metrics
+# 3. Create Grafana dashboard using the metrics
+##############################################################################
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pgbouncer-exporter
+  namespace: nova
+  labels:
+    app: pgbouncer-exporter
+    component: monitoring
+
+spec:
+  replicas: 1
+  
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  
+  selector:
+    matchLabels:
+      app: pgbouncer-exporter
+  
+  template:
+    metadata:
+      labels:
+        app: pgbouncer-exporter
+        component: monitoring
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9127"
+        prometheus.io/path: "/metrics"
+    
+    spec:
+      serviceAccountName: pgbouncer-exporter
+      
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        fsGroup: 999
+      
+      containers:
+      - name: exporter
+        image: prometheuscommunity/pgbouncer-exporter:0.5.0
+        imagePullPolicy: IfNotPresent
+        
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+        
+        ports:
+        - name: metrics
+          containerPort: 9127
+          protocol: TCP
+        
+        # Environment configuration
+        env:
+        # PgBouncer connection details
+        - name: PGBOUNCER_EXPORTER_HOST
+          value: "pgbouncer"
+        - name: PGBOUNCER_EXPORTER_PORT
+          value: "6432"
+        - name: PGBOUNCER_EXPORTER_DATABASE
+          value: "pgbouncer"
+        - name: PGBOUNCER_EXPORTER_USER
+          value: "admin"
+        
+        # Password from secret
+        - name: PGBOUNCER_EXPORTER_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: pgbouncer-userlist
+              key: admin-password
+        
+        # Exporter settings
+        - name: PGBOUNCER_EXPORTER_METRICS_PORT
+          value: "9127"
+        - name: PGBOUNCER_EXPORTER_SCRAPE_INTERVAL
+          value: "30s"
+        
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi
+        
+        # Liveness probe
+        livenessProbe:
+          httpGet:
+            path: /metrics
+            port: metrics
+          initialDelaySeconds: 10
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+        
+        # Readiness probe
+        readinessProbe:
+          httpGet:
+            path: /metrics
+            port: metrics
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+
+---
+# Service for the exporter
+apiVersion: v1
+kind: Service
+metadata:
+  name: pgbouncer-exporter
+  namespace: nova
+  labels:
+    app: pgbouncer-exporter
+    component: monitoring
+  
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "9127"
+
+spec:
+  type: ClusterIP
+  
+  selector:
+    app: pgbouncer-exporter
+  
+  ports:
+  - name: metrics
+    port: 9127
+    targetPort: metrics
+    protocol: TCP
+
+---
+# ServiceAccount for the exporter
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: pgbouncer-exporter
+  namespace: nova
+  labels:
+    app: pgbouncer-exporter
+    component: monitoring

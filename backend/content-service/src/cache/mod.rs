@@ -7,7 +7,8 @@
 pub mod feed_cache;
 
 use crate::error::{AppError, Result};
-use crate::models::{Comment, Post};
+use crate::models::Post;
+// Note: Comment caching moved to social-service
 use redis::aio::ConnectionManager;
 use redis::AsyncCommands;
 use serde::de::DeserializeOwned;
@@ -63,21 +64,7 @@ impl ContentCache {
         self.delete(&Self::post_key(post_id)).await
     }
 
-    /// Cache a comment entity
-    pub async fn cache_comment(&self, comment: &Comment) -> Result<()> {
-        self.set_json(&Self::comment_key(comment.id), comment, None)
-            .await
-    }
-
-    /// Fetch cached comment
-    pub async fn get_comment(&self, comment_id: Uuid) -> Result<Option<Comment>> {
-        self.get_json(&Self::comment_key(comment_id)).await
-    }
-
-    /// Remove a comment from cache
-    pub async fn invalidate_comment(&self, comment_id: Uuid) -> Result<()> {
-        self.delete(&Self::comment_key(comment_id)).await
-    }
+    // Note: cache_comment, get_comment, invalidate_comment moved to social-service
 
     /// Cache an arbitrary JSON payload under a namespaced key
     pub async fn set_json<T: Serialize>(
@@ -129,11 +116,6 @@ impl ContentCache {
     fn post_key(id: Uuid) -> String {
         format!("content:post:{id}")
     }
-
-    /// Helper to build comment cache key
-    fn comment_key(id: Uuid) -> String {
-        format!("content:comment:{id}")
-    }
 }
 
 #[cfg(test)]
@@ -149,12 +131,5 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_comment_key_format() {
-        let id = Uuid::nil();
-        assert_eq!(
-            ContentCache::comment_key(id),
-            "content:comment:00000000-0000-0000-0000-000000000000"
-        );
-    }
+    // Note: test_comment_key_format removed - comment caching moved to social-service
 }

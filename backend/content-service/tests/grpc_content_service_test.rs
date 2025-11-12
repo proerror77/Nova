@@ -20,12 +20,20 @@ mod content_service_grpc_tests {
 
     // Include proto definitions to get generated client code
     pub mod nova {
-        pub mod content {
+        pub mod common {
+            pub mod v1 {
+                tonic::include_proto!("nova.common.v1");
+            }
+            pub use v1::*;
+        }
+        pub mod content_service {
             pub mod v1 {
                 tonic::include_proto!("nova.content_service.v1");
             }
             pub use v1::*;
         }
+        // Re-export content_service as content for backward compatibility
+        pub use content_service as content;
     }
 
     use nova::content::content_service_client::ContentServiceClient;
@@ -339,16 +347,16 @@ mod content_service_grpc_tests {
                 let inner = response.into_inner();
                 println!("Post deleted at: {}", inner.deleted_at);
 
-                // Verify deleted_at timestamp is returned (not empty)
+                // Verify deleted_at timestamp is returned (positive value)
                 assert!(
-                    !inner.deleted_at.is_empty(),
+                    inner.deleted_at > 0,
                     "Deleted_at timestamp should be returned"
                 );
 
-                // Verify it's a reasonable timestamp format
+                // Verify it's a reasonable Unix timestamp (after year 2020)
                 assert!(
-                    inner.deleted_at.len() > 0,
-                    "Deleted_at should contain timestamp"
+                    inner.deleted_at > 1577836800, // 2020-01-01 00:00:00 UTC
+                    "Deleted_at should be a valid recent Unix timestamp"
                 );
 
                 println!("✓ test_delete_post_soft_delete_operation passed");

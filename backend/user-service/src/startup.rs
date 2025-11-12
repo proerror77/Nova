@@ -58,9 +58,7 @@ use crate::metrics;
 use crate::security;
 use crate::services::cdc::{CdcConsumer, CdcConsumerConfig};
 use crate::services::events::{EventDeduplicator, EventsConsumer, EventsConsumerConfig};
-use crate::services::graph::GraphService;
 use crate::services::kafka_producer::EventProducer;
-use crate::services::social_graph_sync::SocialGraphSyncConsumer;
 use redis_utils::RedisPool;
 
 /// ============================================================================

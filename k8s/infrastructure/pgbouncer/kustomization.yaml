@@ -1,0 +1,55 @@
+##############################################################################
+# PgBouncer Base Kustomization
+#
+# Purpose: Deploy PgBouncer connection pooler for PostgreSQL
+#
+# Components:
+# - PgBouncer deployment (2 replicas for HA)
+# - Services (main, metrics, headless)
+# - ConfigMap (pgbouncer.ini)
+# - Secret (userlist.txt) - MUST be created separately
+# - RBAC (ServiceAccount, ClusterRole, ClusterRoleBinding, NetworkPolicy)
+# - Prometheus exporter
+#
+# Prerequisites:
+# 1. PostgreSQL service must exist: postgres-service:5432
+# 2. Create pgbouncer-userlist Secret before deploying:
+#    kubectl create secret generic pgbouncer-userlist \
+#      --from-file=userlist.txt=./userlist.txt \
+#      --from-literal=admin-password=<password> \
+#      -n nova
+#
+# Deployment:
+#   kubectl apply -k k8s/infrastructure/pgbouncer/
+#
+# Verification:
+#   kubectl get pods -n nova -l app=pgbouncer
+#   kubectl logs -n nova -l app=pgbouncer
+#   kubectl exec -n nova <pgbouncer-pod> -- psql -h localhost -p 6432 -U admin pgbouncer -c "SHOW POOLS"
+##############################################################################
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: nova
+
+# Resources to deploy
+resources:
+- deployment.yaml
+- service.yaml
+- configmap.yaml
+- rbac.yaml
+- prometheus-exporter.yaml
+
+# Note: secret.yaml is a template only!
+# Create the actual Secret manually using generate_userlist.sh
+
+# Labels applied to all resources
+commonLabels:
+  app: pgbouncer
+  component: database-proxy
+
+# Annotations for monitoring
+commonAnnotations:
+  prometheus.io/scrape: "true"
+  monitoring-enabled: "true"

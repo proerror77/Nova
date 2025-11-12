@@ -1,0 +1,9 @@
+{
+  "db": "Postgres",
+  "query": "SELECT COUNT(*) FROM shares WHERE post_id = $1",
+  "describe": {
+    "columns": [],
+    "nullable": [],
+    "return_type": "unknown"
+  }
+}

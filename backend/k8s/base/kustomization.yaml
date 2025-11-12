@@ -6,17 +6,20 @@ namespace: nova-backend
 resources:
   - namespace.yaml
   - configmap.yaml
-  - auth-service.yaml
+  - identity-service.yaml
   - user-service.yaml
   - content-service.yaml
   - feed-service.yaml
+  - graph-service.yaml
+  - ranking-service.yaml
   - media-service.yaml
-  - messaging-service.yaml
+  - realtime-chat-service.yaml
   - search-service.yaml
-  - streaming-service.yaml
   - notification-service.yaml
-  - cdn-service.yaml
-  - events-service.yaml
+  - social-service.yaml
+  - analytics-service.yaml
+  - trust-safety-service.yaml
+  - graphql-gateway.yaml
 
 commonLabels:
   app.kubernetes.io/name: nova

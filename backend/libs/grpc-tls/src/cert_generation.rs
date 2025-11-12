@@ -5,12 +5,10 @@
 
 use anyhow::{Context, Result};
 use rcgen::{
-    BasicConstraints, Certificate, CertificateParams, DistinguishedName, DnType, IsCa, KeyPair,
-    SanType,
+    BasicConstraints, CertificateParams, DistinguishedName, DnType, IsCa, SanType,
 };
 use std::fs;
 use std::path::Path;
-use time::{Duration, OffsetDateTime};
 use tracing::info;
 
 /// Bundle of certificates for development
@@ -46,17 +44,13 @@ pub fn generate_dev_certificates() -> Result<CertificateBundle> {
         .distinguished_name
         .push(DnType::OrganizationName, "Nova Development");
     ca_params.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
-    ca_params.not_before = OffsetDateTime::now_utc();
-    ca_params.not_after = OffsetDateTime::now_utc() + Duration::days(365);
 
-    let ca_key_pair = KeyPair::generate()?;
-    ca_params.key_pair = Some(ca_key_pair);
-
-    let ca_cert = Certificate::from_params(ca_params)
+    let ca_keypair = rcgen::KeyPair::generate()?;
+    let ca_cert = ca_params.self_signed(&ca_keypair)
         .context("Failed to generate CA certificate")?;
 
-    let ca_cert_pem = ca_cert.serialize_pem()?;
-    let ca_key_pem = ca_cert.serialize_private_key_pem();
+    let ca_cert_pem = ca_cert.pem();
+    let ca_key_pem = ca_keypair.serialize_pem();
 
     // 2. Generate server certificate signed by CA
     let mut server_params = CertificateParams::default();
@@ -71,27 +65,31 @@ pub fn generate_dev_certificates() -> Result<CertificateBundle> {
     // Add Subject Alternative Names (SANs)
     server_params
         .subject_alt_names
-        .push(SanType::DnsName("localhost".to_string()));
+        .push(SanType::DnsName(
+            "localhost"
+                .try_into()
+                .context("Failed to create SAN for localhost")?,
+        ));
     server_params
         .subject_alt_names
-        .push(SanType::DnsName("*.nova-backend.svc.cluster.local".to_string()));
+        .push(SanType::DnsName(
+            "*.nova-backend.svc.cluster.local"
+                .try_into()
+                .context("Failed to create SAN for k8s service")?,
+        ));
     server_params
         .subject_alt_names
         .push(SanType::IpAddress(std::net::IpAddr::V4(
             std::net::Ipv4Addr::new(127, 0, 0, 1),
         )));
 
-    server_params.not_before = OffsetDateTime::now_utc();
-    server_params.not_after = OffsetDateTime::now_utc() + Duration::days(365);
+    let server_keypair = rcgen::KeyPair::generate()?;
+    let server_cert = server_params
+        .signed_by(&server_keypair, &ca_cert, &ca_keypair)
+        .context("Failed to sign server certificate")?;
 
-    let server_key_pair = KeyPair::generate()?;
-    server_params.key_pair = Some(server_key_pair);
-
-    let server_cert = Certificate::from_params(server_params)
-        .context("Failed to generate server certificate")?;
-
-    let server_cert_pem = server_cert.serialize_pem_with_signer(&ca_cert)?;
-    let server_key_pem = server_cert.serialize_private_key_pem();
+    let server_cert_pem = server_cert.pem();
+    let server_key_pem = server_keypair.serialize_pem();
 
     // 3. Generate client certificate for mTLS
     let mut client_params = CertificateParams::default();
@@ -103,17 +101,13 @@ pub fn generate_dev_certificates() -> Result<CertificateBundle> {
         .distinguished_name
         .push(DnType::OrganizationName, "Nova Development");
 
-    client_params.not_before = OffsetDateTime::now_utc();
-    client_params.not_after = OffsetDateTime::now_utc() + Duration::days(365);
+    let client_keypair = rcgen::KeyPair::generate()?;
+    let client_cert = client_params
+        .signed_by(&client_keypair, &ca_cert, &ca_keypair)
+        .context("Failed to sign client certificate")?;
 
-    let client_key_pair = KeyPair::generate()?;
-    client_params.key_pair = Some(client_key_pair);
-
-    let client_cert = Certificate::from_params(client_params)
-        .context("Failed to generate client certificate")?;
-
-    let client_cert_pem = client_cert.serialize_pem_with_signer(&ca_cert)?;
-    let client_key_pem = client_cert.serialize_private_key_pem();
+    let client_cert_pem = client_cert.pem();
+    let client_key_pem = client_keypair.serialize_pem();
 
     info!("Generated development certificates (CA, server, client)");
 
@@ -130,7 +124,7 @@ pub fn generate_dev_certificates() -> Result<CertificateBundle> {
 /// Write certificate bundle to files
 ///
 /// Creates directory structure:
-/// ```
+/// ```text
 /// certs/
 ///   ca.crt        (CA certificate)
 ///   ca.key        (CA private key)

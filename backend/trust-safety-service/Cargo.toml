@@ -1,0 +1,79 @@
+[package]
+name = "trust-safety-service"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "trust-safety-service"
+path = "src/main.rs"
+
+[lib]
+name = "trust_safety_service"
+path = "src/lib.rs"
+
+[dependencies]
+# Workspace dependencies
+actix-web.workspace = true
+actix-rt.workspace = true
+tokio.workspace = true
+sqlx.workspace = true
+redis.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+uuid.workspace = true
+chrono.workspace = true
+dotenv.workspace = true
+envy.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+thiserror.workspace = true
+anyhow.workspace = true
+validator.workspace = true
+prometheus.workspace = true
+once_cell.workspace = true
+async-trait.workspace = true
+reqwest.workspace = true
+
+# gRPC dependencies
+tonic.workspace = true
+prost.workspace = true
+prost-types.workspace = true
+tonic-health.workspace = true
+
+# Shared libraries
+db-pool = { path = "../libs/db-pool" }
+grpc-tls = { path = "../libs/grpc-tls" }
+grpc-metrics = { path = "../libs/grpc-metrics" }
+grpc-health = { path = "../libs/grpc-health" }
+resilience = { path = "../libs/resilience" }
+error-types = { path = "../libs/error-types" }
+
+# ONNX Runtime for ML inference
+ort = { version = "2.0.0-rc.10", features = ["load-dynamic"] }
+
+# Image processing for NSFW detection
+image = "0.25"
+ndarray = "0.16"
+
+# Text processing
+regex = "1.10"
+unicode-segmentation = "1.11"
+
+# Utilities
+futures = "0.3"
+futures-util = "0.3"
+lazy_static = "1.4"
+dashmap = "6.1"
+
+[build-dependencies]
+tonic-build = "0.12"
+
+[dev-dependencies]
+tokio-test = "0.4"
+mockall = "0.12"
+testcontainers.workspace = true
+serial_test.workspace = true
+tempfile = "3.8"

@@ -1,0 +1,9 @@
+{
+  "db": "Postgres",
+  "query": "INSERT INTO likes (id, user_id, post_id, created_at)\n VALUES ($1, $2, $3, NOW())\n ON CONFLICT (user_id, post_id) DO NOTHING\n RETURNING id",
+  "describe": {
+    "columns": [],
+    "nullable": [],
+    "return_type": "unknown"
+  }
+}

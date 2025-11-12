@@ -22,16 +22,33 @@ pub struct KafkaProducer {
 }
 
 impl KafkaProducer {
-    /// Create new Kafka producer
+    /// Create new Kafka producer with idempotency guarantees
+    ///
+    /// Configuration ensures:
+    /// - `enable.idempotence = true`: Prevents duplicate messages on retry (exactly-once per session)
+    /// - `acks = all`: Waits for all replicas to acknowledge (durability guarantee)
+    /// - `max.in.flight.requests.per.connection = 5`: Maintains ordering with idempotence enabled
+    /// - `retries = 2147483647`: Max retries (librdkafka handles backoff internally)
+    /// - `compression.type = lz4`: Fast compression (better than snappy for CPU-bound workloads)
     pub async fn new(broker_list: &str) -> Result<Self, KafkaError> {
         let producer = ClientConfig::new()
             .set("bootstrap.servers", broker_list)
-            .set("message.timeout.ms", "5000")
-            .set("compression.type", "snappy")
+            .set("message.timeout.ms", "30000") // 30 second timeout (increased from 5s)
+            .set("request.timeout.ms", "30000")
+            // ✅ P1: Idempotency configuration (prevents duplicates on retry)
+            .set("enable.idempotence", "true")
+            .set("acks", "all")
+            .set("max.in.flight.requests.per.connection", "5")
+            .set("retries", "2147483647") // Max retries (INT_MAX)
+            // Performance optimizations
+            .set("compression.type", "lz4") // LZ4 > snappy for speed
+            .set("linger.ms", "10") // Wait 10ms for batching
+            .set("batch.size", "16384") // 16KB batches
+            .set("queue.buffering.max.messages", "100000")
             .create::<FutureProducer>()
             .map_err(|e| KafkaError::ProducerError(e.to_string()))?;
 
-        info!(broker_list = %broker_list, "Kafka producer created");
+        info!(broker_list = %broker_list, "Kafka producer created with idempotency enabled");
 
         Ok(Self {
             producer,

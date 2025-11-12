@@ -1,0 +1,248 @@
+##############################################################################
+# PgBouncer Kubernetes Deployment
+# Version: 1.0
+# Purpose: High-availability connection pooling for PostgreSQL
+#
+# Architecture:
+# - 2 PgBouncer replicas for HA and load distribution
+# - Each replica can handle 250+ concurrent client connections
+# - Multiplexes to 50 PostgreSQL backend connections per replica
+# - Total capacity: ~500+ concurrent clients with only 100 backend connections
+#
+# Key Features:
+# - Health checks (liveness and readiness probes)
+# - Resource limits for stable performance
+# - Config and secrets management via ConfigMap and Secret
+# - Metrics exposure for Prometheus monitoring
+# - Graceful shutdown with preStop hook
+##############################################################################
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pgbouncer
+  namespace: nova
+  labels:
+    app: pgbouncer
+    component: database-proxy
+    version: "1.21"
+spec:
+  # 2 replicas for high availability
+  replicas: 2
+  
+  # Update strategy: rolling updates with 1 replica always available
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  
+  # Pod selector
+  selector:
+    matchLabels:
+      app: pgbouncer
+  
+  # Pod template
+  template:
+    metadata:
+      labels:
+        app: pgbouncer
+        component: database-proxy
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "6432"
+        prometheus.io/path: "/stats"
+    
+    spec:
+      # Anti-affinity: spread PgBouncer pods across different nodes
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - pgbouncer
+              topologyKey: kubernetes.io/hostname
+      
+      # Service account for RBAC (if needed)
+      serviceAccountName: pgbouncer
+      
+      # Security context for the pod
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999  # pgbouncer user
+        fsGroup: 999
+      
+      # Containers
+      containers:
+      - name: pgbouncer
+        image: pgbouncer/pgbouncer:1.21
+        imagePullPolicy: IfNotPresent
+        
+        # Container security context
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+        
+        # Port definitions
+        ports:
+        - name: pgbouncer
+          containerPort: 6432
+          protocol: TCP
+          hostPort: 6432  # For node-level access if needed
+        
+        # Environment variables
+        env:
+        # PostgreSQL backend connection
+        - name: DATABASES_HOST
+          value: "postgres-service"
+        - name: DATABASES_PORT
+          value: "5432"
+        - name: DATABASES_DBNAME
+          value: "nova"
+        
+        # PgBouncer configuration
+        - name: PGBOUNCER_LISTEN_PORT
+          value: "6432"
+        - name: PGBOUNCER_AUTH_TYPE
+          value: "scram-sha-256"
+        - name: PGBOUNCER_POOL_MODE
+          value: "transaction"
+        - name: PGBOUNCER_MAX_CLIENT_CONN
+          value: "250"
+        - name: PGBOUNCER_DEFAULT_POOL_SIZE
+          value: "25"
+        - name: PGBOUNCER_MIN_POOL_SIZE
+          value: "5"
+        
+        # Logging
+        - name: PGBOUNCER_VERBOSE
+          value: "2"
+        
+        # Pod metadata
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        
+        # Resource requests and limits
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        
+        # Volume mounts
+        volumeMounts:
+        # Configuration file (read-only)
+        - name: config
+          mountPath: /etc/pgbouncer/pgbouncer.ini
+          subPath: pgbouncer.ini
+          readOnly: true
+        
+        # User authentication file (read-only)
+        - name: userlist
+          mountPath: /etc/pgbouncer/userlist.txt
+          subPath: userlist.txt
+          readOnly: true
+        
+        # Temporary directory for PgBouncer (writable)
+        - name: tmp
+          mountPath: /tmp
+        
+        # Log directory (writable)
+        - name: logs
+          mountPath: /var/log/pgbouncer
+        
+        # Liveness probe: checks if PgBouncer is still alive
+        # If this fails 3 times in a row, the container is restarted
+        livenessProbe:
+          tcpSocket:
+            port: pgbouncer
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        
+        # Readiness probe: checks if PgBouncer is ready to accept connections
+        # Uses the admin console to verify pool status
+        readinessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - psql -h 127.0.0.1 -p 6432 -U admin pgbouncer -c "SHOW POOLS" -t | grep -q nova
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          successThreshold: 1
+          failureThreshold: 3
+        
+        # Startup probe: gives the container time to start up
+        # Pod won't be considered failed if startup takes longer than usual
+        startupProbe:
+          tcpSocket:
+            port: pgbouncer
+          initialDelaySeconds: 0
+          periodSeconds: 2
+          timeoutSeconds: 3
+          failureThreshold: 30  # 60 seconds total
+        
+        # Graceful shutdown configuration
+        lifecycle:
+          preStop:
+            exec:
+              command:
+              - /bin/sh
+              - -c
+              - |
+                # Send PAUSE command to stop accepting new connections
+                psql -h 127.0.0.1 -p 6432 -U admin pgbouncer -c "PAUSE"
+                # Wait for existing connections to drain (max 30 seconds)
+                sleep 30
+      
+      # Volumes
+      volumes:
+      # ConfigMap with PgBouncer configuration
+      - name: config
+        configMap:
+          name: pgbouncer-config
+          defaultMode: 0444  # Read-only
+      
+      # Secret with user authentication data
+      - name: userlist
+        secret:
+          secretName: pgbouncer-userlist
+          defaultMode: 0400  # Read-only for owner only
+      
+      # Temporary storage (emptyDir)
+      - name: tmp
+        emptyDir:
+          sizeLimit: 100Mi
+      
+      # Log storage (emptyDir)
+      - name: logs
+        emptyDir:
+          sizeLimit: 500Mi
+      
+      # DNS policy
+      dnsPolicy: ClusterFirst
+      
+      # Restart policy
+      restartPolicy: Always
+      
+      # Termination grace period for graceful shutdown
+      terminationGracePeriodSeconds: 60

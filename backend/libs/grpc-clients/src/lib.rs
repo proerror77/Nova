@@ -75,30 +75,41 @@ pub mod nova {
         }
         pub use v1::*;
     }
-    pub mod streaming_service {
-        pub mod v1 {
-            tonic::include_proto!("nova.streaming_service.v1");
-        }
-        pub use v1::*;
-    }
-    pub mod cdn_service {
-        pub mod v1 {
-            tonic::include_proto!("nova.cdn_service.v1");
-        }
-        pub use v1::*;
-    }
     pub mod events_service {
         pub mod v1 {
             tonic::include_proto!("nova.events_service.v1");
         }
         pub use v1::*;
     }
-    pub mod video_service {
+    pub mod graph_service {
         pub mod v1 {
-            tonic::include_proto!("nova.video_service.v1");
+            tonic::include_proto!("nova.graph_service.v1");
         }
         pub use v1::*;
     }
+    pub mod social_service {
+        pub mod v1 {
+            tonic::include_proto!("nova.social_service.v1");
+        }
+        pub use v1::*;
+    }
+    pub mod ranking_service {
+        pub mod v1 {
+            tonic::include_proto!("ranking.v1");
+        }
+        pub use v1::*;
+    }
+    pub mod trust_safety {
+        pub mod v1 {
+            tonic::include_proto!("nova.trust_safety.v1");
+        }
+        pub use v1::*;
+    }
+}
+
+// Feature Store proto module
+pub mod feature_store {
+    tonic::include_proto!("feature_store");
 }
 
 use std::sync::Arc;
@@ -106,17 +117,19 @@ use tonic::transport::Channel;
 
 /// Client types for all services
 pub use nova::auth_service::auth_service_client::AuthServiceClient;
-pub use nova::cdn_service::cdn_service_client::CdnServiceClient;
 pub use nova::content_service::content_service_client::ContentServiceClient;
 pub use nova::events_service::events_service_client::EventsServiceClient;
 pub use nova::feed_service::recommendation_service_client::RecommendationServiceClient;
+pub use nova::graph_service::graph_service_client::GraphServiceClient;
 pub use nova::media_service::media_service_client::MediaServiceClient;
 pub use nova::messaging_service::messaging_service_client::MessagingServiceClient;
 pub use nova::notification_service::notification_service_client::NotificationServiceClient;
 pub use nova::search_service::search_service_client::SearchServiceClient;
-pub use nova::streaming_service::streaming_service_client::StreamingServiceClient;
 pub use nova::user_service::user_service_client::UserServiceClient;
-pub use nova::video_service::video_service_client::VideoServiceClient;
+pub use nova::social_service::social_service_client::SocialServiceClient;
+pub use nova::ranking_service::ranking_service_client::RankingServiceClient;
+pub use feature_store::feature_store_client::FeatureStoreClient;
+pub use nova::trust_safety::trust_safety_service_client::TrustSafetyServiceClient;
 
 #[derive(Clone)]
 pub struct GrpcClientPool {
@@ -128,10 +141,12 @@ pub struct GrpcClientPool {
     search_client: Arc<SearchServiceClient<Channel>>,
     media_client: Arc<MediaServiceClient<Channel>>,
     notification_client: Arc<NotificationServiceClient<Channel>>,
-    streaming_client: Arc<StreamingServiceClient<Channel>>,
-    cdn_client: Arc<CdnServiceClient<Channel>>,
     events_client: Arc<EventsServiceClient<Channel>>,
-    video_client: Arc<VideoServiceClient<Channel>>,
+    graph_client: Arc<GraphServiceClient<Channel>>,
+    social_client: Arc<SocialServiceClient<Channel>>,
+    ranking_client: Arc<RankingServiceClient<Channel>>,
+    feature_store_client: Arc<FeatureStoreClient<Channel>>,
+    trust_safety_client: Arc<TrustSafetyServiceClient<Channel>>,
 }
 
 impl GrpcClientPool {
@@ -173,7 +188,7 @@ impl GrpcClientPool {
         }
 
         let auth_client = Arc::new(AuthServiceClient::new(
-            connect_or_placeholder(config, &config.auth_service_url, "auth-service").await,
+            connect_or_placeholder(config, &config.identity_service_url, "identity-service").await,
         ));
         let user_client = Arc::new(UserServiceClient::new(
             connect_or_placeholder(config, &config.user_service_url, "user-service").await,
@@ -202,18 +217,23 @@ impl GrpcClientPool {
             )
             .await,
         ));
-        let streaming_client = Arc::new(StreamingServiceClient::new(
-            connect_or_placeholder(config, &config.streaming_service_url, "streaming-service")
-                .await,
-        ));
-        let cdn_client = Arc::new(CdnServiceClient::new(
-            connect_or_placeholder(config, &config.cdn_service_url, "cdn-service").await,
-        ));
         let events_client = Arc::new(EventsServiceClient::new(
-            connect_or_placeholder(config, &config.events_service_url, "events-service").await,
+            connect_or_placeholder(config, &config.analytics_service_url, "analytics-service").await,
         ));
-        let video_client = Arc::new(VideoServiceClient::new(
-            connect_or_placeholder(config, &config.video_service_url, "video-service").await,
+        let graph_client = Arc::new(GraphServiceClient::new(
+            connect_or_placeholder(config, &config.graph_service_url, "graph-service").await,
+        ));
+        let social_client = Arc::new(SocialServiceClient::new(
+            connect_or_placeholder(config, &config.social_service_url, "social-service").await,
+        ));
+        let ranking_client = Arc::new(RankingServiceClient::new(
+            connect_or_placeholder(config, &config.ranking_service_url, "ranking-service").await,
+        ));
+        let feature_store_client = Arc::new(FeatureStoreClient::new(
+            connect_or_placeholder(config, &config.feature_store_url, "feature-store").await,
+        ));
+        let trust_safety_client = Arc::new(TrustSafetyServiceClient::new(
+            connect_or_placeholder(config, &config.trust_safety_service_url, "trust-safety-service").await,
         ));
 
         Ok(Self {
@@ -225,10 +245,12 @@ impl GrpcClientPool {
             search_client,
             media_client,
             notification_client,
-            streaming_client,
-            cdn_client,
             events_client,
-            video_client,
+            graph_client,
+            social_client,
+            ranking_client,
+            feature_store_client,
+            trust_safety_client,
         })
     }
 
@@ -265,20 +287,28 @@ impl GrpcClientPool {
         (*self.notification_client).clone()
     }
 
-    pub fn streaming(&self) -> StreamingServiceClient<Channel> {
-        (*self.streaming_client).clone()
-    }
-
-    pub fn cdn(&self) -> CdnServiceClient<Channel> {
-        (*self.cdn_client).clone()
-    }
-
     pub fn events(&self) -> EventsServiceClient<Channel> {
         (*self.events_client).clone()
     }
 
-    pub fn video(&self) -> VideoServiceClient<Channel> {
-        (*self.video_client).clone()
+    pub fn graph(&self) -> GraphServiceClient<Channel> {
+        (*self.graph_client).clone()
+    }
+
+    pub fn social(&self) -> SocialServiceClient<Channel> {
+        (*self.social_client).clone()
+    }
+
+    pub fn ranking(&self) -> RankingServiceClient<Channel> {
+        (*self.ranking_client).clone()
+    }
+
+    pub fn feature_store(&self) -> FeatureStoreClient<Channel> {
+        (*self.feature_store_client).clone()
+    }
+
+    pub fn trust_safety(&self) -> TrustSafetyServiceClient<Channel> {
+        (*self.trust_safety_client).clone()
     }
 }
 

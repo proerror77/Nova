@@ -3,6 +3,13 @@ name = "graphql-gateway"
 version.workspace = true
 edition.workspace = true
 
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "graphql-gateway"
+path = "src/main.rs"
+
 [dependencies]
 # Core
 tokio = { workspace = true }
@@ -60,6 +67,10 @@ async-trait = "0.1"  # ✅ P0-5: For DataLoader trait implementations
 governor = { workspace = true }  # ✅ P0-3: Added for GraphQL Gateway rate limiting
 lru = "0.12"  # LRU cache for per-IP rate limiters
 
+# Resilience (timeout, circuit breaker)
+resilience = { path = "../libs/resilience" }  # ✅ P0: Timeout protection & circuit breakers
+tower = { workspace = true }  # ✅ P0: Tower middleware for gRPC clients
+
 # Kafka
 rdkafka = { version = "0.36", features = ["cmake-build"] }  # ✅ P0-5: For subscription event streaming
 
@@ -67,8 +78,12 @@ rdkafka = { version = "0.36", features = ["cmake-build"] }  # ✅ P0-5: For subs
 prometheus = { workspace = true }  # ✅ Quick Win #5: Cache performance metrics
 lazy_static = "1.5"  # ✅ Quick Win #5: For static metric registry
 
+# Persisted Queries
+sha2 = "0.10"  # ✅ P1: SHA-256 hashing for Automatic Persisted Queries (APQ)
+
 [build-dependencies]
-tonic-build = "0.10"
+tonic-build = "0.12"
 
 [dev-dependencies]
 serial_test = { workspace = true }
+tempfile = "3.10"  # For persisted queries tests

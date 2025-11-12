@@ -215,6 +215,73 @@ groups:
           description: "Topic {{ $labels.topic }} has {{ $value }} under-replicated partitions"
 
   # ==============================================
+  # Elasticsearch Alerts
+  # ==============================================
+  - name: elasticsearch
+    interval: 30s
+    rules:
+      - alert: ElasticsearchDown
+        expr: up{job="elasticsearch"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          category: search
+        annotations:
+          summary: "Elasticsearch is down"
+          description: "Elasticsearch has been unreachable for more than 1 minute."
+
+      - alert: ElasticsearchClusterHealthYellow
+        expr: elasticsearch_cluster_health_status{color="yellow"} == 1
+        for: 5m
+        labels:
+          severity: warning
+          category: search
+        annotations:
+          summary: "Elasticsearch cluster health is yellow"
+          description: "Elasticsearch cluster has unassigned replica shards."
+
+      - alert: ElasticsearchClusterHealthRed
+        expr: elasticsearch_cluster_health_status{color="red"} == 1
+        for: 1m
+        labels:
+          severity: critical
+          category: search
+        annotations:
+          summary: "Elasticsearch cluster health is red"
+          description: "Elasticsearch cluster has unassigned primary shards - DATA LOSS RISK."
+
+  # ==============================================
+  # Neo4j Alerts (Graph Service)
+  # ==============================================
+  - name: neo4j
+    interval: 30s
+    rules:
+      - alert: Neo4jDown
+        expr: up{job="neo4j"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          category: graph
+        annotations:
+          summary: "Neo4j is down"
+          description: "Neo4j has been unreachable for more than 1 minute."
+
+      - alert: Neo4jHighMemoryUsage
+        expr: |
+          (
+            neo4j_memory_heap_used_bytes
+            /
+            neo4j_memory_heap_max_bytes
+          ) > 0.8
+        for: 5m
+        labels:
+          severity: warning
+          category: graph
+        annotations:
+          summary: "Neo4j high memory usage"
+          description: "Neo4j heap memory > 80% (current: {{ $value | humanizePercentage }})"
+
+  # ==============================================
   # Resource Utilization Alerts
   # ==============================================
   - name: resource_utilization

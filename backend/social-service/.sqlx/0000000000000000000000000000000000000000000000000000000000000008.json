@@ -1,0 +1,9 @@
+{
+  "db": "Postgres",
+  "query": "SELECT post_id, like_count, comment_count, share_count\n FROM post_counters\n WHERE post_id = ANY($1)",
+  "describe": {
+    "columns": [],
+    "nullable": [],
+    "return_type": "unknown"
+  }
+}

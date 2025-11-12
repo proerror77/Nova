@@ -1,0 +1,134 @@
+syntax = "proto3";
+
+package feature_store;
+
+// Feature Store service for real-time ML feature serving
+service FeatureStore {
+  // Get features for a single entity
+  rpc GetFeatures(GetFeaturesRequest) returns (GetFeaturesResponse);
+
+  // Get features for multiple entities in a single request
+  rpc BatchGetFeatures(BatchGetFeaturesRequest) returns (BatchGetFeaturesResponse);
+
+  // Set/update feature value for an entity
+  rpc SetFeature(SetFeatureRequest) returns (SetFeatureResponse);
+
+  // Get feature metadata (type, TTL, update time)
+  rpc GetFeatureMetadata(GetFeatureMetadataRequest) returns (GetFeatureMetadataResponse);
+}
+
+// Request to get features for a single entity
+message GetFeaturesRequest {
+  // Entity identifier (e.g., user_id, post_id)
+  string entity_id = 1;
+
+  // List of feature names to retrieve
+  repeated string feature_names = 2;
+
+  // Entity type (e.g., "user", "post")
+  string entity_type = 3;
+}
+
+// Response containing requested features
+message GetFeaturesResponse {
+  // Entity ID
+  string entity_id = 1;
+
+  // Map of feature name to feature value
+  map<string, FeatureValue> features = 2;
+
+  // Missing features (requested but not found)
+  repeated string missing_features = 3;
+}
+
+// Request to get features for multiple entities
+message BatchGetFeaturesRequest {
+  // List of entity IDs
+  repeated string entity_ids = 1;
+
+  // List of feature names to retrieve for each entity
+  repeated string feature_names = 2;
+
+  // Entity type
+  string entity_type = 3;
+}
+
+// Response containing features for multiple entities
+message BatchGetFeaturesResponse {
+  // Map of entity_id to features
+  map<string, EntityFeatures> entities = 1;
+}
+
+// Features for a single entity
+message EntityFeatures {
+  string entity_id = 1;
+  map<string, FeatureValue> features = 2;
+  repeated string missing_features = 3;
+}
+
+// Request to set/update a feature value
+message SetFeatureRequest {
+  // Entity identifier
+  string entity_id = 1;
+
+  // Entity type
+  string entity_type = 2;
+
+  // Feature name
+  string feature_name = 3;
+
+  // Feature value
+  FeatureValue value = 4;
+
+  // Optional TTL in seconds (0 = no expiration)
+  int64 ttl_seconds = 5;
+}
+
+// Response for set feature operation
+message SetFeatureResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// Request to get feature metadata
+message GetFeatureMetadataRequest {
+  string entity_type = 1;
+  string feature_name = 2;
+}
+
+// Response containing feature metadata
+message GetFeatureMetadataResponse {
+  string feature_name = 1;
+  FeatureType type = 2;
+  int64 ttl_seconds = 3;
+  int64 last_updated_timestamp = 4;
+  string description = 5;
+}
+
+// Feature value (supports multiple types)
+message FeatureValue {
+  oneof value {
+    double double_value = 1;
+    int64 int_value = 2;
+    string string_value = 3;
+    bool bool_value = 4;
+    DoubleList double_list_value = 5;  // For embedding vectors
+    int64 timestamp_value = 6;
+  }
+}
+
+// List of doubles (for embedding vectors)
+message DoubleList {
+  repeated double values = 1;
+}
+
+// Feature type enumeration
+enum FeatureType {
+  UNKNOWN = 0;
+  DOUBLE = 1;
+  INT = 2;
+  STRING = 3;
+  BOOL = 4;
+  DOUBLE_LIST = 5;  // Embedding vector
+  TIMESTAMP = 6;
+}

@@ -1,18 +1,19 @@
 [workspace]
 members = [
     # Services
-    "backend/auth-service",
     "backend/user-service",
     "backend/content-service",
     "backend/feed-service",
     "backend/media-service",
     "backend/messaging-service",
     "backend/search-service",
-    "backend/streaming-service",
     "backend/notification-service",
-    "backend/cdn-service",
-    "backend/events-service",
+    "backend/social-service",
     "backend/graphql-gateway",
+    "backend/identity-service",
+    "backend/analytics-service",
+    "backend/graph-service",
+    "backend/ranking-service",
     # Shared Libraries
     "backend/libs/actix-middleware",
     "backend/libs/crypto-core",
@@ -22,6 +23,8 @@ members = [
     "backend/libs/event-schema",
     "backend/libs/grpc-metrics",
     "backend/libs/grpc-tls",
+    "backend/libs/grpc-jwt-propagation",
+    "backend/libs/grpc-health",
     "backend/libs/resilience",
     "backend/libs/aws-secrets",
     "backend/libs/nova-apns-shared",
@@ -29,8 +32,9 @@ members = [
     "backend/libs/grpc-clients",
     "backend/libs/redis-utils",
     "backend/libs/video-core",
-    # "backend/libs/opentelemetry-config",  # TODO: Fix hyper dependencies
-    "backend/libs/event-store"
+    "backend/libs/event-store",
+    "backend/libs/cache-invalidation",
+    "backend/libs/idempotent-consumer"
 ]
 resolver = "2"
 
@@ -131,6 +135,7 @@ neo4rs = "0.8"
 tonic = { version = "0.10", features = ["transport", "tls"] }
 tonic-health = "0.10"
 prost = "0.12"
+prost-types = "0.12"
 
 # Vector operations for embeddings
 ndarray = "0.15"
@@ -141,6 +146,12 @@ http = "0.2"
 # Tower - Service abstraction layer
 tower = "0.4"
 pin-project = "1.1"
+
+# Concurrency utilities
+dashmap = "5.5"
+
+# Futures utilities
+futures = "0.3"
 
 # ONNX Model Serving
 tract-onnx = "0.21"

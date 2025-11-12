@@ -1,0 +1,142 @@
+##############################################################################
+# PgBouncer RBAC Configuration (Role-Based Access Control)
+# 
+# While PgBouncer is a stateless service, we create a ServiceAccount for:
+# 1. Better security practices (principle of least privilege)
+# 2. Pod identity and audit tracking
+# 3. Future integration with service meshes (Istio, etc.)
+# 4. Network policies that reference ServiceAccount
+##############################################################################
+
+---
+# ServiceAccount for PgBouncer pods
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: pgbouncer
+  namespace: nova
+  labels:
+    app: pgbouncer
+    component: database-proxy
+
+---
+# ClusterRole defining what PgBouncer is allowed to do
+# Minimal permissions - mostly read-only for configuration
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: pgbouncer
+  labels:
+    app: pgbouncer
+    component: database-proxy
+
+rules:
+# Read ConfigMaps (for configuration)
+- apiGroups: [""]
+  resources: ["configmaps"]
+  verbs: ["get", "list", "watch"]
+
+# Read Secrets (for authentication data)
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["get", "list", "watch"]
+
+# Read Services (for discovering PostgreSQL service)
+- apiGroups: [""]
+  resources: ["services"]
+  verbs: ["get", "list", "watch"]
+
+# Read Endpoints (for service discovery)
+- apiGroups: [""]
+  resources: ["endpoints"]
+  verbs: ["get", "list", "watch"]
+
+---
+# ClusterRoleBinding binding the ClusterRole to the ServiceAccount
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: pgbouncer
+  labels:
+    app: pgbouncer
+    component: database-proxy
+
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: pgbouncer
+
+subjects:
+- kind: ServiceAccount
+  name: pgbouncer
+  namespace: nova
+
+---
+# Network Policy to restrict PgBouncer communication
+# Only allows traffic on port 6432 from pods in nova namespace
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: pgbouncer
+  namespace: nova
+  labels:
+    app: pgbouncer
+    component: database-proxy
+
+spec:
+  podSelector:
+    matchLabels:
+      app: pgbouncer
+  
+  policyTypes:
+  - Ingress
+  - Egress
+  
+  # Allowed inbound traffic
+  ingress:
+  # Allow from all pods in nova namespace (applications)
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: nova
+    ports:
+    - protocol: TCP
+      port: 6432
+  
+  # Allow from monitoring namespace (Prometheus)
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: monitoring
+    ports:
+    - protocol: TCP
+      port: 9127
+  
+  # Allowed outbound traffic
+  egress:
+  # Allow to PostgreSQL service on port 5432
+  - to:
+    - podSelector:
+        matchLabels:
+          app: postgres
+    ports:
+    - protocol: TCP
+      port: 5432
+  
+  # Allow DNS (CoreDNS)
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: kube-system
+    ports:
+    - protocol: UDP
+      port: 53
+  
+  # Allow to kubernetes API (for config/secret updates)
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: kube-system
+    ports:
+    - protocol: TCP
+      port: 443

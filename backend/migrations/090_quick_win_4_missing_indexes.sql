@@ -47,7 +47,9 @@
 --   - Message timeline pagination
 --   - User activity auditing
 --
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_messages_sender_created
+-- Note: CONCURRENTLY removed for initial migration (no concurrent access during setup)
+-- In production updates, use: CREATE INDEX CONCURRENTLY ...
+CREATE INDEX IF NOT EXISTS idx_messages_sender_created
 ON messages(sender_id, created_at DESC)
 WHERE deleted_at IS NULL;
 
@@ -66,9 +68,12 @@ WHERE deleted_at IS NULL;
 --
 -- Note: Filter on soft_delete status for data integrity
 --
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_posts_user_created
+-- Note: CONCURRENTLY removed for initial migration (no concurrent access during setup)
+-- In production updates, use: CREATE INDEX CONCURRENTLY ...
+-- Note: posts table uses soft_delete column, not deleted_at
+CREATE INDEX IF NOT EXISTS idx_posts_user_created
 ON posts(user_id, created_at DESC)
-WHERE deleted_at IS NULL;
+WHERE soft_delete IS NULL;
 
 -- ==========================================
 -- Index 3: User Preferences (Feed Personalization)
@@ -119,7 +124,7 @@ WHERE deleted_at IS NULL;
 ANALYZE messages;
 ANALYZE posts;
 ANALYZE users;
-ANALYZE user_feed_preferences;
+-- ANALYZE user_feed_preferences; -- Table doesn't exist yet
 ANALYZE conversation_members;
 
 -- =============================================================================
@@ -180,17 +185,9 @@ ANALYZE conversation_members;
 -- Log completion for monitoring
 DO $$
 BEGIN
-    RAISE NOTICE 'Quick Win #4: Missing Database Indexes migration completed';
-    RAISE NOTICE 'New indexes created:';
-    RAISE NOTICE '  ✓ idx_messages_sender_created (messages.sender_id, created_at DESC)';
-    RAISE NOTICE '  ✓ idx_posts_user_created (posts.user_id, created_at DESC)';
-    RAISE NOTICE '';
-    RAISE NOTICE 'Expected performance improvements:';
-    RAISE NOTICE '  - User message history: 3-5x faster (100ms → 20-30ms)';
-    RAISE NOTICE '  - Feed generation: 500ms → 100ms (80% improvement)';
-    RAISE NOTICE '  - User content timeline: 3-5x faster';
-    RAISE NOTICE '  - Auth lookups: 2-3x faster (via existing idx_users_email)';
-    RAISE NOTICE '';
+    RAISE NOTICE 'Quick Win 4: Missing Database Indexes migration completed';
+    RAISE NOTICE 'New indexes created: idx_messages_sender_created, idx_posts_user_created';
+    RAISE NOTICE 'Expected improvements: Message history 3-5x faster, Feed generation 80 percent faster';
     RAISE NOTICE 'Statistics updated for all affected tables';
 END $$;
 

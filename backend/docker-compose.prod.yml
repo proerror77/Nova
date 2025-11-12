@@ -1,14 +1,14 @@
 version: '3.8'
 
 # ==============================================
-# Nova Backend - Production Docker Compose
+# Nova Backend - Production Docker Compose (Phase E)
 # ==============================================
-# This file defines all 11 microservices + infrastructure dependencies
+# This file defines all 14 microservices + infrastructure dependencies
 # Usage: docker-compose -f docker-compose.prod.yml up -d
 
 services:
   # ============================================
-  # Infrastructure Services
+  # Infrastructure Services (7)
   # ============================================
 
   postgres:
@@ -23,13 +23,14 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./migrations:/docker-entrypoint-initdb.d
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s
       timeout: 5s
       retries: 5
     networks:
-      - nova-network
+      - nova-backend
     restart: unless-stopped
 
   redis:
@@ -46,18 +47,17 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - nova-network
+      - nova-backend
     restart: unless-stopped
 
   clickhouse:
     image: clickhouse/clickhouse-server:23.11-alpine
     container_name: nova-clickhouse
     environment:
-      CLICKHOUSE_DB: nova
+      CLICKHOUSE_DB: nova_feed
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
     ports:
-      - "8123:8123"  # HTTP interface
-      - "9000:9000"  # Native interface
+      - "8123:8123"  # HTTP interface only (native interface available internally)
     volumes:
       - clickhouse_data:/var/lib/clickhouse
     healthcheck:
@@ -66,7 +66,28 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - nova-network
+      - nova-backend
+    restart: unless-stopped
+
+  neo4j:
+    image: neo4j:5.13-community
+    container_name: nova-neo4j
+    environment:
+      NEO4J_AUTH: neo4j/password
+      NEO4J_dbms_memory_heap_max__size: 512M
+      NEO4J_dbms_memory_pagecache_size: 256M
+    ports:
+      - "7474:7474"  # HTTP
+      - "7687:7687"  # Bolt
+    volumes:
+      - neo4j_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "cypher-shell -u neo4j -p password 'RETURN 1' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - nova-backend
     restart: unless-stopped
 
   kafka:
@@ -84,8 +105,6 @@ services:
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       CLUSTER_ID: 'MkU3OEVBNTcwNTJENDM2Qk'
-    ports:
-      - "9092:9092"
     volumes:
       - kafka_data:/var/lib/kafka/data
     healthcheck:
@@ -94,7 +113,7 @@ services:
       timeout: 10s
       retries: 5
     networks:
-      - nova-network
+      - nova-backend
     restart: unless-stopped
 
   elasticsearch:
@@ -114,26 +133,45 @@ services:
       timeout: 10s
       retries: 5
     networks:
-      - nova-network
+      - nova-backend
+    restart: unless-stopped
+
+  minio:
+    image: minio/minio:latest
+    container_name: nova-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"  # API
+      - "9001:9001"  # Console
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - nova-backend
     restart: unless-stopped
 
   # ============================================
-  # Microservices (11 services)
+  # Microservices (14 services)
   # ============================================
 
-  auth-service:
+  identity-service:
     build:
-      context: ..
-      dockerfile: backend/Dockerfile.template
+      context: .
+      dockerfile: Dockerfile.template
       args:
-        SERVICE_NAME: auth-service
-    image: nova-auth-service:latest
-    container_name: nova-auth-service
+        SERVICE_NAME: identity-service
+    image: nova-identity-service:latest
+    container_name: nova-identity-service
     environment:
-      HTTP_PORT: 8083
-      SERVER_HOST: 0.0.0.0
-      SERVER_PORT: 8083
-      GRPC_PORT: 9083
+      HTTP_PORT: 8081
+      GRPC_PORT: 9081
       DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/nova
       REDIS_URL: redis://redis:6379
       KAFKA_BROKERS: kafka:9092
@@ -141,8 +179,8 @@ services:
     env_file:
       - .env
     ports:
-      - "8083:8083"  # HTTP
-      - "9083:9083"  # gRPC
+      - "8081:8081"  # HTTP
+      - "9081:9081"  # gRPC
     depends_on:
       postgres:
         condition: service_healthy
@@ -151,26 +189,24 @@ services:
       kafka:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8083/api/v1/health"]
-      interval: 30s
-      timeout: 10s
+      test: ["CMD", "curl", "-f", "http://localhost:8081/api/v1/health"]
+      interval: 10s
+      timeout: 5s
       retries: 3
     networks:
-      - nova-network
+      - nova-backend
     restart: unless-stopped
 
   user-service:
     build:
-      context: ..
-      dockerfile: backend/Dockerfile.template
+      context: .
+      dockerfile: Dockerfile.template
       args:
         SERVICE_NAME: user-service
     image: nova-user-service:latest
     container_name: nova-user-service
     environment:
       HTTP_PORT: 8080
-      SERVER_HOST: 0.0.0.0
-      SERVER_PORT: 8080
       GRPC_PORT: 9080
       DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/nova
       REDIS_URL: redis://redis:6379
@@ -190,26 +226,24 @@ services:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/api/v1/health"]
-      interval: 30s
-      timeout: 10s
+      interval: 10s
+      timeout: 5s
       retries: 3
     networks:
-      - nova-network
+      - nova-backend
     restart: unless-stopped
 
   content-service:
     build:
-      context: ..
-      dockerfile: backend/Dockerfile.template
+      context: .
+      dockerfile: Dockerfile.template
       args:
         SERVICE_NAME: content-service
     image: nova-content-service:latest
     container_name: nova-content-service
     environment:
-      HTTP_PORT: 8081
-      SERVER_HOST: 0.0.0.0
-      SERVER_PORT: 8081
-      GRPC_PORT: 9081
+      HTTP_PORT: 8082
+      GRPC_PORT: 9082
       DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/nova
       REDIS_URL: redis://redis:6379
       KAFKA_BROKERS: kafka:9092
@@ -217,8 +251,8 @@ services:
     env_file:
       - .env
     ports:
-      - "8081:8081"
-      - "9081:9081"
+      - "8082:8082"
+      - "9082:9082"
     depends_on:
       postgres:
         condition: service_healthy
@@ -227,26 +261,24 @@ services:
       kafka:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8081/api/v1/health"]
-      interval: 30s
-      timeout: 10s
+      test: ["CMD", "curl", "-f", "http://localhost:8082/api/v1/health"]
+      interval: 10s
+      timeout: 5s
       retries: 3
     networks:
-      - nova-network
+      - nova-backend
     restart: unless-stopped
 
   feed-service:
     build:
-      context: ..
-      dockerfile: backend/Dockerfile.template
+      context: .
+      dockerfile: Dockerfile.template
       args:
         SERVICE_NAME: feed-service
     image: nova-feed-service:latest
     container_name: nova-feed-service
     environment:
       HTTP_PORT: 8084
-      SERVER_HOST: 0.0.0.0
-      SERVER_PORT: 8084
       GRPC_PORT: 9084
       DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/nova
       REDIS_URL: redis://redis:6379
@@ -269,67 +301,28 @@ services:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8084/api/v1/health"]
-      interval: 30s
-      timeout: 10s
+      interval: 10s
+      timeout: 5s
       retries: 3
     networks:
-      - nova-network
+      - nova-backend
     restart: unless-stopped
 
   media-service:
     build:
-      context: ..
-      dockerfile: backend/Dockerfile.template
+      context: .
+      dockerfile: Dockerfile.template
       args:
         SERVICE_NAME: media-service
     image: nova-media-service:latest
     container_name: nova-media-service
     environment:
-      HTTP_PORT: 8082
-      SERVER_HOST: 0.0.0.0
-      SERVER_PORT: 8082
-      GRPC_PORT: 9082
-      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/nova
-      REDIS_URL: redis://redis:6379
-      KAFKA_BROKERS: kafka:9092
-      RUST_LOG: info
-    env_file:
-      - .env
-    ports:
-      - "8082:8082"
-      - "9082:9082"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      kafka:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8082/api/v1/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-    networks:
-      - nova-network
-    restart: unless-stopped
-
-  messaging-service:
-    build:
-      context: ..
-      dockerfile: backend/Dockerfile.template
-      args:
-        SERVICE_NAME: messaging-service
-    image: nova-messaging-service:latest
-    container_name: nova-messaging-service
-    environment:
       HTTP_PORT: 8085
-      SERVER_HOST: 0.0.0.0
-      SERVER_PORT: 8085
       GRPC_PORT: 9085
       DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/nova
       REDIS_URL: redis://redis:6379
       KAFKA_BROKERS: kafka:9092
+      AWS_S3_ENDPOINT: http://minio:9000
       RUST_LOG: info
     env_file:
       - .env
@@ -343,31 +336,30 @@ services:
         condition: service_healthy
       kafka:
         condition: service_healthy
+      minio:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8085/api/v1/health"]
-      interval: 30s
-      timeout: 10s
+      interval: 10s
+      timeout: 5s
       retries: 3
     networks:
-      - nova-network
+      - nova-backend
     restart: unless-stopped
 
-  search-service:
+  realtime-chat-service:
     build:
-      context: ..
-      dockerfile: backend/Dockerfile.template
+      context: .
+      dockerfile: Dockerfile.template
       args:
-        SERVICE_NAME: search-service
-    image: nova-search-service:latest
-    container_name: nova-search-service
+        SERVICE_NAME: realtime-chat-service
+    image: nova-realtime-chat-service:latest
+    container_name: nova-realtime-chat-service
     environment:
       HTTP_PORT: 8086
-      SERVER_HOST: 0.0.0.0
-      SERVER_PORT: 8086
       GRPC_PORT: 9086
       DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/nova
       REDIS_URL: redis://redis:6379
-      ELASTICSEARCH_URL: http://elasticsearch:9200
       KAFKA_BROKERS: kafka:9092
       RUST_LOG: info
     env_file:
@@ -380,34 +372,31 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      elasticsearch:
-        condition: service_healthy
       kafka:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8086/api/v1/health"]
-      interval: 30s
-      timeout: 10s
+      interval: 10s
+      timeout: 5s
       retries: 3
     networks:
-      - nova-network
+      - nova-backend
     restart: unless-stopped
 
-  streaming-service:
+  search-service:
     build:
-      context: ..
-      dockerfile: backend/Dockerfile.template
+      context: .
+      dockerfile: Dockerfile.template
       args:
-        SERVICE_NAME: streaming-service
-    image: nova-streaming-service:latest
-    container_name: nova-streaming-service
+        SERVICE_NAME: search-service
+    image: nova-search-service:latest
+    container_name: nova-search-service
     environment:
       HTTP_PORT: 8087
-      SERVER_HOST: 0.0.0.0
-      SERVER_PORT: 8087
       GRPC_PORT: 9087
       DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/nova
       REDIS_URL: redis://redis:6379
+      ELASTICSEARCH_URL: http://elasticsearch:9200
       KAFKA_BROKERS: kafka:9092
       RUST_LOG: info
     env_file:
@@ -420,29 +409,29 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
       kafka:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8087/api/v1/health"]
-      interval: 30s
-      timeout: 10s
+      interval: 10s
+      timeout: 5s
       retries: 3
     networks:
-      - nova-network
+      - nova-backend
     restart: unless-stopped
 
   notification-service:
     build:
-      context: ..
-      dockerfile: backend/Dockerfile.template
+      context: .
+      dockerfile: Dockerfile.template
       args:
         SERVICE_NAME: notification-service
     image: nova-notification-service:latest
     container_name: nova-notification-service
     environment:
       HTTP_PORT: 8088
-      SERVER_HOST: 0.0.0.0
-      SERVER_PORT: 8088
       GRPC_PORT: 9088
       DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/nova
       REDIS_URL: redis://redis:6379
@@ -462,26 +451,102 @@ services:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8088/api/v1/health"]
-      interval: 30s
-      timeout: 10s
+      interval: 10s
+      timeout: 5s
       retries: 3
     networks:
-      - nova-network
+      - nova-backend
     restart: unless-stopped
 
-  cdn-service:
+  graph-service:
     build:
-      context: ..
-      dockerfile: backend/Dockerfile.template
+      context: .
+      dockerfile: Dockerfile.template
       args:
-        SERVICE_NAME: cdn-service
-    image: nova-cdn-service:latest
-    container_name: nova-cdn-service
+        SERVICE_NAME: graph-service
+    image: nova-graph-service:latest
+    container_name: nova-graph-service
     environment:
-      HTTP_PORT: 8089
-      SERVER_HOST: 0.0.0.0
-      SERVER_PORT: 8089
-      GRPC_PORT: 9089
+      HTTP_PORT: 8091
+      GRPC_PORT: 9091
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/nova
+      REDIS_URL: redis://redis:6379
+      NEO4J_URI: neo4j://neo4j:7687
+      KAFKA_BROKERS: kafka:9092
+      RUST_LOG: info
+    env_file:
+      - .env
+    ports:
+      - "8091:8091"
+      - "9091:9091"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8091/api/v1/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - nova-backend
+    restart: unless-stopped
+
+  ranking-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.template
+      args:
+        SERVICE_NAME: ranking-service
+    image: nova-ranking-service:latest
+    container_name: nova-ranking-service
+    environment:
+      HTTP_PORT: 8092
+      GRPC_PORT: 9092
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/nova
+      REDIS_URL: redis://redis:6379
+      CLICKHOUSE_URL: http://clickhouse:8123
+      KAFKA_BROKERS: kafka:9092
+      RUST_LOG: info
+    env_file:
+      - .env
+    ports:
+      - "8092:8092"
+      - "9092:9092"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8092/api/v1/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - nova-backend
+    restart: unless-stopped
+
+  social-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.template
+      args:
+        SERVICE_NAME: social-service
+    image: nova-social-service:latest
+    container_name: nova-social-service
+    environment:
+      HTTP_PORT: 8093
+      GRPC_PORT: 9093
       DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/nova
       REDIS_URL: redis://redis:6379
       KAFKA_BROKERS: kafka:9092
@@ -489,8 +554,8 @@ services:
     env_file:
       - .env
     ports:
-      - "8089:8089"
-      - "9089:9089"
+      - "8093:8093"
+      - "9093:9093"
     depends_on:
       postgres:
         condition: service_healthy
@@ -499,27 +564,64 @@ services:
       kafka:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8089/api/v1/health"]
-      interval: 30s
-      timeout: 10s
+      test: ["CMD", "curl", "-f", "http://localhost:8093/api/v1/health"]
+      interval: 10s
+      timeout: 5s
       retries: 3
     networks:
-      - nova-network
+      - nova-backend
     restart: unless-stopped
 
-  events-service:
+  analytics-service:
     build:
-      context: ..
-      dockerfile: backend/Dockerfile.template
+      context: .
+      dockerfile: Dockerfile.template
       args:
-        SERVICE_NAME: events-service
-    image: nova-events-service:latest
-    container_name: nova-events-service
+        SERVICE_NAME: analytics-service
+    image: nova-analytics-service:latest
+    container_name: nova-analytics-service
     environment:
-      HTTP_PORT: 8090
-      SERVER_HOST: 0.0.0.0
-      SERVER_PORT: 8090
-      GRPC_PORT: 9090
+      HTTP_PORT: 8094
+      GRPC_PORT: 9094
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/nova
+      REDIS_URL: redis://redis:6379
+      CLICKHOUSE_URL: http://clickhouse:8123
+      KAFKA_BROKERS: kafka:9092
+      RUST_LOG: info
+    env_file:
+      - .env
+    ports:
+      - "8094:8094"
+      - "9094:9094"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8094/api/v1/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - nova-backend
+    restart: unless-stopped
+
+  trust-safety-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.template
+      args:
+        SERVICE_NAME: trust-safety-service
+    image: nova-trust-safety-service:latest
+    container_name: nova-trust-safety-service
+    environment:
+      HTTP_PORT: 8095
+      GRPC_PORT: 9095
       DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/nova
       REDIS_URL: redis://redis:6379
       KAFKA_BROKERS: kafka:9092
@@ -527,8 +629,8 @@ services:
     env_file:
       - .env
     ports:
-      - "8090:8090"
-      - "9090:9090"
+      - "8095:8095"
+      - "9095:9095"
     depends_on:
       postgres:
         condition: service_healthy
@@ -537,12 +639,90 @@ services:
       kafka:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8090/api/v1/health"]
-      interval: 30s
-      timeout: 10s
+      test: ["CMD", "curl", "-f", "http://localhost:8095/api/v1/health"]
+      interval: 10s
+      timeout: 5s
       retries: 3
     networks:
-      - nova-network
+      - nova-backend
+    restart: unless-stopped
+
+  feature-store:
+    build:
+      context: .
+      dockerfile: Dockerfile.template
+      args:
+        SERVICE_NAME: feature-store
+    image: nova-feature-store:latest
+    container_name: nova-feature-store
+    environment:
+      HTTP_PORT: 8096
+      GRPC_PORT: 9096
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/nova
+      REDIS_URL: redis://redis:6379
+      CLICKHOUSE_URL: http://clickhouse:8123
+      KAFKA_BROKERS: kafka:9092
+      RUST_LOG: info
+    env_file:
+      - .env
+    ports:
+      - "8096:8096"
+      - "9096:9096"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8096/api/v1/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - nova-backend
+    restart: unless-stopped
+
+  # ============================================
+  # API Gateway
+  # ============================================
+
+  graphql-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile.template
+      args:
+        SERVICE_NAME: graphql-gateway
+    image: nova-graphql-gateway:latest
+    container_name: nova-graphql-gateway
+    environment:
+      HTTP_PORT: 8000
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/nova
+      REDIS_URL: redis://redis:6379
+      RUST_LOG: info
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    depends_on:
+      identity-service:
+        condition: service_healthy
+      user-service:
+        condition: service_healthy
+      content-service:
+        condition: service_healthy
+      feed-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - nova-backend
     restart: unless-stopped
 
 # ============================================
@@ -555,14 +735,18 @@ volumes:
     driver: local
   clickhouse_data:
     driver: local
+  neo4j_data:
+    driver: local
   kafka_data:
     driver: local
   elasticsearch_data:
+    driver: local
+  minio_data:
     driver: local
 
 # ============================================
 # Networks
 # ============================================
 networks:
-  nova-network:
+  nova-backend:
     driver: bridge

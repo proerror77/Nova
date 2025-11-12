@@ -1,9 +1,12 @@
 //! Content and feed schema
 //! ✅ P0-4: Relay cursor-based pagination support
+//! ✅ P0: Application-level timeout protection for multi-RPC resolvers
 
 use async_graphql::{Context, Object, Result as GraphQLResult, SimpleObject};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use std::time::Duration;
+use resilience::timeout::{with_timeout_result, TimeoutError};
 
 use crate::clients::ServiceClients;
 use crate::middleware::{check_user_authorization, get_authenticated_user_id};
@@ -188,51 +191,86 @@ impl ContentMutation {
         Ok(response.post.unwrap_or_default().into())
     }
 
+    /// Delete a post (with application-level timeout protection)
+    ///
+    /// ✅ P0: Wrapped entire resolver in 12s timeout to prevent cumulative timeout
+    /// from 2 sequential gRPC calls (each with 10s Channel timeout)
+    ///
+    /// Timeout hierarchy:
+    /// - HTTP request: 30s (actix-web)
+    /// - GraphQL resolver: 12s (application-level, THIS LEVEL)
+    /// - gRPC call: 10s (Channel-level)
     async fn delete_post(&self, ctx: &Context<'_>, id: String) -> GraphQLResult<bool> {
-        let clients = ctx
-            .data::<ServiceClients>()
-            .map_err(|_| "Service clients not available")?;
-
-        let mut client = clients.content_client();
-
-        // Get current user from context (from JWT token)
-        let current_user_id = get_authenticated_user_id(ctx)
-            .map_err(|e| async_graphql::Error::new(e))?;
-
-        // Step 1: Get post to verify ownership
-        let get_req = tonic::Request::new(crate::clients::proto::content::GetPostRequest {
-            post_id: id.clone(),
-        });
-
-        let post_response = client
-            .get_post(get_req)
-            .await
-            .map_err(|e| format!("Failed to get post: {}", e))?;
-
-        let post = post_response
-            .into_inner()
-            .post
-            .ok_or("Post not found")?;
-
-        // Step 2: Check authorization - user must be post owner
-        // Parse creator_id as UUID
-        let creator_uuid = uuid::Uuid::parse_str(&post.creator_id)
-            .map_err(|_| async_graphql::Error::new("Invalid post creator ID format"))?;
-
-        check_user_authorization(ctx, creator_uuid, "delete")
-            .map_err(|e| async_graphql::Error::new(e))?;
-
-        // Step 3: Proceed with deletion
-        let del_req = tonic::Request::new(crate::clients::proto::content::DeletePostRequest {
-            post_id: id,
-            deleted_by_id: current_user_id.to_string(),
-        });
-
-        client
-            .delete_post(del_req)
-            .await
-            .map_err(|e| format!("Failed to delete post: {}", e))?;
-
-        Ok(true)
+        // ✅ Wrap entire resolver in 12s timeout (allows 2 RPCs @ 5s each + overhead)
+        match with_timeout_result(
+            Duration::from_secs(12),
+            delete_post_impl(ctx, id)
+        ).await {
+            Ok(success) => Ok(success),
+            Err(TimeoutError::Elapsed(d)) => {
+                Err(async_graphql::Error::new(format!(
+                    "Delete post operation timed out after {:?}",
+                    d
+                )))
+            }
+            Err(TimeoutError::OperationFailed(msg)) => {
+                Err(async_graphql::Error::new(msg))
+            }
+        }
     }
+}
+
+/// Internal implementation of delete_post (separated for timeout wrapping)
+///
+/// ✅ P0: Uses circuit breaker protection for all gRPC calls via clients.call_content()
+async fn delete_post_impl(
+    ctx: &Context<'_>,
+    id: String,
+) -> Result<bool, String> {
+    let clients = ctx
+        .data::<ServiceClients>()
+        .map_err(|_| "Service clients not available".to_string())?;
+
+    // Get current user from context (from JWT token)
+    let current_user_id = get_authenticated_user_id(ctx)
+        .map_err(|e| e.to_string())?;
+
+    // Step 1: Get post to verify ownership (gRPC call 1 with circuit breaker)
+    let id_clone = id.clone();
+    let clients_clone = clients.clone();
+    let post = clients
+        .call_content(|| async move {
+            let mut client = clients_clone.content_client();
+            let get_req = tonic::Request::new(crate::clients::proto::content::GetPostRequest {
+                post_id: id_clone,
+            });
+            client.get_post(get_req).await
+        })
+        .await
+        .map_err(|e| format!("Failed to get post: {}", e))?
+        .post
+        .ok_or("Post not found".to_string())?;
+
+    // Step 2: Check authorization - user must be post owner
+    let creator_uuid = uuid::Uuid::parse_str(&post.creator_id)
+        .map_err(|_| "Invalid post creator ID format".to_string())?;
+
+    check_user_authorization(ctx, creator_uuid, "delete")
+        .map_err(|e| e.to_string())?;
+
+    // Step 3: Proceed with deletion (gRPC call 2 with circuit breaker)
+    let clients_clone = clients.clone();
+    clients
+        .call_content(|| async move {
+            let mut client = clients_clone.content_client();
+            let del_req = tonic::Request::new(crate::clients::proto::content::DeletePostRequest {
+                post_id: id,
+                deleted_by_id: current_user_id.to_string(),
+            });
+            client.delete_post(del_req).await
+        })
+        .await
+        .map_err(|e| format!("Failed to delete post: {}", e))?;
+
+    Ok(true)
 }

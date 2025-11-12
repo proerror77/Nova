@@ -53,8 +53,8 @@ pub enum TlsConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GrpcConfig {
-    /// Auth Service endpoint
-    pub auth_service_url: String,
+    /// Identity Service endpoint (renamed from auth-service)
+    pub identity_service_url: String,
 
     /// User Service endpoint
     pub user_service_url: String,
@@ -77,17 +77,23 @@ pub struct GrpcConfig {
     /// Notification Service endpoint
     pub notification_service_url: String,
 
-    /// Streaming Service endpoint
-    pub streaming_service_url: String,
+    /// Analytics Service endpoint (renamed from events-service)
+    pub analytics_service_url: String,
 
-    /// CDN Service endpoint
-    pub cdn_service_url: String,
+    /// Graph Service endpoint
+    pub graph_service_url: String,
 
-    /// Events Service endpoint
-    pub events_service_url: String,
+    /// Social Service endpoint
+    pub social_service_url: String,
 
-    /// Video Service endpoint
-    pub video_service_url: String,
+    /// Ranking Service endpoint
+    pub ranking_service_url: String,
+
+    /// Feature Store endpoint
+    pub feature_store_url: String,
+
+    /// Trust & Safety Service endpoint
+    pub trust_safety_service_url: String,
 
     /// gRPC connection timeout in seconds
     pub connection_timeout_secs: u64,
@@ -125,8 +131,8 @@ impl GrpcConfig {
         let tls = Self::load_tls_config(env)?;
 
         let config = Self {
-            auth_service_url: env::var("GRPC_AUTH_SERVICE_URL")
-                .unwrap_or_else(|_| "http://auth-service:9080".to_string()),
+            identity_service_url: env::var("GRPC_IDENTITY_SERVICE_URL")
+                .unwrap_or_else(|_| "http://identity-service:9080".to_string()),
             user_service_url: env::var("GRPC_USER_SERVICE_URL")
                 .unwrap_or_else(|_| "http://user-service:9080".to_string()),
             messaging_service_url: env::var("GRPC_MESSAGING_SERVICE_URL")
@@ -141,14 +147,18 @@ impl GrpcConfig {
                 .unwrap_or_else(|_| "http://media-service:9080".to_string()),
             notification_service_url: env::var("GRPC_NOTIFICATION_SERVICE_URL")
                 .unwrap_or_else(|_| "http://notification-service:9080".to_string()),
-            streaming_service_url: env::var("GRPC_STREAMING_SERVICE_URL")
-                .unwrap_or_else(|_| "http://streaming-service:9080".to_string()),
-            cdn_service_url: env::var("GRPC_CDN_SERVICE_URL")
-                .unwrap_or_else(|_| "http://cdn-service:9080".to_string()),
-            events_service_url: env::var("GRPC_EVENTS_SERVICE_URL")
-                .unwrap_or_else(|_| "http://events-service:9080".to_string()),
-            video_service_url: env::var("GRPC_VIDEO_SERVICE_URL")
-                .unwrap_or_else(|_| "http://video-service:9080".to_string()),
+            analytics_service_url: env::var("GRPC_ANALYTICS_SERVICE_URL")
+                .unwrap_or_else(|_| "http://analytics-service:9080".to_string()),
+            graph_service_url: env::var("GRPC_GRAPH_SERVICE_URL")
+                .unwrap_or_else(|_| "http://graph-service:9080".to_string()),
+            social_service_url: env::var("GRPC_SOCIAL_SERVICE_URL")
+                .unwrap_or_else(|_| "http://social-service:9006".to_string()),
+            ranking_service_url: env::var("GRPC_RANKING_SERVICE_URL")
+                .unwrap_or_else(|_| "http://ranking-service:9088".to_string()),
+            feature_store_url: env::var("GRPC_FEATURE_STORE_URL")
+                .unwrap_or_else(|_| "http://feature-store:9089".to_string()),
+            trust_safety_service_url: env::var("GRPC_TRUST_SAFETY_SERVICE_URL")
+                .unwrap_or_else(|_| "http://trust-safety-service:9091".to_string()),
             connection_timeout_secs: env::var("GRPC_CONNECTION_TIMEOUT_SECS")
                 .ok()
                 .and_then(|s| s.parse().ok())
@@ -332,7 +342,7 @@ impl GrpcConfig {
     /// Configuration for development/testing
     pub fn development() -> Self {
         Self {
-            auth_service_url: "http://localhost:9080".to_string(),
+            identity_service_url: "http://localhost:9080".to_string(),
             user_service_url: "http://localhost:9081".to_string(),
             messaging_service_url: "http://localhost:9082".to_string(),
             content_service_url: "http://localhost:9083".to_string(),
@@ -340,10 +350,12 @@ impl GrpcConfig {
             search_service_url: "http://localhost:9085".to_string(),
             media_service_url: "http://localhost:9086".to_string(),
             notification_service_url: "http://localhost:9087".to_string(),
-            streaming_service_url: "http://localhost:9088".to_string(),
-            cdn_service_url: "http://localhost:9089".to_string(),
-            events_service_url: "http://localhost:9090".to_string(),
-            video_service_url: "http://localhost:9091".to_string(),
+            analytics_service_url: "http://localhost:9090".to_string(),
+            graph_service_url: "http://localhost:50051".to_string(),
+            social_service_url: "http://localhost:9006".to_string(),
+            ranking_service_url: "http://localhost:9088".to_string(),
+            feature_store_url: "http://localhost:9089".to_string(),
+            trust_safety_service_url: "http://localhost:9091".to_string(),
             connection_timeout_secs: 10,
             request_timeout_secs: 30,
             max_concurrent_streams: 1000,

@@ -621,7 +621,10 @@ pub async fn start_grpc_server(
                 tracing::info!("Development mode: Starting without TLS (NOT FOR PRODUCTION)");
                 None
             } else {
-                return Err(e).context("Production requires mTLS - GRPC_SERVER_CERT_PATH must be set");
+                return Err(format!(
+                    "Production requires mTLS - GRPC_SERVER_CERT_PATH must be set: {}",
+                    e
+                ).into());
             }
         }
     };

@@ -1,11 +1,38 @@
 # Nova Services - Unified Dockerfile Template
-# This template builds all 11 Rust microservices with the same multi-stage build process
-# Usage: docker build --build-arg SERVICE_NAME=auth-service -f Dockerfile.template -t nova-auth-service:latest .
+# Version: 2.0
+# Last Updated: 2025-11-12
+# Optimizations: cargo-chef caching, LTO, minimal runtime image
+# Final image size target: <200MB
+#
+# This template builds all 15 Rust microservices with the same multi-stage build process
+# Usage: docker build --build-arg SERVICE_NAME=identity-service -f Dockerfile.template -t nova-identity-service:latest .
 
-# ============================================
-# Stage 1: Builder - Compile Rust binaries
-# ============================================
-FROM rust:1.86-slim AS builder
+# =============================================================================
+# Stage 1: Planner - Generate dependency manifest for caching
+# =============================================================================
+FROM rust:1.76-slim AS planner
+
+# Install cargo-chef for dependency caching
+RUN cargo install cargo-chef
+
+WORKDIR /app
+
+# Copy entire workspace to plan dependencies
+COPY . .
+
+# Generate recipe.json for dependency layer caching
+RUN cargo chef prepare --recipe-path recipe.json
+
+# =============================================================================
+# Stage 2: Builder - Compile service with optimizations
+# =============================================================================
+FROM rust:1.76-slim AS builder
+
+# Build argument for service name (required)
+ARG SERVICE_NAME
+
+# Verify SERVICE_NAME is provided
+RUN test -n "$SERVICE_NAME" || (echo "ERROR: SERVICE_NAME build arg is required" && exit 1)
 
 # Install build dependencies
 RUN apt-get update && apt-get install -y \
@@ -14,60 +41,88 @@ RUN apt-get update && apt-get install -y \
     libssl-dev \
     cmake \
     protobuf-compiler \
+    libsasl2-dev \
     && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /build
+# Install cargo-chef
+RUN cargo install cargo-chef
 
-# Accept SERVICE_NAME as build argument (e.g., "auth-service")
-ARG SERVICE_NAME
-ENV SERVICE_NAME=${SERVICE_NAME}
+WORKDIR /app
 
-# Copy workspace manifests first for better layer caching
-COPY Cargo.toml Cargo.lock ./
-COPY backend/ ./backend/
+# Copy dependency manifest from planner
+COPY --from=planner /app/recipe.json recipe.json
 
-# Build the specific service in release mode
-# This leverages cargo's workspace caching for shared dependencies
+# Build dependencies (cached layer if Cargo.lock unchanged)
+# This is the slowest step but benefits most from caching
+RUN cargo chef cook --release --recipe-path recipe.json
+
+# Copy workspace source code
+COPY . .
+
+# Build the service with maximum optimizations
+# - LTO (Link-Time Optimization) reduces binary size by 30-40%
+# - codegen-units=1 enables more aggressive optimization
+# - strip removes debug symbols (10-20% smaller)
+# Note: LTO and codegen-units are already configured in Cargo.toml [profile.release]
 RUN cargo build --release --package ${SERVICE_NAME}
 
-# ============================================
-# Stage 2: Runtime - Minimal production image
-# ============================================
-FROM debian:bookworm-slim
+# Strip binary to remove remaining symbols (if not already stripped)
+RUN strip /app/target/release/${SERVICE_NAME} 2>/dev/null || true
+
+# Verify binary was created and show size
+RUN ls -lh /app/target/release/${SERVICE_NAME}
+
+# =============================================================================
+# Stage 3: Runtime - Minimal Debian-based final image
+# =============================================================================
+FROM debian:bookworm-slim AS runtime
+
+# Build argument for service name
+ARG SERVICE_NAME
 
 # Install runtime dependencies only
 RUN apt-get update && apt-get install -y \
     ca-certificates \
+    curl \
     libssl3 \
     && rm -rf /var/lib/apt/lists/*
 
-# Create non-root user for security
+# Create non-root user for security (uid=1000)
 RUN useradd -m -u 1000 -s /bin/bash nova
+
 WORKDIR /app
 
-# Accept SERVICE_NAME again for the final image
-ARG SERVICE_NAME
-ENV SERVICE_NAME=${SERVICE_NAME}
+# Copy compiled binary from builder stage
+COPY --from=builder /app/target/release/${SERVICE_NAME} /app/app
 
-# Copy the compiled binary from builder stage
-COPY --from=builder /build/target/release/${SERVICE_NAME} /app/service
+# Copy migrations directory if it exists (for database services)
+# Use conditional copy to avoid errors for services without migrations
+COPY --from=builder /app/${SERVICE_NAME}/migrations ./migrations 2>/dev/null || true
 
-# Copy migrations directory (shared by all services)
-COPY --from=builder /build/backend/migrations /app/migrations
-
-# Set ownership to non-root user
+# Set ownership to nova user
 RUN chown -R nova:nova /app
+
+# Switch to non-root user
 USER nova
 
-# Health check endpoint (unified for all services)
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD curl -f http://localhost:${HTTP_PORT:-8080}/api/v1/health || exit 1
+# Expose common port ranges
+# HTTP: 8000-8099 (service-specific ports defined in k8s manifests)
+# gRPC: 9000-9099 (HTTP_PORT + 1000 by convention)
+EXPOSE 8000-8099 9000-9099
 
-# Expose HTTP port (default: 8080, override via environment variable)
-EXPOSE ${HTTP_PORT:-8080}
+# Health check configuration
+# Override HTTP_PORT via environment variable (default: 8080)
+ENV HTTP_PORT=8080
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 --start-period=10s \
+    CMD curl -f http://localhost:${HTTP_PORT}/api/v1/health || exit 1
 
-# Expose gRPC port (default: HTTP_PORT + 1000)
-# This is automatically calculated at runtime, no need to expose explicitly here
+# Run the service binary
+CMD ["/app/app"]
 
-# Run the service
-CMD ["/app/service"]
+# =============================================================================
+# Metadata
+# =============================================================================
+LABEL org.opencontainers.image.title="Nova ${SERVICE_NAME}"
+LABEL org.opencontainers.image.version="2.0.0"
+LABEL org.opencontainers.image.vendor="Nova Team"
+LABEL org.opencontainers.image.description="Nova Backend Microservice: ${SERVICE_NAME}"

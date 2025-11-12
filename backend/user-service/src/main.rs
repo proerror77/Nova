@@ -45,9 +45,7 @@ use user_service::{
     services::{
         cdc::{CdcConsumer, CdcConsumerConfig},
         events::{EventDeduplicator, EventsConsumer, EventsConsumerConfig},
-        graph::GraphService,
         kafka_producer::EventProducer,
-        social_graph_sync::SocialGraphSyncConsumer,
     },
 };
 
@@ -401,43 +399,7 @@ async fn main() -> io::Result<()> {
     let auth_client_data = web::Data::new(auth_client.clone()); // Now Option<Arc<AuthServiceClient>>
     let health_checker_data = web::Data::new(health_checker.clone());
 
-    // Initialize Neo4j Graph service (optional)
-    let graph_service = match GraphService::new(&config.graph).await {
-        Ok(svc) => {
-            if svc.is_enabled() {
-                tracing::info!("Neo4j graph service enabled");
-            } else {
-                tracing::info!("Neo4j graph service disabled");
-            }
-            svc
-        }
-        Err(e) => {
-            tracing::warn!("Neo4j service init failed: {} (graph disabled)", e);
-            match GraphService::new(&user_service::config::GraphConfig {
-                enabled: false,
-                neo4j_uri: String::new(),
-                neo4j_user: String::new(),
-                neo4j_password: String::new(),
-            })
-            .await
-            {
-                Ok(svc) => svc,
-                Err(e2) => {
-                    tracing::error!(
-                        "GraphService fallback initialization failed (should never happen): {:#}",
-                        e2
-                    );
-                    eprintln!(
-                        "FATAL: GraphService disabled mode initialization failed: {}",
-                        e2
-                    );
-                    std::process::exit(1);
-                }
-            }
-        }
-    };
-    let graph_service_clone = graph_service.clone();
-    let graph_data = web::Data::new(graph_service);
+    // Neo4j Graph service removed - now handled by graph-service (port 9080)
 
     // ========================================
     // Initialize Kafka producer for events (needed by multiple services)
@@ -450,6 +412,54 @@ async fn main() -> io::Result<()> {
             std::process::exit(1);
         }
     });
+
+    // ========================================
+    // Initialize Transactional Outbox components
+    // ========================================
+    use transactional_outbox::{KafkaOutboxPublisher, OutboxProcessor, SqlxOutboxRepository};
+    use rdkafka::ClientConfig;
+
+    // Create outbox repository
+    let outbox_repo = Arc::new(SqlxOutboxRepository::new(db_pool.clone()));
+    tracing::info!("Outbox repository initialized");
+
+    // Create Kafka producer with idempotent settings for Outbox
+    let kafka_outbox_producer: rdkafka::producer::FutureProducer = ClientConfig::new()
+        .set("bootstrap.servers", &config.kafka.brokers)
+        .set("enable.idempotence", "true")  // ✅ Critical for exactly-once
+        .set("acks", "all")                  // ✅ Wait for all replicas
+        .set("max.in.flight.requests.per.connection", "5")
+        .set("retries", "10")
+        .create()
+        .map_err(|e| {
+            tracing::error!("Failed to create Kafka outbox producer: {:#}", e);
+            std::io::Error::new(std::io::ErrorKind::Other, format!("Kafka outbox producer init failed: {}", e))
+        })?;
+    tracing::info!("Kafka outbox producer initialized with idempotence enabled");
+
+    // Create outbox publisher
+    let outbox_publisher = Arc::new(KafkaOutboxPublisher::new(
+        kafka_outbox_producer,
+        "nova".to_string(),  // topic prefix: "nova.user.events"
+    ));
+    tracing::info!("Outbox publisher initialized");
+
+    // Create and start outbox processor
+    let processor = OutboxProcessor::new(
+        outbox_repo.clone(),
+        outbox_publisher,
+        100,                          // batch_size
+        std::time::Duration::from_secs(5),       // poll_interval
+        5,                            // max_retries
+    );
+
+    // Start processor in background
+    let outbox_handle = tokio::spawn(async move {
+        if let Err(e) = processor.start().await {
+            tracing::error!("Outbox processor error: {:?}", e);
+        }
+    });
+    tracing::info!("Outbox processor started (polling every 5 seconds)");
 
     // ========================================
     // Initialize events state (producer already created above)
@@ -476,10 +486,10 @@ async fn main() -> io::Result<()> {
     // Initialize additional handler states with PostgreSQL circuit breaker
     // ========================================
     // posts, videos, likes, comments states REMOVED - moved to content-service and media-service
+    // relationships_state REMOVED - relationship endpoints moved to graph-service (port 9080)
 
-    let relationships_state = web::Data::new(handlers::relationships::RelationshipsHandlerState {
-        postgres_cb: postgres_circuit_breaker.clone(),
-    });
+    // Wrap outbox_repo for handler injection
+    let outbox_repo_data = web::Data::new(outbox_repo.clone());
 
     // ========================================
     // Initialize ClickHouse-dependent background pipelines
@@ -563,26 +573,7 @@ async fn main() -> io::Result<()> {
         (None, None)
     };
 
-    // ========================================
-    // Initialize social graph sync consumer (Neo4j)
-    // ========================================
-    let _social_graph_sync_handle = match SocialGraphSyncConsumer::new(
-        &config.kafka,
-        Arc::new(graph_service_clone),
-        Arc::new(event_producer.as_ref().clone()),
-    )
-    .await
-    {
-        Err(e) => {
-            tracing::warn!("Failed to create social graph sync consumer: {}", e);
-            None
-        }
-        Ok(consumer) => {
-            let handle = Arc::new(consumer).start();
-            tracing::info!("Social graph sync consumer spawned");
-            Some(handle)
-        }
-    };
+    // Social graph sync consumer removed - now handled by graph-service (port 9080)
 
     // S3 client initialization removed - moved to media-service (port 8082)
     // Use media-service API for image upload and storage operations
@@ -759,7 +750,7 @@ async fn main() -> io::Result<()> {
         let health_checker_data = health_checker_data.clone();
         let health_state = health_state.clone();
         let events_state = events_state.clone();
-        let graph_data = graph_data.clone();
+        // graph_data removed - graph logic moved to graph-service (port 9080)
         let global_rate_limit = global_rate_limit.clone();
         // Build CORS configuration from allowed_origins
         let cors_builder = Cors::default();
@@ -791,9 +782,10 @@ async fn main() -> io::Result<()> {
             .app_data(health_state.clone())
             .app_data(health_checker_data.clone())
             .app_data(events_state.clone())
-            .app_data(graph_data.clone())
+            // graph_data REMOVED - graph logic moved to graph-service (port 9080)
             // posts_state, videos_state, likes_state, comments_state REMOVED - moved to content/media services
-            .app_data(relationships_state.clone())
+            // relationships_state removed - moved to graph-service (port 9080)
+            .app_data(outbox_repo_data.clone())  // Add outbox repository for handlers
             // Circuit breakers for critical service protection
             .app_data(web::Data::new(clickhouse_circuit_breaker.clone()))
             .app_data(web::Data::new(kafka_circuit_breaker.clone()))
@@ -929,7 +921,7 @@ async fn main() -> io::Result<()> {
                     // Users endpoints (place after /users/me to avoid route collision)
                     .service(
                         web::scope("/users")
-                            .app_data(graph_data.clone())
+                            // graph_data removed - use graph-service gRPC client if needed
                             // Public endpoints
                             .route("/{id}", web::get().to(handlers::get_user))
                             .route(
@@ -940,19 +932,14 @@ async fn main() -> io::Result<()> {
                             .service(
                                 web::scope("")
                                     .wrap(JwtAuthMiddleware)
-                                    .service(
-                                        web::resource("/{id}/follow")
-                                            .route(web::post().to(handlers::follow_user))
-                                            .route(web::delete().to(handlers::unfollow_user)),
-                                    )
+                                    // /{id}/follow REMOVED - use graph-service gRPC API (port 9080)
                                     .service(
                                         web::resource("/{id}/block")
                                             .route(web::post().to(preferences_block_user))
                                             .route(web::delete().to(preferences_unblock_user)),
                                     ),
                             )
-                            .route("/{id}/followers", web::get().to(handlers::get_followers))
-                            .route("/{id}/following", web::get().to(handlers::get_following)),
+                            // /{id}/followers and /{id}/following REMOVED - use graph-service gRPC API (port 9080)
                     )
                     // Posts and comments endpoints REMOVED - moved to content-service (port 8081)
                     // Discover endpoints REMOVED - moved to feed-service (port 8089)
@@ -1081,6 +1068,20 @@ async fn main() -> io::Result<()> {
     // Cleanup: Graceful worker shutdown
     // ========================================
     tracing::info!("Server shutting down. Stopping background services...");
+
+    // Stop outbox processor
+    outbox_handle.abort();
+    match tokio::time::timeout(std::time::Duration::from_secs(5), outbox_handle).await {
+        Ok(Ok(())) => {
+            tracing::info!("Outbox processor shut down gracefully");
+        }
+        Ok(Err(_)) => {
+            tracing::info!("Outbox processor aborted");
+        }
+        Err(_) => {
+            tracing::warn!("Outbox processor did not shut down within timeout");
+        }
+    }
 
     if let Some(handle) = cdc_handle {
         handle.abort();

@@ -2,20 +2,15 @@
 ///
 /// This module contains handlers for:
 /// - Posts: Create, read, update, delete posts with media attachments
-/// - Comments: Create, read, update, delete comments on posts
 /// - Stories: Create, read, update, delete temporary visual content
 ///
+/// Note: Comment/like/share operations are handled by social-service via gRPC.
 /// Extracted from user-service as part of P1.2 service splitting.
-pub mod comments;
 pub mod feed;
 pub mod posts;
 pub mod stories;
 
 // Re-export handler functions at module level
-pub use comments::{
-    create_comment, delete_comment, get_comment, get_comment_replies, get_post_comments,
-    update_comment,
-};
 pub use feed::get_feed;
 pub use posts::{create_post, delete_post, get_post, get_user_posts, update_post_status};
 pub use stories::{

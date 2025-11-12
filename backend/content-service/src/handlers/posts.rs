@@ -1,12 +1,14 @@
 /// Post handlers - HTTP endpoints for post operations
 use crate::cache::ContentCache;
-use crate::error::Result;
+use crate::error::{AppError, Result};
 use crate::middleware::UserId;
 use crate::services::PostService;
 use actix_web::{web, HttpResponse};
+use grpc_clients::GrpcClientPool;
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use std::sync::Arc;
+use transactional_outbox::SqlxOutboxRepository;
 use uuid::Uuid;
 
 #[derive(Debug, Deserialize)]
@@ -30,14 +32,81 @@ pub struct PostResponse {
 pub async fn create_post(
     pool: web::Data<PgPool>,
     cache: web::Data<Arc<ContentCache>>,
+    outbox_repo: web::Data<Arc<SqlxOutboxRepository>>,
+    grpc_pool: web::Data<Arc<GrpcClientPool>>,
     user_id: UserId,
     req: web::Json<CreatePostRequest>,
 ) -> Result<HttpResponse> {
-    let service = PostService::with_cache((**pool).clone(), cache.get_ref().clone());
-
     // Use default values for text-only posts
     let image_key = req.image_key.as_deref().unwrap_or("text-only");
     let content_type = req.content_type.as_deref().unwrap_or("text");
+
+    // ✅ Phase F: Integrate Trust & Safety Service for content moderation
+    // Call trust-safety-service to moderate content before creating post
+    if let Some(caption_text) = &req.caption {
+        use grpc_clients::nova::trust_safety::{
+            ModerateContentRequest, ContentType as TsContentType, ModerationContext,
+        };
+
+        let mut trust_safety_client = grpc_pool.trust_safety();
+
+        let moderation_req = ModerateContentRequest {
+            content_id: Uuid::new_v4().to_string(), // Temporary ID for moderation
+            content_type: TsContentType::Post as i32,
+            text: caption_text.clone(),
+            image_urls: vec![], // TODO: Add image URLs when available
+            user_id: user_id.0.to_string(),
+            context: Some(ModerationContext {
+                seconds_since_last_post: 0, // TODO: Calculate from user's last post
+                recent_post_count: 0,       // TODO: Query recent post count
+                account_age_days: 0,        // TODO: Calculate from user creation date
+                is_verified: false,         // TODO: Get from user service
+            }),
+        };
+
+        match trust_safety_client.moderate_content(moderation_req).await {
+            Ok(response) => {
+                let moderation_result = response.into_inner();
+
+                if !moderation_result.approved {
+                    // Content rejected by moderation
+                    tracing::warn!(
+                        user_id = %user_id.0,
+                        violations = ?moderation_result.violations,
+                        "Content rejected by Trust & Safety moderation"
+                    );
+
+                    return Err(AppError::BadRequest(format!(
+                        "Content violates community guidelines: {}. Violations: {}",
+                        moderation_result.rejection_reason,
+                        moderation_result.violations.join(", ")
+                    )));
+                }
+
+                // Log moderation approval
+                tracing::info!(
+                    user_id = %user_id.0,
+                    moderation_id = %moderation_result.moderation_id,
+                    "Content approved by Trust & Safety moderation"
+                );
+            }
+            Err(e) => {
+                // Trust-safety service unavailable - log warning but allow post creation
+                // This provides graceful degradation when trust-safety-service is not deployed
+                tracing::warn!(
+                    user_id = %user_id.0,
+                    error = %e,
+                    "Trust & Safety service unavailable - proceeding without moderation (graceful degradation)"
+                );
+            }
+        }
+    }
+
+    let service = PostService::with_outbox(
+        (**pool).clone(),
+        cache.get_ref().clone(),
+        outbox_repo.get_ref().clone(),
+    );
 
     let post = service
         .create_post(user_id.0, req.caption.as_deref(), image_key, content_type)
@@ -83,11 +152,16 @@ pub struct UpdatePostStatusRequest {
 pub async fn update_post_status(
     pool: web::Data<PgPool>,
     cache: web::Data<Arc<ContentCache>>,
+    outbox_repo: web::Data<Arc<SqlxOutboxRepository>>,
     post_id: web::Path<Uuid>,
     user_id: UserId,
     req: web::Json<UpdatePostStatusRequest>,
 ) -> Result<HttpResponse> {
-    let service = PostService::with_cache((**pool).clone(), cache.get_ref().clone());
+    let service = PostService::with_outbox(
+        (**pool).clone(),
+        cache.get_ref().clone(),
+        outbox_repo.get_ref().clone(),
+    );
     let updated = service
         .update_post_status(*post_id, user_id.0, &req.status)
         .await?;
@@ -103,10 +177,15 @@ pub async fn update_post_status(
 pub async fn delete_post(
     pool: web::Data<PgPool>,
     cache: web::Data<Arc<ContentCache>>,
+    outbox_repo: web::Data<Arc<SqlxOutboxRepository>>,
     post_id: web::Path<Uuid>,
     user_id: UserId,
 ) -> Result<HttpResponse> {
-    let service = PostService::with_cache((**pool).clone(), cache.get_ref().clone());
+    let service = PostService::with_outbox(
+        (**pool).clone(),
+        cache.get_ref().clone(),
+        outbox_repo.get_ref().clone(),
+    );
     let deleted = service.delete_post(*post_id, user_id.0).await?;
 
     if deleted {

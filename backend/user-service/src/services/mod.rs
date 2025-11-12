@@ -11,7 +11,7 @@ pub mod cdc;
 pub mod events;
 // pub mod experiments; // REMOVED - moved to feed-service (port 8089) [DELETED]
 // pub mod ffmpeg_optimizer; // REMOVED - moved to media-service (port 8082) [DELETED]
-pub mod graph;
+// pub mod graph; // REMOVED - moved to graph-service (port 9080) [DELETED]
 // pub mod image_processing; // REMOVED - moved to media-service (port 8082) [DELETED]
 // pub mod job_queue; // REMOVED - moved to content-service (port 8081) [DELETED]
 // pub mod jwt_key_rotation; // REMOVED - moved to auth-service (port 8084) [DELETED]
@@ -25,7 +25,7 @@ pub mod moderation_service;
 pub mod query_profiler;
 // pub mod ranking_engine; // REMOVED - moved to feed-service (port 8089) [DELETED]
 pub mod redis_job;
-pub mod social_graph_sync;
+// pub mod social_graph_sync; // REMOVED - moved to graph-service (port 9080) [DELETED]
 pub mod storage;
 // pub mod resumable_upload_service; // REMOVED - moved to media-service (port 8082) [DELETED]
 // pub mod s3_service; // REMOVED - moved to media-service (port 8082) [DELETED]
@@ -66,8 +66,8 @@ pub mod token_revocation;
 // - Recommendation engine moved to feed-service
 //
 // GRAPH & SOCIAL:
-// - graph: Neo4j integration for social graph (follows, suggestions, mutual connections)
-// - social_graph_sync: Kafka consumer for syncing social events (follow/unfollow) to Neo4j
+// - graph: REMOVED - moved to graph-service (port 9080) [DELETED]
+// - social_graph_sync: REMOVED - moved to graph-service (port 9080) [DELETED]
 //
 // COMMON SERVICES:
 // - cdc: Change Data Capture consumer (PostgreSQL → Kafka → ClickHouse sync)

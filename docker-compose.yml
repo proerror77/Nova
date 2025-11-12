@@ -371,50 +371,101 @@ services:
       retries: 3
 
   # ============================================
-  # Auth Service (Axum - gRPC & HTTP)
+  # Identity Service (gRPC - Replaces auth-service, Phase G)
   # ============================================
-  auth-service:
+  identity-service:
     build:
-      context: ./backend/auth-service
-      dockerfile: ../Dockerfile
+      context: ./backend
+      dockerfile: Dockerfile
       target: runtime
     restart: unless-stopped
+    env_file:
+      - .env
     environment:
       # Application
       APP_ENV: development
-      APP_HOST: 0.0.0.0
-      APP_PORT: 8084
-      RUST_LOG: debug
+      SERVER_HOST: 0.0.0.0
+      SERVER_PORT: 9080
+      RUST_LOG: identity_service=debug,info
 
       # Database
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-nova_auth}
       DATABASE_MAX_CONNECTIONS: 10
+      DATABASE_MIN_CONNECTIONS: 2
+      DATABASE_CONNECTION_TIMEOUT: 5
+      DATABASE_IDLE_TIMEOUT: 300
+      DATABASE_ACQUIRE_TIMEOUT: 10
 
-      # JWT
-      JWT_SECRET: ${JWT_SECRET:-dev_secret_change_in_production_32chars}
+      # Redis
+      REDIS_URL: redis://:${REDIS_PASSWORD:-redis123}@redis:6379/0
+      REDIS_POOL_SIZE: 10
 
-      # Jaeger tracing
+      # Kafka
+      KAFKA_BROKERS: kafka:9092
+      KAFKA_TOPIC_PREFIX: identity
+      KAFKA_PRODUCER_TIMEOUT: 30
+
+      # JWT (RS256 keys loaded from AWS Secrets Manager or env vars)
+      JWT_SIGNING_KEY: ${JWT_PRIVATE_KEY:-}
+      JWT_VALIDATION_KEY: ${JWT_PUBLIC_KEY:-}
+      JWT_ALGORITHM: RS256
+      JWT_ISSUER: nova-identity-service
+      JWT_AUDIENCE: nova-api
+      JWT_EXPIRY_SECONDS: 900
+
+      # Email (SMTP)
+      EMAIL_FROM_ADDRESS: ${EMAIL_FROM_ADDRESS:-noreply@nova.local}
+      EMAIL_FROM_NAME: ${EMAIL_FROM_NAME:-Nova Platform}
+      EMAIL_SMTP_HOST: ${EMAIL_SMTP_HOST:-}
+      EMAIL_SMTP_PORT: ${EMAIL_SMTP_PORT:-587}
+      EMAIL_SMTP_USERNAME: ${EMAIL_SMTP_USERNAME:-}
+      EMAIL_SMTP_PASSWORD: ${EMAIL_SMTP_PASSWORD:-}
+      EMAIL_SMTP_TLS: ${EMAIL_SMTP_TLS:-true}
+
+      # OAuth Providers
+      OAUTH_GOOGLE_CLIENT_ID: ${OAUTH_GOOGLE_CLIENT_ID:-}
+      OAUTH_GOOGLE_CLIENT_SECRET: ${OAUTH_GOOGLE_CLIENT_SECRET:-}
+      OAUTH_GOOGLE_REDIRECT_URI: ${OAUTH_GOOGLE_REDIRECT_URI:-http://localhost:3000/auth/google/callback}
+
+      OAUTH_GITHUB_CLIENT_ID: ${OAUTH_GITHUB_CLIENT_ID:-}
+      OAUTH_GITHUB_CLIENT_SECRET: ${OAUTH_GITHUB_CLIENT_SECRET:-}
+      OAUTH_GITHUB_REDIRECT_URI: ${OAUTH_GITHUB_REDIRECT_URI:-http://localhost:3000/auth/github/callback}
+
+      OAUTH_APPLE_CLIENT_ID: ${OAUTH_APPLE_CLIENT_ID:-}
+      OAUTH_APPLE_TEAM_ID: ${OAUTH_APPLE_TEAM_ID:-}
+      OAUTH_APPLE_KEY_ID: ${OAUTH_APPLE_KEY_ID:-}
+      OAUTH_APPLE_PRIVATE_KEY: ${OAUTH_APPLE_PRIVATE_KEY:-}
+      OAUTH_APPLE_REDIRECT_URI: ${OAUTH_APPLE_REDIRECT_URI:-http://localhost:3000/auth/apple/callback}
+
+      OAUTH_WECHAT_APP_ID: ${OAUTH_WECHAT_APP_ID:-}
+      OAUTH_WECHAT_APP_SECRET: ${OAUTH_WECHAT_APP_SECRET:-}
+      OAUTH_WECHAT_REDIRECT_URI: ${OAUTH_WECHAT_REDIRECT_URI:-http://localhost:3000/auth/wechat/callback}
+
+      # AWS Secrets Manager (Production)
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      AWS_SECRETS_JWT_NAME: ${AWS_SECRETS_JWT_NAME:-}
+
+      # Observability
       OTEL_EXPORTER_JAEGER_AGENT_HOST: jaeger
       OTEL_EXPORTER_JAEGER_AGENT_PORT: 6831
 
-    # NOTE: Internal port 8084 is NOT exposed to host
-    # Access via API Gateway (api-gateway:3000) instead
-    # Uncomment below for direct debugging access:
-    # ports:
-    #   - "${AUTH_SERVICE_PORT:-8084}:8084"
+    ports:
+      - "${IDENTITY_SERVICE_PORT:-9080}:9080"
     depends_on:
       postgres:
         condition: service_healthy
-      jaeger:
+      redis:
         condition: service_healthy
+      kafka:
+        condition: service_started
     networks:
       - nova-network
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8084/health || exit 1"]
+      test: ["CMD-SHELL", "grpc_health_probe -addr=localhost:9080 || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 10s
+      start_period: 15s
 
   # ============================================
   # Messaging Service (WS Gateway for DMs)
@@ -753,25 +804,7 @@ services:
   # ============================================
   # Milvus Vector Database
   # ============================================
-  milvus:
-    image: milvusdb/milvus:latest
-    restart: unless-stopped
-    environment:
-      COMMON_STORAGETYPE: local
-      # Use SQLite for embedded storage (suitable for development)
-      # For production, use distributed storage (S3, MinIO, etc.)
-    ports:
-      - "19530:19530"  # Milvus gRPC
-      - "9091:9091"    # Milvus HTTP REST API
-    volumes:
-      - milvus_data:/var/lib/milvus
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9091/healthz"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - nova-network
+  # milvus: (removed duplicate definition, using the one at line 612 instead)
 
   # ============================================
   # MailHog (Email testing - development only)

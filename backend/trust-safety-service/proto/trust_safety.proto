@@ -1,0 +1,151 @@
+syntax = "proto3";
+package nova.trust_safety.v1;
+
+// Trust & Safety Service - Centralized UGC Moderation
+service TrustSafetyService {
+  // Moderate content before publishing (comprehensive check)
+  rpc ModerateContent(ModerateContentRequest) returns (ModerateContentResponse);
+
+  // Quick check if content is safe (lighter weight)
+  rpc CheckContent(CheckContentRequest) returns (CheckContentResponse);
+
+  // Submit appeal for rejected content
+  rpc SubmitAppeal(SubmitAppealRequest) returns (SubmitAppealResponse);
+
+  // Review appeal (admin only)
+  rpc ReviewAppeal(ReviewAppealRequest) returns (ReviewAppealResponse);
+
+  // Get moderation history for content/user
+  rpc GetModerationHistory(GetModerationHistoryRequest) returns (GetModerationHistoryResponse);
+}
+
+// ==================== Moderation Requests ====================
+
+message ModerateContentRequest {
+  string content_id = 1;          // Unique content identifier
+  ContentType content_type = 2;   // Type of content
+  string text = 3;                // Text content to moderate
+  repeated string image_urls = 4; // Images to check for NSFW
+  string user_id = 5;             // User ID for spam detection context
+  ModerationContext context = 6;  // Additional context for spam detection
+}
+
+message CheckContentRequest {
+  string text = 1;                // Text to check
+  repeated string image_urls = 2; // Images to check
+}
+
+message GetModerationHistoryRequest {
+  string user_id = 1;    // Optional: filter by user
+  string content_id = 2; // Optional: filter by content
+  int32 limit = 3;       // Max results (default: 50)
+  int32 offset = 4;      // Pagination offset
+}
+
+// ==================== Moderation Context ====================
+
+message ModerationContext {
+  int64 seconds_since_last_post = 1; // Time since user's last post
+  int32 recent_post_count = 2;       // Posts in last hour
+  int64 account_age_days = 3;        // Account age in days
+  bool is_verified = 4;              // Is verified user
+}
+
+// ==================== Moderation Responses ====================
+
+message ModerateContentResponse {
+  bool approved = 1;                  // Auto-approved (< threshold)
+  RiskScore risk_score = 2;           // Detailed risk scores
+  repeated string violations = 3;      // List of violations found
+  string moderation_id = 4;           // Moderation log ID
+  string rejection_reason = 5;        // Human-readable reason
+}
+
+message CheckContentResponse {
+  bool is_safe = 1;                   // Quick safety check
+  double overall_score = 2;           // 0.0 - 1.0 (higher = riskier)
+  repeated string flags = 3;          // Quick flags (nsfw, toxic, spam)
+}
+
+message GetModerationHistoryResponse {
+  repeated ModerationLog logs = 1;
+  int32 total_count = 2;
+}
+
+// ==================== Risk Scores ====================
+
+message RiskScore {
+  double nsfw_score = 1;      // 0.0 - 1.0 (NSFW probability)
+  double toxicity_score = 2;  // 0.0 - 1.0 (toxic text)
+  double spam_score = 3;      // 0.0 - 1.0 (spam likelihood)
+  double overall_score = 4;   // 0.0 - 1.0 (combined risk)
+
+  // Detailed breakdown
+  repeated string nsfw_categories = 5;  // e.g., ["nudity", "violence"]
+  repeated string toxic_keywords = 6;   // Matched sensitive words
+  repeated string spam_indicators = 7;  // e.g., ["repeated_content", "new_account"]
+}
+
+// ==================== Moderation Log ====================
+
+message ModerationLog {
+  string id = 1;
+  string content_id = 2;
+  string content_type = 3;
+  string user_id = 4;
+  RiskScore risk_score = 5;
+  bool approved = 6;
+  string rejection_reason = 7;
+  string created_at = 8; // ISO 8601 timestamp
+}
+
+// ==================== Appeal System ====================
+
+message SubmitAppealRequest {
+  string moderation_id = 1; // Reference to moderation log
+  string user_id = 2;       // User submitting appeal
+  string reason = 3;        // Appeal reason (user-provided)
+}
+
+message SubmitAppealResponse {
+  string appeal_id = 1;
+  AppealStatus status = 2;
+  string created_at = 3;
+}
+
+message ReviewAppealRequest {
+  string appeal_id = 1;
+  string admin_id = 2;
+  AppealDecision decision = 3;
+  string admin_note = 4; // Optional admin comment
+}
+
+message ReviewAppealResponse {
+  string appeal_id = 1;
+  AppealStatus status = 2;
+  string reviewed_at = 3;
+}
+
+// ==================== Enums ====================
+
+enum ContentType {
+  CONTENT_TYPE_UNSPECIFIED = 0;
+  POST = 1;
+  COMMENT = 2;
+  MESSAGE = 3;
+  PROFILE_BIO = 4;
+  PROFILE_NAME = 5;
+}
+
+enum AppealStatus {
+  APPEAL_STATUS_UNSPECIFIED = 0;
+  PENDING = 1;
+  APPROVED = 2;
+  REJECTED = 3;
+}
+
+enum AppealDecision {
+  APPEAL_DECISION_UNSPECIFIED = 0;
+  APPROVE = 1;  // Overturn moderation, approve content
+  REJECT = 2;   // Uphold moderation decision
+}

@@ -1,549 +1,429 @@
-# Nova Backend - Deployment Checklist
+# Production Deployment Checklist - Nova Microservices Platform
 
-**Version:** 1.0
-**Last Updated:** 2025-11-06
-
-This checklist ensures zero-downtime, safe deployments following the **Canary Release** strategy.
-
----
-
-## Pre-Deployment (T-24 hours)
-
-### Code Quality
-
-- [ ] All unit tests pass (`cargo test --lib`)
-- [ ] All integration tests pass (`cargo test --test '*'`)
-- [ ] No compiler warnings (`cargo clippy -- -D warnings`)
-- [ ] Code formatted (`cargo fmt --check`)
-- [ ] Security audit clean (`cargo audit`)
-
-### Database
-
-- [ ] Migrations are backward-compatible (no column drops/renames)
-- [ ] Migrations tested in staging environment
-- [ ] Rollback plan prepared for migrations
-- [ ] Database backup completed (production)
-- [ ] Migration dry-run successful (`sqlx migrate info`)
-
-### Configuration
-
-- [ ] Environment variables reviewed for all 11 services
-- [ ] Secrets updated in vault (AWS Secrets Manager / HashiCorp Vault)
-- [ ] JWT keys rotated (if needed, with overlap period)
-- [ ] AWS S3 bucket permissions verified
-- [ ] Kafka topics exist and have correct retention policies
-- [ ] Redis memory limits configured correctly
-- [ ] ClickHouse table schemas match code expectations
-
-### Infrastructure
-
-- [ ] Kubernetes cluster capacity checked (CPU, memory)
-- [ ] Database connection pool limits reviewed
-- [ ] Redis cluster health verified
-- [ ] Kafka brokers healthy (no under-replicated partitions)
-- [ ] ClickHouse cluster healthy (no failed parts)
-- [ ] Elasticsearch indices healthy (no red shards)
-- [ ] Load balancer health checks configured
-
-### Monitoring
-
-- [ ] Prometheus scraping all services (check `/targets`)
-- [ ] Grafana dashboards accessible
-- [ ] AlertManager configured with PagerDuty/Slack
-- [ ] Runbook links added to alert annotations
-- [ ] On-call engineer identified and notified
-
-### Documentation
-
-- [ ] Release notes prepared (changes, bug fixes, breaking changes)
-- [ ] Deployment runbook reviewed
-- [ ] Rollback procedure documented
-- [ ] Incident response team on standby
+**Document Version**: 1.0
+**Last Updated**: 2025-11-12
+**Scope**: Production deployments of all Nova microservices
+**Deployment Window**: Saturday 2:00 AM UTC (low-traffic window)
 
 ---
 
-## Deployment Day (Production)
+## Service Deployment Dependency Order
 
-### Phase 1: Pre-Deployment Verification (T-0 minutes)
+The following 5-tier dependency chain MUST be respected during deployment:
 
-- [ ] All pre-deployment checks completed (see above)
-- [ ] Staging environment verified with smoke tests
-- [ ] No active incidents in production
-- [ ] Database read replicas synced (lag < 1 second)
-- [ ] Backup window confirmed (no active long-running queries)
-- [ ] Communication sent to team (#nova-backend-ops Slack channel)
+### Tier 1: Foundation Services (Identity & Authentication)
+- **identity-service** (Core auth foundation)
 
-**Checkpoint:** ✅ All checks passed → Proceed to Phase 2
+### Tier 2: User Management
+- **user-service** (Depends on identity-service)
+
+### Tier 3: Core Content Platform
+- **content-service** (Depends on user-service)
+
+### Tier 4: Social & Graph Infrastructure
+- **social-service** (Depends on content-service)
+- **graph-service** (Depends on social-service)
+
+### Tier 5: Advanced Features
+- **feed-service** (Depends on graph-service)
+- **ranking-service** (Depends on feed-service)
+- **analytics-service** (Depends on ranking-service)
+- **notification-service** (Depends on content-service)
+- **realtime-chat-service** (Depends on user-service)
+- **search-service** (Depends on content-service)
+- **media-service** (Depends on content-service)
+- **trust-safety-service** (Depends on content-service)
+
+### Tier 6: API Gateway (Final)
+- **graphql-gateway** (Depends on all Tier 1-5 services)
 
 ---
 
-### Phase 2: Database Migrations (T+0 minutes)
+## Pre-Deployment Phase (T-24 Hours)
 
-⚠️ **Critical:** Run migrations before deploying new code.
+### Infrastructure Readiness Checks
 
-**Step 1: Verify Current State**
+- [ ] **Kubernetes Cluster Health**
+  - [ ] All nodes in Ready state
+  - [ ] No disk pressure or memory pressure conditions
+  - [ ] Kubelet version matches cluster requirements
+  - [ ] All system pods running (kube-proxy, coredns, etc.)
 
-```bash
-# Check current migration version
-sqlx migrate info --database-url $DATABASE_URL
+- [ ] **Database Cluster Status**
+  - [ ] Primary database accepts read/write operations
+  - [ ] All replicas synchronized (replication lag < 1s)
+  - [ ] PgBouncer connection pool healthy
+  - [ ] Verify 3+ healthy standby replicas exist
+  - [ ] WAL archiving to S3 working correctly
 
-# Expected output: List of applied migrations
+- [ ] **Storage Systems**
+  - [ ] Persistent volumes have >30% free capacity
+  - [ ] No failed volume claims
+  - [ ] S3/object storage buckets accessible and healthy
+
+- [ ] **Observability Stack**
+  - [ ] Prometheus scraping all targets (>98% success rate)
+  - [ ] Jaeger accepting traces
+  - [ ] Elasticsearch/logging accepting log ingest
+  - [ ] AlertManager configured with all channels
+
+### Database Backup & Point-in-Time Recovery
+
+- [ ] **Full Database Backup Completed**
+  - [ ] Backup size verified (>10GB expected)
+  - [ ] Backup timestamp recorded: _______________
+  - [ ] Backup stored in S3 with versioning enabled
+  - [ ] Backup encryption verified (KMS key in use)
+  - [ ] Test restore on staging cluster completed
+  - [ ] PITR available for last 30 days
+
+### Security Audit Pre-Deployment
+
+- [ ] **Secrets Management**
+  - [ ] All hardcoded credentials removed
+  - [ ] AWS Secrets Manager has all required secrets
+  - [ ] JWT signing keys rotated
+  - [ ] Database passwords meet complexity requirements
+  - [ ] Kubernetes External Secrets operator syncing
+
+- [ ] **Network Security**
+  - [ ] Network policies enforce pod-to-pod communication
+  - [ ] Ingress TLS certificates valid (not expiring within 30 days)
+  - [ ] DNS CAA records configured
+  - [ ] VPC security groups reviewed
+
+- [ ] **API Security**
+  - [ ] All HTTP endpoints require authentication
+  - [ ] Rate limiting configured
+  - [ ] CORS headers properly configured
+  - [ ] Request validation middleware enabled
+
+- [ ] **Dependency Security Scan**
+  - [ ] cargo audit: 0 vulnerabilities with CVSS > 6.0
+  - [ ] Container image scan passed (no HIGH/CRITICAL)
+  - [ ] Helm chart dependencies up-to-date
+
+### Capacity Planning & Resource Validation
+
+- [ ] **Compute Capacity**
+  - [ ] Current cluster utilization < 70% CPU, < 75% memory
+  - [ ] Autoscaling configured (min: 5, max: 20 nodes)
+  - [ ] Cluster has >40% spare capacity after deployment
+
+- [ ] **Database Capacity**
+  - [ ] Table sizes analyzed and acceptable
+  - [ ] Query plans reviewed
+  - [ ] Connection limits set appropriately
+  - [ ] Connection pool max < database max
+
+### Service Health Baseline
+
+- [ ] **Current Metrics Recorded** (at T-24h)
+  - [ ] P99 latency (current): ________________ ms
+  - [ ] P95 latency (current): ________________ ms
+  - [ ] Error rate (current): ________________ %
+  - [ ] Throughput (current): ________________ req/s
+
+- [ ] **Health Check Endpoints Verified**
+  - [ ] Each service responds to /health with 200 OK
+  - [ ] Each service responds to /metrics
+  - [ ] Database connections in health check pass
+  - [ ] Cache connections (Redis) pass
+
+---
+
+## Pre-Deployment Phase (T-1 Hour)
+
+### Final Health Checks
+
+- [ ] **Staging Environment Validation**
+  - [ ] All services running on staging
+  - [ ] Staging tests passing (>95% pass rate)
+  - [ ] Load test shows acceptable latency
+  - [ ] Stress test completed without failures
+
+- [ ] **Production-like Load Testing**
+  - [ ] 5-minute load test at 50% expected peak traffic
+  - [ ] 5-minute load test at 100% expected peak traffic
+  - [ ] Error rate remains <0.1%
+  - [ ] No memory leaks (heap growth <5%)
+
+### Staging Validation
+
+- [ ] **End-to-End Test Suite**
+  - [ ] Run smoke tests against staging
+  - [ ] Create test user and verify authentication flow
+  - [ ] Create test post/content and verify distribution
+  - [ ] Verify message sending and real-time delivery
+
+- [ ] **Database Migration Validation**
+  - [ ] All pending migrations executed without errors
+  - [ ] Data integrity validated
+  - [ ] Backward compatibility verified
+  - [ ] Rollback procedure tested manually
+
+### Communication Readiness
+
+- [ ] **Incident Communications Setup**
+  - [ ] Slack #incidents channel active
+  - [ ] PagerDuty on-call engineer notified and confirmed
+  - [ ] Incident commander assigned: ____________________
+  - [ ] Status page set to "Maintenance Window"
+  - [ ] External stakeholders notified via email
+
+- [ ] **Monitoring & Alerting**
+  - [ ] Alerting rules reviewed and thresholds confirmed
+  - [ ] Alert channels verified (PagerDuty, Slack, email)
+  - [ ] Grafana dashboards loaded and visible
+  - [ ] Custom deployment metrics dashboard created
+
+- [ ] **Rollback Plan Ready**
+  - [ ] Rollback commands documented and tested
+  - [ ] Previous version images available in registry
+  - [ ] Database rollback scripts verified (< 10 min)
+
+---
+
+## Canary Deployment Phase (T+0 to T+15 minutes)
+
+### Initial Canary Deployment (5% Traffic)
+
+- [ ] **Tier 1: Identity Service Canary**
+  - [ ] Deploy to 1 pod (5% traffic)
+  - [ ] Pod logs checked for startup errors
+  - [ ] Readiness probe passing
+  - [ ] Liveness probe passing
+
+### Canary Metrics & Monitoring (5% Traffic)
+
+**Monitor for 5 minutes before proceeding:**
+
+- [ ] **Error Rates**
+  - [ ] Error rate on canary: < 0.5%
+  - [ ] 5xx errors: 0
+  - [ ] 4xx errors: < 0.1%
+
+- [ ] **Latency Metrics**
+  - [ ] P99 latency: < baseline + 20%
+  - [ ] P95 latency: < baseline + 15%
+  - [ ] P50 latency: < baseline + 10%
+
+- [ ] **Resource Consumption**
+  - [ ] CPU usage: < 200m
+  - [ ] Memory usage: < 256Mi
+  - [ ] Disk I/O: normal
+  - [ ] Network bandwidth: normal
+
+- [ ] **Dependency Health**
+  - [ ] Database connection pool healthy
+  - [ ] Cache (Redis) connection stable
+  - [ ] Outbound gRPC calls succeeding: >99%
+  - [ ] Message queue (Kafka) lag: < 10s
+
+### Go/No-Go Decision: 5% Canary
+
+**PASS CRITERIA (ALL must pass):**
+- [ ] Error rate < 0.5%
+- [ ] P99 latency < baseline + 20%
+- [ ] No 5xx errors
+- [ ] No pod crashes or restarts
+- [ ] Logs show normal operation
+
+**IF PASS**: Proceed to 25% → **GO**
+**IF FAIL**: Immediately rollback → **NO-GO**
+
+**Decision Made By**: ________________
+**Timestamp**: ________________
+
+---
+
+## Progressive Rollout Phase
+
+### Stage 1: 25% Traffic (T+15 to T+30 minutes)
+
+- [ ] **Scale Tier 1: Identity Service to 5 Pods**
+  - [ ] All 5 pods running and ready
+  - [ ] Monitor for 10 minutes
+  - [ ] All dependencies healthy
+
+| Metric | Baseline | Threshold | Actual | Status |
+|--------|----------|-----------|--------|--------|
+| Error Rate | baseline | <0.5% | ___ | [ ] |
+| P99 Latency | baseline | <+20% | ___ | [ ] |
+| CPU Usage | ___ | <300m | ___ | [ ] |
+| Memory Usage | ___ | <350Mi | ___ | [ ] |
+
+**Go/No-Go Decision**: [ ] GO to 50%  [ ] NO-GO
+
+---
+
+### Stage 2: 50% Traffic (T+30 to T+45 minutes)
+
+- [ ] **Scale Tier 2: User Service to 5 Pods**
+  - [ ] Monitor rollout
+  - [ ] All pods running and ready
+  - [ ] Monitor for 10 minutes
+
+| Metric | Baseline | Threshold | Actual | Status |
+|--------|----------|-----------|--------|--------|
+| Error Rate | baseline | <0.5% | ___ | [ ] |
+| P99 Latency | baseline | <+20% | ___ | [ ] |
+| CPU Usage | ___ | <400m | ___ | [ ] |
+| Memory Usage | ___ | <450Mi | ___ | [ ] |
+
+**Go/No-Go Decision**: [ ] GO to 100%  [ ] NO-GO
+
+---
+
+### Stage 3: 100% Rollout (T+45 to T+90 minutes)
+
+- [ ] **Tier 3: Content Service** (T+45) - 5 pods, validate < 0.5% error rate
+- [ ] **Tier 4: Social & Graph** (T+55) - Deploy in parallel, monitor 10 min
+- [ ] **Tier 5: Advanced Features** (T+65) - Deploy all, monitor 15 min
+- [ ] **Tier 6: GraphQL Gateway** (T+85) - Deploy last, validate schema
+
+**Full System Metrics** (at T+90)
+
+| Metric | Baseline | Threshold | Actual | Status |
+|--------|----------|-----------|--------|--------|
+| Error Rate | baseline | <0.3% | ___ | [ ] |
+| P99 Latency | baseline | <+15% | ___ | [ ] |
+| Cluster CPU | ___ | <60% | ___ | [ ] |
+| Cluster Memory | ___ | <70% | ___ | [ ] |
+
+**Final Go/No-Go Decision**: [ ] SUCCESSFUL  [ ] ROLLBACK
+
+---
+
+## Post-Deployment Verification Phase (T+90 to T+120 minutes)
+
+### Verification Queries
+
+```sql
+-- 1. Verify all services reporting metrics
+SELECT service_name, COUNT(*) as metric_count, MAX(timestamp) as last_report
+FROM metrics WHERE timestamp > now() - interval '5 minutes'
+GROUP BY service_name ORDER BY last_report DESC;
+
+-- 2. Check data anomalies
+SELECT COUNT(*) as user_count FROM users WHERE created_at > now() - interval '5 minutes';
+SELECT COUNT(*) as content_count FROM posts WHERE created_at > now() - interval '5 minutes';
+
+-- 3. Check replication lag
+SELECT slot_name, active FROM pg_replication_slots;
+
+-- 4. Verify outbox pattern
+SELECT COUNT(*) as pending_events FROM outbox WHERE processed_at IS NULL;
 ```
 
-**Step 2: Run Migrations**
+### Traffic Pattern Analysis
 
-```bash
-# Dry-run (verify SQL)
-cat backend/migrations/*.sql | head -50
+- [ ] **Real User Monitoring**
+  - [ ] Traffic distribution normal
+  - [ ] Geographic distribution normal
+  - [ ] User session duration normal
+  - [ ] Page load times < 2s (p95)
 
-# Run migrations
-sqlx migrate run --database-url $DATABASE_URL
+- [ ] **API Usage Patterns**
+  - [ ] GraphQL query complexity within limits
+  - [ ] Mutation execution times acceptable
+  - [ ] Subscription handshakes: >99%
 
-# Expected output: "Applied migration XXXXX"
-```
+### Record New Baselines (T+120)
 
-**Step 3: Verify Migration Success**
-
-```bash
-# Check migration table
-psql $DATABASE_URL -c "SELECT version, description, success FROM _sqlx_migrations ORDER BY installed_on DESC LIMIT 5;"
-
-# Verify new columns/tables exist
-psql $DATABASE_URL -c "\d+ your_new_table"
-```
-
-**Rollback Trigger:**
-- ❌ Migration fails → STOP deployment
-- ❌ Database errors in logs → Revert migration (`sqlx migrate revert`)
-
-**Checkpoint:** ✅ Migrations successful → Proceed to Phase 3
+| Metric | New Baseline | Previous | Change | Status |
+|--------|--------------|----------|--------|--------|
+| P99 Latency | ________________ | ________________ | ±__% | [ ] |
+| P95 Latency | ________________ | ________________ | ±__% | [ ] |
+| Error Rate | ________________ | ________________ | ±__% | [ ] |
+| Throughput | ________________ | ________________ | ±__% | [ ] |
 
 ---
 
-### Phase 3: Build and Push Images (T+5 minutes)
+## Rollback Trigger Conditions
 
-**Step 1: Build Docker Images**
+**Critical (Immediate Rollback):**
+- Error rate > 5% for >1 minute
+- P99 latency > baseline × 2.0 for >2 minutes
+- Service completely unavailable (0 healthy pods)
+- Data corruption detected
+- Auth/authz failures >1% of requests
+- DB connection pool exhaustion
+- Disk space < 1GB free
+- OOM kill events
+- Network partition
+
+**High Priority (Rollback within 5 min):**
+- Error rate > 2% for >5 minutes
+- P99 latency > baseline × 1.5 for >5 minutes
+- Memory usage > 80% (sustained)
+- CPU throttling affecting >30%
+- DB query time degradation > 100%
+- Cache hit rate < 70%
+- Queue lag > 60 seconds
+
+### Rollback Execution
 
 ```bash
-VERSION=v1.0.0  # Update this for each release
-REGISTRY=your-registry.example.com
+# Execute in reverse dependency order
+kubectl rollout undo deployment/graphql-gateway -n nova-prod
+kubectl rollout undo deployment/feed-service -n nova-prod
+kubectl rollout undo deployment/user-service -n nova-prod
+kubectl rollout undo deployment/identity-service -n nova-prod
 
-cd backend
+# Monitor rollback
+kubectl rollout status deployment/identity-service -n nova-prod
 
-# Build all 11 services
-for service in auth-service user-service content-service feed-service media-service \
-               messaging-service search-service streaming-service notification-service \
-               cdn-service events-service; do
-  echo "Building $service..."
-  docker build \
-    --build-arg SERVICE_NAME=$service \
-    -f Dockerfile.template \
-    -t $REGISTRY/nova-$service:$VERSION \
-    -t $REGISTRY/nova-$service:latest \
-    ..
+# Verify stability (60 seconds)
+for i in {1..12}; do
+  kubectl logs -l app=identity-service --tail=100 -n nova-prod
+  sleep 5
 done
 ```
 
-**Step 2: Tag and Push Images**
+---
 
-```bash
-for service in auth-service user-service content-service feed-service media-service \
-               messaging-service search-service streaming-service notification-service \
-               cdn-service events-service; do
-  docker push $REGISTRY/nova-$service:$VERSION
-  docker push $REGISTRY/nova-$service:latest
-done
-```
+## Success Criteria
 
-**Step 3: Verify Images in Registry**
+**Deployment is SUCCESSFUL if ALL criteria met:**
 
-```bash
-# Check image exists
-docker manifest inspect $REGISTRY/nova-auth-service:$VERSION
-```
-
-**Checkpoint:** ✅ All images pushed → Proceed to Phase 4
+- [ ] All services in desired replica count
+- [ ] Error rate increase < 0.5%
+- [ ] P99 latency increase < 20%
+- [ ] No Critical severity alerts
+- [ ] Database replication lag < 1s
+- [ ] All health checks green
+- [ ] Smoke tests passing
+- [ ] No data loss/corruption
+- [ ] Within planned window
+- [ ] Stakeholders notified
 
 ---
 
-### Phase 4: Canary Deployment - 5% Traffic (T+10 minutes)
+## Post-Deployment Checklist (T+2 hours)
 
-**Step 1: Deploy Canary (1 replica per service)**
-
-```bash
-# Update image tags in manifests
-cd k8s/overlays/prod
-sed -i "s/newTag: .*/newTag: $VERSION/" kustomization.yaml
-
-# Apply canary deployment (5% traffic)
-kubectl apply -k k8s/overlays/prod/canary/
-
-# Verify pods are starting
-kubectl get pods -n nova-backend -l version=$VERSION
-```
-
-**Step 2: Wait for Pods to be Ready (2-3 minutes)**
-
-```bash
-# Watch pod status
-watch kubectl get pods -n nova-backend -l version=$VERSION
-
-# Expected: All pods in "Running" state with 1/1 ready
-```
-
-**Step 3: Monitor Metrics (15 minutes)**
-
-**Critical Metrics:**
-
-| Metric | Threshold | Action if Exceeded |
-|--------|-----------|-------------------|
-| Error Rate | < 1% | ROLLBACK |
-| P95 Latency | < 500ms | ROLLBACK |
-| P99 Latency | < 1000ms | INVESTIGATE |
-| CPU Usage | < 80% | MONITOR |
-| Memory Usage | < 80% | MONITOR |
-
-**Check Commands:**
-
-```bash
-# Grafana dashboard
-open http://grafana.nova.app/d/nova-overview
-
-# Prometheus queries
-curl -G 'http://prometheus.nova.app/api/v1/query' \
-  --data-urlencode 'query=rate(http_requests_total{status=~"5..", version="'$VERSION'"}[5m])'
-
-# Check logs for errors
-kubectl logs -n nova-backend -l version=$VERSION --tail=100 | grep -i error
-```
-
-**Rollback Trigger:**
-- ❌ Error rate > 1% for 5 minutes → ROLLBACK to Phase 9
-- ❌ P95 latency > 500ms for 5 minutes → ROLLBACK to Phase 9
-- ❌ Any pod crash loop → ROLLBACK to Phase 9
-
-**Checkpoint:** ✅ Metrics healthy for 15 minutes → Proceed to Phase 5
+- [ ] Remove maintenance window from status page
+- [ ] Archive war room recordings
+- [ ] Collect and review logs
+- [ ] Update deployment runbook
+- [ ] Close temporary bypass configs
+- [ ] Verify backups resumed
+- [ ] Team debrief (30 min)
+- [ ] Schedule post-mortem if needed
+- [ ] Notify business stakeholders
 
 ---
 
-### Phase 5: Scale to 50% Traffic (T+25 minutes)
-
-**Step 1: Scale Replicas (50/50 split)**
-
-```bash
-# Scale new version to 50%
-kubectl scale deployment -n nova-backend --replicas=3 auth-service-$VERSION
-# Repeat for all 11 services
-
-# Verify traffic split
-kubectl get pods -n nova-backend -o wide | grep auth-service
-```
-
-**Step 2: Monitor Metrics (30 minutes)**
-
-**Extended Monitoring:**
-
-```bash
-# Compare old vs new version metrics
-curl -G 'http://prometheus.nova.app/api/v1/query' \
-  --data-urlencode 'query=histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{version=~"'$VERSION'|v0.9.0"}[5m])) by (version)'
-```
-
-**Rollback Trigger:**
-- ❌ New version error rate > old version by 2x → ROLLBACK
-- ❌ New version latency > old version by 1.5x → ROLLBACK
-
-**Checkpoint:** ✅ Metrics stable for 30 minutes → Proceed to Phase 6
-
----
-
-### Phase 6: Full Rollout - 100% Traffic (T+55 minutes)
-
-**Step 1: Scale New Version to 100%**
-
-```bash
-# Apply full production deployment
-kubectl apply -k k8s/overlays/prod/
-
-# Wait for rollout
-kubectl rollout status deployment -n nova-backend --timeout=10m
-```
-
-**Step 2: Verify All Pods Running New Version**
-
-```bash
-# Check all pods
-kubectl get pods -n nova-backend -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.containers[0].image}{"\n"}{end}' | grep $VERSION
-
-# Expected: All services running $VERSION
-```
-
-**Step 3: Gracefully Terminate Old Version**
-
-```bash
-# Wait 5 minutes for active connections to drain
-sleep 300
-
-# Delete old deployment
-kubectl delete deployment -n nova-backend -l version=v0.9.0
-```
-
-**Checkpoint:** ✅ All traffic on new version → Proceed to Phase 7
-
----
-
-### Phase 7: Post-Deployment Verification (T+65 minutes)
-
-**Step 1: Health Check All Services**
-
-```bash
-# Check all 11 services
-for port in 8080 8081 8082 8083 8084 8085 8086 8087 8088 8089 8090; do
-  echo "Testing service on port $port:"
-  curl -f https://api.nova.app/api/v1/health || echo "FAILED"
-done
-```
-
-**Step 2: Smoke Tests**
-
-```bash
-# User registration (auth-service)
-curl -X POST https://api.nova.app/api/v1/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{"email":"test@example.com","username":"testuser","password":"Test123!"}'
-
-# User login (auth-service)
-curl -X POST https://api.nova.app/api/v1/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"email":"test@example.com","password":"Test123!"}'
-
-# Get feed (feed-service)
-TOKEN="..." # From login response
-curl -H "Authorization: Bearer $TOKEN" https://api.nova.app/api/v1/feed
-
-# Send message (messaging-service)
-curl -X POST https://api.nova.app/api/v1/conversations/xxx/messages \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"content":"Hello!"}'
-```
-
-**Step 3: Check Infrastructure Health**
-
-```bash
-# PostgreSQL
-psql $DATABASE_URL -c "SELECT COUNT(*) FROM users;"
-
-# Redis
-redis-cli -h prod-redis.internal INFO keyspace
-
-# ClickHouse
-curl "http://prod-clickhouse.internal:8123/?query=SELECT%20COUNT(*)%20FROM%20feed_ranking_events"
-
-# Kafka
-kafka-topics --bootstrap-server prod-kafka-1.internal:9092 --list
-```
-
-**Checkpoint:** ✅ All smoke tests pass → Proceed to Phase 8
-
----
-
-### Phase 8: Monitoring and Alerting (T+75 minutes)
-
-**Step 1: Verify Monitoring Stack**
-
-```bash
-# Prometheus targets (all services should be "UP")
-curl http://prometheus.nova.app/api/v1/targets | jq '.data.activeTargets[] | select(.health != "up")'
-
-# Expected: No unhealthy targets
-```
-
-**Step 2: Verify Alerts**
-
-```bash
-# Check no critical alerts firing
-curl http://alertmanager.nova.app/api/v2/alerts | jq '.[] | select(.status.state == "firing")'
-
-# Expected: No critical alerts
-```
-
-**Step 3: Monitor for 2 Hours**
-
-- [ ] No increase in error rate (< 0.5%)
-- [ ] No degradation in latency (P95 < 500ms)
-- [ ] No memory leaks (memory usage stable)
-- [ ] No database connection pool exhaustion
-- [ ] No Kafka consumer lag spikes
-
-**Checkpoint:** ✅ Monitoring stable for 2 hours → Deployment complete
-
----
-
-## Phase 9: ROLLBACK Procedure (If Needed)
-
-⚠️ **Trigger:** Any checkpoint fails or critical metric exceeds threshold.
-
-### Step 1: Stop Traffic to New Version Immediately
-
-```bash
-# Scale new version to 0 replicas
-kubectl scale deployment -n nova-backend --replicas=0 auth-service-$VERSION
-# Repeat for all services showing issues
-```
-
-### Step 2: Scale Old Version Back to 100%
-
-```bash
-# Scale old version
-kubectl scale deployment -n nova-backend --replicas=3 auth-service-v0.9.0
-# Repeat for all 11 services
-```
-
-### Step 3: Revert Database Migrations (If Needed)
-
-```bash
-# ONLY if new migrations are incompatible with old code
-sqlx migrate revert --database-url $DATABASE_URL --target-version 20250101000000
-```
-
-### Step 4: Verify Rollback Success
-
-```bash
-# Check all services back on old version
-kubectl get pods -n nova-backend -o jsonpath='{range .items[*]}{.spec.containers[0].image}{"\n"}{end}' | sort -u
-
-# Run health checks
-curl https://api.nova.app/api/v1/health
-```
-
-### Step 5: Post-Mortem
-
-- [ ] Document what went wrong
-- [ ] Collect logs and metrics from failed deployment
-- [ ] File incident report
-- [ ] Schedule retrospective meeting
-
----
-
-## Post-Deployment (T+24 hours)
-
-### Metrics Review
-
-- [ ] Review error rate trend (should be flat or decreasing)
-- [ ] Review latency percentiles (P50, P95, P99)
-- [ ] Review resource utilization (CPU, memory)
-- [ ] Review database query performance (slow query log)
-- [ ] Review Kafka consumer lag (should be < 1000)
-
-### Documentation
-
-- [ ] Update CHANGELOG.md with release notes
-- [ ] Update API documentation (OpenAPI specs)
-- [ ] Announce deployment in #nova-announcements Slack channel
-- [ ] Close deployment ticket in Jira/Linear
-
-### Cleanup
-
-- [ ] Delete old Docker images from registry (retain last 3 versions)
-- [ ] Archive old Kubernetes manifests (git tag)
-- [ ] Clear temporary migration files
-
----
-
-## Emergency Contacts
-
-| Role | Name | Contact |
-|------|------|---------|
-| **On-call Engineer** | [TBD] | PagerDuty |
-| **Database Admin** | [TBD] | Slack: @dba |
-| **DevOps Lead** | [TBD] | Slack: @devops |
-| **Engineering Manager** | [TBD] | Phone: xxx-xxx-xxxx |
-
----
-
-## Quick Reference
-
-### Health Check URLs
-
-```
-https://api.nova.app/api/v1/health         # Aggregated health
-https://api.nova.app/api/v1/health/live    # Liveness probe
-https://api.nova.app/api/v1/health/ready   # Readiness probe
-```
-
-### Monitoring Dashboards
-
-```
-Grafana:       https://grafana.nova.app/d/nova-overview
-Prometheus:    https://prometheus.nova.app/graph
-AlertManager:  https://alertmanager.nova.app
-```
-
-### Common Commands
-
-```bash
-# View logs
-kubectl logs -f -n nova-backend -l app=auth-service
-
-# Restart service
-kubectl rollout restart deployment -n nova-backend auth-service
-
-# Scale service
-kubectl scale deployment -n nova-backend auth-service --replicas=5
-
-# Port-forward for debugging
-kubectl port-forward -n nova-backend svc/auth-service 8083:8083
-```
-
----
-
-**Status Legend:**
-
-- ✅ **Green:** All checks passed, proceed
-- ⚠️ **Yellow:** Warning, investigate but may proceed
-- ❌ **Red:** Critical failure, STOP and rollback
-
-**Deployment Decision Tree:**
-
-```
-┌─────────────────┐
-│ Pre-checks pass?│
-└────────┬────────┘
-         │
-    ✅ Yes │ ❌ No → STOP
-         ↓
-┌─────────────────┐
-│ Migrations OK?  │
-└────────┬────────┘
-         │
-    ✅ Yes │ ❌ No → ROLLBACK
-         ↓
-┌─────────────────┐
-│ Canary healthy? │
-└────────┬────────┘
-         │
-    ✅ Yes │ ❌ No → ROLLBACK (Phase 9)
-         ↓
-┌─────────────────┐
-│ 50% healthy?    │
-└────────┬────────┘
-         │
-    ✅ Yes │ ❌ No → ROLLBACK (Phase 9)
-         ↓
-┌─────────────────┐
-│ Full rollout OK?│
-└────────┬────────┘
-         │
-    ✅ Yes │ ❌ No → ROLLBACK (Phase 9)
-         ↓
-  ✅ DEPLOYMENT COMPLETE
-```
-
----
-
-**Version History:**
-
-| Version | Date | Changes |
-|---------|------|---------|
-| 1.0 | 2025-11-06 | Initial deployment checklist for Phase 1B |
+## Document Sign-Off
+
+| Role | Name | Signature | Date | Time |
+|------|------|-----------|------|------|
+| Engineering Lead | | | | |
+| Platform Engineer | | | | |
+| On-Call Engineer | | | | |
+| Incident Commander | | | | |
+
+**Document Approval**: [ ] Approved  [ ] With Changes  [ ] Not Approved
+
+**Next Deployment Window**: ____________________
+**Post-Deployment Review**: ____________________

@@ -142,3 +142,9 @@ impl From<redis::RedisError> for AppError {
         AppError::CacheError(err.to_string())
     }
 }
+
+impl From<transactional_outbox::OutboxError> for AppError {
+    fn from(err: transactional_outbox::OutboxError) -> Self {
+        AppError::DatabaseError(err.to_string())
+    }
+}

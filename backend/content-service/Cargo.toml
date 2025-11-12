@@ -57,6 +57,7 @@ utoipa-swagger-ui = { version = "5", features = ["actix-web"] }
 
 # Resilience (P0-5)
 resilience = { path = "../libs/resilience" }
+grpc-tls = { path = "../libs/grpc-tls" }  # ✅ P0: mTLS for service-to-service auth
 
 # Shared libraries
 crypto-core = { path = "../libs/crypto-core" }
@@ -65,6 +66,7 @@ redis-utils = { path = "../libs/redis-utils" }
 db-pool = { path = "../libs/db-pool" }
 grpc-metrics = { path = "../libs/grpc-metrics" }
 grpc-clients = { path = "../libs/grpc-clients" }
+transactional-outbox = { path = "../libs/transactional-outbox" }
 
 # Service-specific dependencies
 futures = "0.3"
@@ -77,10 +79,10 @@ regex = "1"
 # gRPC (for inter-service communication)
 tonic.workspace = true
 prost.workspace = true
-tonic-health = "0.10"
+tonic-health.workspace = true
 
 [build-dependencies]
-tonic-build = "0.11"
+tonic-build = "0.12"
 
 [dev-dependencies]
 tokio-test = "0.4"

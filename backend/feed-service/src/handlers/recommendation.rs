@@ -3,13 +3,15 @@
 /// HTTP endpoints for personalized recommendations
 use actix_web::{get, post, web, HttpMessage, HttpRequest, HttpResponse};
 use serde::{Deserialize, Serialize};
+use sqlx::Row;
 use std::sync::Arc;
-use tracing::{debug, error};
+use tracing::{debug, error, warn};
 use uuid::Uuid;
 
 use crate::error::{AppError, Result};
 use crate::middleware::jwt_auth::UserId;
-use crate::services::RecommendationServiceV2;
+use grpc_clients::RankingServiceClient;
+use grpc_clients::nova::ranking_service::v1::{RankFeedRequest, RecallConfig};
 
 /// Request body for ranking API (internal testing)
 #[derive(Debug, Deserialize)]
@@ -73,11 +75,13 @@ pub struct RankingResponse {
 
 /// Handler state for recommendation service
 pub struct RecommendationHandlerState {
-    pub service: Arc<RecommendationServiceV2>,
+    pub ranking_client: Arc<RankingServiceClient<tonic::transport::Channel>>,
+    pub db_pool: sqlx::PgPool,
 }
 
 /// GET /api/v1/recommendations
 /// Get personalized recommendations for authenticated user
+/// Delegates ranking to ranking-service, with chronological fallback
 #[get("/api/v1/recommendations")]
 pub async fn get_recommendations(
     req: HttpRequest,
@@ -99,81 +103,119 @@ pub async fn get_recommendations(
         user_id, limit
     );
 
-    match state.service.get_recommendations(user_id, limit).await {
-        Ok(posts) => {
+    // Call ranking-service via gRPC
+    let ranking_request = RankFeedRequest {
+        user_id: user_id.to_string(),
+        limit: limit as i32,
+        recall_config: Some(RecallConfig {
+            graph_recall_limit: 200,
+            trending_recall_limit: 100,
+            personalized_recall_limit: 100,
+            enable_diversity: true,
+        }),
+    };
+
+    let mut ranking_client = (*state.ranking_client).clone();
+
+    match ranking_client.rank_feed(ranking_request).await {
+        Ok(response) => {
+            let ranked_posts = response.into_inner();
+            let posts: Vec<Uuid> = ranked_posts
+                .posts
+                .into_iter()
+                .filter_map(|p| Uuid::parse_str(&p.post_id).ok())
+                .collect();
+
             let count = posts.len();
             Ok(HttpResponse::Ok().json(RecommendationResponse { posts, count }))
         }
         Err(err) => {
-            error!("Failed to get recommendations: {:?}", err);
-            Err(err)
+            warn!("Ranking service unavailable: {:?}, falling back to chronological feed", err);
+
+            // Fallback: Simple chronological ordering
+            match fetch_chronological_feed(&state.db_pool, user_id, limit).await {
+                Ok(posts) => {
+                    let count = posts.len();
+                    Ok(HttpResponse::Ok().json(RecommendationResponse { posts, count }))
+                }
+                Err(fallback_err) => {
+                    error!("Fallback feed fetch failed: {:?}", fallback_err);
+                    Err(AppError::Internal(format!("Failed to fetch feed: {:?}", fallback_err)))
+                }
+            }
         }
     }
 }
 
+/// Fallback: Fetch chronological feed when ranking service is down
+async fn fetch_chronological_feed(
+    db_pool: &sqlx::PgPool,
+    user_id: Uuid,
+    limit: usize,
+) -> Result<Vec<Uuid>> {
+    let limit = limit as i64;
+
+    // Get posts from followed users, ordered by recency
+    let rows = sqlx::query(
+        "SELECT DISTINCT p.id
+         FROM posts p
+         JOIN follows f ON f.followee_id = p.user_id
+         WHERE f.follower_id = $1
+           AND p.status = 'published'
+           AND p.soft_delete IS NULL
+         ORDER BY p.created_at DESC
+         LIMIT $2",
+    )
+    .bind(user_id)
+    .bind(limit)
+    .fetch_all(db_pool)
+    .await
+    .map_err(|e| AppError::Internal(format!("Database error: {}", e)))?;
+
+    let posts: Vec<Uuid> = rows
+        .into_iter()
+        .filter_map(|row| row.try_get::<Uuid, _>("id").ok())
+        .collect();
+
+    Ok(posts)
+}
+
 /// GET /api/v1/recommendations/model-info
-/// Get current model version information
+/// Get current model version information (delegated to ranking-service)
 #[get("/api/v1/recommendations/model-info")]
-pub async fn get_model_info(state: web::Data<RecommendationHandlerState>) -> Result<HttpResponse> {
-    debug!("Getting model info");
+pub async fn get_model_info(_state: web::Data<RecommendationHandlerState>) -> Result<HttpResponse> {
+    debug!("Model info endpoint deprecated - ranking handled by ranking-service");
 
-    let info = state.service.get_model_info().await;
-
+    // Return basic info indicating delegation
     Ok(HttpResponse::Ok().json(ModelInfoResponse {
-        collaborative_version: info.collaborative_version,
-        content_version: info.content_version,
-        onnx_version: info.onnx_version,
-        deployed_at: info.deployed_at.to_rfc3339(),
+        collaborative_version: "delegated-to-ranking-service".to_string(),
+        content_version: "delegated-to-ranking-service".to_string(),
+        onnx_version: "delegated-to-ranking-service".to_string(),
+        deployed_at: chrono::Utc::now().to_rfc3339(),
     }))
 }
 
 /// POST /api/v1/recommendations/rank
-/// Internal API for ranking candidates (testing/debugging)
+/// Internal API for ranking candidates (delegated to ranking-service)
 /// Requires service-to-service authentication
 #[post("/api/v1/recommendations/rank")]
 pub async fn rank_candidates(
     req: HttpRequest,
-    body: web::Json<RankingRequest>,
-    state: web::Data<RecommendationHandlerState>,
+    _body: web::Json<RankingRequest>,
+    _state: web::Data<RecommendationHandlerState>,
 ) -> Result<HttpResponse> {
     // Verify internal service authentication
-    // TODO: Implement service-to-service auth (e.g., mTLS or service token)
     if !req.headers().contains_key("x-service-token") {
         return Err(AppError::Authentication(
             "Missing service authentication token".to_string(),
         ));
     }
 
-    let limit = body.limit.min(100).max(1);
-
-    debug!(
-        "Ranking {} candidates for user: {}, limit: {}",
-        body.candidates.len(),
-        body.user_id,
-        limit
-    );
-
-    if body.candidates.is_empty() {
-        return Err(AppError::BadRequest("No candidates provided".to_string()));
-    }
-
-    // Create default user context (no recent posts/profile)
-    let context = crate::services::UserContext::default();
-
-    match state
-        .service
-        .rank_with_context(body.user_id, context, body.candidates.clone(), limit)
-        .await
-    {
-        Ok(posts) => {
-            let count = posts.len();
-            Ok(HttpResponse::Ok().json(RecommendationResponse { posts, count }))
-        }
-        Err(err) => {
-            error!("Failed to rank candidates: {:?}", err);
-            Err(err)
-        }
-    }
+    // Ranking is now handled by ranking-service
+    // This endpoint is deprecated and should call ranking-service directly
+    Err(AppError::BadRequest(
+        "This endpoint is deprecated. Use ranking-service directly.".to_string(),
+    ))
 }
 
 /// Request for semantic search
@@ -207,13 +249,13 @@ pub struct SemanticSearchResponse {
 }
 
 /// POST /api/v1/recommendations/semantic-search
-/// Search for semantically similar posts using vector embeddings
+/// Search for semantically similar posts (delegated to ranking-service or feature-store)
 /// Requires service-to-service authentication
 #[post("/api/v1/recommendations/semantic-search")]
 pub async fn semantic_search(
     req: HttpRequest,
-    body: web::Json<SemanticSearchRequest>,
-    state: web::Data<RecommendationHandlerState>,
+    _body: web::Json<SemanticSearchRequest>,
+    _state: web::Data<RecommendationHandlerState>,
 ) -> Result<HttpResponse> {
     // Verify internal service authentication
     if !req.headers().contains_key("x-service-token") {
@@ -222,39 +264,10 @@ pub async fn semantic_search(
         ));
     }
 
-    let limit = body.limit.min(100).max(1);
-
-    debug!(
-        "Semantic search for post: {}, limit: {}",
-        body.post_id, limit
-    );
-
-    match state
-        .service
-        .search_semantically_similar(body.post_id, limit)
-        .await
-    {
-        Ok(results) => {
-            let count = results.len();
-            let semantic_results = results
-                .into_iter()
-                .map(|r| SemanticSearchResult {
-                    post_id: r.post_id,
-                    similarity_score: r.similarity_score,
-                    distance: r.distance,
-                })
-                .collect();
-
-            Ok(HttpResponse::Ok().json(SemanticSearchResponse {
-                results: semantic_results,
-                count,
-            }))
-        }
-        Err(err) => {
-            error!("Failed to perform semantic search: {:?}", err);
-            Err(err)
-        }
-    }
+    // Semantic search is now handled by feature-store or ranking-service
+    Err(AppError::BadRequest(
+        "This endpoint is deprecated. Use feature-store or ranking-service directly.".to_string(),
+    ))
 }
 
 #[cfg(test)]

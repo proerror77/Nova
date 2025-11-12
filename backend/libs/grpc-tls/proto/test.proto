@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package test;
+
+// Test service for mTLS integration tests
+service TestService {
+  rpc Echo(TestRequest) returns (TestResponse);
+}
+
+message TestRequest {
+  string message = 1;
+}
+
+message TestResponse {
+  string message = 1;
+}
+
+// Empty message (not used but helps compilation)
+message Empty {}
+

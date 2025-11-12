@@ -1,32 +1,22 @@
-//! Service layer for recommendation engine
+//! Service layer for feed-service
 //!
-//! Implements hybrid recommendation algorithm combining:
-//! - Collaborative filtering (user-user, item-item)
-//! - Content-based filtering (TF-IDF features)
-//! - A/B testing framework for experiment tracking
-//! - ONNX model serving for deep learning inference
+//! Phase D Refactoring:
+//! ✅ ML ranking logic moved to ranking-service
+//! ✅ Feed-service now focuses on feed assembly and caching
+//! ⚠️  Legacy recommendation_v2 module kept for backward compatibility (to be removed in Phase E)
 //!
-//! Migration status:
-//! ✅ Phase 1: Migrate recommendation_v2 from user-service
-//! ⏳ Phase 2: HTTP API and gRPC service implementation
-//! ⏳ Phase 3: Kafka event consumer integration
-//! ⏳ Phase 4: Milvus vector search integration
+//! Active modules:
+//! - trending: Trending content computation
+//! - (recommendation_v2, kafka_consumer, vector_search: deprecated, use ranking-service)
 
-pub mod graph;
-pub mod kafka_consumer;
-pub mod recommendation_v2;
 pub mod trending;
+
+// Legacy modules (deprecated - use ranking-service instead)
+#[allow(dead_code)]
+pub mod kafka_consumer;
+#[allow(dead_code)]
+pub mod recommendation_v2;
+#[allow(dead_code)]
 pub mod vector_search;
 
-pub use graph::GraphService;
-pub use kafka_consumer::{
-    ExperimentVariant, RecommendationEventBatch, RecommendationEventConsumer,
-    RecommendationEventType, RecommendationKafkaEvent,
-};
-pub use recommendation_v2::{
-    ABTestingFramework, CollaborativeFilteringModel, ContentBasedModel, Experiment,
-    ExperimentEvent, HybridRanker, HybridWeights, ModelInfo, ONNXModelServer, RankedPost,
-    RankingStrategy, RecommendationConfig, RecommendationServiceV2, UserContext, Variant,
-};
 pub use trending::TrendingService;
-pub use vector_search::{PostEmbedding, VectorSearchResult, VectorSearchService};

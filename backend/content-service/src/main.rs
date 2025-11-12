@@ -24,6 +24,7 @@ use std::time::{Duration, Instant};
 use tokio::sync::{broadcast, Mutex};
 use tokio::task::JoinSet;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+use transactional_outbox::{KafkaOutboxPublisher, OutboxProcessor, SqlxOutboxRepository};
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
 
@@ -351,6 +352,43 @@ async fn main() -> io::Result<()> {
 
     tracing::info!("Connected to database via db-pool crate");
 
+    // Initialize Kafka producer with idempotent configuration (required for transactional outbox)
+    let kafka_producer: rdkafka::producer::FutureProducer = rdkafka::ClientConfig::new()
+        .set("bootstrap.servers", config.kafka.brokers.join(","))
+        .set("enable.idempotence", "true")
+        .set("acks", "all")
+        .set("max.in.flight.requests.per.connection", "5")
+        .set("retries", "10")
+        .set("request.timeout.ms", config.kafka.request_timeout_ms.to_string())
+        .set("retry.backoff.ms", config.kafka.retry_backoff_ms.to_string())
+        .create()
+        .map_err(|e| {
+            io::Error::new(
+                io::ErrorKind::Other,
+                format!("Failed to create Kafka producer: {}", e),
+            )
+        })?;
+
+    tracing::info!("✅ Kafka producer initialized with idempotent configuration");
+
+    // Initialize transactional outbox components
+    let outbox_repo = Arc::new(SqlxOutboxRepository::new(db_pool.clone()));
+    let outbox_publisher = Arc::new(KafkaOutboxPublisher::new(
+        kafka_producer,
+        "nova".to_string(), // Topic prefix
+    ));
+
+    // Create outbox processor with batching and retry configuration
+    let outbox_processor = OutboxProcessor::new(
+        outbox_repo.clone(),
+        outbox_publisher,
+        100,                       // batch_size: process 100 events per batch
+        Duration::from_secs(5),    // poll_interval: check for new events every 5 seconds
+        5,                         // max_retries: retry failed events up to 5 times
+    );
+
+    tracing::info!("✅ Transactional outbox processor configured");
+
     let http_bind_address = format!("{}:{}", config.app.host, 8081);
     let grpc_bind_address = format!("{}:9081", config.app.host);
 
@@ -449,6 +487,8 @@ async fn main() -> io::Result<()> {
     });
     let content_cache_data = web::Data::new(content_cache.clone());
     let auth_client_data = web::Data::new(auth_client.clone());
+    let outbox_repo_data = web::Data::new(outbox_repo.clone());
+    let grpc_pool_data = web::Data::new(grpc_pool.clone());
 
     let health_state = web::Data::new(HealthState::new(
         db_pool.clone(),
@@ -490,6 +530,8 @@ async fn main() -> io::Result<()> {
             .app_data(auth_client_data.clone())
             .app_data(feed_state.clone())
             .app_data(health_state.clone())
+            .app_data(outbox_repo_data.clone())
+            .app_data(grpc_pool_data.clone())
             .wrap(cors)
             .wrap(Logger::default())
             .wrap(tracing_actix_web::TracingLogger::default())
@@ -599,6 +641,19 @@ async fn main() -> io::Result<()> {
         feed_refresh_job.run().await;
         Ok(())
     });
+
+    // Transactional outbox background processor
+    // Publishes pending events from outbox table to Kafka
+    tasks.spawn(async move {
+        match outbox_processor.start().await {
+            Ok(_) => Ok(()),
+            Err(e) => Err(io::Error::new(
+                io::ErrorKind::Other,
+                format!("Outbox processor error: {}", e),
+            )),
+        }
+    });
+    tracing::info!("✅ Transactional outbox processor background job started");
 
     // Phase 2: Spec 007 - Content cleaner background job
     // Cleans up content from soft-deleted users after 30-day retention period

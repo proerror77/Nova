@@ -18,7 +18,7 @@ use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 use crate::error::Result;
-use crate::services::RecommendationServiceV2;
+use crate::services::recommendation_v2::RecommendationServiceV2;
 
 /// Experiment variant configuration
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

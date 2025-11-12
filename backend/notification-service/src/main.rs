@@ -88,6 +88,7 @@ async fn main() -> io::Result<()> {
             NotificationServiceImpl,
         };
         use notification_service::services::PushSender;
+        use tonic_health::server::health_reporter;
 
         // Server-side correlation-id extractor interceptor
         fn server_interceptor(
@@ -105,12 +106,65 @@ async fn main() -> io::Result<()> {
             Ok(req)
         }
 
+        // ✅ P1: Create gRPC health reporter for Kubernetes probes
+        let (mut health_reporter, health_service) = health_reporter();
+        health_reporter
+            .set_serving::<NotificationServiceServer<NotificationServiceImpl>>()
+            .await;
+        tracing::info!("gRPC health check enabled (tonic-health protocol)");
+
         let push_sender = Arc::new(PushSender::new(grpc_db_pool.clone(), None, None));
         let svc =
             NotificationServiceImpl::new(grpc_db_pool, grpc_notification_service, push_sender);
 
+        // ✅ P0: Load mTLS configuration
+        let tls_config = match grpc_tls::GrpcServerTlsConfig::from_env() {
+            Ok(config) => {
+                tracing::info!("mTLS enabled - service-to-service authentication active");
+                Some(config)
+            }
+            Err(e) => {
+                tracing::warn!(
+                    "mTLS disabled - TLS config not found: {}. Using development mode for testing only.",
+                    e
+                );
+                if cfg!(debug_assertions) {
+                    tracing::info!("Development mode: Starting without TLS (NOT FOR PRODUCTION)");
+                    None
+                } else {
+                    tracing::error!("Production requires mTLS - GRPC_SERVER_CERT_PATH must be set: {}", e);
+                    return;
+                }
+            }
+        };
+
+        // ✅ P0: Build server with optional TLS
+        let mut server_builder = GrpcServer::builder();
+
+        if let Some(tls_cfg) = tls_config {
+            match tls_cfg.build_server_tls() {
+                Ok(server_tls) => {
+                    match server_builder.tls_config(server_tls) {
+                        Ok(builder) => {
+                            server_builder = builder;
+                            tracing::info!("gRPC server TLS configured successfully");
+                        }
+                        Err(e) => {
+                            tracing::error!("Failed to configure TLS on gRPC server: {}", e);
+                            return;
+                        }
+                    }
+                }
+                Err(e) => {
+                    tracing::error!("Failed to build server TLS config: {}", e);
+                    return;
+                }
+            }
+        }
+
         tracing::info!("gRPC server listening on {}", grpc_addr);
-        if let Err(e) = GrpcServer::builder()
+        if let Err(e) = server_builder
+            .add_service(health_service)  // ✅ P1: Add health service first
             .add_service(NotificationServiceServer::with_interceptor(
                 svc,
                 server_interceptor,

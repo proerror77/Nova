@@ -1,0 +1,9 @@
+{
+  "db": "Postgres",
+  "query": "INSERT INTO shares (id, user_id, post_id, share_type, target_user_id, created_at)\n VALUES ($1, $2, $3, $4, $5, NOW())",
+  "describe": {
+    "columns": [],
+    "nullable": [],
+    "return_type": "unknown"
+  }
+}

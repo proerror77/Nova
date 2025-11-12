@@ -1,210 +1,171 @@
+/// Identity Service Main Entry Point
+///
+/// Starts gRPC server with:
+/// - PostgreSQL connection pool
+/// - Redis connection manager
+/// - Kafka event producer
+/// - Email service (SMTP)
+/// - Outbox consumer (background task)
 use anyhow::{Context, Result};
-use std::sync::Arc;
+use identity_service::{
+    config::Settings,
+    grpc::{nova::auth_service::auth_service_server::AuthServiceServer, IdentityServiceServer},
+    security::initialize_jwt_keys,
+    services::{spawn_outbox_consumer, EmailService, KafkaEventProducer, OutboxConsumerConfig},
+};
+use redis_utils::RedisPool;
+use sqlx::postgres::PgPoolOptions;
+use std::time::Duration;
+use tokio::signal;
 use tonic::transport::Server;
-use tonic_health::server::{health_reporter, HealthReporter};
-use tracing::{info, warn};
-
-mod config;
-mod domain;
-mod grpc;
-mod infrastructure;
-mod application;
-
-use config::Settings;
-use infrastructure::{database::DatabasePool, cache::CacheManager, events::EventPublisher};
+use tracing::{error, info};
 
 #[tokio::main]
 async fn main() -> Result<()> {
     // Initialize tracing
     tracing_subscriber::fmt()
-        .with_env_filter("identity_service=debug,info")
+        .with_env_filter(
+            std::env::var("RUST_LOG").unwrap_or_else(|_| "identity_service=info,info".into()),
+        )
         .with_target(false)
         .json()
         .init();
 
-    info!("Starting Identity Service v2.0.0");
+    info!("Starting Identity Service");
 
     // Load configuration
-    let settings = Settings::load().await?;
+    let settings = Settings::load().await.context("Failed to load configuration")?;
+    info!("Configuration loaded successfully");
 
-    // Initialize database pool with proper timeouts
-    let db_pool = DatabasePool::new(&settings.database)
+    // Initialize JWT keys (RS256)
+    let public_key = settings.jwt.validation_key.as_ref()
+        .unwrap_or(&settings.jwt.signing_key);
+    initialize_jwt_keys(&settings.jwt.signing_key, public_key)
+        .context("Failed to initialize JWT keys")?;
+    info!("JWT keys initialized");
+
+    // Initialize database connection pool
+    let db_pool = PgPoolOptions::new()
+        .max_connections(settings.database.max_connections)
+        .acquire_timeout(Duration::from_secs(5))
+        .connect(&settings.database.url)
         .await
-        .context("Failed to create database pool")?;
+        .context("Failed to connect to PostgreSQL")?;
 
-    // Run migrations
+    info!(
+        "Database pool initialized with {} max connections",
+        settings.database.max_connections
+    );
+
+    // Run database migrations
     sqlx::migrate!("./migrations")
-        .run(db_pool.get())
+        .run(&db_pool)
         .await
         .context("Failed to run database migrations")?;
+    info!("Database migrations completed");
 
-    // Initialize cache manager
-    let cache_manager = Arc::new(
-        CacheManager::new(&settings.redis)
-            .await
-            .context("Failed to initialize cache manager")?
-    );
+    // Initialize Redis connection pool
+    let redis_pool = RedisPool::connect(&settings.redis.url, None)
+        .await
+        .context("Failed to connect to Redis")?;
+    let redis = redis_pool.manager();
+    info!("Redis connection manager initialized");
 
-    // Initialize event publisher (Kafka)
-    let event_publisher = Arc::new(
-        EventPublisher::new(&settings.kafka)
-            .await
-            .context("Failed to initialize event publisher")?
-    );
-
-    // Create application services
-    let auth_service = Arc::new(
-        application::AuthenticationService::new(
-            db_pool.clone(),
-            cache_manager.clone(),
-            event_publisher.clone(),
-            settings.jwt.clone(),
-        )
-    );
-
-    let session_service = Arc::new(
-        application::SessionService::new(
-            db_pool.clone(),
-            cache_manager.clone(),
-            event_publisher.clone(),
-        )
-    );
-
-    let token_service = Arc::new(
-        application::TokenService::new(
-            db_pool.clone(),
-            cache_manager.clone(),
-            settings.jwt.clone(),
-        )
-    );
-
-    // Create gRPC server
-    let identity_impl = grpc::IdentityServiceImpl::new(
-        auth_service,
-        session_service,
-        token_service,
-    );
-
-    let addr = format!("{}:{}", settings.server.host, settings.server.port)
-        .parse()
-        .context("Failed to parse server address")?;
-
-    info!("Identity Service listening on {}", addr);
-
-    // ✅ P0-4: Create gRPC health reporter
-    let (mut health_reporter, health_service) = health_reporter();
-
-    // Mark service as SERVING
-    health_reporter
-        .set_serving::<grpc::identity_service_server::IdentityServiceServer<grpc::IdentityServiceImpl>>()
-        .await;
-
-    info!("gRPC health check enabled (tonic-health protocol)");
-
-    // Start health check endpoint (HTTP)
-    tokio::spawn(health_check_server(settings.server.health_port));
-
-    // Start metrics endpoint
-    tokio::spawn(metrics_server(settings.server.metrics_port));
-
-    // ✅ P0-1: Load mTLS configuration
-    let tls_config = match grpc_tls::GrpcServerTlsConfig::from_env() {
-        Ok(config) => {
-            info!("mTLS enabled - service-to-service authentication active");
-            Some(config)
-        }
-        Err(e) => {
-            warn!("mTLS disabled - TLS config not found: {}. Using development mode for testing only.", e);
-            // In development, allow non-TLS for testing
-            // In production, this should fail hard
-            if cfg!(debug_assertions) {
-                info!("Development mode: Starting without TLS (NOT FOR PRODUCTION)");
+    // Initialize Kafka producer (optional)
+    let kafka_producer = if settings.kafka.brokers.is_empty() {
+        info!("Kafka brokers not configured; running without event publishing");
+        None
+    } else {
+        let brokers = settings.kafka.brokers.join(",");
+        match KafkaEventProducer::new(&brokers, &settings.kafka.topic_prefix) {
+            Ok(producer) => {
+                info!("Kafka producer initialized");
+                Some(producer)
+            }
+            Err(err) => {
+                error!("Failed to initialize Kafka producer: {:?}", err);
                 None
-            } else {
-                return Err(e).context("Production requires mTLS - GRPC_SERVER_CERT_PATH must be set");
             }
         }
     };
 
-    // Build server with optional TLS
-    let mut server_builder = Server::builder();
+    // Initialize email service
+    let email_service = EmailService::new(&settings.email)
+        .context("Failed to initialize email service")?;
 
-    if let Some(tls_cfg) = tls_config {
-        let server_tls = tls_cfg
-            .build_server_tls()
-            .context("Failed to build server TLS config")?;
-        server_builder = server_builder
-            .tls_config(server_tls)
-            .context("Failed to configure TLS on gRPC server")?;
-        info!("gRPC server TLS configured successfully");
+    if email_service.is_enabled() {
+        info!("Email service initialized with SMTP");
+    } else {
+        info!("Email service running in no-op mode (SMTP not configured)");
     }
 
+    // Spawn outbox consumer (background task)
+    let _outbox_handle = if kafka_producer.is_some() {
+        let consumer_config = OutboxConsumerConfig::default();
+        info!("Starting outbox consumer");
+        Some(spawn_outbox_consumer(
+            db_pool.clone(),
+            kafka_producer.clone(),
+            consumer_config,
+        ))
+    } else {
+        info!("Skipping outbox consumer (Kafka not available)");
+        None
+    };
+
+    // Build gRPC server
+    let identity_service = IdentityServiceServer::new(
+        db_pool.clone(),
+        redis.clone(),
+        email_service,
+        kafka_producer,
+    );
+
+    let addr = format!("{}:{}", settings.server.host, settings.server.port)
+        .parse()
+        .context("Invalid server address")?;
+
+    info!("Starting gRPC server on {}", addr);
+
     // Start gRPC server with graceful shutdown
-    server_builder
-        .add_service(health_service)  // ✅ P0-4: Add health service
-        .add_service(grpc::identity_service_server::IdentityServiceServer::new(identity_impl))
-        .add_service(tonic_reflection::server::Builder::configure()
-            .register_encoded_file_descriptor_set(grpc::FILE_DESCRIPTOR_SET)
-            .build()?)
+    Server::builder()
+        .add_service(AuthServiceServer::new(identity_service))
         .serve_with_shutdown(addr, shutdown_signal())
         .await
-        .context("Failed to start gRPC server")?;
+        .context("gRPC server error")?;
 
-    info!("Identity Service shutting down gracefully");
+    info!("Identity service shutdown complete");
+
     Ok(())
 }
 
+/// Wait for shutdown signal (Ctrl+C or SIGTERM)
 async fn shutdown_signal() {
-    tokio::signal::ctrl_c()
-        .await
-        .expect("Failed to install CTRL+C signal handler");
-    warn!("Received shutdown signal");
-}
+    let ctrl_c = async {
+        signal::ctrl_c()
+            .await
+            .expect("Failed to install Ctrl+C handler");
+    };
 
-async fn health_check_server(port: u16) {
-    use actix_web::{web, App, HttpResponse, HttpServer};
+    #[cfg(unix)]
+    let terminate = async {
+        signal::unix::signal(signal::unix::SignalKind::terminate())
+            .expect("Failed to install SIGTERM handler")
+            .recv()
+            .await;
+    };
 
-    HttpServer::new(|| {
-        App::new()
-            .route("/health", web::get().to(|| async {
-                HttpResponse::Ok().json(serde_json::json!({
-                    "status": "healthy",
-                    "service": "identity-service",
-                    "version": "2.0.0"
-                }))
-            }))
-            .route("/ready", web::get().to(|| async {
-                HttpResponse::Ok().json(serde_json::json!({
-                    "ready": true
-                }))
-            }))
-    })
-    .bind(("0.0.0.0", port))
-    .expect("Failed to bind health check server")
-    .run()
-    .await
-    .expect("Failed to run health check server");
-}
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
 
-async fn metrics_server(port: u16) {
-    use actix_web::{web, App, HttpResponse, HttpServer};
-    use prometheus::{Encoder, TextEncoder};
+    tokio::select! {
+        _ = ctrl_c => {
+            info!("Received Ctrl+C signal");
+        },
+        _ = terminate => {
+            info!("Received SIGTERM signal");
+        },
+    }
 
-    HttpServer::new(|| {
-        App::new()
-            .route("/metrics", web::get().to(|| async {
-                let encoder = TextEncoder::new();
-                let metric_families = prometheus::gather();
-                let mut buffer = Vec::new();
-                encoder.encode(&metric_families, &mut buffer).unwrap();
-                HttpResponse::Ok()
-                    .content_type("text/plain; version=0.0.4")
-                    .body(buffer)
-            }))
-    })
-    .bind(("0.0.0.0", port))
-    .expect("Failed to bind metrics server")
-    .run()
-    .await
-    .expect("Failed to run metrics server");
+    info!("Shutting down gracefully...");
 }
