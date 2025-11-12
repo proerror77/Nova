@@ -88,10 +88,8 @@ impl StatsCollector {
             if latencies.is_empty() {
                 (0.0, 0.0)
             } else {
-                latencies.sort_by(|a, b| {
-                    a.partial_cmp(b)
-                        .expect("Latency values should not be NaN")
-                });
+                latencies
+                    .sort_by(|a, b| a.partial_cmp(b).expect("Latency values should not be NaN"));
                 let p50_idx = (latencies.len() as f64 * 0.50) as usize;
                 let p99_idx = (latencies.len() as f64 * 0.99) as usize;
                 (
