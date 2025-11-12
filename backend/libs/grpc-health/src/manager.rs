@@ -228,10 +228,8 @@ mod tests {
             mgr.register_check(Box::new(AlwaysHealthyCheck)).await;
         }
 
-        let handle = HealthManager::start_background_check(
-            manager.clone(),
-            Duration::from_millis(100),
-        );
+        let handle =
+            HealthManager::start_background_check(manager.clone(), Duration::from_millis(100));
 
         // Let it run for a short time
         tokio::time::sleep(Duration::from_millis(250)).await;

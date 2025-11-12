@@ -21,7 +21,7 @@ impl LocationService {
         // Validate coordinates
         let coords =
             LocationCoordinates::new(request.latitude, request.longitude, request.accuracy_meters)
-                .map_err(|e| AppError::BadRequest(e))?;
+                .map_err(AppError::BadRequest)?;
 
         // Check if user has permission to share
         let perm = Self::get_or_create_permission(pool, user_id).await?;

@@ -10,7 +10,6 @@
 /// - Delivery logging and metrics
 /// - Circuit breaker pattern
 use crate::services::{APNsClient, FCMClient};
-use chrono::Utc;
 use sqlx::PgPool;
 use std::sync::Arc;
 use tracing::{debug, error, info, warn};
@@ -299,8 +298,8 @@ impl PushSender {
         "#;
 
         sqlx::query(query)
-            .bind(&request.notification_id)
-            .bind(&request.token_id)
+            .bind(request.notification_id)
+            .bind(request.token_id)
             .bind(status)
             .execute(&self.db)
             .await
@@ -329,8 +328,8 @@ impl PushSender {
         sqlx::query(query)
             .bind(status)
             .bind(&result.error)
-            .bind(&request.notification_id)
-            .bind(&request.token_id)
+            .bind(request.notification_id)
+            .bind(request.token_id)
             .execute(&self.db)
             .await
             .map_err(|e| format!("Failed to update delivery log: {}", e))?;
@@ -349,7 +348,7 @@ impl PushSender {
         "#;
 
         sqlx::query(query)
-            .bind(&token_id)
+            .bind(token_id)
             .execute(&self.db)
             .await
             .map_err(|e| format!("Failed to invalidate token: {}", e))?;

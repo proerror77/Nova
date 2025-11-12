@@ -56,11 +56,9 @@ async fn main() -> Result<(), error::AppError> {
     tracing::info!("Initializing gRPC client pool with connection pooling");
     let grpc_config = GrpcConfig::from_env()
         .map_err(|e| error::AppError::Config(format!("Failed to load gRPC config: {}", e)))?;
-    let grpc_pool = Arc::new(
-        GrpcClientPool::new(&grpc_config)
-            .await
-            .map_err(|e| error::AppError::StartServer(format!("Failed to create gRPC client pool: {}", e)))?,
-    );
+    let grpc_pool = Arc::new(GrpcClientPool::new(&grpc_config).await.map_err(|e| {
+        error::AppError::StartServer(format!("Failed to create gRPC client pool: {}", e))
+    })?);
 
     // Initialize AuthClient from connection pool
     let auth_client = Arc::new(AuthClient::from_pool(grpc_pool.clone()));
@@ -124,7 +122,9 @@ async fn main() -> Result<(), error::AppError> {
             .map_err(|e| error::AppError::StartServer(format!("mTLS config: {e}")))?;
 
         let (mut health_reporter, health_service) = tonic_health::server::health_reporter();
-        health_reporter.set_serving::<RealtimeChatServiceServer<grpc::RealtimeChatServiceImpl>>().await;
+        health_reporter
+            .set_serving::<RealtimeChatServiceServer<grpc::RealtimeChatServiceImpl>>()
+            .await;
 
         GrpcServer::builder()
             .tls_config(tls_config)
@@ -151,7 +151,7 @@ async fn main() -> Result<(), error::AppError> {
         App::new()
             .wrap(cors)
             .wrap(actix_middleware::RequestId::new())
-            .wrap(actix_middleware::Logging::default())
+            .wrap(actix_middleware::Logging)
             .app_data(web::Data::new(rest_state.clone()))
             .app_data(web::Data::new(rest_db.clone()))
             .service(routes::messages::send_message)

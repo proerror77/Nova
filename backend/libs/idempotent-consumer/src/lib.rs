@@ -256,7 +256,10 @@ pub enum ProcessingResult {
 impl ProcessingResult {
     /// Check if processing was successful (either first time or already processed)
     pub fn is_ok(&self) -> bool {
-        matches!(self, ProcessingResult::Success | ProcessingResult::AlreadyProcessed)
+        matches!(
+            self,
+            ProcessingResult::Success | ProcessingResult::AlreadyProcessed
+        )
     }
 
     /// Check if processing failed
@@ -592,8 +595,9 @@ impl IdempotencyGuard {
     /// ```
     pub async fn cleanup_old_events(&self) -> IdempotencyResult<u64> {
         let cutoff_time = Utc::now()
-            - chrono::Duration::from_std(self.retention_duration)
-                .map_err(|e| IdempotencyError::Other(anyhow::anyhow!("Invalid retention duration: {}", e)))?;
+            - chrono::Duration::from_std(self.retention_duration).map_err(|e| {
+                IdempotencyError::Other(anyhow::anyhow!("Invalid retention duration: {}", e))
+            })?;
 
         let result = sqlx::query(
             r#"

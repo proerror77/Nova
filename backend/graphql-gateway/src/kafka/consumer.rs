@@ -6,15 +6,15 @@
 //! - messaging.events: Direct messages
 //! - notification.events: Notifications
 
+use futures_util::stream::Stream;
 use rdkafka::consumer::{Consumer, StreamConsumer};
 use rdkafka::message::Message;
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
-use tokio::sync::mpsc;
-use tracing::{error, info, warn, debug};
-use futures_util::stream::Stream;
 use std::pin::Pin;
+use std::sync::Arc;
 use std::task::{Context, Poll};
+use tokio::sync::mpsc;
+use tracing::{debug, error, info, warn};
 
 use super::KafkaError;
 
@@ -107,7 +107,9 @@ impl KafkaConsumer {
 
                             match topic {
                                 "feed.events" => {
-                                    if let Ok(event) = serde_json::from_slice::<KafkaFeedEvent>(payload) {
+                                    if let Ok(event) =
+                                        serde_json::from_slice::<KafkaFeedEvent>(payload)
+                                    {
                                         debug!(post_id = %event.post_id, "Received feed event");
                                         let _ = self.tx.send(KafkaEvent::Feed(event));
                                     } else {
@@ -115,7 +117,9 @@ impl KafkaConsumer {
                                     }
                                 }
                                 "messaging.events" => {
-                                    if let Ok(event) = serde_json::from_slice::<KafkaMessageEvent>(payload) {
+                                    if let Ok(event) =
+                                        serde_json::from_slice::<KafkaMessageEvent>(payload)
+                                    {
                                         debug!(message_id = %event.message_id, "Received message event");
                                         let _ = self.tx.send(KafkaEvent::Message(event));
                                     } else {
@@ -123,7 +127,9 @@ impl KafkaConsumer {
                                     }
                                 }
                                 "notification.events" => {
-                                    if let Ok(event) = serde_json::from_slice::<KafkaNotificationEvent>(payload) {
+                                    if let Ok(event) =
+                                        serde_json::from_slice::<KafkaNotificationEvent>(payload)
+                                    {
                                         debug!(notification_id = %event.notification_id, "Received notification event");
                                         let _ = self.tx.send(KafkaEvent::Notification(event));
                                     } else {
@@ -174,22 +180,18 @@ impl KafkaEventStream {
     /// Filter message events for a specific user
     pub fn filter_messages_for_user(user_id: &str) -> impl Fn(KafkaEvent) -> bool {
         let user_id = user_id.to_string();
-        move |event: KafkaEvent| {
-            match &event {
-                KafkaEvent::Message(msg) => msg.recipient_id == user_id,
-                _ => false,
-            }
+        move |event: KafkaEvent| match &event {
+            KafkaEvent::Message(msg) => msg.recipient_id == user_id,
+            _ => false,
         }
     }
 
     /// Filter notification events for a specific user
     pub fn filter_notifications_for_user(user_id: &str) -> impl Fn(KafkaEvent) -> bool {
         let user_id = user_id.to_string();
-        move |event: KafkaEvent| {
-            match &event {
-                KafkaEvent::Notification(notif) => notif.user_id == user_id,
-                _ => false,
-            }
+        move |event: KafkaEvent| match &event {
+            KafkaEvent::Notification(notif) => notif.user_id == user_id,
+            _ => false,
         }
     }
 }

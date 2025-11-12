@@ -23,7 +23,10 @@ impl RecallStrategy for PersonalizedRecallStrategy {
         let user_interests = self.get_user_interests(user_id).await?;
 
         if user_interests.is_empty() {
-            warn!("User {} has no interests, personalized recall returns empty", user_id);
+            warn!(
+                "User {} has no interests, personalized recall returns empty",
+                user_id
+            );
             return Ok(Vec::new());
         }
 

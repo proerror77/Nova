@@ -4,9 +4,7 @@
 //! **WARNING**: NEVER use in production - use proper CA-signed certificates.
 
 use anyhow::{Context, Result};
-use rcgen::{
-    BasicConstraints, CertificateParams, DistinguishedName, DnType, IsCa, SanType,
-};
+use rcgen::{BasicConstraints, CertificateParams, DistinguishedName, DnType, IsCa, SanType};
 use std::fs;
 use std::path::Path;
 use tracing::info;
@@ -46,7 +44,8 @@ pub fn generate_dev_certificates() -> Result<CertificateBundle> {
     ca_params.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
 
     let ca_keypair = rcgen::KeyPair::generate()?;
-    let ca_cert = ca_params.self_signed(&ca_keypair)
+    let ca_cert = ca_params
+        .self_signed(&ca_keypair)
         .context("Failed to generate CA certificate")?;
 
     let ca_cert_pem = ca_cert.pem();
@@ -63,20 +62,16 @@ pub fn generate_dev_certificates() -> Result<CertificateBundle> {
         .push(DnType::OrganizationName, "Nova Development");
 
     // Add Subject Alternative Names (SANs)
-    server_params
-        .subject_alt_names
-        .push(SanType::DnsName(
-            "localhost"
-                .try_into()
-                .context("Failed to create SAN for localhost")?,
-        ));
-    server_params
-        .subject_alt_names
-        .push(SanType::DnsName(
-            "*.nova-backend.svc.cluster.local"
-                .try_into()
-                .context("Failed to create SAN for k8s service")?,
-        ));
+    server_params.subject_alt_names.push(SanType::DnsName(
+        "localhost"
+            .try_into()
+            .context("Failed to create SAN for localhost")?,
+    ));
+    server_params.subject_alt_names.push(SanType::DnsName(
+        "*.nova-backend.svc.cluster.local"
+            .try_into()
+            .context("Failed to create SAN for k8s service")?,
+    ));
     server_params
         .subject_alt_names
         .push(SanType::IpAddress(std::net::IpAddr::V4(

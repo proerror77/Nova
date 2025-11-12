@@ -104,10 +104,7 @@ where
     /// - TTL should be < RAM capacity (each entry ~100 bytes)
     /// - For 100K events/sec, 1-hour TTL = ~360M entries = ~36 GB RAM
     pub fn new(ttl: Duration) -> Self {
-        info!(
-            "Initializing Kafka deduplicator with TTL: {:?}",
-            ttl
-        );
+        info!("Initializing Kafka deduplicator with TTL: {:?}", ttl);
         Self {
             seen: Arc::new(DashMap::new()),
             ttl,

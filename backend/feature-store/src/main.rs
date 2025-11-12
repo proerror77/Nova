@@ -33,7 +33,9 @@ async fn main() -> Result<()> {
 
     // Load configuration
     let config = Config::from_env().context("Failed to load configuration")?;
-    config.validate().context("Configuration validation failed")?;
+    config
+        .validate()
+        .context("Configuration validation failed")?;
     info!("Configuration loaded and validated");
 
     // Initialize PostgreSQL pool (standardized)

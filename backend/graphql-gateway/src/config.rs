@@ -218,14 +218,11 @@ impl Config {
         let signing_key = env::var("JWT_SECRET")
             .context("JWT_SECRET must be set when AWS_SECRETS_JWT_NAME is not available")?;
 
-        let algorithm = env::var("JWT_ALGORITHM")
-            .unwrap_or_else(|_| "HS256".to_string());
+        let algorithm = env::var("JWT_ALGORITHM").unwrap_or_else(|_| "HS256".to_string());
 
-        let issuer = env::var("JWT_ISSUER")
-            .unwrap_or_else(|_| "nova-graphql-gateway".to_string());
+        let issuer = env::var("JWT_ISSUER").unwrap_or_else(|_| "nova-graphql-gateway".to_string());
 
-        let audience_str = env::var("JWT_AUDIENCE")
-            .unwrap_or_else(|_| "nova-api".to_string());
+        let audience_str = env::var("JWT_AUDIENCE").unwrap_or_else(|_| "nova-api".to_string());
         let audience = audience_str
             .split(',')
             .map(|s| s.trim().to_string())

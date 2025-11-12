@@ -20,7 +20,6 @@ use std::time::Duration;
 use tokio::sync::broadcast;
 use tokio::task::JoinSet;
 use tracing::info;
-use tracing_subscriber;
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
 
@@ -87,8 +86,7 @@ async fn main() -> io::Result<()> {
     match jwt::load_validation_key() {
         Ok(public_key) => {
             if let Err(err) = jwt::initialize_jwt_validation_only(&public_key) {
-                return Err(io::Error::new(
-                    io::ErrorKind::Other,
+                return Err(io::Error::other(
                     format!("Failed to initialize JWT keys: {err}"),
                 ));
             }
@@ -134,8 +132,7 @@ async fn main() -> io::Result<()> {
     let redis_pool = RedisPool::connect(&config.cache.redis_url, sentinel_cfg)
         .await
         .map_err(|e| {
-            io::Error::new(
-                io::ErrorKind::Other,
+            io::Error::other(
                 format!("Failed to initialize Redis connection: {e}"),
             )
         })?;
@@ -245,7 +242,7 @@ async fn main() -> io::Result<()> {
         tracing::info!("gRPC server is running");
         media_service::grpc::start_grpc_server(grpc_addr, db_pool_grpc, cache_grpc, grpc_shutdown)
             .await
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("{}", e)))
+            .map_err(|e| io::Error::other(format!("{}", e)))
     });
 
     let mut first_error: Option<io::Error> = None;
@@ -273,7 +270,7 @@ async fn main() -> io::Result<()> {
                     Some(Err(e)) => {
                         tracing::error!("Task join error: {}", e);
                         if first_error.is_none() {
-                            first_error = Some(io::Error::new(io::ErrorKind::Other, e.to_string()));
+                            first_error = Some(io::Error::other(e.to_string()));
                         }
                         let _ = shutdown_tx.send(());
                         server_handle.stop(true).await;

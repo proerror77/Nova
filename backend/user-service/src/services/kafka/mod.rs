@@ -4,7 +4,6 @@
 /// - **Deduplication**: Prevent duplicate message processing (CDC events)
 /// - **Retries**: Handle transient failures
 /// - **Monitoring**: Track Kafka operations
-
 pub mod deduplicator;
 
 pub use deduplicator::KafkaDeduplicator;

@@ -75,13 +75,13 @@ pub async fn upload_attachment(
 
     // Ensure message belongs to this conversation
     if msg_conversation_id != conversation_id {
-        return Err(AppError::Forbidden.into());
+        return Err(AppError::Forbidden);
     }
 
     // Check permission: message sender or conversation admin
     let is_sender = sender_id == user.id;
     if !is_sender && !member.is_admin() {
-        return Err(AppError::Forbidden.into());
+        return Err(AppError::Forbidden);
     }
 
     // Create attachment record
@@ -214,7 +214,7 @@ pub async fn delete_attachment(
     // Verify message matches
     let msg_id: Uuid = attachment_row.get("message_id");
     if msg_id != message_id {
-        return Err(AppError::NotFound.into());
+        return Err(AppError::NotFound);
     }
 
     // Get message details to verify user permission
@@ -236,7 +236,7 @@ pub async fn delete_attachment(
     // Check permission: message sender or conversation admin
     let is_sender = sender_id == user.id;
     if !is_sender && !member.is_admin() {
-        return Err(AppError::Forbidden.into());
+        return Err(AppError::Forbidden);
     }
 
     let affected = sqlx::query("DELETE FROM message_attachments WHERE id = $1")
@@ -247,7 +247,7 @@ pub async fn delete_attachment(
         .rows_affected();
 
     if affected == 0 {
-        return Err(AppError::NotFound.into());
+        return Err(AppError::NotFound);
     }
 
     Ok(HttpResponse::NoContent().finish())

@@ -60,26 +60,23 @@ impl TlsConfigPaths {
     /// - `GRPC_CLIENT_CERT_PATH`: Client certificate
     /// - `GRPC_CLIENT_KEY_PATH`: Client private key
     pub fn from_env() -> TlsResult<Self> {
-        let ca_cert_path = std::env::var("GRPC_CA_CERT_PATH").map_err(|_| {
-            TlsError::MissingEnvVar {
+        let ca_cert_path =
+            std::env::var("GRPC_CA_CERT_PATH").map_err(|_| TlsError::MissingEnvVar {
                 var_name: "GRPC_CA_CERT_PATH".to_string(),
                 hint: "Set to CA certificate path for peer verification".to_string(),
-            }
-        })?;
+            })?;
 
-        let server_cert_path = std::env::var("GRPC_SERVER_CERT_PATH").map_err(|_| {
-            TlsError::MissingEnvVar {
+        let server_cert_path =
+            std::env::var("GRPC_SERVER_CERT_PATH").map_err(|_| TlsError::MissingEnvVar {
                 var_name: "GRPC_SERVER_CERT_PATH".to_string(),
                 hint: "Set to server certificate path".to_string(),
-            }
-        })?;
+            })?;
 
-        let server_key_path = std::env::var("GRPC_SERVER_KEY_PATH").map_err(|_| {
-            TlsError::MissingEnvVar {
+        let server_key_path =
+            std::env::var("GRPC_SERVER_KEY_PATH").map_err(|_| TlsError::MissingEnvVar {
                 var_name: "GRPC_SERVER_KEY_PATH".to_string(),
                 hint: "Set to server private key path".to_string(),
-            }
-        })?;
+            })?;
 
         let client_cert_path = std::env::var("GRPC_CLIENT_CERT_PATH")
             .ok()
@@ -204,13 +201,15 @@ impl MtlsClientConfig {
     /// Requires both client certificate and key for mutual authentication.
     pub async fn from_paths(paths: TlsConfigPaths, domain_name: String) -> TlsResult<Self> {
         // Validate client cert/key provided
-        let client_cert_path = paths.client_cert_path.as_ref().ok_or_else(|| {
-            TlsError::MtlsClientCertMissing
-        })?;
+        let client_cert_path = paths
+            .client_cert_path
+            .as_ref()
+            .ok_or(TlsError::MtlsClientCertMissing)?;
 
-        let client_key_path = paths.client_key_path.as_ref().ok_or_else(|| {
-            TlsError::MtlsClientKeyMissing
-        })?;
+        let client_key_path = paths
+            .client_key_path
+            .as_ref()
+            .ok_or(TlsError::MtlsClientKeyMissing)?;
 
         // Load CA certificate
         let ca_cert_pem = Self::load_cert_file(&paths.ca_cert_path)?;
@@ -357,8 +356,7 @@ mod tests {
     async fn test_mtls_client_config_from_paths() {
         let (_temp, paths) = setup_test_certs().await;
 
-        let config =
-            MtlsClientConfig::from_paths(paths, "localhost".to_string()).await;
+        let config = MtlsClientConfig::from_paths(paths, "localhost".to_string()).await;
         assert!(config.is_ok());
 
         let config = config.unwrap();
@@ -372,10 +370,9 @@ mod tests {
     async fn test_mtls_client_build_tls() {
         let (_temp, paths) = setup_test_certs().await;
 
-        let config =
-            MtlsClientConfig::from_paths(paths, "localhost".to_string())
-                .await
-                .unwrap();
+        let config = MtlsClientConfig::from_paths(paths, "localhost".to_string())
+            .await
+            .unwrap();
         let tls_config = config.build_client_tls();
         assert!(tls_config.is_ok());
     }
@@ -385,8 +382,7 @@ mod tests {
         let (_temp, mut paths) = setup_test_certs().await;
         paths.client_cert_path = None;
 
-        let result =
-            MtlsClientConfig::from_paths(paths, "localhost".to_string()).await;
+        let result = MtlsClientConfig::from_paths(paths, "localhost".to_string()).await;
         assert!(result.is_err());
 
         match result.unwrap_err() {

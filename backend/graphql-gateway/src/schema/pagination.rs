@@ -52,8 +52,8 @@ impl CursorCodec {
             .decode(cursor)
             .map_err(|e| format!("Invalid cursor format: {}", e))?;
 
-        let cursor_str = String::from_utf8(decoded)
-            .map_err(|e| format!("Cursor not valid UTF-8: {}", e))?;
+        let cursor_str =
+            String::from_utf8(decoded).map_err(|e| format!("Cursor not valid UTF-8: {}", e))?;
 
         if let Some(offset_str) = cursor_str.strip_prefix("offset:") {
             offset_str
@@ -77,8 +77,8 @@ impl CursorCodec {
             .decode(cursor)
             .map_err(|e| format!("Invalid cursor format: {}", e))?;
 
-        let cursor_str = String::from_utf8(decoded)
-            .map_err(|e| format!("Cursor not valid UTF-8: {}", e))?;
+        let cursor_str =
+            String::from_utf8(decoded).map_err(|e| format!("Cursor not valid UTF-8: {}", e))?;
 
         // Parse "id:post_123,ts:1699632000"
         let parts: Vec<&str> = cursor_str.split(',').collect();
@@ -152,11 +152,7 @@ impl PaginationArgs {
 
     /// Get effective limit
     pub fn get_limit(&self) -> i32 {
-        self.first
-            .or(self.last)
-            .unwrap_or(10)
-            .min(100)
-            .max(1)
+        self.first.or(self.last).unwrap_or(10).min(100).max(1)
     }
 
     /// Get effective offset from after cursor
@@ -210,7 +206,9 @@ impl<T: async_graphql::OutputType> ConnectionBuilder<T> {
         let start_cursor = edges.first().map(|e| e.cursor.clone());
         let end_cursor = edges.last().map(|e| e.cursor.clone());
 
-        let has_next_page = self.total_count.map(|tc| (self.offset as i32 + limit as i32) < tc);
+        let has_next_page = self
+            .total_count
+            .map(|tc| (self.offset + limit as i32) < tc);
         let has_previous_page = self.offset > 0;
 
         Connection {

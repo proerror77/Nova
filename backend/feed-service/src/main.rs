@@ -51,7 +51,7 @@ async fn main() -> io::Result<()> {
                 .with_thread_names(true) // Include thread names
                 .with_line_number(true) // Include source line numbers
                 .with_file(true) // Include source file paths
-                .with_target(true) // Include target module path
+                .with_target(true), // Include target module path
         )
         .init();
 
@@ -195,7 +195,10 @@ async fn main() -> io::Result<()> {
                     tracing::info!("Development mode: Starting without TLS (NOT FOR PRODUCTION)");
                     None
                 } else {
-                    tracing::error!("Production requires mTLS - GRPC_SERVER_CERT_PATH must be set: {}", e);
+                    tracing::error!(
+                        "Production requires mTLS - GRPC_SERVER_CERT_PATH must be set: {}",
+                        e
+                    );
                     return;
                 }
             }
@@ -206,18 +209,16 @@ async fn main() -> io::Result<()> {
 
         if let Some(tls_cfg) = tls_config {
             match tls_cfg.build_server_tls() {
-                Ok(server_tls) => {
-                    match server_builder.tls_config(server_tls) {
-                        Ok(builder) => {
-                            server_builder = builder;
-                            tracing::info!("gRPC server TLS configured successfully");
-                        }
-                        Err(e) => {
-                            tracing::error!("Failed to configure TLS on gRPC server: {}", e);
-                            return;
-                        }
+                Ok(server_tls) => match server_builder.tls_config(server_tls) {
+                    Ok(builder) => {
+                        server_builder = builder;
+                        tracing::info!("gRPC server TLS configured successfully");
                     }
-                }
+                    Err(e) => {
+                        tracing::error!("Failed to configure TLS on gRPC server: {}", e);
+                        return;
+                    }
+                },
                 Err(e) => {
                     tracing::error!("Failed to build server TLS config: {}", e);
                     return;

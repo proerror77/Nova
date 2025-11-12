@@ -52,7 +52,9 @@ async fn main() -> anyhow::Result<()> {
     // Example 6: Multiple rapid invalidations
     println!("\n6. Rapid invalidations (stress test)...");
     for i in 0..10 {
-        publisher.invalidate_user(&format!("rapid_user_{}", i)).await?;
+        publisher
+            .invalidate_user(&format!("rapid_user_{}", i))
+            .await?;
     }
     println!("   ✓ Sent 10 rapid invalidations");
 

@@ -59,8 +59,7 @@ pub struct RateLimitMiddleware {
 impl RateLimitMiddleware {
     pub fn new(config: RateLimitConfig) -> Self {
         let quota = Quota::per_second(
-            NonZeroU32::new(config.req_per_second)
-                .expect("req_per_second must be > 0"),
+            NonZeroU32::new(config.req_per_second).expect("req_per_second must be > 0"),
         );
 
         let rate_limiter = governor::RateLimiter::direct(quota);
@@ -90,12 +89,7 @@ where
     fn new_transform(&self, service: S) -> Self::Future {
         let state = self.state.clone();
 
-        Box::pin(async move {
-            Ok(RateLimitMiddlewareService {
-                service,
-                state,
-            })
-        })
+        Box::pin(async move { Ok(RateLimitMiddlewareService { service, state }) })
     }
 }
 
@@ -135,9 +129,9 @@ where
                 elapsed_ms = start.elapsed().as_millis() as u32,
                 "Rate limit exceeded"
             );
-            return Box::pin(async move {
-                Err(ErrorTooManyRequests("Rate limit exceeded").into())
-            });
+            return Box::pin(
+                async move { Err(ErrorTooManyRequests("Rate limit exceeded")) },
+            );
         }
 
         tracing::debug!(

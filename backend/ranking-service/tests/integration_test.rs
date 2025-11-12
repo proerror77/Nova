@@ -1,12 +1,10 @@
-use ranking_service::{
-    config::RecallConfig, DiversityLayer, RankingLayer, RecallLayer,
-};
+use ranking_service::{config::RecallConfig, DiversityLayer, RankingLayer, RecallLayer};
 
 #[tokio::test]
 async fn test_basic_workflow() {
     // 創建 mock clients
-    let redis_client = redis::Client::open("redis://localhost:6379")
-        .expect("Failed to create Redis client");
+    let redis_client =
+        redis::Client::open("redis://localhost:6379").expect("Failed to create Redis client");
     let graph_channel =
         tonic::transport::Channel::from_static("http://localhost:9008").connect_lazy();
 

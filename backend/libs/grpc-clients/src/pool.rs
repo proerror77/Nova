@@ -320,11 +320,7 @@ mod tests {
         let channel2 = endpoint.clone().connect_lazy();
         let channel3 = endpoint.connect_lazy();
 
-        let channels = vec![
-            Arc::new(channel1),
-            Arc::new(channel2),
-            Arc::new(channel3),
-        ];
+        let channels = vec![Arc::new(channel1), Arc::new(channel2), Arc::new(channel3)];
 
         let pool = GrpcConnectionPool {
             channels,
@@ -372,10 +368,7 @@ mod tests {
         let endpoint = Endpoint::from_static("http://localhost:9999");
         let channel1 = endpoint.clone().connect_lazy();
         let channel2 = endpoint.connect_lazy();
-        let channels = vec![
-            Arc::new(channel1),
-            Arc::new(channel2),
-        ];
+        let channels = vec![Arc::new(channel1), Arc::new(channel2)];
 
         let pool = GrpcConnectionPool {
             channels,
@@ -431,11 +424,7 @@ mod tests {
         let channel1 = endpoint.clone().connect_lazy();
         let channel2 = endpoint.clone().connect_lazy();
         let channel3 = endpoint.connect_lazy();
-        let channels = vec![
-            Arc::new(channel1),
-            Arc::new(channel2),
-            Arc::new(channel3),
-        ];
+        let channels = vec![Arc::new(channel1), Arc::new(channel2), Arc::new(channel3)];
 
         let pool = GrpcConnectionPool {
             channels,

@@ -45,18 +45,18 @@
 //! # }
 //! ```
 
+mod builder;
+mod checks;
 mod error;
 mod health;
-mod checks;
 mod manager;
-mod builder;
 
+pub use builder::HealthManagerBuilder;
+pub use checks::{HealthCheck, KafkaHealthCheck, PostgresHealthCheck, RedisHealthCheck};
 pub use error::{HealthCheckError, Result};
 pub use health::HealthStatus;
-pub use checks::{HealthCheck, PostgresHealthCheck, RedisHealthCheck, KafkaHealthCheck};
 pub use manager::HealthManager;
-pub use builder::HealthManagerBuilder;
 
 // Re-export tonic-health types for convenience
-pub use tonic_health::server::HealthReporter;
 pub use tonic_health::pb::health_server::HealthServer;
+pub use tonic_health::server::HealthReporter;

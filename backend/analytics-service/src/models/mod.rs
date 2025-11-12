@@ -181,6 +181,7 @@ pub struct KafkaTopic {
 
 /// Event Statistics
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct EventStats {
     pub total_events_published: i32,
     pub total_events_processed: i32,
@@ -188,13 +189,3 @@ pub struct EventStats {
     pub events_by_type: std::collections::HashMap<String, i32>,
 }
 
-impl Default for EventStats {
-    fn default() -> Self {
-        Self {
-            total_events_published: 0,
-            total_events_processed: 0,
-            failed_events: 0,
-            events_by_type: std::collections::HashMap::new(),
-        }
-    }
-}

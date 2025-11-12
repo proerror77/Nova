@@ -1,7 +1,7 @@
-pub mod recall;
-pub mod ranking;
 pub mod diversity;
+pub mod ranking;
+pub mod recall;
 
-pub use recall::RecallLayer;
-pub use ranking::RankingLayer;
 pub use diversity::DiversityLayer;
+pub use ranking::RankingLayer;
+pub use recall::RecallLayer;

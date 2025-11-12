@@ -23,15 +23,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     // Initialize Redis client
-    let redis_client = redis::Client::open(config.redis.url.clone())
-        .expect("Failed to create Redis client");
+    let redis_client =
+        redis::Client::open(config.redis.url.clone()).expect("Failed to create Redis client");
 
     // Initialize gRPC clients
-    let graph_client = tonic::transport::Channel::from_shared(
-        config.grpc_clients.graph_service_url.clone(),
-    )
-    .expect("Invalid graph service URL")
-    .connect_lazy();
+    let graph_client =
+        tonic::transport::Channel::from_shared(config.grpc_clients.graph_service_url.clone())
+            .expect("Invalid graph service URL")
+            .connect_lazy();
 
     // Initialize layers
     let recall_layer = RecallLayer::new(graph_client, redis_client, config.recall.clone());

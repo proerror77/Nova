@@ -8,8 +8,8 @@ fn main() {
     // Client code is also generated for integration tests
     tonic_build::configure()
         .build_server(true)
-        .build_client(true)  // Enable client code generation for integration tests
-        .compile(
+        .build_client(true) // Enable client code generation for integration tests
+        .compile_protos(
             &["../proto/services/auth_service.proto"],
             &["../proto/services/"],
         )

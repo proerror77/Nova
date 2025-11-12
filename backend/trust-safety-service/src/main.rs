@@ -2,7 +2,10 @@ use std::sync::Arc;
 use trust_safety_service::{
     config::Config,
     db::ModerationDb,
-    grpc::{server::trust_safety::trust_safety_service_server::TrustSafetyServiceServer, TrustSafetyServiceImpl},
+    grpc::{
+        server::trust_safety::trust_safety_service_server::TrustSafetyServiceServer,
+        TrustSafetyServiceImpl,
+    },
     services::{AppealService, NsfwDetector, SpamDetector, TextModerator},
 };
 
@@ -28,7 +31,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     // Initialize database pool using shared library
-    let db = Arc::new(db_pool::create_pool(db_pool::DbConfig::for_service(&config.service_name)).await?);
+    let db =
+        Arc::new(db_pool::create_pool(db_pool::DbConfig::for_service(&config.service_name)).await?);
     tracing::info!("Database pool initialized");
 
     // Run migrations
@@ -90,11 +94,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         HttpServer::new(|| {
             App::new()
-                .route("/health", web::get().to(|| async { HttpResponse::Ok().body("OK") }))
-                .route("/ready", web::get().to(|| async { HttpResponse::Ok().body("READY") }))
+                .route(
+                    "/health",
+                    web::get().to(|| async { HttpResponse::Ok().body("OK") }),
+                )
+                .route(
+                    "/ready",
+                    web::get().to(|| async { HttpResponse::Ok().body("READY") }),
+                )
         })
         .bind(&health_addr_clone)
-        .unwrap()
+        .expect("Failed to bind health check HTTP server address")
         .run()
         .await
     });

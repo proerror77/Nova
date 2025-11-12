@@ -3,16 +3,16 @@
 //! ✅ P0-5: DataLoader for N+1 query prevention
 //! ✅ P0-5: Query complexity analysis
 
-pub mod user;
-pub mod content;
 pub mod auth;
-pub mod subscription;
-pub mod pagination;
-pub mod loaders;
-pub mod complexity;
 pub mod backpressure;
+pub mod complexity;
+pub mod content;
+pub mod loaders;
+pub mod pagination;
+pub mod subscription;
+pub mod user;
 
-use async_graphql::{MergedObject, Schema, dataloader::DataLoader};
+use async_graphql::{dataloader::DataLoader, MergedObject, Schema};
 
 use crate::clients::ServiceClients;
 use crate::security::{ComplexityLimit, RequestBudget, SecurityConfig};
@@ -27,7 +27,11 @@ pub struct QueryRoot(user::UserQuery, content::ContentQuery, auth::AuthQuery);
 /// 2. Have #[derive(Default)] on the struct
 /// 3. Be owned types (not references) in the MergedObject tuple
 #[derive(MergedObject, Default)]
-pub struct MutationRoot(auth::AuthMutation, content::ContentMutation, user::UserMutation);
+pub struct MutationRoot(
+    auth::AuthMutation,
+    content::ContentMutation,
+    user::UserMutation,
+);
 
 /// GraphQL App Schema type with WebSocket subscriptions
 pub type AppSchema = Schema<QueryRoot, MutationRoot, subscription::SubscriptionRoot>;
@@ -53,16 +57,31 @@ pub fn build_schema(clients: ServiceClients) -> AppSchema {
     let schema_builder = Schema::build(
         QueryRoot::default(),
         MutationRoot::default(),
-        subscription::SubscriptionRoot::default(),
+        subscription::SubscriptionRoot,
     )
     .data(clients)
     // ✅ P0-5: Add DataLoaders for batch loading
     // DataLoaders prevent N+1 queries by batching database requests
-    .data(DataLoader::new(loaders::UserIdLoader::new(), tokio::task::spawn))
-    .data(DataLoader::new(loaders::PostIdLoader::new(), tokio::task::spawn))
-    .data(DataLoader::new(loaders::IdCountLoader::new(), tokio::task::spawn))
-    .data(DataLoader::new(loaders::LikeCountLoader::new(), tokio::task::spawn))
-    .data(DataLoader::new(loaders::FollowCountLoader::new(), tokio::task::spawn))
+    .data(DataLoader::new(
+        loaders::UserIdLoader::new(),
+        tokio::task::spawn,
+    ))
+    .data(DataLoader::new(
+        loaders::PostIdLoader::new(),
+        tokio::task::spawn,
+    ))
+    .data(DataLoader::new(
+        loaders::IdCountLoader::new(),
+        tokio::task::spawn,
+    ))
+    .data(DataLoader::new(
+        loaders::LikeCountLoader::new(),
+        tokio::task::spawn,
+    ))
+    .data(DataLoader::new(
+        loaders::FollowCountLoader::new(),
+        tokio::task::spawn,
+    ))
     // ✅ P0-2: Security extensions
     .extension(ComplexityLimit::new(
         security_config.max_complexity,
@@ -82,9 +101,7 @@ pub fn build_schema(clients: ServiceClients) -> AppSchema {
             .finish()
     } else {
         tracing::warn!("GraphQL introspection ENABLED (development only)");
-        schema_builder
-            .enable_federation()
-            .finish()
+        schema_builder.enable_federation().finish()
     }
 }
 

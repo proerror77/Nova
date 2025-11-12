@@ -10,16 +10,13 @@
 pub mod query_cache;
 pub mod redis_cache;
 
-pub use query_cache::{CachePolicy, CacheStats as QueryCacheStats, GraphqlQueryCache, QueryHash};
-pub use redis_cache::{FeedItem, Notification, SubscriptionCache, SubscriptionMetadata};
 
-use anyhow::{Result, Context as _};
-use redis::aio::{ConnectionManager, MultiplexedConnection};
-use redis::{AsyncCommands, Client, RedisResult};
+use anyhow::{Context as _, Result};
+use redis::aio::ConnectionManager;
+use redis::{AsyncCommands, Client};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use std::time::Duration;
-use tracing::{debug, warn, error};
+use tracing::{debug, error, warn};
 
 /// Redis cache configuration
 #[derive(Debug, Clone)]
@@ -40,9 +37,8 @@ impl CacheConfig {
     /// Create config from environment variables
     pub fn from_env() -> Self {
         Self {
-            redis_url: std::env::var("REDIS_URL").unwrap_or_else(|_| {
-                "redis://localhost:6379".to_string()
-            }),
+            redis_url: std::env::var("REDIS_URL")
+                .unwrap_or_else(|_| "redis://localhost:6379".to_string()),
             default_ttl: 300, // 5 minutes
             user_ttl: 600,    // 10 minutes
             post_ttl: 300,    // 5 minutes
@@ -60,8 +56,8 @@ pub struct CacheClient {
 impl CacheClient {
     /// Create a new cache client
     pub async fn new(config: CacheConfig) -> Result<Self> {
-        let client = Client::open(config.redis_url.clone())
-            .context("Failed to create Redis client")?;
+        let client =
+            Client::open(config.redis_url.clone()).context("Failed to create Redis client")?;
 
         let connection = ConnectionManager::new(client)
             .await
@@ -73,15 +69,12 @@ impl CacheClient {
     }
 
     /// Get a value from cache
-    pub async fn get<T: for<'de> Deserialize<'de>>(
-        &self,
-        key: &str,
-    ) -> Result<Option<T>> {
+    pub async fn get<T: for<'de> Deserialize<'de>>(&self, key: &str) -> Result<Option<T>> {
         match self.connection.clone().get::<_, Option<String>>(key).await {
             Ok(Some(value)) => {
                 debug!("Cache hit: {}", key);
-                let parsed = serde_json::from_str(&value)
-                    .context("Failed to deserialize cached value")?;
+                let parsed =
+                    serde_json::from_str(&value).context("Failed to deserialize cached value")?;
                 Ok(Some(parsed))
             }
             Ok(None) => {
@@ -96,24 +89,14 @@ impl CacheClient {
     }
 
     /// Set a value in cache with default TTL
-    pub async fn set<T: Serialize>(
-        &self,
-        key: &str,
-        value: &T,
-    ) -> Result<()> {
-        self.set_with_ttl(key, value, self.config.default_ttl)
-            .await
+    pub async fn set<T: Serialize>(&self, key: &str, value: &T) -> Result<()> {
+        self.set_with_ttl(key, value, self.config.default_ttl).await
     }
 
     /// Set a value in cache with custom TTL
-    pub async fn set_with_ttl<T: Serialize>(
-        &self,
-        key: &str,
-        value: &T,
-        ttl: u64,
-    ) -> Result<()> {
-        let serialized = serde_json::to_string(value)
-            .context("Failed to serialize value for cache")?;
+    pub async fn set_with_ttl<T: Serialize>(&self, key: &str, value: &T, ttl: u64) -> Result<()> {
+        let serialized =
+            serde_json::to_string(value).context("Failed to serialize value for cache")?;
 
         match redis::cmd("SETEX")
             .arg(key)
@@ -211,7 +194,10 @@ impl CacheClient {
             Ok(response) => {
                 let healthy = response.eq_ignore_ascii_case("PONG");
                 if !healthy {
-                    warn!("Cache health check failed: unexpected response: {}", response);
+                    warn!(
+                        "Cache health check failed: unexpected response: {}",
+                        response
+                    );
                 }
                 Ok(healthy)
             }
@@ -372,7 +358,8 @@ impl CacheInvalidator {
 
     /// Invalidate caches when a comment is added
     pub async fn on_comment_added(&self, post_id: &str) -> Result<()> {
-        self.cache.delete(&CacheKeyBuilder::post_comments(post_id))
+        self.cache
+            .delete(&CacheKeyBuilder::post_comments(post_id))
             .await?;
 
         Ok(())

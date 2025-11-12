@@ -64,13 +64,13 @@
 //! }
 //! ```
 
+use futures_util::StreamExt;
 use redis::aio::ConnectionManager;
 use redis::{AsyncCommands, Client};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::task::JoinHandle;
 use tracing::{debug, error, info, warn};
-use futures_util::StreamExt;
 
 mod error;
 mod helpers;
@@ -144,11 +144,7 @@ pub struct InvalidationMessage {
 
 impl InvalidationMessage {
     /// Create new delete message
-    pub fn delete(
-        entity_type: EntityType,
-        entity_id: String,
-        source_service: String,
-    ) -> Self {
+    pub fn delete(entity_type: EntityType, entity_id: String, source_service: String) -> Self {
         Self {
             message_id: uuid::Uuid::new_v4().to_string(),
             entity_type,
@@ -163,11 +159,7 @@ impl InvalidationMessage {
     }
 
     /// Create new update message
-    pub fn update(
-        entity_type: EntityType,
-        entity_id: String,
-        source_service: String,
-    ) -> Self {
+    pub fn update(entity_type: EntityType, entity_id: String, source_service: String) -> Self {
         Self {
             message_id: uuid::Uuid::new_v4().to_string(),
             entity_type,
@@ -311,15 +303,21 @@ impl InvalidationPublisher {
     /// # }
     /// ```
     pub async fn invalidate_user(&self, user_id: &str) -> Result<usize> {
-        let msg =
-            InvalidationMessage::delete(EntityType::User, user_id.to_string(), self.service_name.clone());
+        let msg = InvalidationMessage::delete(
+            EntityType::User,
+            user_id.to_string(),
+            self.service_name.clone(),
+        );
         self.publish(msg).await
     }
 
     /// Invalidate single post
     pub async fn invalidate_post(&self, post_id: &str) -> Result<usize> {
-        let msg =
-            InvalidationMessage::delete(EntityType::Post, post_id.to_string(), self.service_name.clone());
+        let msg = InvalidationMessage::delete(
+            EntityType::Post,
+            post_id.to_string(),
+            self.service_name.clone(),
+        );
         self.publish(msg).await
     }
 

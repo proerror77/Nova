@@ -386,7 +386,16 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsSession {
 
                         actix::spawn(async move {
                             // Handle WebSocket event asynchronously
-                            if let Err(e) = handle_ws_event_async(user_id, conversation_id, &evt, &db, &registry, &redis).await {
+                            if let Err(e) = handle_ws_event_async(
+                                user_id,
+                                conversation_id,
+                                &evt,
+                                &db,
+                                &registry,
+                                &redis,
+                            )
+                            .await
+                            {
                                 tracing::error!("Failed to handle WebSocket event: {:?}", e);
                             }
                         });
@@ -515,7 +524,7 @@ pub async fn ws_handler(
         state.registry.clone(),
         state.redis.clone(),
         state.db.clone(),
-        state.as_ref().clone(),  // Pass the full AppState
+        state.as_ref().clone(), // Pass the full AppState
     );
 
     let resp = ws::start(session, &req, stream)?;

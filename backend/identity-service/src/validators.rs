@@ -114,7 +114,9 @@ mod tests {
 
     #[test]
     fn test_password_strength_zxcvbn() {
-        assert!(validate_password_strength_zxcvbn("correct-horse-battery-staple"));
+        assert!(validate_password_strength_zxcvbn(
+            "correct-horse-battery-staple"
+        ));
         assert!(!validate_password_strength_zxcvbn("password"));
     }
 }

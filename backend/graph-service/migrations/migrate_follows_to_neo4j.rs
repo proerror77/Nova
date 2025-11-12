@@ -10,7 +10,6 @@
 ///   NEO4J_PASSWORD - Neo4j password
 ///   BATCH_SIZE - Optional, default 1000
 ///   DRY_RUN - Optional, set to "true" for validation only
-
 use anyhow::{Context, Result};
 use neo4rs::{query, Graph};
 use sqlx::postgres::PgPoolOptions;

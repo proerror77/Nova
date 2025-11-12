@@ -123,11 +123,7 @@ pub async fn delete_connection(pool: &PgPool, connection_id: Uuid) -> Result<()>
 }
 
 /// Check if user has OAuth connection for provider
-pub async fn has_provider_connection(
-    pool: &PgPool,
-    user_id: Uuid,
-    provider: &str,
-) -> Result<bool> {
+pub async fn has_provider_connection(pool: &PgPool, user_id: Uuid, provider: &str) -> Result<bool> {
     let exists = sqlx::query_scalar::<_, bool>(
         "SELECT EXISTS(SELECT 1 FROM oauth_connections WHERE user_id = $1 AND provider = $2)",
     )

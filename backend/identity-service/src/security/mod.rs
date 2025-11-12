@@ -12,7 +12,6 @@
 /// - **password**: Argon2id password hashing
 /// - **totp**: TOTP 2FA generation and verification
 /// - **token_revocation**: Real-time token blacklisting via Redis
-
 // Re-export JWT functionality from shared crypto-core library
 pub use crypto_core::jwt;
 pub use crypto_core::jwt::{

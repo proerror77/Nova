@@ -4,18 +4,15 @@ use sqlx::{Pool, Postgres, Row};
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub enum PrivacyMode {
     #[serde(rename = "strict_e2e")]
+    #[default]
     StrictE2e,
     #[serde(rename = "search_enabled")]
     SearchEnabled,
 }
 
-impl Default for PrivacyMode {
-    fn default() -> Self {
-        PrivacyMode::StrictE2e
-    }
-}
 
 impl PrivacyMode {
     pub fn from_str(value: &str) -> Self {
@@ -329,7 +326,7 @@ impl ConversationService {
             .map_err(|e| crate::error::AppError::StartServer(format!("tx: {e}")))?;
 
         // Ensure creator exists
-        let creator_username = format!("u_{}", creator_id.to_string()[..8].to_string());
+        let creator_username = format!("u_{}", &creator_id.to_string()[..8]);
         sqlx::query("INSERT INTO users (id, username) VALUES ($1, $2) ON CONFLICT (id) DO NOTHING")
             .bind(creator_id)
             .bind(creator_username)
@@ -339,7 +336,7 @@ impl ConversationService {
 
         // Ensure all members exist
         for member_id in &member_ids {
-            let username = format!("u_{}", member_id.to_string()[..8].to_string());
+            let username = format!("u_{}", &member_id.to_string()[..8]);
             sqlx::query(
                 "INSERT INTO users (id, username) VALUES ($1, $2) ON CONFLICT (id) DO NOTHING",
             )
@@ -441,7 +438,7 @@ impl ConversationService {
         .fetch_optional(db)
         .await
         .map_err(|e| crate::error::AppError::StartServer(format!("get member: {e}")))?
-        .ok_or_else(|| crate::error::AppError::Forbidden)?;
+        .ok_or(crate::error::AppError::Forbidden)?;
 
         let role: String = member_row.get("role");
         if role != "owner" {
@@ -510,7 +507,7 @@ impl ConversationService {
             .fetch_optional(db)
             .await
             .map_err(|e| crate::error::AppError::StartServer(format!("get requester: {e}")))?
-            .ok_or_else(|| crate::error::AppError::Forbidden)?;
+            .ok_or(crate::error::AppError::Forbidden)?;
 
             let requester_role: String = requester_row.get("role");
             // Only admin and owner can remove members

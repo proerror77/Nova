@@ -416,8 +416,8 @@ async fn main() -> io::Result<()> {
     // ========================================
     // Initialize Transactional Outbox components
     // ========================================
-    use transactional_outbox::{KafkaOutboxPublisher, OutboxProcessor, SqlxOutboxRepository};
     use rdkafka::ClientConfig;
+    use transactional_outbox::{KafkaOutboxPublisher, OutboxProcessor, SqlxOutboxRepository};
 
     // Create outbox repository
     let outbox_repo = Arc::new(SqlxOutboxRepository::new(db_pool.clone()));
@@ -426,21 +426,24 @@ async fn main() -> io::Result<()> {
     // Create Kafka producer with idempotent settings for Outbox
     let kafka_outbox_producer: rdkafka::producer::FutureProducer = ClientConfig::new()
         .set("bootstrap.servers", &config.kafka.brokers)
-        .set("enable.idempotence", "true")  // ✅ Critical for exactly-once
-        .set("acks", "all")                  // ✅ Wait for all replicas
+        .set("enable.idempotence", "true") // ✅ Critical for exactly-once
+        .set("acks", "all") // ✅ Wait for all replicas
         .set("max.in.flight.requests.per.connection", "5")
         .set("retries", "10")
         .create()
         .map_err(|e| {
             tracing::error!("Failed to create Kafka outbox producer: {:#}", e);
-            std::io::Error::new(std::io::ErrorKind::Other, format!("Kafka outbox producer init failed: {}", e))
+            std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("Kafka outbox producer init failed: {}", e),
+            )
         })?;
     tracing::info!("Kafka outbox producer initialized with idempotence enabled");
 
     // Create outbox publisher
     let outbox_publisher = Arc::new(KafkaOutboxPublisher::new(
         kafka_outbox_producer,
-        "nova".to_string(),  // topic prefix: "nova.user.events"
+        "nova".to_string(), // topic prefix: "nova.user.events"
     ));
     tracing::info!("Outbox publisher initialized");
 
@@ -448,9 +451,9 @@ async fn main() -> io::Result<()> {
     let processor = OutboxProcessor::new(
         outbox_repo.clone(),
         outbox_publisher,
-        100,                          // batch_size
-        std::time::Duration::from_secs(5),       // poll_interval
-        5,                            // max_retries
+        100,                               // batch_size
+        std::time::Duration::from_secs(5), // poll_interval
+        5,                                 // max_retries
     );
 
     // Start processor in background
@@ -706,7 +709,10 @@ async fn main() -> io::Result<()> {
                     info!("Development mode: Starting without TLS (NOT FOR PRODUCTION)");
                     None
                 } else {
-                    tracing::error!("Production requires mTLS - GRPC_SERVER_CERT_PATH must be set: {}", e);
+                    tracing::error!(
+                        "Production requires mTLS - GRPC_SERVER_CERT_PATH must be set: {}",
+                        e
+                    );
                     return Err(());
                 }
             }

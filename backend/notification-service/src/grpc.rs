@@ -112,7 +112,7 @@ impl NotificationService for NotificationServiceImpl {
         };
 
         let rows = sqlx::query(query)
-            .bind(&user_id)
+            .bind(user_id)
             .bind(limit)
             .bind(offset)
             .fetch_all(&self.db)
@@ -185,7 +185,7 @@ impl NotificationService for NotificationServiceImpl {
         };
 
         let total_count: i64 = sqlx::query_scalar(count_query)
-            .bind(&user_id)
+            .bind(user_id)
             .fetch_one(&self.db)
             .await
             .unwrap_or(0);
@@ -194,7 +194,7 @@ impl NotificationService for NotificationServiceImpl {
         let unread_count: i64 = sqlx::query_scalar(
             "SELECT COUNT(*) FROM notifications WHERE user_id = $1 AND is_deleted = FALSE AND is_read = FALSE"
         )
-            .bind(&user_id)
+            .bind(user_id)
             .fetch_one(&self.db)
             .await
             .unwrap_or(0);
@@ -435,7 +435,7 @@ impl NotificationService for NotificationServiceImpl {
         "#;
 
         let result = sqlx::query(query)
-            .bind(&user_id)
+            .bind(user_id)
             .execute(&self.db)
             .await
             .map_err(|e| {
@@ -467,7 +467,7 @@ impl NotificationService for NotificationServiceImpl {
         "#;
 
         sqlx::query(query)
-            .bind(&notification_id)
+            .bind(notification_id)
             .execute(&self.db)
             .await
             .map_err(|e| {
@@ -561,7 +561,7 @@ impl NotificationService for NotificationServiceImpl {
         "#;
 
         let row = sqlx::query(query)
-            .bind(&user_id)
+            .bind(user_id)
             .bind(&req.token)
             .bind(token_type)
             .bind(&req.device_id)
@@ -635,7 +635,7 @@ impl NotificationService for NotificationServiceImpl {
         let count: i64 = sqlx::query_scalar(
             "SELECT COUNT(*) FROM notifications WHERE user_id = $1 AND is_deleted = FALSE AND is_read = FALSE"
         )
-            .bind(&user_id)
+            .bind(user_id)
             .fetch_one(&self.db)
             .await
             .unwrap_or(0);
@@ -671,7 +671,7 @@ impl NotificationService for NotificationServiceImpl {
         let total_count: i64 = sqlx::query_scalar(
             "SELECT COUNT(*) FROM notifications WHERE user_id = $1 AND is_deleted = FALSE",
         )
-        .bind(&user_id)
+        .bind(user_id)
         .fetch_one(&self.db)
         .await
         .unwrap_or(0);
@@ -679,7 +679,7 @@ impl NotificationService for NotificationServiceImpl {
         let unread_count: i64 = sqlx::query_scalar(
             "SELECT COUNT(*) FROM notifications WHERE user_id = $1 AND is_deleted = FALSE AND is_read = FALSE"
         )
-            .bind(&user_id)
+            .bind(user_id)
             .fetch_one(&self.db)
             .await
             .unwrap_or(0);
@@ -690,8 +690,8 @@ impl NotificationService for NotificationServiceImpl {
         let today_count: i64 = sqlx::query_scalar(
             "SELECT COUNT(*) FROM notifications WHERE user_id = $1 AND is_deleted = FALSE AND created_at >= $2"
         )
-            .bind(&user_id)
-            .bind(&today_start)
+            .bind(user_id)
+            .bind(today_start)
             .fetch_one(&self.db)
             .await
             .unwrap_or(0);
@@ -700,8 +700,8 @@ impl NotificationService for NotificationServiceImpl {
         let this_week_count: i64 = sqlx::query_scalar(
             "SELECT COUNT(*) FROM notifications WHERE user_id = $1 AND is_deleted = FALSE AND created_at >= $2"
         )
-            .bind(&user_id)
-            .bind(&week_ago)
+            .bind(user_id)
+            .bind(week_ago)
             .fetch_one(&self.db)
             .await
             .unwrap_or(0);

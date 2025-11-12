@@ -7,11 +7,9 @@
 /// - Persisted queries
 /// - Rate limiting per user
 /// - Field/alias limits
-
 use async_graphql::{
     extensions::{Extension, ExtensionContext, ExtensionFactory, NextExecute, NextParseQuery},
-    parser::types::ExecutableDocument,
-    Request, Response, ServerError, Variables,
+    parser::types::ExecutableDocument, Response, ServerError, Variables,
 };
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -45,7 +43,10 @@ impl ComplexityAnalyzer {
         complexity
     }
 
-    fn calculate_operation_complexity(&self, operation: &async_graphql::parser::types::OperationDefinition) -> usize {
+    fn calculate_operation_complexity(
+        &self,
+        operation: &async_graphql::parser::types::OperationDefinition,
+    ) -> usize {
         // Base complexity for operation
         let mut complexity = 1;
 
@@ -57,7 +58,11 @@ impl ComplexityAnalyzer {
         complexity
     }
 
-    fn calculate_selection_complexity(&self, selection: &async_graphql::parser::types::Selection, depth: usize) -> usize {
+    fn calculate_selection_complexity(
+        &self,
+        selection: &async_graphql::parser::types::Selection,
+        depth: usize,
+    ) -> usize {
         use async_graphql::parser::types::Selection;
 
         match selection {
@@ -75,7 +80,8 @@ impl ComplexityAnalyzer {
 
                 // Recurse into sub-selections
                 for sub_selection in &field.node.selection_set.node.items {
-                    complexity += self.calculate_selection_complexity(&sub_selection.node, depth + 1);
+                    complexity +=
+                        self.calculate_selection_complexity(&sub_selection.node, depth + 1);
                 }
 
                 complexity
@@ -105,7 +111,10 @@ impl ComplexityAnalyzer {
         max_depth
     }
 
-    fn calculate_operation_depth(&self, operation: &async_graphql::parser::types::OperationDefinition) -> usize {
+    fn calculate_operation_depth(
+        &self,
+        operation: &async_graphql::parser::types::OperationDefinition,
+    ) -> usize {
         let mut max_depth = 0;
 
         for selection in &operation.selection_set.node.items {
@@ -118,7 +127,11 @@ impl ComplexityAnalyzer {
         max_depth
     }
 
-    fn calculate_selection_depth(&self, selection: &async_graphql::parser::types::Selection, current_depth: usize) -> usize {
+    fn calculate_selection_depth(
+        &self,
+        selection: &async_graphql::parser::types::Selection,
+        current_depth: usize,
+    ) -> usize {
         use async_graphql::parser::types::Selection;
 
         match selection {
@@ -126,7 +139,8 @@ impl ComplexityAnalyzer {
                 let mut max_depth = current_depth;
 
                 for sub_selection in &field.node.selection_set.node.items {
-                    let depth = self.calculate_selection_depth(&sub_selection.node, current_depth + 1);
+                    let depth =
+                        self.calculate_selection_depth(&sub_selection.node, current_depth + 1);
                     if depth > max_depth {
                         max_depth = depth;
                     }
@@ -167,7 +181,7 @@ impl ComplexityLimit {
 impl ExtensionFactory for ComplexityLimit {
     fn create(&self) -> Arc<dyn Extension> {
         Arc::new(ComplexityLimitExtension {
-            analyzer: self.analyzer.clone(),
+            analyzer: self.analyzer,
         })
     }
 }
@@ -265,7 +279,7 @@ impl PersistedQueries {
 
     /// Compute SHA-256 hash of a query string (for APQ)
     pub fn compute_hash(query: &str) -> String {
-        use sha2::{Sha256, Digest};
+        use sha2::{Digest, Sha256};
         let mut hasher = Sha256::new();
         hasher.update(query.as_bytes());
         let result = hasher.finalize();
@@ -425,16 +439,16 @@ pub struct SecurityConfig {
 impl Default for SecurityConfig {
     fn default() -> Self {
         Self {
-            max_complexity: 1000,      // Codex recommendation
-            max_depth: 10,              // Codex recommendation
-            max_backend_calls: 10,      // Codex: "request budget"
+            max_complexity: 1000,  // Codex recommendation
+            max_depth: 10,         // Codex recommendation
+            max_backend_calls: 10, // Codex: "request budget"
             max_queries_per_minute: 100,
             max_mutations_per_minute: 20,
             allow_introspection: false, // Disable in production
             use_persisted_queries: true,
             allow_arbitrary_queries: false, // Block arbitrary queries in production
-            enable_apq: true, // Enable Automatic Persisted Queries
-            persisted_queries_path: None, // Load from file if provided
+            enable_apq: true,               // Enable Automatic Persisted Queries
+            persisted_queries_path: None,   // Load from file if provided
         }
     }
 }

@@ -10,7 +10,7 @@ use crate::{
     state::AppState,
     websocket::events::{broadcast_event, WebSocketEvent},
 };
-use actix_web::{delete, get, post, put, web, HttpResponse};
+use actix_web::{delete, post, put, web, HttpResponse};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -134,7 +134,7 @@ pub async fn add_member(
             tracing::error!(user_id = %body.user_id, error = %e, "auth-service get_user failed");
             crate::error::AppError::StartServer(format!("fetch username: {e}"))
         })?
-        .ok_or_else(|| crate::error::AppError::NotFound)?;
+        .ok_or(crate::error::AppError::NotFound)?;
 
     // Broadcast member.joined event using unified event system
     let event = WebSocketEvent::MemberJoined {

@@ -19,10 +19,7 @@ async fn main() -> anyhow::Result<()> {
     // Subscribe with callback that handles different message types
     let handle = subscriber
         .subscribe(|msg| async move {
-            println!(
-                "\n📨 Received invalidation from {}:",
-                msg.source_service
-            );
+            println!("\n📨 Received invalidation from {}:", msg.source_service);
             println!("   Message ID: {}", msg.message_id);
             println!("   Entity Type: {}", msg.entity_type);
             println!("   Action: {:?}", msg.action);
@@ -31,10 +28,7 @@ async fn main() -> anyhow::Result<()> {
             match msg.action {
                 InvalidationAction::Delete => {
                     if let Some(entity_id) = &msg.entity_id {
-                        println!(
-                            "   → Deleting cache for: {}:{}",
-                            msg.entity_type, entity_id
-                        );
+                        println!("   → Deleting cache for: {}:{}", msg.entity_type, entity_id);
                         // Simulate cache deletion
                         simulate_cache_deletion(&msg.entity_type, entity_id).await;
                     }

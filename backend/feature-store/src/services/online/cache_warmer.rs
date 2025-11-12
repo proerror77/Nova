@@ -1,10 +1,10 @@
-use crate::error::Result;
 use super::OnlineFeatureStore;
+use crate::error::Result;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::watch;
-use tokio::time::{sleep, interval};
+use tokio::time::{interval, sleep};
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
@@ -82,12 +82,7 @@ impl CacheWarmer {
     /// # Returns
     /// - `watch::Sender<()>` - Send signal to shutdown
     /// - `tokio::task::JoinHandle` - Task handle for awaiting completion
-    pub fn spawn(
-        self,
-    ) -> (
-        watch::Sender<()>,
-        tokio::task::JoinHandle<Result<()>>,
-    ) {
+    pub fn spawn(self) -> (watch::Sender<()>, tokio::task::JoinHandle<Result<()>>) {
         let (shutdown_tx, mut shutdown_rx) = watch::channel(());
 
         let handle = tokio::spawn(async move {
@@ -185,7 +180,11 @@ impl CacheWarmer {
 
         // Warm each user's features
         for (user_id, user_features) in features {
-            match self.online_store.warm_features(user_id, user_features).await {
+            match self
+                .online_store
+                .warm_features(user_id, user_features)
+                .await
+            {
                 Ok(_) => {
                     warmed_count += 1;
                 }

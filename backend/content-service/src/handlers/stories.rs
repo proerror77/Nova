@@ -56,7 +56,7 @@ impl FromRequest for AuthenticatedUser {
                 })
             })
             .map(AuthenticatedUser)
-            .map_err(|e| actix_web::Error::from(e));
+            .map_err(actix_web::Error::from);
 
         ready(result)
     }

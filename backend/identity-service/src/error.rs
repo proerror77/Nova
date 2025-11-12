@@ -104,7 +104,9 @@ impl IdentityError {
             IdentityError::WeakPassword(msg) => {
                 Status::new(Code::InvalidArgument, format!("Password too weak: {}", msg))
             }
-            IdentityError::InvalidToken | IdentityError::TokenExpired | IdentityError::TokenRevoked => {
+            IdentityError::InvalidToken
+            | IdentityError::TokenExpired
+            | IdentityError::TokenRevoked => {
                 Status::new(Code::Unauthenticated, "Invalid, expired, or revoked token")
             }
             IdentityError::InvalidOAuthState => {
@@ -123,9 +125,7 @@ impl IdentityError {
                 Status::new(Code::InvalidArgument, "Invalid password reset token")
             }
             IdentityError::SessionNotFound => Status::new(Code::NotFound, "Session not found"),
-            IdentityError::TwoFARequired => {
-                Status::new(Code::Unauthenticated, "Two FA required")
-            }
+            IdentityError::TwoFARequired => Status::new(Code::Unauthenticated, "Two FA required"),
             IdentityError::InvalidTwoFACode => {
                 Status::new(Code::Unauthenticated, "Invalid two FA code")
             }

@@ -122,11 +122,7 @@ mod tests {
 
     #[test]
     fn test_appeal_review() {
-        let mut appeal = Appeal::new(
-            Uuid::new_v4(),
-            Uuid::new_v4(),
-            "Test reason".to_string(),
-        );
+        let mut appeal = Appeal::new(Uuid::new_v4(), Uuid::new_v4(), "Test reason".to_string());
         let admin_id = Uuid::new_v4();
 
         let result = appeal.review(
@@ -143,18 +139,10 @@ mod tests {
 
     #[test]
     fn test_invalid_appeal_transition() {
-        let mut appeal = Appeal::new(
-            Uuid::new_v4(),
-            Uuid::new_v4(),
-            "Test reason".to_string(),
-        );
+        let mut appeal = Appeal::new(Uuid::new_v4(), Uuid::new_v4(), "Test reason".to_string());
         appeal.status = AppealStatus::Approved;
 
-        let result = appeal.review(
-            Uuid::new_v4(),
-            AppealStatus::Rejected,
-            None,
-        );
+        let result = appeal.review(Uuid::new_v4(), AppealStatus::Rejected, None);
 
         assert!(result.is_err());
     }

@@ -45,7 +45,7 @@ pub async fn create_post(
     // Call trust-safety-service to moderate content before creating post
     if let Some(caption_text) = &req.caption {
         use grpc_clients::nova::trust_safety::{
-            ModerateContentRequest, ContentType as TsContentType, ModerationContext,
+            ContentType as TsContentType, ModerateContentRequest, ModerationContext,
         };
 
         let mut trust_safety_client = grpc_pool.trust_safety();

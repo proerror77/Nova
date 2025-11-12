@@ -21,6 +21,12 @@ use std::collections::HashMap;
 #[derive(Clone)]
 pub struct IdCountLoader;
 
+impl Default for IdCountLoader {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl IdCountLoader {
     pub fn new() -> Self {
         Self
@@ -52,6 +58,12 @@ impl Loader<String> for IdCountLoader {
 #[derive(Clone)]
 pub struct UserIdLoader;
 
+impl Default for UserIdLoader {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl UserIdLoader {
     pub fn new() -> Self {
         Self
@@ -82,6 +94,12 @@ impl Loader<String> for UserIdLoader {
 #[derive(Clone)]
 pub struct PostIdLoader;
 
+impl Default for PostIdLoader {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PostIdLoader {
     pub fn new() -> Self {
         Self
@@ -111,6 +129,12 @@ impl Loader<String> for PostIdLoader {
 /// ✅ P0-5: Prevents N+1 like count queries
 #[derive(Clone)]
 pub struct LikeCountLoader;
+
+impl Default for LikeCountLoader {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl LikeCountLoader {
     pub fn new() -> Self {
@@ -143,6 +167,12 @@ impl Loader<String> for LikeCountLoader {
 /// ✅ P0-5: Prevents N separate count queries
 #[derive(Clone)]
 pub struct FollowCountLoader;
+
+impl Default for FollowCountLoader {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl FollowCountLoader {
     pub fn new() -> Self {

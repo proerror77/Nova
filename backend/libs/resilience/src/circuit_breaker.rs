@@ -141,11 +141,11 @@ impl CircuitBreaker {
         state.consecutive_failures = 0;
         self.add_to_window(&mut state, true);
 
-        if state.current == CircuitState::HalfOpen {
-            if state.consecutive_successes >= self.config.success_threshold {
-                info!("Circuit breaker: HalfOpen → Closed");
-                state.current = CircuitState::Closed;
-            }
+        if state.current == CircuitState::HalfOpen
+            && state.consecutive_successes >= self.config.success_threshold
+        {
+            info!("Circuit breaker: HalfOpen → Closed");
+            state.current = CircuitState::Closed;
         }
     }
 
@@ -225,9 +225,7 @@ mod tests {
 
         // Trigger 3 consecutive failures
         for _ in 0..3 {
-            let _ = cb
-                .call(|| async { Err::<(), _>("error") })
-                .await;
+            let _ = cb.call(|| async { Err::<(), _>("error") }).await;
         }
 
         // Circuit should be open
@@ -314,7 +312,7 @@ mod tests {
     #[tokio::test]
     async fn test_error_rate_threshold() {
         let config = CircuitBreakerConfig {
-            failure_threshold: 100, // High threshold to test error rate only
+            failure_threshold: 100,    // High threshold to test error rate only
             error_rate_threshold: 0.5, // 50%
             window_size: 10,
             ..Default::default()

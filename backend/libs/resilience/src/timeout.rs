@@ -25,10 +25,7 @@ pub enum TimeoutError {
 }
 
 /// Execute a future with timeout
-pub async fn with_timeout<F, T>(
-    duration: Duration,
-    future: F,
-) -> Result<T, TimeoutError>
+pub async fn with_timeout<F, T>(duration: Duration, future: F) -> Result<T, TimeoutError>
 where
     F: Future<Output = T>,
 {
@@ -38,10 +35,7 @@ where
 }
 
 /// Execute a fallible future with timeout
-pub async fn with_timeout_result<F, T, E>(
-    duration: Duration,
-    future: F,
-) -> Result<T, TimeoutError>
+pub async fn with_timeout_result<F, T, E>(duration: Duration, future: F) -> Result<T, TimeoutError>
 where
     F: Future<Output = Result<T, E>>,
     E: std::fmt::Display,

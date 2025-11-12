@@ -9,9 +9,9 @@
 //! These tests verify that critical security vulnerabilities are prevented
 //! at the GraphQL gateway level.
 
-use jsonwebtoken::{encode, Header, EncodingKey};
-use serde::{Deserialize, Serialize};
 use chrono::{Duration, Utc};
+use jsonwebtoken::{encode, EncodingKey, Header};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 // ============================================================================
@@ -20,9 +20,9 @@ use std::collections::HashMap;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 struct Claims {
-    sub: String,      // user_id
-    exp: usize,       // expiration timestamp
-    iat: usize,       // issued at timestamp
+    sub: String, // user_id
+    exp: usize,  // expiration timestamp
+    iat: usize,  // issued at timestamp
     email: String,
 }
 
@@ -192,9 +192,18 @@ fn test_idor_uuid_randomness_prevents_enumeration() {
 #[test]
 fn test_idor_pagination_doesnt_expose_others_data() {
     let mut resources: HashMap<String, TestResource> = HashMap::new();
-    resources.insert("p1".to_string(), TestResource::new("p1", "user1", "content"));
-    resources.insert("p2".to_string(), TestResource::new("p2", "user1", "content"));
-    resources.insert("p3".to_string(), TestResource::new("p3", "user2", "content"));
+    resources.insert(
+        "p1".to_string(),
+        TestResource::new("p1", "user1", "content"),
+    );
+    resources.insert(
+        "p2".to_string(),
+        TestResource::new("p2", "user1", "content"),
+    );
+    resources.insert(
+        "p3".to_string(),
+        TestResource::new("p3", "user2", "content"),
+    );
 
     let user1 = TestContext {
         user_id: "user1".to_string(),
@@ -285,7 +294,10 @@ fn test_authorization_invalid_token_denied() {
     let dot_count = invalid_token.matches('.').count();
 
     // Valid JWT has exactly 2 dots (3 parts)
-    assert_ne!(dot_count, 2, "Invalid token should not have valid JWT structure");
+    assert_ne!(
+        dot_count, 2,
+        "Invalid token should not have valid JWT structure"
+    );
 }
 
 #[test]
@@ -454,8 +466,13 @@ fn test_sql_injection_batch_operations_safe() {
     let ids = vec!["id1", "id2", "id3"];
 
     // Safe: parameterized with array
-    let _query = format!("SELECT * FROM posts WHERE id IN ({})",
-        (0..ids.len()).map(|i| format!(":id{}", i)).collect::<Vec<_>>().join(","));
+    let _query = format!(
+        "SELECT * FROM posts WHERE id IN ({})",
+        (0..ids.len())
+            .map(|i| format!(":id{}", i))
+            .collect::<Vec<_>>()
+            .join(",")
+    );
 
     // Would be parameterized, not concatenated
 }

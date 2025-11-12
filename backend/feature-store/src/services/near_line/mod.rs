@@ -1,15 +1,15 @@
 // Near-line feature service - ClickHouse cold/warm storage
 // Provides medium-latency access to historical and less frequently accessed features
 
+use anyhow::{Context, Result};
+use chrono::{DateTime, Utc};
 use clickhouse::Client;
 use sqlx::{PgPool, Row};
-use tracing::{info, warn, error};
-use anyhow::{Result, Context};
 use std::collections::HashMap;
+use tracing::warn;
 use uuid::Uuid;
-use chrono::{DateTime, Utc};
 
-use crate::models::{Feature, FeatureValueData, FeatureDefinition, FeatureType};
+use crate::models::{FeatureDefinition, FeatureType, FeatureValueData};
 
 pub struct NearLineFeatureService {
     clickhouse_client: Client,
@@ -99,7 +99,7 @@ impl NearLineFeatureService {
                    description, default_ttl_seconds, created_at, updated_at
             FROM feature_definitions
             WHERE entity_type = $1 AND name = $2
-            "#
+            "#,
         )
         .bind(entity_type)
         .bind(feature_name)
@@ -107,17 +107,15 @@ impl NearLineFeatureService {
         .await
         .context("Failed to fetch feature metadata")?;
 
-        Ok(row.map(|r| {
-            FeatureDefinition {
-                id: r.get::<Uuid, _>("id"),
-                name: r.get::<String, _>("name"),
-                entity_type: r.get::<String, _>("entity_type"),
-                feature_type: FeatureType::from(r.get::<i32, _>("feature_type")),
-                description: r.get::<Option<String>, _>("description"),
-                default_ttl_seconds: r.get::<i64, _>("default_ttl_seconds"),
-                created_at: r.get::<DateTime<Utc>, _>("created_at"),
-                updated_at: r.get::<DateTime<Utc>, _>("updated_at"),
-            }
+        Ok(row.map(|r| FeatureDefinition {
+            id: r.get::<Uuid, _>("id"),
+            name: r.get::<String, _>("name"),
+            entity_type: r.get::<String, _>("entity_type"),
+            feature_type: FeatureType::from(r.get::<i32, _>("feature_type")),
+            description: r.get::<Option<String>, _>("description"),
+            default_ttl_seconds: r.get::<i64, _>("default_ttl_seconds"),
+            created_at: r.get::<DateTime<Utc>, _>("created_at"),
+            updated_at: r.get::<DateTime<Utc>, _>("updated_at"),
         }))
     }
 
@@ -133,7 +131,7 @@ impl NearLineFeatureService {
             FROM feature_definitions
             WHERE entity_type = $1
             ORDER BY name
-            "#
+            "#,
         )
         .bind(entity_type)
         .fetch_all(&self.pg_pool)
@@ -142,17 +140,15 @@ impl NearLineFeatureService {
 
         let results = rows
             .into_iter()
-            .map(|r| {
-                FeatureDefinition {
-                    id: r.get::<Uuid, _>("id"),
-                    name: r.get::<String, _>("name"),
-                    entity_type: r.get::<String, _>("entity_type"),
-                    feature_type: FeatureType::from(r.get::<i32, _>("feature_type")),
-                    description: r.get::<Option<String>, _>("description"),
-                    default_ttl_seconds: r.get::<i64, _>("default_ttl_seconds"),
-                    created_at: r.get::<DateTime<Utc>, _>("created_at"),
-                    updated_at: r.get::<DateTime<Utc>, _>("updated_at"),
-                }
+            .map(|r| FeatureDefinition {
+                id: r.get::<Uuid, _>("id"),
+                name: r.get::<String, _>("name"),
+                entity_type: r.get::<String, _>("entity_type"),
+                feature_type: FeatureType::from(r.get::<i32, _>("feature_type")),
+                description: r.get::<Option<String>, _>("description"),
+                default_ttl_seconds: r.get::<i64, _>("default_ttl_seconds"),
+                created_at: r.get::<DateTime<Utc>, _>("created_at"),
+                updated_at: r.get::<DateTime<Utc>, _>("updated_at"),
             })
             .collect();
 

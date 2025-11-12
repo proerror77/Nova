@@ -40,7 +40,9 @@ impl HealthCheck for PostgresHealthCheck {
         sqlx::query("SELECT 1")
             .execute(&self.pool)
             .await
-            .map_err(|e| HealthCheckError::database(format!("Failed to execute health check query: {}", e)))?;
+            .map_err(|e| {
+                HealthCheckError::database(format!("Failed to execute health check query: {}", e))
+            })?;
 
         Ok(())
     }
@@ -137,8 +139,7 @@ mod tests {
     async fn test_postgres_health_check_with_invalid_pool() {
         // This test verifies error handling, not actual database connection
         // In real tests, you would use a test database or mock
-        let pool = PgPool::connect("postgres://invalid:invalid@localhost:5432/invalid")
-            .await;
+        let pool = PgPool::connect("postgres://invalid:invalid@localhost:5432/invalid").await;
 
         // If connection fails (expected), we test error handling
         if let Ok(pool) = pool {

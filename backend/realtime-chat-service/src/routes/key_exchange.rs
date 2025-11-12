@@ -59,7 +59,7 @@ pub async fn store_device_public_key(
     let key_exchange = state
         .key_exchange_service
         .as_ref()
-        .ok_or_else(|| AppError::Internal)?;
+        .ok_or(AppError::Internal)?;
 
     key_exchange
         .store_device_key(
@@ -84,7 +84,7 @@ pub async fn get_peer_public_key(
     let key_exchange = state
         .key_exchange_service
         .as_ref()
-        .ok_or_else(|| AppError::Internal)?;
+        .ok_or(AppError::Internal)?;
 
     // Verify that user is part of the conversation
     // This would normally be done by checking the conversation membership
@@ -117,7 +117,7 @@ pub async fn complete_key_exchange(
     let key_exchange = state
         .key_exchange_service
         .as_ref()
-        .ok_or_else(|| AppError::Internal)?;
+        .ok_or(AppError::Internal)?;
 
     // Decode the shared secret hash
     let shared_secret_hash = general_purpose::STANDARD
@@ -165,7 +165,7 @@ pub async fn list_conversation_key_exchanges(
     let key_exchange = state
         .key_exchange_service
         .as_ref()
-        .ok_or_else(|| AppError::Internal)?;
+        .ok_or(AppError::Internal)?;
 
     let exchanges = key_exchange.list_key_exchanges(conversation_id).await?;
 
@@ -210,5 +210,5 @@ mod tests {
 }
 
 // Aliases for main.rs route registration
-pub use store_device_public_key as exchange_keys;
 pub use get_peer_public_key as get_public_key;
+pub use store_device_public_key as exchange_keys;

@@ -42,7 +42,7 @@ pub async fn add_reaction(
 
     // Validate emoji length (basic check)
     if body.emoji.is_empty() || body.emoji.len() > 20 {
-        return Err(AppError::BadRequest("Invalid emoji".into()).into());
+        return Err(AppError::BadRequest("Invalid emoji".into()));
     }
 
     // Get conversation_id for the message (for broadcasting on conversation channel)
@@ -186,7 +186,7 @@ pub async fn remove_reaction(
         .await?;
 
         if !member.is_admin() {
-            return Err(AppError::Forbidden.into());
+            return Err(AppError::Forbidden);
         }
     }
 
@@ -204,7 +204,7 @@ pub async fn remove_reaction(
         .map_err(|e| AppError::StartServer(format!("Failed to remove reaction: {e}")))?;
 
         if result.is_none() {
-            return Err(AppError::NotFound.into());
+            return Err(AppError::NotFound);
         }
 
         // Broadcast reaction.removed event using unified event system

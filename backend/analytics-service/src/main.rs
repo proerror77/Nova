@@ -1,7 +1,7 @@
 use actix_web::{web, App, HttpServer};
+use analytics_service::services::{OutboxConfig, OutboxPublisher};
 use anyhow::{Context, Result};
 use db_pool::{create_pool as create_pg_pool, DbConfig as DbPoolConfig};
-use analytics_service::services::{OutboxConfig, OutboxPublisher};
 use std::sync::Arc;
 use tonic::transport::Server as GrpcServer;
 use tonic_health::server::health_reporter;
@@ -129,18 +129,16 @@ async fn main() -> Result<()> {
 
         if let Some(tls_cfg) = tls_config {
             match tls_cfg.build_server_tls() {
-                Ok(server_tls) => {
-                    match server_builder.tls_config(server_tls) {
-                        Ok(builder) => {
-                            server_builder = builder;
-                            tracing::info!("gRPC server TLS configured successfully");
-                        }
-                        Err(e) => {
-                            tracing::error!("Failed to configure TLS on gRPC server: {}", e);
-                            return;
-                        }
+                Ok(server_tls) => match server_builder.tls_config(server_tls) {
+                    Ok(builder) => {
+                        server_builder = builder;
+                        tracing::info!("gRPC server TLS configured successfully");
                     }
-                }
+                    Err(e) => {
+                        tracing::error!("Failed to configure TLS on gRPC server: {}", e);
+                        return;
+                    }
+                },
                 Err(e) => {
                     tracing::error!("Failed to build server TLS config: {}", e);
                     return;

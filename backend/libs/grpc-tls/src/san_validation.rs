@@ -54,11 +54,9 @@ pub fn extract_san_entries(cert_pem: &str) -> TlsResult<Vec<SanEntry>> {
     let pem = ::pem::parse(cert_pem.as_bytes())?;
 
     let (_, cert) =
-        X509Certificate::from_der(pem.contents()).map_err(|e| {
-            TlsError::CertificateParseError {
-                path: "memory".into(),
-                reason: format!("X.509 parse failed: {}", e),
-            }
+        X509Certificate::from_der(pem.contents()).map_err(|e| TlsError::CertificateParseError {
+            path: "memory".into(),
+            reason: format!("X.509 parse failed: {}", e),
         })?;
 
     let mut san_entries = Vec::new();

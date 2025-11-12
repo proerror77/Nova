@@ -7,18 +7,18 @@
 //! - ✅ P0: Circuit breaker protection for all gRPC clients
 //! - Proper error types
 
+use resilience::circuit_breaker::{CircuitBreaker, CircuitBreakerConfig, CircuitState};
 use std::sync::Arc;
 use std::time::Duration;
 use tonic::transport::{Channel, Endpoint};
 use tonic::Status;
-use resilience::circuit_breaker::{CircuitBreaker, CircuitBreakerConfig, CircuitState};
 
 // Common protos - must be at crate root so generated code can find it
 pub mod common {
     pub mod v1 {
         tonic::include_proto!("nova.common.v1");
     }
-    pub use v1::*;
+    
 }
 
 // Proto module definitions from build.rs
@@ -41,9 +41,9 @@ pub mod proto {
 }
 
 use proto::auth::auth_service_client::AuthServiceClient;
-use proto::user::user_service_client::UserServiceClient;
 use proto::content::content_service_client::ContentServiceClient;
 use proto::feed::recommendation_service_client::RecommendationServiceClient;
+use proto::user::user_service_client::UserServiceClient;
 
 /// Service client manager with pooled gRPC connections and circuit breaker protection
 ///
@@ -127,7 +127,7 @@ impl ServiceClients {
             failure_threshold: 5,
             success_threshold: 2,
             timeout: Duration::from_secs(60),
-            error_rate_threshold: 0.5,  // 50%
+            error_rate_threshold: 0.5, // 50%
             window_size: 100,
         };
 

@@ -149,20 +149,19 @@ pub async fn initiate_call(
 
     if call_type != "direct" && call_type != "group" {
         return Err(
-            crate::error::AppError::Config("call_type must be 'direct' or 'group'".into()).into(),
+            crate::error::AppError::Config("call_type must be 'direct' or 'group'".into()),
         );
     }
 
     if call_type == "group" && max_participants < 2 {
         return Err(crate::error::AppError::Config(
             "max_participants must be >= 2 for group calls".into(),
-        )
-        .into());
+        ));
     }
 
     if max_participants > 50 {
         return Err(
-            crate::error::AppError::Config("max_participants cannot exceed 50".into()).into(),
+            crate::error::AppError::Config("max_participants cannot exceed 50".into()),
         );
     }
 
@@ -414,7 +413,7 @@ pub async fn join_call(
 
     // Verify call is in valid state
     if status != "ringing" && status != "connected" {
-        return Err(crate::error::AppError::Config("Call is not active".into()).into());
+        return Err(crate::error::AppError::Config("Call is not active".into()));
     }
 
     // Join the call (this checks for duplicate joins and capacity)

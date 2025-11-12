@@ -6,7 +6,6 @@
 /// - File verification and integrity checks
 ///
 /// Part of Phase C: Media Consolidation
-
 pub mod s3;
 
 // Re-export commonly used functions

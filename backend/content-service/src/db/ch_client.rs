@@ -45,7 +45,7 @@ impl ClickHouseClient {
             .with_database(database)
             .with_user(username)
             .with_password(password)
-            .with_option("max_execution_time", &(query_timeout_ms / 1000).to_string());
+            .with_option("max_execution_time", (query_timeout_ms / 1000).to_string());
 
         Self {
             client,

@@ -393,8 +393,8 @@ pub async fn update_message(
         "#,
     )
     .bind(&new_content_value)
-    .bind(encrypted_payload.as_ref().map(|v| v.as_slice()))
-    .bind(nonce_payload.as_ref().map(|v| v.as_slice()))
+    .bind(encrypted_payload.as_deref())
+    .bind(nonce_payload.as_deref())
     .bind(encryption_version)
     .bind(message_id)
     .bind(current_version)

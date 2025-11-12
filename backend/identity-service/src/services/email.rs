@@ -140,9 +140,10 @@ impl EmailService {
                     IdentityError::Internal(format!("Failed to build email message: {}", e))
                 })?;
 
-            transport.send(email).await.map_err(|e| {
-                IdentityError::Internal(format!("Failed to send email: {}", e))
-            })?;
+            transport
+                .send(email)
+                .await
+                .map_err(|e| IdentityError::Internal(format!("Failed to send email: {}", e)))?;
             info!(subject, "email sent successfully");
         } else {
             info!(

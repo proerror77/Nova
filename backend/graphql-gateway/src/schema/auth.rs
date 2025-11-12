@@ -48,7 +48,8 @@ impl AuthMutation {
 
         let mut client = clients.auth_client();
 
-        let request = tonic::Request::new(crate::clients::proto::auth::LoginRequest { email, password });
+        let request =
+            tonic::Request::new(crate::clients::proto::auth::LoginRequest { email, password });
 
         let response = client
             .login(request)

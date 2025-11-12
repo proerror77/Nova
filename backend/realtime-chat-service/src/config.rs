@@ -140,12 +140,14 @@ impl Config {
 
         // E2EE encryption master key
         let master_key_env = env::var("ENCRYPTION_MASTER_KEY").map_err(|_| {
-            crate::error::AppError::Config("ENCRYPTION_MASTER_KEY missing (required for E2EE)".into())
+            crate::error::AppError::Config(
+                "ENCRYPTION_MASTER_KEY missing (required for E2EE)".into(),
+            )
         })?;
 
-        let master_key_bytes = STANDARD
-            .decode(master_key_env.as_bytes())
-            .map_err(|e| crate::error::AppError::Config(format!("ENCRYPTION_MASTER_KEY decode: {e}")))?;
+        let master_key_bytes = STANDARD.decode(master_key_env.as_bytes()).map_err(|e| {
+            crate::error::AppError::Config(format!("ENCRYPTION_MASTER_KEY decode: {e}"))
+        })?;
 
         if master_key_bytes.len() != 32 {
             return Err(crate::error::AppError::Config(

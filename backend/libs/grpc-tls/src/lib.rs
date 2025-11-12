@@ -31,10 +31,10 @@ use tonic::transport::{Certificate, ClientTlsConfig, Identity, ServerTlsConfig};
 use tracing::{info, warn};
 
 // Core modules
+pub mod cert_generation;
 pub mod error;
 pub mod mtls;
 pub mod san_validation;
-pub mod cert_generation;
 
 // Re-exports for convenience
 pub use cert_generation::{generate_dev_certificates, CertificateBundle};
@@ -174,8 +174,8 @@ impl GrpcClientTlsConfig {
             .ok()
             .and_then(|path| fs::read_to_string(&path).ok());
 
-        let domain_name = std::env::var("GRPC_SERVER_DOMAIN")
-            .unwrap_or_else(|_| "localhost".to_string());
+        let domain_name =
+            std::env::var("GRPC_SERVER_DOMAIN").unwrap_or_else(|_| "localhost".to_string());
 
         info!(
             domain = %domain_name,
@@ -228,12 +228,11 @@ pub fn validate_cert_expiration(cert_pem: &str, warn_days_before: u64) -> TlsRes
 
     let pem = ::pem::parse(cert_pem.as_bytes())?;
 
-    let (_, cert) = X509Certificate::from_der(pem.contents()).map_err(|e| {
-        TlsError::CertificateParseError {
+    let (_, cert) =
+        X509Certificate::from_der(pem.contents()).map_err(|e| TlsError::CertificateParseError {
             path: "memory".into(),
             reason: format!("X.509 parse failed: {}", e),
-        }
-    })?;
+        })?;
 
     let not_after = cert.validity().not_after;
     let expiry_timestamp = not_after.timestamp();

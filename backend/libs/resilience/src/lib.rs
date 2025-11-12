@@ -43,7 +43,6 @@
 ///     ).await;
 /// }
 /// ```
-
 pub mod circuit_breaker;
 pub mod layer;
 pub mod metrics;
@@ -52,8 +51,13 @@ pub mod retry;
 pub mod timeout;
 
 // Re-export main types for convenience
-pub use circuit_breaker::{CircuitBreaker, CircuitBreakerConfig, CircuitBreakerError, CircuitState};
+pub use circuit_breaker::{
+    CircuitBreaker, CircuitBreakerConfig, CircuitBreakerError, CircuitState,
+};
 pub use layer::{CircuitBreakerLayer, CircuitBreakerService};
-pub use presets::{ServiceConfig, grpc_config, database_config, redis_config, http_external_config, kafka_config, object_storage_config};
-pub use retry::{RetryConfig, RetryError, with_retry};
-pub use timeout::{TimeoutConfig, TimeoutError, with_timeout, with_timeout_result};
+pub use presets::{
+    database_config, grpc_config, http_external_config, kafka_config, object_storage_config,
+    redis_config, ServiceConfig,
+};
+pub use retry::{with_retry, RetryConfig, RetryError};
+pub use timeout::{with_timeout, with_timeout_result, TimeoutConfig, TimeoutError};

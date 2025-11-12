@@ -8,7 +8,7 @@ fn main() {
         .build_client(true)
         .file_descriptor_set_path(out_dir.join("nova_descriptor.bin"))
         .type_attribute(".", "#[derive(serde::Serialize, serde::Deserialize)]")
-        .compile(
+        .compile_protos(
             &[
                 "../proto/services/common.proto",
                 "../proto/services/auth_service.proto",

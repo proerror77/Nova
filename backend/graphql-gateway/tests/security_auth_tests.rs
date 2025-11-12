@@ -5,7 +5,7 @@
 
 use actix_web::{test, web, App, HttpResponse};
 use graphql_gateway::middleware::jwt::{Claims, JwtMiddleware};
-use jsonwebtoken::{encode, EncodingKey, Header, Algorithm};
+use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
 
 async fn test_handler() -> actix_web::Result<HttpResponse> {
     Ok(HttpResponse::Ok().body("success"))
@@ -61,7 +61,8 @@ fn test_jwt_middleware_accepts_32_byte_secret() {
 #[test]
 fn test_jwt_middleware_accepts_strong_secret() {
     // Production-like secret (64 bytes, high entropy)
-    let strong_secret = "bGFyZ2UtcmFuZG9tLXNlY3VyZS1zZWNyZXQtd2l0aC1oaWdoLWVudHJvcHktZm9yLXByb2R1Y3Rpb24=";
+    let strong_secret =
+        "bGFyZ2UtcmFuZG9tLXNlY3VyZS1zZWNyZXQtd2l0aC1oaWdoLWVudHJvcHktZm9yLXByb2R1Y3Rpb24=";
     let middleware = JwtMiddleware::new(strong_secret.to_string());
     assert!(middleware.secret.len() >= 32);
 }
@@ -99,7 +100,7 @@ async fn test_jwt_rejects_future_iat() {
     let claims = Claims {
         sub: "user-123".to_string(),
         exp: (future_timestamp + 7200) as usize,
-        iat: future_timestamp as usize,  // Future iat
+        iat: future_timestamp as usize, // Future iat
         email: "test@example.com".to_string(),
     };
 
@@ -167,7 +168,7 @@ async fn test_jwt_rejects_none_algorithm() {
 
     // Try to create token with "none" algorithm
     let mut header = Header::new(Algorithm::HS256);
-    header.alg = Algorithm::HS256;  // jsonwebtoken doesn't support "none"
+    header.alg = Algorithm::HS256; // jsonwebtoken doesn't support "none"
 
     // Manually craft token with "none" algorithm (simulated attack)
     let token_parts = "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJzdWIiOiJ1c2VyLTEyMyIsImV4cCI6OTk5OTk5OTk5OSwiaWF0IjoxNjAwMDAwMDAwLCJlbWFpbCI6InRlc3RAZXhhbXBsZS5jb20ifQ.";
@@ -237,9 +238,7 @@ async fn test_jwt_rejects_missing_authorization_header() {
     )
     .await;
 
-    let req = test::TestRequest::get()
-        .uri("/test")
-        .to_request();
+    let req = test::TestRequest::get().uri("/test").to_request();
 
     let resp = test::try_call_service(&app, req).await;
     assert!(resp.is_err(), "Missing auth header should be rejected");
@@ -296,9 +295,7 @@ async fn test_health_check_bypasses_authentication() {
     .await;
 
     // No Authorization header
-    let req = test::TestRequest::get()
-        .uri("/health")
-        .to_request();
+    let req = test::TestRequest::get().uri("/health").to_request();
 
     let resp = test::call_service(&app, req).await;
     assert_eq!(resp.status(), 200, "Health check should bypass auth");
@@ -350,7 +347,10 @@ async fn test_jwt_rejects_token_expired_by_1_second() {
         .to_request();
 
     let resp = test::try_call_service(&app, req).await;
-    assert!(resp.is_err(), "Token expired by 1 second should be rejected");
+    assert!(
+        resp.is_err(),
+        "Token expired by 1 second should be rejected"
+    );
 }
 
 // =============================================================================

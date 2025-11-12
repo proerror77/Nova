@@ -57,12 +57,7 @@ where
 
         Box::pin(async move {
             circuit_breaker
-                .call(|| async {
-                    inner
-                        .call(req)
-                        .await
-                        .map_err(|e| e.to_string())
-                })
+                .call(|| async { inner.call(req).await.map_err(|e| e.to_string()) })
                 .await
         })
     }

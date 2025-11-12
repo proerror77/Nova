@@ -175,4 +175,3 @@ pub struct BookmarkResponse {
     pub post_id: String,
     pub bookmarked_at: String,
 }
-

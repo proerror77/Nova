@@ -13,7 +13,6 @@
 /// - `security`: JWT, password hashing, TOTP, token revocation
 /// - `services`: Business logic (email, kafka, oauth, 2FA)
 /// - `validators`: Input validation
-
 pub mod config;
 pub mod db;
 pub mod domain;

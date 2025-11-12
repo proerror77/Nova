@@ -1,9 +1,9 @@
 pub mod config;
+pub mod db;
 pub mod error;
+pub mod grpc;
 pub mod models;
 pub mod services;
-pub mod grpc;
-pub mod db;
 pub mod utils;
 
 // Re-export commonly used types

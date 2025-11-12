@@ -16,7 +16,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     tonic_build::configure()
         .build_server(true)
         .build_client(true)
-        .compile(
+        .compile_protos(
             &[
                 format!("{services_dir}/user_service.proto"),
                 format!("{services_dir}/auth_service.proto"),

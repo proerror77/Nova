@@ -1,5 +1,5 @@
+use anyhow::{anyhow, Result};
 use serde::Deserialize;
-use anyhow::{Result, anyhow};
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Config {
@@ -41,9 +41,9 @@ impl Config {
             .set_default("http_port", 8010)?
             .set_default("grpc_host", "0.0.0.0")?
             .set_default("grpc_port", 9010)?
-            .set_default("redis_default_ttl_seconds", 3600)?  // 1 hour
+            .set_default("redis_default_ttl_seconds", 3600)? // 1 hour
             .set_default("clickhouse_database", "feature_store")?
-            .set_default("clickhouse_sync_interval_seconds", 300)?  // 5 minutes
+            .set_default("clickhouse_sync_interval_seconds", 300)? // 5 minutes
             .set_default("feature_cache_size", 10000)?
             .set_default("batch_fetch_max_size", 100)?
             .set_default("log_level", "info")?

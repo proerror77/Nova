@@ -1,21 +1,20 @@
-use actix_web::{web, App, HttpServer, middleware::Logger};
+use actix_web::{middleware::Logger, web, App, HttpServer};
 use async_graphql_actix_web::{GraphQLRequest, GraphQLResponse, GraphQLSubscription};
+use std::env;
 use tracing::info;
 use tracing_subscriber::prelude::*;
-use std::env;
 
-mod config;
-mod clients;
-mod schema;
-mod middleware;
 mod cache;
-mod kafka;  // ✅ P0-5: Kafka integration for subscriptions
+mod clients;
+mod config;
+mod kafka; // ✅ P0-5: Kafka integration for subscriptions
+mod middleware;
+mod schema;
 mod security; // ✅ P0-2: GraphQL security extensions
 
 use clients::ServiceClients;
+use middleware::{JwtMiddleware, RateLimitConfig, RateLimitMiddleware};
 use schema::build_schema;
-use middleware::{JwtMiddleware, RateLimitMiddleware, RateLimitConfig};
-use cache::CacheConfig;
 
 async fn graphql_handler(
     schema: web::Data<schema::AppSchema>,
@@ -29,8 +28,7 @@ async fn graphql_subscription_handler(
     req: actix_web::HttpRequest,
     payload: web::Payload,
 ) -> actix_web::Result<actix_web::HttpResponse> {
-    GraphQLSubscription::new(schema.as_ref().clone())
-        .start(&req, payload)
+    GraphQLSubscription::new(schema.as_ref().clone()).start(&req, payload)
 }
 
 async fn health_handler() -> &'static str {
@@ -67,7 +65,9 @@ async fn circuit_breaker_health_handler(
         })
         .collect();
 
-    let all_healthy = status_json.iter().all(|s| s["healthy"].as_bool().unwrap_or(false));
+    let all_healthy = status_json
+        .iter()
+        .all(|s| s["healthy"].as_bool().unwrap_or(false));
 
     let response = serde_json::json!({
         "status": if all_healthy { "healthy" } else { "degraded" },
@@ -134,16 +134,19 @@ async fn main() -> std::io::Result<()> {
                 .with_thread_names(true) // Include thread names
                 .with_line_number(true) // Include source line numbers
                 .with_file(true) // Include source file paths
-                .with_target(true) // Include target module path
+                .with_target(true), // Include target module path
         )
         .init();
 
     info!("Starting GraphQL Gateway...");
 
     // Load configuration (includes JWT config from AWS Secrets Manager or env)
-    let config = config::Config::from_env()
-        .await
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, format!("Failed to load configuration: {}", e)))?;
+    let config = config::Config::from_env().await.map_err(|e| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!("Failed to load configuration: {}", e),
+        )
+    })?;
 
     info!(
         algorithm = %config.jwt.algorithm,
@@ -167,16 +170,32 @@ async fn main() -> std::io::Result<()> {
     let jwt_private_key = if config.jwt.algorithm == "RS256" || config.jwt.algorithm == "ES256" {
         config.jwt.signing_key.clone()
     } else {
-        env::var("JWT_PRIVATE_KEY_PEM")
-            .map_err(|_| std::io::Error::new(std::io::ErrorKind::NotFound, "JWT_PRIVATE_KEY_PEM required for RS256 tokens"))?
+        env::var("JWT_PRIVATE_KEY_PEM").map_err(|_| {
+            std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "JWT_PRIVATE_KEY_PEM required for RS256 tokens",
+            )
+        })?
     };
 
-    let jwt_public_key = config.jwt.validation_key.clone()
+    let jwt_public_key = config
+        .jwt
+        .validation_key
+        .clone()
         .or_else(|| env::var("JWT_PUBLIC_KEY_PEM").ok())
-        .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "JWT public key (validation_key or JWT_PUBLIC_KEY_PEM) required for RS256"))?;
+        .ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "JWT public key (validation_key or JWT_PUBLIC_KEY_PEM) required for RS256",
+            )
+        })?;
 
-    crypto_core::jwt::initialize_jwt_keys(&jwt_private_key, &jwt_public_key)
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, format!("Failed to initialize JWT keys - check PEM format: {}", e)))?;
+    crypto_core::jwt::initialize_jwt_keys(&jwt_private_key, &jwt_public_key).map_err(|e| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!("Failed to initialize JWT keys - check PEM format: {}", e),
+        )
+    })?;
 
     info!("JWT authentication enabled with RS256 algorithm");
 
@@ -198,8 +217,8 @@ async fn main() -> std::io::Result<()> {
     HttpServer::new(move || {
         App::new()
             .wrap(Logger::default())
-            .wrap(rate_limiter.clone())  // ✅ P0-3: Apply rate limiting before JWT auth
-            .wrap(JwtMiddleware::new())  // ✅ P0-1: Fixed - Now uses RS256 from crypto-core
+            .wrap(rate_limiter.clone()) // ✅ P0-3: Apply rate limiting before JWT auth
+            .wrap(JwtMiddleware::new()) // ✅ P0-1: Fixed - Now uses RS256 from crypto-core
             .app_data(web::Data::new(schema.clone()))
             .app_data(web::Data::new(clients.clone()))
             // ✅ P0-4: GraphQL endpoints
@@ -214,7 +233,10 @@ async fn main() -> std::io::Result<()> {
             .route("/playground", web::get().to(playground_handler))
             .route("/health", web::get().to(health_handler))
             // ✅ P0: Circuit breaker monitoring endpoint
-            .route("/health/circuit-breakers", web::get().to(circuit_breaker_health_handler))
+            .route(
+                "/health/circuit-breakers",
+                web::get().to(circuit_breaker_health_handler),
+            )
     })
     .bind(&bind_addr)?
     .run()

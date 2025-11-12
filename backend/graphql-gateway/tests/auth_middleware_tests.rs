@@ -1,5 +1,5 @@
 use actix_web::{test, web, App, HttpResponse};
-use jsonwebtoken::{encode, EncodingKey, Header, Algorithm};
+use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]

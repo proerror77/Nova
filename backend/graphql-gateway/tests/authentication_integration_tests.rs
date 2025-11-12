@@ -12,7 +12,7 @@
 //! before any GraphQL request is processed.
 
 use chrono::{Duration, Utc};
-use jsonwebtoken::{encode, decode, Header, Validation, EncodingKey, DecodingKey};
+use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
 
 // ============================================================================
@@ -21,9 +21,9 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 struct Claims {
-    sub: String,      // user_id
-    exp: usize,       // expiration timestamp
-    iat: usize,       // issued at timestamp
+    sub: String, // user_id
+    exp: usize,  // expiration timestamp
+    iat: usize,  // issued at timestamp
     email: String,
 }
 
@@ -240,7 +240,9 @@ fn test_login_user_not_found() {
         TestUser::new("user2", "user2@example.com"),
     ];
 
-    let found = user_db.iter().find(|u| u.email == "nonexistent@example.com");
+    let found = user_db
+        .iter()
+        .find(|u| u.email == "nonexistent@example.com");
     assert!(found.is_none());
 }
 
@@ -264,7 +266,12 @@ fn test_login_multiple_attempts() {
     let secret = "test_secret_key_32_chars_minimum";
 
     for i in 0..5 {
-        let token = generate_token(&format!("user{}", i), "user@example.com", secret, Duration::hours(1));
+        let token = generate_token(
+            &format!("user{}", i),
+            "user@example.com",
+            secret,
+            Duration::hours(1),
+        );
         let claims = decode_token(&token, secret).unwrap();
         assert_eq!(claims.sub, format!("user{}", i));
     }
@@ -370,19 +377,17 @@ fn test_register_generates_initial_token() {
 
 #[test]
 fn test_register_invalid_email_format() {
-    let invalid_emails = vec![
-        "notanemail",
-        "@example.com",
-        "user@",
-        "user @example.com",
-    ];
+    let invalid_emails = vec!["notanemail", "@example.com", "user@", "user @example.com"];
 
     for email in invalid_emails {
         // Validation: proper structure with non-empty parts
         let is_valid = email.contains('@') && {
             let parts: Vec<&str> = email.split('@').collect();
-            parts.len() == 2 && parts[0].len() > 0 && parts[1].contains('.') &&
-            parts[1].len() > 2 && !email.contains(' ')
+            parts.len() == 2
+                && parts[0].len() > 0
+                && parts[1].contains('.')
+                && parts[1].len() > 2
+                && !email.contains(' ')
         };
 
         assert!(!is_valid, "Email {} should be invalid", email);
@@ -537,7 +542,12 @@ fn test_token_with_very_long_user_id() {
     let secret = "test_secret_key_32_chars_minimum";
     let long_user_id = "u".repeat(1000);
 
-    let token = generate_token(&long_user_id, "user@example.com", secret, Duration::hours(1));
+    let token = generate_token(
+        &long_user_id,
+        "user@example.com",
+        secret,
+        Duration::hours(1),
+    );
     let claims = decode_token(&token, secret).unwrap();
 
     assert_eq!(claims.sub, long_user_id);
@@ -569,7 +579,10 @@ fn test_token_expiration_boundary() {
     // Test 2: Token with future expiration (should succeed)
     let valid_token = generate_token("user123", "user@example.com", secret, Duration::hours(1));
     let valid_result = decode_token(&valid_token, secret);
-    assert!(valid_result.is_ok(), "Token with future expiration should be valid");
+    assert!(
+        valid_result.is_ok(),
+        "Token with future expiration should be valid"
+    );
 
     // Verify the two are different
     let valid_claims = valid_result.unwrap();
@@ -579,7 +592,12 @@ fn test_token_expiration_boundary() {
 #[test]
 fn test_token_with_minimum_ttl() {
     let secret = "test_secret_key_32_chars_minimum";
-    let token = generate_token("user123", "user@example.com", secret, Duration::milliseconds(100));
+    let token = generate_token(
+        "user123",
+        "user@example.com",
+        secret,
+        Duration::milliseconds(100),
+    );
 
     // Token should still decode immediately
     let claims = decode_token(&token, secret);
@@ -617,7 +635,12 @@ fn test_token_secret_case_sensitivity() {
     let secret_lower = "test_secret_key_32_chars_minimum";
     let secret_upper = "TEST_SECRET_KEY_32_CHARS_MINIMUM";
 
-    let token = generate_token("user123", "user@example.com", secret_lower, Duration::hours(1));
+    let token = generate_token(
+        "user123",
+        "user@example.com",
+        secret_lower,
+        Duration::hours(1),
+    );
 
     let decoded_correct = decode_token(&token, secret_lower);
     let decoded_wrong = decode_token(&token, secret_upper);
@@ -630,10 +653,18 @@ fn test_token_secret_case_sensitivity() {
 fn test_concurrent_token_validation() {
     let secret = "test_secret_key_32_chars_minimum";
     let tokens: Vec<_> = (0..100)
-        .map(|i| generate_token(&format!("user{}", i), "user@example.com", secret, Duration::hours(1)))
+        .map(|i| {
+            generate_token(
+                &format!("user{}", i),
+                "user@example.com",
+                secret,
+                Duration::hours(1),
+            )
+        })
         .collect();
 
-    let valid_count = tokens.iter()
+    let valid_count = tokens
+        .iter()
         .filter(|t| decode_token(t, secret).is_ok())
         .count();
 
@@ -645,7 +676,12 @@ fn test_token_empty_secret() {
     // Empty secret should fail in real implementation
     let empty_secret = "";
     let result = std::panic::catch_unwind(|| {
-        let _token = generate_token("user123", "user@example.com", empty_secret, Duration::hours(1));
+        let _token = generate_token(
+            "user123",
+            "user@example.com",
+            empty_secret,
+            Duration::hours(1),
+        );
     });
 
     // This would panic or error in real jwt library
@@ -668,7 +704,12 @@ fn test_token_iat_always_less_than_exp() {
     let secret = "test_secret_key_32_chars_minimum";
 
     for i in 0..50 {
-        let token = generate_token(&format!("user{}", i), "user@example.com", secret, Duration::hours(1));
+        let token = generate_token(
+            &format!("user{}", i),
+            "user@example.com",
+            secret,
+            Duration::hours(1),
+        );
         let claims = decode_token(&token, secret).unwrap();
 
         assert!(claims.iat < claims.exp);
@@ -765,7 +806,10 @@ fn test_authorization_check_logs_failures() {
 
     if user_id != resource_owner {
         // Would log authorization failure
-        println!("Authorization failed: {} cannot access resource of {}", user_id, resource_owner);
+        println!(
+            "Authorization failed: {} cannot access resource of {}",
+            user_id, resource_owner
+        );
     }
 }
 

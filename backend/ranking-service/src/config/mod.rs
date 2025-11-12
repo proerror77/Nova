@@ -56,8 +56,7 @@ impl Config {
                     .unwrap_or_else(|_| "ranking-service".to_string()),
             },
             redis: RedisConfig {
-                url: env::var("REDIS_URL")
-                    .unwrap_or_else(|_| "redis://localhost:6379".to_string()),
+                url: env::var("REDIS_URL").unwrap_or_else(|_| "redis://localhost:6379".to_string()),
                 pool_size: env::var("REDIS_POOL_SIZE")
                     .unwrap_or_else(|_| "10".to_string())
                     .parse()

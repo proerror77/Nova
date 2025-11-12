@@ -6,7 +6,6 @@
 /// - Two-factor authentication (TOTP + backup codes)
 /// - OAuth 2.0 (Google, Apple, Facebook, WeChat)
 /// - Transactional outbox (reliable event publishing)
-
 pub mod email;
 pub mod kafka_events;
 pub mod oauth;

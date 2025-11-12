@@ -89,11 +89,11 @@ impl TrustSafetyService for TrustSafetyServiceImpl {
             .map_err(|e| Status::invalid_argument(format!("Invalid user_id: {}", e)))?;
 
         // Get user stats from DB
-        let (recent_post_count, seconds_since_last) =
-            self.moderation_db
-                .get_user_post_stats(user_id)
-                .await
-                .map_err(|e| Status::internal(format!("Failed to get user stats: {}", e)))?;
+        let (recent_post_count, seconds_since_last) = self
+            .moderation_db
+            .get_user_post_stats(user_id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to get user stats: {}", e)))?;
 
         // Get recent content for duplicate check
         let recent_content = self
@@ -243,7 +243,7 @@ impl TrustSafetyService for TrustSafetyServiceImpl {
             .appeal_service
             .submit_appeal(moderation_id, user_id, &req.reason)
             .await
-            .map_err(|e| Status::from(e))?;
+            .map_err(Status::from)?;
 
         Ok(Response::new(SubmitAppealResponse {
             appeal_id: appeal.id.to_string(),
@@ -283,7 +283,7 @@ impl TrustSafetyService for TrustSafetyServiceImpl {
             .appeal_service
             .review_appeal(appeal_id, admin_id, decision, admin_note)
             .await
-            .map_err(|e| Status::from(e))?;
+            .map_err(Status::from)?;
 
         Ok(Response::new(ReviewAppealResponse {
             appeal_id: appeal.id.to_string(),
@@ -323,14 +323,19 @@ impl TrustSafetyService for TrustSafetyServiceImpl {
             ));
         };
 
+        let user_id =
+            if !req.user_id.is_empty() {
+                Some(Uuid::parse_str(&req.user_id).map_err(|e| {
+                    Status::invalid_argument(format!("Invalid user_id UUID: {}", e))
+                })?)
+            } else {
+                None
+            };
+
         let total_count = self
             .moderation_db
             .count_moderation_logs(
-                if !req.user_id.is_empty() {
-                    Some(Uuid::parse_str(&req.user_id).unwrap())
-                } else {
-                    None
-                },
+                user_id,
                 if !req.content_id.is_empty() {
                     Some(&req.content_id)
                 } else {

@@ -23,7 +23,7 @@ impl AppealService {
     ) -> Result<Appeal> {
         // Validate moderation exists
         let moderation_exists = sqlx::query_scalar::<_, bool>(
-            "SELECT EXISTS(SELECT 1 FROM moderation_logs WHERE id = $1 AND user_id = $2)"
+            "SELECT EXISTS(SELECT 1 FROM moderation_logs WHERE id = $1 AND user_id = $2)",
         )
         .bind(moderation_id)
         .bind(user_id)
@@ -51,9 +51,10 @@ impl AppealService {
         .await?;
 
         if let Some(appeal) = existing_appeal {
-            return Err(TrustSafetyError::InvalidInput(
-                format!("Appeal already exists: {}", appeal.id),
-            ));
+            return Err(TrustSafetyError::InvalidInput(format!(
+                "Appeal already exists: {}",
+                appeal.id
+            )));
         }
 
         // Create new appeal
@@ -143,12 +144,10 @@ impl AppealService {
 
         // If approved, update moderation log
         if decision == AppealStatus::Approved {
-            sqlx::query(
-                "UPDATE moderation_logs SET approved = true WHERE id = $1"
-            )
-            .bind(updated_appeal.moderation_id)
-            .execute(&*self.db)
-            .await?;
+            sqlx::query("UPDATE moderation_logs SET approved = true WHERE id = $1")
+                .bind(updated_appeal.moderation_id)
+                .execute(&*self.db)
+                .await?;
 
             tracing::info!(
                 moderation_id = %updated_appeal.moderation_id,

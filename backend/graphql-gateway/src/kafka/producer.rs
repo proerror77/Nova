@@ -8,12 +8,11 @@
 
 use rdkafka::producer::{FutureProducer, FutureRecord};
 use rdkafka::ClientConfig;
-use serde::{Deserialize, Serialize};
 use std::time::Duration;
-use tracing::{info, debug};
+use tracing::{debug, info};
 
-use super::KafkaError;
 use super::consumer::{KafkaFeedEvent, KafkaMessageEvent, KafkaNotificationEvent};
+use super::KafkaError;
 
 /// Kafka producer for publishing events
 pub struct KafkaProducer {
@@ -63,9 +62,7 @@ impl KafkaProducer {
 
         let key = event.post_id.clone();
 
-        let record = FutureRecord::to("feed.events")
-            .payload(&payload)
-            .key(&key);
+        let record = FutureRecord::to("feed.events").payload(&payload).key(&key);
 
         self.producer
             .send(record, Duration::from_secs(30))
@@ -98,7 +95,10 @@ impl KafkaProducer {
     }
 
     /// Publish a notification event
-    pub async fn publish_notification_event(&self, event: KafkaNotificationEvent) -> Result<(), KafkaError> {
+    pub async fn publish_notification_event(
+        &self,
+        event: KafkaNotificationEvent,
+    ) -> Result<(), KafkaError> {
         let payload = serde_json::to_vec(&event)
             .map_err(|e| KafkaError::SerializationError(e.to_string()))?;
 

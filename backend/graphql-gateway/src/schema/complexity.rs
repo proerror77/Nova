@@ -17,8 +17,6 @@
 //! }
 //! Total: 100 + (100 * 1) + (100 * 50) + (100 * 50 * 1) = 10,500
 
-use async_graphql::{Request, Name};
-use serde_json::{json, Value};
 use std::collections::HashMap;
 
 /// Query complexity calculator
@@ -237,12 +235,7 @@ impl ComplexityAnalyzer {
     }
 
     /// Calculate complexity for a field with given multiplier
-    fn field_complexity(
-        &self,
-        field_name: &str,
-        parent_complexity: u32,
-        multiplier: u32,
-    ) -> u32 {
+    fn field_complexity(&self, field_name: &str, parent_complexity: u32, multiplier: u32) -> u32 {
         if let Some(field_def) = self.field_costs.get(field_name) {
             let base = field_def.base_cost.saturating_mul(parent_complexity);
             base.saturating_mul(multiplier)

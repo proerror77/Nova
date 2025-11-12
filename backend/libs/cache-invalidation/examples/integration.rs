@@ -21,7 +21,11 @@ impl UserService {
     }
 
     /// Update user profile (after DB commit)
-    async fn update_user_profile(&self, user_id: &str, _new_data: serde_json::Value) -> anyhow::Result<()> {
+    async fn update_user_profile(
+        &self,
+        user_id: &str,
+        _new_data: serde_json::Value,
+    ) -> anyhow::Result<()> {
         println!("📝 Updating user profile in database: {}", user_id);
 
         // 1. Update database (simulated)
@@ -71,10 +75,7 @@ impl UserService {
         println!("   ✓ Batch database update completed");
 
         // 2. Batch invalidate caches
-        let cache_keys: Vec<String> = user_ids
-            .iter()
-            .map(|id| format!("user:{}", id))
-            .collect();
+        let cache_keys: Vec<String> = user_ids.iter().map(|id| format!("user:{}", id)).collect();
 
         self.publisher.invalidate_batch(cache_keys).await?;
         println!("   ✓ Batch cache invalidation published");

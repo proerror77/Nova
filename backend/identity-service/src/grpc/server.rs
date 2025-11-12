@@ -9,13 +9,12 @@
 /// - Profile: UpdateUserProfile
 /// - E2EE: UpsertUserPublicKey, GetUserPublicKey
 use crate::db;
-use crate::error::{IdentityError, Result};
+use crate::error::IdentityError;
 use crate::security::{generate_token_pair, hash_password, validate_token, verify_password};
 use crate::services::{EmailService, KafkaEventProducer, TwoFaService};
 use chrono::Utc;
 use redis_utils::SharedConnectionManager;
 use sqlx::PgPool;
-use std::sync::Arc;
 use tonic::{Request, Response, Status};
 use tracing::{error, info, warn};
 use uuid::Uuid;
@@ -102,12 +101,8 @@ impl AuthService for IdentityServiceServer {
             .map_err(to_status)?;
 
         // Generate token pair
-        let tokens = generate_token_pair(
-            user.id,
-            &user.email,
-            &user.username,
-        )
-        .map_err(anyhow_to_status)?;
+        let tokens =
+            generate_token_pair(user.id, &user.email, &user.username).map_err(anyhow_to_status)?;
 
         // Publish UserCreated event
         if let Some(producer) = &self.kafka {
@@ -153,8 +148,8 @@ impl AuthService for IdentityServiceServer {
         }
 
         // Verify password
-        let password_valid = verify_password(&req.password, &user.password_hash)
-            .map_err(to_status)?;
+        let password_valid =
+            verify_password(&req.password, &user.password_hash).map_err(to_status)?;
 
         if !password_valid {
             // Record failed login attempt
@@ -171,12 +166,8 @@ impl AuthService for IdentityServiceServer {
             .map_err(to_status)?;
 
         // Generate token pair
-        let tokens = generate_token_pair(
-            user.id,
-            &user.email,
-            &user.username,
-        )
-        .map_err(anyhow_to_status)?;
+        let tokens =
+            generate_token_pair(user.id, &user.email, &user.username).map_err(anyhow_to_status)?;
 
         info!(user_id = %user.id, "User logged in successfully");
 
@@ -196,8 +187,7 @@ impl AuthService for IdentityServiceServer {
         let req = request.into_inner();
 
         // Validate refresh token
-        let token_data = validate_token(&req.refresh_token)
-            .map_err(anyhow_to_status)?;
+        let token_data = validate_token(&req.refresh_token).map_err(anyhow_to_status)?;
 
         // Parse user ID from token claims
         let user_id = Uuid::parse_str(&token_data.claims.sub)
@@ -210,12 +200,8 @@ impl AuthService for IdentityServiceServer {
             .ok_or_else(|| Status::not_found("User not found"))?;
 
         // Generate new token pair
-        let tokens = generate_token_pair(
-            user.id,
-            &user.email,
-            &user.username,
-        )
-        .map_err(anyhow_to_status)?;
+        let tokens =
+            generate_token_pair(user.id, &user.email, &user.username).map_err(anyhow_to_status)?;
 
         Ok(Response::new(RefreshTokenResponse {
             token: tokens.access_token,
@@ -452,8 +438,8 @@ impl AuthService for IdentityServiceServer {
         };
 
         db::users::update_user_profile(&self.db, user_id, fields)
-        .await
-        .map_err(to_status)?;
+            .await
+            .map_err(to_status)?;
 
         // Fetch updated user
         let user = db::users::find_by_id(&self.db, user_id)
@@ -526,9 +512,7 @@ fn to_status(err: IdentityError) -> Status {
     match err {
         IdentityError::UserNotFound => Status::not_found("User not found"),
         IdentityError::EmailAlreadyExists => Status::already_exists("Email already registered"),
-        IdentityError::UsernameAlreadyExists => {
-            Status::already_exists("Username already taken")
-        }
+        IdentityError::UsernameAlreadyExists => Status::already_exists("Username already taken"),
         IdentityError::InvalidCredentials => Status::unauthenticated("Invalid credentials"),
         IdentityError::InvalidToken => Status::unauthenticated("Invalid token"),
         IdentityError::TokenRevoked => Status::unauthenticated("Token revoked"),
@@ -551,13 +535,13 @@ fn to_status(err: IdentityError) -> Status {
         }
         IdentityError::OAuthError(msg) => Status::internal(format!("OAuth error: {}", msg)),
         IdentityError::InvalidOAuthState => Status::invalid_argument("Invalid OAuth state"),
-        IdentityError::InvalidOAuthProvider => {
-            Status::invalid_argument("Invalid OAuth provider")
-        }
+        IdentityError::InvalidOAuthProvider => Status::invalid_argument("Invalid OAuth provider"),
         IdentityError::Database(msg) => Status::internal(format!("Database error: {}", msg)),
         IdentityError::Redis(msg) => Status::internal(format!("Redis error: {}", msg)),
         IdentityError::JwtError(msg) => Status::internal(format!("JWT error: {}", msg)),
-        IdentityError::Validation(msg) => Status::invalid_argument(format!("Validation error: {}", msg)),
+        IdentityError::Validation(msg) => {
+            Status::invalid_argument(format!("Validation error: {}", msg))
+        }
         IdentityError::Internal(msg) => Status::internal(msg),
     }
 }
@@ -583,7 +567,7 @@ fn user_model_to_proto(user: &crate::models::User) -> User {
         email: user.email.clone(),
         username: user.username.clone(),
         created_at: user.created_at.timestamp(),
-        is_active: !user.deleted_at.is_some(),
+        is_active: user.deleted_at.is_none(),
         failed_login_attempts: user.failed_login_attempts,
         locked_until: user.locked_until.map(|dt| dt.timestamp()),
     }

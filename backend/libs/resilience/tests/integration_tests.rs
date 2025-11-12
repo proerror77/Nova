@@ -42,7 +42,7 @@ async fn test_circuit_breaker_full_lifecycle() {
 #[tokio::test]
 async fn test_circuit_breaker_error_rate_trigger() {
     let config = CircuitBreakerConfig {
-        failure_threshold: 100, // High to avoid consecutive failure trigger
+        failure_threshold: 100,    // High to avoid consecutive failure trigger
         error_rate_threshold: 0.6, // 60%
         window_size: 10,
         ..Default::default()

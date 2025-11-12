@@ -22,7 +22,10 @@ impl RecallStrategy for GraphRecallStrategy {
         let following_ids = self.get_following_users(user_id, limit).await?;
 
         if following_ids.is_empty() {
-            warn!("User {} has no following, graph recall returns empty", user_id);
+            warn!(
+                "User {} has no following, graph recall returns empty",
+                user_id
+            );
             return Ok(Vec::new());
         }
 

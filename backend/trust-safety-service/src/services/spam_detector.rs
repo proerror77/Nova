@@ -39,7 +39,8 @@ impl Default for SpamDetector {
 impl SpamDetector {
     pub fn new() -> Self {
         Self {
-            url_pattern: Regex::new(r"https?://[^\s]+").unwrap(),
+            url_pattern: Regex::new(r"https?://[^\s]+")
+                .expect("URL regex pattern is valid; this is a programmer error if it fails"),
         }
     }
 
@@ -149,7 +150,9 @@ impl SpamDetector {
             "lottery",
         ];
 
-        spam_keywords.iter().any(|&keyword| text_lower.contains(keyword))
+        spam_keywords
+            .iter()
+            .any(|&keyword| text_lower.contains(keyword))
     }
 
     /// Detect if content is duplicated
@@ -213,7 +216,8 @@ mod tests {
     fn test_spam_detection_excessive_links() {
         let detector = SpamDetector::new();
         let context = SpamContext::default();
-        let text = "Check out https://spam1.com https://spam2.com https://spam3.com https://spam4.com";
+        let text =
+            "Check out https://spam1.com https://spam2.com https://spam3.com https://spam4.com";
 
         let score = detector.detect(&context, text);
         assert!(score > 0.2, "Multiple links should increase spam score");
@@ -237,7 +241,10 @@ mod tests {
         let score_unverified = detector.detect(&context_unverified, "test");
         let score_verified = detector.detect(&context_verified, "test");
 
-        assert!(score_verified < score_unverified, "Verified users should have lower spam score");
+        assert!(
+            score_verified < score_unverified,
+            "Verified users should have lower spam score"
+        );
     }
 
     #[test]
@@ -257,10 +264,7 @@ mod tests {
     #[test]
     fn test_duplicate_detection() {
         let detector = SpamDetector::new();
-        let recent = vec![
-            "Hello world".to_string(),
-            "Test message".to_string(),
-        ];
+        let recent = vec!["Hello world".to_string(), "Test message".to_string()];
 
         assert!(detector.is_duplicate("Hello world", &recent));
         assert!(detector.is_duplicate("hello world", &recent)); // Case insensitive

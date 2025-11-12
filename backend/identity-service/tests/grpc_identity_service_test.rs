@@ -98,7 +98,10 @@ mod identity_service_grpc_tests {
                 // Verify response structure
                 assert!(!resp.user_id.is_empty(), "User ID should not be empty");
                 assert!(!resp.token.is_empty(), "Access token should not be empty");
-                assert!(!resp.refresh_token.is_empty(), "Refresh token should not be empty");
+                assert!(
+                    !resp.refresh_token.is_empty(),
+                    "Refresh token should not be empty"
+                );
                 assert_eq!(resp.expires_in, 3600, "Token should expire in 3600 seconds");
 
                 // Verify user ID is a valid UUID
@@ -108,7 +111,11 @@ mod identity_service_grpc_tests {
                 );
             }
             Err(status) => {
-                panic!("❌ Registration failed: {} - {}", status.code(), status.message());
+                panic!(
+                    "❌ Registration failed: {} - {}",
+                    status.code(),
+                    status.message()
+                );
             }
         }
     }
@@ -295,7 +302,10 @@ mod identity_service_grpc_tests {
                     "Login user_id should match registered user_id"
                 );
                 assert!(!resp.token.is_empty(), "Access token should not be empty");
-                assert!(!resp.refresh_token.is_empty(), "Refresh token should not be empty");
+                assert!(
+                    !resp.refresh_token.is_empty(),
+                    "Refresh token should not be empty"
+                );
                 assert_eq!(resp.expires_in, 3600, "Token should expire in 3600 seconds");
             }
             Err(status) => {
@@ -482,7 +492,11 @@ mod identity_service_grpc_tests {
                 assert!(resp.expires_at > 0, "Expiry timestamp should be set");
             }
             Err(status) => {
-                panic!("❌ Token verification failed: {} - {}", status.code(), status.message());
+                panic!(
+                    "❌ Token verification failed: {} - {}",
+                    status.code(),
+                    status.message()
+                );
             }
         }
     }
@@ -579,7 +593,9 @@ mod identity_service_grpc_tests {
         println!("✅ User registered with ID: {}", user_id);
 
         // Retrieve the user
-        let get_user_req = Request::new(GetUserRequest { user_id: user_id.clone() });
+        let get_user_req = Request::new(GetUserRequest {
+            user_id: user_id.clone(),
+        });
 
         match client.get_user(get_user_req).await {
             Ok(response) => {
@@ -602,7 +618,11 @@ mod identity_service_grpc_tests {
                 }
             }
             Err(status) => {
-                panic!("❌ Get user failed: {} - {}", status.code(), status.message());
+                panic!(
+                    "❌ Get user failed: {} - {}",
+                    status.code(),
+                    status.message()
+                );
             }
         }
     }
@@ -659,7 +679,11 @@ mod identity_service_grpc_tests {
                 assert!(resp.exists, "User should exist");
             }
             Err(status) => {
-                panic!("❌ Check user exists failed: {} - {}", status.code(), status.message());
+                panic!(
+                    "❌ Check user exists failed: {} - {}",
+                    status.code(),
+                    status.message()
+                );
             }
         }
 
@@ -677,7 +701,11 @@ mod identity_service_grpc_tests {
                 assert!(!resp.exists, "Non-existent user should not exist");
             }
             Err(status) => {
-                panic!("❌ Check user exists failed: {} - {}", status.code(), status.message());
+                panic!(
+                    "❌ Check user exists failed: {} - {}",
+                    status.code(),
+                    status.message()
+                );
             }
         }
     }

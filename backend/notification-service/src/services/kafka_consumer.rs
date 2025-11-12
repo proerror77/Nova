@@ -59,6 +59,12 @@ pub struct NotificationBatch {
     pub batch_id: String,
 }
 
+impl Default for NotificationBatch {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl NotificationBatch {
     /// Create a new notification batch
     pub fn new() -> Self {

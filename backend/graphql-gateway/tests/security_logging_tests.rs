@@ -34,11 +34,7 @@ fn test_logs_contain_no_email_addresses() {
     let email_pattern = Regex::new(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b").unwrap();
 
     for log in safe_logs {
-        assert!(
-            !email_pattern.is_match(log),
-            "Email found in log: {}",
-            log
-        );
+        assert!(!email_pattern.is_match(log), "Email found in log: {}", log);
     }
 }
 
@@ -68,10 +64,10 @@ fn test_logs_reject_unsafe_email_exposure() {
 #[test]
 fn test_password_pattern_detection() {
     let sensitive_patterns = vec![
-        r"password[\"']?\s*[:=]\s*[\"']?[\w!@#$%^&*()]+",
-        r"token[\"']?\s*[:=]\s*[\"']?[\w-]+",
-        r"secret[\"']?\s*[:=]\s*[\"']?[\w-]+",
-        r"api[_-]?key[\"']?\s*[:=]\s*[\"']?[\w-]+",
+        r#"password["']?\s*[:=]\s*["']?[\w!@#$%^&*()]+"#,
+        r#"token["']?\s*[:=]\s*["']?[\w-]+"#,
+        r#"secret["']?\s*[:=]\s*["']?[\w-]+"#,
+        r#"api[_-]?key["']?\s*[:=]\s*["']?[\w-]+"#,
     ];
 
     let unsafe_log = r#"{"level":"DEBUG","password":"SecretPassword123","user":"test"}"#;
@@ -125,10 +121,7 @@ fn test_sanitize_path_removes_query_parameters() {
         "/api/users"
     );
 
-    assert_eq!(
-        sanitize_path("/api/users"),
-        "/api/users"
-    );
+    assert_eq!(sanitize_path("/api/users"), "/api/users");
 }
 
 #[test]
@@ -177,7 +170,10 @@ fn test_structured_logs_contain_required_fields() {
     assert!(parsed.get("level").is_some(), "Missing 'level' field");
     assert!(parsed.get("user_id").is_some(), "Missing 'user_id' field");
     assert!(parsed.get("path").is_some(), "Missing 'path' field");
-    assert!(parsed.get("elapsed_ms").is_some(), "Missing 'elapsed_ms' field");
+    assert!(
+        parsed.get("elapsed_ms").is_some(),
+        "Missing 'elapsed_ms' field"
+    );
 }
 
 // =============================================================================
@@ -187,11 +183,15 @@ fn test_structured_logs_contain_required_fields() {
 #[test]
 fn test_ip_address_logging_allowed() {
     // IP addresses are OK to log (needed for security analysis)
-    let log_with_ip = r#"{"level":"WARN","client_ip":"192.168.1.100","message":"Rate limit exceeded"}"#;
+    let log_with_ip =
+        r#"{"level":"WARN","client_ip":"192.168.1.100","message":"Rate limit exceeded"}"#;
 
     let ip_pattern = Regex::new(r"\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b").unwrap();
 
-    assert!(ip_pattern.is_match(log_with_ip), "IP address should be logged for security");
+    assert!(
+        ip_pattern.is_match(log_with_ip),
+        "IP address should be logged for security"
+    );
 }
 
 // =============================================================================
@@ -252,7 +252,8 @@ fn test_sensitive_operations_logged_at_info_level() {
 
 #[test]
 fn test_logs_contain_correlation_id() {
-    let log_entry = r#"{"level":"INFO","correlation_id":"req-abc-123","message":"Processing request"}"#;
+    let log_entry =
+        r#"{"level":"INFO","correlation_id":"req-abc-123","message":"Processing request"}"#;
 
     let parsed: serde_json::Value = serde_json::from_str(log_entry).unwrap();
 
@@ -312,9 +313,9 @@ mod helpers {
     /// Check if a string contains any PII patterns
     pub fn contains_pii(text: &str) -> bool {
         let patterns = vec![
-            r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b", // Email
-            r"password[\"']?\s*[:=]\s*[\"']?[\w!@#$%^&*()]+",         // Password
-            r"eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+",                 // JWT
+            r#"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b"#, // Email
+            r#"password["']?\s*[:=]\s*["']?[\w!@#$%^&*()]+"#,         // Password
+            r#"eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+"#,                // JWT
         ];
 
         for pattern_str in patterns {
@@ -332,7 +333,9 @@ mod helpers {
     fn test_pii_detector() {
         assert!(contains_pii("user@example.com"));
         assert!(contains_pii(r#"{"password":"secret123"}"#));
-        assert!(contains_pii("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0In0.abc"));
+        assert!(contains_pii(
+            "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0In0.abc"
+        ));
 
         assert!(!contains_pii("user_id: 123"));
         assert!(!contains_pii("error: Database connection failed"));

@@ -39,8 +39,7 @@ impl Config {
                 .unwrap_or_else(|_| "8086".to_string())
                 .parse()
                 .unwrap_or(8086),
-            database_url: env::var("DATABASE_URL")
-                .expect("DATABASE_URL must be set"),
+            database_url: env::var("DATABASE_URL").expect("DATABASE_URL must be set"),
             db_max_connections: env::var("DB_MAX_CONNECTIONS")
                 .unwrap_or_else(|_| "50".to_string())
                 .parse()
@@ -67,8 +66,7 @@ impl Config {
                 .unwrap_or(0.5),
             service_name: env::var("SERVICE_NAME")
                 .unwrap_or_else(|_| "trust-safety-service".to_string()),
-            environment: env::var("ENVIRONMENT")
-                .unwrap_or_else(|_| "development".to_string()),
+            environment: env::var("ENVIRONMENT").unwrap_or_else(|_| "development".to_string()),
         })
     }
 }

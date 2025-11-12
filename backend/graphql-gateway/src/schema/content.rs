@@ -4,9 +4,9 @@
 
 use async_graphql::{Context, Object, Result as GraphQLResult, SimpleObject};
 use chrono::{DateTime, Utc};
+use resilience::timeout::{with_timeout_result, TimeoutError};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
-use resilience::timeout::{with_timeout_result, TimeoutError};
 
 use crate::clients::ServiceClients;
 use crate::middleware::{check_user_authorization, get_authenticated_user_id};
@@ -54,9 +54,8 @@ impl ContentQuery {
 
         let mut client = clients.content_client();
 
-        let request = tonic::Request::new(crate::clients::proto::content::GetPostRequest {
-            post_id: id,
-        });
+        let request =
+            tonic::Request::new(crate::clients::proto::content::GetPostRequest { post_id: id });
 
         match client.get_post(request).await {
             Ok(response) => {
@@ -159,11 +158,7 @@ pub struct ContentMutation;
 
 #[Object]
 impl ContentMutation {
-    async fn create_post(
-        &self,
-        ctx: &Context<'_>,
-        content: String,
-    ) -> GraphQLResult<Post> {
+    async fn create_post(&self, ctx: &Context<'_>, content: String) -> GraphQLResult<Post> {
         let clients = ctx
             .data::<ServiceClients>()
             .map_err(|_| "Service clients not available")?;
@@ -171,11 +166,7 @@ impl ContentMutation {
         let mut client = clients.content_client();
 
         // Get creator_id from context (would normally come from JWT token)
-        let creator_id = ctx
-            .data::<String>()
-            .ok()
-            .cloned()
-            .unwrap_or_default();
+        let creator_id = ctx.data::<String>().ok().cloned().unwrap_or_default();
 
         let request = tonic::Request::new(crate::clients::proto::content::CreatePostRequest {
             creator_id,
@@ -202,20 +193,13 @@ impl ContentMutation {
     /// - gRPC call: 10s (Channel-level)
     async fn delete_post(&self, ctx: &Context<'_>, id: String) -> GraphQLResult<bool> {
         // ✅ Wrap entire resolver in 12s timeout (allows 2 RPCs @ 5s each + overhead)
-        match with_timeout_result(
-            Duration::from_secs(12),
-            delete_post_impl(ctx, id)
-        ).await {
+        match with_timeout_result(Duration::from_secs(12), delete_post_impl(ctx, id)).await {
             Ok(success) => Ok(success),
-            Err(TimeoutError::Elapsed(d)) => {
-                Err(async_graphql::Error::new(format!(
-                    "Delete post operation timed out after {:?}",
-                    d
-                )))
-            }
-            Err(TimeoutError::OperationFailed(msg)) => {
-                Err(async_graphql::Error::new(msg))
-            }
+            Err(TimeoutError::Elapsed(d)) => Err(async_graphql::Error::new(format!(
+                "Delete post operation timed out after {:?}",
+                d
+            ))),
+            Err(TimeoutError::OperationFailed(msg)) => Err(async_graphql::Error::new(msg)),
         }
     }
 }
@@ -223,17 +207,13 @@ impl ContentMutation {
 /// Internal implementation of delete_post (separated for timeout wrapping)
 ///
 /// ✅ P0: Uses circuit breaker protection for all gRPC calls via clients.call_content()
-async fn delete_post_impl(
-    ctx: &Context<'_>,
-    id: String,
-) -> Result<bool, String> {
+async fn delete_post_impl(ctx: &Context<'_>, id: String) -> Result<bool, String> {
     let clients = ctx
         .data::<ServiceClients>()
         .map_err(|_| "Service clients not available".to_string())?;
 
     // Get current user from context (from JWT token)
-    let current_user_id = get_authenticated_user_id(ctx)
-        .map_err(|e| e.to_string())?;
+    let current_user_id = get_authenticated_user_id(ctx).map_err(|e| e.to_string())?;
 
     // Step 1: Get post to verify ownership (gRPC call 1 with circuit breaker)
     let id_clone = id.clone();
@@ -255,8 +235,7 @@ async fn delete_post_impl(
     let creator_uuid = uuid::Uuid::parse_str(&post.creator_id)
         .map_err(|_| "Invalid post creator ID format".to_string())?;
 
-    check_user_authorization(ctx, creator_uuid, "delete")
-        .map_err(|e| e.to_string())?;
+    check_user_authorization(ctx, creator_uuid, "delete").map_err(|e| e.to_string())?;
 
     // Step 3: Proceed with deletion (gRPC call 2 with circuit breaker)
     let clients_clone = clients.clone();

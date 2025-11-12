@@ -155,8 +155,7 @@ impl GraphqlQueryCache {
     pub fn with_limits(max_size_bytes: usize, max_entries: usize) -> Self {
         debug!(
             max_size_mb = max_size_bytes / (1024 * 1024),
-            max_entries,
-            "Initializing GraphQL query cache"
+            max_entries, "Initializing GraphQL query cache"
         );
 
         Self {
@@ -210,9 +209,7 @@ impl GraphqlQueryCache {
         CACHE_MISS.inc();
         debug!(query_hash = %query_hash, "L1 cache MISS");
 
-        let result = executor()
-            .await
-            .context("GraphQL query execution failed")?;
+        let result = executor().await.context("GraphQL query execution failed")?;
 
         // Store if cacheable (TTL > 0)
         if !policy.ttl.is_zero() {
@@ -470,9 +467,7 @@ mod tests {
         };
 
         cache
-            .get_or_execute(query_hash.clone(), short_ttl, || async {
-                Ok(data.clone())
-            })
+            .get_or_execute(query_hash.clone(), short_ttl, || async { Ok(data.clone()) })
             .await
             .unwrap();
 
@@ -557,23 +552,29 @@ mod tests {
         // Insert multiple entries
         let data = Bytes::from("data");
         cache
-            .get_or_execute("user:123:profile".to_string(), CachePolicy::PUBLIC, || async {
-                Ok(data.clone())
-            })
+            .get_or_execute(
+                "user:123:profile".to_string(),
+                CachePolicy::PUBLIC,
+                || async { Ok(data.clone()) },
+            )
             .await
             .unwrap();
 
         cache
-            .get_or_execute("user:123:posts".to_string(), CachePolicy::PUBLIC, || async {
-                Ok(data.clone())
-            })
+            .get_or_execute(
+                "user:123:posts".to_string(),
+                CachePolicy::PUBLIC,
+                || async { Ok(data.clone()) },
+            )
             .await
             .unwrap();
 
         cache
-            .get_or_execute("user:456:profile".to_string(), CachePolicy::PUBLIC, || async {
-                Ok(data.clone())
-            })
+            .get_or_execute(
+                "user:456:profile".to_string(),
+                CachePolicy::PUBLIC,
+                || async { Ok(data.clone()) },
+            )
             .await
             .unwrap();
 
@@ -590,7 +591,7 @@ mod tests {
     fn test_cache_stats() {
         let stats = CacheStats {
             entries: 50,
-            size_bytes: 50 * 1024 * 1024, // 50MB
+            size_bytes: 50 * 1024 * 1024,      // 50MB
             max_size_bytes: 100 * 1024 * 1024, // 100MB
             max_entries: 1000,
             hit_count: 700,

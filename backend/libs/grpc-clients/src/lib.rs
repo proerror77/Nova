@@ -115,6 +115,7 @@ pub mod feature_store {
 use std::sync::Arc;
 use tonic::transport::Channel;
 
+pub use feature_store::feature_store_client::FeatureStoreClient;
 /// Client types for all services
 pub use nova::auth_service::auth_service_client::AuthServiceClient;
 pub use nova::content_service::content_service_client::ContentServiceClient;
@@ -124,12 +125,11 @@ pub use nova::graph_service::graph_service_client::GraphServiceClient;
 pub use nova::media_service::media_service_client::MediaServiceClient;
 pub use nova::messaging_service::messaging_service_client::MessagingServiceClient;
 pub use nova::notification_service::notification_service_client::NotificationServiceClient;
-pub use nova::search_service::search_service_client::SearchServiceClient;
-pub use nova::user_service::user_service_client::UserServiceClient;
-pub use nova::social_service::social_service_client::SocialServiceClient;
 pub use nova::ranking_service::ranking_service_client::RankingServiceClient;
-pub use feature_store::feature_store_client::FeatureStoreClient;
+pub use nova::search_service::search_service_client::SearchServiceClient;
+pub use nova::social_service::social_service_client::SocialServiceClient;
 pub use nova::trust_safety::trust_safety_service_client::TrustSafetyServiceClient;
+pub use nova::user_service::user_service_client::UserServiceClient;
 
 #[derive(Clone)]
 pub struct GrpcClientPool {
@@ -218,7 +218,8 @@ impl GrpcClientPool {
             .await,
         ));
         let events_client = Arc::new(EventsServiceClient::new(
-            connect_or_placeholder(config, &config.analytics_service_url, "analytics-service").await,
+            connect_or_placeholder(config, &config.analytics_service_url, "analytics-service")
+                .await,
         ));
         let graph_client = Arc::new(GraphServiceClient::new(
             connect_or_placeholder(config, &config.graph_service_url, "graph-service").await,
@@ -233,7 +234,12 @@ impl GrpcClientPool {
             connect_or_placeholder(config, &config.feature_store_url, "feature-store").await,
         ));
         let trust_safety_client = Arc::new(TrustSafetyServiceClient::new(
-            connect_or_placeholder(config, &config.trust_safety_service_url, "trust-safety-service").await,
+            connect_or_placeholder(
+                config,
+                &config.trust_safety_service_url,
+                "trust-safety-service",
+            )
+            .await,
         ));
 
         Ok(Self {

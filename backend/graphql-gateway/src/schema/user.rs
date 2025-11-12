@@ -56,20 +56,15 @@ pub struct UserQuery;
 
 #[Object]
 impl UserQuery {
-    async fn user(
-        &self,
-        ctx: &Context<'_>,
-        id: String,
-    ) -> GraphQLResult<Option<UserProfile>> {
+    async fn user(&self, ctx: &Context<'_>, id: String) -> GraphQLResult<Option<UserProfile>> {
         let clients = ctx
             .data::<ServiceClients>()
             .map_err(|_| "Service clients not available")?;
 
         let mut client = clients.user_client();
 
-        let request = tonic::Request::new(crate::clients::proto::user::GetUserProfileRequest {
-            user_id: id,
-        });
+        let request =
+            tonic::Request::new(crate::clients::proto::user::GetUserProfileRequest { user_id: id });
 
         match client.get_user_profile(request).await {
             Ok(response) => {
@@ -92,11 +87,7 @@ pub struct UserMutation;
 
 #[Object]
 impl UserMutation {
-    async fn follow_user(
-        &self,
-        ctx: &Context<'_>,
-        followee_id: String,
-    ) -> GraphQLResult<bool> {
+    async fn follow_user(&self, ctx: &Context<'_>, followee_id: String) -> GraphQLResult<bool> {
         let clients = ctx
             .data::<ServiceClients>()
             .map_err(|_| "Service clients not available")?;
@@ -104,11 +95,7 @@ impl UserMutation {
         let mut client = clients.user_client();
 
         // Get current user from context (would normally come from JWT token)
-        let follower_id = ctx
-            .data::<String>()
-            .ok()
-            .cloned()
-            .unwrap_or_default();
+        let follower_id = ctx.data::<String>().ok().cloned().unwrap_or_default();
 
         let request = tonic::Request::new(crate::clients::proto::user::FollowUserRequest {
             follower_id,

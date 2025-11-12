@@ -3,7 +3,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     tonic_build::configure()
         .build_server(true)
         .build_client(false)
-        .compile(
+        .compile_protos(
             &[
                 "../proto/services/events_service.proto",
                 "../proto/services/common.proto",

@@ -152,10 +152,7 @@ async fn process_batch(
         let latency_seconds =
             (Utc::now() - event.created_at).num_milliseconds().max(0) as f64 / 1_000.0;
 
-        tracing::debug!(
-            latency_seconds,
-            "Outbox event processing latency"
-        );
+        tracing::debug!(latency_seconds, "Outbox event processing latency");
 
         match processing_result {
             Ok(ProcessOutcome::Published) => {

@@ -624,7 +624,8 @@ pub async fn start_grpc_server(
                 return Err(format!(
                     "Production requires mTLS - GRPC_SERVER_CERT_PATH must be set: {}",
                     e
-                ).into());
+                )
+                .into());
             }
         }
     };
