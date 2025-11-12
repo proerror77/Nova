@@ -75,6 +75,7 @@ chrono = { version = "0.4", features = ["serde"] }
 dotenv = "0.15"
 envy = "0.4"
 hkdf = "0.12"
+config = "0.14"
 
 # Logging
 tracing = "0.1"
