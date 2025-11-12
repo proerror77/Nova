@@ -67,15 +67,21 @@ jobs:
     strategy:
       matrix:
         service:
-          - auth-service
-          - user-service
+          - analytics-service
           - content-service
           - feed-service
+          - graph-service
+          - graphql-gateway
+          - identity-service
           - media-service
-          - messaging-service
+          - notification-service
+          - ranking-service
+          - realtime-chat-service
           - search-service
-          - streaming-service
-      max-parallel: 4  # ← 优化: 从 2 提升到 4
+          - social-service
+          - trust-safety-service
+          - user-service
+      max-parallel: 4
       fail-fast: false
 
     steps:
