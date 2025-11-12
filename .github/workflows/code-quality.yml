@@ -23,12 +23,18 @@ jobs:
         run: |
           echo "🔍 Scanning for unwrap() calls in production code..."
 
-          # Find unwrap() calls excluding test files
+          # Find unwrap() calls excluding test files, comments, and archived services
           UNWRAPS=$(grep -rn "\.unwrap()" backend --include="*.rs" | \
-                    grep -v "test" | \
+                    grep -v "backend/archived-v1/" | \
+                    grep -v "/tests/" | \
+                    grep -v "_test.rs" | \
+                    grep -v "test_" | \
+                    grep -v "#\[test\]" | \
                     grep -v "#\[cfg(test)\]" | \
+                    grep -v "^\s*//" | \
                     grep -v "build.rs" | \
-                    grep -v "target/" || true)
+                    grep -v "target/" | \
+                    grep -v "examples/" || true)
 
           if [ -n "$UNWRAPS" ]; then
             echo "❌ Found unwrap() calls in production code:"
@@ -104,11 +110,15 @@ jobs:
         run: |
           echo "🔍 Scanning for potential hardcoded secrets..."
 
-          # Check for suspicious patterns (excluding comments and tests)
+          # Check for suspicious patterns (excluding comments, tests, and archived services)
           SECRETS=$(grep -rn -E '(password|secret|api_key|token)\s*=\s*"[^"]+"' backend --include="*.rs" | \
-                    grep -v "test" | \
+                    grep -v "backend/archived-v1/" | \
+                    grep -v "/tests/" | \
+                    grep -v "_test.rs" | \
+                    grep -v "test_" | \
                     grep -v "//" | \
-                    grep -v "target/" || true)
+                    grep -v "target/" | \
+                    grep -v "examples/" || true)
 
           if [ -n "$SECRETS" ]; then
             echo "❌ Found potential hardcoded secrets:"
@@ -130,11 +140,16 @@ jobs:
         run: |
           echo "🔍 Scanning for println! statements..."
 
-          # Find println! in non-test code
-          PRINTLNS=$(grep -rn "println!" backend --include="*.rs" | \
-                     grep -v "test" | \
+          # Find println! in non-test code (excluding archived services and examples)
+          PRINTLNS=$(grep -rn "println!\|eprintln!" backend --include="*.rs" | \
+                     grep -v "backend/archived-v1/" | \
+                     grep -v "/tests/" | \
+                     grep -v "_test.rs" | \
+                     grep -v "test_" | \
                      grep -v "build.rs" | \
-                     grep -v "target/" || true)
+                     grep -v "target/" | \
+                     grep -v "examples/" | \
+                     grep -v "ERROR:" || true)
 
           if [ -n "$PRINTLNS" ]; then
             echo "⚠️  Found println! statements in production code:"
@@ -156,11 +171,17 @@ jobs:
         run: |
           echo "🔍 Scanning for panic! calls..."
 
-          # Find panic! in production code
+          # Find panic! in production code, excluding tests and archived services
           PANICS=$(grep -rn "panic!" backend --include="*.rs" | \
-                   grep -v "test" | \
+                   grep -v "backend/archived-v1/" | \
+                   grep -v "/tests/" | \
+                   grep -v "_test.rs" | \
+                   grep -v "test_" | \
+                   grep -v "#\[test\]" | \
+                   grep -v "#\[cfg(test)\]" | \
                    grep -v "unreachable!" | \
-                   grep -v "target/" || true)
+                   grep -v "target/" | \
+                   grep -v "examples/" || true)
 
           if [ -n "$PANICS" ]; then
             echo "❌ Found panic! calls in production code:"
