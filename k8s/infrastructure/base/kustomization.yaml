@@ -16,7 +16,6 @@ resources:
 - redis-pvc.yaml
 - elasticsearch.yaml
 # 微服务
-- auth-service.yaml
 - user-service.yaml
 - content-service.yaml
 - feed-service.yaml
@@ -40,8 +39,6 @@ commonAnnotations:
 
 # 镜像替换 (用于 CI/CD 流程)
 images:
-- name: nova/auth-service
-  newTag: latest
 - name: nova/user-service
   newTag: latest
 - name: nova/content-service
@@ -67,8 +64,6 @@ images:
 
 # 副本数配置
 replicas:
-- name: auth-service
-  count: 2
 - name: user-service
   count: 2
 - name: content-service
