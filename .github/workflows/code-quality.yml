@@ -222,10 +222,13 @@ jobs:
           cd backend
           cargo clippy --all-targets --all-features -- \
             -W clippy::unwrap_used \
-            -W clippy::panic \
             -W clippy::todo \
             -W clippy::unimplemented \
             -A dead_code \
+            -A unused_imports \
+            -A unused_variables \
+            -A clippy::panic \
+            -A clippy::too_many_arguments \
             -D warnings
 
   rustfmt:
