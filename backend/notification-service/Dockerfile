@@ -1,48 +1,59 @@
 # Multi-stage build for notification-service
-# Stage 1: Build
-FROM rust:1.75 as builder
+FROM rust:1.88-slim-bookworm AS builder
 
-WORKDIR /app
-
-# Copy workspace files
-COPY Cargo.toml Cargo.lock ./
-COPY backend/notification-service ./notification-service
-COPY backend/libs ./libs
-
-# Install system dependencies
+# Install dependencies
 RUN apt-get update && apt-get install -y \
     pkg-config \
     libssl-dev \
+    ca-certificates \
+    cmake \
+    build-essential \
+    protobuf-compiler \
+    librdkafka-dev \
     && rm -rf /var/lib/apt/lists/*
-
-# Build the application
-RUN cargo build --release -p notification-service
-
-# Stage 2: Runtime
-FROM debian:bookworm-slim
 
 WORKDIR /app
 
-# Install runtime dependencies
+# Copy workspace files from repo root
+COPY Cargo.toml Cargo.lock ./
+# Copy full backend workspace to satisfy workspace members
+COPY backend ./backend
+
+# Build notification-service
+RUN cargo build --release -p notification-service --bin notification-service
+
+# Runtime stage
+FROM debian:bookworm-slim AS runtime
+
 RUN apt-get update && apt-get install -y \
     ca-certificates \
     libssl3 \
+    librdkafka1 \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy binary from builder
-COPY --from=builder /app/target/release/notification-service /usr/local/bin/
+# Create non-root user
+RUN useradd -m -u 1001 -s /bin/bash appuser
 
-# Set environment variables
-ENV RUST_LOG=info
-ENV PORT=8000
-ENV DATABASE_URL=postgres://user:password@postgres/nova
+WORKDIR /app
+
+# Copy binary
+COPY --from=builder /app/target/release/notification-service /app/notification-service
+
+# Adjust ownership
+RUN chown -R appuser:appuser /app
+USER appuser
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
+    CMD curl -f http://localhost:8080/health || exit 1
 
-# Expose port
-EXPOSE 8000
+ENV RUST_LOG=info
+ENV SERVER_HOST=0.0.0.0
+ENV SERVER_PORT=8080
 
-# Run the application
-CMD ["notification-service"]
+# Expose REST API port
+EXPOSE 8080
+# Expose gRPC port
+EXPOSE 9080
+
+CMD ["/app/notification-service"]
