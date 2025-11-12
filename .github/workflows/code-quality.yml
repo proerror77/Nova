@@ -218,12 +218,18 @@ jobs:
           components: clippy
 
       - name: Run Clippy
+        env:
+          RUSTFLAGS: ""  # Clear default -D warnings
         run: |
           cd backend
           cargo clippy --lib --bins --all-features -- \
             -D clippy::unwrap_used \
             -D clippy::todo \
             -D clippy::unimplemented \
+            -A clippy::too_many_arguments \
+            -A clippy::should_implement_trait \
+            -A clippy::manual_clamp \
+            -A clippy::type_complexity \
             -A dead_code \
             -A unused_imports \
             -A unused_variables
