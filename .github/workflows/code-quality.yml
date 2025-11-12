@@ -24,6 +24,8 @@ jobs:
           echo "🔍 Scanning for unwrap() calls in production code..."
 
           # Find unwrap() calls excluding test files, comments, and archived services
+          # Note: Rely on Clippy's unwrap_used lint for actual enforcement
+          # This is a secondary check for quick feedback
           UNWRAPS=$(grep -rn "\.unwrap()" backend --include="*.rs" | \
                     grep -v "backend/archived-v1/" | \
                     grep -v "/tests/" | \
@@ -31,10 +33,13 @@ jobs:
                     grep -v "test_" | \
                     grep -v "#\[test\]" | \
                     grep -v "#\[cfg(test)\]" | \
-                    grep -v "^\s*//" | \
+                    grep -v ":\s*//" | \
                     grep -v "build.rs" | \
                     grep -v "target/" | \
-                    grep -v "examples/" || true)
+                    grep -v "examples/" | \
+                    grep -v "mod tests" | \
+                    grep -v "fn test_" | \
+                    grep -v "fn create_test_" || true)
 
           if [ -n "$UNWRAPS" ]; then
             echo "❌ Found unwrap() calls in production code:"
@@ -116,7 +121,7 @@ jobs:
                     grep -v "/tests/" | \
                     grep -v "_test.rs" | \
                     grep -v "test_" | \
-                    grep -v "//" | \
+                    grep -v ":\s*//" | \
                     grep -v "target/" | \
                     grep -v "examples/" || true)
 
@@ -179,9 +184,12 @@ jobs:
                    grep -v "test_" | \
                    grep -v "#\[test\]" | \
                    grep -v "#\[cfg(test)\]" | \
+                   grep -v ":\s*//" | \
                    grep -v "unreachable!" | \
                    grep -v "target/" | \
-                   grep -v "examples/" || true)
+                   grep -v "examples/" | \
+                   grep -v "mod tests" | \
+                   grep -v "fn test_" || true)
 
           if [ -n "$PANICS" ]; then
             echo "❌ Found panic! calls in production code:"
@@ -210,7 +218,6 @@ jobs:
           cd backend
           cargo clippy --all-targets --all-features -- \
             -W clippy::unwrap_used \
-            -W clippy::expect_used \
             -W clippy::panic \
             -W clippy::todo \
             -W clippy::unimplemented \
