@@ -129,7 +129,7 @@ impl CollaborativeFilteringModel {
 
         // Sort by aggregated score (descending)
         let mut ranked: Vec<(Uuid, f64)> = aggregated_scores.into_iter().collect();
-        ranked.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        ranked.sort_by(|a, b| b.1.partial_cmp(&a.1).expect("Scores should not be NaN"));
 
         Ok(ranked.into_iter().take(n).collect())
     }

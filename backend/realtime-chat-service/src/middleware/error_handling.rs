@@ -71,5 +71,9 @@ pub fn map_error(err: &AppError) -> (u16, ErrorResponse) {
 
 pub fn into_response(err: AppError) -> HttpResponse {
     let (status, response) = map_error(&err);
-    HttpResponse::build(actix_web::http::StatusCode::from_u16(status).unwrap()).json(response)
+    HttpResponse::build(
+        actix_web::http::StatusCode::from_u16(status)
+            .expect("map_error returns valid HTTP status code"),
+    )
+    .json(response)
 }

@@ -82,7 +82,7 @@ async fn run_consumer(ctx: EventContext, config: KafkaConsumerConfig) -> Result<
                     continue;
                 }
 
-                let data = payload.unwrap();
+                let data = payload.expect("Payload checked to be Some above");
 
                 let result = if topic == config.message_persisted_topic {
                     on_message_persisted(&ctx, data).await

@@ -22,7 +22,7 @@ lazy_static! {
         &["job_name", "status"],
         REGISTRY
     )
-    .unwrap();
+    .expect("Failed to register metric");
 
     /// Total DLQ messages sent (labels: job_name)
     pub static ref JOB_DLQ_MESSAGES_TOTAL: CounterVec = register_counter_vec_with_registry!(
@@ -31,7 +31,7 @@ lazy_static! {
         &["job_name"],
         REGISTRY
     )
-    .unwrap();
+    .expect("Failed to register metric");
 
     // ======================
     // Histograms (延迟分布)
@@ -45,7 +45,7 @@ lazy_static! {
         vec![0.01, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0, 60.0],
         REGISTRY
     )
-    .unwrap();
+    .expect("Failed to register metric");
 
     // ======================
     // Gauges (实时值)
@@ -58,7 +58,7 @@ lazy_static! {
         &["job_name"],
         REGISTRY
     )
-    .unwrap();
+    .expect("Failed to register metric");
 
     /// Job health status (0=unhealthy, 1=healthy) (labels: job_name)
     pub static ref JOB_HEALTH: GaugeVec = register_gauge_vec_with_registry!(
@@ -67,7 +67,7 @@ lazy_static! {
         &["job_name"],
         REGISTRY
     )
-    .unwrap();
+    .expect("Failed to register metric");
 
     /// Consecutive job failures (labels: job_name)
     pub static ref JOB_CONSECUTIVE_FAILURES: GaugeVec = register_gauge_vec_with_registry!(
@@ -76,7 +76,7 @@ lazy_static! {
         &["job_name"],
         REGISTRY
     )
-    .unwrap();
+    .expect("Failed to register metric");
 
     /// Items processed in last job run (labels: job_name)
     pub static ref JOB_ITEMS_PROCESSED: GaugeVec = register_gauge_vec_with_registry!(
@@ -85,7 +85,7 @@ lazy_static! {
         &["job_name"],
         REGISTRY
     )
-    .unwrap();
+    .expect("Failed to register metric");
 }
 
 /// Helper functions for job metrics

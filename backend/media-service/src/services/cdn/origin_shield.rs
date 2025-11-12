@@ -124,7 +124,11 @@ impl OriginShield {
             if let Some(entry) = cache.get(request_path) {
                 if entry.is_valid() {
                     debug!("Origin Shield cache hit: {}", request_path);
-                    return Ok(entry.cached_response.as_ref().unwrap().clone());
+                    return Ok(entry
+                        .cached_response
+                        .as_ref()
+                        .expect("Valid cache entry should have cached_response")
+                        .clone());
                 }
             }
         }

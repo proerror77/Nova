@@ -237,7 +237,11 @@ pub async fn run_jobs(
     let mut handles = vec![];
 
     for (job, ctx) in jobs {
-        let permit = semaphore.clone().acquire_owned().await.unwrap();
+        let permit = semaphore
+            .clone()
+            .acquire_owned()
+            .await
+            .expect("Semaphore should not be closed");
         let shutdown_rx = shutdown_signal.subscribe();
 
         let handle = tokio::spawn(async move {

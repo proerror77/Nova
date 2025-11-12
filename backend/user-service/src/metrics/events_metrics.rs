@@ -20,7 +20,7 @@ lazy_static! {
         &["status"],
         REGISTRY
     )
-    .unwrap();
+    .expect("Failed to register metric");
 
     /// Total events inserted into ClickHouse (labels: batch_size)
     /// Tracks batch insert efficiency
@@ -30,7 +30,7 @@ lazy_static! {
         &["batch_size"],
         REGISTRY
     )
-    .unwrap();
+    .expect("Failed to register metric");
 
     /// Deduplication cache hits (event already processed)
     pub static ref EVENTS_DEDUP_HITS: CounterVec = register_counter_vec_with_registry!(
@@ -39,7 +39,7 @@ lazy_static! {
         &["action"],
         REGISTRY
     )
-    .unwrap();
+    .expect("Failed to register metric");
 
     /// Deduplication cache misses (new event)
     pub static ref EVENTS_DEDUP_MISSES: CounterVec = register_counter_vec_with_registry!(
@@ -48,7 +48,7 @@ lazy_static! {
         &["action"],
         REGISTRY
     )
-    .unwrap();
+    .expect("Failed to register metric");
 
     // ======================
     // Histograms - 事件处理延迟
@@ -64,7 +64,7 @@ lazy_static! {
         vec![10.0, 50.0, 100.0, 250.0, 500.0, 1000.0, 2500.0, 5000.0],
         REGISTRY
     )
-    .unwrap();
+    .expect("Failed to register metric");
 
     /// Batch insert size distribution
     /// Helps optimize batch size configuration
@@ -75,7 +75,7 @@ lazy_static! {
         vec![10.0, 50.0, 100.0, 250.0, 500.0, 1000.0],
         REGISTRY
     )
-    .unwrap();
+    .expect("Failed to register metric");
 
     // ======================
     // Gauges - 消费者实时状态
@@ -88,7 +88,7 @@ lazy_static! {
         &["partition"],
         REGISTRY
     )
-    .unwrap();
+    .expect("Failed to register metric");
 
     /// Current dedup cache size (entries)
     pub static ref EVENTS_DEDUP_CACHE_SIZE: GaugeVec = register_gauge_vec_with_registry!(
@@ -97,7 +97,7 @@ lazy_static! {
         &["cache_type"],
         REGISTRY
     )
-    .unwrap();
+    .expect("Failed to register metric");
 }
 
 /// Helper functions for recording event metrics

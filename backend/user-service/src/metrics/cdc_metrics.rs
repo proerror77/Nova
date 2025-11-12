@@ -21,7 +21,7 @@ lazy_static! {
         &["table", "operation"],
         REGISTRY
     )
-    .unwrap();
+    .expect("Failed to register metric");
 
     /// Successful CDC inserts into ClickHouse (labels: table)
     pub static ref CDC_INSERTS_SUCCESS: CounterVec = register_counter_vec_with_registry!(
@@ -30,7 +30,7 @@ lazy_static! {
         &["table"],
         REGISTRY
     )
-    .unwrap();
+    .expect("Failed to register metric");
 
     /// Failed CDC inserts into ClickHouse (labels: table, error_type)
     pub static ref CDC_INSERTS_FAILED: CounterVec = register_counter_vec_with_registry!(
@@ -39,7 +39,7 @@ lazy_static! {
         &["table", "error_type"],
         REGISTRY
     )
-    .unwrap();
+    .expect("Failed to register metric");
 
     /// Total Kafka offset commits (labels: topic)
     pub static ref CDC_OFFSETS_COMMITTED: CounterVec = register_counter_vec_with_registry!(
@@ -48,7 +48,7 @@ lazy_static! {
         &["topic"],
         REGISTRY
     )
-    .unwrap();
+    .expect("Failed to register metric");
 
     // ======================
     // Histograms - CDC 延迟分布
@@ -63,7 +63,7 @@ lazy_static! {
         vec![10.0, 50.0, 100.0, 250.0, 500.0, 1000.0, 2500.0, 5000.0],
         REGISTRY
     )
-    .unwrap();
+    .expect("Failed to register metric");
 
     /// Kafka offset commit duration (labels: topic)
     pub static ref CDC_OFFSET_COMMIT_DURATION_MS: HistogramVec = register_histogram_vec_with_registry!(
@@ -73,7 +73,7 @@ lazy_static! {
         vec![5.0, 10.0, 25.0, 50.0, 100.0, 250.0, 500.0],
         REGISTRY
     )
-    .unwrap();
+    .expect("Failed to register metric");
 
     // ======================
     // Gauges - CDC 实时状态
@@ -87,7 +87,7 @@ lazy_static! {
         &["table", "partition"],
         REGISTRY
     )
-    .unwrap();
+    .expect("Failed to register metric");
 
     /// Consumer lag age in seconds (labels: table)
     /// 表示最后消费的消息时间戳与当前时间的差距(秒)
@@ -97,7 +97,7 @@ lazy_static! {
         &["table"],
         REGISTRY
     )
-    .unwrap();
+    .expect("Failed to register metric");
 }
 
 /// Helper functions for recording CDC metrics

@@ -152,7 +152,7 @@ impl PaginationArgs {
 
     /// Get effective limit
     pub fn get_limit(&self) -> i32 {
-        self.first.or(self.last).unwrap_or(10).min(100).max(1)
+        self.first.or(self.last).unwrap_or(10).clamp(1, 100)
     }
 
     /// Get effective offset from after cursor

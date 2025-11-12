@@ -685,7 +685,7 @@ impl NotificationService for NotificationServiceImpl {
             .unwrap_or(0);
 
         let today = Utc::now().date_naive();
-        let today_start = today.and_hms_opt(0, 0, 0).unwrap();
+        let today_start = today.and_hms_opt(0, 0, 0).expect("Valid time: 00:00:00");
 
         let today_count: i64 = sqlx::query_scalar(
             "SELECT COUNT(*) FROM notifications WHERE user_id = $1 AND is_deleted = FALSE AND created_at >= $2"

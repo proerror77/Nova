@@ -21,7 +21,7 @@ lazy_static! {
         &["cache_type", "key_pattern"],
         REGISTRY
     )
-    .unwrap();
+    .expect("Failed to register metric");
 
     /// Total cache misses (labels: cache_type, key_pattern)
     pub static ref CACHE_MISSES: CounterVec = register_counter_vec_with_registry!(
@@ -30,7 +30,7 @@ lazy_static! {
         &["cache_type", "key_pattern"],
         REGISTRY
     )
-    .unwrap();
+    .expect("Failed to register metric");
 
     /// Total cache invalidations (labels: cache_type, reason)
     /// reason: ttl_expired, manual_invalidate, evicted
@@ -40,7 +40,7 @@ lazy_static! {
         &["cache_type", "reason"],
         REGISTRY
     )
-    .unwrap();
+    .expect("Failed to register metric");
 
     /// Total cache write operations (labels: cache_type, operation)
     /// operation: set, update, delete
@@ -50,7 +50,7 @@ lazy_static! {
         &["cache_type", "operation"],
         REGISTRY
     )
-    .unwrap();
+    .expect("Failed to register metric");
 
     // ======================
     // Histograms - 缓存操作延迟
@@ -65,7 +65,7 @@ lazy_static! {
         vec![1.0, 5.0, 10.0, 25.0, 50.0, 100.0, 250.0, 500.0],
         REGISTRY
     )
-    .unwrap();
+    .expect("Failed to register metric");
 
     /// Cache entry size distribution (bytes)
     pub static ref CACHE_ENTRY_SIZE_BYTES: HistogramVec = register_histogram_vec_with_registry!(
@@ -75,7 +75,7 @@ lazy_static! {
         vec![100.0, 500.0, 1000.0, 5000.0, 10000.0, 50000.0, 100000.0],
         REGISTRY
     )
-    .unwrap();
+    .expect("Failed to register metric");
 
     // ======================
     // Gauges - 缓存实时状态
@@ -89,7 +89,7 @@ lazy_static! {
         &["cache_type"],
         REGISTRY
     )
-    .unwrap();
+    .expect("Failed to register metric");
 
     /// Estimated cache memory usage (labels: cache_type)
     pub static ref CACHE_MEMORY_BYTES: GaugeVec = register_gauge_vec_with_registry!(
@@ -98,7 +98,7 @@ lazy_static! {
         &["cache_type"],
         REGISTRY
     )
-    .unwrap();
+    .expect("Failed to register metric");
 
     /// Number of entries in cache (labels: cache_type)
     pub static ref CACHE_ENTRY_COUNT: GaugeVec = register_gauge_vec_with_registry!(
@@ -107,7 +107,7 @@ lazy_static! {
         &["cache_type"],
         REGISTRY
     )
-    .unwrap();
+    .expect("Failed to register metric");
 }
 
 /// Helper functions for recording cache metrics

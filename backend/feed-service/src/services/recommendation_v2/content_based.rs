@@ -143,7 +143,10 @@ impl ContentBasedModel {
             .collect();
 
         // Sort by similarity (descending)
-        scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        scored.sort_by(|a, b| {
+            b.1.partial_cmp(&a.1)
+                .expect("Similarity scores should not be NaN")
+        });
 
         Ok(scored.into_iter().take(k).collect())
     }

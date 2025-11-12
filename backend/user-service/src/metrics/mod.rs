@@ -29,7 +29,7 @@ lazy_static! {
         "Total number of login attempts",
         &["status"]
     )
-    .unwrap();
+    .expect("Failed to register metric");
 
     /// Total user registrations (labels: status=success|failed)
     pub static ref REGISTRATION_TOTAL: CounterVec = register_counter_vec!(
@@ -37,7 +37,7 @@ lazy_static! {
         "Total number of user registrations",
         &["status"]
     )
-    .unwrap();
+    .expect("Failed to register metric");
 
     /// Total password reset requests
     pub static ref PASSWORD_RESET_TOTAL: CounterVec = register_counter_vec!(
@@ -45,7 +45,7 @@ lazy_static! {
         "Total number of password reset requests",
         &["status"]
     )
-    .unwrap();
+    .expect("Failed to register metric");
 
     /// Total OAuth logins (labels: provider=apple|google|facebook, status=success|failed)
     pub static ref OAUTH_LOGINS_TOTAL: CounterVec = register_counter_vec!(
@@ -53,7 +53,7 @@ lazy_static! {
         "Total number of OAuth logins",
         &["provider", "status"]
     )
-    .unwrap();
+    .expect("Failed to register metric");
 
     /// Total 2FA attempts (labels: status=success|failed)
     pub static ref TWOFA_ATTEMPTS_TOTAL: CounterVec = register_counter_vec!(
@@ -61,7 +61,7 @@ lazy_static! {
         "Total number of 2FA verification attempts",
         &["status"]
     )
-    .unwrap();
+    .expect("Failed to register metric");
 
     /// Email verification errors
     pub static ref EMAIL_VERIFICATION_ERRORS: CounterVec = register_counter_vec!(
@@ -69,7 +69,7 @@ lazy_static! {
         "Total email verification errors",
         &["error_type"]
     )
-    .unwrap();
+    .expect("Failed to register metric");
 
     /// OAuth errors (labels: provider=apple|google|facebook, error_type)
     pub static ref OAUTH_ERRORS: CounterVec = register_counter_vec!(
@@ -77,7 +77,7 @@ lazy_static! {
         "Total OAuth authentication errors",
         &["provider", "error_type"]
     )
-    .unwrap();
+    .expect("Failed to register metric");
 
     /// Rate limit hits
     pub static ref RATE_LIMIT_HITS: CounterVec = register_counter_vec!(
@@ -85,7 +85,7 @@ lazy_static! {
         "Total number of rate limit hits",
         &["endpoint"]
     )
-    .unwrap();
+    .expect("Failed to register metric");
 
     /// Token refresh attempts
     pub static ref TOKEN_REFRESH_TOTAL: CounterVec = register_counter_vec!(
@@ -93,7 +93,7 @@ lazy_static! {
         "Total token refresh attempts",
         &["status"]
     )
-    .unwrap();
+    .expect("Failed to register metric");
 
     /// Total 2FA setup attempts (labels: operation=enable|confirm, status=success|failed)
     pub static ref TWOFA_SETUP_TOTAL: CounterVec = register_counter_vec!(
@@ -101,7 +101,7 @@ lazy_static! {
         "Total number of 2FA setup attempts",
         &["operation", "status"]
     )
-    .unwrap();
+    .expect("Failed to register metric");
 
     // ======================
     // Histograms (延迟分布)
@@ -114,7 +114,7 @@ lazy_static! {
         &["status"],
         vec![0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0]
     )
-    .unwrap();
+    .expect("Failed to register metric");
 
     /// Password hashing duration in seconds
     pub static ref PASSWORD_HASH_DURATION_SECONDS: HistogramVec = register_histogram_vec!(
@@ -123,7 +123,7 @@ lazy_static! {
         &["operation"], // "hash" or "verify"
         vec![0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.0]
     )
-    .unwrap();
+    .expect("Failed to register metric");
 
     /// JWT token generation duration in seconds
     pub static ref TOKEN_GENERATION_DURATION_SECONDS: HistogramVec = register_histogram_vec!(
@@ -132,7 +132,7 @@ lazy_static! {
         &["token_type"], // "access" or "refresh"
         vec![0.0001, 0.0005, 0.001, 0.005, 0.01, 0.025, 0.05, 0.1]
     )
-    .unwrap();
+    .expect("Failed to register metric");
 
     /// OAuth request duration in seconds
     pub static ref OAUTH_DURATION_SECONDS: HistogramVec = register_histogram_vec!(
@@ -141,7 +141,7 @@ lazy_static! {
         &["provider", "operation"], // operation: "authorize" or "callback"
         vec![0.01, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0]
     )
-    .unwrap();
+    .expect("Failed to register metric");
 
     /// 2FA setup operation duration in seconds (labels: operation=enable|confirm)
     pub static ref TWOFA_SETUP_DURATION_SECONDS: HistogramVec = register_histogram_vec!(
@@ -150,7 +150,7 @@ lazy_static! {
         &["operation"], // operation: "enable" or "confirm"
         vec![0.01, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5]
     )
-    .unwrap();
+    .expect("Failed to register metric");
 
     // ======================
     // Gauges (实时值)
@@ -161,21 +161,21 @@ lazy_static! {
         "auth_active_sessions",
         "Number of currently active user sessions"
     )
-    .unwrap();
+    .expect("Failed to register metric");
 
     /// Current number of rate-limited IPs
     pub static ref RATE_LIMITED_IPS_GAUGE: Gauge = register_gauge!(
         "auth_rate_limited_ips",
         "Number of currently rate-limited IP addresses"
     )
-    .unwrap();
+    .expect("Failed to register metric");
 
     /// Current number of failed login attempts (last hour)
     pub static ref FAILED_LOGIN_ATTEMPTS_GAUGE: Gauge = register_gauge!(
         "auth_failed_login_attempts_recent",
         "Number of failed login attempts in the last hour"
     )
-    .unwrap();
+    .expect("Failed to register metric");
 
     // ======================
     // Social Graph Metrics
@@ -187,7 +187,7 @@ lazy_static! {
         "Total number of follow/unfollow events by phase",
         &["event", "phase"]
     )
-    .unwrap();
+    .expect("Failed to register metric");
 }
 
 static METRICS_INIT: Once = Once::new();
@@ -283,8 +283,10 @@ pub fn gather_metrics() -> String {
     let encoder = TextEncoder::new();
     let metric_families = REGISTRY.gather();
     let mut buffer = Vec::new();
-    encoder.encode(&metric_families, &mut buffer).unwrap();
-    String::from_utf8(buffer).unwrap()
+    encoder
+        .encode(&metric_families, &mut buffer)
+        .expect("Failed to encode metrics");
+    String::from_utf8(buffer).expect("Metrics encoder produces valid UTF-8")
 }
 
 /// Helper functions for common metric operations
