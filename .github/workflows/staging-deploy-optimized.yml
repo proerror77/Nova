@@ -146,7 +146,6 @@ jobs:
           echo "📝 Updating image tags to: ${{ github.sha }}"
 
           kustomize edit set image \
-            nova/auth-service=${{ env.REGISTRY }}/${{ env.REGISTRY_ALIAS }}/auth-service:${{ github.sha }} \
             nova/user-service=${{ env.REGISTRY }}/${{ env.REGISTRY_ALIAS }}/user-service:${{ github.sha }} \
             nova/content-service=${{ env.REGISTRY }}/${{ env.REGISTRY_ALIAS }}/content-service:${{ github.sha }} \
             nova/feed-service=${{ env.REGISTRY }}/${{ env.REGISTRY_ALIAS }}/feed-service:${{ github.sha }} \
