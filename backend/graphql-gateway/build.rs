@@ -1,4 +1,5 @@
 // Build scripts are allowed to panic on compilation errors
+// Root workspace Cargo.toml updated to include all Phase E/F/G services
 #![allow(clippy::panic)]
 
 use std::path::PathBuf;
