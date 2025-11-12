@@ -49,7 +49,8 @@ pub fn check_user_authorization(
 ///
 /// Returns the strongly-typed AuthenticatedUser
 pub fn require_auth(ctx: &Context<'_>) -> Result<AuthenticatedUser, String> {
-    ctx.data::<AuthenticatedUser>().copied() // Dereference to copy the value
+    ctx.data::<AuthenticatedUser>()
+        .copied() // Dereference to copy the value
         .map_err(|_| "Unauthorized: authentication required".to_string())
 }
 
@@ -65,7 +66,8 @@ pub fn get_authenticated_user_id(ctx: &Context<'_>) -> Result<Uuid, String> {
 ///
 /// Use this when you need email, username, or other claim fields
 pub fn get_authenticated_claims(ctx: &Context<'_>) -> Result<Claims, String> {
-    ctx.data::<Claims>().cloned() // Clone the Claims
+    ctx.data::<Claims>()
+        .cloned() // Clone the Claims
         .map_err(|_| "Unauthorized: authentication required".to_string())
 }
 

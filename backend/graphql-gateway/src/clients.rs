@@ -18,7 +18,6 @@ pub mod common {
     pub mod v1 {
         tonic::include_proto!("nova.common.v1");
     }
-    
 }
 
 // Proto module definitions from build.rs

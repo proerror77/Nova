@@ -43,8 +43,7 @@ pub struct PostFeatures {
     pub author_id: Option<Uuid>, // For diversity layer author tracking
 }
 
-#[derive(Debug, Clone)]
-#[derive(Default)]
+#[derive(Debug, Clone, Default)]
 pub struct RecallStats {
     pub graph_recall_count: i32,
     pub trending_recall_count: i32,
@@ -52,4 +51,3 @@ pub struct RecallStats {
     pub total_candidates: i32,
     pub final_count: i32,
 }
-

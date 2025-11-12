@@ -206,9 +206,7 @@ impl<T: async_graphql::OutputType> ConnectionBuilder<T> {
         let start_cursor = edges.first().map(|e| e.cursor.clone());
         let end_cursor = edges.last().map(|e| e.cursor.clone());
 
-        let has_next_page = self
-            .total_count
-            .map(|tc| (self.offset + limit as i32) < tc);
+        let has_next_page = self.total_count.map(|tc| (self.offset + limit as i32) < tc);
         let has_previous_page = self.offset > 0;
 
         Connection {

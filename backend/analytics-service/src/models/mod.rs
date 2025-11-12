@@ -180,12 +180,10 @@ pub struct KafkaTopic {
 }
 
 /// Event Statistics
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct EventStats {
     pub total_events_published: i32,
     pub total_events_processed: i32,
     pub failed_events: i32,
     pub events_by_type: std::collections::HashMap<String, i32>,
 }
-

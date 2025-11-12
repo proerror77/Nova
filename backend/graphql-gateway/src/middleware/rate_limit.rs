@@ -129,9 +129,7 @@ where
                 elapsed_ms = start.elapsed().as_millis() as u32,
                 "Rate limit exceeded"
             );
-            return Box::pin(
-                async move { Err(ErrorTooManyRequests("Rate limit exceeded")) },
-            );
+            return Box::pin(async move { Err(ErrorTooManyRequests("Rate limit exceeded")) });
         }
 
         tracing::debug!(

@@ -3,8 +3,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::{Pool, Postgres, Row};
 use uuid::Uuid;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub enum PrivacyMode {
     #[serde(rename = "strict_e2e")]
     #[default]
@@ -12,7 +11,6 @@ pub enum PrivacyMode {
     #[serde(rename = "search_enabled")]
     SearchEnabled,
 }
-
 
 impl PrivacyMode {
     pub fn from_str(value: &str) -> Self {

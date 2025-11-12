@@ -9,9 +9,7 @@ pub mod rate_limit;
 pub use jwt::JwtMiddleware;
 
 // Re-export auth functions
-pub use auth::{
-    check_user_authorization, get_authenticated_user_id,
-};
+pub use auth::{check_user_authorization, get_authenticated_user_id};
 
 // Re-export rate limiting
 pub use rate_limit::{RateLimitConfig, RateLimitMiddleware};
