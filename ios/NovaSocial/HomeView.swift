@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct HomeView: View {
+    @Binding var currentPage: AppPage
     @Environment(\.dismiss) var dismiss
     @State private var showReportView = false
     @State private var showThankYouView = false
@@ -190,7 +191,7 @@ struct HomeView: View {
 
                     // Message
                     VStack(spacing: 4) {
-                        Image("Message-icon")
+                        Image("Message-icon-black")
                             .resizable()
                             .scaledToFit()
                             .frame(width: 22, height: 22)
@@ -199,6 +200,9 @@ struct HomeView: View {
                             .foregroundColor(.black)
                     }
                     .frame(maxWidth: .infinity)
+                    .onTapGesture {
+                        currentPage = .message
+                    }
 
                     // New Post
                     NewPostButtonComponent(showNewPost: $showNewPost)
@@ -458,5 +462,5 @@ struct NewPostButtonComponent: View {
 }
 
 #Preview {
-    HomeView()
+    HomeView(currentPage: .constant(.home))
 }
