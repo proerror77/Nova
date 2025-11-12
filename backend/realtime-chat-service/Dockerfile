@@ -39,9 +39,6 @@ WORKDIR /app
 # Copy binary
 COPY --from=builder /app/target/release/realtime-chat-service /app/realtime-chat-service
 
-# Copy migrations if they exist
-COPY --from=builder --chown=appuser:appuser /app/backend/realtime-chat-service/migrations /app/migrations 2>/dev/null || true
-
 # Adjust ownership
 RUN chown -R appuser:appuser /app
 USER appuser
