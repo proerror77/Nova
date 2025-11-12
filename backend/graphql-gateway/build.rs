@@ -1,7 +1,10 @@
+// Build scripts are allowed to panic on compilation errors
+#![allow(clippy::panic)]
+
 use std::path::PathBuf;
 
 fn main() {
-    let out_dir = PathBuf::from(std::env::var("OUT_DIR").unwrap());
+    let out_dir = PathBuf::from(std::env::var("OUT_DIR").expect("OUT_DIR not set"));
 
     tonic_build::configure()
         .build_server(false)
