@@ -1,7 +1,21 @@
+use once_cell::sync::Lazy;
+use regex::Regex;
+
+// Cached email validation regex (compiled once, reused for all validations)
+static EMAIL_REGEX: Lazy<Regex> = Lazy::new(|| {
+    // Basic email validation regex according to RFC 5322
+    // Pattern: local-part@domain
+    // - Local part: alphanumeric, dots, hyphens, underscores, plus signs
+    // - Domain: alphanumeric with dots, at least one dot required, 2+ char TLD
+    Regex::new(r"^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$")
+        .expect("EMAIL_REGEX compilation failed")
+});
+
 /// Input validation utilities for auth service
 /// Validates email format according to RFC 5322
+/// Simple but effective regex-based validation
 pub fn validate_email(email: &str) -> bool {
-    validator::validate_email(email)
+    EMAIL_REGEX.is_match(email) && email.len() <= 254 // RFC 5321 max length
 }
 
 /// Validates password strength
