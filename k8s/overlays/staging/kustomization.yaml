@@ -109,8 +109,6 @@ replicas:
     count: 2
   - name: realtime-chat-service
     count: 2
-  - name: messaging-service
-    count: 2
   - name: search-service
     count: 2
   - name: media-service
@@ -118,8 +116,6 @@ replicas:
   - name: trust-safety-service
     count: 2
   - name: graphql-gateway
-    count: 2
-  - name: api-gateway
     count: 2
 
 # Resource limits for staging (moderate)
