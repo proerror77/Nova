@@ -10,7 +10,6 @@
 pub mod query_cache;
 pub mod redis_cache;
 
-
 use anyhow::{Context as _, Result};
 use redis::aio::ConnectionManager;
 use redis::{AsyncCommands, Client};

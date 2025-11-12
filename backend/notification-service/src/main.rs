@@ -49,9 +49,7 @@ async fn main() -> io::Result<()> {
                 e
             );
             tracing::info!("Some features will not work without database connection");
-            return Err(io::Error::other(
-                "Database connection failed",
-            ));
+            return Err(io::Error::other("Database connection failed"));
         }
     };
 

@@ -112,7 +112,8 @@ where
 /// ```
 pub fn get_correlation_id(req: &actix_web::HttpRequest) -> String {
     req.extensions()
-        .get::<String>().cloned()
+        .get::<String>()
+        .cloned()
         .unwrap_or_else(|| Uuid::new_v4().to_string())
 }
 

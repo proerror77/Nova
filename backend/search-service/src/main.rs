@@ -589,10 +589,9 @@ async fn unified_search(
     }
 
     // Search posts if requested
-    if search_types.contains(&"post")
-        && !params.q.trim().is_empty() {
-            posts = sqlx::query_as::<_, PostResult>(
-                r#"
+    if search_types.contains(&"post") && !params.q.trim().is_empty() {
+        posts = sqlx::query_as::<_, PostResult>(
+            r#"
                 SELECT id, user_id, caption, created_at
                 FROM posts
                 WHERE to_tsvector('english', COALESCE(caption, '')) @@
@@ -604,12 +603,12 @@ async fn unified_search(
                          created_at DESC
                 LIMIT $2
                 "#,
-            )
-            .bind(&params.q)
-            .bind(params.limit)
-            .fetch_all(&state.db)
-            .await?;
-        }
+        )
+        .bind(&params.q)
+        .bind(params.limit)
+        .fetch_all(&state.db)
+        .await?;
+    }
 
     // Search hashtags if requested
     if search_types.contains(&"hashtag") {

@@ -86,9 +86,9 @@ async fn main() -> io::Result<()> {
     match jwt::load_validation_key() {
         Ok(public_key) => {
             if let Err(err) = jwt::initialize_jwt_validation_only(&public_key) {
-                return Err(io::Error::other(
-                    format!("Failed to initialize JWT keys: {err}"),
-                ));
+                return Err(io::Error::other(format!(
+                    "Failed to initialize JWT keys: {err}"
+                )));
             }
         }
         Err(err) => {
@@ -131,11 +131,7 @@ async fn main() -> io::Result<()> {
 
     let redis_pool = RedisPool::connect(&config.cache.redis_url, sentinel_cfg)
         .await
-        .map_err(|e| {
-            io::Error::other(
-                format!("Failed to initialize Redis connection: {e}"),
-            )
-        })?;
+        .map_err(|e| io::Error::other(format!("Failed to initialize Redis connection: {e}")))?;
 
     let media_cache = Arc::new(MediaCache::with_manager(redis_pool.manager(), None));
     let media_cache_http = media_cache.clone();

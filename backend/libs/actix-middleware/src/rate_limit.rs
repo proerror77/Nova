@@ -16,8 +16,7 @@ use tokio::sync::Mutex;
 use tokio::time::timeout;
 
 /// Rate limit failure behavior when Redis is unavailable
-#[derive(Debug, Clone, Copy, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, Deserialize, Default)]
 pub enum FailureMode {
     /// Allow requests when Redis fails (prioritize availability)
     #[default]
@@ -25,7 +24,6 @@ pub enum FailureMode {
     /// Deny requests when Redis fails (prioritize security)
     FailClosed,
 }
-
 
 // In-memory fallback rate limit counter (per-process, not distributed)
 // Used when Redis is unavailable and FailClosed mode is enabled

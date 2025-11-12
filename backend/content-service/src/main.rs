@@ -316,9 +316,9 @@ async fn main() -> io::Result<()> {
     match jwt::load_validation_key() {
         Ok(public_key) => {
             if let Err(err) = jwt::initialize_jwt_validation_only(&public_key) {
-                return Err(io::Error::other(
-                    format!("Failed to initialize JWT keys: {err}"),
-                ));
+                return Err(io::Error::other(format!(
+                    "Failed to initialize JWT keys: {err}"
+                )));
             }
         }
         Err(err) => {
@@ -367,11 +367,7 @@ async fn main() -> io::Result<()> {
             config.kafka.retry_backoff_ms.to_string(),
         )
         .create()
-        .map_err(|e| {
-            io::Error::other(
-                format!("Failed to create Kafka producer: {}", e),
-            )
-        })?;
+        .map_err(|e| io::Error::other(format!("Failed to create Kafka producer: {}", e)))?;
 
     tracing::info!("✅ Kafka producer initialized with idempotent configuration");
 
@@ -410,11 +406,7 @@ async fn main() -> io::Result<()> {
 
     let redis_pool = RedisPool::connect(&config.cache.url, sentinel_cfg)
         .await
-        .map_err(|e| {
-            io::Error::other(
-                format!("Failed to initialize Redis connection: {e}"),
-            )
-        })?;
+        .map_err(|e| io::Error::other(format!("Failed to initialize Redis connection: {e}")))?;
 
     let content_cache = Arc::new(ContentCache::with_manager(redis_pool.manager(), None));
     let feed_cache = Arc::new(FeedCache::new(redis_pool.manager(), 120));
@@ -459,16 +451,13 @@ async fn main() -> io::Result<()> {
 
     // Initialize gRPC client pool with connection pooling
     tracing::info!("Initializing gRPC client pool with connection pooling");
-    let grpc_config = GrpcConfig::from_env().map_err(|e| {
-        io::Error::other(
-            format!("Failed to load gRPC config: {}", e),
-        )
-    })?;
-    let grpc_pool = Arc::new(GrpcClientPool::new(&grpc_config).await.map_err(|e| {
-        io::Error::other(
-            format!("Failed to create gRPC client pool: {}", e),
-        )
-    })?);
+    let grpc_config = GrpcConfig::from_env()
+        .map_err(|e| io::Error::other(format!("Failed to load gRPC config: {}", e)))?;
+    let grpc_pool = Arc::new(
+        GrpcClientPool::new(&grpc_config)
+            .await
+            .map_err(|e| io::Error::other(format!("Failed to create gRPC client pool: {}", e)))?,
+    );
 
     // Initialize AuthClient from connection pool
     let auth_client = Arc::new(AuthClient::from_pool(grpc_pool.clone()));
@@ -648,9 +637,7 @@ async fn main() -> io::Result<()> {
     tasks.spawn(async move {
         match outbox_processor.start().await {
             Ok(_) => Ok(()),
-            Err(e) => Err(io::Error::other(
-                format!("Outbox processor error: {}", e),
-            )),
+            Err(e) => Err(io::Error::other(format!("Outbox processor error: {}", e))),
         }
     });
     tracing::info!("✅ Transactional outbox processor background job started");

@@ -9,7 +9,8 @@
 /// - Field/alias limits
 use async_graphql::{
     extensions::{Extension, ExtensionContext, ExtensionFactory, NextExecute, NextParseQuery},
-    parser::types::ExecutableDocument, Response, ServerError, Variables,
+    parser::types::ExecutableDocument,
+    Response, ServerError, Variables,
 };
 use std::collections::HashMap;
 use std::sync::Arc;
