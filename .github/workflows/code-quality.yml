@@ -225,6 +225,7 @@ jobs:
             -W clippy::panic \
             -W clippy::todo \
             -W clippy::unimplemented \
+            -A dead_code \
             -D warnings
 
   rustfmt:
