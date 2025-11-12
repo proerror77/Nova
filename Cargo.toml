@@ -136,10 +136,10 @@ neo4rs = "0.8"
 
 # Phase 4: Video Processing
 # gRPC for TensorFlow Serving and Milvus
-tonic = { version = "0.10", features = ["transport", "tls"] }
-tonic-health = "0.10"
-prost = "0.12"
-prost-types = "0.12"
+tonic = { version = "0.12", features = ["transport", "tls"] }
+tonic-health = "0.12"
+prost = "0.13"
+prost-types = "0.13"
 
 # Vector operations for embeddings
 ndarray = "0.15"
