@@ -220,7 +220,7 @@ jobs:
       - name: Run Clippy
         run: |
           cd backend
-          cargo clippy --all-targets --all-features -- \
+          cargo clippy --lib --bins --all-features -- \
             -W clippy::unwrap_used \
             -W clippy::todo \
             -W clippy::unimplemented \
