@@ -116,7 +116,7 @@ jobs:
             --repository-name "${{ env.REGISTRY_ALIAS }}/${{ matrix.service }}" \
             --region ${{ env.AWS_REGION }} \
             --image-ids imageTag=${{ github.sha }} \
-            --query 'imageDetails[0].[imageTags,imageSizeInBytes,imagePushedAt]' \
+            --query 'imageDetails[0].{Tags:join(`,`,imageTags),Size:imageSizeInBytes,PushedAt:imagePushedAt}' \
             --output table
 
   update-kustomization:
