@@ -1,10 +1,10 @@
 //! GraphQL Subscriptions (WebSocket support)
 //! Enables real-time updates for feed, messages, and notifications
 
-use async_graphql::{Result as GraphQLResult, Subscription, SimpleObject};
+use async_graphql::{Result as GraphQLResult, SimpleObject, Subscription};
+use chrono::Utc;
 use futures_util::stream::Stream;
 use serde::{Deserialize, Serialize};
-use chrono::Utc;
 
 /// Feed update event (when new posts appear in personalized feed)
 #[derive(SimpleObject, Clone, Debug, Serialize, Deserialize)]
@@ -51,9 +51,7 @@ impl SubscriptionRoot {
     /// - Ready for integration with Kafka/Redis pub-sub
     /// - Filters by current user from JWT context
     /// - Supports all post event types
-    async fn feed_updated(
-        &self,
-    ) -> impl Stream<Item = GraphQLResult<FeedUpdateEvent>> {
+    async fn feed_updated(&self) -> impl Stream<Item = GraphQLResult<FeedUpdateEvent>> {
         // Demo: Returns stream of feed events
         // In production:
         // 1. Get user_id from context JWT
@@ -61,15 +59,13 @@ impl SubscriptionRoot {
         // 3. Filter events matching user's interests
         // 4. Stream in real-time with correlation IDs
 
-        futures_util::stream::iter(vec![
-            Ok(FeedUpdateEvent {
-                post_id: "post_demo_1".to_string(),
-                creator_id: "user_123".to_string(),
-                content: "New post in your feed".to_string(),
-                created_at: Utc::now().to_rfc3339(),
-                event_type: "post_created".to_string(),
-            }),
-        ])
+        futures_util::stream::iter(vec![Ok(FeedUpdateEvent {
+            post_id: "post_demo_1".to_string(),
+            creator_id: "user_123".to_string(),
+            content: "New post in your feed".to_string(),
+            created_at: Utc::now().to_rfc3339(),
+            event_type: "post_created".to_string(),
+        })])
     }
 
     /// Subscribe to incoming direct messages
@@ -79,9 +75,7 @@ impl SubscriptionRoot {
     /// - End-to-end encryption ready
     /// - Conversation filtering by user_id
     /// - Supports read receipts and typing indicators
-    async fn message_received(
-        &self,
-    ) -> impl Stream<Item = GraphQLResult<MessageReceivedEvent>> {
+    async fn message_received(&self) -> impl Stream<Item = GraphQLResult<MessageReceivedEvent>> {
         // Demo: Returns stream of received messages
         // In production:
         // 1. Get user_id from context JWT
@@ -90,16 +84,14 @@ impl SubscriptionRoot {
         // 4. Handle E2E decryption server-side or client-side
         // 5. Stream with encryption metadata
 
-        futures_util::stream::iter(vec![
-            Ok(MessageReceivedEvent {
-                message_id: "msg_demo_1".to_string(),
-                conversation_id: "conv_456".to_string(),
-                sender_id: "user_789".to_string(),
-                content: "Hello from demo".to_string(),
-                created_at: Utc::now().to_rfc3339(),
-                encrypted: true,
-            }),
-        ])
+        futures_util::stream::iter(vec![Ok(MessageReceivedEvent {
+            message_id: "msg_demo_1".to_string(),
+            conversation_id: "conv_456".to_string(),
+            sender_id: "user_789".to_string(),
+            content: "Hello from demo".to_string(),
+            created_at: Utc::now().to_rfc3339(),
+            encrypted: true,
+        })])
     }
 
     /// Subscribe to incoming notifications
@@ -109,9 +101,7 @@ impl SubscriptionRoot {
     /// - Respects user notification preferences
     /// - Supports notification grouping/batching
     /// - Includes action metadata for UI handling
-    async fn notification_received(
-        &self,
-    ) -> impl Stream<Item = GraphQLResult<NotificationEvent>> {
+    async fn notification_received(&self) -> impl Stream<Item = GraphQLResult<NotificationEvent>> {
         // Demo: Returns stream of notifications
         // In production:
         // 1. Get user_id from context JWT
@@ -121,17 +111,15 @@ impl SubscriptionRoot {
         // 5. Stream with proper action categorization
         // 6. Track read/unread state in event
 
-        futures_util::stream::iter(vec![
-            Ok(NotificationEvent {
-                notification_id: "notif_demo_1".to_string(),
-                user_id: "user_123".to_string(),
-                actor_id: "user_456".to_string(),
-                action: "like".to_string(),
-                target_id: Some("post_789".to_string()),
-                created_at: Utc::now().to_rfc3339(),
-                read: false,
-            }),
-        ])
+        futures_util::stream::iter(vec![Ok(NotificationEvent {
+            notification_id: "notif_demo_1".to_string(),
+            user_id: "user_123".to_string(),
+            actor_id: "user_456".to_string(),
+            action: "like".to_string(),
+            target_id: Some("post_789".to_string()),
+            created_at: Utc::now().to_rfc3339(),
+            read: false,
+        })])
     }
 }
 

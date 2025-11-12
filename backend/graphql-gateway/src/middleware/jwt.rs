@@ -8,7 +8,7 @@ use actix_web::{
     dev::{forward_ready, Service, ServiceRequest, ServiceResponse, Transform},
     Error, HttpMessage,
 };
-use crypto_core::jwt::{validate_token, Claims};
+use crypto_core::jwt::validate_token;
 use futures_util::future::LocalBoxFuture;
 use std::future::{ready, Ready};
 use uuid::Uuid;
@@ -96,7 +96,9 @@ where
                 "JWT authentication failed: Missing Authorization header"
             );
             return Box::pin(async move {
-                Err(actix_web::error::ErrorUnauthorized("Missing Authorization header"))
+                Err(actix_web::error::ErrorUnauthorized(
+                    "Missing Authorization header",
+                ))
             });
         }
 
@@ -112,7 +114,9 @@ where
                     "JWT authentication failed: Invalid Authorization header encoding"
                 );
                 return Box::pin(async move {
-                    Err(actix_web::error::ErrorUnauthorized("Invalid Authorization header"))
+                    Err(actix_web::error::ErrorUnauthorized(
+                        "Invalid Authorization header",
+                    ))
                 });
             }
         };
@@ -128,7 +132,9 @@ where
                 "JWT authentication failed: Missing Bearer scheme"
             );
             return Box::pin(async move {
-                Err(actix_web::error::ErrorUnauthorized("Authorization must use Bearer scheme"))
+                Err(actix_web::error::ErrorUnauthorized(
+                    "Authorization must use Bearer scheme",
+                ))
             });
         }
 
@@ -148,7 +154,9 @@ where
                 );
                 return Box::pin(async move {
                     // Don't expose internal error details to clients
-                    Err(actix_web::error::ErrorUnauthorized("Invalid or expired token"))
+                    Err(actix_web::error::ErrorUnauthorized(
+                        "Invalid or expired token",
+                    ))
                 });
             }
         };
@@ -211,9 +219,7 @@ mod tests {
         )
         .await;
 
-        let req = test::TestRequest::get()
-            .uri("/health")
-            .to_request();
+        let req = test::TestRequest::get().uri("/health").to_request();
 
         let resp = test::call_service(&app, req).await;
         assert_eq!(resp.status(), 200);
@@ -228,9 +234,7 @@ mod tests {
         )
         .await;
 
-        let req = test::TestRequest::get()
-            .uri("/test")
-            .to_request();
+        let req = test::TestRequest::get().uri("/test").to_request();
 
         let resp = test::try_call_service(&app, req).await;
         assert!(resp.is_err(), "Missing auth header should be rejected");

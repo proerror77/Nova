@@ -92,15 +92,17 @@ impl TextModerator {
     fn compile_patterns() -> Vec<Regex> {
         vec![
             // Phone numbers (various formats)
-            Regex::new(r"\b\d{3}[-.]?\d{3}[-.]?\d{4}\b").unwrap(),
+            Regex::new(r"\b\d{3}[-.]?\d{3}[-.]?\d{4}\b").expect("Phone regex pattern is valid"),
             // Email addresses
-            Regex::new(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b").unwrap(),
+            Regex::new(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b")
+                .expect("Email regex pattern is valid"),
             // URLs (basic pattern)
-            Regex::new(r"https?://[^\s]+").unwrap(),
+            Regex::new(r"https?://[^\s]+").expect("URL regex pattern is valid"),
             // Credit card patterns (basic)
-            Regex::new(r"\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b").unwrap(),
+            Regex::new(r"\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b")
+                .expect("Credit card regex pattern is valid"),
             // Excessive repeated punctuation
-            Regex::new(r"[!?]{4,}").unwrap(),
+            Regex::new(r"[!?]{4,}").expect("Punctuation regex pattern is valid"),
         ]
     }
 
@@ -108,7 +110,7 @@ impl TextModerator {
     fn contains_word(&self, text: &str, word: &str) -> bool {
         // Use Unicode word boundaries
         let words = text.unicode_words().collect::<Vec<_>>();
-        words.iter().any(|w| *w == word)
+        words.contains(&word)
     }
 
     /// Check for excessive capitalization (>70% caps)
@@ -127,7 +129,7 @@ impl TextModerator {
 
     /// Check for repeated characters (e.g., "hellooooo")
     fn has_repeated_chars(&self, text: &str) -> bool {
-        let pattern = Regex::new(r"(.)\1{4,}").unwrap();
+        let pattern = Regex::new(r"(.)\1{4,}").expect("Repeated character regex pattern is valid");
         pattern.is_match(text)
     }
 
@@ -212,7 +214,9 @@ mod tests {
 
         let result = moderator.check("HELLO THIS IS ALL CAPS");
         assert!(result.is_flagged);
-        assert!(result.violations.contains(&"excessive_capitalization".to_string()));
+        assert!(result
+            .violations
+            .contains(&"excessive_capitalization".to_string()));
     }
 
     #[test]
@@ -222,7 +226,9 @@ mod tests {
 
         let result = moderator.check("Hellooooooo");
         assert!(result.is_flagged);
-        assert!(result.violations.contains(&"repeated_characters".to_string()));
+        assert!(result
+            .violations
+            .contains(&"repeated_characters".to_string()));
     }
 
     #[test]

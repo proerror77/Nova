@@ -24,8 +24,7 @@ use tokio::time::sleep;
 
 /// Helper function to get test secret name from environment
 fn get_test_secret_name() -> String {
-    env::var("AWS_SECRETS_TEST_SECRET_NAME")
-        .unwrap_or_else(|_| "test/nova/jwt-config".to_string())
+    env::var("AWS_SECRETS_TEST_SECRET_NAME").unwrap_or_else(|_| "test/nova/jwt-config".to_string())
 }
 
 /// Test: Create SecretManager and verify initialization
@@ -46,7 +45,9 @@ async fn test_secret_manager_initialization() {
 /// Test: Fetch secret and verify caching
 #[tokio::test]
 async fn test_secret_fetch_and_cache() {
-    let manager = SecretManager::new().await.expect("Failed to create manager");
+    let manager = SecretManager::new()
+        .await
+        .expect("Failed to create manager");
     let secret_name = get_test_secret_name();
 
     // Skip test if secret doesn't exist (allows running tests without AWS setup)
@@ -83,7 +84,9 @@ async fn test_secret_fetch_and_cache() {
 /// Test: JWT config parsing and validation
 #[tokio::test]
 async fn test_jwt_config_parsing() {
-    let manager = SecretManager::new().await.expect("Failed to create manager");
+    let manager = SecretManager::new()
+        .await
+        .expect("Failed to create manager");
     let secret_name = get_test_secret_name();
 
     // Skip test if secret doesn't exist
@@ -99,7 +102,10 @@ async fn test_jwt_config_parsing() {
     let jwt_config = jwt_config_result.expect("Failed to parse JWT config");
 
     // Validate required fields
-    assert!(!jwt_config.signing_key.is_empty(), "Signing key is required");
+    assert!(
+        !jwt_config.signing_key.is_empty(),
+        "Signing key is required"
+    );
     assert!(!jwt_config.algorithm.is_empty(), "Algorithm is required");
     assert!(!jwt_config.issuer.is_empty(), "Issuer is required");
     assert!(!jwt_config.audience.is_empty(), "Audience is required");
@@ -132,7 +138,9 @@ async fn test_jwt_config_parsing() {
 /// Test: Cache invalidation
 #[tokio::test]
 async fn test_cache_invalidation() {
-    let manager = SecretManager::new().await.expect("Failed to create manager");
+    let manager = SecretManager::new()
+        .await
+        .expect("Failed to create manager");
     let secret_name = get_test_secret_name();
 
     // Skip test if secret doesn't exist
@@ -166,7 +174,10 @@ async fn test_cache_invalidation() {
         .expect("Failed to fetch secret after invalidation");
 
     let (entries_final, _) = manager.cache_stats().await;
-    assert_eq!(entries_final, 1, "Cache should contain 1 entry after re-fetch");
+    assert_eq!(
+        entries_final, 1,
+        "Cache should contain 1 entry after re-fetch"
+    );
 }
 
 /// Test: Cache expiration (TTL)
@@ -212,7 +223,10 @@ async fn test_cache_ttl_expiration() {
         .expect("Failed to fetch secret after TTL expiration");
 
     let (entries_final, _) = manager.cache_stats().await;
-    assert_eq!(entries_final, 1, "Cache should contain 1 entry after re-fetch");
+    assert_eq!(
+        entries_final, 1,
+        "Cache should contain 1 entry after re-fetch"
+    );
 }
 
 /// Test: Simulate secret rotation
@@ -270,11 +284,16 @@ async fn test_secret_rotation_simulation() {
 /// Test: Error handling for non-existent secret
 #[tokio::test]
 async fn test_secret_not_found_error() {
-    let manager = SecretManager::new().await.expect("Failed to create manager");
+    let manager = SecretManager::new()
+        .await
+        .expect("Failed to create manager");
     let non_existent_secret = "test/nova/nonexistent-secret-12345";
 
     let result = manager.get_secret(non_existent_secret).await;
-    assert!(result.is_err(), "Should return error for non-existent secret");
+    assert!(
+        result.is_err(),
+        "Should return error for non-existent secret"
+    );
 
     match result.unwrap_err() {
         SecretError::NotFound(name) => {
@@ -309,7 +328,9 @@ fn test_invalid_jwt_config_parsing() {
 /// Test: Concurrent access to cache
 #[tokio::test]
 async fn test_concurrent_cache_access() {
-    let manager = SecretManager::new().await.expect("Failed to create manager");
+    let manager = SecretManager::new()
+        .await
+        .expect("Failed to create manager");
     let secret_name = get_test_secret_name();
 
     // Skip test if secret doesn't exist
@@ -370,7 +391,9 @@ async fn test_concurrent_cache_access() {
 /// Test: Multiple secret names in cache
 #[tokio::test]
 async fn test_multiple_secrets_in_cache() {
-    let manager = SecretManager::new().await.expect("Failed to create manager");
+    let manager = SecretManager::new()
+        .await
+        .expect("Failed to create manager");
     let secret_name = get_test_secret_name();
 
     // Skip test if secret doesn't exist
@@ -431,5 +454,8 @@ async fn test_secret_manager_builder() {
         .expect("Failed to build SecretManager");
 
     let (entries, _) = manager.cache_stats().await;
-    assert_eq!(entries, 0, "Builder-created manager should have empty cache");
+    assert_eq!(
+        entries, 0,
+        "Builder-created manager should have empty cache"
+    );
 }

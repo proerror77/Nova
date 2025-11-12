@@ -4,7 +4,7 @@ use crate::{
     services::conversation_service::{ConversationService, PrivacyMode},
     state::AppState,
 };
-use actix_web::{delete, get, post, put, web, HttpResponse};
+use actix_web::{get, post, put, web, HttpResponse};
 use base64::{engine::general_purpose, Engine as _};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;

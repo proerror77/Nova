@@ -1,9 +1,9 @@
 use crate::nova::realtime_chat::v1::{
-    realtime_chat_service_server::RealtimeChatService, ExchangeKeysRequest, ExchangeKeysResponse,
-    GetConversationRequest, GetConversationResponse, GetMessageHistoryRequest,
-    GetMessageHistoryResponse, GetPublicKeyRequest, GetPublicKeyResponse, SendMessageRequest,
-    SendMessageResponse, StartCallRequest, StartCallResponse, EndCallRequest, EndCallResponse,
-    StreamMessagesRequest, MessageEvent, TypingIndicatorRequest, TypingIndicatorResponse,
+    realtime_chat_service_server::RealtimeChatService, EndCallRequest, EndCallResponse,
+    ExchangeKeysRequest, ExchangeKeysResponse, GetConversationRequest, GetConversationResponse,
+    GetMessageHistoryRequest, GetMessageHistoryResponse, GetPublicKeyRequest, GetPublicKeyResponse,
+    MessageEvent, SendMessageRequest, SendMessageResponse, StartCallRequest, StartCallResponse,
+    StreamMessagesRequest, TypingIndicatorRequest, TypingIndicatorResponse,
     UpdateCallStatusRequest, UpdateCallStatusResponse,
 };
 use crate::state::AppState;
@@ -36,7 +36,9 @@ impl RealtimeChatService for RealtimeChatServiceImpl {
     ) -> Result<Response<GetConversationResponse>, Status> {
         let _req = request.into_inner();
         // TODO: Implement get_conversation logic
-        Err(Status::unimplemented("get_conversation not yet implemented"))
+        Err(Status::unimplemented(
+            "get_conversation not yet implemented",
+        ))
     }
 
     async fn get_message_history(

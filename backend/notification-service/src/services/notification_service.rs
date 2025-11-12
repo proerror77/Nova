@@ -7,9 +7,9 @@
 /// 4. Supports notification preferences and filtering
 /// 5. Manages device tokens and delivery tracking
 /// 6. Implements priority queuing and batch processing
-use super::{APNsClient, FCMClient, KafkaNotification};
+use super::{APNsClient, FCMClient};
 use crate::models::{
-    CreateNotificationRequest, DeliveryAttempt, DeviceToken, Notification, NotificationChannel,
+    CreateNotificationRequest, DeviceToken, Notification, NotificationChannel,
     NotificationPreference, NotificationPriority, NotificationStatus, NotificationType,
 };
 use chrono::{Duration, Utc};
@@ -72,20 +72,20 @@ impl NotificationService {
         "#;
 
         let row = sqlx::query(query)
-            .bind(&notification_id)
-            .bind(&req.recipient_id)
-            .bind(&req.sender_id)
+            .bind(notification_id)
+            .bind(req.recipient_id)
+            .bind(req.sender_id)
             .bind(req.notification_type.as_str())
             .bind(&req.title)
             .bind(&req.body)
             .bind(&req.image_url)
-            .bind(&req.object_id)
+            .bind(req.object_id)
             .bind(&req.object_type)
             .bind(&req.metadata)
             .bind(req.priority.as_str())
             .bind("queued")
-            .bind(&now)
-            .bind(&expires_at)
+            .bind(now)
+            .bind(expires_at)
             .fetch_one(&self.db)
             .await
             .map_err(|e| {
@@ -143,12 +143,12 @@ impl NotificationService {
         "#;
 
         let row = sqlx::query(query)
-            .bind(&device_token_id)
-            .bind(&user_id)
+            .bind(device_token_id)
+            .bind(user_id)
             .bind(&token)
             .bind(channel.as_str())
             .bind(&device_type)
-            .bind(&now)
+            .bind(now)
             .fetch_one(&self.db)
             .await
             .map_err(|e| {
@@ -170,7 +170,7 @@ impl NotificationService {
         "#;
 
         sqlx::query(query)
-            .bind(&user_id)
+            .bind(user_id)
             .bind(token)
             .execute(&self.db)
             .await
@@ -192,7 +192,7 @@ impl NotificationService {
         "#;
 
         let rows = sqlx::query(query)
-            .bind(&user_id)
+            .bind(user_id)
             .fetch_all(&self.db)
             .await
             .map_err(|e| format!("Failed to fetch user devices: {}", e))?;
@@ -239,7 +239,7 @@ impl NotificationService {
         "#;
 
         match sqlx::query(query)
-            .bind(&user_id)
+            .bind(user_id)
             .fetch_optional(&self.db)
             .await
             .map_err(|e| format!("Failed to fetch preferences: {}", e))?
@@ -280,9 +280,9 @@ impl NotificationService {
                 "#;
 
                 sqlx::query(insert_query)
-                    .bind(&pref_id)
-                    .bind(&user_id)
-                    .bind(&now)
+                    .bind(pref_id)
+                    .bind(user_id)
+                    .bind(now)
                     .execute(&self.db)
                     .await
                     .map_err(|e| format!("Failed to create default preferences: {}", e))?;
@@ -502,8 +502,8 @@ impl NotificationService {
         "#;
 
         sqlx::query(query)
-            .bind(&now)
-            .bind(&notification_id)
+            .bind(now)
+            .bind(notification_id)
             .execute(&self.db)
             .await
             .map_err(|e| format!("Failed to mark notification as read: {}", e))?;
@@ -525,7 +525,7 @@ impl NotificationService {
         "#;
 
         match sqlx::query(query)
-            .bind(&notification_id)
+            .bind(notification_id)
             .fetch_optional(&self.db)
             .await
             .map_err(|e| format!("Failed to fetch notification: {}", e))?

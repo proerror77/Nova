@@ -10,8 +10,8 @@ use uuid::Uuid;
 
 use crate::error::{AppError, Result};
 use crate::middleware::jwt_auth::UserId;
-use grpc_clients::RankingServiceClient;
 use grpc_clients::nova::ranking_service::v1::{RankFeedRequest, RecallConfig};
+use grpc_clients::RankingServiceClient;
 
 /// Request body for ranking API (internal testing)
 #[derive(Debug, Deserialize)]
@@ -130,7 +130,10 @@ pub async fn get_recommendations(
             Ok(HttpResponse::Ok().json(RecommendationResponse { posts, count }))
         }
         Err(err) => {
-            warn!("Ranking service unavailable: {:?}, falling back to chronological feed", err);
+            warn!(
+                "Ranking service unavailable: {:?}, falling back to chronological feed",
+                err
+            );
 
             // Fallback: Simple chronological ordering
             match fetch_chronological_feed(&state.db_pool, user_id, limit).await {
@@ -140,7 +143,10 @@ pub async fn get_recommendations(
                 }
                 Err(fallback_err) => {
                     error!("Fallback feed fetch failed: {:?}", fallback_err);
-                    Err(AppError::Internal(format!("Failed to fetch feed: {:?}", fallback_err)))
+                    Err(AppError::Internal(format!(
+                        "Failed to fetch feed: {:?}",
+                        fallback_err
+                    )))
                 }
             }
         }

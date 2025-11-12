@@ -280,11 +280,11 @@ async fn main() -> io::Result<()> {
                     Ok(resp) if resp.status().is_success() => return Ok(()),
                     Ok(resp) => {
                         eprintln!("healthcheck HTTP status: {}", resp.status());
-                        return Err(io::Error::new(io::ErrorKind::Other, "healthcheck failed"));
+                        return Err(io::Error::other("healthcheck failed"));
                     }
                     Err(e) => {
                         eprintln!("healthcheck HTTP error: {}", e);
-                        return Err(io::Error::new(io::ErrorKind::Other, "healthcheck error"));
+                        return Err(io::Error::other("healthcheck error"));
                     }
                 }
             }
@@ -316,8 +316,7 @@ async fn main() -> io::Result<()> {
     match jwt::load_validation_key() {
         Ok(public_key) => {
             if let Err(err) = jwt::initialize_jwt_validation_only(&public_key) {
-                return Err(io::Error::new(
-                    io::ErrorKind::Other,
+                return Err(io::Error::other(
                     format!("Failed to initialize JWT keys: {err}"),
                 ));
             }
@@ -359,12 +358,17 @@ async fn main() -> io::Result<()> {
         .set("acks", "all")
         .set("max.in.flight.requests.per.connection", "5")
         .set("retries", "10")
-        .set("request.timeout.ms", config.kafka.request_timeout_ms.to_string())
-        .set("retry.backoff.ms", config.kafka.retry_backoff_ms.to_string())
+        .set(
+            "request.timeout.ms",
+            config.kafka.request_timeout_ms.to_string(),
+        )
+        .set(
+            "retry.backoff.ms",
+            config.kafka.retry_backoff_ms.to_string(),
+        )
         .create()
         .map_err(|e| {
-            io::Error::new(
-                io::ErrorKind::Other,
+            io::Error::other(
                 format!("Failed to create Kafka producer: {}", e),
             )
         })?;
@@ -382,9 +386,9 @@ async fn main() -> io::Result<()> {
     let outbox_processor = OutboxProcessor::new(
         outbox_repo.clone(),
         outbox_publisher,
-        100,                       // batch_size: process 100 events per batch
-        Duration::from_secs(5),    // poll_interval: check for new events every 5 seconds
-        5,                         // max_retries: retry failed events up to 5 times
+        100,                    // batch_size: process 100 events per batch
+        Duration::from_secs(5), // poll_interval: check for new events every 5 seconds
+        5,                      // max_retries: retry failed events up to 5 times
     );
 
     tracing::info!("✅ Transactional outbox processor configured");
@@ -407,8 +411,7 @@ async fn main() -> io::Result<()> {
     let redis_pool = RedisPool::connect(&config.cache.url, sentinel_cfg)
         .await
         .map_err(|e| {
-            io::Error::new(
-                io::ErrorKind::Other,
+            io::Error::other(
                 format!("Failed to initialize Redis connection: {e}"),
             )
         })?;
@@ -457,14 +460,12 @@ async fn main() -> io::Result<()> {
     // Initialize gRPC client pool with connection pooling
     tracing::info!("Initializing gRPC client pool with connection pooling");
     let grpc_config = GrpcConfig::from_env().map_err(|e| {
-        io::Error::new(
-            io::ErrorKind::Other,
+        io::Error::other(
             format!("Failed to load gRPC config: {}", e),
         )
     })?;
     let grpc_pool = Arc::new(GrpcClientPool::new(&grpc_config).await.map_err(|e| {
-        io::Error::new(
-            io::ErrorKind::Other,
+        io::Error::other(
             format!("Failed to create gRPC client pool: {}", e),
         )
     })?);
@@ -632,7 +633,7 @@ async fn main() -> io::Result<()> {
             grpc_shutdown,
         )
         .await
-        .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("{}", e)))
+        .map_err(|e| io::Error::other(format!("{}", e)))
     });
 
     // Feed refresh background job
@@ -647,8 +648,7 @@ async fn main() -> io::Result<()> {
     tasks.spawn(async move {
         match outbox_processor.start().await {
             Ok(_) => Ok(()),
-            Err(e) => Err(io::Error::new(
-                io::ErrorKind::Other,
+            Err(e) => Err(io::Error::other(
                 format!("Outbox processor error: {}", e),
             )),
         }
@@ -691,7 +691,7 @@ async fn main() -> io::Result<()> {
                     Some(Err(e)) => {
                         tracing::error!("Task join error: {}", e);
                         if first_error.is_none() {
-                            first_error = Some(io::Error::new(io::ErrorKind::Other, e.to_string()));
+                            first_error = Some(io::Error::other(e.to_string()));
                         }
                         let _ = shutdown_tx.send(());
                         server_handle.stop(true).await;

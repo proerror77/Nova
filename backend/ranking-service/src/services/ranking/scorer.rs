@@ -148,7 +148,12 @@ impl RankingScorer {
             .collect();
 
         // Sort by score descending
-        scored_candidates.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap());
+        // Note: NaN scores are treated as less than any valid score
+        scored_candidates.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         debug!(
             user_id = %user_id,

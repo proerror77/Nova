@@ -68,10 +68,8 @@ impl OnlineFeatureStore {
         for feature_name in feature_names {
             let key = format_feature_key(user_id, feature_name);
 
-            match redis_utils::with_timeout(async {
-                conn.get::<_, Option<String>>(&key).await
-            })
-            .await
+            match redis_utils::with_timeout(async { conn.get::<_, Option<String>>(&key).await })
+                .await
             {
                 Ok(Some(value)) => match value.parse::<f64>() {
                     Ok(val) => {
@@ -147,10 +145,8 @@ impl OnlineFeatureStore {
         }
 
         // Execute MGET for all keys at once
-        match redis_utils::with_timeout(async {
-            conn.get::<_, Vec<Option<String>>>(&keys).await
-        })
-        .await
+        match redis_utils::with_timeout(async { conn.get::<_, Vec<Option<String>>>(&keys).await })
+            .await
         {
             Ok(values) => {
                 for (idx, value_opt) in values.into_iter().enumerate() {
@@ -161,7 +157,7 @@ impl OnlineFeatureStore {
                             Ok(val) => {
                                 result
                                     .entry(*user_id)
-                                    .or_insert_with(HashMap::new)
+                                    .or_default()
                                     .insert(feature_name.clone(), val);
                             }
                             Err(e) => {
@@ -206,12 +202,7 @@ impl OnlineFeatureStore {
     ///
     /// # Errors
     /// Returns AppError::Redis on connection failures or timeout
-    pub async fn set_feature(
-        &self,
-        user_id: Uuid,
-        feature_name: String,
-        value: f64,
-    ) -> Result<()> {
+    pub async fn set_feature(&self, user_id: Uuid, feature_name: String, value: f64) -> Result<()> {
         let key = format_feature_key(user_id, &feature_name);
         let value_str = value.to_string();
         let mut conn = self.redis_manager.lock().await;
@@ -252,11 +243,7 @@ impl OnlineFeatureStore {
     ///
     /// # Errors
     /// Returns AppError::Redis on connection failures. Individual feature failures are logged but don't fail the entire operation.
-    pub async fn warm_features(
-        &self,
-        user_id: Uuid,
-        features: HashMap<String, f64>,
-    ) -> Result<()> {
+    pub async fn warm_features(&self, user_id: Uuid, features: HashMap<String, f64>) -> Result<()> {
         if features.is_empty() {
             return Ok(());
         }
@@ -272,10 +259,8 @@ impl OnlineFeatureStore {
             pipe.set_ex(&key, &value_str, FEATURE_TTL_SECONDS as u64);
         }
 
-        match redis_utils::with_timeout(async {
-            pipe.query_async::<_, Vec<()>>(&mut *conn).await
-        })
-        .await
+        match redis_utils::with_timeout(async { pipe.query_async::<_, Vec<()>>(&mut *conn).await })
+            .await
         {
             Ok(_) => {
                 info!(
@@ -491,13 +476,19 @@ mod tests {
     fn test_format_feature_key() {
         let user_id = Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000").unwrap();
         let key = format_feature_key(user_id, "engagement_score");
-        assert_eq!(key, "feature:550e8400-e29b-41d4-a716-446655440000:engagement_score");
+        assert_eq!(
+            key,
+            "feature:550e8400-e29b-41d4-a716-446655440000:engagement_score"
+        );
     }
 
     #[test]
     fn test_format_feature_key_special_chars() {
         let user_id = Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000").unwrap();
         let key = format_feature_key(user_id, "avg_session:time");
-        assert_eq!(key, "feature:550e8400-e29b-41d4-a716-446655440000:avg_session:time");
+        assert_eq!(
+            key,
+            "feature:550e8400-e29b-41d4-a716-446655440000:avg_session:time"
+        );
     }
 }

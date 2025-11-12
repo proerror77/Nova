@@ -59,8 +59,8 @@ impl MessageService {
                 (content_string.clone(), None, None, 0)
             };
 
-        let encrypted_slice = content_encrypted.as_ref().map(|v| v.as_slice());
-        let nonce_slice = content_nonce.as_ref().map(|v| v.as_slice());
+        let encrypted_slice = content_encrypted.as_deref();
+        let nonce_slice = content_nonce.as_deref();
 
         let row = sqlx::query_as::<_, (Uuid, Uuid, Uuid, String, Option<Vec<u8>>, Option<Vec<u8>>, i32, i64, Option<String>, chrono::DateTime<Utc>)>(
             r#"
@@ -238,8 +238,8 @@ impl MessageService {
         .bind(&content)
         .bind(duration_ms as i32)
         .bind(audio_codec)
-        .bind(content_encrypted.as_ref().map(|v| v.as_slice()))
-        .bind(content_nonce.as_ref().map(|v| v.as_slice()))
+        .bind(content_encrypted.as_deref())
+        .bind(content_nonce.as_deref())
         .bind(encryption_version)
         .bind(idempotency_key)
         .fetch_one(db)

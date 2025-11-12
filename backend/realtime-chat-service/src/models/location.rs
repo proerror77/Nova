@@ -19,13 +19,13 @@ pub struct LocationCoordinates {
 
 impl LocationCoordinates {
     pub fn new(latitude: f64, longitude: f64, accuracy_meters: i32) -> Result<Self, String> {
-        if latitude < -90.0 || latitude > 90.0 {
+        if !(-90.0..=90.0).contains(&latitude) {
             return Err("Invalid latitude: must be between -90 and 90".to_string());
         }
-        if longitude < -180.0 || longitude > 180.0 {
+        if !(-180.0..=180.0).contains(&longitude) {
             return Err("Invalid longitude: must be between -180 and 180".to_string());
         }
-        if accuracy_meters < 0 || accuracy_meters > 10000 {
+        if !(0..=10000).contains(&accuracy_meters) {
             return Err("Invalid accuracy: must be between 0 and 10000 meters".to_string());
         }
 

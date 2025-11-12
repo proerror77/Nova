@@ -84,9 +84,7 @@ impl ModerationDb {
         .bind(moderation_id)
         .fetch_optional(&*self.pool)
         .await?
-        .ok_or_else(|| {
-            TrustSafetyError::ModerationLogNotFound(moderation_id.to_string())
-        })?;
+        .ok_or_else(|| TrustSafetyError::ModerationLogNotFound(moderation_id.to_string()))?;
 
         Ok(log)
     }
@@ -171,11 +169,7 @@ impl ModerationDb {
     }
 
     /// Get recent content for duplicate detection
-    pub async fn get_recent_user_content(
-        &self,
-        user_id: Uuid,
-        limit: i64,
-    ) -> Result<Vec<String>> {
+    pub async fn get_recent_user_content(&self, user_id: Uuid, limit: i64) -> Result<Vec<String>> {
         let content_ids = sqlx::query_scalar::<_, String>(
             r#"
             SELECT content_id
@@ -194,10 +188,7 @@ impl ModerationDb {
     }
 
     /// Get user's post statistics for spam detection
-    pub async fn get_user_post_stats(
-        &self,
-        user_id: Uuid,
-    ) -> Result<(i64, Option<i64>)> {
+    pub async fn get_user_post_stats(&self, user_id: Uuid) -> Result<(i64, Option<i64>)> {
         // Count posts in last hour and get seconds since last post
         let stats = sqlx::query_as::<_, (i64, Option<i64>)>(
             r#"

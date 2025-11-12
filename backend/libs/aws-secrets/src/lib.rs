@@ -23,15 +23,14 @@
 //! }
 //! ```
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use aws_config::BehaviorVersion;
 use aws_sdk_secretsmanager::Client as SecretsClient;
 use moka::future::Cache;
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 use std::time::Duration;
 use thiserror::Error;
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 
 #[derive(Error, Debug)]
 pub enum SecretError {
@@ -67,7 +66,7 @@ struct CachedSecret {
 pub struct JwtSecretConfig {
     pub signing_key: String,
     pub validation_key: Option<String>, // For asymmetric keys (RS256, ES256)
-    pub algorithm: String,               // HS256, RS256, ES256
+    pub algorithm: String,              // HS256, RS256, ES256
     pub issuer: String,
     pub audience: Vec<String>,
     pub expiry_seconds: u64,
@@ -86,6 +85,7 @@ impl JwtSecretConfig {
 pub struct SecretManager {
     client: SecretsClient,
     cache: Cache<String, CachedSecret>,
+    #[allow(dead_code)]
     cache_ttl: Duration,
 }
 

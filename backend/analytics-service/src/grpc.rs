@@ -165,15 +165,15 @@ impl EventsService for EventsServiceImpl {
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
             "#,
         )
-        .bind(&event_id)
+        .bind(event_id)
         .bind(&req.event_type)
         .bind(&req.aggregate_id)
         .bind(&req.aggregate_type)
         .bind(&data)
         .bind(&metadata)
-        .bind(&correlation_id)
-        .bind(&causation_id)
-        .bind(&created_at)
+        .bind(correlation_id)
+        .bind(causation_id)
+        .bind(created_at)
         .execute(&self.state.db)
         .await
         .map_err(Self::db_error_to_status)?;
@@ -242,10 +242,7 @@ impl EventsService for EventsServiceImpl {
             };
 
             let correlation_id = if !event_data.correlation_id.is_empty() {
-                match Self::parse_uuid(&event_data.correlation_id, "correlation_id") {
-                    Ok(id) => Some(id),
-                    Err(_) => None,
-                }
+                Self::parse_uuid(&event_data.correlation_id, "correlation_id").ok()
             } else {
                 None
             };
@@ -263,13 +260,13 @@ impl EventsService for EventsServiceImpl {
                 VALUES ($1, $2, $3, $4, $5, $6, $7)
                 "#,
             )
-            .bind(&event_id)
+            .bind(event_id)
             .bind(&event_data.event_type)
             .bind(&event_data.aggregate_id)
             .bind(&event_data.aggregate_type)
             .bind(&data)
-            .bind(&correlation_id)
-            .bind(&created_at)
+            .bind(correlation_id)
+            .bind(created_at)
             .execute(&self.state.db)
             .await
             {
@@ -330,7 +327,7 @@ impl EventsService for EventsServiceImpl {
             WHERE id = $1
             "#,
         )
-        .bind(&event_id)
+        .bind(event_id)
         .fetch_optional(&self.state.db)
         .await
         .map_err(Self::db_error_to_status)?;
@@ -550,11 +547,11 @@ impl EventsService for EventsServiceImpl {
             VALUES ($1, $2, $3, $4, 'kafka_consumer', $5)
             "#,
         )
-        .bind(&subscription_id)
+        .bind(subscription_id)
         .bind(&req.subscriber_service)
         .bind(&req.event_types)
         .bind(&req.endpoint)
-        .bind(&created_at)
+        .bind(created_at)
         .execute(&self.state.db)
         .await
         .map_err(Self::db_error_to_status)?;
@@ -589,7 +586,7 @@ impl EventsService for EventsServiceImpl {
         let subscription_id = Self::parse_uuid(&req.subscription_id, "subscription_id")?;
 
         let result = sqlx::query("UPDATE event_subscriptions SET is_active = false WHERE id = $1")
-            .bind(&subscription_id)
+            .bind(subscription_id)
             .execute(&self.state.db)
             .await
             .map_err(Self::db_error_to_status)?;
@@ -690,12 +687,12 @@ impl EventsService for EventsServiceImpl {
             VALUES ($1, $2, $3, $4, $5, $6, $6)
             "#,
         )
-        .bind(&schema_id)
+        .bind(schema_id)
         .bind(&req.event_type)
         .bind(version)
         .bind(&schema_json)
         .bind(req.set_as_active)
-        .bind(&created_at)
+        .bind(created_at)
         .execute(&self.state.db)
         .await
         .map_err(Self::db_error_to_status)?;
@@ -840,7 +837,7 @@ impl EventsService for EventsServiceImpl {
         sqlx::query(
             "UPDATE outbox_events SET status = 'published', published_at = NOW() WHERE id = $1",
         )
-        .bind(&event_id)
+        .bind(event_id)
         .execute(&self.state.db)
         .await
         .map_err(Self::db_error_to_status)?;
@@ -854,7 +851,7 @@ impl EventsService for EventsServiceImpl {
             WHERE id = $1
             "#,
         )
-        .bind(&event_id)
+        .bind(event_id)
         .fetch_one(&self.state.db)
         .await
         .map_err(Self::db_error_to_status)?;
@@ -909,7 +906,7 @@ impl EventsService for EventsServiceImpl {
             WHERE id = $1
             "#,
         )
-        .bind(&event_id)
+        .bind(event_id)
         .execute(&self.state.db)
         .await
         .map_err(Self::db_error_to_status)?;
@@ -922,7 +919,7 @@ impl EventsService for EventsServiceImpl {
             WHERE id = $1
             "#,
         )
-        .bind(&event_id)
+        .bind(event_id)
         .fetch_one(&self.state.db)
         .await
         .map_err(Self::db_error_to_status)?;

@@ -1,4 +1,4 @@
-use crate::models::{CreateNotificationRequest, Notification};
+use crate::models::CreateNotificationRequest;
 use crate::services::NotificationService;
 /// Notification CRUD handlers
 use actix_web::{web, HttpResponse, Result as ActixResult};
@@ -55,7 +55,7 @@ pub async fn create_notification(
     req: web::Json<CreateNotificationPayload>,
 ) -> ActixResult<HttpResponse> {
     let notification_type = parse_notification_type(&req.notification_type);
-    let priority = parse_priority(&req.priority.as_deref().unwrap_or("normal"));
+    let priority = parse_priority(req.priority.as_deref().unwrap_or("normal"));
 
     let create_req = CreateNotificationRequest {
         recipient_id: req.recipient_id,

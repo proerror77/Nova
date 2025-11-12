@@ -9,11 +9,11 @@
 //! 3. If backpressure fails, drop oldest events
 //! 4. Monitor and alert on backpressure events
 
+use anyhow::Result;
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tokio::sync::mpsc;
-use anyhow::Result;
 
 /// Backpressure configuration
 #[derive(Debug, Clone)]
@@ -33,9 +33,9 @@ pub struct BackpressureConfig {
 impl Default for BackpressureConfig {
     fn default() -> Self {
         Self {
-            max_queue_size: 10_000,        // 10k events
-            warning_threshold: 0.75,        // 75%
-            critical_threshold: 0.95,       // 95%
+            max_queue_size: 10_000,   // 10k events
+            warning_threshold: 0.75,  // 75%
+            critical_threshold: 0.95, // 95%
             timeout_duration: Duration::from_secs(30),
             drop_on_overflow: true,
         }

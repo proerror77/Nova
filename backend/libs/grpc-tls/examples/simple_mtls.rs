@@ -57,8 +57,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         client_key_path: Some(cert_dir.join("client.key")),
     };
 
-    let client_config =
-        MtlsClientConfig::from_paths(client_paths, "localhost".to_string()).await?;
+    let client_config = MtlsClientConfig::from_paths(client_paths, "localhost".to_string()).await?;
     let _client_tls = client_config.build_client_tls()?;
     println!("✓ Client mTLS configured with certificate authentication\n");
 

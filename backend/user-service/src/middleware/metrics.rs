@@ -46,7 +46,7 @@ where
 
     forward_ready!(service);
 
-    fn call(&self, mut req: ServiceRequest) -> Self::Future {
+    fn call(&self, req: ServiceRequest) -> Self::Future {
         let start_time = Instant::now();
 
         // CRITICAL FIX for actix-web 4.11.0 BorrowMutError:

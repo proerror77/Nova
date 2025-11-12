@@ -12,7 +12,6 @@
 /// 2. Compute interaction features (author_is_following, previous_interactions)
 /// 3. Run GBDT model inference → relevance scores
 /// 4. Apply diversity reranking (MMR algorithm)
-
 pub mod simple; // Phase D: Simple ranking layer
 
 // Phase E: Advanced ranking with ONNX models

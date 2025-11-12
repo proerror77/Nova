@@ -132,10 +132,13 @@ async fn test_query_performance_with_indexes() {
     assert_eq!(result.count, Some(1000));
 
     // Cleanup
-    sqlx::query!("DELETE FROM engagement_events WHERE content_id = $1", content_id)
-        .execute(&pool)
-        .await
-        .expect("Failed to cleanup");
+    sqlx::query!(
+        "DELETE FROM engagement_events WHERE content_id = $1",
+        content_id
+    )
+    .execute(&pool)
+    .await
+    .expect("Failed to cleanup");
 }
 
 #[tokio::test]

@@ -15,14 +15,13 @@
 use rdkafka::consumer::{Consumer, StreamConsumer};
 use rdkafka::ClientConfig;
 use std::sync::Arc;
-use tokio::sync::RwLock;
-use tracing::{error, info, debug};
 use thiserror::Error;
+use tokio::sync::RwLock;
+use tracing::{error, info};
 
 pub mod consumer;
 pub mod producer;
 
-pub use consumer::KafkaConsumer;
 pub use producer::KafkaProducer;
 
 /// Kafka configuration
@@ -116,7 +115,9 @@ impl KafkaSubscriptionManager {
         match self.consumer.read().await.as_ref() {
             Some(consumer) => {
                 // Simple check: try to fetch metadata
-                consumer.fetch_metadata(None, std::time::Duration::from_secs(2)).is_ok()
+                consumer
+                    .fetch_metadata(None, std::time::Duration::from_secs(2))
+                    .is_ok()
             }
             None => false,
         }

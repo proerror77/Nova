@@ -41,7 +41,11 @@ async fn test_pool_config_total_connections_under_limit() {
         total
     );
 
-    println!("✅ Total DB connections across {} services: {}/75", services.len(), total);
+    println!(
+        "✅ Total DB connections across {} services: {}/75",
+        services.len(),
+        total
+    );
 }
 
 #[tokio::test]
@@ -313,7 +317,10 @@ async fn test_pool_creation_timeout_enforced() {
     let result = create_pool(config).await;
     let elapsed = start.elapsed();
 
-    assert!(result.is_err(), "Pool creation should fail for unreachable DB");
+    assert!(
+        result.is_err(),
+        "Pool creation should fail for unreachable DB"
+    );
 
     // Should timeout quickly (within 2 seconds, accounting for retry logic)
     assert!(

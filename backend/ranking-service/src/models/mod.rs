@@ -44,6 +44,7 @@ pub struct PostFeatures {
 }
 
 #[derive(Debug, Clone)]
+#[derive(Default)]
 pub struct RecallStats {
     pub graph_recall_count: i32,
     pub trending_recall_count: i32,
@@ -52,14 +53,3 @@ pub struct RecallStats {
     pub final_count: i32,
 }
 
-impl Default for RecallStats {
-    fn default() -> Self {
-        Self {
-            graph_recall_count: 0,
-            trending_recall_count: 0,
-            personalized_recall_count: 0,
-            total_candidates: 0,
-            final_count: 0,
-        }
-    }
-}

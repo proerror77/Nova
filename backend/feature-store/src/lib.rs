@@ -14,9 +14,7 @@ pub mod utils;
 // Re-export common types
 pub use feature_store::{
     feature_store_server::{FeatureStore, FeatureStoreServer},
-    GetFeaturesRequest, GetFeaturesResponse,
-    BatchGetFeaturesRequest, BatchGetFeaturesResponse,
+    BatchGetFeaturesRequest, BatchGetFeaturesResponse, DoubleList, FeatureType, FeatureValue,
+    GetFeatureMetadataRequest, GetFeatureMetadataResponse, GetFeaturesRequest, GetFeaturesResponse,
     SetFeatureRequest, SetFeatureResponse,
-    GetFeatureMetadataRequest, GetFeatureMetadataResponse,
-    FeatureValue, FeatureType, DoubleList,
 };

@@ -14,12 +14,6 @@ use std::time::Instant;
 #[derive(Clone, Default)]
 pub struct Logging;
 
-impl Logging {
-    pub fn default() -> Self {
-        Self
-    }
-}
-
 impl<S, B> Transform<S, ServiceRequest> for Logging
 where
     S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = Error>,

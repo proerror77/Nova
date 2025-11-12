@@ -57,12 +57,11 @@ pub async fn find_by_id(pool: &PgPool, user_id: Uuid) -> Result<Option<User>> {
 
 /// Batch find users by IDs (for gRPC GetUsersByIds RPC)
 pub async fn find_by_ids(pool: &PgPool, user_ids: &[Uuid]) -> Result<Vec<User>> {
-    let users = sqlx::query_as::<_, User>(
-        "SELECT * FROM users WHERE id = ANY($1) AND deleted_at IS NULL"
-    )
-    .bind(user_ids)
-    .fetch_all(pool)
-    .await?;
+    let users =
+        sqlx::query_as::<_, User>("SELECT * FROM users WHERE id = ANY($1) AND deleted_at IS NULL")
+            .bind(user_ids)
+            .fetch_all(pool)
+            .await?;
 
     Ok(users)
 }
@@ -91,10 +90,7 @@ pub async fn create_user(
 }
 
 /// Retrieve profile snapshot for a given user
-pub async fn get_user_profile(
-    pool: &PgPool,
-    user_id: Uuid,
-) -> Result<Option<UserProfileRecord>> {
+pub async fn get_user_profile(pool: &PgPool, user_id: Uuid) -> Result<Option<UserProfileRecord>> {
     let profile = sqlx::query_as::<_, UserProfileRecord>(
         r#"
         SELECT
@@ -423,11 +419,7 @@ pub async fn reset_failed_login(pool: &PgPool, user_id: Uuid) -> Result<()> {
 }
 
 /// List users with pagination
-pub async fn list_users(
-    pool: &PgPool,
-    limit: i64,
-    offset: i64,
-) -> Result<Vec<User>> {
+pub async fn list_users(pool: &PgPool, limit: i64, offset: i64) -> Result<Vec<User>> {
     let users = sqlx::query_as::<_, User>(
         r#"
         SELECT *
@@ -446,11 +438,7 @@ pub async fn list_users(
 }
 
 /// Search users by email or username
-pub async fn search_users(
-    pool: &PgPool,
-    query: &str,
-    limit: i64,
-) -> Result<Vec<User>> {
+pub async fn search_users(pool: &PgPool, query: &str, limit: i64) -> Result<Vec<User>> {
     let search_pattern = format!("%{}%", query);
 
     let users = sqlx::query_as::<_, User>(

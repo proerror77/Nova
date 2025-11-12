@@ -477,10 +477,7 @@ impl KafkaOutboxPublisher {
     /// - "feed.item.added" -> "nova.feed.events"
     fn get_topic(&self, event_type: &str) -> String {
         // Extract aggregate type from event_type (e.g., "user" from "user.created")
-        let aggregate = event_type
-            .split('.')
-            .next()
-            .unwrap_or("unknown");
+        let aggregate = event_type.split('.').next().unwrap_or("unknown");
 
         format!("{}.{}.events", self.topic_prefix, aggregate)
     }
@@ -492,8 +489,8 @@ impl OutboxPublisher for KafkaOutboxPublisher {
         let topic = self.get_topic(&event.event_type);
 
         // Serialize payload
-        let payload_str = serde_json::to_string(&event.payload)
-            .context("Failed to serialize event payload")?;
+        let payload_str =
+            serde_json::to_string(&event.payload).context("Failed to serialize event payload")?;
 
         // Create string values that will live long enough
         let event_id_str = event.id.to_string();
@@ -708,7 +705,9 @@ impl<R: OutboxRepository, P: OutboxPublisher> OutboxProcessor<R, P> {
                     );
 
                     // Mark as failed
-                    if let Err(mark_err) = self.repository.mark_failed(event.id, &e.to_string()).await {
+                    if let Err(mark_err) =
+                        self.repository.mark_failed(event.id, &e.to_string()).await
+                    {
                         error!(
                             event_id = %event.id,
                             error = ?mark_err,
@@ -748,18 +747,10 @@ mod tests {
         let repo = Arc::new(SqlxOutboxRepository::new(
             PgPool::connect_lazy("postgresql://localhost/test").unwrap(),
         ));
-        let producer = rdkafka::producer::FutureProducer::from_config(
-            &rdkafka::ClientConfig::new(),
-        )
-        .unwrap();
+        let producer =
+            rdkafka::producer::FutureProducer::from_config(&rdkafka::ClientConfig::new()).unwrap();
         let publisher = Arc::new(KafkaOutboxPublisher::new(producer, "test".to_string()));
-        let processor = OutboxProcessor::new(
-            repo,
-            publisher,
-            10,
-            Duration::from_secs(1),
-            5,
-        );
+        let processor = OutboxProcessor::new(repo, publisher, 10, Duration::from_secs(1), 5);
 
         assert_eq!(processor.calculate_backoff(0).as_secs(), 1);
         assert_eq!(processor.calculate_backoff(1).as_secs(), 2);
@@ -772,14 +763,15 @@ mod tests {
 
     #[test]
     fn test_topic_mapping() {
-        let producer = rdkafka::producer::FutureProducer::from_config(
-            &rdkafka::ClientConfig::new(),
-        )
-        .unwrap();
+        let producer =
+            rdkafka::producer::FutureProducer::from_config(&rdkafka::ClientConfig::new()).unwrap();
         let publisher = KafkaOutboxPublisher::new(producer, "nova".to_string());
 
         assert_eq!(publisher.get_topic("user.created"), "nova.user.events");
-        assert_eq!(publisher.get_topic("content.published"), "nova.content.events");
+        assert_eq!(
+            publisher.get_topic("content.published"),
+            "nova.content.events"
+        );
         assert_eq!(publisher.get_topic("feed.item.added"), "nova.feed.events");
     }
 }

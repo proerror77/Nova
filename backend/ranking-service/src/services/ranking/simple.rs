@@ -5,6 +5,12 @@ use anyhow::Result;
 /// Phase D: 簡化版打分邏輯（Phase E 將接入真實 ONNX 模型）
 pub struct RankingLayer;
 
+impl Default for RankingLayer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl RankingLayer {
     pub fn new() -> Self {
         Self
@@ -28,7 +34,12 @@ impl RankingLayer {
             .collect();
 
         // 按分數降序排序
-        ranked_posts.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap());
+        // Note: NaN scores are treated as less than any valid score
+        ranked_posts.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         Ok(ranked_posts)
     }
@@ -40,9 +51,9 @@ impl RankingLayer {
         PostFeatures {
             engagement_score: candidate.recall_weight * 0.8,
             recency_score: self.compute_recency_score(candidate.timestamp),
-            author_quality_score: 0.7, // 佔位符
+            author_quality_score: 0.7,  // 佔位符
             content_quality_score: 0.8, // 佔位符
-            author_id: None, // Phase E: 從 content-service 獲取
+            author_id: None,            // Phase E: 從 content-service 獲取
         }
     }
 

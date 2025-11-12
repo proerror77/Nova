@@ -78,8 +78,7 @@ pub struct DatabaseSettings {
 impl DatabaseSettings {
     fn from_env() -> Result<Self> {
         Ok(Self {
-            url: env::var("DATABASE_URL")
-                .context("DATABASE_URL must be set")?,
+            url: env::var("DATABASE_URL").context("DATABASE_URL must be set")?,
             max_connections: env::var("DATABASE_MAX_CONNECTIONS")
                 .unwrap_or_else(|_| "50".to_string())
                 .parse()
@@ -116,8 +115,7 @@ pub struct RedisSettings {
 impl RedisSettings {
     fn from_env() -> Result<Self> {
         Ok(Self {
-            url: env::var("REDIS_URL")
-                .context("REDIS_URL must be set")?,
+            url: env::var("REDIS_URL").context("REDIS_URL must be set")?,
             pool_size: env::var("REDIS_POOL_SIZE")
                 .unwrap_or_else(|_| "10".to_string())
                 .parse()
@@ -144,8 +142,7 @@ pub struct KafkaSettings {
 
 impl KafkaSettings {
     fn from_env() -> Result<Self> {
-        let brokers_str = env::var("KAFKA_BROKERS")
-            .context("KAFKA_BROKERS must be set")?;
+        let brokers_str = env::var("KAFKA_BROKERS").context("KAFKA_BROKERS must be set")?;
         let brokers = brokers_str
             .split(',')
             .map(|s| s.trim().to_string())
@@ -153,8 +150,7 @@ impl KafkaSettings {
 
         Ok(Self {
             brokers,
-            topic_prefix: env::var("KAFKA_TOPIC_PREFIX")
-                .unwrap_or_else(|_| "identity".to_string()),
+            topic_prefix: env::var("KAFKA_TOPIC_PREFIX").unwrap_or_else(|_| "identity".to_string()),
             producer_timeout: env::var("KAFKA_PRODUCER_TIMEOUT")
                 .unwrap_or_else(|_| "5".to_string())
                 .parse()
@@ -234,14 +230,11 @@ impl JwtSettings {
         let signing_key = env::var("JWT_SECRET")
             .context("JWT_SECRET must be set when AWS_SECRETS_JWT_NAME is not available")?;
 
-        let algorithm = env::var("JWT_ALGORITHM")
-            .unwrap_or_else(|_| "HS256".to_string());
+        let algorithm = env::var("JWT_ALGORITHM").unwrap_or_else(|_| "HS256".to_string());
 
-        let issuer = env::var("JWT_ISSUER")
-            .unwrap_or_else(|_| "nova-platform".to_string());
+        let issuer = env::var("JWT_ISSUER").unwrap_or_else(|_| "nova-platform".to_string());
 
-        let audience_str = env::var("JWT_AUDIENCE")
-            .unwrap_or_else(|_| "api,web".to_string());
+        let audience_str = env::var("JWT_AUDIENCE").unwrap_or_else(|_| "api,web".to_string());
         let audience = audience_str
             .split(',')
             .map(|s| s.trim().to_string())
@@ -278,8 +271,7 @@ pub struct ServerSettings {
 impl ServerSettings {
     fn from_env() -> Result<Self> {
         Ok(Self {
-            host: env::var("SERVER_HOST")
-                .unwrap_or_else(|_| "0.0.0.0".to_string()),
+            host: env::var("SERVER_HOST").unwrap_or_else(|_| "0.0.0.0".to_string()),
             port: env::var("SERVER_PORT")
                 .unwrap_or_else(|_| "50051".to_string())
                 .parse()
@@ -312,16 +304,14 @@ pub struct EmailSettings {
 impl EmailSettings {
     fn from_env() -> Result<Self> {
         Ok(Self {
-            smtp_host: env::var("SMTP_HOST")
-                .unwrap_or_else(|_| "localhost".to_string()),
+            smtp_host: env::var("SMTP_HOST").unwrap_or_else(|_| "localhost".to_string()),
             smtp_port: env::var("SMTP_PORT")
                 .unwrap_or_else(|_| "1025".to_string())
                 .parse()
                 .context("Invalid SMTP_PORT")?,
             smtp_username: env::var("SMTP_USERNAME").ok(),
             smtp_password: env::var("SMTP_PASSWORD").ok(),
-            smtp_from: env::var("SMTP_FROM")
-                .unwrap_or_else(|_| "noreply@nova.dev".to_string()),
+            smtp_from: env::var("SMTP_FROM").unwrap_or_else(|_| "noreply@nova.dev".to_string()),
             use_starttls: env::var("SMTP_USE_STARTTLS")
                 .unwrap_or_else(|_| "false".to_string())
                 .parse()

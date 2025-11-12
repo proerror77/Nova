@@ -70,9 +70,7 @@ impl From<TrustSafetyError> for Status {
                 tracing::error!("Configuration error: {}", e);
                 Status::internal(format!("Configuration error: {}", e))
             }
-            TrustSafetyError::InvalidInput(e) => {
-                Status::invalid_argument(e)
-            }
+            TrustSafetyError::InvalidInput(e) => Status::invalid_argument(e),
             TrustSafetyError::ModelNotFound(e) => {
                 tracing::error!("Model not found: {}", e);
                 Status::failed_precondition(format!("Model not found: {}", e))
@@ -89,9 +87,7 @@ impl From<TrustSafetyError> for Status {
                     from, to
                 ))
             }
-            TrustSafetyError::Unauthorized(e) => {
-                Status::permission_denied(e)
-            }
+            TrustSafetyError::Unauthorized(e) => Status::permission_denied(e),
             TrustSafetyError::Internal(e) => {
                 tracing::error!("Internal error: {}", e);
                 Status::internal(e)

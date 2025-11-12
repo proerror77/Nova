@@ -50,7 +50,7 @@ pub fn map_error(err: &AppError) -> (u16, ErrorResponse) {
 
     let message = err.to_string();
     let response = ErrorResponse::new(
-        &match status {
+        match status {
             400 => "Bad Request",
             401 => "Unauthorized",
             403 => "Forbidden",

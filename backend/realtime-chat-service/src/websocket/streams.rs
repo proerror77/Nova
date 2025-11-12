@@ -109,7 +109,7 @@ pub async fn publish_envelope(
     // Only trim every 100 messages (not every message) to prevent performance degradation
     // Previous implementation trimmed on every message, causing Redis bottlenecks
     let counter = TRIM_COUNTER.fetch_add(1, Ordering::Relaxed);
-    if counter % TRIM_INTERVAL == 0 {
+    if counter.is_multiple_of(TRIM_INTERVAL) {
         // Non-blocking trim: spawn background task to avoid blocking main message path
         let key_clone = key.clone();
         let redis_client = client.clone();

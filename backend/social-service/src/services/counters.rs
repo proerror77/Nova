@@ -60,12 +60,7 @@ impl CounterService {
         let key = format!("post:{}:likes", post_id);
 
         // Ensure counter doesn't go negative
-        let current: i64 = self
-            .redis
-            .clone()
-            .get(&key)
-            .await
-            .unwrap_or(0);
+        let current: i64 = self.redis.clone().get(&key).await.unwrap_or(0);
 
         if current > 0 {
             let new_count: i64 = self
@@ -136,12 +131,7 @@ impl CounterService {
     pub async fn decrement_comment_count(&self, post_id: Uuid) -> Result<i64> {
         let key = format!("post:{}:comments", post_id);
 
-        let current: i64 = self
-            .redis
-            .clone()
-            .get(&key)
-            .await
-            .unwrap_or(0);
+        let current: i64 = self.redis.clone().get(&key).await.unwrap_or(0);
 
         if current > 0 {
             let new_count: i64 = self
@@ -235,10 +225,7 @@ impl CounterService {
     // ========== Batch Operations (MGET Optimization) ==========
 
     /// Batch get all counts for multiple posts (optimized with Redis MGET)
-    pub async fn batch_get_counts(
-        &self,
-        post_ids: &[Uuid],
-    ) -> Result<HashMap<Uuid, PostCounts>> {
+    pub async fn batch_get_counts(&self, post_ids: &[Uuid]) -> Result<HashMap<Uuid, PostCounts>> {
         if post_ids.is_empty() {
             return Ok(HashMap::new());
         }
@@ -337,7 +324,7 @@ impl CounterService {
             .ignore();
         }
 
-        pipe.query_async(&mut self.redis.clone())
+        pipe.query_async::<_, ()>(&mut self.redis.clone())
             .await
             .context("Failed to warm counters in Redis")?;
 
@@ -348,52 +335,46 @@ impl CounterService {
 
     /// Load like count from PostgreSQL
     async fn load_like_count_from_pg(&self, post_id: Uuid) -> Result<i64> {
-        let count: Option<i64> = sqlx::query_scalar(
-            "SELECT like_count FROM post_counters WHERE post_id = $1",
-        )
-        .bind(post_id)
-        .fetch_optional(&self.pg_pool)
-        .await
-        .context("Failed to load like count from PostgreSQL")?;
+        let count: Option<i64> =
+            sqlx::query_scalar("SELECT like_count FROM post_counters WHERE post_id = $1")
+                .bind(post_id)
+                .fetch_optional(&self.pg_pool)
+                .await
+                .context("Failed to load like count from PostgreSQL")?;
 
         Ok(count.unwrap_or(0))
     }
 
     /// Load comment count from PostgreSQL
     async fn load_comment_count_from_pg(&self, post_id: Uuid) -> Result<i64> {
-        let count: Option<i64> = sqlx::query_scalar(
-            "SELECT comment_count FROM post_counters WHERE post_id = $1",
-        )
-        .bind(post_id)
-        .fetch_optional(&self.pg_pool)
-        .await
-        .context("Failed to load comment count from PostgreSQL")?;
+        let count: Option<i64> =
+            sqlx::query_scalar("SELECT comment_count FROM post_counters WHERE post_id = $1")
+                .bind(post_id)
+                .fetch_optional(&self.pg_pool)
+                .await
+                .context("Failed to load comment count from PostgreSQL")?;
 
         Ok(count.unwrap_or(0))
     }
 
     /// Load share count from PostgreSQL
     async fn load_share_count_from_pg(&self, post_id: Uuid) -> Result<i64> {
-        let count: Option<i64> = sqlx::query_scalar(
-            "SELECT share_count FROM post_counters WHERE post_id = $1",
-        )
-        .bind(post_id)
-        .fetch_optional(&self.pg_pool)
-        .await
-        .context("Failed to load share count from PostgreSQL")?;
+        let count: Option<i64> =
+            sqlx::query_scalar("SELECT share_count FROM post_counters WHERE post_id = $1")
+                .bind(post_id)
+                .fetch_optional(&self.pg_pool)
+                .await
+                .context("Failed to load share count from PostgreSQL")?;
 
         Ok(count.unwrap_or(0))
     }
 
     /// Batch load counters from PostgreSQL
-    async fn load_counters_from_pg(
-        &self,
-        post_ids: &[Uuid],
-    ) -> Result<HashMap<Uuid, PostCounts>> {
+    async fn load_counters_from_pg(&self, post_ids: &[Uuid]) -> Result<HashMap<Uuid, PostCounts>> {
         let rows = sqlx::query_as::<_, (Uuid, i64, i64, i64)>(
             "SELECT post_id, like_count, comment_count, share_count
              FROM post_counters
-             WHERE post_id = ANY($1)"
+             WHERE post_id = ANY($1)",
         )
         .bind(post_ids)
         .fetch_all(&self.pg_pool)
@@ -450,7 +431,7 @@ impl CounterService {
             .ignore();
         }
 
-        pipe.query_async(&mut self.redis.clone())
+        pipe.query_async::<_, ()>(&mut self.redis.clone())
             .await
             .context("Failed to reconcile counters in Redis")?;
 

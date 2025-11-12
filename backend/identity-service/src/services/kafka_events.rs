@@ -136,9 +136,8 @@ impl KafkaEventProducer {
         envelope: &EventEnvelope<T>,
         partition_key_id: Uuid,
     ) -> Result<()> {
-        let payload = serde_json::to_string(envelope).map_err(|e| {
-            IdentityError::Internal(format!("Failed to serialize envelope: {}", e))
-        })?;
+        let payload = serde_json::to_string(envelope)
+            .map_err(|e| IdentityError::Internal(format!("Failed to serialize envelope: {}", e)))?;
 
         let partition_key = partition_key_id.to_string();
         let correlation_id = envelope

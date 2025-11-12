@@ -3,7 +3,6 @@
 // entity types, and metadata management.
 
 use sqlx::PgPool;
-use uuid::Uuid;
 
 pub struct FeatureMetadataRepository {
     pool: PgPool,

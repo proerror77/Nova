@@ -78,8 +78,7 @@ async fn connect_with_retry(
             Err(err) => {
                 last_err = Some(err);
                 if attempt + 1 < max_attempts {
-                    let sleep_duration =
-                        backoff.checked_mul(attempt + 1).unwrap_or(backoff);
+                    let sleep_duration = backoff.checked_mul(attempt + 1).unwrap_or(backoff);
                     tracing::warn!(
                         attempt = attempt + 1,
                         max_attempts,

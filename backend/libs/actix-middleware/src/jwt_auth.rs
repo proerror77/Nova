@@ -122,7 +122,7 @@ where
 
             // Compute token hash for cache key
             let token_hash = crypto_core::hash::sha256(token.as_bytes());
-            let cache_key = format!("jwt:validation:{}", hex::encode(&token_hash));
+            let cache_key = format!("jwt:validation:{}", hex::encode(token_hash));
 
             // Try to get cached claims from Redis (with double-check verification)
             let claims = if let Some(redis_conn) = &redis {

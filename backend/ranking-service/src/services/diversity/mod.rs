@@ -5,7 +5,7 @@ use uuid::Uuid;
 /// Diversity Layer - 多樣性重排
 /// 使用 MMR (Maximal Marginal Relevance) 算法
 pub struct DiversityLayer {
-    lambda: f32, // 平衡 relevance 和 diversity 的參數（0~1）
+    lambda: f32,                        // 平衡 relevance 和 diversity 的參數（0~1）
     max_consecutive_from_author: usize, // 同一作者最多連續出現次數
 }
 
@@ -81,7 +81,11 @@ impl DiversityLayer {
     }
 
     /// Check if adding this post violates author diversity constraint
-    fn violates_author_diversity(&self, recent_authors: &[Option<Uuid>], post: &RankedPost) -> bool {
+    fn violates_author_diversity(
+        &self,
+        recent_authors: &[Option<Uuid>],
+        post: &RankedPost,
+    ) -> bool {
         if recent_authors.len() < self.max_consecutive_from_author {
             return false;
         }
@@ -173,10 +177,7 @@ mod tests {
 
         assert_eq!(reranked.len(), 3);
         // 應該選擇不同 recall_source 的帖子以提高多樣性
-        let sources: Vec<_> = reranked
-            .iter()
-            .map(|p| p.recall_source.as_str())
-            .collect();
+        let sources: Vec<_> = reranked.iter().map(|p| p.recall_source.as_str()).collect();
         let unique_sources: HashSet<_> = sources.iter().collect();
         assert!(unique_sources.len() >= 2); // 至少有 2 個不同來源
     }

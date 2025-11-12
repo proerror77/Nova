@@ -34,11 +34,16 @@ async fn main() -> Result<()> {
     info!("Starting Identity Service");
 
     // Load configuration
-    let settings = Settings::load().await.context("Failed to load configuration")?;
+    let settings = Settings::load()
+        .await
+        .context("Failed to load configuration")?;
     info!("Configuration loaded successfully");
 
     // Initialize JWT keys (RS256)
-    let public_key = settings.jwt.validation_key.as_ref()
+    let public_key = settings
+        .jwt
+        .validation_key
+        .as_ref()
         .unwrap_or(&settings.jwt.signing_key);
     initialize_jwt_keys(&settings.jwt.signing_key, public_key)
         .context("Failed to initialize JWT keys")?;
@@ -90,8 +95,8 @@ async fn main() -> Result<()> {
     };
 
     // Initialize email service
-    let email_service = EmailService::new(&settings.email)
-        .context("Failed to initialize email service")?;
+    let email_service =
+        EmailService::new(&settings.email).context("Failed to initialize email service")?;
 
     if email_service.is_enabled() {
         info!("Email service initialized with SMTP");

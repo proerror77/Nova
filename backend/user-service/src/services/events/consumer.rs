@@ -90,13 +90,12 @@ impl EventMessage {
 
         // User ID checks: allow system events to omit numeric user_id
         // For events like new_follow/unfollow, UUIDs are provided in `properties`.
-        if self.event_type != "new_follow" && self.event_type != "unfollow"
-            && self.user_id <= 0 {
-                return Err(AppError::Validation(format!(
-                    "Invalid user_id: {}",
-                    self.user_id
-                )));
-            }
+        if self.event_type != "new_follow" && self.event_type != "unfollow" && self.user_id <= 0 {
+            return Err(AppError::Validation(format!(
+                "Invalid user_id: {}",
+                self.user_id
+            )));
+        }
 
         // Timestamp should be reasonable (within 1 year of now)
         let now = chrono::Utc::now().timestamp_millis();

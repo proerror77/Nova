@@ -10,7 +10,7 @@ use crate::websocket::events::{broadcast_event, WebSocketEvent};
 use uuid::Uuid;
 
 use crate::state::AppState;
-use actix_web::{delete, get, post, put, web, HttpResponse};
+use actix_web::{delete, get, post, web, HttpResponse};
 
 /// Share or update location in a conversation
 ///
@@ -81,7 +81,7 @@ pub async fn get_user_location(
 
     match location {
         Some(loc) => Ok(HttpResponse::Ok().json(loc)),
-        None => Err(AppError::NotFound.into()),
+        None => Err(AppError::NotFound),
     }
 }
 

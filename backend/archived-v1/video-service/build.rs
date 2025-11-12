@@ -6,6 +6,6 @@ fn main() {
     tonic_build::configure()
         .build_server(true)
         .build_client(false)
-        .compile(&["../proto/services/video_service.proto", "../proto/services/common.proto"], &["../proto/services/"])
+        .compile_protos(&["../proto/services/video_service.proto", "../proto/services/common.proto"], &["../proto/services/"])
         .expect("Failed to compile video_service.proto");
 }

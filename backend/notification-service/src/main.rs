@@ -49,8 +49,7 @@ async fn main() -> io::Result<()> {
                 e
             );
             tracing::info!("Some features will not work without database connection");
-            return Err(io::Error::new(
-                io::ErrorKind::Other,
+            return Err(io::Error::other(
                 "Database connection failed",
             ));
         }
@@ -132,7 +131,10 @@ async fn main() -> io::Result<()> {
                     tracing::info!("Development mode: Starting without TLS (NOT FOR PRODUCTION)");
                     None
                 } else {
-                    tracing::error!("Production requires mTLS - GRPC_SERVER_CERT_PATH must be set: {}", e);
+                    tracing::error!(
+                        "Production requires mTLS - GRPC_SERVER_CERT_PATH must be set: {}",
+                        e
+                    );
                     return;
                 }
             }
@@ -143,18 +145,16 @@ async fn main() -> io::Result<()> {
 
         if let Some(tls_cfg) = tls_config {
             match tls_cfg.build_server_tls() {
-                Ok(server_tls) => {
-                    match server_builder.tls_config(server_tls) {
-                        Ok(builder) => {
-                            server_builder = builder;
-                            tracing::info!("gRPC server TLS configured successfully");
-                        }
-                        Err(e) => {
-                            tracing::error!("Failed to configure TLS on gRPC server: {}", e);
-                            return;
-                        }
+                Ok(server_tls) => match server_builder.tls_config(server_tls) {
+                    Ok(builder) => {
+                        server_builder = builder;
+                        tracing::info!("gRPC server TLS configured successfully");
                     }
-                }
+                    Err(e) => {
+                        tracing::error!("Failed to configure TLS on gRPC server: {}", e);
+                        return;
+                    }
+                },
                 Err(e) => {
                     tracing::error!("Failed to build server TLS config: {}", e);
                     return;
@@ -164,7 +164,7 @@ async fn main() -> io::Result<()> {
 
         tracing::info!("gRPC server listening on {}", grpc_addr);
         if let Err(e) = server_builder
-            .add_service(health_service)  // ✅ P1: Add health service first
+            .add_service(health_service) // ✅ P1: Add health service first
             .add_service(NotificationServiceServer::with_interceptor(
                 svc,
                 server_interceptor,

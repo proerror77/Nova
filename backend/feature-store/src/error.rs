@@ -62,9 +62,7 @@ impl From<AppError> for GrpcStatus {
             AppError::NotFound(msg) => GrpcStatus::not_found(msg),
             AppError::Validation(msg) => GrpcStatus::invalid_argument(msg),
             AppError::Timeout(msg) => GrpcStatus::deadline_exceeded(msg),
-            AppError::Database(msg) | AppError::Redis(msg) => {
-                GrpcStatus::unavailable(msg)
-            }
+            AppError::Database(msg) | AppError::Redis(msg) => GrpcStatus::unavailable(msg),
             _ => GrpcStatus::internal(err.to_string()),
         }
     }

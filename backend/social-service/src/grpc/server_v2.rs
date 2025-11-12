@@ -88,7 +88,7 @@ impl SocialService for SocialServiceImpl {
             "INSERT INTO likes (id, user_id, post_id, created_at)
              VALUES ($1, $2, $3, NOW())
              ON CONFLICT (user_id, post_id) DO NOTHING
-             RETURNING id"
+             RETURNING id",
         )
         .bind(like_id)
         .bind(user_id)
@@ -124,7 +124,10 @@ impl SocialService for SocialServiceImpl {
                 last_error: None,
             };
 
-            self.state.outbox_repo.insert(&mut tx, &event).await
+            self.state
+                .outbox_repo
+                .insert(&mut tx, &event)
+                .await
                 .map_err(outbox_error_to_status)?;
         }
 
@@ -135,7 +138,7 @@ impl SocialService for SocialServiceImpl {
 
         // 4. Update Redis counter (after successful commit, best-effort)
         let new_count = if was_created {
-            let mut counter_svc = self.state.counter_service.clone();
+            let counter_svc = self.state.counter_service.clone();
             counter_svc
                 .increment_like_count(post_id)
                 .await
@@ -149,7 +152,7 @@ impl SocialService for SocialServiceImpl {
                 })
         } else {
             // Get current count if like already existed
-            let mut counter_svc = self.state.counter_service.clone();
+            let counter_svc = self.state.counter_service.clone();
             counter_svc.get_like_count(post_id).await.unwrap_or(0)
         };
 
@@ -184,7 +187,7 @@ impl SocialService for SocialServiceImpl {
         let result = sqlx::query_as::<_, (Uuid,)>(
             "DELETE FROM likes
              WHERE user_id = $1 AND post_id = $2
-             RETURNING id"
+             RETURNING id",
         )
         .bind(user_id)
         .bind(post_id)
@@ -217,7 +220,10 @@ impl SocialService for SocialServiceImpl {
                 last_error: None,
             };
 
-            self.state.outbox_repo.insert(&mut tx, &event).await
+            self.state
+                .outbox_repo
+                .insert(&mut tx, &event)
+                .await
                 .map_err(outbox_error_to_status)?;
         }
 
@@ -228,7 +234,7 @@ impl SocialService for SocialServiceImpl {
 
         // 4. Update Redis counter
         let new_count = if was_deleted {
-            let mut counter_svc = self.state.counter_service.clone();
+            let counter_svc = self.state.counter_service.clone();
             counter_svc
                 .decrement_like_count(post_id)
                 .await
@@ -265,7 +271,7 @@ impl SocialService for SocialServiceImpl {
 
         // Query like status from database
         let result = sqlx::query_as::<_, (chrono::NaiveDateTime,)>(
-            "SELECT created_at FROM likes WHERE user_id = $1 AND post_id = $2"
+            "SELECT created_at FROM likes WHERE user_id = $1 AND post_id = $2",
         )
         .bind(user_id)
         .bind(post_id)
@@ -284,10 +290,7 @@ impl SocialService for SocialServiceImpl {
             None => (false, None),
         };
 
-        Ok(Response::new(GetLikeStatusResponse {
-            is_liked,
-            liked_at,
-        }))
+        Ok(Response::new(GetLikeStatusResponse { is_liked, liked_at }))
     }
 
     /// Get like count for a post
@@ -347,7 +350,7 @@ impl SocialService for SocialServiceImpl {
             "SELECT user_id, created_at FROM likes
              WHERE post_id = $1
              ORDER BY created_at DESC
-             LIMIT $2 OFFSET $3"
+             LIMIT $2 OFFSET $3",
         )
         .bind(post_id)
         .bind(limit as i64)
@@ -424,7 +427,7 @@ impl SocialService for SocialServiceImpl {
         let share_id = Uuid::new_v4();
         sqlx::query(
             "INSERT INTO shares (id, user_id, post_id, share_type, target_user_id, created_at)
-             VALUES ($1, $2, $3, $4, $5, NOW())"
+             VALUES ($1, $2, $3, $4, $5, NOW())",
         )
         .bind(share_id)
         .bind(user_id)
@@ -460,7 +463,10 @@ impl SocialService for SocialServiceImpl {
             last_error: None,
         };
 
-        self.state.outbox_repo.insert(&mut tx, &event).await
+        self.state
+            .outbox_repo
+            .insert(&mut tx, &event)
+            .await
             .map_err(outbox_error_to_status)?;
 
         // 3. Commit transaction
@@ -543,7 +549,7 @@ impl SocialService for SocialServiceImpl {
             "SELECT id, user_id, share_type, created_at FROM shares
              WHERE post_id = $1
              ORDER BY created_at DESC
-             LIMIT $2 OFFSET $3"
+             LIMIT $2 OFFSET $3",
         )
         .bind(post_id)
         .bind(limit as i64)
@@ -592,42 +598,54 @@ impl SocialService for SocialServiceImpl {
         _request: Request<CreateCommentRequest>,
     ) -> Result<Response<CreateCommentResponse>, Status> {
         // TODO: Implement with same transactional-outbox pattern
-        Err(Status::unimplemented("Comment operations not yet implemented"))
+        Err(Status::unimplemented(
+            "Comment operations not yet implemented",
+        ))
     }
 
     async fn update_comment(
         &self,
         _request: Request<UpdateCommentRequest>,
     ) -> Result<Response<UpdateCommentResponse>, Status> {
-        Err(Status::unimplemented("Comment operations not yet implemented"))
+        Err(Status::unimplemented(
+            "Comment operations not yet implemented",
+        ))
     }
 
     async fn delete_comment(
         &self,
         _request: Request<DeleteCommentRequest>,
     ) -> Result<Response<DeleteCommentResponse>, Status> {
-        Err(Status::unimplemented("Comment operations not yet implemented"))
+        Err(Status::unimplemented(
+            "Comment operations not yet implemented",
+        ))
     }
 
     async fn get_comment(
         &self,
         _request: Request<GetCommentRequest>,
     ) -> Result<Response<GetCommentResponse>, Status> {
-        Err(Status::unimplemented("Comment operations not yet implemented"))
+        Err(Status::unimplemented(
+            "Comment operations not yet implemented",
+        ))
     }
 
     async fn list_comments(
         &self,
         _request: Request<ListCommentsRequest>,
     ) -> Result<Response<ListCommentsResponse>, Status> {
-        Err(Status::unimplemented("Comment operations not yet implemented"))
+        Err(Status::unimplemented(
+            "Comment operations not yet implemented",
+        ))
     }
 
     async fn get_comment_count(
         &self,
         _request: Request<GetCommentCountRequest>,
     ) -> Result<Response<GetCommentCountResponse>, Status> {
-        Err(Status::unimplemented("Comment operations not yet implemented"))
+        Err(Status::unimplemented(
+            "Comment operations not yet implemented",
+        ))
     }
 
     // ========== Batch Operations ==========
@@ -637,7 +655,9 @@ impl SocialService for SocialServiceImpl {
         _request: Request<BatchGetLikeStatusRequest>,
     ) -> Result<Response<BatchGetLikeStatusResponse>, Status> {
         // TODO: Implement with Redis MGET optimization
-        Err(Status::unimplemented("Batch operations not yet implemented"))
+        Err(Status::unimplemented(
+            "Batch operations not yet implemented",
+        ))
     }
 
     async fn batch_get_counts(
@@ -645,6 +665,8 @@ impl SocialService for SocialServiceImpl {
         _request: Request<BatchGetCountsRequest>,
     ) -> Result<Response<BatchGetCountsResponse>, Status> {
         // TODO: Implement with Redis MGET optimization
-        Err(Status::unimplemented("Batch operations not yet implemented"))
+        Err(Status::unimplemented(
+            "Batch operations not yet implemented",
+        ))
     }
 }

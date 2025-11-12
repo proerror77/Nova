@@ -1,8 +1,8 @@
-use crate::domain::edge::{Edge, EdgeType, GraphStats};
+use crate::domain::edge::GraphStats;
 use anyhow::{Context, Result};
-use neo4rs::{query, Graph, Query};
+use neo4rs::{query, Graph};
 use std::sync::Arc;
-use tracing::{debug, error, warn};
+use tracing::debug;
 use uuid::Uuid;
 
 /// Repository for graph operations using Neo4j

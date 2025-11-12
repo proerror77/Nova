@@ -13,10 +13,9 @@
 //! - Reduces DB queries by 80-90% for hot subscriptions
 //! - Automatic expiration prevents memory bloat
 
+use anyhow::Result;
 use redis::aio::ConnectionManager;
 use serde::{Deserialize, Serialize};
-use std::time::Duration;
-use anyhow::Result;
 
 /// Redis cache client for subscription data
 #[derive(Clone)]
@@ -70,7 +69,11 @@ impl SubscriptionCache {
 
     /// Cache notification event
     /// ✅ P0-5: Store notifications with immediate publish
-    pub async fn cache_notification(&self, user_id: &str, notification: &Notification) -> Result<()> {
+    pub async fn cache_notification(
+        &self,
+        user_id: &str,
+        notification: &Notification,
+    ) -> Result<()> {
         let key = format!("notification:{}", user_id);
         let value = serde_json::to_string(notification)?;
 
@@ -113,7 +116,11 @@ impl SubscriptionCache {
 
     /// Cache subscription metadata
     /// ✅ P0-5: Track active subscriptions for load balancing
-    pub async fn cache_subscription(&self, sub_id: &str, metadata: &SubscriptionMetadata) -> Result<()> {
+    pub async fn cache_subscription(
+        &self,
+        sub_id: &str,
+        metadata: &SubscriptionMetadata,
+    ) -> Result<()> {
         let key = format!("subscription:{}", sub_id);
         let value = serde_json::to_string(metadata)?;
 
@@ -147,7 +154,11 @@ impl SubscriptionCache {
 
     /// Batch cache multiple items (for DataLoader integration)
     /// ✅ P0-5: Cache results from DataLoader batches
-    pub async fn cache_batch<T: Serialize>(&self, prefix: &str, items: &[(String, T)]) -> Result<()> {
+    pub async fn cache_batch<T: Serialize>(
+        &self,
+        prefix: &str,
+        items: &[(String, T)],
+    ) -> Result<()> {
         let mut pipeline = redis::pipe();
 
         for (id, item) in items {
@@ -156,7 +167,9 @@ impl SubscriptionCache {
             pipeline.set_ex(&key, &value, self.ttl_seconds as u64);
         }
 
-        pipeline.query_async::<_, ()>(&mut self.redis.clone()).await?;
+        pipeline
+            .query_async::<_, ()>(&mut self.redis.clone())
+            .await?;
 
         Ok(())
     }

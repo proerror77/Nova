@@ -169,8 +169,8 @@ impl StreamingManifestGenerator {
         let mut playlist = String::from("#EXTM3U\n");
         playlist.push_str("#EXT-X-VERSION:3\n");
 
-        let segment_duration = self.config.hls_segment_duration as u32;
-        let total_segments = (duration_seconds + segment_duration - 1) / segment_duration;
+        let segment_duration = self.config.hls_segment_duration;
+        let total_segments = duration_seconds.div_ceil(segment_duration);
 
         playlist.push_str(&format!("#EXT-X-TARGETDURATION:{}\n", segment_duration));
         playlist.push_str("#EXT-X-MEDIA-SEQUENCE:0\n");
@@ -220,8 +220,8 @@ impl StreamingManifestGenerator {
             quality_tiers.len()
         );
 
-        let segment_duration = self.config.dash_segment_duration as u32;
-        let total_segments = (duration_seconds + segment_duration - 1) / segment_duration;
+        let segment_duration = self.config.dash_segment_duration;
+        let total_segments = duration_seconds.div_ceil(segment_duration);
 
         // Convert duration to ISO 8601 format (PT00H00M30S)
         let duration_iso = self.seconds_to_iso8601(duration_seconds);

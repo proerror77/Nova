@@ -169,7 +169,7 @@ impl ContentService for ContentServiceImpl {
         _request: Request<GetCommentsRequest>,
     ) -> Result<Response<GetCommentsResponse>, Status> {
         Err(Status::unimplemented(
-            "Comment operations moved to social-service. Call social_service.ListComments instead"
+            "Comment operations moved to social-service. Call social_service.ListComments instead",
         ))
     }
 
@@ -179,7 +179,7 @@ impl ContentService for ContentServiceImpl {
         _request: Request<CreateCommentRequest>,
     ) -> Result<Response<CreateCommentResponse>, Status> {
         Err(Status::unimplemented(
-            "Comment operations moved to social-service. Call social_service.CreateComment instead"
+            "Comment operations moved to social-service. Call social_service.CreateComment instead",
         ))
     }
 
@@ -189,7 +189,7 @@ impl ContentService for ContentServiceImpl {
         _request: Request<UpdateCommentRequest>,
     ) -> Result<Response<UpdateCommentResponse>, Status> {
         Err(Status::unimplemented(
-            "Comment operations moved to social-service. Call social_service.UpdateComment instead"
+            "Comment operations moved to social-service. Call social_service.UpdateComment instead",
         ))
     }
 
@@ -199,7 +199,7 @@ impl ContentService for ContentServiceImpl {
         _request: Request<DeleteCommentRequest>,
     ) -> Result<Response<DeleteCommentResponse>, Status> {
         Err(Status::unimplemented(
-            "Comment operations moved to social-service. Call social_service.DeleteComment instead"
+            "Comment operations moved to social-service. Call social_service.DeleteComment instead",
         ))
     }
 
@@ -209,7 +209,7 @@ impl ContentService for ContentServiceImpl {
         _request: Request<LikePostRequest>,
     ) -> Result<Response<LikePostResponse>, Status> {
         Err(Status::unimplemented(
-            "Like operations moved to social-service. Call social_service.CreateLike instead"
+            "Like operations moved to social-service. Call social_service.CreateLike instead",
         ))
     }
 
@@ -219,7 +219,7 @@ impl ContentService for ContentServiceImpl {
         _request: Request<UnlikePostRequest>,
     ) -> Result<Response<UnlikePostResponse>, Status> {
         Err(Status::unimplemented(
-            "Like operations moved to social-service. Call social_service.DeleteLike instead"
+            "Like operations moved to social-service. Call social_service.DeleteLike instead",
         ))
     }
 
@@ -229,7 +229,7 @@ impl ContentService for ContentServiceImpl {
         _request: Request<GetPostLikesRequest>,
     ) -> Result<Response<GetPostLikesResponse>, Status> {
         Err(Status::unimplemented(
-            "Like operations moved to social-service. Call social_service.ListLikes instead"
+            "Like operations moved to social-service. Call social_service.ListLikes instead",
         ))
     }
 
@@ -255,9 +255,7 @@ impl ContentService for ContentServiceImpl {
         }
 
         // Build the query with proper parameterization for all post IDs
-        let query_str = format!(
-            "SELECT id, user_id, caption, image_key, image_sizes, status, content_type, created_at, updated_at, deleted_at FROM posts WHERE id = ANY($1::uuid[]) AND deleted_at IS NULL ORDER BY created_at DESC",
-        );
+        let query_str = "SELECT id, user_id, caption, image_key, image_sizes, status, content_type, created_at, updated_at, deleted_at FROM posts WHERE id = ANY($1::uuid[]) AND deleted_at IS NULL ORDER BY created_at DESC".to_string();
 
         let posts = sqlx::query_as::<_, Post>(&query_str)
             .bind(&post_ids)
@@ -268,7 +266,7 @@ impl ContentService for ContentServiceImpl {
                 Status::internal("Failed to fetch posts")
             })?;
 
-        let proto_posts = posts.iter().map(|p| convert_post_to_proto(p)).collect();
+        let proto_posts = posts.iter().map(convert_post_to_proto).collect();
 
         Ok(Response::new(GetPostsByIdsResponse { posts: proto_posts }))
     }
@@ -360,7 +358,7 @@ impl ContentService for ContentServiceImpl {
             }
         };
 
-        let proto_posts = posts.iter().map(|p| convert_post_to_proto(p)).collect();
+        let proto_posts = posts.iter().map(convert_post_to_proto).collect();
 
         let total_count = i32::try_from(total).unwrap_or_else(|_| {
             tracing::warn!("Post count exceeded i32::MAX: {}", total);

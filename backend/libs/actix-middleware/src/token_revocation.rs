@@ -76,7 +76,7 @@ where
             let token_hash = crypto_core::hash::sha256(token.as_bytes());
 
             // Check if token is revoked
-            let revocation_key = format!("revoked_token:{}", hex::encode(&token_hash));
+            let revocation_key = format!("revoked_token:{}", hex::encode(token_hash));
             let mut conn = redis.lock().await;
             let is_revoked: bool = conn.exists(&revocation_key).await.map_err(|e| {
                 tracing::error!("Redis check failed: {}", e);

@@ -69,16 +69,13 @@ impl CircuitBreaker {
         // Check state
         {
             let inner = self.inner.read().await;
-            match inner.state {
-                CircuitBreakerState::Open => {
-                    // Check if timeout has passed
-                    if let Some(last_failure) = inner.last_failure_time {
-                        if last_failure.elapsed() < inner.config.timeout {
-                            return Err(CircuitBreakerError::Open);
-                        }
+            if inner.state == CircuitBreakerState::Open {
+                // Check if timeout has passed
+                if let Some(last_failure) = inner.last_failure_time {
+                    if last_failure.elapsed() < inner.config.timeout {
+                        return Err(CircuitBreakerError::Open);
                     }
                 }
-                _ => {}
             }
         }
 

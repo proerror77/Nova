@@ -25,7 +25,7 @@ pub enum FeatureType {
     Int,
     String,
     Bool,
-    DoubleList,  // For embedding vectors
+    DoubleList, // For embedding vectors
     Timestamp,
 }
 

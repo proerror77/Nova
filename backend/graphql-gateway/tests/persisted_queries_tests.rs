@@ -120,7 +120,10 @@ fn test_security_config_from_env() {
     assert!(config.use_persisted_queries);
     assert!(!config.allow_arbitrary_queries);
     assert!(config.enable_apq);
-    assert_eq!(config.persisted_queries_path, Some("/path/to/queries.json".to_string()));
+    assert_eq!(
+        config.persisted_queries_path,
+        Some("/path/to/queries.json".to_string())
+    );
 
     // Cleanup
     std::env::remove_var("GRAPHQL_USE_PERSISTED_QUERIES");
@@ -159,7 +162,10 @@ async fn test_concurrent_query_registration() {
     for (i, hash) in hashes.iter().enumerate() {
         let query = pq.get(hash).await;
         assert!(query.is_some());
-        assert_eq!(query.unwrap(), format!("query Test{} {{ user {{ id }} }}", i));
+        assert_eq!(
+            query.unwrap(),
+            format!("query Test{} {{ user {{ id }} }}", i)
+        );
     }
 }
 
@@ -167,7 +173,7 @@ async fn test_concurrent_query_registration() {
 async fn test_hash_collision_resistance() {
     // Two very similar queries should have different hashes
     let query1 = "query GetUser { user { id name } }";
-    let query2 = "query GetUser { user { id name  } }";  // Extra space
+    let query2 = "query GetUser { user { id name  } }"; // Extra space
 
     let hash1 = PersistedQueries::compute_hash(query1);
     let hash2 = PersistedQueries::compute_hash(query2);

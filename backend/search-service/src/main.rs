@@ -3,12 +3,11 @@ use actix_web::{
     web::{self, Data, Json, Query},
     App, HttpResponse, HttpServer, Responder,
 };
-use anyhow::{Context, Result};
+use anyhow::Result;
 use error_types::ErrorResponse;
 use redis::aio::ConnectionManager;
 use search_service::events::consumers::EventContext;
 use search_service::events::kafka::{spawn_message_consumer, KafkaConsumerConfig};
-use search_service::events::SearchIndexConsumer;
 use search_service::openapi::ApiDoc;
 use search_service::search_suggestions::SearchSuggestionsService;
 use search_service::services::elasticsearch::{
@@ -16,7 +15,7 @@ use search_service::services::elasticsearch::{
 };
 use search_service::services::{ClickHouseClient, RedisCache};
 use serde::{Deserialize, Serialize};
-use sqlx::{postgres::PgPoolOptions, PgPool};
+use sqlx::PgPool;
 use std::sync::Arc;
 use tonic::transport::Server as GrpcServer;
 use tonic_health::server::health_reporter;
@@ -74,7 +73,7 @@ impl actix_web::ResponseError for AppError {
 
         let message = self.to_string();
         let response = ErrorResponse::new(
-            &match status {
+            match status {
                 actix_web::http::StatusCode::BAD_REQUEST => "Bad Request",
                 actix_web::http::StatusCode::INTERNAL_SERVER_ERROR => "Internal Server Error",
                 actix_web::http::StatusCode::BAD_GATEWAY => "Bad Gateway",
@@ -429,7 +428,7 @@ async fn get_search_suggestions(
         params.limit,
     )
     .await
-    .map_err(|e| AppError::Config(e))?;
+    .map_err(AppError::Config)?;
 
     Ok(Json(serde_json::json!({
         "query_type": params.query_type,
@@ -446,7 +445,7 @@ async fn get_trending_searches(
     let query_type = params.q.clone();
     let trending = SearchSuggestionsService::get_trending_searches(&state.db, &query_type, 20)
         .await
-        .map_err(|e| AppError::Config(e))?;
+        .map_err(AppError::Config)?;
 
     Ok(Json(serde_json::json!({
         "query_type": query_type,
@@ -470,7 +469,7 @@ async fn record_search_click(
         params.result_id,
     )
     .await
-    .map_err(|e| AppError::Config(e))?;
+    .map_err(AppError::Config)?;
 
     Ok(Json(serde_json::json!({
         "message": "Click recorded successfully"
@@ -590,8 +589,8 @@ async fn unified_search(
     }
 
     // Search posts if requested
-    if search_types.contains(&"post") {
-        if !params.q.trim().is_empty() {
+    if search_types.contains(&"post")
+        && !params.q.trim().is_empty() {
             posts = sqlx::query_as::<_, PostResult>(
                 r#"
                 SELECT id, user_id, caption, created_at
@@ -611,7 +610,6 @@ async fn unified_search(
             .fetch_all(&state.db)
             .await?;
         }
-    }
 
     // Search hashtags if requested
     if search_types.contains(&"hashtag") {
@@ -919,10 +917,14 @@ async fn main() -> std::io::Result<()> {
                 Err(e) => {
                     tracing::warn!("mTLS disabled - TLS config not found: {}. Using development mode for testing only.", e);
                     if cfg!(debug_assertions) {
-                        tracing::info!("Development mode: Starting without TLS (NOT FOR PRODUCTION)");
+                        tracing::info!(
+                            "Development mode: Starting without TLS (NOT FOR PRODUCTION)"
+                        );
                         None
                     } else {
-                        tracing::error!("Production requires mTLS - GRPC_SERVER_CERT_PATH must be set");
+                        tracing::error!(
+                            "Production requires mTLS - GRPC_SERVER_CERT_PATH must be set"
+                        );
                         return;
                     }
                 }
@@ -933,18 +935,16 @@ async fn main() -> std::io::Result<()> {
 
             if let Some(tls_cfg) = tls_config {
                 match tls_cfg.build_server_tls() {
-                    Ok(server_tls) => {
-                        match server_builder.tls_config(server_tls) {
-                            Ok(builder) => {
-                                server_builder = builder;
-                                tracing::info!("gRPC server TLS configured successfully");
-                            }
-                            Err(e) => {
-                                tracing::error!("Failed to configure TLS on gRPC server: {}", e);
-                                return;
-                            }
+                    Ok(server_tls) => match server_builder.tls_config(server_tls) {
+                        Ok(builder) => {
+                            server_builder = builder;
+                            tracing::info!("gRPC server TLS configured successfully");
                         }
-                    }
+                        Err(e) => {
+                            tracing::error!("Failed to configure TLS on gRPC server: {}", e);
+                            return;
+                        }
+                    },
                     Err(e) => {
                         tracing::error!("Failed to build server TLS config: {}", e);
                         return;

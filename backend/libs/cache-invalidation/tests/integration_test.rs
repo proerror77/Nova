@@ -190,10 +190,7 @@ async fn test_multiple_entity_types() {
     publisher.invalidate_user("user_1").await.unwrap();
     publisher.invalidate_post("post_1").await.unwrap();
     publisher.invalidate_comment("comment_1").await.unwrap();
-    publisher
-        .invalidate_notification("notif_1")
-        .await
-        .unwrap();
+    publisher.invalidate_notification("notif_1").await.unwrap();
 
     tokio::time::sleep(Duration::from_millis(300)).await;
 
@@ -201,8 +198,7 @@ async fn test_multiple_entity_types() {
     assert_eq!(messages.len(), 4);
 
     // Verify all entity types received
-    let entity_types: Vec<EntityType> =
-        messages.iter().map(|m| m.entity_type.clone()).collect();
+    let entity_types: Vec<EntityType> = messages.iter().map(|m| m.entity_type.clone()).collect();
     assert!(entity_types.contains(&EntityType::User));
     assert!(entity_types.contains(&EntityType::Post));
     assert!(entity_types.contains(&EntityType::Comment));
@@ -288,10 +284,9 @@ async fn test_concurrent_publishers() {
     let mut handles = Vec::new();
     for i in 1..=5 {
         let h = tokio::spawn(async move {
-            let publisher =
-                InvalidationPublisher::new(REDIS_URL, format!("service_{}", i))
-                    .await
-                    .expect("Failed to create publisher");
+            let publisher = InvalidationPublisher::new(REDIS_URL, format!("service_{}", i))
+                .await
+                .expect("Failed to create publisher");
 
             for j in 1..=5 {
                 publisher

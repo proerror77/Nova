@@ -1,5 +1,4 @@
 // gRPC server implementation for FeatureStore service
-use crate::error::AppError;
 use crate::services::online::OnlineFeatureStore;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -43,7 +42,9 @@ impl FeatureStoreImpl {
             return Err(Status::invalid_argument("entity_id cannot be empty"));
         }
         if entity_id.len() > 255 {
-            return Err(Status::invalid_argument("entity_id exceeds max length of 255"));
+            return Err(Status::invalid_argument(
+                "entity_id exceeds max length of 255",
+            ));
         }
         Ok(())
     }
@@ -68,7 +69,9 @@ impl FeatureStoreImpl {
             return Err(Status::invalid_argument("feature_names cannot be empty"));
         }
         if feature_names.len() > 100 {
-            return Err(Status::invalid_argument("Cannot request more than 100 features at once"));
+            return Err(Status::invalid_argument(
+                "Cannot request more than 100 features at once",
+            ));
         }
         for name in feature_names {
             if name.is_empty() {
@@ -84,7 +87,9 @@ impl FeatureStoreImpl {
             return Err(Status::invalid_argument("entity_ids cannot be empty"));
         }
         if entity_ids.len() > 100 {
-            return Err(Status::invalid_argument("Cannot fetch features for more than 100 entities at once"));
+            return Err(Status::invalid_argument(
+                "Cannot fetch features for more than 100 entities at once",
+            ));
         }
         Ok(())
     }
@@ -179,9 +184,9 @@ impl FeatureStore for FeatureStoreImpl {
         let req = request.into_inner();
 
         // Validate input
-        Self::validate_entity_id(&req.entity_id).map_err(|e| Status::from(e))?;
-        Self::validate_entity_type(&req.entity_type).map_err(|e| Status::from(e))?;
-        Self::validate_feature_names(&req.feature_names).map_err(|e| Status::from(e))?;
+        Self::validate_entity_id(&req.entity_id)?;
+        Self::validate_entity_type(&req.entity_type)?;
+        Self::validate_feature_names(&req.feature_names)?;
 
         info!(
             "get_features: entity_id={}, entity_type={}, feature_count={}",
@@ -211,9 +216,12 @@ impl FeatureStore for FeatureStoreImpl {
 
         for feature_name in &req.feature_names {
             if let Some(&value) = result.get(feature_name) {
-                features.insert(feature_name.clone(), feature_store::FeatureValue {
-                    value: Some(feature_store::feature_value::Value::DoubleValue(value)),
-                });
+                features.insert(
+                    feature_name.clone(),
+                    feature_store::FeatureValue {
+                        value: Some(feature_store::feature_value::Value::DoubleValue(value)),
+                    },
+                );
             } else {
                 missing_features.push(feature_name.clone());
             }
@@ -256,9 +264,9 @@ impl FeatureStore for FeatureStoreImpl {
         let req = request.into_inner();
 
         // Validate input
-        Self::validate_batch_size(&req.entity_ids).map_err(|e| Status::from(e))?;
-        Self::validate_entity_type(&req.entity_type).map_err(|e| Status::from(e))?;
-        Self::validate_feature_names(&req.feature_names).map_err(|e| Status::from(e))?;
+        Self::validate_batch_size(&req.entity_ids)?;
+        Self::validate_entity_type(&req.entity_type)?;
+        Self::validate_feature_names(&req.feature_names)?;
 
         info!(
             "batch_get_features: entity_count={}, entity_type={}, feature_count={}",
@@ -296,9 +304,12 @@ impl FeatureStore for FeatureStoreImpl {
 
             for feature_name in &req.feature_names {
                 if let Some(&value) = feature_map.get(feature_name) {
-                    features.insert(feature_name.clone(), feature_store::FeatureValue {
-                        value: Some(feature_store::feature_value::Value::DoubleValue(value)),
-                    });
+                    features.insert(
+                        feature_name.clone(),
+                        feature_store::FeatureValue {
+                            value: Some(feature_store::feature_value::Value::DoubleValue(value)),
+                        },
+                    );
                 } else {
                     missing_features.push(feature_name.clone());
                 }
@@ -315,10 +326,7 @@ impl FeatureStore for FeatureStoreImpl {
             );
         }
 
-        info!(
-            "batch_get_features: returned {} entities",
-            entities.len()
-        );
+        info!("batch_get_features: returned {} entities", entities.len());
 
         Ok(Response::new(BatchGetFeaturesResponse { entities }))
     }
@@ -347,8 +355,8 @@ impl FeatureStore for FeatureStoreImpl {
         let req = request.into_inner();
 
         // Validate input
-        Self::validate_entity_id(&req.entity_id).map_err(|e| Status::from(e))?;
-        Self::validate_entity_type(&req.entity_type).map_err(|e| Status::from(e))?;
+        Self::validate_entity_id(&req.entity_id)?;
+        Self::validate_entity_type(&req.entity_type)?;
 
         if req.feature_name.is_empty() {
             return Err(Status::invalid_argument("feature_name cannot be empty"));
@@ -375,7 +383,11 @@ impl FeatureStore for FeatureStoreImpl {
         let value = match req.value.and_then(|v| v.value) {
             Some(feature_store::feature_value::Value::DoubleValue(v)) => v,
             Some(feature_store::feature_value::Value::IntValue(v)) => v as f64,
-            _ => return Err(Status::invalid_argument("Only numeric values are supported for set_feature")),
+            _ => {
+                return Err(Status::invalid_argument(
+                    "Only numeric values are supported for set_feature",
+                ))
+            }
         };
 
         // Set feature in online store
@@ -421,7 +433,7 @@ impl FeatureStore for FeatureStoreImpl {
         let req = request.into_inner();
 
         // Validate input
-        Self::validate_entity_type(&req.entity_type).map_err(|e| Status::from(e))?;
+        Self::validate_entity_type(&req.entity_type)?;
 
         if req.feature_name.is_empty() {
             return Err(Status::invalid_argument("feature_name cannot be empty"));
@@ -434,7 +446,9 @@ impl FeatureStore for FeatureStoreImpl {
 
         // TODO: Implement metadata retrieval from PostgreSQL
         // For now, return unimplemented
-        Err(Status::unimplemented("get_feature_metadata not yet implemented - requires PostgreSQL integration"))
+        Err(Status::unimplemented(
+            "get_feature_metadata not yet implemented - requires PostgreSQL integration",
+        ))
     }
 }
 
@@ -465,9 +479,7 @@ mod tests {
         assert!(FeatureStoreImpl::validate_feature_names(&vec!["f1".to_string()]).is_ok());
         assert!(FeatureStoreImpl::validate_feature_names(&vec![]).is_err());
         assert!(FeatureStoreImpl::validate_feature_names(&vec!["".to_string()]).is_err());
-        assert!(
-            FeatureStoreImpl::validate_feature_names(&vec!["f".to_string(); 101]).is_err()
-        );
+        assert!(FeatureStoreImpl::validate_feature_names(&vec!["f".to_string(); 101]).is_err());
     }
 
     #[test]

@@ -191,7 +191,11 @@ async fn test_process_if_new_success() {
         .expect("Failed to process event");
 
     assert_eq!(result, ProcessingResult::Success);
-    assert_eq!(counter.load(Ordering::SeqCst), 1, "Function should be called once");
+    assert_eq!(
+        counter.load(Ordering::SeqCst),
+        1,
+        "Function should be called once"
+    );
 
     // Verify event was marked as processed
     let is_processed = guard
@@ -230,7 +234,11 @@ async fn test_process_if_new_already_processed() {
         .expect("Failed to process event");
 
     assert_eq!(result, ProcessingResult::AlreadyProcessed);
-    assert_eq!(counter.load(Ordering::SeqCst), 0, "Function should NOT be called");
+    assert_eq!(
+        counter.load(Ordering::SeqCst),
+        0,
+        "Function should NOT be called"
+    );
 
     cleanup_test_events(&pool).await;
 }
@@ -263,7 +271,10 @@ async fn test_process_if_new_processing_fails() {
         .is_processed(event_id)
         .await
         .expect("Failed to check if processed");
-    assert!(!is_processed, "Failed event should not be marked as processed");
+    assert!(
+        !is_processed,
+        "Failed event should not be marked as processed"
+    );
 
     cleanup_test_events(&pool).await;
 }
@@ -277,7 +288,10 @@ async fn test_concurrent_processing_same_event() {
     let pool = create_test_pool().await;
     cleanup_test_events(&pool).await;
 
-    let guard = Arc::new(IdempotencyGuard::new(pool.clone(), Duration::from_secs(86400)));
+    let guard = Arc::new(IdempotencyGuard::new(
+        pool.clone(),
+        Duration::from_secs(86400),
+    ));
     let event_id = "test-concurrent-event-1";
 
     // Counter to track how many times processing function was called
@@ -322,7 +336,10 @@ async fn test_concurrent_processing_same_event() {
         .filter(|r| **r == ProcessingResult::AlreadyProcessed)
         .count();
 
-    println!("Success: {}, AlreadyProcessed: {}", success_count, already_processed_count);
+    println!(
+        "Success: {}, AlreadyProcessed: {}",
+        success_count, already_processed_count
+    );
 
     // Assertions
     assert_eq!(
@@ -348,7 +365,10 @@ async fn test_concurrent_marking_same_event() {
     let pool = create_test_pool().await;
     cleanup_test_events(&pool).await;
 
-    let guard = Arc::new(IdempotencyGuard::new(pool.clone(), Duration::from_secs(86400)));
+    let guard = Arc::new(IdempotencyGuard::new(
+        pool.clone(),
+        Duration::from_secs(86400),
+    ));
     let event_id = "test-concurrent-mark-1";
 
     // Spawn 10 parallel tasks
@@ -357,9 +377,8 @@ async fn test_concurrent_marking_same_event() {
         let guard_clone = guard.clone();
         let event_id_clone = event_id.to_string();
 
-        let handle = tokio::spawn(async move {
-            guard_clone.mark_processed(&event_id_clone, None).await
-        });
+        let handle =
+            tokio::spawn(async move { guard_clone.mark_processed(&event_id_clone, None).await });
 
         handles.push(handle);
     }
@@ -461,7 +480,10 @@ async fn test_invalid_event_id_too_long() {
 
     let long_id = "x".repeat(256);
     let result = guard.is_processed(&long_id).await;
-    assert!(result.is_err(), "Event_id >255 characters should return error");
+    assert!(
+        result.is_err(),
+        "Event_id >255 characters should return error"
+    );
 }
 
 /// Test: Multiple different event IDs
@@ -531,7 +553,10 @@ async fn benchmark_mark_1000_events() {
     let elapsed = start.elapsed();
     let avg_time = elapsed / 1000;
 
-    println!("Marked 1000 events in {:?} (avg: {:?}/event)", elapsed, avg_time);
+    println!(
+        "Marked 1000 events in {:?} (avg: {:?}/event)",
+        elapsed, avg_time
+    );
     println!("Throughput: {} events/sec", 1000.0 / elapsed.as_secs_f64());
 
     cleanup_test_events(&pool).await;

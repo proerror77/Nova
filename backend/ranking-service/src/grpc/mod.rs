@@ -1,4 +1,4 @@
-use crate::models::{RecallStats, RankedPost};
+use crate::models::{RankedPost, RecallStats};
 use crate::services::{DiversityLayer, RankingLayer, RecallLayer};
 use std::sync::Arc;
 use tonic::{Request, Response, Status};
@@ -69,9 +69,7 @@ impl RankingService for RankingServiceImpl {
             .map_err(|e| Status::internal(format!("Ranking failed: {}", e)))?;
 
         // 3. Diversity 重排
-        let final_posts = self
-            .diversity_layer
-            .rerank(ranked_posts, limit as usize);
+        let final_posts = self.diversity_layer.rerank(ranked_posts, limit as usize);
 
         let proto_posts: Vec<ProtoRankedPost> =
             final_posts.into_iter().map(to_proto_ranked_post).collect();

@@ -14,7 +14,7 @@ fn main() {
     tonic_build::configure()
         .build_server(true) // MessagingService server
         .build_client(true) // AuthService client
-        .compile(
+        .compile_protos(
             &[
                 "../proto/services/messaging_service.proto",
                 "../proto/services/auth_service.proto",

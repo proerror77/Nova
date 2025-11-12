@@ -134,8 +134,7 @@ fn validate_password_strength(password: &str) -> Result<()> {
 
     if entropy.score() < 3 {
         return Err(IdentityError::WeakPassword(
-            "Password is too weak. Please use a stronger password with higher entropy."
-                .to_string(),
+            "Password is too weak. Please use a stronger password with higher entropy.".to_string(),
         ));
     }
 

@@ -1,21 +1,21 @@
 //! GraphQL Gateway Middleware
 
-pub mod jwt;
 pub mod auth;
-pub mod rate_limit;
+pub mod jwt;
 pub mod persisted_queries;
+pub mod rate_limit;
 
 // Re-export JWT middleware and AuthenticatedUser type
-pub use jwt::{JwtMiddleware, AuthenticatedUser};
+pub use jwt::JwtMiddleware;
 
 // Re-export auth functions
-pub use auth::{check_user_authorization, require_auth, get_authenticated_user_id, get_authenticated_claims};
+pub use auth::{
+    check_user_authorization, get_authenticated_user_id,
+};
 
 // Re-export rate limiting
-pub use rate_limit::{RateLimitMiddleware, RateLimitConfig};
+pub use rate_limit::{RateLimitConfig, RateLimitMiddleware};
 
 // Re-export persisted queries middleware
-pub use persisted_queries::PersistedQueriesMiddleware;
 
 // Re-export Claims from crypto_core for convenience
-pub use crypto_core::jwt::Claims;

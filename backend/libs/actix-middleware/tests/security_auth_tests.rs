@@ -1,8 +1,7 @@
 /// Security-focused authentication tests
 /// These tests validate that ALL endpoints require proper authentication
-
-use actix_web::{test, web, App, HttpRequest, HttpResponse, middleware::Logger};
-use jsonwebtoken::{encode, decode, Header, Validation, EncodingKey, DecodingKey};
+use actix_web::{middleware::Logger, test, web, App, HttpRequest, HttpResponse};
+use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -49,7 +48,7 @@ fn create_expired_token(user_id: i64) -> String {
         sub: format!("user-{}", user_id),
         user_id,
         iat: now - 1000,
-        exp: now - 100,  // Already expired
+        exp: now - 100, // Already expired
     };
 
     encode(
@@ -97,9 +96,8 @@ async fn protected_endpoint(req: HttpRequest) -> HttpResponse {
     let auth_header = req.headers().get("Authorization");
 
     if auth_header.is_none() {
-        return HttpResponse::Unauthorized().json(
-            serde_json::json!({"error": "Missing Authorization header"})
-        );
+        return HttpResponse::Unauthorized()
+            .json(serde_json::json!({"error": "Missing Authorization header"}));
     }
 
     let token = auth_header
@@ -110,9 +108,8 @@ async fn protected_endpoint(req: HttpRequest) -> HttpResponse {
         .map(|s| s.to_string());
 
     if token.is_none() {
-        return HttpResponse::Unauthorized().json(
-            serde_json::json!({"error": "Invalid Authorization header format"})
-        );
+        return HttpResponse::Unauthorized()
+            .json(serde_json::json!({"error": "Invalid Authorization header format"}));
     }
 
     match decode::<Claims>(
@@ -120,17 +117,12 @@ async fn protected_endpoint(req: HttpRequest) -> HttpResponse {
         &DecodingKey::from_secret(JWT_SECRET.as_ref()),
         &Validation::default(),
     ) {
-        Ok(data) => {
-            HttpResponse::Ok().json(serde_json::json!({
-                "message": "authorized",
-                "user_id": data.claims.user_id
-            }))
-        }
-        Err(_) => {
-            HttpResponse::Unauthorized().json(
-                serde_json::json!({"error": "Invalid or expired token"})
-            )
-        }
+        Ok(data) => HttpResponse::Ok().json(serde_json::json!({
+            "message": "authorized",
+            "user_id": data.claims.user_id
+        })),
+        Err(_) => HttpResponse::Unauthorized()
+            .json(serde_json::json!({"error": "Invalid or expired token"})),
     }
 }
 
@@ -138,15 +130,10 @@ async fn protected_endpoint(req: HttpRequest) -> HttpResponse {
 
 #[actix_web::test]
 async fn test_protected_endpoint_without_auth_returns_401() {
-    let app = test::init_service(
-        App::new()
-            .route("/protected", web::get().to(protected_endpoint))
-    )
-    .await;
+    let app =
+        test::init_service(App::new().route("/protected", web::get().to(protected_endpoint))).await;
 
-    let req = test::TestRequest::get()
-        .uri("/protected")
-        .to_request();
+    let req = test::TestRequest::get().uri("/protected").to_request();
 
     let resp = test::call_service(&app, req).await;
 
@@ -158,11 +145,8 @@ async fn test_protected_endpoint_without_auth_returns_401() {
 
 #[actix_web::test]
 async fn test_protected_endpoint_with_malformed_auth_returns_401() {
-    let app = test::init_service(
-        App::new()
-            .route("/protected", web::get().to(protected_endpoint))
-    )
-    .await;
+    let app =
+        test::init_service(App::new().route("/protected", web::get().to(protected_endpoint))).await;
 
     let req = test::TestRequest::get()
         .uri("/protected")
@@ -176,11 +160,8 @@ async fn test_protected_endpoint_with_malformed_auth_returns_401() {
 
 #[actix_web::test]
 async fn test_protected_endpoint_with_expired_token_returns_401() {
-    let app = test::init_service(
-        App::new()
-            .route("/protected", web::get().to(protected_endpoint))
-    )
-    .await;
+    let app =
+        test::init_service(App::new().route("/protected", web::get().to(protected_endpoint))).await;
 
     let expired_token = create_expired_token(123);
 
@@ -196,11 +177,8 @@ async fn test_protected_endpoint_with_expired_token_returns_401() {
 
 #[actix_web::test]
 async fn test_protected_endpoint_with_invalid_signature_returns_401() {
-    let app = test::init_service(
-        App::new()
-            .route("/protected", web::get().to(protected_endpoint))
-    )
-    .await;
+    let app =
+        test::init_service(App::new().route("/protected", web::get().to(protected_endpoint))).await;
 
     let invalid_token = create_invalid_signature_token(123);
 
@@ -216,11 +194,8 @@ async fn test_protected_endpoint_with_invalid_signature_returns_401() {
 
 #[actix_web::test]
 async fn test_protected_endpoint_with_malformed_token_returns_401() {
-    let app = test::init_service(
-        App::new()
-            .route("/protected", web::get().to(protected_endpoint))
-    )
-    .await;
+    let app =
+        test::init_service(App::new().route("/protected", web::get().to(protected_endpoint))).await;
 
     let malformed_token = create_malformed_token();
 
@@ -236,11 +211,8 @@ async fn test_protected_endpoint_with_malformed_token_returns_401() {
 
 #[actix_web::test]
 async fn test_protected_endpoint_with_valid_token_returns_200() {
-    let app = test::init_service(
-        App::new()
-            .route("/protected", web::get().to(protected_endpoint))
-    )
-    .await;
+    let app =
+        test::init_service(App::new().route("/protected", web::get().to(protected_endpoint))).await;
 
     let valid_token = create_valid_token(123, 3600);
 
@@ -260,15 +232,9 @@ async fn test_protected_endpoint_with_valid_token_returns_200() {
 
 #[actix_web::test]
 async fn test_public_endpoint_accessible_without_auth() {
-    let app = test::init_service(
-        App::new()
-            .route("/public", web::get().to(public_endpoint))
-    )
-    .await;
+    let app = test::init_service(App::new().route("/public", web::get().to(public_endpoint))).await;
 
-    let req = test::TestRequest::get()
-        .uri("/public")
-        .to_request();
+    let req = test::TestRequest::get().uri("/public").to_request();
 
     let resp = test::call_service(&app, req).await;
 
@@ -324,18 +290,14 @@ async fn test_graphql_query_without_auth_fails() {
     async fn graphql_handler(req: HttpRequest) -> HttpResponse {
         let auth = req.headers().get("Authorization");
         if auth.is_none() {
-            return HttpResponse::Unauthorized().json(
-                serde_json::json!({"errors": [{"message": "Unauthorized"}]})
-            );
+            return HttpResponse::Unauthorized()
+                .json(serde_json::json!({"errors": [{"message": "Unauthorized"}]}));
         }
         HttpResponse::Ok().json(serde_json::json!({"data": {"user": {"id": "123"}}}))
     }
 
-    let app = test::init_service(
-        App::new()
-            .route("/graphql", web::post().to(graphql_handler))
-    )
-    .await;
+    let app =
+        test::init_service(App::new().route("/graphql", web::post().to(graphql_handler))).await;
 
     let req = test::TestRequest::post()
         .uri("/graphql")
@@ -354,9 +316,8 @@ async fn test_graphql_introspection_requires_auth() {
     async fn graphql_handler(req: HttpRequest) -> HttpResponse {
         let auth = req.headers().get("Authorization");
         if auth.is_none() {
-            return HttpResponse::Unauthorized().json(
-                serde_json::json!({"errors": [{"message": "Unauthorized"}]})
-            );
+            return HttpResponse::Unauthorized()
+                .json(serde_json::json!({"errors": [{"message": "Unauthorized"}]}));
         }
         // Allow introspection only for authenticated users
         HttpResponse::Ok().json(serde_json::json!({
@@ -368,11 +329,8 @@ async fn test_graphql_introspection_requires_auth() {
         }))
     }
 
-    let app = test::init_service(
-        App::new()
-            .route("/graphql", web::post().to(graphql_handler))
-    )
-    .await;
+    let app =
+        test::init_service(App::new().route("/graphql", web::post().to(graphql_handler))).await;
 
     // Introspection query without auth
     let req = test::TestRequest::post()

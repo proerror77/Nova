@@ -4,10 +4,10 @@
 
 mod metrics;
 
+use metrics::update_pool_metrics;
 pub use metrics::{
     acquire_with_backpressure, acquire_with_metrics, BackpressureConfig, PoolExhaustedError,
 };
-use metrics::update_pool_metrics;
 
 use sqlx::postgres::{PgPool, PgPoolOptions};
 use std::time::Duration;

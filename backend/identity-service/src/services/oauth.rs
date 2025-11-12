@@ -23,7 +23,6 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sqlx::PgPool;
-use std::collections::HashMap;
 use tracing::{info, warn};
 use uuid::Uuid;
 
@@ -302,8 +301,7 @@ impl OAuthService {
             .map_err(|e| IdentityError::OAuthError(e.to_string()))?;
 
         // Decode ID token to get user info (Apple doesn't have userinfo endpoint)
-        let id_token_claims: AppleIdTokenClaims =
-            decode_jwt_claims(&token_response.id_token)?;
+        let id_token_claims: AppleIdTokenClaims = decode_jwt_claims(&token_response.id_token)?;
 
         Ok(OAuthUserInfo {
             provider_user_id: id_token_claims.sub,
@@ -345,7 +343,10 @@ impl OAuthService {
         let user_info = self
             .http
             .get("https://graph.facebook.com/me")
-            .query(&[("fields", "id,name,email,picture"), ("access_token", &token_response.access_token)])
+            .query(&[
+                ("fields", "id,name,email,picture"),
+                ("access_token", &token_response.access_token),
+            ])
             .send()
             .await
             .map_err(|e| IdentityError::OAuthError(e.to_string()))?
@@ -365,9 +366,10 @@ impl OAuthService {
     }
 
     async fn exchange_wechat(&self, code: &str, _redirect_uri: &str) -> Result<OAuthUserInfo> {
-        let app_id = self.config.wechat_app_id.as_ref().ok_or_else(|| {
-            IdentityError::OAuthError("WeChat app ID not configured".to_string())
-        })?;
+        let app_id =
+            self.config.wechat_app_id.as_ref().ok_or_else(|| {
+                IdentityError::OAuthError("WeChat app ID not configured".to_string())
+            })?;
         let app_secret = self.config.wechat_app_secret.as_ref().ok_or_else(|| {
             IdentityError::OAuthError("WeChat app secret not configured".to_string())
         })?;
@@ -421,9 +423,10 @@ impl OAuthService {
         use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
 
         let key_id = self.apple_key_id()?.clone();
-        let team_id = self.config.apple_team_id.as_ref().ok_or_else(|| {
-            IdentityError::OAuthError("Apple team ID not configured".to_string())
-        })?;
+        let team_id =
+            self.config.apple_team_id.as_ref().ok_or_else(|| {
+                IdentityError::OAuthError("Apple team ID not configured".to_string())
+            })?;
         let client_id = self.apple_client_id()?.clone();
         let private_key = self.config.apple_private_key.as_ref().ok_or_else(|| {
             IdentityError::OAuthError("Apple private key not configured".to_string())
@@ -441,9 +444,8 @@ impl OAuthService {
         let mut header = Header::new(Algorithm::ES256);
         header.kid = Some(key_id);
 
-        let key = EncodingKey::from_ec_pem(private_key.as_bytes()).map_err(|e| {
-            IdentityError::OAuthError(format!("Invalid Apple private key: {}", e))
-        })?;
+        let key = EncodingKey::from_ec_pem(private_key.as_bytes())
+            .map_err(|e| IdentityError::OAuthError(format!("Invalid Apple private key: {}", e)))?;
 
         encode(&header, &claims, &key)
             .map_err(|e| IdentityError::OAuthError(format!("Failed to sign Apple JWT: {}", e)))
@@ -455,9 +457,12 @@ impl OAuthService {
         provider: OAuthProvider,
     ) -> Result<(User, bool)> {
         // Check if OAuth connection exists
-        if let Some(conn) =
-            crate::db::oauth::find_by_provider(&self.db, provider.as_str(), &oauth_user.provider_user_id)
-                .await?
+        if let Some(conn) = crate::db::oauth::find_by_provider(
+            &self.db,
+            provider.as_str(),
+            &oauth_user.provider_user_id,
+        )
+        .await?
         {
             // Update OAuth tokens
             crate::db::oauth::update_tokens(
@@ -657,11 +662,10 @@ fn decode_jwt_claims<T: serde::de::DeserializeOwned>(token: &str) -> Result<T> {
         ));
     }
 
-    let payload = BASE64_URL_SAFE_NO_PAD
-        .decode(segments[1])
-        .map_err(|e| IdentityError::OAuthError(format!("Failed to decode ID token payload: {}", e)))?;
+    let payload = BASE64_URL_SAFE_NO_PAD.decode(segments[1]).map_err(|e| {
+        IdentityError::OAuthError(format!("Failed to decode ID token payload: {}", e))
+    })?;
 
-    serde_json::from_slice(&payload).map_err(|e| {
-        IdentityError::OAuthError(format!("Failed to parse ID token payload: {}", e))
-    })
+    serde_json::from_slice(&payload)
+        .map_err(|e| IdentityError::OAuthError(format!("Failed to parse ID token payload: {}", e)))
 }

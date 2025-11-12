@@ -74,8 +74,8 @@ async fn test_certificate_expiration_validation() {
     let (_temp, paths) = setup_test_env().await;
 
     // Load and validate certificate expiration
-    let server_cert = fs::read_to_string(&paths.server_cert_path)
-        .expect("Failed to read server cert");
+    let server_cert =
+        fs::read_to_string(&paths.server_cert_path).expect("Failed to read server cert");
 
     let result = grpc_tls::validate_cert_expiration(&server_cert, 30);
     assert!(result.is_ok());
@@ -85,8 +85,8 @@ async fn test_certificate_expiration_validation() {
 async fn test_san_validation_success() {
     let (_temp, paths) = setup_test_env().await;
 
-    let server_cert = fs::read_to_string(&paths.server_cert_path)
-        .expect("Failed to read server cert");
+    let server_cert =
+        fs::read_to_string(&paths.server_cert_path).expect("Failed to read server cert");
 
     let expected_sans = vec!["localhost".to_string()];
     let result = validate_san(&server_cert, &expected_sans);
@@ -98,8 +98,8 @@ async fn test_san_validation_success() {
 async fn test_san_validation_wildcard() {
     let (_temp, paths) = setup_test_env().await;
 
-    let server_cert = fs::read_to_string(&paths.server_cert_path)
-        .expect("Failed to read server cert");
+    let server_cert =
+        fs::read_to_string(&paths.server_cert_path).expect("Failed to read server cert");
 
     let expected_sans = vec!["*.nova-backend.svc.cluster.local".to_string()];
     let result = validate_san(&server_cert, &expected_sans);
@@ -111,8 +111,8 @@ async fn test_san_validation_wildcard() {
 async fn test_san_validation_failure() {
     let (_temp, paths) = setup_test_env().await;
 
-    let server_cert = fs::read_to_string(&paths.server_cert_path)
-        .expect("Failed to read server cert");
+    let server_cert =
+        fs::read_to_string(&paths.server_cert_path).expect("Failed to read server cert");
 
     let expected_sans = vec!["nonexistent.com".to_string()];
     let result = validate_san(&server_cert, &expected_sans);

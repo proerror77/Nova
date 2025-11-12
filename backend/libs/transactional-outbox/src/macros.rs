@@ -50,9 +50,9 @@
 #[macro_export]
 macro_rules! publish_event {
     ($tx:expr, $repo:expr, $aggregate_type:expr, $aggregate_id:expr, $event_type:expr, $payload:expr) => {{
-        use $crate::{OutboxEvent, OutboxRepository};
-        use uuid::Uuid;
         use chrono::Utc;
+        use uuid::Uuid;
+        use $crate::{OutboxEvent, OutboxRepository};
 
         let event = OutboxEvent {
             id: Uuid::new_v4(),
@@ -126,9 +126,9 @@ macro_rules! publish_event_with_metadata {
         $payload:expr,
         $metadata:expr
     ) => {{
-        use $crate::{OutboxEvent, OutboxRepository};
-        use uuid::Uuid;
         use chrono::Utc;
+        use uuid::Uuid;
+        use $crate::{OutboxEvent, OutboxRepository};
 
         let event = OutboxEvent {
             id: Uuid::new_v4(),

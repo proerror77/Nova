@@ -92,7 +92,8 @@ impl NsfwDetector {
                 let pixel = rgb_img.get_pixel(x, y);
                 tensor[[0, 0, y as usize, x as usize]] = pixel[0] as f32 / 255.0; // R
                 tensor[[0, 1, y as usize, x as usize]] = pixel[1] as f32 / 255.0; // G
-                tensor[[0, 2, y as usize, x as usize]] = pixel[2] as f32 / 255.0; // B
+                tensor[[0, 2, y as usize, x as usize]] = pixel[2] as f32 / 255.0;
+                // B
             }
         }
 
@@ -106,12 +107,13 @@ impl NsfwDetector {
             .map_err(|e| TrustSafetyError::OnnxRuntime(e.to_string()))?;
 
         // Build inputs vector
-        let inputs: Vec<(Cow<'_, str>, SessionInputValue<'_>)> = vec![
-            (Cow::Borrowed("input"), SessionInputValue::from(input_value))
-        ];
+        let inputs: Vec<(Cow<'_, str>, SessionInputValue<'_>)> =
+            vec![(Cow::Borrowed("input"), SessionInputValue::from(input_value))];
 
         // Run inference (requires mut, lock the session)
-        let mut session = self.session.lock()
+        let mut session = self
+            .session
+            .lock()
             .map_err(|e| TrustSafetyError::Internal(format!("Failed to lock session: {}", e)))?;
 
         let outputs: SessionOutputs = session
@@ -128,10 +130,7 @@ impl NsfwDetector {
             .map_err(|e| TrustSafetyError::OnnxRuntime(e.to_string()))?;
 
         // Get NSFW probability (assuming index 1 is NSFW class)
-        let nsfw_score = scores_data
-            .get(1)
-            .copied()
-            .unwrap_or(0.0);
+        let nsfw_score = scores_data.get(1).copied().unwrap_or(0.0);
 
         Ok(nsfw_score)
     }

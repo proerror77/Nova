@@ -7,7 +7,7 @@ fn main() {
     tonic_build::configure()
         .build_server(true)
         .build_client(false)
-        .compile(
+        .compile_protos(
             &[
                 "../proto/services/auth_service.proto",
                 "../proto/services/common.proto",

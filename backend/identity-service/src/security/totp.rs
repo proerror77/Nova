@@ -29,7 +29,7 @@ impl TOTPGenerator {
         let mut secret_bytes = [0u8; 20];
         rng.fill(&mut secret_bytes);
 
-        let secret = base64_engine.encode(&secret_bytes);
+        let secret = base64_engine.encode(secret_bytes);
 
         // Create provisioning URI for QR code
         // Format: otpauth://totp/Issuer:Account?secret=SECRET&issuer=Issuer

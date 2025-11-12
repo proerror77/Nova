@@ -122,7 +122,10 @@ pub mod kafka_correlation;
 /// - The buffer at `out_buf` must remain valid for the duration of this call
 /// - Returns 24 on success, 0 on invalid input
 #[no_mangle]
-pub unsafe extern "C" fn cryptocore_generate_nonce(out_buf: *mut c_uchar, out_len: c_ulong) -> c_ulong {
+pub unsafe extern "C" fn cryptocore_generate_nonce(
+    out_buf: *mut c_uchar,
+    out_len: c_ulong,
+) -> c_ulong {
     let len = out_len as usize;
     if out_buf.is_null() || len < 24 {
         return 0;

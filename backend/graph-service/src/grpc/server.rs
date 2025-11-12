@@ -238,11 +238,7 @@ impl GraphService for GraphServiceImpl {
         let user_id = Uuid::parse_str(&req.user_id)
             .map_err(|e| Status::invalid_argument(format!("Invalid user_id: {}", e)))?;
 
-        let limit = if req.limit > 0 {
-            req.limit
-        } else {
-            1000
-        };
+        let limit = if req.limit > 0 { req.limit } else { 1000 };
         let offset = req.offset;
 
         match self.repo.get_following(user_id, limit, offset).await {

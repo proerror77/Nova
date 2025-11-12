@@ -2,10 +2,10 @@
 //!
 //! SECURITY: Uses strongly-typed AuthenticatedUser to prevent type confusion attacks
 
-use async_graphql::Context;
-use uuid::Uuid;
 use crate::middleware::jwt::AuthenticatedUser;
+use async_graphql::Context;
 use crypto_core::jwt::Claims;
+use uuid::Uuid;
 
 /// Check if user is authorized to perform action on resource
 ///
@@ -49,9 +49,7 @@ pub fn check_user_authorization(
 ///
 /// Returns the strongly-typed AuthenticatedUser
 pub fn require_auth(ctx: &Context<'_>) -> Result<AuthenticatedUser, String> {
-    ctx
-        .data::<AuthenticatedUser>()
-        .map(|user| *user)  // Dereference to copy the value
+    ctx.data::<AuthenticatedUser>().copied() // Dereference to copy the value
         .map_err(|_| "Unauthorized: authentication required".to_string())
 }
 
@@ -67,9 +65,7 @@ pub fn get_authenticated_user_id(ctx: &Context<'_>) -> Result<Uuid, String> {
 ///
 /// Use this when you need email, username, or other claim fields
 pub fn get_authenticated_claims(ctx: &Context<'_>) -> Result<Claims, String> {
-    ctx
-        .data::<Claims>()
-        .map(|claims| claims.clone())  // Clone the Claims
+    ctx.data::<Claims>().cloned() // Clone the Claims
         .map_err(|_| "Unauthorized: authentication required".to_string())
 }
 
@@ -77,10 +73,7 @@ pub fn get_authenticated_claims(ctx: &Context<'_>) -> Result<Claims, String> {
 ///
 /// NOTE: Role-based access control not yet implemented
 /// This is a placeholder for future RBAC implementation
-pub fn check_user_role(
-    ctx: &Context<'_>,
-    required_role: &str,
-) -> Result<(), String> {
+pub fn check_user_role(ctx: &Context<'_>, required_role: &str) -> Result<(), String> {
     // For now, just check authentication
     let _user = require_auth(ctx)?;
 

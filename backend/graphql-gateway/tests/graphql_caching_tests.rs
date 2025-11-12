@@ -100,7 +100,10 @@ async fn test_ttl_expiration() {
     cache.set(key.to_string(), value.clone()).await;
 
     // Immediately should hit
-    assert!(cache.get(key).await.is_some(), "Should hit before expiration");
+    assert!(
+        cache.get(key).await.is_some(),
+        "Should hit before expiration"
+    );
 
     // Wait for expiration
     sleep(Duration::from_secs(2)).await;
@@ -261,7 +264,9 @@ async fn test_cache_eviction_on_ttl() {
 
     // Add 5 items
     for i in 0..5 {
-        cache.set(format!("key_{}", i), format!("value_{}", i)).await;
+        cache
+            .set(format!("key_{}", i), format!("value_{}", i))
+            .await;
     }
 
     assert_eq!(cache.size().await, 5, "Should have 5 items");
@@ -301,8 +306,12 @@ async fn test_cache_pattern_deletion() {
 
     // Add items with pattern
     for i in 0..5 {
-        cache.set(format!("feed:user_123:{}", i), "value".to_string()).await;
-        cache.set(format!("feed:user_456:{}", i), "value".to_string()).await;
+        cache
+            .set(format!("feed:user_123:{}", i), "value".to_string())
+            .await;
+        cache
+            .set(format!("feed:user_456:{}", i), "value".to_string())
+            .await;
     }
 
     // In real Redis, use KEYS pattern matching
@@ -383,7 +392,9 @@ async fn test_cache_memory_limit_enforcement() {
 
     // Fill cache to limit
     for i in 0..max_items {
-        cache.set(format!("key_{}", i), "x".repeat(item_size_bytes)).await;
+        cache
+            .set(format!("key_{}", i), "x".repeat(item_size_bytes))
+            .await;
     }
 
     let size = cache.size().await;

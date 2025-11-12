@@ -1,6 +1,6 @@
 mod graph_recall;
-mod trending_recall;
 mod personalized_recall;
+mod trending_recall;
 
 use crate::config::RecallConfig;
 use crate::models::{Candidate, RecallSource, RecallStats};
@@ -28,11 +28,7 @@ pub struct RecallLayer {
 }
 
 impl RecallLayer {
-    pub fn new(
-        graph_client: Channel,
-        redis_client: redis::Client,
-        config: RecallConfig,
-    ) -> Self {
+    pub fn new(graph_client: Channel, redis_client: redis::Client, config: RecallConfig) -> Self {
         let strategies: Vec<(Box<dyn RecallStrategy>, f32)> = vec![
             (
                 Box::new(GraphRecallStrategy::new(graph_client.clone())),
@@ -164,8 +160,7 @@ mod tests {
 
         let redis_client =
             redis::Client::open("redis://localhost:6379").expect("Redis client failed");
-        let graph_channel =
-            Channel::from_static("http://localhost:9008").connect_lazy();
+        let graph_channel = Channel::from_static("http://localhost:9008").connect_lazy();
 
         let layer = RecallLayer::new(graph_channel, redis_client, config);
         let unique = layer.deduplicate_and_merge(candidates);

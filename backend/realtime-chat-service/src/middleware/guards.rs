@@ -26,7 +26,7 @@ impl FromRequest for User {
         let user_id = extensions.get::<UserId>().map(|u| u.0);
 
         Box::pin(async move {
-            let user_id = user_id.ok_or_else(|| AppError::Unauthorized)?;
+            let user_id = user_id.ok_or(AppError::Unauthorized)?;
             Ok(User { id: user_id })
         })
     }

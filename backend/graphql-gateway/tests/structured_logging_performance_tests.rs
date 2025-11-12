@@ -190,18 +190,14 @@ fn test_performance_impact_minimal() {
     let start = Instant::now();
     tracing::subscriber::with_default(subscriber, || {
         for i in 0..iterations {
-            info!(
-                request_id = i,
-                action = "process",
-                "Processing request"
-            );
+            info!(request_id = i, action = "process", "Processing request");
         }
     });
     let with_logging = start.elapsed();
 
     // Calculate overhead
-    let overhead_percent = ((with_logging.as_micros() as f64 / baseline.as_micros() as f64) - 1.0)
-        * 100.0;
+    let overhead_percent =
+        ((with_logging.as_micros() as f64 / baseline.as_micros() as f64) - 1.0) * 100.0;
 
     println!("Baseline: {:?}", baseline);
     println!("With logging: {:?}", with_logging);
@@ -303,10 +299,7 @@ fn test_redaction_of_sensitive_fields() {
         log.contains("[REDACTED]"),
         "Sensitive fields should be redacted"
     );
-    assert!(
-        !log.contains("sk_"),
-        "API keys should not be in plaintext"
-    );
+    assert!(!log.contains("sk_"), "API keys should not be in plaintext");
 }
 
 #[test]

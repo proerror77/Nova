@@ -242,9 +242,7 @@ async fn test_connection_timeout_configuration() {
         max_lifetime_secs: 300,
     };
 
-    let pool = create_pool(config)
-        .await
-        .expect("Failed to create pool");
+    let pool = create_pool(config).await.expect("Failed to create pool");
 
     // Acquire both connections
     let _conn1 = pool.acquire().await.expect("First acquire should succeed");
@@ -281,10 +279,7 @@ async fn test_pool_recovery_after_exhaustion() {
     tokio::time::sleep(Duration::from_millis(100)).await;
 
     // Should be able to acquire again
-    let conn4 = pool
-        .acquire()
-        .await
-        .expect("Should acquire after release");
+    let conn4 = pool.acquire().await.expect("Should acquire after release");
 
     assert!(conn4.ping().await.is_ok());
 

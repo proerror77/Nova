@@ -205,4 +205,3 @@ impl GraphServiceClient {
         Ok(result)
     }
 }
-
