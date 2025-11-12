@@ -1,3 +1,6 @@
+// Build scripts are allowed to panic on compilation errors
+#![allow(clippy::panic)]
+
 fn main() {
     // Compile all proto files for client generation
     // This centralizes client code generation for all services
