@@ -263,7 +263,7 @@ impl FCMClient {
     pub async fn get_access_token(&self) -> Result<String, String> {
         // Check if we have a cached token that's still valid
         {
-            let cache = self.token_cache.lock().unwrap();
+            let cache = self.token_cache.lock().expect("Token cache lock poisoned");
             if let Some(cached) = cache.as_ref() {
                 let now = Utc::now().timestamp();
                 if cached.expires_at > now + 60 {
@@ -323,7 +323,7 @@ impl FCMClient {
         // Cache the token
         let expires_at = Utc::now().timestamp() + token_response.expires_in;
         {
-            let mut cache = self.token_cache.lock().unwrap();
+            let mut cache = self.token_cache.lock().expect("Token cache lock poisoned");
             *cache = Some(TokenCache {
                 access_token: token_response.access_token.clone(),
                 expires_at,
