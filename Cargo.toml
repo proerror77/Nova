@@ -79,7 +79,7 @@ config = "0.14"
 
 # Logging
 tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 tracing-actix-web = "0.7"
 
 # Error handling
@@ -192,7 +192,7 @@ chrono = { version = "0.4", features = ["serde"] }
 tokio-test = "0.4"
 criterion = { version = "0.5", features = ["async_tokio", "html_reports"] }
 tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 # Integration test dependencies
 uuid = { version = "1.7", features = ["v4", "serde"] }
 rand = "0.8"
