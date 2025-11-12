@@ -5,7 +5,6 @@ members = [
     "backend/content-service",
     "backend/feed-service",
     "backend/media-service",
-    "backend/messaging-service",
     "backend/search-service",
     "backend/notification-service",
     "backend/social-service",
@@ -14,6 +13,9 @@ members = [
     "backend/analytics-service",
     "backend/graph-service",
     "backend/ranking-service",
+    "backend/feature-store",
+    "backend/realtime-chat-service",
+    "backend/trust-safety-service",
     # Shared Libraries
     "backend/libs/actix-middleware",
     "backend/libs/crypto-core",
@@ -34,7 +36,8 @@ members = [
     "backend/libs/video-core",
     "backend/libs/event-store",
     "backend/libs/cache-invalidation",
-    "backend/libs/idempotent-consumer"
+    "backend/libs/idempotent-consumer",
+    "backend/libs/transactional-outbox"
 ]
 resolver = "2"
 
