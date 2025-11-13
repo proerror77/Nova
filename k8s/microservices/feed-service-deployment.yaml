@@ -78,7 +78,7 @@ spec:
                       - backend
       containers:
         - name: feed-service
-          image: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/feed-service:latest
+          image: nova/feed-service
           imagePullPolicy: Always
           ports:
             - name: http
