@@ -23,8 +23,6 @@ patchesStrategicMerge:
 - content-service-probes-patch.yaml
 - streaming-service-env-patch.yaml
 - search-service-env-patch.yaml
-- identity-service-probes-patch.yaml
-- notification-service-probes-patch.yaml
 - elasticsearch-replicas-patch.yaml
 - s3-env-patch.yaml
 - hpa-min1-patch.yaml
