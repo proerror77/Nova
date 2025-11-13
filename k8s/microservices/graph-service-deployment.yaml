@@ -2,7 +2,6 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: graph-service
-  namespace: nova
   labels:
     app: graph-service
     tier: backend

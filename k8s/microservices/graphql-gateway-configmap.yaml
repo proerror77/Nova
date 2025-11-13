@@ -2,7 +2,6 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: graphql-gateway-configmap
-  namespace: nova
   labels:
     app: graphql-gateway
     version: v2

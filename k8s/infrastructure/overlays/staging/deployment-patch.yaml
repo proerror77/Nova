@@ -2,7 +2,6 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: user-service
-  namespace: nova
 spec:
   template:
     spec:
@@ -21,7 +20,6 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: content-service
-  namespace: nova
 spec:
   template:
     spec:
@@ -40,7 +38,6 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: feed-service
-  namespace: nova
 spec:
   template:
     spec:
@@ -59,7 +56,6 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: media-service
-  namespace: nova
 spec:
   template:
     spec:
@@ -78,7 +74,6 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: messaging-service
-  namespace: nova
 spec:
   template:
     spec:
@@ -97,7 +92,6 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: search-service
-  namespace: nova
 spec:
   template:
     spec:
@@ -116,7 +110,6 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: analytics-service
-  namespace: nova
 spec:
   template:
     spec:
@@ -135,7 +128,6 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: graph-service
-  namespace: nova
 spec:
   template:
     spec:
@@ -154,7 +146,6 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: graphql-gateway
-  namespace: nova
 spec:
   template:
     spec:
@@ -173,7 +164,6 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: identity-service
-  namespace: nova
 spec:
   template:
     spec:
@@ -192,7 +182,6 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: notification-service
-  namespace: nova
 spec:
   template:
     spec:
@@ -211,7 +200,6 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: ranking-service
-  namespace: nova
 spec:
   template:
     spec:
@@ -230,7 +218,6 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: realtime-chat-service
-  namespace: nova
 spec:
   template:
     spec:
@@ -249,7 +236,6 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: social-service
-  namespace: nova
 spec:
   template:
     spec:
@@ -268,7 +254,6 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: trust-safety-service
-  namespace: nova
 spec:
   template:
     spec:
@@ -282,3 +267,4 @@ spec:
           limits:
             cpu: 500m
             memory: 512Mi
+
