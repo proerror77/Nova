@@ -31,43 +31,78 @@ patchesStrategicMerge:
 # Harden ClickHouse exposure
 
 images:
+- name: nova/analytics-service
+  newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/analytics-service
+  newTag: a3c6095ad20277c62133862f6e9425c98d0f9bc3
 - name: nova/content-service
   newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/content-service
-  newTag: d558d85069e280ac2568db182d064ed3e3d7eea9
+  newTag: a3c6095ad20277c62133862f6e9425c98d0f9bc3
 - name: nova/feed-service
   newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/feed-service
-  newTag: d558d85069e280ac2568db182d064ed3e3d7eea9
+  newTag: a3c6095ad20277c62133862f6e9425c98d0f9bc3
+- name: nova/graph-service
+  newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/graph-service
+  newTag: a3c6095ad20277c62133862f6e9425c98d0f9bc3
+- name: nova/graphql-gateway
+  newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/graphql-gateway
+  newTag: a3c6095ad20277c62133862f6e9425c98d0f9bc3
+- name: nova/identity-service
+  newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/identity-service
+  newTag: a3c6095ad20277c62133862f6e9425c98d0f9bc3
 - name: nova/media-service
   newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/media-service
-  newTag: d558d85069e280ac2568db182d064ed3e3d7eea9
-- name: nova/messaging-service
-  newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/messaging-service
-  newTag: d558d85069e280ac2568db182d064ed3e3d7eea9
+  newTag: a3c6095ad20277c62133862f6e9425c98d0f9bc3
+- name: nova/notification-service
+  newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/notification-service
+  newTag: a3c6095ad20277c62133862f6e9425c98d0f9bc3
+- name: nova/ranking-service
+  newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/ranking-service
+  newTag: a3c6095ad20277c62133862f6e9425c98d0f9bc3
+- name: nova/realtime-chat-service
+  newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/realtime-chat-service
+  newTag: a3c6095ad20277c62133862f6e9425c98d0f9bc3
 - name: nova/search-service
   newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/search-service
-  newTag: d558d85069e280ac2568db182d064ed3e3d7eea9
-- name: nova/streaming-service
-  newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/streaming-service
-  newTag: d558d85069e280ac2568db182d064ed3e3d7eea9
+  newTag: a3c6095ad20277c62133862f6e9425c98d0f9bc3
+- name: nova/social-service
+  newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/social-service
+  newTag: a3c6095ad20277c62133862f6e9425c98d0f9bc3
+- name: nova/trust-safety-service
+  newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/trust-safety-service
+  newTag: a3c6095ad20277c62133862f6e9425c98d0f9bc3
 - name: nova/user-service
   newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/user-service
-  newTag: d558d85069e280ac2568db182d064ed3e3d7eea9
+  newTag: a3c6095ad20277c62133862f6e9425c98d0f9bc3
 
 replicas:
 - count: 1
-  name: user-service
+  name: analytics-service
 - count: 1
   name: content-service
 - count: 1
   name: feed-service
 - count: 1
+  name: graph-service
+- count: 1
+  name: graphql-gateway
+- count: 1
+  name: identity-service
+- count: 1
   name: media-service
 - count: 1
-  name: messaging-service
+  name: notification-service
+- count: 1
+  name: ranking-service
+- count: 1
+  name: realtime-chat-service
 - count: 1
   name: search-service
 - count: 1
-  name: streaming-service
+  name: social-service
+- count: 1
+  name: trust-safety-service
+- count: 1
+  name: user-service
 
 commonAnnotations:
   argocd.argoproj.io/compare-result: "false"
