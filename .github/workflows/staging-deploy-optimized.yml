@@ -149,13 +149,20 @@ jobs:
           echo "📝 Updating image tags to: ${{ github.sha }}"
 
           kustomize edit set image \
-            nova/user-service=${{ env.REGISTRY }}/${{ env.REGISTRY_ALIAS }}/user-service:${{ github.sha }} \
+            nova/analytics-service=${{ env.REGISTRY }}/${{ env.REGISTRY_ALIAS }}/analytics-service:${{ github.sha }} \
             nova/content-service=${{ env.REGISTRY }}/${{ env.REGISTRY_ALIAS }}/content-service:${{ github.sha }} \
             nova/feed-service=${{ env.REGISTRY }}/${{ env.REGISTRY_ALIAS }}/feed-service:${{ github.sha }} \
+            nova/graph-service=${{ env.REGISTRY }}/${{ env.REGISTRY_ALIAS }}/graph-service:${{ github.sha }} \
+            nova/graphql-gateway=${{ env.REGISTRY }}/${{ env.REGISTRY_ALIAS }}/graphql-gateway:${{ github.sha }} \
+            nova/identity-service=${{ env.REGISTRY }}/${{ env.REGISTRY_ALIAS }}/identity-service:${{ github.sha }} \
             nova/media-service=${{ env.REGISTRY }}/${{ env.REGISTRY_ALIAS }}/media-service:${{ github.sha }} \
-            nova/messaging-service=${{ env.REGISTRY }}/${{ env.REGISTRY_ALIAS }}/messaging-service:${{ github.sha }} \
+            nova/notification-service=${{ env.REGISTRY }}/${{ env.REGISTRY_ALIAS }}/notification-service:${{ github.sha }} \
+            nova/ranking-service=${{ env.REGISTRY }}/${{ env.REGISTRY_ALIAS }}/ranking-service:${{ github.sha }} \
+            nova/realtime-chat-service=${{ env.REGISTRY }}/${{ env.REGISTRY_ALIAS }}/realtime-chat-service:${{ github.sha }} \
             nova/search-service=${{ env.REGISTRY }}/${{ env.REGISTRY_ALIAS }}/search-service:${{ github.sha }} \
-            nova/streaming-service=${{ env.REGISTRY }}/${{ env.REGISTRY_ALIAS }}/streaming-service:${{ github.sha }}
+            nova/social-service=${{ env.REGISTRY }}/${{ env.REGISTRY_ALIAS }}/social-service:${{ github.sha }} \
+            nova/trust-safety-service=${{ env.REGISTRY }}/${{ env.REGISTRY_ALIAS }}/trust-safety-service:${{ github.sha }} \
+            nova/user-service=${{ env.REGISTRY }}/${{ env.REGISTRY_ALIAS }}/user-service:${{ github.sha }}
 
       # 优化: 验证 kustomization 语法
       - name: Validate kustomization

@@ -55,13 +55,13 @@ images:
     newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/streaming-service
     newTag: latest
 
-# 副本数
+# 副本数 (Staging: 1个副本用于资源优化)
 replicas:
   - name: auth-service
-    count: 2
+    count: 1
   - name: user-service
-    count: 2
+    count: 1
   - name: content-service
-    count: 2
+    count: 1
   - name: messaging-service
-    count: 2
+    count: 1
