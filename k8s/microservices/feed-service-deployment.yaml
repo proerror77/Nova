@@ -8,7 +8,6 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: feed-service
-  namespace: nova-feed
   labels:
     app: feed-service
     tier: backend
@@ -147,7 +146,6 @@ apiVersion: v1
 kind: Service
 metadata:
   name: feed-service
-  namespace: nova-feed
   labels:
     app: feed-service
 spec:
@@ -169,4 +167,3 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: feed-service
-  namespace: nova-feed

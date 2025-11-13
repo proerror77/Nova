@@ -2,7 +2,6 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: ranking-service
-  namespace: nova
   labels:
     app: ranking-service
     tier: backend

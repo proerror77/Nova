@@ -5,32 +5,25 @@ kind: Kustomization
 # 这个文件定义所有环境共用的基础配置
 # 环境特定的覆盖由 overlays 目录定义
 
-# 命名空间（会被 overlay 覆盖）
-namespace: nova-staging
+# 命名空间 - 由 overlay 设置，不在 base 中设置
+# 这避免了当多个 Namespace 资源存在时的冲突
 
 # 通用标签
-commonLabels:
-  app.kubernetes.io/name: nova
-  app.kubernetes.io/managed-by: argocd
+labels:
+  - includeSelectors: true
+    pairs:
+      app.kubernetes.io/name: nova
+      app.kubernetes.io/managed-by: argocd
 
 # 通用注解
 commonAnnotations:
   description: "Nova Microservices Platform"
 
-# 包含的资源
-# 这些是所有环境都需要的共同资源
+# 包含的资源 - 直接引用 microservices kustomization
+# (不能直接引用 ../microservices 中的文件 - kustomize 安全限制)
+# 必须通过 microservices/kustomization.yaml 来引用所有资源
 resources:
-  - ../microservices/
-
-# 变量替换
-vars:
-  - name: IMAGE_REGISTRY
-    objref:
-      kind: ConfigMap
-      name: image-registry
-      apiVersion: v1
-    fieldref:
-      fieldpath: data.registry
+  - ../microservices
 
 # 配置管理生成器
 configMapGenerator:

@@ -2,7 +2,6 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: communication-service
-  namespace: nova
   labels:
     app: communication-service
     version: v2

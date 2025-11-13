@@ -1,34 +1,36 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-namespace: nova
+namespace: nova-staging
 
-patchesStrategicMerge:
-- deployment-patch.yaml
-- secrets-patch.yaml
-- configmap-patch.yaml
-- deployment-images-patch.yaml
-- postgres-deploy-patch.yaml
-- service-selectors-patch.yaml
-- redis-deploy-patch.yaml
-- deploy-labels-patch.yaml
-- user-service-env-patch.yaml
-- user-service-probes-patch.yaml
-- feed-service-env-patch.yaml
-- feed-service-probes-patch.yaml
-- messaging-service-env-patch.yaml
-- messaging-service-env-port-patch.yaml
-- messaging-service-probes-patch.yaml
-- content-service-env-patch.yaml
-- content-service-probes-patch.yaml
-- streaming-service-env-patch.yaml
-- search-service-env-patch.yaml
-- elasticsearch-replicas-patch.yaml
-- s3-env-patch.yaml
-- hpa-min1-patch.yaml
-- prefer-large-nodes-patch.yaml
-- resource-optimization-patch.yaml
-# Harden ClickHouse exposure
+# TODO: Re-enable patches after base deployment works correctly
+# Strategic merge patches for staging environment
+# Applied after base resources are composed and namespaced
+#patchesStrategicMerge:
+#- deployment-patch.yaml
+# - secrets-patch.yaml
+# - configmap-patch.yaml
+# - deployment-images-patch.yaml
+# - postgres-deploy-patch.yaml
+# - service-selectors-patch.yaml
+# - redis-deploy-patch.yaml
+# - deploy-labels-patch.yaml
+# - user-service-env-patch.yaml
+# - user-service-probes-patch.yaml
+# - feed-service-env-patch.yaml
+# - feed-service-probes-patch.yaml
+# - messaging-service-env-patch.yaml
+# - messaging-service-env-port-patch.yaml
+# - messaging-service-probes-patch.yaml
+# - content-service-env-patch.yaml
+# - content-service-probes-patch.yaml
+# - search-service-env-patch.yaml
+# - elasticsearch-replicas-patch.yaml
+# - s3-env-patch.yaml
+# - hpa-min1-patch.yaml
+# - prefer-large-nodes-patch.yaml
+# - resource-optimization-patch.yaml
+# Note: Harden ClickHouse exposure with additional patches as needed
 
 images:
 - name: nova/analytics-service
@@ -74,35 +76,36 @@ images:
   newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/user-service
   newTag: c849ea7287e61bc77123ee9d58b3f47cb2901cb5
 
-replicas:
-- count: 1
-  name: analytics-service
-- count: 1
-  name: content-service
-- count: 1
-  name: feed-service
-- count: 1
-  name: graph-service
-- count: 1
-  name: graphql-gateway
-- count: 1
-  name: identity-service
-- count: 1
-  name: media-service
-- count: 1
-  name: notification-service
-- count: 1
-  name: ranking-service
-- count: 1
-  name: realtime-chat-service
-- count: 1
-  name: search-service
-- count: 1
-  name: social-service
-- count: 1
-  name: trust-safety-service
-- count: 1
-  name: user-service
+# TODO: Re-enable replicas after resources are properly discovered
+#replicas:
+#- count: 1
+#  name: analytics-service
+#- count: 1
+#  name: content-service
+#- count: 1
+#  name: feed-service
+#- count: 1
+#  name: graph-service
+#- count: 1
+#  name: graphql-gateway
+#- count: 1
+#  name: identity-service
+#- count: 1
+#  name: media-service
+#- count: 1
+#  name: notification-service
+#- count: 1
+#  name: ranking-service
+#- count: 1
+#  name: realtime-chat-service
+#- count: 1
+#  name: search-service
+#- count: 1
+#  name: social-service
+#- count: 1
+#  name: trust-safety-service
+#- count: 1
+#  name: user-service
 
 commonAnnotations:
   argocd.argoproj.io/compare-result: "false"

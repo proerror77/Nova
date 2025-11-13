@@ -2,7 +2,6 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: identity-service
-  namespace: nova
   labels:
     app: identity-service
     version: v2
