@@ -141,7 +141,7 @@ spec:
                       - backend
       containers:
         - name: user-service
-          image: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/user-service:latest
+          image: nova/user-service
           imagePullPolicy: Always
           ports:
             - name: http
