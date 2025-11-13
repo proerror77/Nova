@@ -126,9 +126,6 @@ jobs:
     runs-on: ubuntu-22.04
     permissions:
       contents: write
-      pull-requests: write
-    outputs:
-      pr-number: ${{ steps.create-pr.outputs.pull-request-number }}
 
     steps:
       - name: Checkout code
@@ -173,67 +170,25 @@ jobs:
           echo "📦 Preview (first 30 lines):"
           head -30 /tmp/rendered.yaml
 
-      - name: Commit and create Pull Request
-        id: create-pr
-        uses: peter-evans/create-pull-request@v6
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          commit-message: "chore(staging): update images to ${{ github.sha }}"
-          branch: staging/kustomization-${{ github.run_id }}
-          title: "chore(staging): update images to ${{ github.sha }}"
-          body: |
-            ## Automated Kustomization Update
+      - name: Configure Git
+        run: |
+          git config --global user.email "github-actions@nova.dev"
+          git config --global user.name "GitHub Actions Bot"
 
-            **Commit:** ${{ github.sha }}
-            **Run:** ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      - name: Commit and push directly to main
+        run: |
+          cd ${{ github.workspace }}
+          git add ${{ env.KUSTOMIZE_PATH }}/kustomization.yaml
+          git commit -m "chore(staging): update images to ${{ github.sha }}" || echo "No changes to commit"
+          git push origin main
+          echo "✅ Pushed kustomization update to main branch"
+          echo "🚀 ArgoCD will detect the change and deploy automatically"
 
-            This PR automatically updates the Kustomization image tags to match the latest Docker builds.
-
-            ### Services Updated:
-            - user-service
-            - content-service
-            - feed-service
-            - media-service
-            - messaging-service
-            - search-service
-            - streaming-service
-
-            ### Deployed Images:
-            All services: `${{ env.REGISTRY }}/${{ env.REGISTRY_ALIAS }}/*:${{ github.sha }}`
-
-            ---
-
-            ✅ Automated by GitHub Actions
-          labels: |
-            automated
-            kustomization
-            staging
-          delete-branch: true
-          base: main
-
-  # 优化: 自动合并 PR（可选）
-  merge-pull-request:
-    name: Merge Pull Request
-    needs: [verify-aws, build-and-push, update-kustomization]
-    if: needs.verify-aws.outputs.has_aws == 'true' && needs.update-kustomization.outputs.pr-number != ''
-    runs-on: ubuntu-22.04
-    permissions:
-      pull-requests: write
-      contents: write
-
-    steps:
-      - name: Merge PR
-        uses: peter-evans/enable-pull-request-automerge@v3
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          pull-request-number: ${{ needs.update-kustomization.outputs.pr-number }}
-          merge-method: squash
-        continue-on-error: true
 
   # 优化: 实际验证 ArgoCD sync
   verify-argocd-sync:
     name: Verify ArgoCD Sync
-    needs: [verify-aws, merge-pull-request]
+    needs: [verify-aws, update-kustomization]
     if: needs.verify-aws.outputs.has_aws == 'true'
     runs-on: ubuntu-22.04
 
@@ -261,7 +216,7 @@ jobs:
   # 优化: 实际 Smoke Test
   smoke-test:
     name: Staging Smoke Test
-    needs: [verify-aws, merge-pull-request, verify-argocd-sync]
+    needs: [verify-aws, verify-argocd-sync]
     if: needs.verify-aws.outputs.has_aws == 'true'
     runs-on: ubuntu-22.04
 
@@ -320,7 +275,7 @@ jobs:
   # 优化: 失败通知
   notify-on-failure:
     name: Notify on Failure
-    needs: [verify-aws, build-and-push, update-kustomization, merge-pull-request, verify-argocd-sync, smoke-test]
+    needs: [verify-aws, build-and-push, update-kustomization, verify-argocd-sync, smoke-test]
     if: failure()
     runs-on: ubuntu-22.04
 
@@ -336,7 +291,7 @@ jobs:
 
   summary:
     name: Deployment Summary
-    needs: [verify-aws, build-and-push, update-kustomization, merge-pull-request, verify-argocd-sync, smoke-test]
+    needs: [verify-aws, build-and-push, update-kustomization, verify-argocd-sync, smoke-test]
     if: always()
     runs-on: ubuntu-22.04
 
