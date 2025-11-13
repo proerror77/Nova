@@ -3,28 +3,9 @@
 # Goal: Reduce resource requests to match actual usage + 30% safety margin
 # Result: Enables 20+ pods on 3 nodes without vCPU expansion
 
-# Pattern 1: Lightweight services (auth, content, feed, media, user)
+# Pattern 1: Lightweight services (content, feed, media, user)
 # Actual usage: 1-5m CPU, 2-10Mi memory
 # Optimized request: 25m CPU, 64Mi memory (20x actual + 30% margin)
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: auth-service
-  namespace: nova
-spec:
-  template:
-    spec:
-      containers:
-      - name: auth-service
-        resources:
-          requests:
-            cpu: 25m           # 100m → 25m (4x reduction)
-            memory: 64Mi       # 256Mi → 64Mi (4x reduction)
-          limits:
-            cpu: 100m          # 500m → 100m (5x reduction)
-            memory: 128Mi      # 512Mi → 128Mi (4x reduction)
-
 ---
 apiVersion: apps/v1
 kind: Deployment
