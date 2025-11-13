@@ -1,0 +1,78 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Include all microservice deployments
+resources:
+  # Core microservices (14 services)
+  - analytics-service-deployment.yaml
+  - analytics-service-service.yaml
+  - analytics-service-configmap.yaml
+  - analytics-service-secret.yaml
+  - analytics-service-serviceaccount.yaml
+  
+  - content-service-deployment.yaml
+  
+  - feed-service-deployment.yaml
+  
+  - graph-service-deployment.yaml
+  - graph-service-service.yaml
+  - graph-service-configmap.yaml
+  - graph-service-secret.yaml
+  - graph-service-serviceaccount.yaml
+  
+  - graphql-gateway-deployment.yaml
+  - graphql-gateway-service.yaml
+  - graphql-gateway-configmap.yaml
+  - graphql-gateway-secret.yaml
+  - graphql-gateway-serviceaccount.yaml
+  
+  - identity-service-deployment.yaml
+  
+  - media-service-deployment.yaml
+  
+  - notification-service-deployment.yaml
+  - notification-service-service.yaml
+  - notification-service-configmap.yaml
+  - notification-service-secret.yaml
+  - notification-service-serviceaccount.yaml
+  
+  - ranking-service-deployment.yaml
+  - ranking-service-service.yaml
+  - ranking-service-configmap.yaml
+  - ranking-service-secret.yaml
+  - ranking-service-serviceaccount.yaml
+  
+  - realtime-chat-service-deployment.yaml
+  - realtime-chat-service-service.yaml
+  - realtime-chat-service-configmap.yaml
+  - realtime-chat-service-secret.yaml
+  - realtime-chat-service-serviceaccount.yaml
+  
+  - search-service-deployment.yaml
+  - search-service-service.yaml
+  - search-service-configmap.yaml
+  - search-service-secret.yaml
+  - search-service-serviceaccount.yaml
+  
+  - social-service-deployment.yaml
+  
+  - trust-safety-service-deployment.yaml
+  - trust-safety-service-service.yaml
+  - trust-safety-service-configmap.yaml
+  - trust-safety-service-secret.yaml
+  - trust-safety-service-serviceaccount.yaml
+  
+  - user-service-deployment.yaml
+
+  # API Gateway (separate)
+  - api-gateway/deployment.yaml
+  
+  # Infrastructure and support services
+  - ingress.yaml
+  - ingress-tls-setup.yaml
+  - prometheus-monitoring-setup.yaml
+  - gitops-argocd-setup.yaml
+  - s3-configmap.yaml
+  - s3-secret.yaml
+  - messaging-service-cronjobs.yaml
+  - turn-server-deployment.yaml
