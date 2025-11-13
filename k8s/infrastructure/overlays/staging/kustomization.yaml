@@ -33,25 +33,25 @@ patchesStrategicMerge:
 images:
 - name: nova/content-service
   newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/content-service
-  newTag: d558d85069e280ac2568db182d064ed3e3d7eea9
+  newTag: 799002b0bb680fa83e39f4d96b3ab49187e2fa00
 - name: nova/feed-service
   newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/feed-service
-  newTag: d558d85069e280ac2568db182d064ed3e3d7eea9
+  newTag: 799002b0bb680fa83e39f4d96b3ab49187e2fa00
 - name: nova/media-service
   newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/media-service
-  newTag: d558d85069e280ac2568db182d064ed3e3d7eea9
+  newTag: 799002b0bb680fa83e39f4d96b3ab49187e2fa00
 - name: nova/messaging-service
   newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/messaging-service
-  newTag: d558d85069e280ac2568db182d064ed3e3d7eea9
+  newTag: 799002b0bb680fa83e39f4d96b3ab49187e2fa00
 - name: nova/search-service
   newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/search-service
-  newTag: d558d85069e280ac2568db182d064ed3e3d7eea9
+  newTag: 799002b0bb680fa83e39f4d96b3ab49187e2fa00
 - name: nova/streaming-service
   newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/streaming-service
-  newTag: d558d85069e280ac2568db182d064ed3e3d7eea9
+  newTag: 799002b0bb680fa83e39f4d96b3ab49187e2fa00
 - name: nova/user-service
   newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/user-service
-  newTag: d558d85069e280ac2568db182d064ed3e3d7eea9
+  newTag: 799002b0bb680fa83e39f4d96b3ab49187e2fa00
 
 replicas:
 - count: 1
@@ -73,6 +73,7 @@ commonAnnotations:
   argocd.argoproj.io/compare-result: "false"
   environment: staging
 
+# PgBouncer connection pooling (P1 Priority)
 resources:
 - ../../base
 - postgres-pvc-gp3.yaml
@@ -88,5 +89,4 @@ resources:
 - external-secrets-store.yaml
 - external-secrets.yaml
 - seed-data-job.yaml
-# PgBouncer connection pooling (P1 Priority)
 - ../../pgbouncer
