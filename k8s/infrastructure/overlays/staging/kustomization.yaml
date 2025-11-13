@@ -3,11 +3,295 @@ kind: Kustomization
 
 namespace: nova-staging
 
-# TODO: Re-enable patches after base deployment works correctly
 # Strategic merge patches for staging environment
-# Applied after base resources are composed and namespaced
-#patchesStrategicMerge:
-#- deployment-patch.yaml
+# Using JSON 6902 patches with explicit namespace targeting
+# This allows patches to work correctly with nested kustomizations
+patchesJson6902:
+- target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: user-service
+    namespace: nova-staging
+  patch: |-
+    - op: replace
+      path: /spec/template/spec/containers/0/imagePullPolicy
+      value: Always
+    - op: replace
+      path: /spec/template/spec/containers/0/resources
+      value:
+        requests:
+          cpu: 100m
+          memory: 256Mi
+        limits:
+          cpu: 500m
+          memory: 512Mi
+- target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: content-service
+    namespace: nova-staging
+  patch: |-
+    - op: replace
+      path: /spec/template/spec/containers/0/imagePullPolicy
+      value: Always
+    - op: replace
+      path: /spec/template/spec/containers/0/resources
+      value:
+        requests:
+          cpu: 100m
+          memory: 256Mi
+        limits:
+          cpu: 500m
+          memory: 512Mi
+- target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: feed-service
+    namespace: nova-staging
+  patch: |-
+    - op: replace
+      path: /spec/template/spec/containers/0/imagePullPolicy
+      value: Always
+    - op: replace
+      path: /spec/template/spec/containers/0/resources
+      value:
+        requests:
+          cpu: 100m
+          memory: 512Mi
+        limits:
+          cpu: 500m
+          memory: 1Gi
+- target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: media-service
+    namespace: nova-staging
+  patch: |-
+    - op: replace
+      path: /spec/template/spec/containers/0/imagePullPolicy
+      value: Always
+    - op: replace
+      path: /spec/template/spec/containers/0/resources
+      value:
+        requests:
+          cpu: 100m
+          memory: 512Mi
+        limits:
+          cpu: 500m
+          memory: 1Gi
+- target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: messaging-service
+    namespace: nova-staging
+  patch: |-
+    - op: replace
+      path: /spec/template/spec/containers/0/imagePullPolicy
+      value: Always
+    - op: replace
+      path: /spec/template/spec/containers/0/resources
+      value:
+        requests:
+          cpu: 100m
+          memory: 512Mi
+        limits:
+          cpu: 500m
+          memory: 1Gi
+- target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: search-service
+    namespace: nova-staging
+  patch: |-
+    - op: replace
+      path: /spec/template/spec/containers/0/imagePullPolicy
+      value: Always
+    - op: replace
+      path: /spec/template/spec/containers/0/resources
+      value:
+        requests:
+          cpu: 200m
+          memory: 512Mi
+        limits:
+          cpu: 1000m
+          memory: 2Gi
+- target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: analytics-service
+    namespace: nova-staging
+  patch: |-
+    - op: replace
+      path: /spec/template/spec/containers/0/imagePullPolicy
+      value: Always
+    - op: replace
+      path: /spec/template/spec/containers/0/resources
+      value:
+        requests:
+          cpu: 100m
+          memory: 256Mi
+        limits:
+          cpu: 500m
+          memory: 512Mi
+- target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: graph-service
+    namespace: nova-staging
+  patch: |-
+    - op: replace
+      path: /spec/template/spec/containers/0/imagePullPolicy
+      value: Always
+    - op: replace
+      path: /spec/template/spec/containers/0/resources
+      value:
+        requests:
+          cpu: 100m
+          memory: 256Mi
+        limits:
+          cpu: 500m
+          memory: 512Mi
+- target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: graphql-gateway
+    namespace: nova-staging
+  patch: |-
+    - op: replace
+      path: /spec/template/spec/containers/0/imagePullPolicy
+      value: Always
+    - op: replace
+      path: /spec/template/spec/containers/0/resources
+      value:
+        requests:
+          cpu: 100m
+          memory: 256Mi
+        limits:
+          cpu: 500m
+          memory: 512Mi
+- target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: identity-service
+    namespace: nova-staging
+  patch: |-
+    - op: replace
+      path: /spec/template/spec/containers/0/imagePullPolicy
+      value: Always
+    - op: replace
+      path: /spec/template/spec/containers/0/resources
+      value:
+        requests:
+          cpu: 100m
+          memory: 256Mi
+        limits:
+          cpu: 500m
+          memory: 512Mi
+- target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: notification-service
+    namespace: nova-staging
+  patch: |-
+    - op: replace
+      path: /spec/template/spec/containers/0/imagePullPolicy
+      value: Always
+    - op: replace
+      path: /spec/template/spec/containers/0/resources
+      value:
+        requests:
+          cpu: 100m
+          memory: 256Mi
+        limits:
+          cpu: 500m
+          memory: 512Mi
+- target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: ranking-service
+    namespace: nova-staging
+  patch: |-
+    - op: replace
+      path: /spec/template/spec/containers/0/imagePullPolicy
+      value: Always
+    - op: replace
+      path: /spec/template/spec/containers/0/resources
+      value:
+        requests:
+          cpu: 100m
+          memory: 256Mi
+        limits:
+          cpu: 500m
+          memory: 512Mi
+- target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: realtime-chat-service
+    namespace: nova-staging
+  patch: |-
+    - op: replace
+      path: /spec/template/spec/containers/0/imagePullPolicy
+      value: Always
+    - op: replace
+      path: /spec/template/spec/containers/0/resources
+      value:
+        requests:
+          cpu: 100m
+          memory: 256Mi
+        limits:
+          cpu: 500m
+          memory: 512Mi
+- target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: social-service
+    namespace: nova-staging
+  patch: |-
+    - op: replace
+      path: /spec/template/spec/containers/0/imagePullPolicy
+      value: Always
+    - op: replace
+      path: /spec/template/spec/containers/0/resources
+      value:
+        requests:
+          cpu: 100m
+          memory: 256Mi
+        limits:
+          cpu: 500m
+          memory: 512Mi
+- target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: trust-safety-service
+    namespace: nova-staging
+  patch: |-
+    - op: replace
+      path: /spec/template/spec/containers/0/imagePullPolicy
+      value: Always
+    - op: replace
+      path: /spec/template/spec/containers/0/resources
+      value:
+        requests:
+          cpu: 100m
+          memory: 256Mi
+        limits:
+          cpu: 500m
+          memory: 512Mi
 # - secrets-patch.yaml
 # - configmap-patch.yaml
 # - deployment-images-patch.yaml
