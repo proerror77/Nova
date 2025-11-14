@@ -47,14 +47,12 @@ jobs:
             --access-scope type=cluster 2>/dev/null || true
           aws eks list-associated-access-policies --cluster-name "$CLUSTER_NAME" --principal-arn "$PRINCIPAL"
 
-      - name: Install kubectl and kustomize
+      - name: Install kubectl
         run: |
           sudo apt-get update -y
           sudo apt-get install -y curl
           curl -sLo /usr/local/bin/kubectl https://dl.k8s.io/release/v1.28.0/bin/linux/amd64/kubectl
           chmod +x /usr/local/bin/kubectl
-          curl -s https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh | bash
-          sudo mv kustomize /usr/local/bin/
 
       - name: Setup Helm and install operators (CRDs)
         uses: azure/setup-helm@v4
@@ -91,7 +89,7 @@ jobs:
 
       - name: Render overlay (staging)
         run: |
-          kustomize build k8s/infrastructure/overlays/staging > /tmp/staging.yaml
+          kubectl kustomize k8s/infrastructure/overlays/staging > /tmp/staging.yaml
           head -n 30 /tmp/staging.yaml
 
       - name: Apply to cluster
