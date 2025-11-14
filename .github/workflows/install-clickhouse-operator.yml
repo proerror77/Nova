@@ -58,8 +58,8 @@ jobs:
         run: |
           set -e
           # Choose a known stable version
-          VER=v0.23.6
-          BUNDLE=https://raw.githubusercontent.com/Altinity/clickhouse-operator/${VER}/deploy/operator/clickhouse-operator-install-bundle.yaml
+          BRANCH=master
+          BUNDLE=https://raw.githubusercontent.com/Altinity/clickhouse-operator/${BRANCH}/deploy/operator/clickhouse-operator-install-bundle.yaml
           kubectl create namespace clickhouse-operator --dry-run=client -o yaml | kubectl apply -f - || true
           kubectl apply -f "$BUNDLE" -n clickhouse-operator
           kubectl rollout status -n clickhouse-operator deploy/clickhouse-operator --timeout=300s || true
