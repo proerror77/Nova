@@ -63,6 +63,45 @@ jobs:
           aws eks update-kubeconfig --region "$AWS_REGION" --name "$CLUSTER_NAME"
           kubectl cluster-info || true
 
+      - name: Ensure aws-auth mapping for nodegroup role
+        shell: bash
+        run: |
+          set -euo pipefail
+          NODE_ROLE=$(aws eks describe-nodegroup --cluster-name "$CLUSTER_NAME" --nodegroup-name "${CLUSTER_NAME}-node-group" --region "$AWS_REGION" --output json | jq -r '.nodegroup.nodeRole')
+          echo "Using node role: $NODE_ROLE"
+          cat > /tmp/aws-auth.yaml << 'YAML'
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: aws-auth
+            namespace: kube-system
+          data:
+            mapRoles: |
+              - rolearn: REPLACE_NODE_ROLE
+                username: system:node:{{EC2PrivateDNSName}}
+                groups:
+                  - system:bootstrappers
+                  - system:nodes
+          YAML
+          sed -i "" "s#REPLACE_NODE_ROLE#${NODE_ROLE//#/\\#}#" /tmp/aws-auth.yaml || sed -i "s#REPLACE_NODE_ROLE#${NODE_ROLE//#/\\#}#" /tmp/aws-auth.yaml
+          kubectl apply -f /tmp/aws-auth.yaml
+
+      - name: Wait for nodes to register
+        shell: bash
+        run: |
+          for i in {1..30}; do
+            READY=$(kubectl get nodes --no-headers 2>/dev/null | wc -l | tr -d ' ')
+            if [ "$READY" -ge 1 ]; then
+              kubectl get nodes -o wide
+              exit 0
+            fi
+            echo "waiting for nodes to register... ($i/30)"
+            sleep 10
+          done
+          echo "No nodes registered after waiting." >&2
+          kubectl get events -A || true
+          exit 1
+
       - name: Setup Helm and install operators (CRDs)
         uses: azure/setup-helm@v4
         with:
