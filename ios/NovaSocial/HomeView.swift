@@ -1,21 +1,32 @@
 import SwiftUI
 
 struct HomeView: View {
+    @Binding var currentPage: AppPage
     @Environment(\.dismiss) var dismiss
     @State private var showReportView = false
     @State private var showThankYouView = false
     @State private var showNewPost = false
+    @State private var showSearch = false
+    @State private var showNotification = false
 
     var body: some View {
         ZStack {
             // 条件渲染：根据状态即时切换视图
-            if showNewPost {
+            if showNotification {
+                NotificationView(showNotification: $showNotification)
+                    .transition(.identity)
+            } else if showSearch {
+                HSearchView(showSearch: $showSearch)
+                    .transition(.identity)
+            } else if showNewPost {
                 NewPostView(showNewPost: $showNewPost)
                     .transition(.identity)
             } else {
                 homeContent
             }
         }
+        .animation(.none, value: showNotification)
+        .animation(.none, value: showSearch)
         .animation(.none, value: showNewPost)
         .navigationBarBackButtonHidden(true)
         .sheet(isPresented: $showReportView) {
@@ -33,12 +44,11 @@ struct HomeView: View {
                 VStack(spacing: 0) {
                 // MARK: - 顶部导航栏
                 HStack {
-                    Button(action: { dismiss() }) {
+                    Button(action: { showSearch = true }) {
                         Image("Back-icon")
                             .resizable()
                             .scaledToFit()
                             .frame(width: 24, height: 24)
-                            .foregroundColor(.black)
                     }
                     Spacer()
                     Image("ICERED-icon")
@@ -46,12 +56,11 @@ struct HomeView: View {
                         .scaledToFit()
                         .frame(height: 18)
                     Spacer()
-                    Button(action: {}) {
+                    Button(action: { showNotification = true }) {
                         Image("Notice-icon")
                             .resizable()
                             .scaledToFit()
                             .frame(width: 24, height: 24)
-                            .foregroundColor(.black)
                     }
                 }
                 .frame(height: DesignTokens.topBarHeight)
@@ -190,7 +199,7 @@ struct HomeView: View {
 
                     // Message
                     VStack(spacing: 4) {
-                        Image("Message-icon")
+                        Image("Message-icon-black")
                             .resizable()
                             .scaledToFit()
                             .frame(width: 22, height: 22)
@@ -199,6 +208,9 @@ struct HomeView: View {
                             .foregroundColor(.black)
                     }
                     .frame(maxWidth: .infinity)
+                    .onTapGesture {
+                        currentPage = .message
+                    }
 
                     // New Post
                     NewPostButtonComponent(showNewPost: $showNewPost)
@@ -225,6 +237,9 @@ struct HomeView: View {
                             .foregroundColor(.black)
                     }
                     .frame(maxWidth: .infinity)
+                    .onTapGesture {
+                        currentPage = .account
+                    }
                 }
                 .frame(height: 60)
                 .padding(.bottom, 20)
@@ -458,5 +473,5 @@ struct NewPostButtonComponent: View {
 }
 
 #Preview {
-    HomeView()
+    HomeView(currentPage: .constant(.home))
 }

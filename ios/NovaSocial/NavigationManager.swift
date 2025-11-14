@@ -21,7 +21,7 @@ final class NavigationManager {
 
     /// 返回到根视图
     func popToRoot() {
-        path.removeAll()
+        path = NavigationPath()
     }
 
     /// 检查导航栈是否为空
