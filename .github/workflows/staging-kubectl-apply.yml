@@ -54,6 +54,11 @@ jobs:
           curl -sLo /usr/local/bin/kubectl https://dl.k8s.io/release/v1.28.0/bin/linux/amd64/kubectl
           chmod +x /usr/local/bin/kubectl
 
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig --region "$AWS_REGION" --name "$CLUSTER_NAME"
+          kubectl cluster-info || true
+
       - name: Setup Helm and install operators (CRDs)
         uses: azure/setup-helm@v4
         with:
@@ -81,11 +86,6 @@ jobs:
             kubectl get crd | grep -q clickhouseinstallations.clickhouse.altinity.com && break; \
             sleep 6; \
           done
-
-      - name: Update kubeconfig
-        run: |
-          aws eks update-kubeconfig --region "$AWS_REGION" --name "$CLUSTER_NAME"
-          kubectl cluster-info || true
 
       - name: Render overlay (staging)
         run: |
