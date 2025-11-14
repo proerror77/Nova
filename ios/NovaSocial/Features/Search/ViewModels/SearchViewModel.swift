@@ -14,6 +14,10 @@ class SearchViewModel: ObservableObject {
     @Published var isSearching = false
     @Published var errorMessage: String?
 
+    // MARK: - Services
+
+    private let searchService = SearchService()
+
     // MARK: - Actions
 
     func performSearch() async {
@@ -25,17 +29,20 @@ class SearchViewModel: ObservableObject {
         isSearching = true
         errorMessage = nil
 
-        // TODO: Implement SearchService.searchAll()
-        // Example:
-        // do {
-        //     let results = try await searchService.searchAll(
-        //         query: searchQuery,
-        //         filter: selectedFilter
-        //     )
-        //     searchResults = results
-        // } catch {
-        //     errorMessage = "Search failed: \(error.localizedDescription)"
-        // }
+        do {
+            searchResults = try await searchService.searchAll(
+                query: searchQuery,
+                filter: selectedFilter,
+                limit: 30,
+                offset: 0
+            )
+
+            // Save to recent searches
+            searchService.saveRecentSearch(searchQuery)
+        } catch {
+            errorMessage = "Search failed: \(error.localizedDescription)"
+            searchResults = []
+        }
 
         isSearching = false
     }
@@ -46,13 +53,15 @@ class SearchViewModel: ObservableObject {
             return
         }
 
-        // TODO: Implement SearchService.getSuggestions()
-        // Example:
-        // do {
-        //     searchSuggestions = try await searchService.getSuggestions(query: searchQuery)
-        // } catch {
-        //     // Silent fail for suggestions
-        // }
+        do {
+            searchSuggestions = try await searchService.getSuggestions(
+                query: searchQuery,
+                limit: 10
+            )
+        } catch {
+            // Silent fail for suggestions - don't show error to user
+            searchSuggestions = []
+        }
     }
 
     func clearSearch() {

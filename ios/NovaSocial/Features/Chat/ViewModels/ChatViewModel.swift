@@ -13,19 +13,25 @@ class ChatViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var errorMessage: String?
 
+    // MARK: - Services
+
+    private let communicationService = CommunicationService()
+
     // MARK: - Lifecycle
 
     func loadConversations() async {
         isLoading = true
         errorMessage = nil
 
-        // TODO: Implement CommunicationService.getConversations()
-        // Example:
-        // do {
-        //     conversations = try await communicationService.getConversations()
-        // } catch {
-        //     errorMessage = "Failed to load conversations: \(error.localizedDescription)"
-        // }
+        do {
+            conversations = try await communicationService.getConversations(
+                limit: 50,
+                offset: 0
+            )
+        } catch {
+            errorMessage = "Failed to load conversations: \(error.localizedDescription)"
+            conversations = []
+        }
 
         isLoading = false
     }
@@ -44,31 +50,45 @@ class ChatViewModel: ObservableObject {
         isLoading = true
         errorMessage = nil
 
-        // TODO: Implement CommunicationService.getMessages()
-        // Example:
-        // do {
-        //     messages = try await communicationService.getMessages(conversationId: conversationId)
-        // } catch {
-        //     errorMessage = "Failed to load messages: \(error.localizedDescription)"
-        // }
+        do {
+            messages = try await communicationService.getMessages(
+                conversationId: conversationId,
+                limit: 100,
+                offset: 0
+            )
+        } catch {
+            errorMessage = "Failed to load messages: \(error.localizedDescription)"
+            messages = []
+        }
 
         isLoading = false
     }
 
     func sendMessage(_ text: String, to conversationId: String) async -> Bool {
-        // TODO: Implement CommunicationService.sendMessage()
-        // Example:
-        // do {
-        //     let message = try await communicationService.sendMessage(
-        //         conversationId: conversationId,
-        //         content: text
-        //     )
-        //     messages.append(message)
-        //     return true
-        // } catch {
-        //     errorMessage = "Failed to send message: \(error.localizedDescription)"
-        //     return false
-        // }
-        return false
+        guard !text.isEmpty else { return false }
+
+        do {
+            let message = try await communicationService.sendMessage(
+                conversationId: conversationId,
+                content: text,
+                mediaUrl: nil
+            )
+
+            // Optimistic update: append message to list
+            messages.append(message)
+
+            // Update conversation's last message
+            if let index = conversations.firstIndex(where: { $0.id == conversationId }) {
+                var updatedConversation = conversations[index]
+                conversations.remove(at: index)
+                // Move to top of list
+                conversations.insert(updatedConversation, at: 0)
+            }
+
+            return true
+        } catch {
+            errorMessage = "Failed to send message: \(error.localizedDescription)"
+            return false
+        }
     }
 }
