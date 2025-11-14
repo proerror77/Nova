@@ -301,6 +301,7 @@ patchesStrategicMerge:
 - messaging-service-env-patch.yaml
 - messaging-service-env-port-patch.yaml
 - messaging-service-probes-patch.yaml
+- messaging-cronjob-patch.yaml
 - content-service-env-patch.yaml
 # - content-service-probes-patch.yaml  # TODO: 检查 probe 配置
 - search-service-env-patch.yaml
