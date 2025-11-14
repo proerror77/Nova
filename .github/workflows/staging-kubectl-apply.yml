@@ -97,15 +97,11 @@ jobs:
           kubectl kustomize k8s/infrastructure/overlays/staging > /tmp/staging.yaml
           head -n 30 /tmp/staging.yaml
 
-      - name: Filter out ClickHouseInstallation (apply core first)
-        run: |
-          awk 'BEGIN{RS="\n---\n"; ORS="---\n"} {doc=$0; if (doc ~ /apiVersion:[ ]*clickhouse.altinity.com\/v1/ && doc ~ /kind:[ ]*ClickHouseInstallation/) next; print doc}' /tmp/staging.yaml > /tmp/staging-core.yaml
-          echo "Core manifest size:"; wc -l /tmp/staging-core.yaml || true
 
       - name: Apply to cluster
         run: |
           set -e
-          kubectl apply -f /tmp/staging-core.yaml
+          kubectl apply -f /tmp/staging.yaml || true
           kubectl get pods -n nova-staging -o wide
 
       - name: Summary
