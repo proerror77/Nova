@@ -3,9 +3,37 @@ import Foundation
 // MARK: - Social Service
 
 /// Manages social interactions using social-service backend
-/// Handles likes, comments, and shares on posts
+/// Handles likes, comments, shares, and feeds
 class SocialService {
     private let client = APIClient.shared
+
+    // MARK: - Feeds
+
+    /// Get user's personalized feed
+    func getUserFeed(userId: String, limit: Int = 20, cursor: String? = nil) async throws -> (posts: [Post], nextCursor: String?, hasMore: Bool) {
+        // TODO: Implement gRPC call to SocialService.GetUserFeed
+        // Example:
+        // let request = GetUserFeedRequest(user_id: userId, limit: limit, cursor: cursor)
+        // let response: GetUserFeedResponse = try await client.request(endpoint: "/social/feed", body: request)
+        // return (
+        //     posts: response.posts,
+        //     nextCursor: response.next_cursor,
+        //     hasMore: response.has_more
+        // )
+        throw APIError.notFound
+    }
+
+    /// Get explore/discover feed
+    func getExploreFeed(limit: Int = 20, cursor: String? = nil) async throws -> (posts: [Post], nextCursor: String?, hasMore: Bool) {
+        // TODO: Implement gRPC call to SocialService.GetExploreFeed
+        throw APIError.notFound
+    }
+
+    /// Get trending posts
+    func getTrendingPosts(limit: Int = 20) async throws -> [Post] {
+        // TODO: Implement gRPC call to SocialService.GetTrendingPosts
+        throw APIError.notFound
+    }
 
     // MARK: - Likes
 

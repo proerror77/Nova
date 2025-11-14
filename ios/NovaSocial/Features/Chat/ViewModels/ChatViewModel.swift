@@ -9,19 +9,9 @@ class ChatViewModel: ObservableObject {
 
     @Published var conversations: [Conversation] = []
     @Published var selectedConversation: Conversation?
+    @Published var messages: [Message] = []
     @Published var isLoading = false
     @Published var errorMessage: String?
-
-    // MARK: - Temporary Model (TODO: Move to Shared/Models)
-
-    struct Conversation: Identifiable {
-        let id: String
-        let userId: String
-        let username: String
-        let lastMessage: String
-        let timestamp: Date
-        let unreadCount: Int
-    }
 
     // MARK: - Lifecycle
 
@@ -29,7 +19,13 @@ class ChatViewModel: ObservableObject {
         isLoading = true
         errorMessage = nil
 
-        // TODO: Implement conversations loading from backend
+        // TODO: Implement CommunicationService.getConversations()
+        // Example:
+        // do {
+        //     conversations = try await communicationService.getConversations()
+        // } catch {
+        //     errorMessage = "Failed to load conversations: \(error.localizedDescription)"
+        // }
 
         isLoading = false
     }
@@ -38,9 +34,41 @@ class ChatViewModel: ObservableObject {
 
     func selectConversation(_ conversation: Conversation) {
         selectedConversation = conversation
+        // Load messages for this conversation
+        Task {
+            await loadMessages(for: conversation.id)
+        }
     }
 
-    func sendMessage(_ text: String, to conversationId: String) async {
-        // TODO: Implement message sending
+    func loadMessages(for conversationId: String) async {
+        isLoading = true
+        errorMessage = nil
+
+        // TODO: Implement CommunicationService.getMessages()
+        // Example:
+        // do {
+        //     messages = try await communicationService.getMessages(conversationId: conversationId)
+        // } catch {
+        //     errorMessage = "Failed to load messages: \(error.localizedDescription)"
+        // }
+
+        isLoading = false
+    }
+
+    func sendMessage(_ text: String, to conversationId: String) async -> Bool {
+        // TODO: Implement CommunicationService.sendMessage()
+        // Example:
+        // do {
+        //     let message = try await communicationService.sendMessage(
+        //         conversationId: conversationId,
+        //         content: text
+        //     )
+        //     messages.append(message)
+        //     return true
+        // } catch {
+        //     errorMessage = "Failed to send message: \(error.localizedDescription)"
+        //     return false
+        // }
+        return false
     }
 }

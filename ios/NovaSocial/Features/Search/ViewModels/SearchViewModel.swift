@@ -9,24 +9,10 @@ class SearchViewModel: ObservableObject {
 
     @Published var searchQuery: String = ""
     @Published var searchResults: [SearchResult] = []
+    @Published var searchSuggestions: [SearchSuggestion] = []
+    @Published var selectedFilter: SearchFilter = .all
     @Published var isSearching = false
     @Published var errorMessage: String?
-
-    // MARK: - Temporary Model (TODO: Move to Shared/Models)
-
-    enum SearchResult: Identifiable {
-        case user(id: String, username: String, displayName: String)
-        case post(id: String, content: String, author: String)
-        case hashtag(tag: String, postCount: Int)
-
-        var id: String {
-            switch self {
-            case .user(let id, _, _): return "user-\(id)"
-            case .post(let id, _, _): return "post-\(id)"
-            case .hashtag(let tag, _): return "tag-\(tag)"
-            }
-        }
-    }
 
     // MARK: - Actions
 
@@ -39,13 +25,46 @@ class SearchViewModel: ObservableObject {
         isSearching = true
         errorMessage = nil
 
-        // TODO: Implement search from backend
+        // TODO: Implement SearchService.searchAll()
+        // Example:
+        // do {
+        //     let results = try await searchService.searchAll(
+        //         query: searchQuery,
+        //         filter: selectedFilter
+        //     )
+        //     searchResults = results
+        // } catch {
+        //     errorMessage = "Search failed: \(error.localizedDescription)"
+        // }
 
         isSearching = false
+    }
+
+    func loadSuggestions() async {
+        guard !searchQuery.isEmpty else {
+            searchSuggestions = []
+            return
+        }
+
+        // TODO: Implement SearchService.getSuggestions()
+        // Example:
+        // do {
+        //     searchSuggestions = try await searchService.getSuggestions(query: searchQuery)
+        // } catch {
+        //     // Silent fail for suggestions
+        // }
     }
 
     func clearSearch() {
         searchQuery = ""
         searchResults = []
+        searchSuggestions = []
+    }
+
+    func selectFilter(_ filter: SearchFilter) {
+        selectedFilter = filter
+        Task {
+            await performSearch()
+        }
     }
 }
