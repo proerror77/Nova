@@ -8,28 +8,26 @@ class NotificationViewModel: ObservableObject {
     // MARK: - Published Properties
 
     @Published var notifications: [NotificationItem] = []
+    @Published var selectedFilter: NotificationFilter = .all
     @Published var unreadCount = 0
     @Published var isLoading = false
     @Published var errorMessage: String?
 
-    // MARK: - Temporary Model (TODO: Move to Shared/Models)
+    // MARK: - Computed Properties
 
-    struct NotificationItem: Identifiable {
-        let id: String
-        let type: NotificationType
-        let message: String
-        let timestamp: Date
-        let isRead: Bool
-        let relatedUserId: String?
-        let relatedPostId: String?
-    }
-
-    enum NotificationType {
-        case like
-        case comment
-        case follow
-        case mention
-        case share
+    var filteredNotifications: [NotificationItem] {
+        switch selectedFilter {
+        case .all:
+            return notifications
+        case .unread:
+            return notifications.filter { !$0.isRead }
+        case .mentions:
+            return notifications.filter { $0.type == .mention }
+        case .likes:
+            return notifications.filter { $0.type == .like }
+        case .comments:
+            return notifications.filter { $0.type == .comment }
+        }
     }
 
     // MARK: - Lifecycle
@@ -38,7 +36,17 @@ class NotificationViewModel: ObservableObject {
         isLoading = true
         errorMessage = nil
 
-        // TODO: Implement notifications loading from backend
+        // TODO: Implement CommunicationService.getNotifications()
+        // Example:
+        // do {
+        //     let response = try await communicationService.getNotifications(
+        //         unreadOnly: selectedFilter == .unread
+        //     )
+        //     notifications = response.notifications
+        //     unreadCount = response.unreadCount
+        // } catch {
+        //     errorMessage = "Failed to load notifications: \(error.localizedDescription)"
+        // }
 
         isLoading = false
     }
@@ -46,10 +54,34 @@ class NotificationViewModel: ObservableObject {
     // MARK: - Actions
 
     func markAsRead(_ notificationId: String) async {
-        // TODO: Implement mark as read
+        // TODO: Implement CommunicationService.markNotificationRead()
+        // Example:
+        // do {
+        //     try await communicationService.markNotificationRead(id: notificationId)
+        //     if let index = notifications.firstIndex(where: { $0.id == notificationId }) {
+        //         var updated = notifications[index]
+        //         updated.isRead = true
+        //         notifications[index] = updated
+        //         unreadCount = max(0, unreadCount - 1)
+        //     }
+        // } catch {
+        //     errorMessage = "Failed to mark as read: \(error.localizedDescription)"
+        // }
     }
 
     func markAllAsRead() async {
-        // TODO: Implement mark all as read
+        // TODO: Implement CommunicationService.markAllNotificationsRead()
+        // Example:
+        // do {
+        //     try await communicationService.markAllNotificationsRead()
+        //     notifications = notifications.map { var updated = $0; updated.isRead = true; return updated }
+        //     unreadCount = 0
+        // } catch {
+        //     errorMessage = "Failed to mark all as read: \(error.localizedDescription)"
+        // }
+    }
+
+    func selectFilter(_ filter: NotificationFilter) {
+        selectedFilter = filter
     }
 }
