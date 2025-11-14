@@ -1,0 +1,125 @@
+config:
+  target: "http://localhost:8080"
+  phases:
+    # 逐步加压到连接池极限
+    - duration: 60
+      arrivalRate: 50
+      rampTo: 100
+      name: "Ramp up to pool limit"
+
+    # 保持峰值流量
+    - duration: 120
+      arrivalRate: 100
+      name: "Sustained peak load"
+
+    # 突发流量 (测试连接池饱和)
+    - duration: 30
+      arrivalRate: 200
+      name: "Connection pool saturation test"
+
+  # 监控指标
+  ensure:
+    maxErrorRate: 5         # 允许 5% 错误 (连接池饱和时)
+    p95: 1000               # P95 < 1s
+    medianLatency: 300      # 中位数 < 300ms
+
+scenarios:
+  # 场景 1: 数据库密集查询 (JOIN + 聚合)
+  - name: "Heavy Database Query"
+    weight: 40
+    flow:
+      - post:
+          url: "/graphql"
+          json:
+            query: |
+              query ComplexQuery($userId: ID!) {
+                user(id: $userId) {
+                  posts(limit: 50) {
+                    comments(limit: 20) {
+                      author { username }
+                    }
+                    likes(limit: 100) {
+                      user { id }
+                    }
+                  }
+                  followers(limit: 100) {
+                    posts(limit: 10) {
+                      id
+                    }
+                  }
+                }
+              }
+            variables:
+              userId: "{{ $randomString() }}"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          capture:
+            - json: "$.errors[0].message"
+              as: "errorMessage"
+              strict: false
+      - think: 1
+
+  # 场景 2: 写操作并发 (测试事务锁)
+  - name: "Concurrent Writes"
+    weight: 30
+    flow:
+      - post:
+          url: "/graphql"
+          json:
+            query: |
+              mutation UpdateUser($input: UpdateUserInput!) {
+                updateUser(input: $input) {
+                  id
+                  username
+                }
+              }
+            variables:
+              input:
+                bio: "Updated at {{ $timestamp() }}"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+
+  # 场景 3: 长时间持有连接 (测试超时)
+  - name: "Long Running Query"
+    weight: 20
+    flow:
+      - post:
+          url: "/graphql"
+          json:
+            query: |
+              query SlowQuery {
+                analytics {
+                  trendingPosts(
+                    timeWindow: WEEK,
+                    limit: 1000
+                  ) {
+                    id
+                    score
+                  }
+                }
+              }
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          timeout: 10  # 10秒超时
+
+  # 场景 4: Feed 刷新 (批量查询)
+  - name: "Batch Feed Generation"
+    weight: 10
+    flow:
+      - post:
+          url: "/graphql"
+          json:
+            query: |
+              query BatchFeed {
+                feed(limit: 100) {
+                  id
+                  content
+                  author {
+                    id
+                    username
+                    followers { totalCount }
+                  }
+                }
+              }
+          headers:
+            Authorization: "Bearer {{ authToken }}"

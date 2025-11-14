@@ -8,10 +8,8 @@ terraform {
     }
   }
 
-  # S3 远程后端配置
-  # 实际配置通过 backend.hcl 文件注入
-  backend "s3" {
-  }
+  # 本地后端（临时用于本地部署/测试）
+  backend "local" {}
 }
 
 provider "aws" {

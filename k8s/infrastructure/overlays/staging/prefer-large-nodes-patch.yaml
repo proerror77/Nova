@@ -2,7 +2,6 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: feed-service
-  namespace: nova
 spec:
   template:
     spec:
@@ -20,7 +19,6 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: messaging-service
-  namespace: nova
 spec:
   template:
     spec:
@@ -38,7 +36,6 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: search-service
-  namespace: nova
 spec:
   template:
     spec:
@@ -52,21 +49,3 @@ spec:
                 operator: In
                 values: ["large"]
 ---
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: streaming-service
-  namespace: nova
-spec:
-  template:
-    spec:
-      affinity:
-        nodeAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-          - weight: 100
-            preference:
-              matchExpressions:
-              - key: nodegroup
-                operator: In
-                values: ["large"]
-

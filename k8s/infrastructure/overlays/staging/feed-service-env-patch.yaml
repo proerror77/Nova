@@ -2,7 +2,6 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: feed-service
-  namespace: nova
 spec:
   template:
     spec:
@@ -16,5 +15,3 @@ spec:
             configMapKeyRef:
               name: nova-config
               key: KAFKA_BROKERS
-        - name: USER_SERVICE_GRPC_URL
-          value: http://user-service:9083

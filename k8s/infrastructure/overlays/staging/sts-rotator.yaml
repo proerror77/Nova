@@ -2,13 +2,13 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: sts-rotator
-  namespace: nova
+  namespace: nova-staging
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: sts-rotator-role
-  namespace: nova
+  namespace: nova-staging
 rules:
   - apiGroups: [""]
     resources: ["secrets"]
@@ -22,11 +22,11 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: sts-rotator-rb
-  namespace: nova
+  namespace: nova-staging
 subjects:
   - kind: ServiceAccount
     name: sts-rotator
-    namespace: nova
+    namespace: nova-staging
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
@@ -36,7 +36,7 @@ apiVersion: batch/v1
 kind: CronJob
 metadata:
   name: sts-rotate-patch
-  namespace: nova
+  namespace: nova-staging
 spec:
   schedule: "0 */4 * * *"
   concurrencyPolicy: Forbid
@@ -72,7 +72,7 @@ spec:
                   TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
                   CACERT=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt
                   API=https://kubernetes.default.svc
-                  ns=nova
+                  ns=nova-staging
                   # Patch secret
                   curl -sS -X PATCH "$API/api/v1/namespaces/$ns/secrets/nova-s3-credentials" \
                     -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/merge-patch+json' \

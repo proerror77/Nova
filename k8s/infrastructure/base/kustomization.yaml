@@ -3,7 +3,6 @@ kind: Kustomization
 
 metadata:
   name: nova-base
-  namespace: nova
 
 # 资源清单
 resources:
@@ -19,15 +18,16 @@ resources:
 # Do NOT include them here to avoid duplication and conflicts
 # Legacy service definitions (user-service.yaml, content-service.yaml, etc.) have been removed
 
-# 命名空间配置
-namespace: nova
+# NOTE: namespace 应由 overlay 设置（staging: nova-staging, production: nova-production）
+# 不在 base 设置 namespace，避免与 overlay 的 namespace 转换冲突
 
-# 通用标签
-commonLabels:
-  app: nova
-  managed-by: kustomize
+# 通用标签（仅保留与环境无关的固定标签）
+# 环境相关的标签（如 environment: staging/production）应在 overlay 中设置
+labels:
+  - pairs:
+      managed-by: kustomize
 
-# 通用注解
+# 通用注解（环境无关）
 commonAnnotations:
   deployment.kubernetes.io/revision: "1"
 

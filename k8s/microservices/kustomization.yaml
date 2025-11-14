@@ -32,7 +32,13 @@ resources:
   - identity-service-deployment.yaml
   
   - media-service-deployment.yaml
-  
+
+  - messaging-service-deployment.yaml
+  - messaging-service-service.yaml
+  - messaging-service-configmap.yaml
+  - messaging-service-secret.yaml
+  - messaging-service-serviceaccount.yaml
+
   - notification-service-deployment.yaml
   - notification-service-service.yaml
   - notification-service-configmap.yaml
@@ -64,19 +70,16 @@ resources:
   - trust-safety-service-configmap.yaml
   - trust-safety-service-secret.yaml
   - trust-safety-service-serviceaccount.yaml
-  
-  - user-service-deployment.yaml
 
   # API Gateway (separate)
   - api-gateway/deployment.yaml
-  
+
   # Infrastructure and support services
   - ingress.yaml
   - ingress-tls-setup.yaml
   # NOTE: prometheus-monitoring-setup.yaml commented out due to namespace conflicts
   # with staging overlay's namespace transformation. Deploy monitoring separately if needed.
   # - prometheus-monitoring-setup.yaml
-  - gitops-argocd-setup.yaml
   - s3-configmap.yaml
   - s3-secret.yaml
   - messaging-service-cronjobs.yaml

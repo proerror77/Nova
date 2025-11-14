@@ -33,6 +33,7 @@ RUN apt-get update && \
     ca-certificates \
     libssl3 \
     curl \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

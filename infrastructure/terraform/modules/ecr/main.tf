@@ -5,7 +5,7 @@
 resource "aws_ecr_repository" "nova_services" {
   for_each = toset(var.services)
 
-  repository_name            = "${var.ecr_registry_alias}/${each.value}"
+  name                       = "${var.ecr_registry_alias}/${each.value}"
   image_tag_mutability       = "MUTABLE"
   image_scanning_configuration {
     scan_on_push = true

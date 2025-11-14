@@ -11,5 +11,5 @@ spec:
       port: 8080
       targetPort: 8080
     - name: grpc
-      port: 9091
-      targetPort: 9091
+      port: 9080
+      targetPort: 9080
