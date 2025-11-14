@@ -6,26 +6,7 @@ namespace: nova-staging
 # Strategic merge patches for staging environment
 # Using JSON 6902 patches with explicit namespace targeting
 # This allows patches to work correctly with nested kustomizations
-patchesJson6902:
-- target:
-    group: apps
-    version: v1
-    kind: Deployment
-    name: user-service
-    namespace: nova-staging
-  patch: |-
-    - op: replace
-      path: /spec/template/spec/containers/0/imagePullPolicy
-      value: Always
-    - op: replace
-      path: /spec/template/spec/containers/0/resources
-      value:
-        requests:
-          cpu: 100m
-          memory: 256Mi
-        limits:
-          cpu: 500m
-          memory: 512Mi
+patches:
 - target:
     group: apps
     version: v1
@@ -306,29 +287,30 @@ patchesJson6902:
           port: 8086
           targetPort: 8086
           protocol: TCP
+
+# Migrated strategic merge patches to unified 'patches'
 # 启用以下 patches 以完整配置 staging 环境
-- secrets-patch.yaml
-- configmap-patch.yaml
-- deployment-images-patch.yaml
-- postgres-deploy-patch.yaml
-- service-selectors-patch.yaml
-- redis-deploy-patch.yaml
-- deploy-labels-patch.yaml
-- user-service-env-patch.yaml
-- user-service-probes-patch.yaml
-- feed-service-env-patch.yaml
+# ❌ REMOVED: secrets-patch.yaml - 含明文密钥，已移至 docs/samples 作为示例
+- path: configmap-patch.yaml
+- path: deployment-images-patch.yaml
+- path: postgres-deploy-patch.yaml
+- path: service-selectors-patch.yaml
+- path: redis-deploy-patch.yaml
+- path: deploy-labels-patch.yaml
+- path: feed-service-env-patch.yaml
 # - feed-service-probes-patch.yaml  # TODO: 检查 probe 配置
-- messaging-service-env-patch.yaml
-- messaging-service-env-port-patch.yaml
-- messaging-service-probes-patch.yaml
-- content-service-env-patch.yaml
+- path: messaging-service-env-patch.yaml
+- path: messaging-service-env-port-patch.yaml
+- path: messaging-service-probes-patch.yaml
+- path: content-service-env-patch.yaml
 # - content-service-probes-patch.yaml  # TODO: 检查 probe 配置
-- search-service-env-patch.yaml
-- elasticsearch-replicas-patch.yaml
-- s3-env-patch.yaml
-- hpa-min1-patch.yaml
-- prefer-large-nodes-patch.yaml
+- path: search-service-env-patch.yaml
+- path: elasticsearch-replicas-patch.yaml
+- path: s3-env-patch.yaml
+- path: prefer-large-nodes-patch.yaml
 # - resource-optimization-patch.yaml  # 可选：资源优化
+
+# Remove deprecated/retired services from staging (none currently included)
 # Note: ClickHouse 需要额外的网络隔离 patches
 
 images:
@@ -371,9 +353,6 @@ images:
 - name: nova/trust-safety-service
   newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/trust-safety-service
   newTag: c849ea7287e61bc77123ee9d58b3f47cb2901cb5
-- name: nova/user-service
-  newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/user-service
-  newTag: c849ea7287e61bc77123ee9d58b3f47cb2901cb5
 
 # TODO: Re-enable replicas after resources are properly discovered
 #replicas:
@@ -411,8 +390,7 @@ commonAnnotations:
   environment: staging
 
 resources:
-- namespace-patch.yaml
-- ../../../base
+- ../../base
 - postgres-pvc-gp3.yaml
 - clickhouse-pvc.yaml
 - sts-rotator.yaml
@@ -430,8 +408,7 @@ resources:
 # ========================================
 # P0 Priority: Core Service Infrastructure
 # ========================================
-# gRPC service discovery and networking
-- grpc-services.yaml
+# gRPC service discovery和 networking 交由 microservices 自带 Service 定义管理，避免重复
 
 # Database migration job (runs before services start)
 - sqlx-migrate-job.yaml
@@ -443,7 +420,8 @@ resources:
 # P1 Priority: Service Startup Orchestration
 # ========================================
 # Init containers for dependency ordering
-- service-init-containers-patch.yaml
+# ❌ COMMENTED: service-init-containers-patch.yaml - 导致资源ID冲突
+# - service-init-containers-patch.yaml
 
 # ========================================
 # P2 Priority: Data & Event Infrastructure
@@ -462,6 +440,12 @@ resources:
 # ========================================
 # Protocol Buffer definitions and service registry
 - proto-management.yaml
+
+# ========================================
+# P4 Priority: Microservice Deployments
+# ========================================
+# All application service deployments from microservices directory kustomization
+- ../../../microservices
 
 # ========================================
 # PgBouncer connection pooling (P1 Priority)

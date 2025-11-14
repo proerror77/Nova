@@ -2,7 +2,7 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: nova-ch-data
-  namespace: nova
+  namespace: nova-staging
 spec:
   accessModes:
   - ReadWriteOnce

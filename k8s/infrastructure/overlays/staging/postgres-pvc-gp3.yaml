@@ -2,7 +2,7 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: postgres-pvc-gp3
-  namespace: nova
+  namespace: nova-staging
 spec:
   accessModes:
     - ReadWriteOnce

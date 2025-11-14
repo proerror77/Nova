@@ -1,0 +1,20 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: nova-staging
+
+#最小测试：引用 microservices 目录
+patchesJson6902:
+- target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: analytics-service
+    namespace: nova-staging
+  patch: |-
+    - op: replace
+      path: /spec/template/spec/containers/0/imagePullPolicy
+      value: Always
+
+resources:
+- ../../../microservices

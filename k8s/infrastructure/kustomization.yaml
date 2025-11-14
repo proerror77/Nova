@@ -3,10 +3,10 @@ kind: Kustomization
 
 metadata:
   name: nova
-  namespace: nova
 
 # Namespace
-namespace: nova
+# Namespace is set by overlays
+# namespace: nova
 
 # Resources to deploy
 resources:
@@ -21,10 +21,11 @@ resources:
   - hpa.yaml
 
 # Common labels applied to all resources
-commonLabels:
-  app: nova
-  version: v1
-  managed-by: kustomize
+labels:
+  - pairs:
+      app: nova
+      version: v1
+      managed-by: kustomize
 
 # Common annotations applied to all resources
 commonAnnotations:

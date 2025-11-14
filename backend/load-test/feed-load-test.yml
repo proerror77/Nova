@@ -1,0 +1,164 @@
+config:
+  target: "http://localhost:8080"
+  phases:
+    # Phase 1: 预热缓存 (低流量)
+    - duration: 30
+      arrivalRate: 5
+      name: "Warm-up phase"
+
+    # Phase 2: 稳定负载 (目标流量)
+    - duration: 180
+      arrivalRate: 50
+      name: "Sustained load"
+
+    # Phase 3: 峰值测试 (2x 流量)
+    - duration: 60
+      arrivalRate: 100
+      name: "Peak load spike"
+
+    # Phase 4: 恢复 (降低流量)
+    - duration: 30
+      arrivalRate: 20
+      name: "Recovery"
+
+  # 测试数据池
+  payload:
+    path: "./test-users.csv"
+    fields:
+      - "userId"
+      - "authToken"
+
+  # 性能目标
+  ensure:
+    maxErrorRate: 1    # 错误率 < 1%
+    p95: 500           # P95 延迟 < 500ms
+    p99: 1000          # P99 延迟 < 1s
+
+  plugins:
+    expect: {}
+    metrics-by-endpoint:
+      # 按端点分组指标
+      stripQueryString: true
+
+scenarios:
+  # 场景 1: Feed 生成 (最热路径)
+  - name: "Generate Feed"
+    weight: 60  # 60% 流量
+    flow:
+      - post:
+          url: "/graphql"
+          json:
+            query: |
+              query GetFeed($limit: Int!) {
+                feed(limit: $limit) {
+                  id
+                  content
+                  author {
+                    id
+                    username
+                    avatar
+                  }
+                  createdAt
+                  likesCount
+                  commentsCount
+                }
+              }
+            variables:
+              limit: 50
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+            Content-Type: "application/json"
+          capture:
+            - json: "$.data.feed[0].id"
+              as: "firstPostId"
+          expect:
+            - statusCode: 200
+            - contentType: json
+            - hasProperty: data.feed
+      - think: 3  # 用户阅读时间
+
+  # 场景 2: 用户资料查询
+  - name: "View User Profile"
+    weight: 20  # 20% 流量
+    flow:
+      - post:
+          url: "/graphql"
+          json:
+            query: |
+              query GetUser($id: ID!) {
+                user(id: $id) {
+                  id
+                  username
+                  bio
+                  followersCount
+                  followingCount
+                  posts(limit: 10) {
+                    id
+                    content
+                    createdAt
+                  }
+                }
+              }
+            variables:
+              id: "{{ userId }}"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          expect:
+            - statusCode: 200
+      - think: 2
+
+  # 场景 3: Post 详情 + 评论
+  - name: "View Post Details"
+    weight: 15  # 15% 流量
+    flow:
+      - post:
+          url: "/graphql"
+          json:
+            query: |
+              query GetPost($id: ID!) {
+                post(id: $id) {
+                  id
+                  content
+                  author { id username }
+                  comments(limit: 20) {
+                    id
+                    content
+                    author { username }
+                  }
+                  likes(limit: 50) {
+                    user { username }
+                  }
+                }
+              }
+            variables:
+              id: "{{ firstPostId }}"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          expect:
+            - statusCode: 200
+
+  # 场景 4: 创建 Post (写操作)
+  - name: "Create Post"
+    weight: 5  # 5% 流量
+    flow:
+      - post:
+          url: "/graphql"
+          json:
+            query: |
+              mutation CreatePost($input: CreatePostInput!) {
+                createPost(input: $input) {
+                  id
+                  content
+                  createdAt
+                }
+              }
+            variables:
+              input:
+                content: "Load test post {{ $randomString() }}"
+                visibility: "PUBLIC"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          expect:
+            - statusCode: 200
+            - hasProperty: data.createPost.id
+      - think: 1

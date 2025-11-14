@@ -26,6 +26,7 @@ RUN apt-get update && apt-get install -y \
     ca-certificates \
     libssl3 \
     librdkafka1 \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user and group
@@ -40,13 +41,13 @@ RUN chown -R appuser:appuser /app
 USER appuser
 
 ENV RUST_LOG=info
-ENV APP_PORT=8000
+ENV APP_PORT=8080
 ENV DATABASE_URL=postgresql://localhost/nova
 ENV KAFKA_BOOTSTRAP_SERVERS=kafka:9092
 
-EXPOSE 8000
+EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
+    CMD curl -f http://localhost:8080/health || exit 1
 
 CMD ["/app/feed-service"]

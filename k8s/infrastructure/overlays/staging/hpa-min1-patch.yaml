@@ -2,7 +2,6 @@ apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
   name: user-service-hpa
-  namespace: nova
 spec:
   minReplicas: 1
 ---
@@ -10,7 +9,6 @@ apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
   name: content-service-hpa
-  namespace: nova
 spec:
   minReplicas: 1
 ---
@@ -18,7 +16,6 @@ apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
   name: media-service-hpa
-  namespace: nova
 spec:
   minReplicas: 1
 ---
@@ -26,6 +23,5 @@ apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
   name: messaging-service-hpa
-  namespace: nova
 spec:
   minReplicas: 1

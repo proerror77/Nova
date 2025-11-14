@@ -4,14 +4,6 @@
 # Port: 9000 (TCP native protocol), 8123 (HTTP)
 
 ---
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: clickhouse-operator
-  labels:
-    app: clickhouse-operator
-
----
 # ClickHouse configuration ConfigMap
 apiVersion: v1
 kind: ConfigMap

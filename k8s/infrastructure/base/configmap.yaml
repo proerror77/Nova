@@ -1,10 +1,10 @@
 ---
 # 全局应用配置
+# NOTE: namespace 由 overlay 的顶层 namespace 字段设置
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: nova-config
-  namespace: nova
 data:
   # 环境
   APP_ENV: production

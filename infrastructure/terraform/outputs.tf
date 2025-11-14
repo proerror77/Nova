@@ -85,15 +85,6 @@ output "oidc_provider_url" {
 # ECR Outputs
 # ============================================================================
 
-output "ecr_registry_url" {
-  description = "ECR registry URL"
-  value       = module.ecr.registry_url
-}
-
-output "ecr_repositories" {
-  description = "Map of ECR repository names to their URLs"
-  value       = module.ecr.repository_urls
-}
 
 # ============================================================================
 # Kubectl Configuration

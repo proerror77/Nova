@@ -14,12 +14,9 @@ terraform {
     }
   }
 
-  backend "s3" {
-    bucket         = "nova-terraform-state"
-    key            = "eks/terraform.tfstate"
-    region         = "ap-northeast-1"
-    encrypt        = true
-    dynamodb_table = "terraform-locks"
+  # Temporary local backend to bypass STS connectivity issue during init
+  backend "local" {
+    path = "terraform.tfstate"
   }
 }
 

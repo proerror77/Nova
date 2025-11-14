@@ -2,7 +2,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: resource-optimization-info
-  namespace: nova
+  namespace: nova-staging
 data:
   optimization-summary: |
     ## Resource Optimization Summary
