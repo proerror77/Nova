@@ -12,6 +12,7 @@ env:
   AWS_REGION: ap-northeast-1
   CLUSTER_NAME: nova-staging
   ROLE_TO_ASSUME: arn:aws:iam::025434362120:role/github-actions-role
+  ESO_CHART_VERSION: "0.9.13"
 
 concurrency:
   group: staging-kubectl-apply
@@ -107,6 +108,18 @@ jobs:
         with:
           version: v3.14.4
 
+      - name: Pre-install External Secrets CRDs (pinned chart)
+        run: |
+          set -e
+          rm -rf /tmp/eso-chart && mkdir -p /tmp/eso-chart
+          helm repo add external-secrets https://charts.external-secrets.io
+          helm repo update
+          helm pull external-secrets/external-secrets --version "$ESO_CHART_VERSION" --untar --untardir /tmp/eso-chart
+          # Apply CRDs first to avoid Helm wait/uninstall flakiness and unknown-field warnings causing requeues
+          if [ -d /tmp/eso-chart/external-secrets/crds ]; then
+            kubectl apply -f /tmp/eso-chart/external-secrets/crds
+          fi
+
       - name: Clean up ESO release if locked (pending)
         run: |
           set -e
@@ -133,7 +146,8 @@ jobs:
           n=0
           until [ "$n" -ge 3 ]; do
             if helm upgrade --install external-secrets external-secrets/external-secrets \
-              -n external-secrets-system --create-namespace --wait --timeout 15m; then
+              -n external-secrets-system --create-namespace --version "$ESO_CHART_VERSION" --skip-crds \
+              --wait --timeout 20m; then
               break
             fi
             n=$((n+1))
