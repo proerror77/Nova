@@ -15,6 +15,7 @@ class ProfileViewModel: ObservableObject {
 
     // MARK: - Services
 
+    private let userService = UserService()
     private let graphService = GraphService()
     private let socialService = SocialService()
     private let contentService = ContentService()
@@ -41,14 +42,14 @@ class ProfileViewModel: ObservableObject {
         errorMessage = nil
 
         do {
-            // TODO: Fetch user profile from a user profile service
-            // For now, using mock data or need to implement a separate UserProfileService
-            // that fetches user details (not managed by GraphService)
+            // Fetch user profile from UserService
+            userProfile = try await userService.getUser(userId: userId)
 
             // Load initial content based on selected tab
             await loadContent(for: selectedTab)
         } catch {
             handleError(error)
+            userProfile = nil
         }
 
         isLoading = false
@@ -95,17 +96,14 @@ class ProfileViewModel: ObservableObject {
         errorMessage = nil
 
         do {
+            // Upload image to MediaService
             let avatarUrl = try await mediaService.uploadImage(image: imageData, userId: userId)
 
-            // TODO: Update profile with new avatar URL
-            // Need a separate UserProfileService to update user profile details
-            // GraphService only handles follow/follower relationships
-
-            // For now, just update local state
-            if var profile = userProfile {
-                // Note: This is a workaround. Need proper update endpoint
-                errorMessage = "Avatar uploaded to \(avatarUrl), but profile update not implemented yet"
-            }
+            // Update profile with new avatar URL
+            userProfile = try await userService.updateProfile(
+                userId: userId,
+                avatarUrl: avatarUrl
+            )
         } catch {
             handleError(error)
         }

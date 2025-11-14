@@ -13,6 +13,10 @@ class NotificationViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var errorMessage: String?
 
+    // MARK: - Services
+
+    private let communicationService = CommunicationService()
+
     // MARK: - Computed Properties
 
     var filteredNotifications: [NotificationItem] {
@@ -36,17 +40,19 @@ class NotificationViewModel: ObservableObject {
         isLoading = true
         errorMessage = nil
 
-        // TODO: Implement CommunicationService.getNotifications()
-        // Example:
-        // do {
-        //     let response = try await communicationService.getNotifications(
-        //         unreadOnly: selectedFilter == .unread
-        //     )
-        //     notifications = response.notifications
-        //     unreadCount = response.unreadCount
-        // } catch {
-        //     errorMessage = "Failed to load notifications: \(error.localizedDescription)"
-        // }
+        do {
+            let response = try await communicationService.getNotifications(
+                unreadOnly: selectedFilter == .unread,
+                limit: 50,
+                offset: 0
+            )
+            notifications = response.notifications
+            unreadCount = response.unreadCount
+        } catch {
+            errorMessage = "Failed to load notifications: \(error.localizedDescription)"
+            notifications = []
+            unreadCount = 0
+        }
 
         isLoading = false
     }
@@ -54,31 +60,87 @@ class NotificationViewModel: ObservableObject {
     // MARK: - Actions
 
     func markAsRead(_ notificationId: String) async {
-        // TODO: Implement CommunicationService.markNotificationRead()
-        // Example:
-        // do {
-        //     try await communicationService.markNotificationRead(id: notificationId)
-        //     if let index = notifications.firstIndex(where: { $0.id == notificationId }) {
-        //         var updated = notifications[index]
-        //         updated.isRead = true
-        //         notifications[index] = updated
-        //         unreadCount = max(0, unreadCount - 1)
-        //     }
-        // } catch {
-        //     errorMessage = "Failed to mark as read: \(error.localizedDescription)"
-        // }
+        // Optimistic update: mark as read immediately in UI
+        guard let index = notifications.firstIndex(where: { $0.id == notificationId }) else { return }
+
+        let wasUnread = !notifications[index].isRead
+        var updated = notifications[index]
+        updated = NotificationItem(
+            id: updated.id,
+            type: updated.type,
+            message: updated.message,
+            timestamp: updated.timestamp,
+            isRead: true,
+            relatedUserId: updated.relatedUserId,
+            relatedPostId: updated.relatedPostId,
+            relatedCommentId: updated.relatedCommentId,
+            userAvatarUrl: updated.userAvatarUrl,
+            userName: updated.userName,
+            postThumbnailUrl: updated.postThumbnailUrl
+        )
+        notifications[index] = updated
+
+        if wasUnread {
+            unreadCount = max(0, unreadCount - 1)
+        }
+
+        // Send API request
+        do {
+            try await communicationService.markNotificationRead(id: notificationId)
+        } catch {
+            // Revert on error
+            notifications[index] = NotificationItem(
+                id: updated.id,
+                type: updated.type,
+                message: updated.message,
+                timestamp: updated.timestamp,
+                isRead: false,
+                relatedUserId: updated.relatedUserId,
+                relatedPostId: updated.relatedPostId,
+                relatedCommentId: updated.relatedCommentId,
+                userAvatarUrl: updated.userAvatarUrl,
+                userName: updated.userName,
+                postThumbnailUrl: updated.postThumbnailUrl
+            )
+            if wasUnread {
+                unreadCount += 1
+            }
+            errorMessage = "Failed to mark as read: \(error.localizedDescription)"
+        }
     }
 
     func markAllAsRead() async {
-        // TODO: Implement CommunicationService.markAllNotificationsRead()
-        // Example:
-        // do {
-        //     try await communicationService.markAllNotificationsRead()
-        //     notifications = notifications.map { var updated = $0; updated.isRead = true; return updated }
-        //     unreadCount = 0
-        // } catch {
-        //     errorMessage = "Failed to mark all as read: \(error.localizedDescription)"
-        // }
+        // Store original state for rollback
+        let originalNotifications = notifications
+        let originalUnreadCount = unreadCount
+
+        // Optimistic update: mark all as read
+        notifications = notifications.map { notification in
+            NotificationItem(
+                id: notification.id,
+                type: notification.type,
+                message: notification.message,
+                timestamp: notification.timestamp,
+                isRead: true,
+                relatedUserId: notification.relatedUserId,
+                relatedPostId: notification.relatedPostId,
+                relatedCommentId: notification.relatedCommentId,
+                userAvatarUrl: notification.userAvatarUrl,
+                userName: notification.userName,
+                postThumbnailUrl: notification.postThumbnailUrl
+            )
+        }
+        unreadCount = 0
+
+        // Send API request
+        do {
+            try await communicationService.markAllNotificationsRead()
+        } catch {
+            // Revert on error
+            notifications = originalNotifications
+            unreadCount = originalUnreadCount
+            errorMessage = "Failed to mark all as read: \(error.localizedDescription)"
+        }
     }
 
     func selectFilter(_ filter: NotificationFilter) {
