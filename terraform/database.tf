@@ -60,7 +60,7 @@ resource "aws_db_instance" "main" {
   monitoring_interval             = 60
   monitoring_role_arn             = aws_iam_role.rds_monitoring.arn
 
-  performance_insights_enabled    = true
+  performance_insights_enabled          = true
   performance_insights_retention_period = 7
 
   skip_final_snapshot       = var.environment != "production"
@@ -174,7 +174,7 @@ resource "aws_cloudwatch_metric_alarm" "rds_cpu" {
   }
 
   alarm_description = "RDS CPU utilization is too high"
-  alarm_actions     = []  # Add SNS topic ARN for alerts
+  alarm_actions     = [] # Add SNS topic ARN for alerts
 
   tags = {
     Name = "nova-${var.environment}-rds-cpu"
@@ -190,14 +190,14 @@ resource "aws_cloudwatch_metric_alarm" "rds_storage" {
   namespace           = "AWS/RDS"
   period              = 300
   statistic           = "Average"
-  threshold           = 10737418240  # 10 GB in bytes
+  threshold           = 10737418240 # 10 GB in bytes
 
   dimensions = {
     DBInstanceIdentifier = aws_db_instance.main.id
   }
 
   alarm_description = "RDS free storage space is too low"
-  alarm_actions     = []  # Add SNS topic ARN for alerts
+  alarm_actions     = [] # Add SNS topic ARN for alerts
 
   tags = {
     Name = "nova-${var.environment}-rds-storage"
@@ -220,7 +220,7 @@ resource "aws_cloudwatch_metric_alarm" "redis_cpu" {
   }
 
   alarm_description = "ElastiCache CPU utilization is too high"
-  alarm_actions     = []  # Add SNS topic ARN for alerts
+  alarm_actions     = [] # Add SNS topic ARN for alerts
 
   tags = {
     Name = "nova-${var.environment}-redis-cpu"
@@ -243,7 +243,7 @@ resource "aws_cloudwatch_metric_alarm" "redis_memory" {
   }
 
   alarm_description = "ElastiCache memory usage is too high"
-  alarm_actions     = []  # Add SNS topic ARN for alerts
+  alarm_actions     = [] # Add SNS topic ARN for alerts
 
   tags = {
     Name = "nova-${var.environment}-redis-memory"

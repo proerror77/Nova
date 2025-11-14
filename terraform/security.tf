@@ -2,106 +2,6 @@
 # IAM Roles
 # ============================================
 
-# ECS Task Execution Role (for pulling images and writing logs)
-resource "aws_iam_role" "ecs_task_execution" {
-  name = "nova-${var.environment}-ecs-task-execution"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Action = "sts:AssumeRole"
-        Effect = "Allow"
-        Principal = {
-          Service = "ecs-tasks.amazonaws.com"
-        }
-      }
-    ]
-  })
-}
-
-resource "aws_iam_role_policy_attachment" "ecs_task_execution" {
-  role       = aws_iam_role.ecs_task_execution.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
-}
-
-# Additional policy for ECR access
-resource "aws_iam_role_policy" "ecs_task_execution_ecr" {
-  name = "ecr-access"
-  role = aws_iam_role.ecs_task_execution.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Action = [
-          "ecr:GetAuthorizationToken",
-          "ecr:BatchCheckLayerAvailability",
-          "ecr:GetDownloadUrlForLayer",
-          "ecr:BatchGetImage"
-        ]
-        Resource = "*"
-      }
-    ]
-  })
-}
-
-# ECS Task Role (for application permissions)
-resource "aws_iam_role" "ecs_task" {
-  name = "nova-${var.environment}-ecs-task"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Action = "sts:AssumeRole"
-        Effect = "Allow"
-        Principal = {
-          Service = "ecs-tasks.amazonaws.com"
-        }
-      }
-    ]
-  })
-}
-
-# Task role policy for S3, SQS, SNS access
-resource "aws_iam_role_policy" "ecs_task" {
-  name = "application-permissions"
-  role = aws_iam_role.ecs_task.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Action = [
-          "s3:GetObject",
-          "s3:PutObject",
-          "s3:DeleteObject"
-        ]
-        Resource = "arn:aws:s3:::nova-${var.environment}-*/*"
-      },
-      {
-        Effect = "Allow"
-        Action = [
-          "sqs:SendMessage",
-          "sqs:ReceiveMessage",
-          "sqs:DeleteMessage"
-        ]
-        Resource = "arn:aws:sqs:${var.aws_region}:*:nova-*"
-      },
-      {
-        Effect = "Allow"
-        Action = [
-          "sns:Publish"
-        ]
-        Resource = "arn:aws:sns:${var.aws_region}:*:nova-*"
-      }
-    ]
-  })
-}
-
 # GitHub Actions Role (for CI/CD)
 resource "aws_iam_role" "github_actions" {
   name = "nova-${var.environment}-github-actions"
@@ -141,16 +41,6 @@ resource "aws_iam_role_policy" "github_actions" {
         ]
         Resource = "*"
       },
-      {
-        Effect = "Allow"
-        Action = [
-          "ecs:DescribeServices",
-          "ecs:DescribeTaskDefinition",
-          "ecs:RegisterTaskDefinition",
-          "ecs:UpdateService"
-        ]
-        Resource = "*"
-      }
     ]
   })
 }
@@ -163,7 +53,7 @@ resource "aws_iam_role_policy" "github_actions" {
 resource "aws_security_group" "alb" {
   name        = "nova-${var.environment}-alb"
   description = "Security group for Application Load Balancer"
-  vpc_id      = aws_vpc.main.id
+  vpc_id      = data.aws_vpc.main.id
 
   ingress {
     description = "HTTP from internet"
@@ -194,53 +84,18 @@ resource "aws_security_group" "alb" {
   }
 }
 
-# ECS Tasks Security Group
-resource "aws_security_group" "ecs_tasks" {
-  name        = "nova-${var.environment}-ecs-tasks"
-  description = "Security group for ECS tasks"
-  vpc_id      = aws_vpc.main.id
-
-  ingress {
-    description     = "HTTP from ALB"
-    from_port       = 0
-    to_port         = 65535
-    protocol        = "tcp"
-    security_groups = [aws_security_group.alb.id]
-  }
-
-  ingress {
-    description = "gRPC inter-service communication"
-    from_port   = 50051
-    to_port     = 50062
-    protocol    = "tcp"
-    self        = true
-  }
-
-  egress {
-    description = "Allow all outbound"
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  tags = {
-    Name = "nova-${var.environment}-ecs-tasks"
-  }
-}
-
 # RDS Security Group
 resource "aws_security_group" "rds" {
   name        = "nova-${var.environment}-rds"
   description = "Security group for RDS PostgreSQL"
-  vpc_id      = aws_vpc.main.id
+  vpc_id      = data.aws_vpc.main.id
 
   ingress {
-    description     = "PostgreSQL from ECS tasks"
+    description     = "PostgreSQL from EKS nodes"
     from_port       = 5432
     to_port         = 5432
     protocol        = "tcp"
-    security_groups = [aws_security_group.ecs_tasks.id]
+    security_groups = [aws_security_group.eks_nodes.id]
   }
 
   egress {
@@ -260,14 +115,14 @@ resource "aws_security_group" "rds" {
 resource "aws_security_group" "elasticache" {
   name        = "nova-${var.environment}-elasticache"
   description = "Security group for ElastiCache Redis"
-  vpc_id      = aws_vpc.main.id
+  vpc_id      = data.aws_vpc.main.id
 
   ingress {
-    description     = "Redis from ECS tasks"
+    description     = "Redis from EKS nodes"
     from_port       = 6379
     to_port         = 6379
     protocol        = "tcp"
-    security_groups = [aws_security_group.ecs_tasks.id]
+    security_groups = [aws_security_group.eks_nodes.id]
   }
 
   egress {

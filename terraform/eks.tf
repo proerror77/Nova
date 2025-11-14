@@ -39,7 +39,7 @@ resource "aws_iam_role_policy_attachment" "eks_vpc_resource_controller" {
 resource "aws_security_group" "eks_cluster" {
   name        = "nova-${var.environment}-eks-cluster-sg"
   description = "Security group for EKS cluster control plane"
-  vpc_id      = aws_vpc.main.id
+  vpc_id      = data.aws_vpc.main.id
 
   ingress {
     from_port   = 443
@@ -62,9 +62,9 @@ resource "aws_security_group" "eks_cluster" {
 
 # EKS Cluster
 resource "aws_eks_cluster" "main" {
-  name            = "nova-${var.environment}"
-  role_arn        = aws_iam_role.eks_cluster.arn
-  version         = "1.28"
+  name                      = "nova-${var.environment}"
+  role_arn                  = aws_iam_role.eks_cluster.arn
+  version                   = "1.28"
   enabled_cluster_log_types = ["api", "audit", "authenticator", "controllerManager", "scheduler"]
 
   vpc_config {
@@ -155,13 +155,13 @@ resource "aws_iam_role_policy" "eks_node_ecr_push" {
 resource "aws_security_group" "eks_nodes" {
   name        = "nova-${var.environment}-eks-nodes-sg"
   description = "Security group for EKS worker nodes"
-  vpc_id      = aws_vpc.main.id
+  vpc_id      = data.aws_vpc.main.id
 
   ingress {
-    from_port   = 0
-    to_port     = 65535
-    protocol    = "tcp"
-    self        = true
+    from_port = 0
+    to_port   = 65535
+    protocol  = "tcp"
+    self      = true
   }
 
   ingress {

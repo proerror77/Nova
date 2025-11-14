@@ -18,8 +18,8 @@ db_name           = "nova_production"
 db_username       = "nova_admin"
 
 # Redis Configuration
-redis_node_type        = "cache.r6g.large"
-redis_num_cache_nodes  = 3
+redis_node_type       = "cache.r6g.large"
+redis_num_cache_nodes = 3
 
 # ECR Configuration
 ecr_image_retention_count = 20

@@ -1,7 +1,7 @@
 variable "aws_region" {
   description = "AWS region for all resources"
   type        = string
-  default     = "us-east-1"
+  default     = "ap-northeast-1"
 }
 
 variable "environment" {
@@ -37,25 +37,7 @@ variable "vpc_cidr" {
 variable "availability_zones" {
   description = "List of availability zones"
   type        = list(string)
-  default     = ["us-east-1a", "us-east-1b"]
-}
-
-variable "ecs_task_cpu" {
-  description = "Fargate task CPU units (256, 512, 1024, 2048, 4096)"
-  type        = number
-  default     = 512
-}
-
-variable "ecs_task_memory" {
-  description = "Fargate task memory in MB (512, 1024, 2048, 4096, 8192)"
-  type        = number
-  default     = 1024
-}
-
-variable "ecs_task_count" {
-  description = "Number of ECS tasks to run per service"
-  type        = number
-  default     = 2
+  default     = ["ap-northeast-1a", "ap-northeast-1c"]
 }
 
 variable "db_instance_class" {
