@@ -1,0 +1,119 @@
+name: Terraform Backend Migration
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Migration action'
+        required: true
+        default: 'migrate'
+        type: choice
+        options:
+          - migrate
+          - verify
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: ap-northeast-1
+  TF_VERSION: 1.5.0
+
+jobs:
+  backend-migration:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::025434362120:role/nova-staging-github-actions
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: GitHubActions-TerraformMigration
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Verify AWS credentials
+        run: |
+          aws sts get-caller-identity
+          aws s3 ls s3://nova-terraform-state-025434362120/
+
+      - name: Upload local state to S3 (if migrate)
+        if: github.event.inputs.action == 'migrate'
+        run: |
+          echo "📤 Uploading local state to S3..."
+
+          # Check if local state exists
+          if [ -f terraform/terraform.tfstate ]; then
+            echo "✅ Found local state file"
+
+            # Upload to S3
+            aws s3 cp terraform/terraform.tfstate \
+              s3://nova-terraform-state-025434362120/staging/terraform.tfstate \
+              --region ${{ env.AWS_REGION }}
+
+            echo "✅ State uploaded to S3"
+          else
+            echo "⚠️ No local state file found"
+            exit 1
+          fi
+
+      - name: Initialize Terraform with S3 backend
+        working-directory: terraform
+        run: |
+          echo "🔄 Initializing Terraform with S3 backend..."
+
+          # Remove .terraform directory for clean init
+          rm -rf .terraform
+
+          # Initialize with S3 backend
+          terraform init -backend-config=backend.hcl
+
+      - name: Verify state migration
+        working-directory: terraform
+        run: |
+          echo "✅ Verifying state in S3..."
+
+          # List resources in state
+          echo "📊 Resources in state:"
+          terraform state list | tee /tmp/state_resources.txt
+
+          RESOURCE_COUNT=$(wc -l < /tmp/state_resources.txt)
+          echo ""
+          echo "Total resources: $RESOURCE_COUNT"
+
+          if [ "$RESOURCE_COUNT" -lt 1 ]; then
+            echo "❌ State appears empty!"
+            exit 1
+          fi
+
+          echo "✅ State verification successful"
+
+      - name: Terraform Plan
+        if: github.event.inputs.action == 'verify'
+        working-directory: terraform
+        run: |
+          echo "📋 Running Terraform plan..."
+          terraform plan -var-file=staging.tfvars -no-color | tee plan.txt
+
+          # Check for drift
+          if grep -q "No changes" plan.txt; then
+            echo "✅ No drift detected"
+          else
+            echo "⚠️ Configuration drift detected, review plan output"
+          fi
+
+      - name: Upload state backup
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-state-backup-${{ github.run_number }}
+          path: terraform/terraform.tfstate*
+          retention-days: 30

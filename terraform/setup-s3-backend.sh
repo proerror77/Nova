@@ -7,9 +7,9 @@
 set -e
 
 REGION="ap-northeast-1"
-BUCKET_NAME="nova-terraform-state"
 TABLE_NAME="nova-terraform-locks"
 AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+BUCKET_NAME="nova-terraform-state-${AWS_ACCOUNT_ID}"
 
 echo "🚀 Setting up Terraform S3 Backend..."
 echo "   Region: $REGION"
