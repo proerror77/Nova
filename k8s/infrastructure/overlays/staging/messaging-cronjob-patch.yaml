@@ -1,0 +1,9 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: messaging-requeue-stale-claims
+spec:
+  suspend: true
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 0
+  failedJobsHistoryLimit: 1
