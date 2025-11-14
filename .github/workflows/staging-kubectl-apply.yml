@@ -56,6 +56,34 @@ jobs:
           curl -s https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh | bash
           sudo mv kustomize /usr/local/bin/
 
+      - name: Setup Helm and install operators (CRDs)
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.14.4
+
+      - name: Install External Secrets Operator
+        run: |
+          helm repo add external-secrets https://charts.external-secrets.io
+          helm repo update
+          helm upgrade --install external-secrets external-secrets/external-secrets \
+            -n external-secrets-system --create-namespace
+          # wait for ESO deployment ready
+          kubectl rollout status -n external-secrets-system deploy/external-secrets --timeout=180s || true
+
+      - name: Install ClickHouse Operator (CRDs)
+        run: |
+          helm repo add altinity https://helm.clickhouse.tech
+          helm repo update
+          # Install operator in its own namespace
+          helm upgrade --install clickhouse-operator altinity/clickhouse-operator \
+            -n clickhouse-operator --create-namespace \
+            --set installCRDs=true
+          # wait for CRDs to appear
+          for i in {1..30}; do \
+            kubectl get crd | grep -q clickhouseinstallations.clickhouse.altinity.com && break; \
+            sleep 6; \
+          done
+
       - name: Update kubeconfig
         run: |
           aws eks update-kubeconfig --region "$AWS_REGION" --name "$CLUSTER_NAME"
@@ -78,4 +106,3 @@ jobs:
           echo "✅ kubectl apply completed (or attempted)." 
           echo "Check pods:" 
           echo "kubectl get pods -n nova-staging"
-
