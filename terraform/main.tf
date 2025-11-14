@@ -8,16 +8,11 @@ terraform {
     }
   }
 
-  # NOTE: S3 backend temporarily disabled due to access restrictions
-  # Backends can be configured via: terraform init -backend-config=path/to/backend.hcl
-  #
-  # For local development/planning:
-  #   terraform plan -var-file=staging.tfvars
-  #
-  # For production deployment with S3 state:
-  #   - Ensure S3 bucket exists in ca-central-1
-  #   - Ensure IAM role has S3/DynamoDB permissions
-  #   - Run: terraform init -backend-config=backend.hcl
+  # 本地后端配置 (用于 staging 环境)
+  # 注意: 在生产环境中应使用 S3 远程后端
+  backend "local" {
+    path = "terraform.tfstate"
+  }
 }
 
 provider "aws" {

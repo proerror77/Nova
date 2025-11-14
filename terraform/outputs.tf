@@ -16,16 +16,6 @@ output "alb_zone_id" {
   value       = aws_lb.main.zone_id
 }
 
-output "ecs_cluster_name" {
-  description = "Name of the ECS cluster"
-  value       = aws_ecs_cluster.main.name
-}
-
-output "ecs_cluster_arn" {
-  description = "ARN of the ECS cluster"
-  value       = aws_ecs_cluster.main.arn
-}
-
 output "rds_endpoint" {
   description = "RDS PostgreSQL endpoint"
   value       = aws_db_instance.main.endpoint
@@ -50,7 +40,7 @@ output "redis_port" {
 
 output "vpc_id" {
   description = "ID of the VPC"
-  value       = aws_vpc.main.id
+  value       = data.aws_vpc.main.id
 }
 
 output "private_subnet_ids" {
@@ -61,14 +51,4 @@ output "private_subnet_ids" {
 output "public_subnet_ids" {
   description = "IDs of public subnets"
   value       = aws_subnet.public[*].id
-}
-
-output "ecs_task_execution_role_arn" {
-  description = "ARN of the ECS task execution role"
-  value       = aws_iam_role.ecs_task_execution.arn
-}
-
-output "ecs_task_role_arn" {
-  description = "ARN of the ECS task role"
-  value       = aws_iam_role.ecs_task.arn
 }

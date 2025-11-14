@@ -20,9 +20,9 @@ resource "aws_ecr_repository" "services" {
 
 # Lifecycle policy to keep only recent images
 resource "aws_ecr_lifecycle_policy" "services" {
-  for_each = aws_ecr_repository.services
+  for_each = toset(var.services)
 
-  repository = each.value.name
+  repository = "nova-${each.key}"
 
   policy = jsonencode({
     rules = [
@@ -30,9 +30,9 @@ resource "aws_ecr_lifecycle_policy" "services" {
         rulePriority = 1
         description  = "Keep last ${var.ecr_image_retention_count} images"
         selection = {
-          tagStatus     = "any"
-          countType     = "imageCountMoreThan"
-          countNumber   = var.ecr_image_retention_count
+          tagStatus   = "any"
+          countType   = "imageCountMoreThan"
+          countNumber = var.ecr_image_retention_count
         }
         action = {
           type = "expire"
@@ -42,11 +42,11 @@ resource "aws_ecr_lifecycle_policy" "services" {
   })
 }
 
-# ECR Repository Policy - Allow GitHub Actions to push images
+# ECR Repository Policy - Allow EKS nodes and GitHub Actions to push/pull images
 resource "aws_ecr_repository_policy" "services" {
-  for_each = aws_ecr_repository.services
+  for_each = toset(var.services)
 
-  repository = each.value.name
+  repository = "nova-${each.key}"
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -56,7 +56,7 @@ resource "aws_ecr_repository_policy" "services" {
         Effect = "Allow"
         Principal = {
           AWS = [
-            aws_iam_role.ecs_task_execution.arn,
+            aws_iam_role.eks_node_group.arn,
             aws_iam_role.github_actions.arn
           ]
         }
