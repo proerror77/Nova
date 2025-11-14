@@ -16,7 +16,7 @@ struct FigmaDesignAppApp: App {
                     MessageView(currentPage: $currentPage)
                         .transition(.identity)
                 case .account:
-                    AccountView(currentPage: $currentPage)
+                    ProfileView(currentPage: $currentPage)
                         .transition(.identity)
                 default:
                     HomeView(currentPage: $currentPage)

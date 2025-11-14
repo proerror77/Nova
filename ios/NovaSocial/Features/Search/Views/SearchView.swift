@@ -1,6 +1,6 @@
 import SwiftUI
 
-struct HSearchView: View {
+struct SearchView: View {
     @Binding var showSearch: Bool
     @State private var searchText = ""
     @FocusState private var isSearchFocused: Bool
@@ -112,5 +112,5 @@ struct SearchResultItem: View {
 }
 
 #Preview {
-    HSearchView(showSearch: .constant(true))
+    SearchView(showSearch: .constant(true))
 }

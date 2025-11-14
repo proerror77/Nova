@@ -1,9 +1,9 @@
 import SwiftUI
 import PhotosUI
 
-struct AccountView: View {
+struct ProfileView: View {
     @Binding var currentPage: AppPage
-    @StateObject private var viewModel = UserProfileViewModel()
+    @StateObject private var viewModel = ProfileViewModel()
     @State private var showNewPost = false
     @State private var showSetting = false
     @State private var selectedPhotoItem: PhotosPickerItem?
@@ -446,5 +446,5 @@ struct PostGridItem: View {
 }
 
 #Preview {
-    AccountView(currentPage: .constant(.account))
+    ProfileView(currentPage: .constant(.account))
 }

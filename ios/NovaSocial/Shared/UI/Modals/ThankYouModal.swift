@@ -1,6 +1,6 @@
 import SwiftUI
 
-struct ThankYouView: View {
+struct ThankYouModal: View {
     @Environment(\.dismiss) var dismiss
     @Binding var showThankYouView: Bool
     @Binding var isPresented: Bool
@@ -60,7 +60,7 @@ struct ThankYouView: View {
 
                     // Done button
                     Button(action: {
-                        isPresented = false  // 关闭 ReportView sheet，返回 HomeView
+                        isPresented = false  // 关闭 ReportModal sheet，返回 HomeView
                     }) {
                         Text("Done")
                             .font(.system(size: 16, weight: .medium))
@@ -81,5 +81,5 @@ struct ThankYouView: View {
 #Preview {
     @Previewable @State var showThankYouView = true
     @Previewable @State var isPresented = true
-    ThankYouView(showThankYouView: $showThankYouView, isPresented: $isPresented)
+    ThankYouModal(showThankYouView: $showThankYouView, isPresented: $isPresented)
 }

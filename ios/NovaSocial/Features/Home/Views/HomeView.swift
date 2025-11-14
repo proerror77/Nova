@@ -16,7 +16,7 @@ struct HomeView: View {
                 NotificationView(showNotification: $showNotification)
                     .transition(.identity)
             } else if showSearch {
-                HSearchView(showSearch: $showSearch)
+                SearchView(showSearch: $showSearch)
                     .transition(.identity)
             } else if showNewPost {
                 NewPostView(showNewPost: $showNewPost)
@@ -30,7 +30,7 @@ struct HomeView: View {
         .animation(.none, value: showNewPost)
         .navigationBarBackButtonHidden(true)
         .sheet(isPresented: $showReportView) {
-            ReportView(isPresented: $showReportView, showThankYouView: $showThankYouView)
+            ReportModal(isPresented: $showReportView, showThankYouView: $showThankYouView)
         }
     }
 
@@ -332,7 +332,7 @@ struct CommentCardItem: View {
 
                 Spacer()
 
-                // 菜单按钮 - 点击跳转到 ReportView
+                // 菜单按钮 - 点击跳转到 ReportModal
                 Button(action: {
                     showReportView = true
                 }) {

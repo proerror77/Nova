@@ -1,6 +1,6 @@
 import SwiftUI
 
-struct SettingView: View {
+struct SettingsView: View {
     @Binding var showSetting: Bool
     @State private var isDarkMode = false
 
@@ -152,5 +152,5 @@ struct SettingItem: View {
 }
 
 #Preview {
-    SettingView(showSetting: .constant(true))
+    SettingsView(showSetting: .constant(true))
 }
