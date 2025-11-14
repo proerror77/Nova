@@ -288,12 +288,9 @@ patches:
           targetPort: 8086
           protocol: TCP
 
-# Migrated strategic merge patches to unified 'patches'
 # 启用以下 patches 以完整配置 staging 环境
 # ❌ REMOVED: secrets-patch.yaml - 含明文密钥，已移至 docs/samples 作为示例
 - path: configmap-patch.yaml
-patchesStrategicMerge:
-- deployment-images-patch.yaml
 - path: postgres-deploy-patch.yaml
 - path: service-selectors-patch.yaml
 - path: redis-deploy-patch.yaml
@@ -310,6 +307,9 @@ patchesStrategicMerge:
 - path: s3-env-patch.yaml
 - path: prefer-large-nodes-patch.yaml
 # - resource-optimization-patch.yaml  # 可选：资源优化
+
+patchesStrategicMerge:
+- deployment-images-patch.yaml
 
 # Remove deprecated/retired services from staging (none currently included)
 # Note: ClickHouse 需要额外的网络隔离 patches
