@@ -288,28 +288,26 @@ patches:
           targetPort: 8086
           protocol: TCP
 
-# 启用以下 patches 以完整配置 staging 环境
-# ❌ REMOVED: secrets-patch.yaml - 含明文密钥，已移至 docs/samples 作为示例
-- path: configmap-patch.yaml
-- path: postgres-deploy-patch.yaml
-- path: service-selectors-patch.yaml
-- path: redis-deploy-patch.yaml
-- path: deploy-labels-patch.yaml
-- path: feed-service-env-patch.yaml
-# - feed-service-probes-patch.yaml  # TODO: 检查 probe 配置
-- path: messaging-service-env-patch.yaml
-- path: messaging-service-env-port-patch.yaml
-- path: messaging-service-probes-patch.yaml
-- path: content-service-env-patch.yaml
-# - content-service-probes-patch.yaml  # TODO: 检查 probe 配置
-- path: search-service-env-patch.yaml
-- path: elasticsearch-replicas-patch.yaml
-- path: s3-env-patch.yaml
-- path: prefer-large-nodes-patch.yaml
-# - resource-optimization-patch.yaml  # 可选：资源优化
-
+# 启用以下 patches 以完整配置 staging 环境（strategic merge）
 patchesStrategicMerge:
+- configmap-patch.yaml
 - deployment-images-patch.yaml
+- postgres-deploy-patch.yaml
+- service-selectors-patch.yaml
+- redis-deploy-patch.yaml
+- deploy-labels-patch.yaml
+- feed-service-env-patch.yaml
+# - feed-service-probes-patch.yaml  # TODO: 检查 probe 配置
+- messaging-service-env-patch.yaml
+- messaging-service-env-port-patch.yaml
+- messaging-service-probes-patch.yaml
+- content-service-env-patch.yaml
+# - content-service-probes-patch.yaml  # TODO: 检查 probe 配置
+- search-service-env-patch.yaml
+- elasticsearch-replicas-patch.yaml
+- s3-env-patch.yaml
+- prefer-large-nodes-patch.yaml
+# - resource-optimization-patch.yaml  # 可选：资源优化
 
 # Remove deprecated/retired services from staging (none currently included)
 # Note: ClickHouse 需要额外的网络隔离 patches
