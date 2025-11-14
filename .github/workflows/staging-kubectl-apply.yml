@@ -121,14 +121,19 @@ jobs:
           echo ok=true >> $GITHUB_OUTPUT
 
       - name: Fallback install ClickHouse Operator via raw bundle
-        if: steps.ch-helm.outcome != 'success'
+        if: always()
         run: |
           set -e
           BRANCH=master
           BUNDLE=https://raw.githubusercontent.com/Altinity/clickhouse-operator/${BRANCH}/deploy/operator/clickhouse-operator-install-bundle.yaml
-          kubectl create namespace clickhouse-operator --dry-run=client -o yaml | kubectl apply -f - || true
-          kubectl apply -f "$BUNDLE"
-          kubectl rollout status -n clickhouse-operator deploy/clickhouse-operator --timeout=300s || true
+          # Skip if CRDs already present (Helm succeeded earlier)
+          if kubectl get crd | grep -q clickhouseinstallations.clickhouse.altinity.com; then
+            echo "ClickHouse CRDs already installed; skipping raw bundle"
+          else
+            kubectl create namespace clickhouse-operator --dry-run=client -o yaml | kubectl apply -f - || true
+            kubectl apply -f "$BUNDLE"
+            kubectl rollout status -n clickhouse-operator deploy/clickhouse-operator --timeout=300s || true
+          fi
 
       - name: Sync critical secrets from AWS Secrets Manager (fallback)
         env:
