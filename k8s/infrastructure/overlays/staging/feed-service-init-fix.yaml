@@ -1,0 +1,21 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: feed-service
+spec:
+  template:
+    spec:
+      initContainers:
+      - name: wait-for-content-service
+        command:
+        - sh
+        - -c
+        - |
+          echo "Waiting for content-service:9080 to be ready..."
+          for i in $(seq 1 300); do
+            if nc -z content-service 9080; then
+              echo "✓ content-service is ready"; exit 0; fi
+            echo "Attempt $i/300 - not ready, retry in 1s..."; sleep 1
+          done
+          echo "✗ FATAL: content-service not ready after 5 minutes"; exit 1
+

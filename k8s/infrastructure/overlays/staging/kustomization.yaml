@@ -288,6 +288,17 @@ patches:
           targetPort: 8086
           protocol: TCP
 
+# Enforce numeric runAsUser for all Deployments (images use UID 1001)
+- target:
+    group: apps
+    version: v1
+    kind: Deployment
+  patch: |-
+    - op: add
+      path: /spec/template/spec/securityContext/runAsUser
+      value: 1001
+
+
 # 启用以下 patches 以完整配置 staging 环境（strategic merge）
 patchesStrategicMerge:
 - configmap-patch.yaml
@@ -304,6 +315,8 @@ patchesStrategicMerge:
 - messaging-cronjob-patch.yaml
 - content-service-env-patch.yaml
 # - content-service-probes-patch.yaml  # TODO: 检查 probe 配置
+- feed-service-init-fix.yaml
+- content-service-ports-patch.yaml
 - search-service-env-patch.yaml
 - elasticsearch-replicas-patch.yaml
 - s3-env-patch.yaml
@@ -395,6 +408,8 @@ resources:
 - clickhouse-pvc.yaml
 - sts-rotator.yaml
 - secrets-sync.yaml
+- content-service-configmap.yaml
+- media-service-configmap.yaml
 - resource-optimization-info.configmap.yaml
 - nova-messaging-keys.yaml
 - nova-clickhouse-credentials.yaml
