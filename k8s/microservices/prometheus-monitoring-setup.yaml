@@ -1,14 +1,7 @@
----
-# Prometheus Namespace
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: nova-monitoring
-  labels:
-    app: nova
-    component: monitoring
-
----
+# NOTE: Prometheus Namespace creation has been removed from this file.
+# The nova-monitoring namespace should be created separately if needed for monitoring.
+# Apply with: kubectl create namespace nova-monitoring
+#
 # ConfigMap for Prometheus configuration
 apiVersion: v1
 kind: ConfigMap

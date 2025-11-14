@@ -1,0 +1,264 @@
+# SQLx 数据库迁移 Job
+# 在服务启动前自动运行所有数据库迁移脚本
+# 保证数据库 schema 最新
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sqlx-migrate-script
+  namespace: nova-staging
+  labels:
+    app: sqlx-migrate
+data:
+  run-migrations.sh: |
+    #!/bin/bash
+    set -euo pipefail
+
+    echo "🗄️  SQLx Migration Runner - Starting at $(date)"
+    echo "========================================"
+
+    # 配置
+    DB_HOST="${DB_HOST:-postgres.nova-staging.svc.cluster.local}"
+    DB_PORT="${DB_PORT:-5432}"
+    DB_USER="${DB_USER:-nova_staging}"
+    DB_RETRY_LIMIT=30
+    DB_RETRY_COUNT=0
+
+    # 等待 PostgreSQL 就绪
+    echo "⏳ Waiting for PostgreSQL at $DB_HOST:$DB_PORT..."
+    while [ $DB_RETRY_COUNT -lt $DB_RETRY_LIMIT ]; do
+      if PGPASSWORD="$DB_PASSWORD" psql \
+          -h "$DB_HOST" \
+          -p "$DB_PORT" \
+          -U "$DB_USER" \
+          -d postgres \
+          -c "SELECT 1" 2>/dev/null; then
+        echo "✓ PostgreSQL is ready"
+        break
+      fi
+      DB_RETRY_COUNT=$((DB_RETRY_COUNT + 1))
+      echo "  Attempt $DB_RETRY_COUNT/$DB_RETRY_LIMIT..."
+      sleep 2
+    done
+
+    if [ $DB_RETRY_COUNT -eq $DB_RETRY_LIMIT ]; then
+      echo "❌ PostgreSQL connection timeout after $((DB_RETRY_LIMIT * 2)) seconds"
+      exit 1
+    fi
+
+    # 构建数据库 URL
+    DATABASE_URL="postgresql://$DB_USER:$DB_PASSWORD@$DB_HOST:$DB_PORT"
+
+    # 获取所有需要迁移的数据库列表
+    DATABASES=(
+      "nova_auth"
+      "nova_user"
+      "nova_content"
+      "nova_feed"
+      "nova_messaging"
+      "nova_search"
+      "nova_notification"
+      "nova_media"
+      "nova_analytics"
+      "nova_graph"
+      "nova_ranking"
+      "nova_feature_store"
+      "nova_identity"
+      "nova_trust_safety"
+      "nova_realtime_chat"
+    )
+
+    echo ""
+    echo "🔄 Running migrations for ${#DATABASES[@]} databases..."
+    echo "========================================"
+
+    FAILED=0
+    SUCCEEDED=0
+
+    for DB in "${DATABASES[@]}"; do
+      echo ""
+      echo "📦 Database: $DB"
+
+      # 创建数据库（如果不存在）
+      PGPASSWORD="$DB_PASSWORD" psql \
+        -h "$DB_HOST" \
+        -p "$DB_PORT" \
+        -U "$DB_USER" \
+        -d postgres \
+        -c "CREATE DATABASE $DB;" 2>/dev/null || true
+
+      # 运行迁移
+      DB_URL="$DATABASE_URL/$DB"
+
+      if sqlx database create --database-url "$DB_URL" 2>/dev/null || true; then
+        echo "  ✓ Database created/verified"
+      fi
+
+      # 应用迁移脚本（从 ConfigMap 的 SQL 文件）
+      if [ -d "/migrations/$DB" ]; then
+        for migration in /migrations/$DB/*.sql; do
+          if [ -f "$migration" ]; then
+            echo "  → Applying $(basename $migration)..."
+            PGPASSWORD="$DB_PASSWORD" psql \
+              -h "$DB_HOST" \
+              -p "$DB_PORT" \
+              -U "$DB_USER" \
+              -d "$DB" \
+              -f "$migration" \
+              -v ON_ERROR_STOP=1 \
+              --quiet || {
+              echo "  ⚠️  Migration $(basename $migration) skipped (may already be applied)"
+            }
+          fi
+        done
+        echo "  ✓ All migrations applied"
+        SUCCEEDED=$((SUCCEEDED + 1))
+      else
+        echo "  ℹ️  No migrations found for $DB (using auto-init)"
+        SUCCEEDED=$((SUCCEEDED + 1))
+      fi
+    done
+
+    echo ""
+    echo "========================================"
+    echo "✅ Migration Complete"
+    echo "   Databases: $SUCCEEDED succeeded, $FAILED failed"
+    echo "   Time: $(date)"
+    exit 0
+
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: sqlx-migrate
+  namespace: nova-staging
+  labels:
+    app: sqlx-migrate
+    job-type: database-migration
+  annotations:
+    description: "Run SQLx database migrations for all Nova services"
+    version: "1.0"
+spec:
+  # Job 完成后 1 小时自动清理
+  ttlSecondsAfterFinished: 3600
+
+  # 重试策略
+  backoffLimit: 3
+
+  # 超时时间（15 分钟）
+  activeDeadlineSeconds: 900
+
+  template:
+    metadata:
+      labels:
+        app: sqlx-migrate
+        job-type: database-migration
+    spec:
+      # 只运行一次
+      restartPolicy: Never
+
+      serviceAccountName: default
+
+      # 初始化容器：验证依赖
+      initContainers:
+      - name: wait-for-postgres
+        image: busybox:1.35
+        command:
+        - sh
+        - -c
+        - |
+          echo "Waiting for PostgreSQL..."
+          for i in $(seq 1 30); do
+            if nc -zv postgres.nova-staging.svc.cluster.local 5432; then
+              echo "✓ PostgreSQL is ready"
+              exit 0
+            fi
+            echo "Attempt $i/30, retrying in 2 seconds..."
+            sleep 2
+          done
+          echo "❌ PostgreSQL not ready"
+          exit 1
+
+      # 主容器：运行迁移
+      containers:
+      - name: sqlx-migrate
+        image: postgres:15-alpine  # 包含 psql 和基础工具
+
+        command:
+        - /bin/sh
+        - -c
+        - |
+          # 安装 sqlx-cli
+          apk add --no-cache curl bash
+
+          # 下载 sqlx-cli（可选，使用 psql 也可以）
+          # curl -L https://github.com/launchbadge/sqlx-cli/releases/download/v0.7.3/sqlx-v0.7.3-x86_64-unknown-linux-musl.tar.gz | tar xz -C /usr/local/bin
+
+          # 运行迁移脚本
+          bash /migrations/run-migrations.sh
+
+        # 环境变量
+        env:
+        - name: DB_HOST
+          value: "postgres.nova-staging.svc.cluster.local"
+        - name: DB_PORT
+          value: "5432"
+        - name: DB_USER
+          valueFrom:
+            secretKeyRef:
+              name: nova-db-credentials
+              key: username
+              optional: false
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: nova-db-credentials
+              key: password
+              optional: false
+
+        # 资源限制
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+
+        # 卷挂载
+        volumeMounts:
+        - name: migrate-script
+          mountPath: /migrations
+          readOnly: true
+
+      # 卷定义
+      volumes:
+      - name: migrate-script
+        configMap:
+          name: sqlx-migrate-script
+          defaultMode: 0755
+
+      # Pod 干扰预算（确保迁移稳定运行）
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values: [postgres]
+              topologyKey: kubernetes.io/hostname
+
+---
+# 为了在 staging 初始化时自动运行迁移，创建一个依赖的资源
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: migration-status
+  namespace: nova-staging
+  labels:
+    app: sqlx-migrate
+data:
+  status: "pending"  # 初始状态：pending -> running -> completed

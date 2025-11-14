@@ -293,59 +293,9 @@ data:
   search-limit-rps: "20"
   search-limit-burst-multiplier: "2"
 
----
-# Service definitions (example - adjust ports as needed)
-# These should match your actual service deployments
-
-apiVersion: v1
-kind: Service
-metadata:
-  name: user-service
-  namespace: nova
-  labels:
-    app: user-service
-spec:
-  type: ClusterIP
-  ports:
-    - port: 8080
-      targetPort: 8080
-      protocol: TCP
-      name: http
-  selector:
-    app: user-service
-
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: messaging-service
-  namespace: nova
-  labels:
-    app: messaging-service
-spec:
-  type: ClusterIP
-  ports:
-    - port: 3000
-      targetPort: 3000
-      protocol: TCP
-      name: http
-  selector:
-    app: messaging-service
-
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: search-service
-  namespace: nova
-  labels:
-    app: search-service
-spec:
-  type: ClusterIP
-  ports:
-    - port: 8086
-      targetPort: 8086
-      protocol: TCP
-      name: http
-  selector:
-    app: search-service
+# NOTE: Service definitions have been removed from this file.
+# They are now defined in separate YAML files in the microservices directory:
+# - user-service-service.yaml
+# - messaging-service-service.yaml
+# - search-service-service.yaml
+# This eliminates duplicate resource definitions and prevents Kustomize conflicts.

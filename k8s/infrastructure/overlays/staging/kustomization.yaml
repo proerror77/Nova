@@ -292,29 +292,44 @@ patchesJson6902:
         limits:
           cpu: 500m
           memory: 512Mi
-# - secrets-patch.yaml
-# - configmap-patch.yaml
-# - deployment-images-patch.yaml
-# - postgres-deploy-patch.yaml
-# - service-selectors-patch.yaml
-# - redis-deploy-patch.yaml
-# - deploy-labels-patch.yaml
-# - user-service-env-patch.yaml
-# - user-service-probes-patch.yaml
-# - feed-service-env-patch.yaml
-# - feed-service-probes-patch.yaml
-# - messaging-service-env-patch.yaml
-# - messaging-service-env-port-patch.yaml
-# - messaging-service-probes-patch.yaml
-# - content-service-env-patch.yaml
-# - content-service-probes-patch.yaml
-# - search-service-env-patch.yaml
-# - elasticsearch-replicas-patch.yaml
-# - s3-env-patch.yaml
-# - hpa-min1-patch.yaml
-# - prefer-large-nodes-patch.yaml
-# - resource-optimization-patch.yaml
-# Note: Harden ClickHouse exposure with additional patches as needed
+# Patch to ensure only one search-service Service definition is used
+- target:
+    version: v1
+    kind: Service
+    name: search-service
+    namespace: nova-staging
+  patch: |-
+    - op: replace
+      path: /spec/ports
+      value:
+        - name: http
+          port: 8086
+          targetPort: 8086
+          protocol: TCP
+# 启用以下 patches 以完整配置 staging 环境
+- secrets-patch.yaml
+- configmap-patch.yaml
+- deployment-images-patch.yaml
+- postgres-deploy-patch.yaml
+- service-selectors-patch.yaml
+- redis-deploy-patch.yaml
+- deploy-labels-patch.yaml
+- user-service-env-patch.yaml
+- user-service-probes-patch.yaml
+- feed-service-env-patch.yaml
+# - feed-service-probes-patch.yaml  # TODO: 检查 probe 配置
+- messaging-service-env-patch.yaml
+- messaging-service-env-port-patch.yaml
+- messaging-service-probes-patch.yaml
+- content-service-env-patch.yaml
+# - content-service-probes-patch.yaml  # TODO: 检查 probe 配置
+- search-service-env-patch.yaml
+- elasticsearch-replicas-patch.yaml
+- s3-env-patch.yaml
+- hpa-min1-patch.yaml
+- prefer-large-nodes-patch.yaml
+# - resource-optimization-patch.yaml  # 可选：资源优化
+# Note: ClickHouse 需要额外的网络隔离 patches
 
 images:
 - name: nova/analytics-service
@@ -396,7 +411,8 @@ commonAnnotations:
   environment: staging
 
 resources:
-- ../../base
+- namespace-patch.yaml
+- ../../../base
 - postgres-pvc-gp3.yaml
 - clickhouse-pvc.yaml
 - sts-rotator.yaml
@@ -410,5 +426,44 @@ resources:
 - external-secrets-store.yaml
 - external-secrets.yaml
 - seed-data-job.yaml
+
+# ========================================
+# P0 Priority: Core Service Infrastructure
+# ========================================
+# gRPC service discovery and networking
+- grpc-services.yaml
+
+# Database migration job (runs before services start)
+- sqlx-migrate-job.yaml
+
+# PostgreSQL multi-database initialization
+- postgres-multi-db-init.yaml
+
+# ========================================
+# P1 Priority: Service Startup Orchestration
+# ========================================
+# Init containers for dependency ordering
+- service-init-containers-patch.yaml
+
+# ========================================
+# P2 Priority: Data & Event Infrastructure
+# ========================================
+# Redis cluster for caching and sessions
+- redis-cluster-statefulset.yaml
+
+# Kafka + Zookeeper for event streaming
+- kafka-zookeeper-deployment.yaml
+
+# ClickHouse for analytics
+- clickhouse-installation.yaml
+
+# ========================================
+# P3 Priority: API Contract Management
+# ========================================
+# Protocol Buffer definitions and service registry
+- proto-management.yaml
+
+# ========================================
 # PgBouncer connection pooling (P1 Priority)
+# ========================================
 - ../../pgbouncer

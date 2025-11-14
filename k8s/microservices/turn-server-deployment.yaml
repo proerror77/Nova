@@ -1,15 +1,6 @@
 ---
 # TURN Server Deployment for WebRTC Video Calls
 # Handles NAT traversal for peer-to-peer video connections
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: nova-turn
-  labels:
-    app: nova
-    component: turn-server
-
----
 # ConfigMap for coturn configuration
 apiVersion: v1
 kind: ConfigMap

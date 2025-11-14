@@ -2,7 +2,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: seed-data-scripts
-  namespace: nova
+  namespace: nova-staging
 data:
   01_seed_auth_users.sql: |
     -- Seed data for auth-service (nova_auth database)
@@ -29,12 +29,37 @@ data:
   run_seed.sh: |
     #!/bin/bash
     set -euo pipefail
+
     echo "Starting seed data initialization..."
+    echo "  Database Host: $DB_HOST"
+    echo "  Database Port: $DB_PORT"
+    echo "  Database User: $DB_USER"
+
+    # 等待 PostgreSQL 就绪
+    echo "Waiting for PostgreSQL to be ready..."
+    for i in {1..30}; do
+      if PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d postgres -c "SELECT 1" 2>/dev/null; then
+        echo "✓ PostgreSQL is ready"
+        break
+      fi
+      echo "  Attempt $i/30 - waiting..."
+      sleep 2
+    done
+
+    # 初始化数据库
     for db in nova_auth nova_user nova_content nova_messaging; do
       echo "Seeding database: $db"
       for sql in /seed-data/*.sql; do
-        echo "  Executing: $(basename $sql)"
-        PGPASSWORD="$DB_PASSWORD" psql -h postgres -p 5432 -U nova -d "$db" -f "$sql" -q || echo "  Warning: Some inserts may have been skipped (ON CONFLICT)"
+        if [[ -f "$sql" && "$sql" == *.sql ]]; then
+          echo "  Executing: $(basename $sql)"
+          PGPASSWORD="$DB_PASSWORD" psql \
+            -h "$DB_HOST" \
+            -p "$DB_PORT" \
+            -U "$DB_USER" \
+            -d "$db" \
+            -f "$sql" \
+            -q || echo "  Warning: Some inserts may have been skipped (ON CONFLICT)"
+        fi
       done
     done
     echo "✓ Seed data initialization complete"
@@ -43,7 +68,7 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: seed-data-init
-  namespace: nova
+  namespace: nova-staging
   annotations:
     description: "Initialize staging database with test data for E2E testing"
 spec:
@@ -60,11 +85,23 @@ spec:
         image: postgres:16-alpine
         command: ["/bin/sh", "/seed-data/run_seed.sh"]
         env:
+        # 从 External Secrets 获取数据库凭证
+        - name: DB_USER
+          valueFrom:
+            secretKeyRef:
+              name: nova-db-credentials
+              key: username
+              optional: false
         - name: DB_PASSWORD
           valueFrom:
             secretKeyRef:
               name: nova-db-credentials
-              key: DB_PASSWORD
+              key: password
+              optional: false
+        - name: DB_HOST
+          value: "postgres.nova-staging.svc.cluster.local"
+        - name: DB_PORT
+          value: "5432"
         volumeMounts:
         - name: seed-scripts
           mountPath: /seed-data

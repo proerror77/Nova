@@ -1,0 +1,469 @@
+# Kafka + Zookeeper for Nova Staging
+# Single-node Zookeeper + Single-node Kafka for event streaming
+# Used by: feed-service, analytics-service, trust-safety-service
+# Kafka port: 9092 (PLAINTEXT)
+# Zookeeper port: 2181
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: zookeeper-config
+  namespace: nova-staging
+  labels:
+    app: zookeeper
+data:
+  zoo.cfg: |
+    # Zookeeper configuration for Nova Staging
+    tickTime=2000
+    dataDir=/var/lib/zookeeper
+    clientPort=2181
+
+    # Single server configuration (standalone mode)
+    server.1=zookeeper:2888:3888
+
+    # Performance tuning
+    autopurge.snapRetainCount=3
+    autopurge.purgeInterval=1
+
+    # Connection settings
+    maxClientCnxns=60
+    minSessionTimeout=4000
+    maxSessionTimeout=40000
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kafka-config
+  namespace: nova-staging
+  labels:
+    app: kafka
+data:
+  log4j.properties: |
+    log4j.rootLogger=WARN, stdout
+    log4j.logger.kafka=INFO
+    log4j.logger.kafka.controller=INFO
+    log4j.additivity.kafka=false
+
+    log4j.appender.stdout=org.apache.log4j.ConsoleAppender
+    log4j.appender.stdout.layout=org.apache.log4j.PatternLayout
+    log4j.appender.stdout.layout.ConversionPattern=[%d] %p %m (%c)%n
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: zookeeper
+  namespace: nova-staging
+  labels:
+    app: zookeeper
+spec:
+  type: ClusterIP
+  ports:
+  - name: client
+    port: 2181
+    targetPort: 2181
+    protocol: TCP
+  - name: server
+    port: 2888
+    targetPort: 2888
+    protocol: TCP
+  - name: leader-election
+    port: 3888
+    targetPort: 3888
+    protocol: TCP
+  selector:
+    app: zookeeper
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka
+  namespace: nova-staging
+  labels:
+    app: kafka
+spec:
+  type: ClusterIP
+  ports:
+  - name: broker
+    port: 9092
+    targetPort: 9092
+    protocol: TCP
+  - name: jmx
+    port: 9999
+    targetPort: 9999
+    protocol: TCP
+  selector:
+    app: kafka
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: zookeeper
+  namespace: nova-staging
+  labels:
+    app: zookeeper
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: zookeeper
+  template:
+    metadata:
+      labels:
+        app: zookeeper
+    spec:
+      securityContext:
+        fsGroup: 1000
+        runAsNonRoot: true
+        runAsUser: 1000
+
+      containers:
+      - name: zookeeper
+        image: confluentinc/cp-zookeeper:7.6.1
+        imagePullPolicy: IfNotPresent
+
+        ports:
+        - name: client
+          containerPort: 2181
+          protocol: TCP
+        - name: server
+          containerPort: 2888
+          protocol: TCP
+        - name: leader-election
+          containerPort: 3888
+          protocol: TCP
+
+        env:
+        - name: ZOO_CFG_EXTRA
+          value: "metricsProvider.className=org.apache.zookeeper.metrics.prometheus.PrometheusMetricsProvider metricsProvider.httpPort=7070"
+        - name: ZOO_SERVERS
+          value: "server.1=zookeeper:2888:3888"
+        - name: ZOO_4LW_COMMANDS_WHITELIST
+          value: "stat,ruok,conf,isro,mntr"
+
+        livenessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - "echo ruok | nc -w 2 localhost 2181 | grep imok"
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+
+        readinessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - "echo stat | nc -w 2 localhost 2181 | grep Zookeeper"
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+
+        volumeMounts:
+        - name: zookeeper-data
+          mountPath: /var/lib/zookeeper
+        - name: zookeeper-config
+          mountPath: /etc/kafka/secrets
+          readOnly: true
+
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: true
+          runAsUser: 1000
+          capabilities:
+            drop:
+            - ALL
+
+      volumes:
+      - name: zookeeper-data
+        emptyDir: {}
+      - name: zookeeper-config
+        configMap:
+          name: zookeeper-config
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kafka
+  namespace: nova-staging
+  labels:
+    app: kafka
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kafka
+  template:
+    metadata:
+      labels:
+        app: kafka
+    spec:
+      securityContext:
+        fsGroup: 1000
+        runAsNonRoot: true
+        runAsUser: 1000
+
+      initContainers:
+      - name: wait-for-zookeeper
+        image: confluentinc/cp-kafka:7.6.1
+        command:
+        - sh
+        - -c
+        - |
+          echo "Waiting for Zookeeper..."
+          for i in $(seq 1 30); do
+            if echo ruok | nc -w 2 zookeeper.nova-staging.svc.cluster.local 2181 2>/dev/null | grep -q imok; then
+              echo "✓ Zookeeper is ready"
+              exit 0
+            fi
+            echo "  Attempt $i/30, retrying..."
+            sleep 2
+          done
+          echo "❌ Zookeeper is not ready"
+          exit 1
+
+      containers:
+      - name: kafka
+        image: confluentinc/cp-kafka:7.6.1
+        imagePullPolicy: IfNotPresent
+
+        ports:
+        - name: broker
+          containerPort: 9092
+          protocol: TCP
+        - name: jmx
+          containerPort: 9999
+          protocol: TCP
+
+        env:
+        - name: KAFKA_BROKER_ID
+          value: "1"
+        - name: KAFKA_ZOOKEEPER_CONNECT
+          value: "zookeeper.nova-staging.svc.cluster.local:2181"
+        - name: KAFKA_ADVERTISED_LISTENERS
+          value: "PLAINTEXT://kafka.nova-staging.svc.cluster.local:9092"
+        - name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP
+          value: "PLAINTEXT:PLAINTEXT"
+        - name: KAFKA_INTER_BROKER_LISTENER_NAME
+          value: "PLAINTEXT"
+
+        # Performance and reliability
+        - name: KAFKA_NUM_NETWORK_THREADS
+          value: "8"
+        - name: KAFKA_NUM_IO_THREADS
+          value: "8"
+        - name: KAFKA_SOCKET_SEND_BUFFER_BYTES
+          value: "102400"
+        - name: KAFKA_SOCKET_RECEIVE_BUFFER_BYTES
+          value: "102400"
+        - name: KAFKA_SOCKET_REQUEST_MAX_BYTES
+          value: "104857600"
+
+        # Log retention (7 days for staging)
+        - name: KAFKA_LOG_RETENTION_HOURS
+          value: "168"
+        - name: KAFKA_LOG_RETENTION_BYTES
+          value: "1073741824"  # 1GB
+        - name: KAFKA_LOG_SEGMENT_BYTES
+          value: "1073741824"  # 1GB
+
+        # Topic defaults
+        - name: KAFKA_AUTO_CREATE_TOPICS_ENABLE
+          value: "true"
+        - name: KAFKA_DEFAULT_REPLICATION_FACTOR
+          value: "1"
+        - name: KAFKA_MIN_INSYNC_REPLICAS
+          value: "1"
+
+        # Metrics
+        - name: KAFKA_JMX_PORT
+          value: "9999"
+        - name: KAFKA_JMX_HOSTNAME
+          value: "kafka.nova-staging.svc.cluster.local"
+        - name: KAFKA_METRICS_REPORTERS
+          value: "org.apache.kafka.common.metrics.JmxReporter"
+
+        livenessProbe:
+          tcpSocket:
+            port: 9092
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+
+        readinessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - |
+              kafka-broker-api-versions.sh --bootstrap-server localhost:9092 | grep ApiVersion > /dev/null
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 5
+          failureThreshold: 3
+
+        resources:
+          requests:
+            cpu: 200m
+            memory: 512Mi
+          limits:
+            cpu: 1000m
+            memory: 1Gi
+
+        volumeMounts:
+        - name: kafka-data
+          mountPath: /var/lib/kafka/data
+        - name: kafka-config
+          mountPath: /etc/kafka
+          readOnly: true
+
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: true
+          runAsUser: 1000
+          capabilities:
+            drop:
+            - ALL
+
+      volumes:
+      - name: kafka-data
+        emptyDir: {}
+      - name: kafka-config
+        configMap:
+          name: kafka-config
+
+---
+# Kafka Topic initialization Job
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kafka-init-topics
+  namespace: nova-staging
+  labels:
+    app: kafka
+spec:
+  ttlSecondsAfterFinished: 3600
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        app: kafka-init
+    spec:
+      restartPolicy: Never
+
+      initContainers:
+      - name: wait-for-kafka
+        image: busybox:1.35
+        command:
+        - sh
+        - -c
+        - |
+          echo "Waiting for Kafka to be ready..."
+          for i in $(seq 1 30); do
+            if nc -zv kafka.nova-staging.svc.cluster.local 9092 2>/dev/null; then
+              echo "✓ Kafka is ready"
+              exit 0
+            fi
+            echo "  Attempt $i/30, retrying..."
+            sleep 2
+          done
+          echo "❌ Kafka is not ready"
+          exit 1
+
+      containers:
+      - name: kafka-init
+        image: confluentinc/cp-kafka:7.6.1
+        command:
+        - sh
+        - -c
+        - |
+          set -e
+          echo "📨 Kafka Topic Initialization - $(date)"
+          echo "========================================"
+
+          BOOTSTRAP_SERVER="kafka.nova-staging.svc.cluster.local:9092"
+
+          # Topics for various services
+          TOPICS=(
+            "user-events:3:1"
+            "content-events:3:1"
+            "feed-updates:3:1"
+            "messaging-events:3:1"
+            "notification-events:2:1"
+            "analytics-events:6:1"
+            "ranking-updates:3:1"
+            "trust-safety-events:3:1"
+            "realtime-chat:3:1"
+          )
+
+          echo "Creating topics on $BOOTSTRAP_SERVER..."
+          echo ""
+
+          for topic_spec in "${TOPICS[@]}"; do
+            IFS=':' read -r topic_name partitions replication <<< "$topic_spec"
+
+            echo "📌 Topic: $topic_name (partitions: $partitions, replication: $replication)"
+
+            kafka-topics.sh \
+              --bootstrap-server "$BOOTSTRAP_SERVER" \
+              --create \
+              --topic "$topic_name" \
+              --partitions "$partitions" \
+              --replication-factor "$replication" \
+              --if-not-exists || true
+
+            echo ""
+          done
+
+          echo "========================================"
+          echo "✅ Topics Initialized"
+          echo ""
+          echo "Topics list:"
+          kafka-topics.sh --bootstrap-server "$BOOTSTRAP_SERVER" --list
+
+      resources:
+        requests:
+          cpu: 100m
+          memory: 256Mi
+        limits:
+          cpu: 500m
+          memory: 512Mi
+
+---
+# Service for Kafka management tools access (optional)
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka-jmx
+  namespace: nova-staging
+  labels:
+    app: kafka
+spec:
+  type: ClusterIP
+  ports:
+  - name: jmx
+    port: 9999
+    targetPort: 9999
+    protocol: TCP
+  selector:
+    app: kafka

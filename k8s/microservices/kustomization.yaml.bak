@@ -73,9 +73,7 @@ resources:
   # Infrastructure and support services
   - ingress.yaml
   - ingress-tls-setup.yaml
-  # NOTE: prometheus-monitoring-setup.yaml commented out due to namespace conflicts
-  # with staging overlay's namespace transformation. Deploy monitoring separately if needed.
-  # - prometheus-monitoring-setup.yaml
+  - prometheus-monitoring-setup.yaml
   - gitops-argocd-setup.yaml
   - s3-configmap.yaml
   - s3-secret.yaml

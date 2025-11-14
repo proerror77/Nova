@@ -1,0 +1,251 @@
+# PostgreSQL 多数据库初始化
+# 为 14 个微服务创建各自的数据库和用户
+# 使用最小权限原则，每个服务有独立的凭证
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-multi-db-init
+  namespace: nova-staging
+  labels:
+    app: postgres
+    component: init-script
+data:
+  # 第一步：创建所有数据库
+  01-create-databases.sql: |
+    -- 创建所有微服务数据库
+    SELECT 'CREATE DATABASE nova_auth' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'nova_auth')\gexec
+    SELECT 'CREATE DATABASE nova_user' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'nova_user')\gexec
+    SELECT 'CREATE DATABASE nova_content' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'nova_content')\gexec
+    SELECT 'CREATE DATABASE nova_feed' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'nova_feed')\gexec
+    SELECT 'CREATE DATABASE nova_messaging' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'nova_messaging')\gexec
+    SELECT 'CREATE DATABASE nova_search' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'nova_search')\gexec
+    SELECT 'CREATE DATABASE nova_notification' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'nova_notification')\gexec
+    SELECT 'CREATE DATABASE nova_media' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'nova_media')\gexec
+    SELECT 'CREATE DATABASE nova_analytics' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'nova_analytics')\gexec
+    SELECT 'CREATE DATABASE nova_graph' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'nova_graph')\gexec
+    SELECT 'CREATE DATABASE nova_ranking' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'nova_ranking')\gexec
+    SELECT 'CREATE DATABASE nova_feature_store' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'nova_feature_store')\gexec
+    SELECT 'CREATE DATABASE nova_identity' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'nova_identity')\gexec
+    SELECT 'CREATE DATABASE nova_trust_safety' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'nova_trust_safety')\gexec
+    SELECT 'CREATE DATABASE nova_realtime_chat' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'nova_realtime_chat')\gexec
+
+  # 第二步：创建服务用户和权限
+  02-create-service-users.sql: |
+    -- 为每个微服务创建独立用户（使用最小权限原则）
+    DO $$
+    BEGIN
+      -- auth-service 用户
+      IF NOT EXISTS (SELECT FROM pg_user WHERE usename = 'nova_auth_svc') THEN
+        CREATE USER nova_auth_svc WITH ENCRYPTED PASSWORD 'nova_auth_staging_pwd';
+        GRANT ALL PRIVILEGES ON DATABASE nova_auth TO nova_auth_svc;
+      END IF;
+
+      -- user-service 用户
+      IF NOT EXISTS (SELECT FROM pg_user WHERE usename = 'nova_user_svc') THEN
+        CREATE USER nova_user_svc WITH ENCRYPTED PASSWORD 'nova_user_staging_pwd';
+        GRANT ALL PRIVILEGES ON DATABASE nova_user TO nova_user_svc;
+      END IF;
+
+      -- content-service 用户
+      IF NOT EXISTS (SELECT FROM pg_user WHERE usename = 'nova_content_svc') THEN
+        CREATE USER nova_content_svc WITH ENCRYPTED PASSWORD 'nova_content_staging_pwd';
+        GRANT ALL PRIVILEGES ON DATABASE nova_content TO nova_content_svc;
+      END IF;
+
+      -- feed-service 用户
+      IF NOT EXISTS (SELECT FROM pg_user WHERE usename = 'nova_feed_svc') THEN
+        CREATE USER nova_feed_svc WITH ENCRYPTED PASSWORD 'nova_feed_staging_pwd';
+        GRANT ALL PRIVILEGES ON DATABASE nova_feed TO nova_feed_svc;
+      END IF;
+
+      -- messaging-service 用户
+      IF NOT EXISTS (SELECT FROM pg_user WHERE usename = 'nova_messaging_svc') THEN
+        CREATE USER nova_messaging_svc WITH ENCRYPTED PASSWORD 'nova_messaging_staging_pwd';
+        GRANT ALL PRIVILEGES ON DATABASE nova_messaging TO nova_messaging_svc;
+      END IF;
+
+      -- search-service 用户
+      IF NOT EXISTS (SELECT FROM pg_user WHERE usename = 'nova_search_svc') THEN
+        CREATE USER nova_search_svc WITH ENCRYPTED PASSWORD 'nova_search_staging_pwd';
+        GRANT ALL PRIVILEGES ON DATABASE nova_search TO nova_search_svc;
+      END IF;
+
+      -- notification-service 用户
+      IF NOT EXISTS (SELECT FROM pg_user WHERE usename = 'nova_notification_svc') THEN
+        CREATE USER nova_notification_svc WITH ENCRYPTED PASSWORD 'nova_notification_staging_pwd';
+        GRANT ALL PRIVILEGES ON DATABASE nova_notification TO nova_notification_svc;
+      END IF;
+
+      -- media-service 用户
+      IF NOT EXISTS (SELECT FROM pg_user WHERE usename = 'nova_media_svc') THEN
+        CREATE USER nova_media_svc WITH ENCRYPTED PASSWORD 'nova_media_staging_pwd';
+        GRANT ALL PRIVILEGES ON DATABASE nova_media TO nova_media_svc;
+      END IF;
+
+      -- analytics-service 用户
+      IF NOT EXISTS (SELECT FROM pg_user WHERE usename = 'nova_analytics_svc') THEN
+        CREATE USER nova_analytics_svc WITH ENCRYPTED PASSWORD 'nova_analytics_staging_pwd';
+        GRANT ALL PRIVILEGES ON DATABASE nova_analytics TO nova_analytics_svc;
+      END IF;
+
+      -- graph-service 用户
+      IF NOT EXISTS (SELECT FROM pg_user WHERE usename = 'nova_graph_svc') THEN
+        CREATE USER nova_graph_svc WITH ENCRYPTED PASSWORD 'nova_graph_staging_pwd';
+        GRANT ALL PRIVILEGES ON DATABASE nova_graph TO nova_graph_svc;
+      END IF;
+
+      -- ranking-service 用户
+      IF NOT EXISTS (SELECT FROM pg_user WHERE usename = 'nova_ranking_svc') THEN
+        CREATE USER nova_ranking_svc WITH ENCRYPTED PASSWORD 'nova_ranking_staging_pwd';
+        GRANT ALL PRIVILEGES ON DATABASE nova_ranking TO nova_ranking_svc;
+      END IF;
+
+      -- feature-store 用户
+      IF NOT EXISTS (SELECT FROM pg_user WHERE usename = 'nova_feature_store_svc') THEN
+        CREATE USER nova_feature_store_svc WITH ENCRYPTED PASSWORD 'nova_feature_store_staging_pwd';
+        GRANT ALL PRIVILEGES ON DATABASE nova_feature_store TO nova_feature_store_svc;
+      END IF;
+
+      -- identity-service 用户
+      IF NOT EXISTS (SELECT FROM pg_user WHERE usename = 'nova_identity_svc') THEN
+        CREATE USER nova_identity_svc WITH ENCRYPTED PASSWORD 'nova_identity_staging_pwd';
+        GRANT ALL PRIVILEGES ON DATABASE nova_identity TO nova_identity_svc;
+      END IF;
+
+      -- trust-safety-service 用户
+      IF NOT EXISTS (SELECT FROM pg_user WHERE usename = 'nova_trust_safety_svc') THEN
+        CREATE USER nova_trust_safety_svc WITH ENCRYPTED PASSWORD 'nova_trust_safety_staging_pwd';
+        GRANT ALL PRIVILEGES ON DATABASE nova_trust_safety TO nova_trust_safety_svc;
+      END IF;
+
+      -- realtime-chat-service 用户
+      IF NOT EXISTS (SELECT FROM pg_user WHERE usename = 'nova_realtime_chat_svc') THEN
+        CREATE USER nova_realtime_chat_svc WITH ENCRYPTED PASSWORD 'nova_realtime_chat_staging_pwd';
+        GRANT ALL PRIVILEGES ON DATABASE nova_realtime_chat TO nova_realtime_chat_svc;
+      END IF;
+    END
+    $$;
+
+  # 第三步：创建扩展和初始 schema
+  03-create-extensions.sql: |
+    -- 在每个数据库中启用必要的扩展
+    \c nova_auth
+    CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+    CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+    \c nova_user
+    CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+    CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+    \c nova_content
+    CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+    CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+    \c nova_feed
+    CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+    CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+    \c nova_messaging
+    CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+    CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+    \c nova_search
+    CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+    CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+    \c nova_notification
+    CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+    CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+    \c nova_media
+    CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+    CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+    \c nova_analytics
+    CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+    CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+    \c nova_graph
+    CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+    CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+    \c nova_ranking
+    CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+    CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+    \c nova_feature_store
+    CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+    CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+    \c nova_identity
+    CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+    CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+    \c nova_trust_safety
+    CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+    CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+    \c nova_realtime_chat
+    CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+    CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+  # 数据库映射信息（用于参考）
+  database-mapping.txt: |
+    微服务 → 数据库映射表
+
+    1. auth-service → nova_auth
+    2. user-service → nova_user
+    3. content-service → nova_content
+    4. feed-service → nova_feed
+    5. messaging-service → nova_messaging
+    6. search-service → nova_search
+    7. notification-service → nova_notification
+    8. media-service → nova_media
+    9. analytics-service → nova_analytics
+    10. graph-service → nova_graph
+    11. ranking-service → nova_ranking
+    12. feature-store → nova_feature_store
+    13. identity-service → nova_identity
+    14. trust-safety-service → nova_trust_safety
+    15. realtime-chat-service → nova_realtime_chat
+
+---
+# 更新 postgres 的 init script 卷来使用多数据库配置
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init-scripts
+  namespace: nova-staging
+  labels:
+    app: postgres
+    component: init-script
+data:
+  # 综合初始化脚本
+  init-all-databases.sh: |
+    #!/bin/bash
+    set -e
+
+    echo "🗄️  PostgreSQL Multi-Database Initialization - Starting at $(date)"
+    echo "========================================"
+
+    # 运行初始化 SQL 脚本
+    echo "Step 1: Creating databases..."
+    psql -v ON_ERROR_STOP=1 -f /docker-entrypoint-initdb.d/01-create-databases.sql
+
+    echo "Step 2: Creating service users..."
+    psql -v ON_ERROR_STOP=1 -f /docker-entrypoint-initdb.d/02-create-service-users.sql
+
+    echo "Step 3: Creating extensions..."
+    psql -v ON_ERROR_STOP=1 -f /docker-entrypoint-initdb.d/03-create-extensions.sql
+
+    echo ""
+    echo "✅ All databases initialized successfully!"
+    echo "========================================"
+    echo ""
+    echo "📊 Created databases:"
+    psql -l | grep nova_
+
+    echo ""
+    echo "🔐 Created service users:"
+    psql -c "\du" | grep nova_
