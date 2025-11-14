@@ -1,10 +1,12 @@
 import SwiftUI
+import PhotosUI
 
 struct AccountView: View {
     @Binding var currentPage: AppPage
+    @StateObject private var viewModel = UserProfileViewModel()
     @State private var showNewPost = false
     @State private var showSetting = false
-    @State private var selectedTab = 0 // 0: Posts, 1: Saved, 2: Liked
+    @State private var selectedPhotoItem: PhotosPickerItem?
 
     var body: some View {
         ZStack {
@@ -48,7 +50,7 @@ struct AccountView: View {
                         // MARK: - 顶部导航栏
                         HStack {
                             HStack(spacing: 11) {
-                                Text("Bruce Li")
+                                Text(viewModel.userProfile?.displayName ?? viewModel.userProfile?.username ?? "Loading...")
                                     .font(Font.custom("Helvetica Neue", size: 21).weight(.medium))
                                     .foregroundColor(.white)
 
@@ -60,7 +62,9 @@ struct AccountView: View {
                             Spacer()
 
                             HStack(spacing: 19) {
-                                Button(action: {}) {
+                                Button(action: {
+                                    viewModel.shareProfile()
+                                }) {
                                     Image(systemName: "square.and.arrow.up")
                                         .font(.system(size: 20))
                                         .foregroundColor(.white)
@@ -89,31 +93,50 @@ struct AccountView: View {
                                         .fill(.white)
                                         .frame(width: 140, height: 140)
 
-                                    Circle()
-                                        .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
+                                    // 头像图片
+                                    if let avatarUrl = viewModel.userProfile?.avatarUrl,
+                                       let url = URL(string: avatarUrl) {
+                                        AsyncImage(url: url) { image in
+                                            image
+                                                .resizable()
+                                                .scaledToFill()
+                                        } placeholder: {
+                                            Circle()
+                                                .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
+                                        }
                                         .frame(width: 136, height: 136)
-
-                                    // + 号按钮
-                                    ZStack {
+                                        .clipShape(Circle())
+                                    } else {
                                         Circle()
-                                            .fill(Color(red: 0.82, green: 0.11, blue: 0.26))
-                                            .frame(width: 35, height: 35)
+                                            .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
+                                            .frame(width: 136, height: 136)
+                                    }
 
-                                        Image(systemName: "plus")
-                                            .font(.system(size: 16, weight: .bold))
-                                            .foregroundColor(.white)
+                                    // + 号按钮 - 上传头像
+                                    PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
+                                        ZStack {
+                                            Circle()
+                                                .fill(Color(red: 0.82, green: 0.11, blue: 0.26))
+                                                .frame(width: 35, height: 35)
+
+                                            Image(systemName: "plus")
+                                                .font(.system(size: 16, weight: .bold))
+                                                .foregroundColor(.white)
+                                        }
                                     }
                                     .offset(x: 45, y: 45)
                                 }
 
                                 // 用户名和位置
-                                Text("Bruce Li")
+                                Text(viewModel.userProfile?.displayName ?? viewModel.userProfile?.username ?? "")
                                     .font(Font.custom("Helvetica Neue", size: 21).weight(.bold))
                                     .foregroundColor(.white)
 
-                                Text("China")
-                                    .font(Font.custom("Helvetica Neue", size: 14))
-                                    .foregroundColor(.white)
+                                if let location = viewModel.userProfile?.location {
+                                    Text(location)
+                                        .font(Font.custom("Helvetica Neue", size: 14))
+                                        .foregroundColor(.white)
+                                }
                             }
 
                             // MARK: - 统计数据
@@ -123,7 +146,7 @@ struct AccountView: View {
                                     Text("Following")
                                         .font(Font.custom("Helvetica Neue", size: 16.50))
                                         .foregroundColor(.white)
-                                    Text("3021")
+                                    Text("\(viewModel.userProfile?.followingCount ?? 0)")
                                         .font(Font.custom("Helvetica Neue", size: 16.50))
                                         .foregroundColor(.white)
                                 }
@@ -139,7 +162,7 @@ struct AccountView: View {
                                     Text("Followers")
                                         .font(Font.custom("Helvetica Neue", size: 16.50))
                                         .foregroundColor(.white)
-                                    Text("3021")
+                                    Text("\(viewModel.userProfile?.followerCount ?? 0)")
                                         .font(Font.custom("Helvetica Neue", size: 16.50))
                                         .foregroundColor(.white)
                                 }
@@ -150,12 +173,12 @@ struct AccountView: View {
                                     .fill(.white)
                                     .frame(width: 0.25, height: 26)
 
-                                // Likes
+                                // Posts
                                 VStack(spacing: 1) {
-                                    Text("Likes")
+                                    Text("Posts")
                                         .font(Font.custom("Helvetica Neue", size: 16.50))
                                         .foregroundColor(.white)
-                                    Text("3021")
+                                    Text("\(viewModel.userProfile?.postCount ?? 0)")
                                         .font(Font.custom("Helvetica Neue", size: 16.50))
                                         .foregroundColor(.white)
                                 }
@@ -174,28 +197,47 @@ struct AccountView: View {
                         Spacer()
 
                         HStack(spacing: 42) {
-                            Button(action: { selectedTab = 0 }) {
+                            Button(action: {
+                                viewModel.selectedTab = .posts
+                                Task {
+                                    await viewModel.loadContent(for: .posts)
+                                }
+                            }) {
                                 Text("Posts")
                                     .font(Font.custom("Helvetica Neue", size: 16.50).weight(.bold))
-                                    .foregroundColor(selectedTab == 0 ? Color(red: 0.82, green: 0.11, blue: 0.26) : .black)
+                                    .foregroundColor(viewModel.selectedTab == .posts ? Color(red: 0.82, green: 0.11, blue: 0.26) : .black)
                             }
 
-                            Button(action: { selectedTab = 1 }) {
+                            Button(action: {
+                                viewModel.selectedTab = .saved
+                                Task {
+                                    await viewModel.loadContent(for: .saved)
+                                }
+                            }) {
                                 Text("Saved")
                                     .font(Font.custom("Helvetica Neue", size: 16.50).weight(.bold))
-                                    .foregroundColor(selectedTab == 1 ? Color(red: 0.82, green: 0.11, blue: 0.26) : .black)
+                                    .foregroundColor(viewModel.selectedTab == .saved ? Color(red: 0.82, green: 0.11, blue: 0.26) : .black)
                             }
 
-                            Button(action: { selectedTab = 2 }) {
+                            Button(action: {
+                                viewModel.selectedTab = .liked
+                                Task {
+                                    await viewModel.loadContent(for: .liked)
+                                }
+                            }) {
                                 Text("Liked")
                                     .font(Font.custom("Helvetica Neue", size: 16.50).weight(.bold))
-                                    .foregroundColor(selectedTab == 2 ? Color(red: 0.82, green: 0.11, blue: 0.26) : .black)
+                                    .foregroundColor(viewModel.selectedTab == .liked ? Color(red: 0.82, green: 0.11, blue: 0.26) : .black)
                             }
                         }
 
                         Spacer()
 
-                        Button(action: {}) {
+                        Button(action: {
+                            Task {
+                                await viewModel.searchInProfile(query: "")
+                            }
+                        }) {
                             Image(systemName: "magnifyingglass")
                                 .font(.system(size: 20))
                                 .foregroundColor(.black)
@@ -209,10 +251,25 @@ struct AccountView: View {
                     // MARK: - 图片网格
                     ScrollView {
                         VStack(spacing: 0) {
-                            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
-                                ForEach(0..<6, id: \.self) { index in
-                                    PostGridItem()
+                            if viewModel.isLoading {
+                                ProgressView()
+                                    .padding(.top, 40)
+                            } else if viewModel.hasContent {
+                                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+                                    ForEach(viewModel.currentTabPosts) { post in
+                                        PostGridItem(post: post)
+                                    }
                                 }
+                            } else {
+                                VStack(spacing: 12) {
+                                    Image(systemName: "tray")
+                                        .font(.system(size: 48))
+                                        .foregroundColor(.gray)
+                                    Text("No posts yet")
+                                        .font(.system(size: 16))
+                                        .foregroundColor(.gray)
+                                }
+                                .padding(.top, 60)
                             }
 
                             // 👇 调整这里的高度来控制白色区域的大小
@@ -296,11 +353,53 @@ struct AccountView: View {
                 .offset(y: 35)
             }
         }
+        .onChange(of: selectedPhotoItem) { oldValue, newValue in
+            Task {
+                if let photoItem = newValue,
+                   let data = try? await photoItem.loadTransferable(type: Data.self),
+                   let image = UIImage(data: data) {
+                    await viewModel.uploadAvatar(image: image)
+                }
+            }
+        }
+        .task {
+            // TODO: Get current user ID from authentication service
+            await viewModel.loadUserProfile(userId: "current_user_id")
+        }
+        .alert("Error", isPresented: .constant(viewModel.errorMessage != nil)) {
+            Button("OK") {
+                viewModel.errorMessage = nil
+            }
+        } message: {
+            if let error = viewModel.errorMessage {
+                Text(error)
+            }
+        }
     }
 }
 
 // MARK: - 图片网格项组件
 struct PostGridItem: View {
+    let post: Post
+
+    private var formattedDate: String {
+        let date = Date(timeIntervalSince1970: TimeInterval(post.createdAt))
+        let now = Date()
+        let interval = now.timeIntervalSince(date)
+
+        if interval < 60 {
+            return "just now"
+        } else if interval < 3600 {
+            return "\(Int(interval / 60))m"
+        } else if interval < 86400 {
+            return "\(Int(interval / 3600))h"
+        } else if interval < 604800 {
+            return "\(Int(interval / 86400))d"
+        } else {
+            return "\(Int(interval / 604800))w"
+        }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             // 用户信息
@@ -310,11 +409,11 @@ struct PostGridItem: View {
                     .frame(width: 24, height: 24)
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Simone Carter")
+                    Text(post.creatorId)
                         .font(Font.custom("Helvetica Neue", size: 12).weight(.semibold))
                         .foregroundColor(.black)
 
-                    Text("1d")
+                    Text(formattedDate)
                         .font(Font.custom("Helvetica Neue", size: 10))
                         .foregroundColor(Color(red: 0.60, green: 0.60, blue: 0.60))
                 }
@@ -324,7 +423,7 @@ struct PostGridItem: View {
             .padding(.horizontal, 12)
             .padding(.top, 12)
 
-            // 图片
+            // 图片占位符（后续可以从 media_urls 加载）
             Rectangle()
                 .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
                 .aspectRatio(1, contentMode: .fill)
@@ -332,8 +431,8 @@ struct PostGridItem: View {
                 .cornerRadius(12)
                 .padding(.horizontal, 12)
 
-            // 描述文本
-            Text("kyleegigstead Cyborg dreams...")
+            // 帖子内容
+            Text(post.content)
                 .font(Font.custom("Helvetica Neue", size: 13).weight(.medium))
                 .foregroundColor(.black)
                 .lineLimit(2)
