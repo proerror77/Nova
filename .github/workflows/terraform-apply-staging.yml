@@ -55,7 +55,7 @@ jobs:
           echo "plan_summary=$SUMMARY" >> $GITHUB_OUTPUT
 
       - name: 💾 Save Plan Artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: terraform-plan
           path: terraform/staging.tfplan
@@ -73,7 +73,7 @@ jobs:
           cat outputs.json
 
       - name: 📤 Save Apply Output
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: terraform-apply-output
           path: |
