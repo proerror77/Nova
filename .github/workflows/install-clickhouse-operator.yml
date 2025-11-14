@@ -54,14 +54,16 @@ jobs:
           echo "ok=true" >> $GITHUB_OUTPUT
 
       - name: Fallback install via raw manifests (if Helm failed)
-        if: steps.helm.outputs.ok != 'true'
+        if: steps.helm.outcome != 'success'
+        continue-on-error: true
         run: |
           set -e
           # Choose a known stable version
           BRANCH=master
           BUNDLE=https://raw.githubusercontent.com/Altinity/clickhouse-operator/${BRANCH}/deploy/operator/clickhouse-operator-install-bundle.yaml
           kubectl create namespace clickhouse-operator --dry-run=client -o yaml | kubectl apply -f - || true
-          kubectl apply -f "$BUNDLE" -n clickhouse-operator
+          # Apply cluster-scoped bundle without forcing namespace
+          kubectl apply -f "$BUNDLE"
           kubectl rollout status -n clickhouse-operator deploy/clickhouse-operator --timeout=300s || true
 
       - name: Verify CRDs
