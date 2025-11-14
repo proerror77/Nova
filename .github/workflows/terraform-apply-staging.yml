@@ -113,12 +113,19 @@ jobs:
             [View Full Logs](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
             `;
 
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: summary
-            });
+            // Only post comment if triggered from a PR or issue (not from push event)
+            if (context.issue.number) {
+              github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: summary
+              });
+              core.info('✅ Posted results comment to issue/PR');
+            } else {
+              core.info('ℹ️ Skipping comment posting (push event detected, no PR/issue context)');
+              core.info('📋 Summary: ' + status);
+            }
 
       - name: ✅ Summary
         if: success()
