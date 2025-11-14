@@ -133,15 +133,17 @@ jobs:
           n=0
           until [ "$n" -ge 3 ]; do
             if helm upgrade --install external-secrets external-secrets/external-secrets \
-              -n external-secrets-system --create-namespace --atomic --wait --timeout 10m; then
+              -n external-secrets-system --create-namespace --wait --timeout 15m; then
               break
             fi
             n=$((n+1))
             echo "helm install external-secrets failed, retry $n/3 after sleep..." >&2
-            sleep 10
+            # attempt best-effort status for debugging between retries
+            kubectl -n external-secrets-system get pods || true
+            sleep 15
           done
           # wait for ESO deployment ready (best-effort)
-          kubectl rollout status -n external-secrets-system deploy/external-secrets --timeout=300s || true
+          kubectl rollout status -n external-secrets-system deploy/external-secrets --timeout=600s || true
 
       - name: Install ClickHouse Operator (CRDs)
         id: ch-helm
