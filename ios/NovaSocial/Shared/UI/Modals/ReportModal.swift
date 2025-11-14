@@ -1,6 +1,6 @@
 import SwiftUI
 
-struct ReportView: View {
+struct ReportModal: View {
     @State private var showThankYou = false
     @State private var showPoll = false
     @Binding var isPresented: Bool
@@ -96,7 +96,7 @@ struct ReportOptionNavigable: View {
 
     var body: some View {
         NavigationLink {
-            ThankYouView(showThankYouView: $showThankYouView, isPresented: $isPresented)
+            ThankYouModal(showThankYouView: $showThankYouView, isPresented: $isPresented)
                 .transaction { transaction in
                     transaction.animation = nil
                 }
@@ -126,5 +126,5 @@ struct ReportOptionNavigable: View {
 #Preview {
     @Previewable @State var isPresented = true
     @Previewable @State var showThankYouView = false
-    ReportView(isPresented: $isPresented, showThankYouView: $showThankYouView)
+    ReportModal(isPresented: $isPresented, showThankYouView: $showThankYouView)
 }

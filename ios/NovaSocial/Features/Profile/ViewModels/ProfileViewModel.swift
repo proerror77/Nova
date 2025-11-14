@@ -2,7 +2,7 @@ import Foundation
 import SwiftUI
 
 @MainActor
-class UserProfileViewModel: ObservableObject {
+class ProfileViewModel: ObservableObject {
     // MARK: - Published Properties
 
     @Published var userProfile: UserProfile?
@@ -215,8 +215,8 @@ class UserProfileViewModel: ObservableObject {
 
     // MARK: - Mock Data for Preview
     #if DEBUG
-    static func preview() -> UserProfileViewModel {
-        let viewModel = UserProfileViewModel()
+    static func preview() -> ProfileViewModel {
+        let viewModel = ProfileViewModel()
         viewModel.userProfile = UserProfile(
             id: "mock-user-id",
             username: "bruce_li",
