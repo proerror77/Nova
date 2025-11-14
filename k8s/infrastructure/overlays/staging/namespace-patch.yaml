@@ -1,0 +1,7 @@
+# Namespace override patch - 确保所有资源都在 nova-staging namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: nova-staging
+  labels:
+    environment: staging

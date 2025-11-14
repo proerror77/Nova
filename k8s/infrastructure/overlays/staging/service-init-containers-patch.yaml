@@ -1,0 +1,676 @@
+# 微服务启动依赖管理
+# 为各个微服务添加 Init Container，确保依赖服务先启动
+# 这避免了级联故障和启动顺序混乱
+
+---
+# feed-service 依赖：user-service + kafka
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: feed-service
+  namespace: nova-staging
+spec:
+  template:
+    spec:
+      initContainers:
+      - name: wait-for-user-service
+        image: busybox:1.35
+        command:
+        - sh
+        - -c
+        - |
+          echo "⏳ Waiting for user-service:50051..."
+          for i in $(seq 1 30); do
+            if nc -zv user-service.nova-staging.svc.cluster.local 50051 2>/dev/null; then
+              echo "✓ user-service is ready"
+              exit 0
+            fi
+            echo "  Attempt $i/30, retrying..."
+            sleep 2
+          done
+          echo "❌ user-service is not ready"
+          exit 1
+
+      - name: wait-for-kafka
+        image: busybox:1.35
+        command:
+        - sh
+        - -c
+        - |
+          echo "⏳ Waiting for kafka:9092..."
+          for i in $(seq 1 30); do
+            if nc -zv kafka.nova-staging.svc.cluster.local 9092 2>/dev/null; then
+              echo "✓ kafka is ready"
+              exit 0
+            fi
+            echo "  Attempt $i/30, retrying..."
+            sleep 2
+          done
+          echo "❌ kafka is not ready"
+          exit 1
+
+---
+# messaging-service 依赖：user-service + postgres
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: messaging-service
+  namespace: nova-staging
+spec:
+  template:
+    spec:
+      initContainers:
+      - name: wait-for-user-service
+        image: busybox:1.35
+        command:
+        - sh
+        - -c
+        - |
+          echo "⏳ Waiting for user-service:50051..."
+          for i in $(seq 1 30); do
+            if nc -zv user-service.nova-staging.svc.cluster.local 50051 2>/dev/null; then
+              echo "✓ user-service is ready"
+              exit 0
+            fi
+            sleep 2
+          done
+          exit 1
+
+      - name: wait-for-postgres
+        image: postgres:15-alpine
+        command:
+        - sh
+        - -c
+        - |
+          echo "⏳ Waiting for postgres:5432..."
+          for i in $(seq 1 30); do
+            if PGPASSWORD="$DB_PASSWORD" psql -h postgres.nova-staging.svc.cluster.local -U "$DB_USER" -d postgres -c "SELECT 1" 2>/dev/null; then
+              echo "✓ postgres is ready"
+              exit 0
+            fi
+            sleep 2
+          done
+          exit 1
+        env:
+        - name: DB_USER
+          valueFrom:
+            secretKeyRef:
+              name: nova-db-credentials
+              key: username
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: nova-db-credentials
+              key: password
+
+---
+# search-service 依赖：postgres + elasticsearch
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: search-service
+  namespace: nova-staging
+spec:
+  template:
+    spec:
+      initContainers:
+      - name: wait-for-postgres
+        image: postgres:15-alpine
+        command:
+        - sh
+        - -c
+        - |
+          echo "⏳ Waiting for postgres:5432..."
+          for i in $(seq 1 30); do
+            if PGPASSWORD="$DB_PASSWORD" psql -h postgres.nova-staging.svc.cluster.local -U "$DB_USER" -d postgres -c "SELECT 1" 2>/dev/null; then
+              echo "✓ postgres is ready"
+              exit 0
+            fi
+            sleep 2
+          done
+          exit 1
+        env:
+        - name: DB_USER
+          valueFrom:
+            secretKeyRef:
+              name: nova-db-credentials
+              key: username
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: nova-db-credentials
+              key: password
+
+      - name: wait-for-elasticsearch
+        image: busybox:1.35
+        command:
+        - sh
+        - -c
+        - |
+          echo "⏳ Waiting for elasticsearch:9200..."
+          for i in $(seq 1 30); do
+            if nc -zv elasticsearch.nova-staging.svc.cluster.local 9200 2>/dev/null; then
+              echo "✓ elasticsearch is ready"
+              exit 0
+            fi
+            sleep 2
+          done
+          exit 1
+
+---
+# analytics-service 依赖：kafka + clickhouse
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: analytics-service
+  namespace: nova-staging
+spec:
+  template:
+    spec:
+      initContainers:
+      - name: wait-for-kafka
+        image: busybox:1.35
+        command:
+        - sh
+        - -c
+        - |
+          echo "⏳ Waiting for kafka:9092..."
+          for i in $(seq 1 30); do
+            if nc -zv kafka.nova-staging.svc.cluster.local 9092 2>/dev/null; then
+              echo "✓ kafka is ready"
+              exit 0
+            fi
+            sleep 2
+          done
+          exit 1
+
+      - name: wait-for-clickhouse
+        image: busybox:1.35
+        command:
+        - sh
+        - -c
+        - |
+          echo "⏳ Waiting for clickhouse:9000..."
+          for i in $(seq 1 30); do
+            if nc -zv clickhouse.nova-staging.svc.cluster.local 9000 2>/dev/null; then
+              echo "✓ clickhouse is ready"
+              exit 0
+            fi
+            sleep 2
+          done
+          exit 1
+
+---
+# graph-service 依赖：neo4j
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: graph-service
+  namespace: nova-staging
+spec:
+  template:
+    spec:
+      initContainers:
+      - name: wait-for-neo4j
+        image: busybox:1.35
+        command:
+        - sh
+        - -c
+        - |
+          echo "⏳ Waiting for neo4j:7687..."
+          for i in $(seq 1 30); do
+            if nc -zv neo4j.nova-staging.svc.cluster.local 7687 2>/dev/null; then
+              echo "✓ neo4j is ready"
+              exit 0
+            fi
+            sleep 2
+          done
+          exit 1
+
+---
+# notification-service 依赖：redis
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notification-service
+  namespace: nova-staging
+spec:
+  template:
+    spec:
+      initContainers:
+      - name: wait-for-redis
+        image: busybox:1.35
+        command:
+        - sh
+        - -c
+        - |
+          echo "⏳ Waiting for redis:6379..."
+          for i in $(seq 1 30); do
+            if nc -zv redis.nova-staging.svc.cluster.local 6379 2>/dev/null; then
+              echo "✓ redis is ready"
+              exit 0
+            fi
+            sleep 2
+          done
+          exit 1
+
+---
+# ranking-service 依赖：redis + postgres
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ranking-service
+  namespace: nova-staging
+spec:
+  template:
+    spec:
+      initContainers:
+      - name: wait-for-redis
+        image: busybox:1.35
+        command:
+        - sh
+        - -c
+        - |
+          echo "⏳ Waiting for redis:6379..."
+          for i in $(seq 1 30); do
+            if nc -zv redis.nova-staging.svc.cluster.local 6379 2>/dev/null; then
+              echo "✓ redis is ready"
+              exit 0
+            fi
+            sleep 2
+          done
+          exit 1
+
+      - name: wait-for-postgres
+        image: postgres:15-alpine
+        command:
+        - sh
+        - -c
+        - |
+          echo "⏳ Waiting for postgres:5432..."
+          for i in $(seq 1 30); do
+            if PGPASSWORD="$DB_PASSWORD" psql -h postgres.nova-staging.svc.cluster.local -U "$DB_USER" -d postgres -c "SELECT 1" 2>/dev/null; then
+              echo "✓ postgres is ready"
+              exit 0
+            fi
+            sleep 2
+          done
+          exit 1
+        env:
+        - name: DB_USER
+          valueFrom:
+            secretKeyRef:
+              name: nova-db-credentials
+              key: username
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: nova-db-credentials
+              key: password
+
+---
+# realtime-chat-service 依赖：user-service + messaging-service + redis
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: realtime-chat-service
+  namespace: nova-staging
+spec:
+  template:
+    spec:
+      initContainers:
+      - name: wait-for-user-service
+        image: busybox:1.35
+        command:
+        - sh
+        - -c
+        - |
+          echo "⏳ Waiting for user-service:50051..."
+          for i in $(seq 1 30); do
+            if nc -zv user-service.nova-staging.svc.cluster.local 50051 2>/dev/null; then
+              echo "✓ user-service is ready"
+              exit 0
+            fi
+            sleep 2
+          done
+          exit 1
+
+      - name: wait-for-messaging-service
+        image: busybox:1.35
+        command:
+        - sh
+        - -c
+        - |
+          echo "⏳ Waiting for messaging-service:50051..."
+          for i in $(seq 1 30); do
+            if nc -zv messaging-service.nova-staging.svc.cluster.local 50051 2>/dev/null; then
+              echo "✓ messaging-service is ready"
+              exit 0
+            fi
+            sleep 2
+          done
+          exit 1
+
+      - name: wait-for-redis
+        image: busybox:1.35
+        command:
+        - sh
+        - -c
+        - |
+          echo "⏳ Waiting for redis:6379..."
+          for i in $(seq 1 30); do
+            if nc -zv redis.nova-staging.svc.cluster.local 6379 2>/dev/null; then
+              echo "✓ redis is ready"
+              exit 0
+            fi
+            sleep 2
+          done
+          exit 1
+
+---
+# trust-safety-service 依赖：postgres + kafka
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: trust-safety-service
+  namespace: nova-staging
+spec:
+  template:
+    spec:
+      initContainers:
+      - name: wait-for-postgres
+        image: postgres:15-alpine
+        command:
+        - sh
+        - -c
+        - |
+          echo "⏳ Waiting for postgres:5432..."
+          for i in $(seq 1 30); do
+            if PGPASSWORD="$DB_PASSWORD" psql -h postgres.nova-staging.svc.cluster.local -U "$DB_USER" -d postgres -c "SELECT 1" 2>/dev/null; then
+              echo "✓ postgres is ready"
+              exit 0
+            fi
+            sleep 2
+          done
+          exit 1
+        env:
+        - name: DB_USER
+          valueFrom:
+            secretKeyRef:
+              name: nova-db-credentials
+              key: username
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: nova-db-credentials
+              key: password
+
+      - name: wait-for-kafka
+        image: busybox:1.35
+        command:
+        - sh
+        - -c
+        - |
+          echo "⏳ Waiting for kafka:9092..."
+          for i in $(seq 1 30); do
+            if nc -zv kafka.nova-staging.svc.cluster.local 9092 2>/dev/null; then
+              echo "✓ kafka is ready"
+              exit 0
+            fi
+            sleep 2
+          done
+          exit 1
+
+---
+# user-service 依赖：postgres (基础身份验证服务)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: user-service
+  namespace: nova-staging
+spec:
+  template:
+    spec:
+      initContainers:
+      - name: wait-for-postgres
+        image: postgres:15-alpine
+        command:
+        - sh
+        - -c
+        - |
+          echo "⏳ Waiting for postgres:5432..."
+          for i in $(seq 1 30); do
+            if PGPASSWORD="$DB_PASSWORD" psql -h postgres.nova-staging.svc.cluster.local -U "$DB_USER" -d postgres -c "SELECT 1" 2>/dev/null; then
+              echo "✓ postgres is ready"
+              exit 0
+            fi
+            sleep 2
+          done
+          exit 1
+        env:
+        - name: DB_USER
+          valueFrom:
+            secretKeyRef:
+              name: nova-db-credentials
+              key: username
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: nova-db-credentials
+              key: password
+
+---
+# content-service 依赖：postgres
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: content-service
+  namespace: nova-staging
+spec:
+  template:
+    spec:
+      initContainers:
+      - name: wait-for-postgres
+        image: postgres:15-alpine
+        command:
+        - sh
+        - -c
+        - |
+          echo "⏳ Waiting for postgres:5432..."
+          for i in $(seq 1 30); do
+            if PGPASSWORD="$DB_PASSWORD" psql -h postgres.nova-staging.svc.cluster.local -U "$DB_USER" -d postgres -c "SELECT 1" 2>/dev/null; then
+              echo "✓ postgres is ready"
+              exit 0
+            fi
+            sleep 2
+          done
+          exit 1
+        env:
+        - name: DB_USER
+          valueFrom:
+            secretKeyRef:
+              name: nova-db-credentials
+              key: username
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: nova-db-credentials
+              key: password
+
+---
+# media-service 依赖：postgres + content-service
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: media-service
+  namespace: nova-staging
+spec:
+  template:
+    spec:
+      initContainers:
+      - name: wait-for-postgres
+        image: postgres:15-alpine
+        command:
+        - sh
+        - -c
+        - |
+          echo "⏳ Waiting for postgres:5432..."
+          for i in $(seq 1 30); do
+            if PGPASSWORD="$DB_PASSWORD" psql -h postgres.nova-staging.svc.cluster.local -U "$DB_USER" -d postgres -c "SELECT 1" 2>/dev/null; then
+              echo "✓ postgres is ready"
+              exit 0
+            fi
+            sleep 2
+          done
+          exit 1
+        env:
+        - name: DB_USER
+          valueFrom:
+            secretKeyRef:
+              name: nova-db-credentials
+              key: username
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: nova-db-credentials
+              key: password
+
+      - name: wait-for-content-service
+        image: busybox:1.35
+        command:
+        - sh
+        - -c
+        - |
+          echo "⏳ Waiting for content-service:50051..."
+          for i in $(seq 1 30); do
+            if nc -zv content-service.nova-staging.svc.cluster.local 50051 2>/dev/null; then
+              echo "✓ content-service is ready"
+              exit 0
+            fi
+            sleep 2
+          done
+          exit 1
+
+---
+# identity-service 依赖：postgres + user-service
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: identity-service
+  namespace: nova-staging
+spec:
+  template:
+    spec:
+      initContainers:
+      - name: wait-for-postgres
+        image: postgres:15-alpine
+        command:
+        - sh
+        - -c
+        - |
+          echo "⏳ Waiting for postgres:5432..."
+          for i in $(seq 1 30); do
+            if PGPASSWORD="$DB_PASSWORD" psql -h postgres.nova-staging.svc.cluster.local -U "$DB_USER" -d postgres -c "SELECT 1" 2>/dev/null; then
+              echo "✓ postgres is ready"
+              exit 0
+            fi
+            sleep 2
+          done
+          exit 1
+        env:
+        - name: DB_USER
+          valueFrom:
+            secretKeyRef:
+              name: nova-db-credentials
+              key: username
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: nova-db-credentials
+              key: password
+
+      - name: wait-for-user-service
+        image: busybox:1.35
+        command:
+        - sh
+        - -c
+        - |
+          echo "⏳ Waiting for user-service:50051..."
+          for i in $(seq 1 30); do
+            if nc -zv user-service.nova-staging.svc.cluster.local 50051 2>/dev/null; then
+              echo "✓ user-service is ready"
+              exit 0
+            fi
+            sleep 2
+          done
+          exit 1
+
+---
+# feature-store 依赖：postgres + kafka + redis (特征存储)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: feature-store
+  namespace: nova-staging
+spec:
+  template:
+    spec:
+      initContainers:
+      - name: wait-for-postgres
+        image: postgres:15-alpine
+        command:
+        - sh
+        - -c
+        - |
+          echo "⏳ Waiting for postgres:5432..."
+          for i in $(seq 1 30); do
+            if PGPASSWORD="$DB_PASSWORD" psql -h postgres.nova-staging.svc.cluster.local -U "$DB_USER" -d postgres -c "SELECT 1" 2>/dev/null; then
+              echo "✓ postgres is ready"
+              exit 0
+            fi
+            sleep 2
+          done
+          exit 1
+        env:
+        - name: DB_USER
+          valueFrom:
+            secretKeyRef:
+              name: nova-db-credentials
+              key: username
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: nova-db-credentials
+              key: password
+
+      - name: wait-for-kafka
+        image: busybox:1.35
+        command:
+        - sh
+        - -c
+        - |
+          echo "⏳ Waiting for kafka:9092..."
+          for i in $(seq 1 30); do
+            if nc -zv kafka.nova-staging.svc.cluster.local 9092 2>/dev/null; then
+              echo "✓ kafka is ready"
+              exit 0
+            fi
+            sleep 2
+          done
+          exit 1
+
+      - name: wait-for-redis
+        image: busybox:1.35
+        command:
+        - sh
+        - -c
+        - |
+          echo "⏳ Waiting for redis:6379..."
+          for i in $(seq 1 30); do
+            if nc -zv redis.nova-staging.svc.cluster.local 6379 2>/dev/null; then
+              echo "✓ redis is ready"
+              exit 0
+            fi
+            sleep 2
+          done
+          exit 1

@@ -1,14 +1,7 @@
----
-# Nginx Ingress Controller Namespace
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: ingress-nginx
-  labels:
-    app: nova
-    component: ingress
-
----
+# NOTE: Namespace creation has been removed from this file.
+# The ingress-nginx namespace should be created separately if using the Nginx Ingress Controller.
+# Apply with: kubectl create namespace ingress-nginx
+#
 # Note: Install Nginx Ingress Controller first:
 # helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
 # helm repo update

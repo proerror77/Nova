@@ -15,15 +15,9 @@ resources:
 - redis.yaml
 - redis-pvc.yaml
 - elasticsearch.yaml
-# 微服务
-- user-service.yaml
-- content-service.yaml
-- feed-service.yaml
-- media-service.yaml
-- messaging-service.yaml
-- search-service.yaml
-- streaming-service.yaml
-- ingress.yaml
+# NOTE: Microservices are now defined in k8s/microservices/ directory
+# Do NOT include them here to avoid duplication and conflicts
+# Legacy service definitions (user-service.yaml, content-service.yaml, etc.) have been removed
 
 # 命名空间配置
 namespace: nova
@@ -37,22 +31,8 @@ commonLabels:
 commonAnnotations:
   deployment.kubernetes.io/revision: "1"
 
-# 镜像替换 (用于 CI/CD 流程)
-images:
-- name: nova/user-service
-  newTag: latest
-- name: nova/content-service
-  newTag: latest
-- name: nova/feed-service
-  newTag: latest
-- name: nova/media-service
-  newTag: latest
-- name: nova/messaging-service
-  newTag: latest
-- name: nova/search-service
-  newTag: latest
-- name: nova/streaming-service
-  newTag: latest
+# NOTE: Image transformations are now handled in overlay kustomizations
+# Legacy image configurations removed - use k8s/infrastructure/overlays/staging/kustomization.yaml instead
 
 # ConfigMap 已在 configmap.yaml 中定义,不使用生成器避免冲突
 
@@ -62,22 +42,8 @@ images:
 #   literals:
 #   - DATABASE_URL=postgres://nova:password@postgres:5432/nova_content
 
-# 副本数配置
-replicas:
-- name: user-service
-  count: 2
-- name: content-service
-  count: 2
-- name: feed-service
-  count: 2
-- name: media-service
-  count: 2
-- name: messaging-service
-  count: 2
-- name: search-service
-  count: 2
-- name: streaming-service
-  count: 2
+# NOTE: Replica configurations are now in microservices deployment files
+# Legacy replica configurations removed
 
 # 处理器 (patchesStrategicMerge 用于部分覆盖)
 # patchesStrategicMerge:
