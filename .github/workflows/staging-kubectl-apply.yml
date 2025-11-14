@@ -144,12 +144,12 @@ jobs:
             {
               echo 'apiVersion: v1'
               echo 'kind: Secret'
-              echo 'type: Opaque'
               echo 'metadata:'
               echo '  name: '"$name"
               echo '  namespace: '"$NS"
-              echo 'stringData:'
-              echo "$json" | jq -r 'to_entries[] | "  \(.key): \(.value)"'
+              echo 'type: Opaque'
+              echo 'data:'
+              echo "$json" | jq -r 'to_entries | map({key: .key, val: (.value|@base64)})[] | "  \(.key): \(.val)"'
             } > "$tmp"
             kubectl apply -f "$tmp"
           }
