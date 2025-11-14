@@ -59,18 +59,12 @@ jobs:
           set -e
           # Choose a known stable version
           VER=v0.23.6
-          BASE=https://raw.githubusercontent.com/Altinity/clickhouse-operator/${VER}/deploy
+          BUNDLE=https://raw.githubusercontent.com/Altinity/clickhouse-operator/${VER}/deploy/operator/clickhouse-operator-install-bundle.yaml
           kubectl create namespace clickhouse-operator --dry-run=client -o yaml | kubectl apply -f - || true
-          # CRDs
-          kubectl apply -f $BASE/crd-install.yaml
-          # RBAC + operator
-          kubectl apply -f $BASE/operator/clickhouse-operator-install-template.yaml -n clickhouse-operator
-          kubectl apply -f $BASE/operator/clickhouse-operator-install.yaml -n clickhouse-operator
-          # Wait for deployment
+          kubectl apply -f "$BUNDLE" -n clickhouse-operator
           kubectl rollout status -n clickhouse-operator deploy/clickhouse-operator --timeout=300s || true
 
       - name: Verify CRDs
         run: |
           kubectl get crd | grep -E 'clickhouse.*altinity.com' || true
           kubectl get pods -n clickhouse-operator -o wide || true
-
