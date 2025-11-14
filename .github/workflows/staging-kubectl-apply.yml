@@ -12,7 +12,6 @@ env:
   AWS_REGION: ap-northeast-1
   CLUSTER_NAME: nova-staging
   ROLE_TO_ASSUME: arn:aws:iam::025434362120:role/github-actions-role
-  ESO_CHART_VERSION: "0.9.13"
 
 concurrency:
   group: staging-kubectl-apply
@@ -103,61 +102,10 @@ jobs:
           kubectl get events -A || true
           exit 1
 
-      - name: Setup Helm and install operators (CRDs)
+      - name: Setup Helm (for ClickHouse)
         uses: azure/setup-helm@v4
         with:
           version: v3.14.4
-
-      - name: Pre-install External Secrets CRDs (pinned chart)
-        run: |
-          set -e
-          rm -rf /tmp/eso-chart && mkdir -p /tmp/eso-chart
-          helm repo add external-secrets https://charts.external-secrets.io
-          helm repo update
-          helm pull external-secrets/external-secrets --version "$ESO_CHART_VERSION" --untar --untardir /tmp/eso-chart
-          # Apply CRDs first to avoid Helm wait/uninstall flakiness and unknown-field warnings causing requeues
-          if [ -d /tmp/eso-chart/external-secrets/crds ]; then
-            kubectl apply -f /tmp/eso-chart/external-secrets/crds
-          fi
-
-      - name: Clean up ESO release if locked (pending)
-        run: |
-          set -e
-          NS=external-secrets-system
-          RELEASE=external-secrets
-          # If release exists and is pending, uninstall to clear helm lock
-          if helm list -n "$NS" -a -o json | jq -e '.[] | select(.name=="'"$RELEASE"'")' >/dev/null; then
-            STATUS=$(helm status "$RELEASE" -n "$NS" -o json | jq -r '.info.status' || echo unknown)
-            echo "ESO current status: $STATUS"
-            if [[ "$STATUS" == pending* ]] || [[ "$STATUS" == "failed" ]]; then
-              echo "Release is $STATUS; uninstalling to clear lock..."
-              helm uninstall "$RELEASE" -n "$NS" --wait || true
-              # Best-effort cleanup of leftover helm secrets
-              kubectl -n "$NS" delete secret -l owner=helm,name="$RELEASE" --ignore-not-found=true || true
-            fi
-          fi
-
-      - name: Install External Secrets Operator
-        run: |
-          set -e
-          helm repo add external-secrets https://charts.external-secrets.io
-          helm repo update
-          # retry up to 3 times to mitigate transient API throttling / DNS flakes
-          n=0
-          until [ "$n" -ge 3 ]; do
-            if helm upgrade --install external-secrets external-secrets/external-secrets \
-              -n external-secrets-system --create-namespace --version "$ESO_CHART_VERSION" --skip-crds \
-              --wait --timeout 20m; then
-              break
-            fi
-            n=$((n+1))
-            echo "helm install external-secrets failed, retry $n/3 after sleep..." >&2
-            # attempt best-effort status for debugging between retries
-            kubectl -n external-secrets-system get pods || true
-            sleep 15
-          done
-          # wait for ESO deployment ready (best-effort)
-          kubectl rollout status -n external-secrets-system deploy/external-secrets --timeout=600s || true
 
       - name: Install ClickHouse Operator (CRDs)
         id: ch-helm
@@ -242,12 +190,6 @@ jobs:
           echo "[infra] wait kube-system daemonsets"
           kubectl -n kube-system rollout status ds/aws-node --timeout=300s || true
           kubectl -n kube-system rollout status ds/kube-proxy --timeout=300s || true
-
-          echo "[infra] wait external-secrets-system deployments"
-          if kubectl get ns external-secrets-system >/dev/null 2>&1; then
-            for d in $(kubectl -n external-secrets-system get deploy -o json | jq -r '.items[].metadata.name'); do
-              echo "Waiting for external-secrets-system/deploy/$d"; kubectl -n external-secrets-system rollout status deploy/$d --timeout=600s || true; done
-          fi
 
           echo "[infra] wait clickhouse-operator deployment"
           if kubectl get ns clickhouse-operator >/dev/null 2>&1; then
