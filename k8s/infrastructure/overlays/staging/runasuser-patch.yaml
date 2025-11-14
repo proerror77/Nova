@@ -152,14 +152,3 @@ spec:
         runAsNonRoot: true
         runAsUser: 1001
 ---
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: api-gateway
-spec:
-  template:
-    spec:
-      securityContext:
-        runAsNonRoot: true
-        runAsUser: 1001
-
