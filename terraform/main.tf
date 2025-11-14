@@ -8,10 +8,9 @@ terraform {
     }
   }
 
-  # 本地后端配置 (用于 staging 环境)
-  # 注意: 在生产环境中应使用 S3 远程后端
-  backend "local" {
-    path = "terraform.tfstate"
+  # S3 远程后端配置
+  # 实际配置通过 backend.hcl 文件注入
+  backend "s3" {
   }
 }
 

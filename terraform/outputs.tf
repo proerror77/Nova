@@ -1,10 +1,11 @@
-output "ecr_repository_urls" {
-  description = "Map of service names to ECR repository URLs"
-  value = {
-    for service in var.services :
-    service => aws_ecr_repository.services[service].repository_url
-  }
-}
+# Temporarily commented during import to avoid validation errors
+# output "ecr_repository_urls" {
+#   description = "Map of service names to ECR repository URLs"
+#   value = {
+#     for service in var.services :
+#     service => aws_ecr_repository.services[service].repository_url
+#   }
+# }
 
 output "alb_dns_name" {
   description = "DNS name of the Application Load Balancer"
