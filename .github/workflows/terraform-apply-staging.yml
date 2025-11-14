@@ -1,0 +1,129 @@
+name: Terraform Apply - Staging
+
+on:
+  workflow_dispatch:  # 允许手动触发
+  push:
+    branches:
+      - main
+    paths:
+      - 'terraform/**'
+      - '.github/workflows/terraform-apply-staging.yml'
+
+env:
+  TF_VERSION: 1.5.0
+  AWS_REGION: ap-northeast-1
+
+jobs:
+  plan-and-apply:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🏗️ Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: 🔐 Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: 🔍 Terraform Format Check
+        working-directory: ./terraform
+        run: terraform fmt -check -recursive
+
+      - name: 🔧 Terraform Init
+        working-directory: ./terraform
+        run: terraform init -upgrade
+
+      - name: 📋 Terraform Plan
+        working-directory: ./terraform
+        id: plan
+        run: |
+          terraform plan -var-file=staging.tfvars -out=staging.tfplan 2>&1 | tee plan.log
+
+          # Extract summary
+          SUMMARY=$(tail -5 plan.log | grep -E "^(No changes|Plan:|Apply complete)" || echo "Planning completed")
+          echo "plan_summary=$SUMMARY" >> $GITHUB_OUTPUT
+
+      - name: 💾 Save Plan Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: terraform-plan
+          path: terraform/staging.tfplan
+
+      - name: 🚀 Terraform Apply
+        working-directory: ./terraform
+        id: apply
+        run: |
+          echo "⏳ Starting terraform apply at $(date)"
+          terraform apply -auto-approve staging.tfplan 2>&1 | tee apply.log
+          echo "✅ Terraform apply completed at $(date)"
+
+          # Extract outputs
+          terraform output -json > outputs.json || echo "{}" > outputs.json
+          cat outputs.json
+
+      - name: 📤 Save Apply Output
+        uses: actions/upload-artifact@v3
+        with:
+          name: terraform-apply-output
+          path: |
+            terraform/apply.log
+            terraform/outputs.json
+
+      - name: 📊 Post Results
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const planLog = fs.readFileSync('./terraform/plan.log', 'utf8');
+            const applyLog = fs.readFileSync('./terraform/apply.log', 'utf8').slice(-2000); // Last 2000 chars
+
+            let status = '✅ SUCCESS';
+            if (context.job.status === 'failure') {
+              status = '❌ FAILED';
+            }
+
+            const summary = `
+            # ${status} Terraform Apply - Staging
+
+            **Region:** ap-northeast-1
+            **Timestamp:** ${new Date().toISOString()}
+
+            ## Plan Summary
+            \`\`\`
+            ${planLog.split('\n').slice(-10).join('\n')}
+            \`\`\`
+
+            ## Apply Output (last 2000 chars)
+            \`\`\`
+            ${applyLog}
+            \`\`\`
+
+            [View Full Logs](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+            `;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: summary
+            });
+
+      - name: ✅ Summary
+        if: success()
+        run: |
+          echo "🎉 Infrastructure deployment completed successfully!"
+          echo ""
+          echo "📊 Outputs:"
+          cd terraform && terraform output -json | jq '.' || echo "(No outputs yet)"
