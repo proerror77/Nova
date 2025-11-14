@@ -1,0 +1,76 @@
+name: Install ClickHouse Operator
+
+on:
+  workflow_dispatch:
+
+env:
+  AWS_REGION: ap-northeast-1
+  CLUSTER_NAME: nova-staging
+  ROLE_TO_ASSUME: arn:aws:iam::025434362120:role/github-actions-role
+
+concurrency:
+  group: install-clickhouse-operator
+  cancel-in-progress: true
+
+jobs:
+  install:
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: gha-clickhouse-${{ github.run_id }}
+          audience: sts.amazonaws.com
+
+      - name: Install kubectl & helm
+        run: |
+          sudo apt-get update -y && sudo apt-get install -y curl
+          curl -sLo /usr/local/bin/kubectl https://dl.k8s.io/release/v1.28.0/bin/linux/amd64/kubectl
+          chmod +x /usr/local/bin/kubectl
+          curl -sL https://get.helm.sh/helm-v3.14.4-linux-amd64.tar.gz | tar xz
+          sudo mv linux-amd64/helm /usr/local/bin/ && rm -rf linux-amd64
+
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig --region "$AWS_REGION" --name "$CLUSTER_NAME"
+          kubectl cluster-info || true
+
+      - name: Try install via Helm (preferred)
+        id: helm
+        continue-on-error: true
+        run: |
+          set -e
+          helm repo add altinity https://helm.clickhouse.tech
+          helm repo update
+          helm upgrade --install clickhouse-operator altinity/clickhouse-operator \
+            -n clickhouse-operator --create-namespace \
+            --set installCRDs=true --atomic --wait --timeout 5m
+          echo "ok=true" >> $GITHUB_OUTPUT
+
+      - name: Fallback install via raw manifests (if Helm failed)
+        if: steps.helm.outputs.ok != 'true'
+        run: |
+          set -e
+          # Choose a known stable version
+          VER=v0.23.6
+          BASE=https://raw.githubusercontent.com/Altinity/clickhouse-operator/${VER}/deploy
+          kubectl create namespace clickhouse-operator --dry-run=client -o yaml | kubectl apply -f - || true
+          # CRDs
+          kubectl apply -f $BASE/crd-install.yaml
+          # RBAC + operator
+          kubectl apply -f $BASE/operator/clickhouse-operator-install-template.yaml -n clickhouse-operator
+          kubectl apply -f $BASE/operator/clickhouse-operator-install.yaml -n clickhouse-operator
+          # Wait for deployment
+          kubectl rollout status -n clickhouse-operator deploy/clickhouse-operator --timeout=300s || true
+
+      - name: Verify CRDs
+        run: |
+          kubectl get crd | grep -E 'clickhouse.*altinity.com' || true
+          kubectl get pods -n clickhouse-operator -o wide || true
+

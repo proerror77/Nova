@@ -11,12 +11,12 @@ spec:
   clusterIP: None
   ports:
     - name: grpc
-      port: 9085
-      targetPort: 9085
+      port: 9080
+      targetPort: 9080
       protocol: TCP
     - name: http
-      port: 8085
-      targetPort: 8085
+      port: 8080
+      targetPort: 8080
       protocol: TCP
 ---
 apiVersion: v1
@@ -31,10 +31,10 @@ spec:
   type: LoadBalancer
   ports:
     - name: grpc
-      port: 9085
-      targetPort: 9085
+      port: 9080
+      targetPort: 9080
       protocol: TCP
     - name: http
-      port: 8085
-      targetPort: 8085
+      port: 8080
+      targetPort: 8080
       protocol: TCP

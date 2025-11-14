@@ -53,10 +53,10 @@ spec:
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
-              containerPort: 8085
+              containerPort: 8080
               protocol: TCP
             - name: grpc
-              containerPort: 9085
+              containerPort: 9080
               protocol: TCP
           resources:
             requests:
@@ -68,7 +68,7 @@ spec:
           livenessProbe:
             httpGet:
               path: /health
-              port: 8085
+              port: 8080
             initialDelaySeconds: 10
             periodSeconds: 10
             timeoutSeconds: 5
@@ -76,7 +76,7 @@ spec:
           readinessProbe:
             httpGet:
               path: /readiness
-              port: 8085
+              port: 8080
             initialDelaySeconds: 5
             periodSeconds: 10
             timeoutSeconds: 5
