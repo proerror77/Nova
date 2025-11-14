@@ -182,6 +182,46 @@ jobs:
           kubectl apply -f "$BUNDLE"
           kubectl rollout status -n clickhouse-operator deploy/clickhouse-operator --timeout=300s || true
 
+      - name: Sync critical secrets from AWS Secrets Manager (fallback)
+        env:
+          NS: nova-staging
+          AWS_REGION: ${{ env.AWS_REGION }}
+        run: |
+          set -euo pipefail
+          apply_secret() {
+            local name=$1
+            local json=$2
+            tmp=/tmp/secret-${name}.yaml
+            echo "Applying secret $name to $NS"
+            {
+              echo 'apiVersion: v1'
+              echo 'kind: Secret'
+              echo 'type: Opaque'
+              echo 'metadata:'
+              echo '  name: '"$name"
+              echo '  namespace: '"$NS"
+              echo 'stringData:'
+              echo "$json" | jq -r 'to_entries[] | "  \(.key): \(.value)"'
+            } > "$tmp"
+            kubectl apply -f "$tmp"
+          }
+
+          # DB credentials
+          DB_JSON=$(aws secretsmanager get-secret-value --secret-id nova/staging/nova-db-credentials --region "$AWS_REGION" | jq -r .SecretString)
+          [ -n "$DB_JSON" ] && apply_secret nova-db-credentials "$DB_JSON"
+
+          # JWT keys
+          JWT_JSON=$(aws secretsmanager get-secret-value --secret-id nova/staging/nova-jwt-keys --region "$AWS_REGION" | jq -r .SecretString)
+          [ -n "$JWT_JSON" ] && apply_secret nova-jwt-keys "$JWT_JSON"
+
+          # ClickHouse credentials
+          CH_JSON=$(aws secretsmanager get-secret-value --secret-id nova/staging/nova-clickhouse-credentials --region "$AWS_REGION" | jq -r .SecretString)
+          [ -n "$CH_JSON" ] && apply_secret nova-clickhouse-credentials "$CH_JSON"
+
+          # S3 config (region/bucket) — creds 由 STS rotator 寫入
+          S3CFG_JSON=$(aws secretsmanager get-secret-value --secret-id nova/staging/nova-s3-config --region "$AWS_REGION" | jq -r .SecretString)
+          [ -n "$S3CFG_JSON" ] && apply_secret nova-s3-credentials "$S3CFG_JSON"
+
       - name: Render overlay (staging)
         run: |
           kubectl kustomize k8s/infrastructure/overlays/staging > /tmp/staging.yaml
