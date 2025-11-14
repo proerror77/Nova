@@ -182,13 +182,31 @@ jobs:
         run: |
           set -e
           NS=nova-staging
-          # deployments
-          for d in analytics-service content-service feed-service graph-service graphql-gateway identity-service media-service messaging-service notification-service ranking-service realtime-chat-service search-service social-service trust-safety-service pgbouncer; do
-            echo "Waiting for deployment/$d"; kubectl -n $NS rollout status deploy/$d --timeout=300s || true; done
-          # statefulsets
-          for s in postgres redis-cluster; do
-            echo "Waiting for statefulset/$s"; kubectl -n $NS rollout status statefulset/$s --timeout=600s || true; done
-          echo "Summary:"; kubectl -n $NS get pods -o wide
+
+          echo "[infra] wait kube-system daemonsets"
+          kubectl -n kube-system rollout status ds/aws-node --timeout=300s || true
+          kubectl -n kube-system rollout status ds/kube-proxy --timeout=300s || true
+
+          echo "[infra] wait external-secrets-system deployments"
+          if kubectl get ns external-secrets-system >/dev/null 2>&1; then
+            for d in $(kubectl -n external-secrets-system get deploy -o json | jq -r '.items[].metadata.name'); do
+              echo "Waiting for external-secrets-system/deploy/$d"; kubectl -n external-secrets-system rollout status deploy/$d --timeout=600s || true; done
+          fi
+
+          echo "[infra] wait clickhouse-operator deployment"
+          if kubectl get ns clickhouse-operator >/dev/null 2>&1; then
+            kubectl -n clickhouse-operator rollout status deploy/clickhouse-operator --timeout=600s || true
+          fi
+
+          echo "[apps] wait all deployments in $NS"
+          for d in $(kubectl -n $NS get deploy -o json | jq -r '.items[].metadata.name'); do
+            echo "Waiting for deployment/$d"; kubectl -n $NS rollout status deploy/$d --timeout=600s || true; done
+
+          echo "[apps] wait all statefulsets in $NS"
+          for s in $(kubectl -n $NS get statefulset -o json | jq -r '.items[].metadata.name'); do
+            echo "Waiting for statefulset/$s"; kubectl -n $NS rollout status statefulset/$s --timeout=900s || true; done
+
+          echo "Summary:"; kubectl -n $NS get deploy,statefulset; kubectl -n $NS get pods -o wide
 
       - name: Summary
         if: always()
