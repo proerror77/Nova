@@ -13,6 +13,10 @@ env:
   CLUSTER_NAME: nova-staging
   ROLE_TO_ASSUME: arn:aws:iam::025434362120:role/github-actions-role
 
+concurrency:
+  group: staging-kubectl-apply
+  cancel-in-progress: true
+
 jobs:
   apply:
     runs-on: ubuntu-22.04
@@ -69,7 +73,7 @@ jobs:
           helm repo add external-secrets https://charts.external-secrets.io
           helm repo update
           helm upgrade --install external-secrets external-secrets/external-secrets \
-            -n external-secrets-system --create-namespace
+            -n external-secrets-system --create-namespace --atomic --wait --timeout 5m
           # wait for ESO deployment ready
           kubectl rollout status -n external-secrets-system deploy/external-secrets --timeout=180s || true
 
@@ -80,7 +84,7 @@ jobs:
           # Install operator in its own namespace
           helm upgrade --install clickhouse-operator altinity/clickhouse-operator \
             -n clickhouse-operator --create-namespace \
-            --set installCRDs=true
+            --set installCRDs=true --atomic --wait --timeout 5m
           # wait for CRDs to appear
           for i in {1..30}; do \
             kubectl get crd | grep -q clickhouseinstallations.clickhouse.altinity.com && break; \
