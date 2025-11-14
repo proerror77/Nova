@@ -29,12 +29,12 @@ jobs:
         with:
           terraform_version: ${{ env.TF_VERSION }}
 
-      - name: 🔐 Configure AWS credentials
+      - name: 🔐 Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          role-to-assume: arn:aws:iam::025434362120:role/nova-staging-github-actions
           aws-region: ${{ env.AWS_REGION }}
+          role-session-name: GitHubActions-TerraformApply
 
       - name: 🔍 Terraform Format Check
         working-directory: ./terraform
@@ -42,7 +42,22 @@ jobs:
 
       - name: 🔧 Terraform Init
         working-directory: ./terraform
-        run: terraform init -upgrade
+        run: terraform init -upgrade -backend-config=backend.hcl
+
+      - name: 🔍 Verify Backend State
+        working-directory: ./terraform
+        run: |
+          echo "Verifying backend state is accessible..."
+          terraform state list > /dev/null || {
+            echo "❌ Backend state is empty or inaccessible"
+            exit 1
+          }
+          RESOURCE_COUNT=$(terraform state list | wc -l)
+          echo "✅ Found $RESOURCE_COUNT resources in remote state"
+          if [ "$RESOURCE_COUNT" -lt 1 ]; then
+            echo "❌ State appears empty! Expected at least 1 resource."
+            exit 1
+          fi
 
       - name: 📋 Terraform Plan
         working-directory: ./terraform
