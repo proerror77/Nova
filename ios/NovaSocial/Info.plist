@@ -30,5 +30,11 @@
     <array>
         <string>UIInterfaceOrientationPortrait</string>
     </array>
+    <key>NSCameraUsageDescription</key>
+    <string>We need access to your camera to take photos for your posts.</string>
+    <key>NSPhotoLibraryUsageDescription</key>
+    <string>We need access to your photo library to select photos for your posts.</string>
+    <key>NSLocationWhenInUseUsageDescription</key>
+    <string>We need access to your location to help you add location tags to your posts.</string>
 </dict>
 </plist>

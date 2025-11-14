@@ -13,10 +13,13 @@ targets:
     platform: iOS
     deploymentTarget: "18.0"
     sources:
-      - path: "Sources（swift文件）"
+      - path: .
+        excludes:
+          - "*.xcodeproj"
+          - "*.yml"
+          - "Info.plist"
     resources:
-      - path: "Resources（图片:图标）"
-      - path: Assets.xcassets
+      - Assets.xcassets
     settings:
       PRODUCT_BUNDLE_IDENTIFIER: com.bruce.figmadesignapp
       CODE_SIGN_STYLE: Manual

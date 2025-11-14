@@ -1,28 +1,5 @@
- import SwiftUI
-
-// MARK: - Design Tokens
-struct DesignTokens {
-    // Colors
-    static let backgroundColor = Color(red: 0.97, green: 0.96, blue: 0.96)
-    static let white = Color.white
-    static let textPrimary = Color(red: 0.38, green: 0.37, blue: 0.37)
-    static let textSecondary = Color(red: 0.68, green: 0.68, blue: 0.68)
-    static let accentColor = Color(red: 0.82, green: 0.13, blue: 0.25)
-    static let accentLight = Color(red: 1, green: 0.78, blue: 0.78)
-    static let borderColor = Color(red: 0.74, green: 0.74, blue: 0.74)
-    static let placeholderColor = Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50)
-
-    // Spacing
-    static let spacing8: CGFloat = 8
-    static let spacing16: CGFloat = 16
-    static let spacing13: CGFloat = 13
-
-    // Sizes
-    static let tagWidth: CGFloat = 173.36
-    static let tagHeight: CGFloat = 30.80
-    static let avatarSize: CGFloat = 38
-    static let topBarHeight: CGFloat = 56  // 统一的顶部导航栏高度（与 HomeView 一致）
-}
+import SwiftUI
+import PhotosUI
 
 struct NewPostView: View {
     @Binding var showNewPost: Bool
@@ -32,26 +9,35 @@ struct NewPostView: View {
     @State private var showPhotoPicker = false
     @State private var showCamera = false
     @State private var showLocation = false
+    @State private var selectedPhotos: [PhotosPickerItem] = []
+    @State private var selectedImages: [UIImage] = []
 
     var body: some View {
         ZStack {
             // 条件渲染：根据状态即时切换视图
-            if showPhotoPicker {
-                PhotoPickerView(showPhotoPicker: $showPhotoPicker)
-                    .transition(.identity)
-            } else if showCamera {
-                CameraScreen(showCamera: $showCamera)
-                    .transition(.identity)
-            } else if showLocation {
+            if showLocation {
                 LocationView(showLocation: $showLocation)
                     .transition(.identity)
             } else {
                 newPostContent
             }
         }
-        .animation(.none, value: showPhotoPicker)
-        .animation(.none, value: showCamera)
         .animation(.none, value: showLocation)
+        .sheet(isPresented: $showCamera) {
+            ImagePicker(sourceType: .camera, selectedImage: .constant(nil))
+        }
+        .photosPicker(isPresented: $showPhotoPicker, selection: $selectedPhotos, maxSelectionCount: 10, matching: .images)
+        .onChange(of: selectedPhotos) { oldValue, newValue in
+            Task {
+                selectedImages = []
+                for item in newValue {
+                    if let data = try? await item.loadTransferable(type: Data.self),
+                       let image = UIImage(data: data) {
+                        selectedImages.append(image)
+                    }
+                }
+            }
+        }
     }
 
     var newPostContent: some View {
@@ -424,6 +410,45 @@ struct TopNavigationBar: View {
         }
         .frame(height: DesignTokens.topBarHeight)
         .padding(.horizontal, 16)
+    }
+}
+
+// MARK: - Image Picker for Camera
+struct ImagePicker: UIViewControllerRepresentable {
+    var sourceType: UIImagePickerController.SourceType
+    @Binding var selectedImage: UIImage?
+    @Environment(\.presentationMode) private var presentationMode
+
+    func makeUIViewController(context: Context) -> UIImagePickerController {
+        let picker = UIImagePickerController()
+        picker.sourceType = sourceType
+        picker.delegate = context.coordinator
+        return picker
+    }
+
+    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+
+    class Coordinator: NSObject, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
+        let parent: ImagePicker
+
+        init(_ parent: ImagePicker) {
+            self.parent = parent
+        }
+
+        func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
+            if let image = info[.originalImage] as? UIImage {
+                parent.selectedImage = image
+            }
+            parent.presentationMode.wrappedValue.dismiss()
+        }
+
+        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+            parent.presentationMode.wrappedValue.dismiss()
+        }
     }
 }
 
