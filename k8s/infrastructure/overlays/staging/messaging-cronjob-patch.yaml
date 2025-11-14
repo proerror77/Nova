@@ -2,7 +2,7 @@ apiVersion: batch/v1
 kind: CronJob
 metadata:
   name: messaging-requeue-stale-claims
-  namespace: nova-messaging
+  namespace: nova-staging
 spec:
   suspend: true
   concurrencyPolicy: Forbid
