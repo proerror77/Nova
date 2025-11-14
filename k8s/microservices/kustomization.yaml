@@ -76,7 +76,10 @@ resources:
 
   # Infrastructure and support services
   - ingress.yaml
-  - ingress-tls-setup.yaml
+  # Optional TLS + cert-manager integration (ClusterIssuer etc.)
+  # ingress-tls-setup.yaml is disabled by default to avoid requiring cert-manager CRDs in all environments.
+  # Apply manually when cert-manager is installed:
+  # - ingress-tls-setup.yaml
   # NOTE: prometheus-monitoring-setup.yaml commented out due to namespace conflicts
   # with staging overlay's namespace transformation. Deploy monitoring separately if needed.
   # - prometheus-monitoring-setup.yaml
