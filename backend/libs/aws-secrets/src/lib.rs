@@ -86,16 +86,24 @@ impl JwtSecretConfig {
     ///   "expiry_seconds": 3600
     /// }
     /// ```
-    /// and a legacy format used in some environments:
-    /// ```json
-    /// {
-    ///   "jwt_secret": "raw-secret-key",
-    ///   "algorithm": "HS256",
-    ///   "issuer": "nova-platform",
-    ///   "audience": ["api", "web"],
-    ///   "expiry_seconds": 3600
-    /// }
-    /// ```
+    /// and two legacy formats used in some environments:
+    /// - symmetric:
+    ///   ```json
+    ///   {
+    ///     "jwt_secret": "raw-secret-key",
+    ///     "algorithm": "HS256",
+    ///     "issuer": "nova-platform",
+    ///     "audience": ["api", "web"],
+    ///     "expiry_seconds": 3600
+    ///   }
+    ///   ```
+    /// - asymmetric (RS256) using PEM fields:
+    ///   ```json
+    ///   {
+    ///     "JWT_PRIVATE_KEY_PEM": "-----BEGIN RSA PRIVATE KEY-----... ",
+    ///     "JWT_PUBLIC_KEY_PEM": "-----BEGIN PUBLIC KEY-----... "
+    ///   }
+    ///   ```
     pub fn from_json(json: &str) -> Result<Self, SecretError> {
         let value: serde_json::Value = serde_json::from_str(json).map_err(|e| {
             SecretError::InvalidFormat(format!("Failed to parse JWT config JSON: {}", e))
@@ -144,7 +152,7 @@ impl JwtSecretConfig {
             });
         }
 
-        // Legacy shape: jwt_secret + optional metadata
+        // Legacy shape (symmetric): jwt_secret + optional metadata
         if let Some(signing_key) = value.get("jwt_secret").and_then(|v| v.as_str()) {
             let algorithm = value
                 .get("algorithm")
@@ -175,6 +183,49 @@ impl JwtSecretConfig {
             return Ok(Self {
                 signing_key: signing_key.to_string(),
                 validation_key: None,
+                algorithm: algorithm.to_string(),
+                issuer: issuer.to_string(),
+                audience,
+                expiry_seconds,
+            });
+        }
+
+        // Legacy shape (asymmetric): JWT_PRIVATE_KEY_PEM / JWT_PUBLIC_KEY_PEM
+        if let Some(private_pem) = value
+            .get("JWT_PRIVATE_KEY_PEM")
+            .and_then(|v| v.as_str())
+        {
+            let public_pem = value
+                .get("JWT_PUBLIC_KEY_PEM")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+
+            // For PEM-based keys we always default to RS256.
+            let algorithm = "RS256";
+            let issuer = value
+                .get("issuer")
+                .and_then(|v| v.as_str())
+                .unwrap_or("nova-platform");
+
+            let audience = value
+                .get("audience")
+                .and_then(|v| v.as_array())
+                .map(|items| {
+                    items
+                        .iter()
+                        .filter_map(|item| item.as_str().map(|s| s.to_string()))
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_else(|| vec!["api".to_string(), "web".to_string()]);
+
+            let expiry_seconds = value
+                .get("expiry_seconds")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(3600);
+
+            return Ok(Self {
+                signing_key: private_pem.to_string(),
+                validation_key: public_pem,
                 algorithm: algorithm.to_string(),
                 issuer: issuer.to_string(),
                 audience,
