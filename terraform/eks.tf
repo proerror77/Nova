@@ -64,7 +64,7 @@ resource "aws_security_group" "eks_cluster" {
 resource "aws_eks_cluster" "main" {
   name                      = "nova-${var.environment}"
   role_arn                  = aws_iam_role.eks_cluster.arn
-  version                   = "1.28"
+  version                   = "1.30"
   enabled_cluster_log_types = ["api", "audit", "authenticator", "controllerManager", "scheduler"]
 
   vpc_config {
@@ -205,7 +205,12 @@ resource "aws_security_group" "eks_nodes" {
   }
 }
 
-# EKS Node Group
+#
+# EKS Node Groups
+# - main  : On-Demand capacity (base, system + core services)
+# - spot  : Spot capacity (burstable workload, non-critical services)
+#
+
 resource "aws_eks_node_group" "main" {
   cluster_name    = aws_eks_cluster.main.name
   node_group_name = "nova-${var.environment}-node-group"
@@ -221,11 +226,9 @@ resource "aws_eks_node_group" "main" {
 
   instance_types = ["t3.xlarge"]
 
-  # Use Spot instances for staging to avoid vCPU quota limits
-  # Production uses On-Demand (see conditional logic above)
-  capacity_type = var.environment == "production" ? "ON_DEMAND" : "SPOT"
+  # Base nodegroup 使用 On-Demand，提供穩定容量
+  capacity_type = "ON_DEMAND"
 
-  # Ensure proper ordering
   depends_on = [
     aws_iam_role_policy_attachment.eks_worker_node_policy,
     aws_iam_role_policy_attachment.eks_cni_policy,
@@ -235,6 +238,34 @@ resource "aws_eks_node_group" "main" {
 
   tags = {
     Name = "nova-${var.environment}-node-group"
+  }
+}
+
+resource "aws_eks_node_group" "spot" {
+  cluster_name    = aws_eks_cluster.main.name
+  node_group_name = "nova-${var.environment}-node-group-spot"
+  node_role_arn   = aws_iam_role.eks_node_group.arn
+  subnet_ids      = aws_subnet.private[*].id
+
+  scaling_config {
+    # Production 預設不啟用 Spot；staging 透過變數控制 Spot 節點數量
+    desired_size = var.environment == "production" ? 0 : var.spot_node_desired_size
+    max_size     = var.environment == "production" ? 0 : var.spot_node_max_size
+    min_size     = var.environment == "production" ? 0 : var.spot_node_min_size
+  }
+
+  instance_types = ["t3.xlarge"]
+  capacity_type  = "SPOT"
+
+  depends_on = [
+    aws_iam_role_policy_attachment.eks_worker_node_policy,
+    aws_iam_role_policy_attachment.eks_cni_policy,
+    aws_iam_role_policy_attachment.eks_container_registry_policy,
+    aws_iam_role_policy_attachment.eks_ssm_policy,
+  ]
+
+  tags = {
+    Name = "nova-${var.environment}-node-group-spot"
   }
 }
 

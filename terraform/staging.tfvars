@@ -3,10 +3,16 @@
 environment = "staging"
 aws_region  = "ap-northeast-1"
 
-# EKS node group sizing for staging (3 x t3.xlarge)
-node_desired_size = 3
+# EKS node group sizing for staging
+# - On-Demand: 2 x t3.xlarge (穩定基礎容量，對應 8 vCPU On-Demand 配額)
+# - Spot     : 額外彈性容量，使用獨立 Spot vCPU 配額
+node_desired_size = 2
 node_min_size     = 2
-node_max_size     = 5
+node_max_size     = 3
+
+spot_node_desired_size = 2
+spot_node_min_size     = 0
+spot_node_max_size     = 3
 
 # VPC Configuration
 vpc_cidr           = "10.0.0.0/16"

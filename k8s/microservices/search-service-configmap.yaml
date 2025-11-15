@@ -5,3 +5,9 @@ metadata:
 data:
   LOG_LEVEL: "info"
   ENVIRONMENT: "staging"
+  # Local/dev defaults for Elasticsearch (optional)
+  ELASTICSEARCH_URL: "http://elasticsearch.nova.svc.cluster.local:9200"
+  ELASTICSEARCH_POST_INDEX: "nova_posts"
+  ELASTICSEARCH_MESSAGE_INDEX: "nova_messages"
+  ELASTICSEARCH_USER_INDEX: "nova_users"
+  ELASTICSEARCH_COMMENT_INDEX: "nova_comments"

@@ -20,18 +20,30 @@ pub struct ServerConfig {
 #[derive(Debug, Clone, Deserialize)]
 pub struct Neo4jConfig {
     /// Neo4j bolt URI, e.g. bolt://neo4j:7687
-    #[serde(rename = "NEO4J_URI")]
+    #[serde(rename = "NEO4J_URI", default = "default_neo4j_uri")]
     pub uri: String,
     /// Neo4j username from secret
-    #[serde(rename = "NEO4J_USER")]
+    #[serde(rename = "NEO4J_USER", default = "default_neo4j_user")]
     pub user: String,
     /// Neo4j password from secret
-    #[serde(rename = "NEO4J_PASSWORD")]
+    #[serde(rename = "NEO4J_PASSWORD", default = "default_neo4j_password")]
     pub password: String,
 }
 
 fn default_grpc_port() -> u16 {
     9080
+}
+
+fn default_neo4j_uri() -> String {
+    "bolt://neo4j:7687".to_string()
+}
+
+fn default_neo4j_user() -> String {
+    "neo4j".to_string()
+}
+
+fn default_neo4j_password() -> String {
+    "CHANGE_ME".to_string()
 }
 
 impl Config {
