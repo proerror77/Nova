@@ -169,6 +169,11 @@ spec:
     spec:
       containers:
       - name: identity-service
+        env:
+        - name: AWS_SECRETS_JWT_NAME
+          value: "nova/staging/nova-jwt-keys"
+        - name: AWS_REGION
+          value: "ap-northeast-1"
         imagePullPolicy: Always
         resources:
           requests:
@@ -267,4 +272,3 @@ spec:
           limits:
             cpu: 500m
             memory: 512Mi
-

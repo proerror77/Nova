@@ -213,12 +213,17 @@ resource "aws_eks_node_group" "main" {
   subnet_ids      = aws_subnet.private[*].id
 
   scaling_config {
-    desired_size = var.environment == "production" ? 3 : 2
-    max_size     = var.environment == "production" ? 10 : 5
-    min_size     = var.environment == "production" ? 2 : 1
+    # Production 使用固定較高配置，其它環境（含 staging）透過變數控制
+    desired_size = var.environment == "production" ? 3 : var.node_desired_size
+    max_size     = var.environment == "production" ? 10 : var.node_max_size
+    min_size     = var.environment == "production" ? 2 : var.node_min_size
   }
 
   instance_types = ["t3.xlarge"]
+
+  # Use Spot instances for staging to avoid vCPU quota limits
+  # Production uses On-Demand (see conditional logic above)
+  capacity_type = var.environment == "production" ? "ON_DEMAND" : "SPOT"
 
   # Ensure proper ordering
   depends_on = [

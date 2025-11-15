@@ -5,3 +5,7 @@ metadata:
 data:
   LOG_LEVEL: "info"
   ENVIRONMENT: "staging"
+  # gRPC server configuration
+  SERVER_GRPC_PORT: "9080"
+  # Neo4j connection (non-sensitive endpoint only)
+  NEO4J_URI: "bolt://neo4j.nova-staging.svc.cluster.local:7687"

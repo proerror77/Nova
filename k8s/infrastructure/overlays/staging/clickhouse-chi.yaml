@@ -10,7 +10,7 @@ spec:
         <yandex>
           <users>
             <nova>
-              <password_sha256_hex>6700484bed513440d69da5d453592123145c31bbd61b5116b604eb94661036ef</password_sha256_hex>
+              <password_sha256_hex>86112850e198ebaa0fc49c4cb0238183994eb5abad94a2113a3ebc3b92f59370</password_sha256_hex>
               <networks>
                 <!-- Restrict to VPC CIDR to avoid public access -->
                 <ip>10.0.0.0/8</ip>
@@ -29,7 +29,7 @@ spec:
           podTemplate: ch-pod
           serviceTemplate: ch-svc
     users:
-      nova/password_sha256_hex: "6700484bed513440d69da5d453592123145c31bbd61b5116b604eb94661036ef"
+      nova/password_sha256_hex: "86112850e198ebaa0fc49c4cb0238183994eb5abad94a2113a3ebc3b92f59370"
       nova/networks/ip:
         - 10.0.0.0/8
       nova/profile: default

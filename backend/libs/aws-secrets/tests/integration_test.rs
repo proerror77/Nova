@@ -304,11 +304,10 @@ async fn test_secret_not_found_error() {
 }
 
 /// Test: Error handling for invalid JWT config format
-#[tokio::test]
+#[test]
 fn test_invalid_jwt_config_parsing() {
-    // Missing required field: algorithm
+    // Missing required signing key fields
     let invalid_json = r#"{
-        "signing_key": "test-key",
         "issuer": "nova",
         "audience": ["api"],
         "expiry_seconds": 3600
@@ -319,7 +318,10 @@ fn test_invalid_jwt_config_parsing() {
 
     match result.unwrap_err() {
         SecretError::InvalidFormat(msg) => {
-            assert!(msg.contains("Failed to parse JWT config"));
+            assert!(
+                msg.contains("JWT config missing expected fields"),
+                "Unexpected error message: {msg}"
+            );
         }
         other => panic!("Expected InvalidFormat error, got: {:?}", other),
     }

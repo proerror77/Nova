@@ -23,25 +23,6 @@ spec:
         - containerPort: 5432
           name: postgres
 
-        # 从 External Secrets 获取密码
-        env:
-        - name: POSTGRES_USER
-          valueFrom:
-            secretKeyRef:
-              name: nova-db-credentials
-              key: username
-              optional: false
-        - name: POSTGRES_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: nova-db-credentials
-              key: password
-              optional: false
-        - name: POSTGRES_DB
-          value: "nova_auth"
-        - name: PGDATA
-          value: /var/lib/postgresql/data/pgdata
-
         # 资源限制（staging 环境）
         resources:
           requests:

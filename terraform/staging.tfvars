@@ -3,6 +3,11 @@
 environment = "staging"
 aws_region  = "ap-northeast-1"
 
+# EKS node group sizing for staging (3 x t3.xlarge)
+node_desired_size = 3
+node_min_size     = 2
+node_max_size     = 5
+
 # VPC Configuration
 vpc_cidr           = "10.0.0.0/16"
 availability_zones = ["ap-northeast-1a", "ap-northeast-1c"]

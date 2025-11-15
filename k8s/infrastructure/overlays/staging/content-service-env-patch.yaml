@@ -10,8 +10,15 @@ spec:
         env:
         - name: CORS_ALLOWED_ORIGINS
           value: "https://staging.nova.example.com,https://nova.example.com"
+        - name: CLICKHOUSE_URL
+          value: "http://chi-nova-ch-single-0-0.nova-staging.svc.cluster.local:8123"
+        - name: CLICKHOUSE_DATABASE
+          value: analytics
         - name: CLICKHOUSE_USERNAME
-          value: nova
+          valueFrom:
+            secretKeyRef:
+              name: nova-clickhouse-credentials
+              key: CLICKHOUSE_USER
         - name: CLICKHOUSE_PASSWORD
           valueFrom:
             secretKeyRef:

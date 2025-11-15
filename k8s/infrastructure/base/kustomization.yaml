@@ -9,6 +9,8 @@ resources:
 - namespace.yaml
 - configmap.yaml
 - secrets.yaml
+# StorageClass for EBS gp3 volumes (PostgreSQL, Redis, ClickHouse)
+- storageclass-gp3.yaml
 # 基础设施服务
 - postgres.yaml
 - redis.yaml

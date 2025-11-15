@@ -314,6 +314,10 @@ patchesStrategicMerge:
 - elasticsearch-replicas-patch.yaml
 - s3-env-patch.yaml
 - prefer-large-nodes-patch.yaml
+# Shared DATABASE_URL wiring for core services
+- service-db-env-patch.yaml
+# Shared Redis URL wiring for services using Redis
+- service-redis-env-patch.yaml
 # - resource-optimization-patch.yaml  # 可选：资源优化
 
 # Remove deprecated/retired services from staging (none currently included)
@@ -360,36 +364,35 @@ images:
   newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/trust-safety-service
   newTag: c849ea7287e61bc77123ee9d58b3f47cb2901cb5
 
-# TODO: Re-enable replicas after resources are properly discovered
-#replicas:
-#- count: 1
-#  name: analytics-service
-#- count: 1
-#  name: content-service
-#- count: 1
-#  name: feed-service
-#- count: 1
-#  name: graph-service
-#- count: 1
-#  name: graphql-gateway
-#- count: 1
-#  name: identity-service
-#- count: 1
-#  name: media-service
-#- count: 1
-#  name: notification-service
-#- count: 1
-#  name: ranking-service
-#- count: 1
-#  name: realtime-chat-service
-#- count: 1
-#  name: search-service
-#- count: 1
-#  name: social-service
-#- count: 1
-#  name: trust-safety-service
-#- count: 1
-#  name: user-service
+# Staging replica overrides to keep core path light
+replicas:
+  # Disable non-critical services temporarily to free CPU for DB/Redis
+  - name: analytics-service
+    count: 0
+  - name: ranking-service
+    count: 0
+  - name: realtime-chat-service
+    count: 0
+  - name: trust-safety-service
+    count: 0
+  - name: social-service
+    count: 0
+  - name: api-gateway
+    count: 0
+
+  # Keep a single replica for core path services
+  - name: content-service
+    count: 1
+  - name: graph-service
+    count: 1
+  - name: graphql-gateway
+    count: 1
+  - name: media-service
+    count: 1
+  - name: notification-service
+    count: 1
+  - name: search-service
+    count: 1
 
 commonAnnotations:
   argocd.argoproj.io/compare-result: "false"

@@ -58,8 +58,9 @@ Example for Kubernetes:
 ```yaml
 - name: Deploy
   run: |
-    kubectl set image deployment/nova-user-service \
-      nova-user-service=${{ steps.version.outputs.image }}
+    # Example rollout for identity-service (user-service successor)
+    kubectl set image deployment/identity-service \
+      identity-service=${{ steps.version.outputs.image }}
 ```
 
 ### Step 3: Push to GitHub
@@ -109,12 +110,12 @@ git commit -m "docs: update [skip ci]"
 
 Images are stored at:
 ```
-ghcr.io/YOUR_USERNAME/nova/nova-user-service:TAG
+ghcr.io/YOUR_USERNAME/nova/nova-identity-service:TAG
 ```
 
 Pull example:
 ```bash
-docker pull ghcr.io/YOUR_USERNAME/nova/nova-user-service:latest
+docker pull ghcr.io/YOUR_USERNAME/nova/nova-identity-service:latest
 ```
 
 ## Troubleshooting

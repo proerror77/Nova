@@ -731,6 +731,13 @@ async fn init_redis_connection(redis_url: &str) -> Result<ConnectionManager, red
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
+    // Install default TLS crypto provider for rustls-based clients (sqlx, ClickHouse, Elasticsearch).
+    // This is required when both `aws-lc-rs` and `ring` features are enabled.
+    if let Err(err) = rustls::crypto::aws_lc_rs::default_provider().install_default() {
+        eprintln!("ERROR: failed to install rustls crypto provider: {:?}", err);
+        std::process::exit(1);
+    }
+
     // Initialize tracing
     tracing_subscriber::fmt()
         .with_env_filter(

@@ -1,5 +1,6 @@
 # Multi-stage build for GraphQL Gateway
-FROM rust:latest as builder
+# Align builder/runtime with unified workspace template to avoid glibc mismatches.
+FROM rust:1.76-slim AS builder
 
 # Install build dependencies
 RUN apt-get update && \
@@ -14,25 +15,23 @@ RUN apt-get update && \
 
 WORKDIR /app
 
-# Copy workspace Cargo files
+# Copy workspace manifest files
 COPY Cargo.toml Cargo.lock ./
 
-# Copy all backend services (for workspace dependencies)
+# Copy backend workspace (needed for workspace dependencies)
 COPY backend/ ./backend/
 
-# Build GraphQL Gateway
-WORKDIR /app
+# Build GraphQL Gateway binary in release mode
 RUN cargo build --release -p graphql-gateway
 
 # Runtime stage
 FROM debian:bookworm-slim
 
-# Install runtime dependencies
+# Install runtime dependencies only
 RUN apt-get update && \
     apt-get install -y \
     ca-certificates \
     libssl3 \
-    curl \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
@@ -47,7 +46,7 @@ RUN useradd -m -u 1000 appuser && \
 
 USER appuser
 
-# Expose port
+# Expose HTTP port
 EXPOSE 8080
 
 # Health check

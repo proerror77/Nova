@@ -95,16 +95,6 @@ jobs:
           DATABASE_URL: postgresql://nova:nova_password@localhost:5432/postgres
           REDIS_URL: redis://localhost:6379
 
-      - name: Run integration tests for user-service
-        timeout-minutes: 10
-        run: cargo test --manifest-path backend/user-service/Cargo.toml --test neo4j_suggest_tests -- --nocapture --test-threads=1
-        env:
-          DATABASE_URL: postgresql://nova:nova_password@localhost:5432/postgres
-          REDIS_URL: redis://localhost:6379
-
-      - name: Run content-service gRPC tests (requires running services - skipped in CI)
-        run: 'echo "Note: content-service gRPC tests require running services. Use docker-compose.dev.yml locally."'
-
       - name: Generate coverage report
         timeout-minutes: 10
         run: |

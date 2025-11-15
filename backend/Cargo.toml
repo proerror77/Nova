@@ -3,7 +3,6 @@ resolver = "2"
 members = [
     # Core Services (V2 Architecture)
     "identity-service",        # Authentication & Authorization (NEW)
-    "user-service",            # User Profiles only
     "content-service",         # Posts & Comments
     "social-service",          # Feed, Follows, Likes (NEW - merged feed)
     "media-service",           # Unified Media handling

@@ -146,7 +146,6 @@ jobs:
     strategy:
       matrix:
         service:
-          - user-service
           - auth-service
           - content-service
           - feed-service
@@ -220,7 +219,6 @@ jobs:
     strategy:
       matrix:
         service:
-          - user-service
           - auth-service
           - content-service
           - feed-service
@@ -264,7 +262,6 @@ jobs:
     strategy:
       matrix:
         service:
-          - user-service
           - auth-service
           - content-service
           - feed-service

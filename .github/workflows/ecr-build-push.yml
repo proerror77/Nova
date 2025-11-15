@@ -29,20 +29,17 @@ jobs:
     strategy:
       matrix:
         service:
-          - user-service
-          # TEMPORARY: Building only user-service to fix BorrowMutError
-          # Other services commented out to prevent matrix cancellation
-          # - auth-service
-          # - content-service
-          # - feed-service
-          # - media-service
-          # - messaging-service
-          # - search-service
-          # - streaming-service
-          # - graphql-gateway
-          # - notification-service
-          # - events-service
-          # - cdn-service
+          - auth-service
+          - content-service
+          - feed-service
+          - media-service
+          - messaging-service
+          - search-service
+          - streaming-service
+          - graphql-gateway
+          - notification-service
+          - events-service
+          - cdn-service
       max-parallel: 2
 
     steps:
@@ -141,7 +138,7 @@ jobs:
       - name: Verify all images in ECR
         run: |
           echo "Verifying all service images in ECR..."
-          for service in auth-service user-service content-service feed-service media-service messaging-service search-service streaming-service graphql-gateway notification-service events-service cdn-service; do
+          for service in auth-service content-service feed-service media-service messaging-service search-service streaming-service graphql-gateway notification-service events-service cdn-service; do
             IMAGE="${{ env.ECR_REGISTRY }}/${{ env.REGISTRY_ALIAS }}/$service:${{ github.ref_name }}-${{ github.sha }}"
             if aws ecr describe-images --repository-name "${{ env.REGISTRY_ALIAS }}/$service" --region ${{ env.AWS_REGION }} --query "imageDetails[?contains(imageTags, '${{ github.ref_name }}-${{ github.sha }}')]" | grep -q "."; then
               echo "OK: $service image found in ECR"
