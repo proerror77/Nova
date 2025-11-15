@@ -7,7 +7,7 @@ spec:
     spec:
       containers:
       - name: content-service
-        image: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/content-service:dae305a3b9bbbb3a3257b3e8b1162f24608aefe9
+        image: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/content-service:1e540c83707781fd53b543921e0ea667a0435ce9
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -40,4 +40,4 @@ spec:
     spec:
       containers:
       - name: identity-service
-        image: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/identity-service:dae305a3b9bbbb3a3257b3e8b1162f24608aefe9
+        image: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/identity-service:1e540c83707781fd53b543921e0ea667a0435ce9
