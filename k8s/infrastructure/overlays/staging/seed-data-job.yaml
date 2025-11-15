@@ -85,18 +85,18 @@ spec:
         image: postgres:16-alpine
         command: ["/bin/sh", "/seed-data/run_seed.sh"]
         env:
-        # 从 External Secrets 获取数据库凭证
+        # 从统一的 nova-db-credentials Secret 获取数据库凭证
         - name: DB_USER
           valueFrom:
             secretKeyRef:
               name: nova-db-credentials
-              key: username
+              key: DB_USER
               optional: false
         - name: DB_PASSWORD
           valueFrom:
             secretKeyRef:
               name: nova-db-credentials
-              key: password
+              key: DB_PASSWORD
               optional: false
         - name: DB_HOST
           value: "postgres.nova-staging.svc.cluster.local"

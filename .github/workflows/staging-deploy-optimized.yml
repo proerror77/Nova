@@ -80,7 +80,6 @@ jobs:
           - search-service
           - social-service
           - trust-safety-service
-          - user-service
       max-parallel: 4
       fail-fast: false
 

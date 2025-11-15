@@ -93,7 +93,7 @@ spec:
             failureThreshold: 3
           envFrom:
             - configMapRef:
-                name: graphql-gateway-config
+                name: graphql-gateway-configmap
             - secretRef:
                 name: graphql-gateway-secret
           volumeMounts:

@@ -1,0 +1,117 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: analytics-service
+spec:
+  template:
+    spec:
+      containers:
+      - name: analytics-service
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: nova-db-credentials
+              key: DATABASE_URL
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notification-service
+spec:
+  template:
+    spec:
+      containers:
+      - name: notification-service
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: nova-db-credentials
+              key: DATABASE_URL
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: content-service
+spec:
+  template:
+    spec:
+      containers:
+      - name: content-service
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: nova-db-credentials
+              key: content-db-url
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: media-service
+spec:
+  template:
+    spec:
+      containers:
+      - name: media-service
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: nova-db-credentials
+              key: media-db-url
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: search-service
+spec:
+  template:
+    spec:
+      containers:
+      - name: search-service
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: nova-db-credentials
+              key: DATABASE_URL
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: realtime-chat-service
+spec:
+  template:
+    spec:
+      containers:
+      - name: realtime-chat-service
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: nova-db-credentials
+              key: DATABASE_URL
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: trust-safety-service
+spec:
+  template:
+    spec:
+      containers:
+      - name: trust-safety-service
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: nova-db-credentials
+              key: DATABASE_URL

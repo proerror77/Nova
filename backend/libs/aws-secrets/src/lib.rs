@@ -73,10 +73,118 @@ pub struct JwtSecretConfig {
 }
 
 impl JwtSecretConfig {
-    /// Parse JWT secret from JSON string
+    /// Parse JWT secret from JSON string.
+    ///
+    /// Supports both the canonical format:
+    /// ```json
+    /// {
+    ///   "signing_key": "base64-encoded-key",
+    ///   "validation_key": "base64-encoded-key",
+    ///   "algorithm": "HS256",
+    ///   "issuer": "nova-platform",
+    ///   "audience": ["api", "web"],
+    ///   "expiry_seconds": 3600
+    /// }
+    /// ```
+    /// and a legacy format used in some environments:
+    /// ```json
+    /// {
+    ///   "jwt_secret": "raw-secret-key",
+    ///   "algorithm": "HS256",
+    ///   "issuer": "nova-platform",
+    ///   "audience": ["api", "web"],
+    ///   "expiry_seconds": 3600
+    /// }
+    /// ```
     pub fn from_json(json: &str) -> Result<Self, SecretError> {
-        serde_json::from_str(json)
-            .map_err(|e| SecretError::InvalidFormat(format!("Failed to parse JWT config: {}", e)))
+        let value: serde_json::Value = serde_json::from_str(json).map_err(|e| {
+            SecretError::InvalidFormat(format!("Failed to parse JWT config JSON: {}", e))
+        })?;
+
+        // Preferred/canonical shape: signing_key + friends
+        if let Some(signing_key) = value.get("signing_key").and_then(|v| v.as_str()) {
+            let validation_key = value
+                .get("validation_key")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+
+            let algorithm = value
+                .get("algorithm")
+                .and_then(|v| v.as_str())
+                .unwrap_or("HS256");
+
+            let issuer = value
+                .get("issuer")
+                .and_then(|v| v.as_str())
+                .unwrap_or("nova-platform");
+
+            let audience = value
+                .get("audience")
+                .and_then(|v| v.as_array())
+                .map(|items| {
+                    items
+                        .iter()
+                        .filter_map(|item| item.as_str().map(|s| s.to_string()))
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_else(|| vec!["api".to_string(), "web".to_string()]);
+
+            let expiry_seconds = value
+                .get("expiry_seconds")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(3600);
+
+            return Ok(Self {
+                signing_key: signing_key.to_string(),
+                validation_key,
+                algorithm: algorithm.to_string(),
+                issuer: issuer.to_string(),
+                audience,
+                expiry_seconds,
+            });
+        }
+
+        // Legacy shape: jwt_secret + optional metadata
+        if let Some(signing_key) = value.get("jwt_secret").and_then(|v| v.as_str()) {
+            let algorithm = value
+                .get("algorithm")
+                .and_then(|v| v.as_str())
+                .unwrap_or("HS256");
+
+            let issuer = value
+                .get("issuer")
+                .and_then(|v| v.as_str())
+                .unwrap_or("nova-platform");
+
+            let audience = value
+                .get("audience")
+                .and_then(|v| v.as_array())
+                .map(|items| {
+                    items
+                        .iter()
+                        .filter_map(|item| item.as_str().map(|s| s.to_string()))
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_else(|| vec!["api".to_string(), "web".to_string()]);
+
+            let expiry_seconds = value
+                .get("expiry_seconds")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(3600);
+
+            return Ok(Self {
+                signing_key: signing_key.to_string(),
+                validation_key: None,
+                algorithm: algorithm.to_string(),
+                issuer: issuer.to_string(),
+                audience,
+                expiry_seconds,
+            });
+        }
+
+        Err(SecretError::InvalidFormat(
+            "JWT config missing expected fields (signing_key or jwt_secret)".to_string(),
+        ))
     }
 }
 

@@ -66,7 +66,6 @@ jobs:
       matrix:
         service:
           - auth-service
-          - user-service
           - messaging-service
           - content-service
           - feed-service
@@ -454,11 +453,11 @@ jobs:
 
           echo "✅ Rollout commands issued"
 
-      - name: Wait for user-service rollout
+      - name: Wait for identity-service rollout
         run: |
-          echo "Waiting for user-service to be ready..."
-          kubectl rollout status deployment/user-service -n nova --timeout=5m 2>/dev/null || true
-          kubectl get pods -n nova -l app=user-service -o wide
+          echo "Waiting for identity-service to be ready..."
+          kubectl rollout status deployment/identity-service -n nova --timeout=5m 2>/dev/null || true
+          kubectl get pods -n nova -l app=identity-service -o wide
 
       - name: Check service health
         run: |
@@ -506,8 +505,8 @@ jobs:
           echo ""
 
           # Check if pods are running
-          echo "Checking pod status..."
-          kubectl get pods -n nova -l app=user-service -o wide || true
+          echo "Checking identity-service pod status..."
+          kubectl get pods -n nova -l app=identity-service -o wide || true
 
           echo ""
           echo "Checking service endpoints..."

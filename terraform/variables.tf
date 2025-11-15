@@ -81,3 +81,21 @@ variable "enable_multi_az" {
   type        = bool
   default     = false
 }
+
+variable "node_desired_size" {
+  description = "Desired number of nodes in the EKS node group (non-production environments)"
+  type        = number
+  default     = 2
+}
+
+variable "node_min_size" {
+  description = "Minimum number of nodes in the EKS node group (non-production environments)"
+  type        = number
+  default     = 1
+}
+
+variable "node_max_size" {
+  description = "Maximum number of nodes in the EKS node group (non-production environments)"
+  type        = number
+  default     = 5
+}

@@ -98,8 +98,6 @@ spec:
           envFrom:
             - configMapRef:
                 name: content-service-config
-            - secretRef:
-                name: content-service-secret
 
           volumeMounts:
             - name: tmp

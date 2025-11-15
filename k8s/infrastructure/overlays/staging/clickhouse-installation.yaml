@@ -20,8 +20,8 @@ data:
         <users>
             <!-- Default user for login if user not defined -->
             <default>
-                <!-- Password could be empty, to forbid login -->
-                <password>default_pass</password>
+                <!-- Password configured via SHA256 to avoid plaintext in config -->
+                <password_sha256_hex>86112850e198ebaa0fc49c4cb0238183994eb5abad94a2113a3ebc3b92f59370</password_sha256_hex>
 
                 <!-- List of networks with open access.
                      To open access from everywhere, specify:
@@ -159,6 +159,7 @@ spec:
       - host: "0.0.0.0/0"
       profile: default
       quota: default
+      password_sha256_hex: "86112850e198ebaa0fc49c4cb0238183994eb5abad94a2113a3ebc3b92f59370"
 
     - name: analytics_svc
       networks:

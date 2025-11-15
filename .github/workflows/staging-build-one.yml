@@ -4,12 +4,12 @@ on:
   workflow_dispatch:
     inputs:
       service:
-        description: Service name (e.g., user-service)
+        description: Service name (e.g., identity-service)
         required: true
         type: choice
         options:
           - auth-service
-          - user-service
+          - identity-service
           - content-service
           - feed-service
           - media-service

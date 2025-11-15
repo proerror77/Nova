@@ -100,9 +100,17 @@ spec:
           name: postgres
         env:
         - name: POSTGRES_USER
-          value: "nova"
+          valueFrom:
+            secretKeyRef:
+              name: nova-db-credentials
+              key: DB_USER
+              optional: false
         - name: POSTGRES_PASSWORD
-          value: "nova123"
+          valueFrom:
+            secretKeyRef:
+              name: nova-db-credentials
+              key: DB_PASSWORD
+              optional: false
         - name: POSTGRES_DB
           value: "nova_auth"
         - name: PGDATA
