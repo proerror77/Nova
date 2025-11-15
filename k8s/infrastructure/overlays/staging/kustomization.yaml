@@ -306,7 +306,7 @@ patchesStrategicMerge:
 - messaging-service-probes-patch.yaml
 - messaging-cronjob-patch.yaml
 - content-service-env-patch.yaml
-# - content-service-probes-patch.yaml  # TODO: 检查 probe 配置
+- content-service-probes-patch.yaml
 - feed-service-init-fix.yaml
 - content-service-ports-patch.yaml
 - runasuser-patch.yaml
@@ -314,6 +314,8 @@ patchesStrategicMerge:
 - elasticsearch-replicas-patch.yaml
 - s3-env-patch.yaml
 - prefer-large-nodes-patch.yaml
+# Identity-service gRPC-only health checks (no HTTP server)
+- identity-service-probes-patch.yaml
 # Shared DATABASE_URL wiring for core services
 - service-db-env-patch.yaml
 # Shared Redis URL wiring for services using Redis
@@ -329,7 +331,7 @@ images:
   newTag: c849ea7287e61bc77123ee9d58b3f47cb2901cb5
 - name: nova/content-service
   newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/content-service
-  newTag: c849ea7287e61bc77123ee9d58b3f47cb2901cb5
+  newTag: 06a891dcf2eeb0ba7289b4694dacb9ba6eacb214
 - name: nova/feed-service
   newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/feed-service
   newTag: c849ea7287e61bc77123ee9d58b3f47cb2901cb5
@@ -341,7 +343,7 @@ images:
   newTag: c849ea7287e61bc77123ee9d58b3f47cb2901cb5
 - name: nova/identity-service
   newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/identity-service
-  newTag: c849ea7287e61bc77123ee9d58b3f47cb2901cb5
+  newTag: 06a891dcf2eeb0ba7289b4694dacb9ba6eacb214
 - name: nova/media-service
   newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/media-service
   newTag: c849ea7287e61bc77123ee9d58b3f47cb2901cb5
@@ -356,7 +358,7 @@ images:
   newTag: c849ea7287e61bc77123ee9d58b3f47cb2901cb5
 - name: nova/search-service
   newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/search-service
-  newTag: c849ea7287e61bc77123ee9d58b3f47cb2901cb5
+  newTag: 06a891dcf2eeb0ba7289b4694dacb9ba6eacb214
 - name: nova/social-service
   newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/social-service
   newTag: c849ea7287e61bc77123ee9d58b3f47cb2901cb5

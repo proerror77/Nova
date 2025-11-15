@@ -105,9 +105,23 @@ impl JwtSecretConfig {
     ///   }
     ///   ```
     pub fn from_json(json: &str) -> Result<Self, SecretError> {
-        let value: serde_json::Value = serde_json::from_str(json).map_err(|e| {
-            SecretError::InvalidFormat(format!("Failed to parse JWT config JSON: {}", e))
-        })?;
+        // First parse the top-level value
+        let mut value: serde_json::Value =
+            serde_json::from_str(json).map_err(|e| {
+                SecretError::InvalidFormat(format!("Failed to parse JWT config JSON: {}", e))
+            })?;
+
+        // Some environments store the JWT config as a *stringified* JSON blob
+        // inside Secrets Manager (i.e. SecretString is `"\"{...}\""`).
+        // If we detect that pattern, attempt a second parse on the inner string.
+        if let serde_json::Value::String(inner) = &value {
+            value = serde_json::from_str(inner).map_err(|e| {
+                SecretError::InvalidFormat(format!(
+                    "Failed to parse nested JWT config JSON: {}",
+                    e
+                ))
+            })?;
+        }
 
         // Preferred/canonical shape: signing_key + friends
         if let Some(signing_key) = value.get("signing_key").and_then(|v| v.as_str()) {
