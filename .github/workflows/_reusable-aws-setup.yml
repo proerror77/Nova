@@ -27,7 +27,7 @@ jobs:
       ecr-registry: ${{ steps.login-ecr.outputs.registry }}
     steps:
       - name: Configure AWS credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v5
         with:
           role-to-assume: arn:aws:iam::025434362120:role/github-actions-role
           aws-region: ${{ inputs.aws-region }}
