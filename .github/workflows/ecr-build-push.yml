@@ -30,10 +30,12 @@ jobs:
       matrix:
         service:
           - auth-service
+          - identity-service
           - content-service
           - feed-service
           - media-service
           - messaging-service
+          - graph-service
           - search-service
           - streaming-service
           - graphql-gateway
