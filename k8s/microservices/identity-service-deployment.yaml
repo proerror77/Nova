@@ -38,7 +38,7 @@ spec:
 
       containers:
       - name: identity-service
-        image: nova/identity-service:2.0.0
+        image: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/identity-service:c849ea7287e61bc77123ee9d58b3f47cb2901cb5
         imagePullPolicy: IfNotPresent
 
         # Security context for the container
@@ -75,6 +75,19 @@ spec:
             secretKeyRef:
               name: identity-service-secret
               key: database-url
+        # JWT configuration for local/dev and non-AWS environments:
+        # use RSA keys from the Kubernetes Secret so that
+        # crypto-core::jwt can initialize RS256 keys correctly.
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: identity-service-secret
+              key: jwt-private-key
+        - name: JWT_VALIDATION_KEY
+          valueFrom:
+            secretKeyRef:
+              name: identity-service-secret
+              key: jwt-public-key
         - name: REDIS_URL
           valueFrom:
             configMapKeyRef:
@@ -109,20 +122,16 @@ spec:
 
         # Health checks
         livenessProbe:
-          httpGet:
-            path: /health/live
+          tcpSocket:
             port: 8080
-            scheme: HTTP
           initialDelaySeconds: 10
           periodSeconds: 10
           timeoutSeconds: 5
           failureThreshold: 3
 
         readinessProbe:
-          httpGet:
-            path: /health/ready
+          tcpSocket:
             port: 8080
-            scheme: HTTP
           initialDelaySeconds: 5
           periodSeconds: 5
           timeoutSeconds: 3

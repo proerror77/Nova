@@ -99,3 +99,21 @@ variable "node_max_size" {
   type        = number
   default     = 5
 }
+
+variable "spot_node_desired_size" {
+  description = "Desired number of Spot nodes in the EKS node group (non-production environments)"
+  type        = number
+  default     = 0
+}
+
+variable "spot_node_min_size" {
+  description = "Minimum number of Spot nodes in the EKS node group (non-production environments)"
+  type        = number
+  default     = 0
+}
+
+variable "spot_node_max_size" {
+  description = "Maximum number of Spot nodes in the EKS node group (non-production environments)"
+  type        = number
+  default     = 3
+}

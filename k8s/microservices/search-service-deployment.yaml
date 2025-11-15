@@ -49,8 +49,8 @@ spec:
                       - backend
       containers:
         - name: search-service
-          image: nova/search-service
-          imagePullPolicy: Always
+          image: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/search-service:c849ea7287e61bc77123ee9d58b3f47cb2901cb5
+          imagePullPolicy: IfNotPresent
           ports:
             - name: http
               containerPort: 8086
