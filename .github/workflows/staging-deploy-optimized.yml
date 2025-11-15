@@ -36,7 +36,7 @@ jobs:
       - name: Configure AWS credentials
         id: aws-creds
         continue-on-error: true
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v5
         with:
           role-to-assume: arn:aws:iam::025434362120:role/github-actions-role
           aws-region: ${{ env.AWS_REGION }}
@@ -90,7 +90,7 @@ jobs:
           fetch-depth: 0
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v5
         with:
           role-to-assume: arn:aws:iam::025434362120:role/github-actions-role
           aws-region: ${{ env.AWS_REGION }}
