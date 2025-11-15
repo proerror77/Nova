@@ -227,8 +227,40 @@ impl JwtSettings {
 
     /// Load JWT configuration from environment variables
     fn from_env() -> Result<Self> {
-        let signing_key = env::var("JWT_SECRET")
-            .context("JWT_SECRET must be set when AWS_SECRETS_JWT_NAME is not available")?;
+        // Prefer PEM-based RSA keys when available (production-like configuration).
+        // This matches the staging/production secret layout where JWT_PRIVATE_KEY / JWT_PUBLIC_KEY
+        // contain full PEM-encoded keys for RS256.
+        if let Ok(private_pem) = env::var("JWT_PRIVATE_KEY") {
+            let public_pem = env::var("JWT_PUBLIC_KEY").ok();
+
+            let issuer =
+                env::var("JWT_ISSUER").unwrap_or_else(|_| "nova-platform".to_string());
+            let audience_str =
+                env::var("JWT_AUDIENCE").unwrap_or_else(|_| "api,web".to_string());
+            let audience = audience_str
+                .split(',')
+                .map(|s| s.trim().to_string())
+                .collect();
+
+            let expiry_seconds = env::var("JWT_EXPIRY_SECONDS")
+                .unwrap_or_else(|_| "3600".to_string())
+                .parse()
+                .context("Invalid JWT_EXPIRY_SECONDS")?;
+
+            return Ok(Self {
+                signing_key: private_pem,
+                validation_key: public_pem,
+                algorithm: "RS256".to_string(),
+                issuer,
+                audience,
+                expiry_seconds,
+            });
+        }
+
+        // Fallback: symmetric secret (development only)
+        let signing_key = env::var("JWT_SECRET").context(
+            "JWT_SECRET must be set when AWS_SECRETS_JWT_NAME is not available and no PEM keys are configured",
+        )?;
 
         let algorithm = env::var("JWT_ALGORITHM").unwrap_or_else(|_| "HS256".to_string());
 
