@@ -46,6 +46,9 @@ clickhouse = { version = "0.12", features = ["rustls-tls"] }
 # Hashing
 md5 = "0.7"
 
+# TLS crypto provider (rustls 0.23)
+rustls = { version = "0.23", default-features = false, features = ["aws-lc-rs"] }
+
 # OpenAPI
 utoipa = { version = "4", features = ["chrono", "uuid"] }
 utoipa-swagger-ui = { version = "5", features = ["actix-web"] }
