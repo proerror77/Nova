@@ -125,6 +125,7 @@ impl JwtSecretConfig {
 
         // Preferred/canonical shape: signing_key + friends
         if let Some(signing_key) = value.get("signing_key").and_then(|v| v.as_str()) {
+            info!("Parsed JWT config using canonical signing_key/validation_key fields");
             let validation_key = value
                 .get("validation_key")
                 .and_then(|v| v.as_str())
@@ -168,6 +169,7 @@ impl JwtSecretConfig {
 
         // Legacy shape (symmetric): jwt_secret + optional metadata
         if let Some(signing_key) = value.get("jwt_secret").and_then(|v| v.as_str()) {
+            info!("Parsed JWT config using legacy jwt_secret field");
             let algorithm = value
                 .get("algorithm")
                 .and_then(|v| v.as_str())
@@ -209,6 +211,7 @@ impl JwtSecretConfig {
             .get("JWT_PRIVATE_KEY_PEM")
             .and_then(|v| v.as_str())
         {
+            info!("Parsed JWT config using PEM fields JWT_PRIVATE_KEY_PEM/JWT_PUBLIC_KEY_PEM (RS256)");
             let public_pem = value
                 .get("JWT_PUBLIC_KEY_PEM")
                 .and_then(|v| v.as_str())
