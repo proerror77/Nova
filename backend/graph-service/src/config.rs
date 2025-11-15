@@ -3,8 +3,7 @@ use std::env;
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Config {
-    /// gRPC server configuration, flattened so SERVER_GRPC_PORT maps correctly
-    #[serde(flatten, default)]
+    /// gRPC server configuration
     pub server: ServerConfig,
     /// Neo4j connection configuration, flattened from NEO4J_* env vars
     #[serde(flatten)]
