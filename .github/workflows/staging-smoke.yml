@@ -37,7 +37,7 @@ jobs:
       SMOKE_SKIP_OPENAPI: true
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Ensure kubeconfig secret is present (informative)
         shell: bash
