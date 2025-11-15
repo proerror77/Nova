@@ -7,7 +7,7 @@ spec:
     spec:
       containers:
       - name: content-service
-        image: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/content-service:38cc45e2f3b81a611e60955577b5a0a1120fbf56
+        image: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/content-service:dae305a3b9bbbb3a3257b3e8b1162f24608aefe9
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -30,3 +30,14 @@ spec:
       containers:
       - name: messaging-service
         image: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/messaging-service:fix-routes-amd64-20251102092900
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: identity-service
+spec:
+  template:
+    spec:
+      containers:
+      - name: identity-service
+        image: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/identity-service:dae305a3b9bbbb3a3257b3e8b1162f24608aefe9
