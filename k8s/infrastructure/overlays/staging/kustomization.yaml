@@ -386,6 +386,8 @@ replicas:
     count: 0
   - name: api-gateway
     count: 0
+  - name: feed-service
+    count: 0
 
   # Disable PgBouncer in staging for now to avoid hostPort conflicts and crashes
   - name: pgbouncer
