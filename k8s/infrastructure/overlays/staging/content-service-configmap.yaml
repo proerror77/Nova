@@ -6,4 +6,4 @@ metadata:
 data:
   APP_ENV: "staging"
   LOG_LEVEL: "info"
-
+  CONTENT_SERVICE_PORT: "8080"
