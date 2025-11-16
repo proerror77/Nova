@@ -80,7 +80,7 @@ spec:
       # Containers
       containers:
       - name: pgbouncer
-        image: pgbouncer/pgbouncer:1.21
+        image: pgbouncer/pgbouncer:latest
         imagePullPolicy: IfNotPresent
         
         # Container security context

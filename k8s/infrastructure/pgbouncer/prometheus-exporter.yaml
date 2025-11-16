@@ -57,7 +57,7 @@ spec:
       
       containers:
       - name: exporter
-        image: prometheuscommunity/pgbouncer-exporter:0.5.0
+        image: prometheuscommunity/pgbouncer-exporter:latest
         imagePullPolicy: IfNotPresent
         
         securityContext:
