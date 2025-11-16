@@ -317,7 +317,6 @@ patchesStrategicMerge:
 - prefer-large-nodes-patch.yaml
 # Identity-service gRPC-only health checks (no HTTP server)
 - identity-service-probes-patch.yaml
-- pgbouncer-userlist-patch.yaml
 # Shared DATABASE_URL wiring for core services
 - service-db-env-patch.yaml
 # Shared Redis URL wiring for services using Redis
