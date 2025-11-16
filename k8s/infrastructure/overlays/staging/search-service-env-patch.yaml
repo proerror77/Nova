@@ -9,7 +9,6 @@ spec:
       - name: search-service
         env:
         - name: PORT
-          value: "8080"
+          value: "8086"
         - name: ELASTICSEARCH_URL
           value: "http://elasticsearch.nova-staging.svc.cluster.local:9200"
-
