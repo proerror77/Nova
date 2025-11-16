@@ -47,9 +47,19 @@ pub struct SearchAnalytics {
 
 impl ClickHouseClient {
     pub async fn new(url: &str) -> Result<Self, ClickHouseError> {
-        let client = Client::default()
+        let mut client = Client::default()
             .with_url(url)
             .with_compression(clickhouse::Compression::Lz4);
+
+        if let Ok(database) = std::env::var("CLICKHOUSE_DATABASE") {
+            client = client.with_database(database);
+        }
+        if let Ok(username) = std::env::var("CLICKHOUSE_USERNAME") {
+            client = client.with_user(username);
+        }
+        if let Ok(password) = std::env::var("CLICKHOUSE_PASSWORD") {
+            client = client.with_password(password);
+        }
 
         let instance = Self { client };
         instance.ensure_schema().await?;

@@ -14,3 +14,18 @@ spec:
           value: "http://elasticsearch.nova-staging.svc.cluster.local:9200"
         - name: CLICKHOUSE_URL
           value: "http://chi-nova-ch-single-0-0.nova-staging.svc.cluster.local:8123"
+        - name: CLICKHOUSE_DATABASE
+          valueFrom:
+            secretKeyRef:
+              name: nova-clickhouse-credentials
+              key: CLICKHOUSE_DATABASE
+        - name: CLICKHOUSE_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: nova-clickhouse-credentials
+              key: CLICKHOUSE_USER
+        - name: CLICKHOUSE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: nova-clickhouse-credentials
+              key: CLICKHOUSE_PASSWORD
