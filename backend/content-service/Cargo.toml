@@ -67,6 +67,7 @@ db-pool = { path = "../libs/db-pool" }
 grpc-metrics = { path = "../libs/grpc-metrics" }
 grpc-clients = { path = "../libs/grpc-clients" }
 transactional-outbox = { path = "../libs/transactional-outbox" }
+rustls = { version = "0.23", default-features = false, features = ["aws-lc-rs"] }
 
 # Service-specific dependencies
 futures = "0.3"
