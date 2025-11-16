@@ -396,8 +396,15 @@ async fn main() -> io::Result<()> {
 
     tracing::info!("✅ Transactional outbox processor configured");
 
-    let http_bind_address = format!("{}:{}", config.app.host, 8081);
-    let grpc_bind_address = format!("{}:9081", config.app.host);
+    // Derive HTTP and gRPC bind addresses from configuration.
+    // HTTP uses the configured application port; gRPC defaults to HTTP+1000
+    // but can be overridden via CONTENT_SERVICE_GRPC_PORT.
+    let http_bind_address = format!("{}:{}", config.app.host, config.app.port);
+    let grpc_port: u16 = std::env::var("CONTENT_SERVICE_GRPC_PORT")
+        .ok()
+        .and_then(|p| p.parse().ok())
+        .unwrap_or_else(|| config.app.port.saturating_add(1000));
+    let grpc_bind_address = format!("{}:{}", config.app.host, grpc_port);
 
     tracing::info!("Starting HTTP server at {}", http_bind_address);
     tracing::info!("Starting gRPC server at {}", grpc_bind_address);
