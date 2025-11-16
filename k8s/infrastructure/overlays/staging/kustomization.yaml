@@ -301,6 +301,7 @@ patchesStrategicMerge:
 - deploy-labels-patch.yaml
 - feed-service-env-patch.yaml
 # - feed-service-probes-patch.yaml  # TODO: 检查 probe 配置
+- analytics-service-env-patch.yaml
 - messaging-service-env-patch.yaml
 - messaging-service-env-port-patch.yaml
 - messaging-service-probes-patch.yaml
