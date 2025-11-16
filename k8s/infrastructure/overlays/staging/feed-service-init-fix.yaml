@@ -11,11 +11,10 @@ spec:
         - sh
         - -c
         - |
-          echo "Waiting for content-service:9080 to be ready..."
+          echo "Waiting for content-service:8081 to be ready..."
           for i in $(seq 1 300); do
-            if nc -z content-service 9080; then
+            if nc -z content-service 8081; then
               echo "✓ content-service is ready"; exit 0; fi
             echo "Attempt $i/300 - not ready, retry in 1s..."; sleep 1
           done
           echo "✗ FATAL: content-service not ready after 5 minutes"; exit 1
-
