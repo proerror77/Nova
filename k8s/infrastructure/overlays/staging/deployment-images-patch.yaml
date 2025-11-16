@@ -7,7 +7,7 @@ spec:
     spec:
       containers:
       - name: content-service
-        image: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/content-service:549e65c4565972d435467356c9de670098ec46d7
+        image: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/content-service:4e7634a01c998bba650915882af53547504556b7
 ---
 apiVersion: apps/v1
 kind: Deployment
