@@ -1,0 +1,24 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: content-service
+spec:
+  template:
+    spec:
+      containers:
+      - name: content-service
+        env:
+        - name: GRPC_TLS_ENABLED
+          value: "true"
+        - name: GRPC_TLS_DOMAIN_NAME
+          value: "nova-grpc-services.nova-staging.svc.cluster.local"
+        - name: GRPC_TLS_CA_CERT_PATH
+          value: "/etc/nova/certs/ca.crt"
+        volumeMounts:
+        - name: grpc-ca-cert
+          mountPath: /etc/nova/certs
+          readOnly: true
+      volumes:
+      - name: grpc-ca-cert
+        secret:
+          secretName: grpc-ca-cert
