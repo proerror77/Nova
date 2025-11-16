@@ -338,7 +338,7 @@ images:
   newTag: c849ea7287e61bc77123ee9d58b3f47cb2901cb5
 - name: nova/graph-service
   newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/graph-service
-  newTag: d92d81be65538c0f5d07090a6e03560b447cf5bd
+  newTag: 453ce5e7a4447cd313e55bda15d24e8de2e27975
 - name: nova/graphql-gateway
   newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/graphql-gateway
   newTag: c849ea7287e61bc77123ee9d58b3f47cb2901cb5
