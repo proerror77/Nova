@@ -29,19 +29,21 @@ jobs:
     strategy:
       matrix:
         service:
-          - auth-service
+          # Active V2 / current services with Dockerfiles
+          - analytics-service
           - identity-service
           - content-service
           - feed-service
           - media-service
-          - messaging-service
           - graph-service
+          - user-service
+          - social-service
+          - ranking-service
+          - realtime-chat-service
+          - trust-safety-service
           - search-service
-          - streaming-service
           - graphql-gateway
           - notification-service
-          - events-service
-          - cdn-service
       max-parallel: 2
 
     steps:
@@ -63,7 +65,6 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::025434362120:role/github-actions-role
-          source-account-id: '025434362120'
           aws-region: ${{ env.AWS_REGION }}
           audience: sts.amazonaws.com
           role-session-name: gha-ecr-${{ github.run_id }}
