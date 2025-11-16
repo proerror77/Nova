@@ -10,7 +10,7 @@ spec:
         # Startup probe: Allows 5 minutes for service to start (60 failures * 5s = 300s)
         startupProbe:
           httpGet:
-            path: /health
+            path: /api/v1/health/live
             port: 8080
           initialDelaySeconds: 10
           periodSeconds: 5
@@ -19,7 +19,7 @@ spec:
         # Readiness probe: Determines if service can receive traffic
         readinessProbe:
           httpGet:
-            path: /readiness
+            path: /api/v1/health/ready
             port: 8080
           initialDelaySeconds: 5
           periodSeconds: 5
@@ -29,7 +29,7 @@ spec:
         # Liveness probe: Detects if service needs restart
         livenessProbe:
           httpGet:
-            path: /health
+            path: /api/v1/health/live
             port: 8080
           initialDelaySeconds: 30
           periodSeconds: 10
