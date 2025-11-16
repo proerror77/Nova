@@ -434,7 +434,7 @@ spec:
 
             echo "📌 Topic: $topic_name (partitions: $partitions, replication: $replication)"
 
-            kafka-topics.sh \
+            kafka-topics \
               --bootstrap-server "$BOOTSTRAP_SERVER" \
               --create \
               --topic "$topic_name" \
@@ -449,7 +449,7 @@ spec:
           echo "✅ Topics Initialized"
           echo ""
           echo "Topics list:"
-          kafka-topics.sh --bootstrap-server "$BOOTSTRAP_SERVER" --list
+          kafka-topics --bootstrap-server "$BOOTSTRAP_SERVER" --list
 
         resources:
           requests:
