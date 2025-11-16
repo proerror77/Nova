@@ -323,6 +323,7 @@ patchesStrategicMerge:
 - service-redis-env-patch.yaml
 # - resource-optimization-patch.yaml  # 可选：资源优化
 - grpc-tls-env-patch.yaml
+- pgbouncer-images-patch.yaml
 
 # Remove deprecated/retired services from staging (none currently included)
 # Note: ClickHouse 需要额外的网络隔离 patches
