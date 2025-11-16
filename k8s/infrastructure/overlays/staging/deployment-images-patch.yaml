@@ -51,4 +51,4 @@ spec:
     spec:
       containers:
       - name: search-service
-        image: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/search-service:dbd971aa18d2a18f14b4901b573436c4cb0f0e8f
+        image: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/search-service:e6aea57f4cccfd9367de59337757aa058862361c

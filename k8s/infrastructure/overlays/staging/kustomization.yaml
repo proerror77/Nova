@@ -363,7 +363,7 @@ images:
   newTag: c849ea7287e61bc77123ee9d58b3f47cb2901cb5
 - name: nova/search-service
   newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/search-service
-  newTag: dbd971aa18d2a18f14b4901b573436c4cb0f0e8f
+  newTag: e6aea57f4cccfd9367de59337757aa058862361c
 - name: nova/social-service
   newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/social-service
   newTag: c849ea7287e61bc77123ee9d58b3f47cb2901cb5
