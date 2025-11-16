@@ -30,7 +30,7 @@ jobs:
           terraform_version: ${{ env.TF_VERSION }}
 
       - name: 🔐 Configure AWS credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v5
         with:
           role-to-assume: arn:aws:iam::025434362120:role/nova-staging-github-actions
           aws-region: ${{ env.AWS_REGION }}
