@@ -1,6 +1,25 @@
 use serde::Deserialize;
 use std::env;
 
+fn default_grpc_port() -> u16 {
+    env::var("SERVER_GRPC_PORT")
+        .ok()
+        .and_then(|v| v.parse::<u16>().ok())
+        .unwrap_or(9080)
+}
+
+fn default_neo4j_uri() -> String {
+    env::var("NEO4J_URI").unwrap_or_else(|_| "bolt://neo4j:7687".to_string())
+}
+
+fn default_neo4j_user() -> String {
+    env::var("NEO4J_USER").unwrap_or_else(|_| "neo4j".to_string())
+}
+
+fn default_neo4j_password() -> String {
+    env::var("NEO4J_PASSWORD").unwrap_or_else(|_| "CHANGE_ME".to_string())
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct Config {
     /// gRPC server configuration
