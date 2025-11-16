@@ -321,6 +321,7 @@ patchesStrategicMerge:
 # Shared Redis URL wiring for services using Redis
 - service-redis-env-patch.yaml
 # - resource-optimization-patch.yaml  # 可选：资源优化
+- grpc-tls-env-patch.yaml
 
 # Remove deprecated/retired services from staging (none currently included)
 # Note: ClickHouse 需要额外的网络隔离 patches
@@ -331,7 +332,7 @@ images:
   newTag: c849ea7287e61bc77123ee9d58b3f47cb2901cb5
 - name: nova/content-service
   newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/content-service
-  newTag: dae305a3b9bbbb3a3257b3e8b1162f24608aefe9
+  newTag: b7b2a37ae4be0cb4bb867e47a52cc1930d89d0ff
 - name: nova/feed-service
   newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/feed-service
   newTag: c849ea7287e61bc77123ee9d58b3f47cb2901cb5
@@ -358,7 +359,7 @@ images:
   newTag: c849ea7287e61bc77123ee9d58b3f47cb2901cb5
 - name: nova/search-service
   newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/search-service
-  newTag: dae305a3b9bbbb3a3257b3e8b1162f24608aefe9
+  newTag: dbd971aa18d2a18f14b4901b573436c4cb0f0e8f
 - name: nova/social-service
   newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/social-service
   newTag: c849ea7287e61bc77123ee9d58b3f47cb2901cb5
