@@ -29,14 +29,13 @@ jobs:
     strategy:
       matrix:
         service:
-          # Active V2 / current services with Dockerfiles
+          # Active V2 / current services with Dockerfiles (exclude legacy user-service)
           - analytics-service
           - identity-service
           - content-service
           - feed-service
           - media-service
           - graph-service
-          - user-service
           - social-service
           - ranking-service
           - realtime-chat-service
