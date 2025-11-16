@@ -1,6 +1,4 @@
-# Multi-stage build for GraphQL Gateway
-# Align builder/runtime with unified workspace template to avoid glibc mismatches.
-FROM rust:1.76-slim AS builder
+FROM rust:slim AS builder
 
 # Install build dependencies
 RUN apt-get update && \
@@ -13,6 +11,10 @@ RUN apt-get update && \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
+# Ensure we have a new enough Rust/Cargo toolchain with edition 2024 support.
+RUN rustup toolchain install nightly && \
+    rustup default nightly
+
 WORKDIR /app
 
 # Copy workspace manifest files
@@ -22,16 +24,15 @@ COPY Cargo.toml Cargo.lock ./
 COPY backend/ ./backend/
 
 # Build GraphQL Gateway binary in release mode
-RUN cargo build --release -p graphql-gateway
+RUN cargo +nightly build --release -p graphql-gateway
 
 # Runtime stage
-FROM debian:bookworm-slim
+FROM rust:slim
 
-# Install runtime dependencies only
+# Install minimal runtime dependencies
 RUN apt-get update && \
     apt-get install -y \
     ca-certificates \
-    libssl3 \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
