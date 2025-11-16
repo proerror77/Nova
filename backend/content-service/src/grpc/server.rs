@@ -787,28 +787,42 @@ pub async fn start_grpc_server(
     }
 
     // ✅ P0: Load mTLS configuration
+    //
+    // In production, missing TLS configuration is a hard error.
+    // In non-production environments (e.g. staging, development),
+    // we allow starting without TLS to keep the environment usable
+    // while mTLS is being rolled out.
+    let app_env = std::env::var("APP_ENV").unwrap_or_else(|_| "development".to_string());
+    let is_production_env = app_env.eq_ignore_ascii_case("production");
+
     let tls_config = match grpc_tls::GrpcServerTlsConfig::from_env() {
         Ok(config) => {
-            tracing::info!("mTLS enabled - service-to-service authentication active");
+            tracing::info!(
+                "mTLS enabled - service-to-service authentication active (env = {})",
+                app_env
+            );
             Some(config)
         }
         Err(e) => {
             tracing::warn!(
-                "mTLS disabled - TLS config not found: {}. Using development mode for testing only.",
+                "mTLS disabled - TLS config not found for env '{}': {}. Starting without TLS.",
+                app_env,
                 e
             );
-            // In development, allow non-TLS for testing
-            // In production, this should fail hard
-            if cfg!(debug_assertions) {
-                tracing::info!("Development mode: Starting without TLS (NOT FOR PRODUCTION)");
-                None
-            } else {
+
+            if is_production_env {
                 return Err(format!(
                     "Production requires mTLS - GRPC_SERVER_CERT_PATH must be set: {}",
                     e
                 )
                 .into());
             }
+
+            tracing::info!(
+                "Non-production environment ({}): running gRPC server without TLS (NOT FOR PRODUCTION)",
+                app_env
+            );
+            None
         }
     };
 

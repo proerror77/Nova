@@ -168,7 +168,7 @@ metadata:
     app: redis-cluster
 spec:
   serviceName: redis-cluster-headless
-  replicas: 3
+  replicas: 1
   selector:
     matchLabels:
       app: redis-cluster
@@ -194,23 +194,8 @@ spec:
         runAsNonRoot: true
         runAsUser: 999
 
-      initContainers:
-      - name: wait-for-all-pods
-        image: busybox:1.35
-        command:
-        - sh
-        - -c
-        - |
-          echo "Waiting for all Redis pods to be ready..."
-          for i in 0 1 2; do
-            echo "Waiting for redis-cluster-$i..."
-            until nc -z redis-cluster-$i.redis-cluster-headless.nova-staging.svc.cluster.local 6379; do
-              echo "  Retrying..."
-              sleep 2
-            done
-            echo "✓ redis-cluster-$i is ready"
-          done
-          echo "All pods ready!"
+      # Init container removed - circular dependency issue
+      # Cluster initialization handled by separate Job after all pods are Running
 
       containers:
       - name: redis
@@ -263,10 +248,10 @@ spec:
 
         resources:
           requests:
-            cpu: 100m
+            cpu: 50m
             memory: 256Mi
           limits:
-            cpu: 500m
+            cpu: 300m
             memory: 512Mi
 
         volumeMounts:

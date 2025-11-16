@@ -116,6 +116,9 @@ spec:
       labels:
         app: zookeeper
     spec:
+      # Disable automatic service link environment variables to avoid JMX conflicts
+      enableServiceLinks: false
+
       securityContext:
         fsGroup: 1000
         runAsNonRoot: true
@@ -138,30 +141,36 @@ spec:
           protocol: TCP
 
         env:
-        - name: ZOO_CFG_EXTRA
-          value: "metricsProvider.className=org.apache.zookeeper.metrics.prometheus.PrometheusMetricsProvider metricsProvider.httpPort=7070"
-        - name: ZOO_SERVERS
-          value: "server.1=zookeeper:2888:3888"
-        - name: ZOO_4LW_COMMANDS_WHITELIST
+        # Required environment variables for cp-zookeeper
+        - name: ZOOKEEPER_CLIENT_PORT
+          value: "2181"
+        - name: ZOOKEEPER_TICK_TIME
+          value: "2000"
+        - name: ZOOKEEPER_INIT_LIMIT
+          value: "10"
+        - name: ZOOKEEPER_SYNC_LIMIT
+          value: "5"
+        # JMX configuration (disable to avoid conflicts)
+        - name: KAFKA_JMX_OPTS
+          value: "-Dcom.sun.management.jmxremote=false"
+        # Additional configuration
+        - name: ZOOKEEPER_4LW_COMMANDS_WHITELIST
           value: "stat,ruok,conf,isro,mntr"
+        # Single-node setup - no server ID or servers list needed
 
         livenessProbe:
-          exec:
-            command:
-            - sh
-            - -c
-            - "echo ruok | nc -w 2 localhost 2181 | grep imok"
+          httpGet:
+            path: /commands/ruok
+            port: 8080
           initialDelaySeconds: 30
           periodSeconds: 10
           timeoutSeconds: 5
           failureThreshold: 3
 
         readinessProbe:
-          exec:
-            command:
-            - sh
-            - -c
-            - "echo stat | nc -w 2 localhost 2181 | grep Zookeeper"
+          httpGet:
+            path: /commands/ruok
+            port: 8080
           initialDelaySeconds: 10
           periodSeconds: 5
           timeoutSeconds: 3
@@ -178,9 +187,6 @@ spec:
         volumeMounts:
         - name: zookeeper-data
           mountPath: /var/lib/zookeeper
-        - name: zookeeper-config
-          mountPath: /etc/kafka/secrets
-          readOnly: true
 
         securityContext:
           allowPrivilegeEscalation: false
@@ -216,6 +222,9 @@ spec:
       labels:
         app: kafka
     spec:
+      # Disable automatic service link environment variables to avoid JMX conflicts
+      enableServiceLinks: false
+
       securityContext:
         fsGroup: 1000
         runAsNonRoot: true
@@ -223,15 +232,15 @@ spec:
 
       initContainers:
       - name: wait-for-zookeeper
-        image: confluentinc/cp-kafka:7.6.1
+        image: busybox:1.35
         command:
         - sh
         - -c
         - |
           echo "Waiting for Zookeeper..."
           for i in $(seq 1 30); do
-            if echo ruok | nc -w 2 zookeeper.nova-staging.svc.cluster.local 2181 2>/dev/null | grep -q imok; then
-              echo "✓ Zookeeper is ready"
+            if nc -z zookeeper.nova-staging.svc.cluster.local 2181 2>/dev/null; then
+              echo "✓ Zookeeper is ready (port 2181 open)"
               exit 0
             fi
             echo "  Attempt $i/30, retrying..."
@@ -254,16 +263,28 @@ spec:
           protocol: TCP
 
         env:
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
         - name: KAFKA_BROKER_ID
           value: "1"
         - name: KAFKA_ZOOKEEPER_CONNECT
           value: "zookeeper.nova-staging.svc.cluster.local:2181"
+        - name: KAFKA_LISTENERS
+          value: "PLAINTEXT://0.0.0.0:9092"
         - name: KAFKA_ADVERTISED_LISTENERS
-          value: "PLAINTEXT://kafka.nova-staging.svc.cluster.local:9092"
+          value: "PLAINTEXT://$(POD_IP):9092"
         - name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP
           value: "PLAINTEXT:PLAINTEXT"
         - name: KAFKA_INTER_BROKER_LISTENER_NAME
           value: "PLAINTEXT"
+        - name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR
+          value: "1"
+        - name: KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR
+          value: "1"
+        - name: KAFKA_TRANSACTION_STATE_LOG_MIN_ISR
+          value: "1"
 
         # Performance and reliability
         - name: KAFKA_NUM_NETWORK_THREADS
@@ -293,13 +314,9 @@ spec:
         - name: KAFKA_MIN_INSYNC_REPLICAS
           value: "1"
 
-        # Metrics
-        - name: KAFKA_JMX_PORT
-          value: "9999"
-        - name: KAFKA_JMX_HOSTNAME
-          value: "kafka.nova-staging.svc.cluster.local"
-        - name: KAFKA_METRICS_REPORTERS
-          value: "org.apache.kafka.common.metrics.JmxReporter"
+        # Metrics (JMX disabled to avoid conflicts)
+        - name: KAFKA_JMX_OPTS
+          value: "-Dcom.sun.management.jmxremote=false"
 
         livenessProbe:
           tcpSocket:
@@ -310,31 +327,24 @@ spec:
           failureThreshold: 3
 
         readinessProbe:
-          exec:
-            command:
-            - sh
-            - -c
-            - |
-              kafka-broker-api-versions.sh --bootstrap-server localhost:9092 | grep ApiVersion > /dev/null
+          tcpSocket:
+            port: 9092
           initialDelaySeconds: 10
           periodSeconds: 5
-          timeoutSeconds: 5
+          timeoutSeconds: 3
           failureThreshold: 3
 
         resources:
           requests:
-            cpu: 200m
+            cpu: 50m
             memory: 512Mi
           limits:
-            cpu: 1000m
+            cpu: 300m
             memory: 1Gi
 
         volumeMounts:
         - name: kafka-data
           mountPath: /var/lib/kafka/data
-        - name: kafka-config
-          mountPath: /etc/kafka
-          readOnly: true
 
         securityContext:
           allowPrivilegeEscalation: false
@@ -441,13 +451,13 @@ spec:
           echo "Topics list:"
           kafka-topics.sh --bootstrap-server "$BOOTSTRAP_SERVER" --list
 
-      resources:
-        requests:
-          cpu: 100m
-          memory: 256Mi
-        limits:
-          cpu: 500m
-          memory: 512Mi
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
 
 ---
 # Service for Kafka management tools access (optional)

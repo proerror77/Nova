@@ -391,9 +391,9 @@ replicas:
   - name: content-service
     count: 1
   - name: graph-service
-    count: 1
+    count: 0
   - name: graphql-gateway
-    count: 1
+    count: 0
   - name: media-service
     count: 1
   - name: notification-service

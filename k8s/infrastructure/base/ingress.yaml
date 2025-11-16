@@ -39,16 +39,16 @@ spec:
     http:
       paths:
       # Content Service - Posts
-      - path: /api/v1/posts
+      - path: /api/v2/posts
         pathType: Prefix
         backend:
           service:
             name: content-service
             port:
-              number: 8081
+              number: 8080
 
       # Media Service - Uploads
-      - path: /api/v1/uploads
+      - path: /api/v2/uploads
         pathType: Prefix
         backend:
           service:
@@ -57,7 +57,7 @@ spec:
               number: 8082
 
       # Media Service - Videos
-      - path: /api/v1/videos
+      - path: /api/v2/videos
         pathType: Prefix
         backend:
           service:
@@ -66,7 +66,7 @@ spec:
               number: 8082
 
       # Media Service - Reels
-      - path: /api/v1/reels
+      - path: /api/v2/reels
         pathType: Prefix
         backend:
           service:
@@ -74,79 +74,141 @@ spec:
             port:
               number: 8082
 
-      # User Service - Feed/Discovery/Relationships
-      - path: /api/v1/feed
+      # Identity Service - Users/Auth
+      - path: /api/v2/users
         pathType: Prefix
         backend:
           service:
-            name: user-service
+            name: identity-service
             port:
-              number: 8083
+              number: 8080
 
-      - path: /api/v1/discover
+      - path: /api/v2/auth
         pathType: Prefix
         backend:
           service:
-            name: user-service
+            name: identity-service
             port:
-              number: 8083
+              number: 8080
 
-      - path: /api/v1/users
+      # Social Service - Feed/Discovery/Relationships
+      - path: /api/v2/feed
         pathType: Prefix
         backend:
           service:
-            name: user-service
+            name: social-service
             port:
-              number: 8083
+              number: 8081
 
-      - path: /api/v1/relationships
+      - path: /api/v2/discover
         pathType: Prefix
         backend:
           service:
-            name: user-service
+            name: social-service
             port:
-              number: 8083
+              number: 8081
 
-      - path: /api/v1/trending
+      - path: /api/v2/relationships
         pathType: Prefix
         backend:
           service:
-            name: user-service
+            name: social-service
             port:
-              number: 8083
+              number: 8081
+
+      - path: /api/v2/trending
+        pathType: Prefix
+        backend:
+          service:
+            name: social-service
+            port:
+              number: 8081
 
       # Messaging Service - Messages/Calls/Notifications
-      - path: /api/v1/messages
+      - path: /api/v2/messages
         pathType: Prefix
         backend:
           service:
             name: messaging-service
             port:
-              number: 8084
+              number: 3000
 
-      - path: /api/v1/conversations
+      - path: /api/v2/conversations
         pathType: Prefix
         backend:
           service:
             name: messaging-service
             port:
-              number: 8084
+              number: 3000
 
-      - path: /api/v1/calls
+      - path: /api/v2/calls
         pathType: Prefix
         backend:
           service:
             name: messaging-service
             port:
-              number: 8084
+              number: 3000
 
-      - path: /api/v1/notifications
+      - path: /api/v2/notifications
         pathType: Prefix
         backend:
           service:
-            name: messaging-service
+            name: notification-service
             port:
-              number: 8084
+              number: 8000
+
+      # Search Service
+      - path: /api/v2/search
+        pathType: Prefix
+        backend:
+          service:
+            name: search-service
+            port:
+              number: 8080
+
+      # Analytics Service
+      - path: /api/v2/analytics
+        pathType: Prefix
+        backend:
+          service:
+            name: analytics-service
+            port:
+              number: 8080
+
+      - path: /api/v2/events
+        pathType: Prefix
+        backend:
+          service:
+            name: analytics-service
+            port:
+              number: 8080
+
+      # Ranking Service
+      - path: /api/v2/ranking
+        pathType: Prefix
+        backend:
+          service:
+            name: ranking-service
+            port:
+              number: 8080
+
+      # Trust & Safety Service
+      - path: /api/v2/moderation
+        pathType: Prefix
+        backend:
+          service:
+            name: trust-safety-service
+            port:
+              number: 8080
+
+      # Realtime Chat Service
+      - path: /api/v2/chat
+        pathType: Prefix
+        backend:
+          service:
+            name: realtime-chat-service
+            port:
+              number: 8080
 
       # WebSocket endpoint for messaging
       - path: /ws
@@ -155,16 +217,16 @@ spec:
           service:
             name: messaging-service
             port:
-              number: 8084
+              number: 3000
 
       # Health checks
       - path: /health
-        pathType: Prefix
+        pathType: Exact
         backend:
           service:
-            name: content-service
+            name: identity-service
             port:
-              number: 8081
+              number: 8080
 
 ---
 # TLS 证书（使用自签名或 Let's Encrypt）

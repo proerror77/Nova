@@ -41,7 +41,7 @@ spec:
   syncPolicy:
     automated:
       prune: true      # Delete resources removed from Git
-      selfHeal: true   # Auto-sync if cluster state drifts
+      selfHeal: false  # Do NOT auto-heal manual changes (e.g. scaling services to 0)
       allowEmpty: false # Prevent empty applications
 
     syncOptions:
