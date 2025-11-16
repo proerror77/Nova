@@ -387,9 +387,9 @@ replicas:
   - name: api-gateway
     count: 0
 
-  # Limit PgBouncer to a single replica in staging to avoid hostPort conflicts
+  # Disable PgBouncer in staging for now to avoid hostPort conflicts and crashes
   - name: pgbouncer
-    count: 1
+    count: 0
 
   # Keep a single replica for core path services
   - name: content-service
