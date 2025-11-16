@@ -98,7 +98,7 @@ impl ClickHouseClient {
                 ENGINE = SummingMergeTree()
                 PARTITION BY toYYYYMMDD(hour_bucket)
                 ORDER BY (hour_bucket, query)
-                TTL hour_bucket + INTERVAL 7 DAY
+                TTL toDateTime(hour_bucket) + INTERVAL 7 DAY
                 AS SELECT
                     toStartOfHour(timestamp) AS hour_bucket,
                     query,
@@ -120,7 +120,7 @@ impl ClickHouseClient {
                 ENGINE = SummingMergeTree()
                 PARTITION BY toYYYYMMDD(day_bucket)
                 ORDER BY (day_bucket, query)
-                TTL day_bucket + INTERVAL 30 DAY
+                TTL toDate(day_bucket) + INTERVAL 30 DAY
                 AS SELECT
                     toDate(timestamp) AS day_bucket,
                     query,
