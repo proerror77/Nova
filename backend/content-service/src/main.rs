@@ -269,6 +269,16 @@ async fn shutdown_signal() {
 
 #[actix_web::main]
 async fn main() -> io::Result<()> {
+    // Install default TLS crypto provider for rustls-based clients used by shared gRPC clients.
+    // This is required when `aws-lc-rs` is enabled in the dependency tree.
+    if let Err(err) = rustls::crypto::aws_lc_rs::default_provider().install_default() {
+        eprintln!(
+            "ERROR: failed to install rustls crypto provider: {:?}",
+            err
+        );
+        return Err(io::Error::other("failed to install rustls crypto provider"));
+    }
+
     // Support container healthchecks via CLI subcommand: `healthcheck-http` or legacy `healthcheck`
     {
         let mut args = std::env::args();
