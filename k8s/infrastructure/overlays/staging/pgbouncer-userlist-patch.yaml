@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: pgbouncer-userlist
+type: Opaque
+stringData:
+  # NOTE: staging placeholder only. Real SCRAM hashes should be provisioned
+  # out-of-band for production.
+  admin-password: "changeme-staging-admin-password"

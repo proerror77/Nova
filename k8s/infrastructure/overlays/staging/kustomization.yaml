@@ -317,6 +317,7 @@ patchesStrategicMerge:
 - prefer-large-nodes-patch.yaml
 # Identity-service gRPC-only health checks (no HTTP server)
 - identity-service-probes-patch.yaml
+- pgbouncer-userlist-patch.yaml
 # Shared DATABASE_URL wiring for core services
 - service-db-env-patch.yaml
 # Shared Redis URL wiring for services using Redis
@@ -386,6 +387,10 @@ replicas:
     count: 0
   - name: api-gateway
     count: 0
+
+  # Limit PgBouncer to a single replica in staging to avoid hostPort conflicts
+  - name: pgbouncer
+    count: 1
 
   # Keep a single replica for core path services
   - name: content-service
