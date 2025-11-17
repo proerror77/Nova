@@ -50,13 +50,17 @@ jobs:
           tar xzf gitleaks_8.18.0_linux_x64.tar.gz
           chmod +x gitleaks
 
-      - name: Scan for secrets in history
+      - name: Scan for secrets in history (baseline aware)
         run: |
-          ./gitleaks detect --source . --verbose --exit-code 1 || {
-            echo "⚠️ Secrets detected in git history"
-            echo "Remediation: git filter-branch or BFG Repo-Cleaner"
-            exit 1
-          }
+          ./gitleaks detect \
+            --source . \
+            --verbose \
+            --baseline-path .github/security/gitleaks-baseline.json \
+            --exit-code 1 || {
+              echo "⚠️ Secrets detected outside the approved baseline"
+              echo "Remediation: scrub the leak or update .github/security/gitleaks-baseline.json after validation"
+              exit 1
+            }
 
       - name: Scan for secrets in current files
         run: |

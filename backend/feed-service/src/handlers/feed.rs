@@ -6,10 +6,9 @@ use tracing::{debug, info};
 use uuid::Uuid;
 
 use crate::error::{AppError, Result};
-use crate::grpc::clients::{ContentServiceClient, UserServiceClient};
+use crate::grpc::clients::ContentServiceClient;
 use crate::middleware::jwt_auth::UserId;
 use crate::models::FeedResponse;
-use grpc_clients::nova::user_service::v2::GetUserFollowingRequest;
 
 #[derive(Debug, Deserialize)]
 pub struct FeedQueryParams {
@@ -52,14 +51,13 @@ impl FeedQueryParams {
 
 pub struct FeedHandlerState {
     pub content_client: Arc<ContentServiceClient>,
-    pub user_client: Arc<UserServiceClient>,
 }
 
 #[get("")]
 pub async fn get_feed(
     query: web::Query<FeedQueryParams>,
     http_req: HttpRequest,
-    state: web::Data<FeedHandlerState>,
+    _state: web::Data<FeedHandlerState>,
 ) -> Result<HttpResponse> {
     let user_id = http_req
         .extensions()
@@ -81,47 +79,18 @@ pub async fn get_feed(
         user_id, query.algo, limit, offset
     );
 
-    // Step 1: Get user's following list via gRPC
-    let following_resp = state
-        .user_client
-        .get_user_following(GetUserFollowingRequest {
-            user_id: user_id.to_string(),
-            limit: 1000,
-            offset: 0,
-        })
-        .await
-        .map_err(|e| AppError::Internal(format!("Failed to fetch following list: {}", e)))?;
-
-    // Step 2: Get posts from followed users via batch gRPC call
-    let followed_user_ids: Vec<String> = following_resp
-        .profiles
-        .iter()
-        .take(100) // Limit to prevent huge batch requests
-        .map(|profile| profile.id.clone())
-        .collect();
-
-    if followed_user_ids.is_empty() {
-        // User doesn't follow anyone, return empty feed
-        return Ok(HttpResponse::Ok().json(FeedResponse {
-            posts: vec![],
-            cursor: None,
-            has_more: false,
-            total_count: 0,
-        }));
-    }
-
-    // For simplicity in this implementation, we'll return pagination-ready response
-    // In production, would fetch actual post IDs from followed users and batch load
-    let posts: Vec<Uuid> = vec![]; // Placeholder: actual implementation would fetch posts
+    // For simplicity in this implementation, we'll return an empty feed
+    // The actual implementation should:
+    // - Use graph-service to get following list
+    // - Use content-service to fetch posts from followed users
+    let posts: Vec<Uuid> = vec![];
     let posts_count = posts.len();
 
     let cursor = FeedQueryParams::encode_cursor(offset + limit as usize);
 
     info!(
-        "Feed generated for user: {} (followers: {}, posts: {})",
-        user_id,
-        followed_user_ids.len(),
-        posts_count
+        "Feed generated for user: {} (posts: {})",
+        user_id, posts_count
     );
 
     Ok(HttpResponse::Ok().json(FeedResponse {

@@ -46,6 +46,7 @@ pub fn parse_cache_key(key: &str) -> Result<(EntityType, String)> {
     Ok((entity_type, entity_id))
 }
 
+#[allow(dead_code)]
 /// Build pattern for multiple entities
 ///
 /// # Example
@@ -66,6 +67,7 @@ pub fn build_pattern(entity_type: &str, pattern: Option<&str>) -> String {
     }
 }
 
+#[allow(dead_code)]
 /// Extract entity type from cache key
 ///
 /// # Example
@@ -83,6 +85,7 @@ pub fn extract_entity_type(key: &str) -> Option<&str> {
     key.split(':').next()
 }
 
+#[allow(dead_code)]
 /// Validate cache key format
 ///
 /// # Example

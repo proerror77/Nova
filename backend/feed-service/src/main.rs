@@ -125,10 +125,13 @@ async fn main() -> io::Result<()> {
 
     // Initialize FeedHandlerState with gRPC clients
     let feed_handler_state = web::Data::new(FeedHandlerState {
-        content_client: Arc::new(recommendation_service::grpc::clients::ContentServiceClient::from_pool(grpc_pool.clone())),
-        user_client: Arc::new(recommendation_service::grpc::clients::UserServiceClient::from_pool(grpc_pool.clone())),
+        content_client: Arc::new(
+            recommendation_service::grpc::clients::ContentServiceClient::from_pool(
+                grpc_pool.clone(),
+            ),
+        ),
     });
-    tracing::info!("FeedHandlerState initialized with content and user gRPC clients");
+    tracing::info!("FeedHandlerState initialized with content gRPC client");
 
     // Kafka consumer removed - recommendation events now handled by ranking-service
     info!("Feed-service simplified - ranking delegated to ranking-service");
@@ -303,10 +306,7 @@ async fn main() -> io::Result<()> {
             .service(get_model_info)
             .service(rank_candidates)
             .service(semantic_search)
-            .service(
-                web::scope("/api/v2/feed")
-                    .service(get_feed)
-            )
+            .service(web::scope("/api/v2/feed").service(get_feed))
     })
     .bind(format!("0.0.0.0:{}", config.app.port))?
     .run()

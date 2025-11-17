@@ -1,6 +1,6 @@
 # Nova Backend - Kubernetes Manifests
 
-This directory contains Kubernetes manifests for deploying all 11 Nova microservices to production.
+This directory contains Kubernetes manifests for deploying all active Nova microservices to production.
 
 ## Directory Structure
 
@@ -10,15 +10,12 @@ k8s/
 │   ├── namespace.yaml              # nova-backend namespace
 │   ├── configmap.yaml              # Shared configuration
 │   ├── auth-service.yaml           # Auth service deployment + service
-│   ├── user-service.yaml           # User service deployment + service
 │   ├── content-service.yaml        # Content service deployment + service
 │   ├── feed-service.yaml           # Feed service deployment + service
 │   ├── media-service.yaml          # Media service deployment + service
 │   ├── messaging-service.yaml      # Messaging service deployment + service
 │   ├── search-service.yaml         # Search service deployment + service
-│   ├── streaming-service.yaml      # Streaming service deployment + service
 │   ├── notification-service.yaml   # Notification service deployment + service
-│   ├── cdn-service.yaml            # CDN service deployment + service
 │   ├── events-service.yaml         # Events service deployment + service
 │   └── kustomization.yaml          # Kustomize base configuration
 ├── overlays/                       # Environment-specific overrides
@@ -35,7 +32,7 @@ README.md                           # This file
 
 ### 1. Generate Service Manifests
 
-All 11 services follow the same pattern. Use the generator script to avoid duplication:
+所有服務共用同一 template，可使用產生腳本避免重工：
 
 ```bash
 cd k8s
@@ -100,15 +97,12 @@ kubectl rollout status deployment -n nova-backend --timeout=5m
 | Service | HTTP Port | gRPC Port |
 |---------|-----------|-----------|
 | auth-service | 8083 | 9083 |
-| user-service | 8080 | 9080 |
 | content-service | 8081 | 9081 |
 | feed-service | 8084 | 9084 |
 | media-service | 8082 | 9082 |
 | messaging-service | 8085 | 9085 |
 | search-service | 8086 | 9086 |
-| streaming-service | 8087 | 9087 |
 | notification-service | 8088 | 9088 |
-| cdn-service | 8089 | 9089 |
 | events-service | 8090 | 9090 |
 
 ### Resource Limits

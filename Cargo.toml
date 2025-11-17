@@ -1,7 +1,6 @@
 [workspace]
 members = [
     # Services
-    "backend/user-service",
     "backend/content-service",
     "backend/feed-service",
     "backend/media-service",
@@ -200,8 +199,6 @@ once_cell = "1.19"
 testcontainers = "0.17"
 hex = "0.4"
 # Service dependencies for integration tests
-# Temporarily disabled due to user-service compilation issues
-# user-service = { path = "backend/user-service" }
 
 [[test]]
 name = "core_flow_test"

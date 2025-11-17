@@ -5,6 +5,7 @@ use crate::grpc::AuthClient;
 use crate::models::Post;
 use crate::services::feed_ranking::FeedRankingService;
 use crate::services::posts::PostService;
+use chrono::{DateTime, Utc};
 use grpc_metrics::layer::RequestGuard;
 use sqlx::PgPool;
 use std::sync::Arc;
@@ -30,6 +31,8 @@ pub mod nova {
     pub use content_service as content;
 }
 
+use grpc_clients::nova::social_service::v2 as social_proto;
+use grpc_clients::GrpcClientPool;
 use nova::common::ErrorStatus;
 use nova::content::content_service_server::ContentService;
 use nova::content::*;
@@ -41,6 +44,7 @@ pub struct ContentServiceImpl {
     feed_cache: Arc<FeedCache>,
     feed_ranking: Arc<FeedRankingService>,
     auth_client: Arc<AuthClient>,
+    grpc_pool: Arc<GrpcClientPool>,
 }
 
 fn convert_post_to_proto(post: &Post) -> crate::grpc::nova::content::Post {
@@ -68,6 +72,52 @@ fn make_error(code: &'static str, message: impl Into<String>) -> Option<ErrorSta
         message: message.into(),
         metadata: Default::default(),
     })
+}
+
+fn timestamp_parts_to_secs(seconds: i64, nanos: i32) -> i64 {
+    DateTime::<Utc>::from_timestamp(seconds, nanos as u32)
+        .map(|dt| dt.timestamp())
+        .unwrap_or(seconds)
+}
+
+fn map_social_comment(comment: social_proto::Comment) -> Comment {
+    let created_at = comment
+        .created_at
+        .map(|ts| timestamp_parts_to_secs(ts.seconds, ts.nanos))
+        .unwrap_or(0);
+
+    Comment {
+        id: comment.comment_id,
+        post_id: comment.post_id,
+        creator_id: comment.user_id,
+        content: comment.content,
+        created_at,
+    }
+}
+
+fn map_social_like(like: social_proto::Liker) -> PostLike {
+    let liked_at = like
+        .liked_at
+        .map(|ts| timestamp_parts_to_secs(ts.seconds, ts.nanos))
+        .unwrap_or(0);
+
+    PostLike {
+        user_id: like.user_id,
+        liked_at,
+    }
+}
+
+fn map_social_status(status: Status, context: &str) -> Status {
+    tracing::error!(
+        context,
+        code = ?status.code(),
+        message = %status.message(),
+        "social-service gRPC call failed"
+    );
+    Status::new(
+        status.code(),
+        format!("{context} failed: {}", status.message()),
+    )
 }
 
 #[tonic::async_trait]
@@ -168,9 +218,45 @@ impl ContentService for ContentServiceImpl {
         &self,
         _request: Request<GetCommentsRequest>,
     ) -> Result<Response<GetCommentsResponse>, Status> {
-        Err(Status::unimplemented(
-            "Comment operations moved to social-service. Call social_service.ListComments instead",
-        ))
+        let req = _request.into_inner();
+
+        if req.post_id.is_empty() {
+            return Err(Status::invalid_argument("post_id is required"));
+        }
+
+        let limit = if req.limit <= 0 { 50 } else { req.limit }.min(100);
+        let offset = req.offset.max(0);
+
+        let social_req = social_proto::ListCommentsRequest {
+            post_id: req.post_id.clone(),
+            limit,
+            cursor: if offset == 0 {
+                String::new()
+            } else {
+                offset.to_string()
+            },
+            sort: social_proto::CommentSort::Newest as i32,
+        };
+
+        let mut social_client = self.grpc_pool.social();
+        let response = social_client
+            .list_comments(Request::new(social_req))
+            .await
+            .map_err(|status| map_social_status(status, "social_service.ListComments"))?
+            .into_inner();
+
+        let total = response.comments.len() as i32;
+        let comments = response
+            .comments
+            .into_iter()
+            .map(map_social_comment)
+            .collect();
+
+        Ok(Response::new(GetCommentsResponse {
+            comments,
+            total,
+            error: ok_error(),
+        }))
     }
 
     /// Create a comment (DEPRECATED - use social-service)
@@ -178,9 +264,37 @@ impl ContentService for ContentServiceImpl {
         &self,
         _request: Request<CreateCommentRequest>,
     ) -> Result<Response<CreateCommentResponse>, Status> {
-        Err(Status::unimplemented(
-            "Comment operations moved to social-service. Call social_service.CreateComment instead",
-        ))
+        let req = _request.into_inner();
+
+        if req.post_id.is_empty() || req.user_id.is_empty() || req.content.trim().is_empty() {
+            return Err(Status::invalid_argument(
+                "post_id, user_id, and content are required",
+            ));
+        }
+
+        let social_req = social_proto::CreateCommentRequest {
+            post_id: req.post_id.clone(),
+            user_id: req.user_id.clone(),
+            content: req.content.clone(),
+            parent_comment_id: req.parent_comment_id.clone(),
+        };
+
+        let mut social_client = self.grpc_pool.social();
+        let response = social_client
+            .create_comment(Request::new(social_req))
+            .await
+            .map_err(|status| map_social_status(status, "social_service.CreateComment"))?
+            .into_inner();
+
+        let comment = response
+            .comment
+            .map(map_social_comment)
+            .ok_or_else(|| Status::internal("social-service returned empty comment payload"))?;
+
+        Ok(Response::new(CreateCommentResponse {
+            comment: Some(comment),
+            error: ok_error(),
+        }))
     }
 
     /// Update a comment (DEPRECATED - use social-service)
@@ -188,9 +302,36 @@ impl ContentService for ContentServiceImpl {
         &self,
         _request: Request<UpdateCommentRequest>,
     ) -> Result<Response<UpdateCommentResponse>, Status> {
-        Err(Status::unimplemented(
-            "Comment operations moved to social-service. Call social_service.UpdateComment instead",
-        ))
+        let req = _request.into_inner();
+
+        if req.comment_id.is_empty() || req.user_id.is_empty() {
+            return Err(Status::invalid_argument(
+                "comment_id and user_id are required",
+            ));
+        }
+
+        let social_req = social_proto::UpdateCommentRequest {
+            comment_id: req.comment_id.clone(),
+            user_id: req.user_id.clone(),
+            content: req.content.clone(),
+        };
+
+        let mut social_client = self.grpc_pool.social();
+        let response = social_client
+            .update_comment(Request::new(social_req))
+            .await
+            .map_err(|status| map_social_status(status, "social_service.UpdateComment"))?
+            .into_inner();
+
+        let comment = response
+            .comment
+            .map(map_social_comment)
+            .ok_or_else(|| Status::internal("social-service returned empty comment payload"))?;
+
+        Ok(Response::new(UpdateCommentResponse {
+            comment: Some(comment),
+            error: ok_error(),
+        }))
     }
 
     /// Delete a comment (DEPRECATED - use social-service)
@@ -198,9 +339,29 @@ impl ContentService for ContentServiceImpl {
         &self,
         _request: Request<DeleteCommentRequest>,
     ) -> Result<Response<DeleteCommentResponse>, Status> {
-        Err(Status::unimplemented(
-            "Comment operations moved to social-service. Call social_service.DeleteComment instead",
-        ))
+        let req = _request.into_inner();
+
+        if req.comment_id.is_empty() || req.user_id.is_empty() {
+            return Err(Status::invalid_argument(
+                "comment_id and user_id are required",
+            ));
+        }
+
+        let social_req = social_proto::DeleteCommentRequest {
+            comment_id: req.comment_id.clone(),
+            user_id: req.user_id.clone(),
+        };
+
+        let mut social_client = self.grpc_pool.social();
+        social_client
+            .delete_comment(Request::new(social_req))
+            .await
+            .map_err(|status| map_social_status(status, "social_service.DeleteComment"))?;
+
+        Ok(Response::new(DeleteCommentResponse {
+            comment_id: req.comment_id,
+            deleted_at: Utc::now().timestamp(),
+        }))
     }
 
     /// Like a post (DEPRECATED - use social-service)
@@ -208,9 +369,28 @@ impl ContentService for ContentServiceImpl {
         &self,
         _request: Request<LikePostRequest>,
     ) -> Result<Response<LikePostResponse>, Status> {
-        Err(Status::unimplemented(
-            "Like operations moved to social-service. Call social_service.CreateLike instead",
-        ))
+        let req = _request.into_inner();
+
+        if req.post_id.is_empty() || req.user_id.is_empty() {
+            return Err(Status::invalid_argument("post_id and user_id are required"));
+        }
+
+        let social_req = social_proto::CreateLikeRequest {
+            user_id: req.user_id.clone(),
+            post_id: req.post_id.clone(),
+        };
+
+        let mut social_client = self.grpc_pool.social();
+        let response = social_client
+            .create_like(Request::new(social_req))
+            .await
+            .map_err(|status| map_social_status(status, "social_service.CreateLike"))?
+            .into_inner();
+
+        Ok(Response::new(LikePostResponse {
+            success: response.success,
+            error: ok_error(),
+        }))
     }
 
     /// Unlike a post (DEPRECATED - use social-service)
@@ -218,9 +398,28 @@ impl ContentService for ContentServiceImpl {
         &self,
         _request: Request<UnlikePostRequest>,
     ) -> Result<Response<UnlikePostResponse>, Status> {
-        Err(Status::unimplemented(
-            "Like operations moved to social-service. Call social_service.DeleteLike instead",
-        ))
+        let req = _request.into_inner();
+
+        if req.post_id.is_empty() || req.user_id.is_empty() {
+            return Err(Status::invalid_argument("post_id and user_id are required"));
+        }
+
+        let social_req = social_proto::DeleteLikeRequest {
+            user_id: req.user_id.clone(),
+            post_id: req.post_id.clone(),
+        };
+
+        let mut social_client = self.grpc_pool.social();
+        let response = social_client
+            .delete_like(Request::new(social_req))
+            .await
+            .map_err(|status| map_social_status(status, "social_service.DeleteLike"))?
+            .into_inner();
+
+        Ok(Response::new(UnlikePostResponse {
+            success: response.success,
+            error: ok_error(),
+        }))
     }
 
     /// Get users who liked a post (DEPRECATED - use social-service)
@@ -228,9 +427,45 @@ impl ContentService for ContentServiceImpl {
         &self,
         _request: Request<GetPostLikesRequest>,
     ) -> Result<Response<GetPostLikesResponse>, Status> {
-        Err(Status::unimplemented(
-            "Like operations moved to social-service. Call social_service.ListLikes instead",
-        ))
+        let req = _request.into_inner();
+
+        if req.post_id.is_empty() {
+            return Err(Status::invalid_argument("post_id is required"));
+        }
+
+        let limit = if req.limit <= 0 { 50 } else { req.limit }.min(100);
+        let offset = req.offset.max(0);
+
+        let social_req = social_proto::GetLikersRequest {
+            post_id: req.post_id.clone(),
+            limit,
+            cursor: if offset == 0 {
+                String::new()
+            } else {
+                offset.to_string()
+            },
+        };
+
+        let mut social_client = self.grpc_pool.social();
+        let response = social_client
+            .get_likers(Request::new(social_req))
+            .await
+            .map_err(|status| map_social_status(status, "social_service.GetLikers"))?
+            .into_inner();
+
+        let like_rows = response
+            .likers
+            .into_iter()
+            .map(map_social_like)
+            .collect::<Vec<_>>();
+
+        let total_count = like_rows.len() as i32;
+
+        Ok(Response::new(GetPostLikesResponse {
+            likes: like_rows,
+            total_count,
+            error: ok_error(),
+        }))
     }
 
     /// Get multiple posts by IDs (batch operation)
@@ -738,6 +973,7 @@ impl ContentServiceImpl {
         feed_cache: Arc<FeedCache>,
         feed_ranking: Arc<FeedRankingService>,
         auth_client: Arc<AuthClient>,
+        grpc_pool: Arc<GrpcClientPool>,
     ) -> Self {
         Self {
             db_pool,
@@ -745,6 +981,7 @@ impl ContentServiceImpl {
             feed_cache,
             feed_ranking,
             auth_client,
+            grpc_pool,
         }
     }
 }
@@ -757,6 +994,7 @@ pub async fn start_grpc_server(
     feed_cache: Arc<FeedCache>,
     feed_ranking: Arc<FeedRankingService>,
     auth_client: Arc<AuthClient>,
+    grpc_pool: Arc<GrpcClientPool>,
     mut shutdown: broadcast::Receiver<()>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     use nova::content::content_service_server::ContentServiceServer;
@@ -765,7 +1003,14 @@ pub async fn start_grpc_server(
 
     tracing::info!("Starting gRPC server at {}", addr);
 
-    let service = ContentServiceImpl::new(db_pool, cache, feed_cache, feed_ranking, auth_client);
+    let service = ContentServiceImpl::new(
+        db_pool,
+        cache,
+        feed_cache,
+        feed_ranking,
+        auth_client,
+        grpc_pool,
+    );
 
     // Health service
     let (mut health, health_service) = health_reporter();
@@ -789,11 +1034,11 @@ pub async fn start_grpc_server(
     // ✅ P0: Load mTLS configuration
     //
     // In production, missing TLS configuration is a hard error.
-    // In non-production environments (e.g. staging, development),
-    // we allow starting without TLS to keep the environment usable
-    // while mTLS is being rolled out.
+    // In non-production environments (development only),
+    // we allow starting without TLS to keep the environment usable.
     let app_env = std::env::var("APP_ENV").unwrap_or_else(|_| "development".to_string());
-    let is_production_env = app_env.eq_ignore_ascii_case("production");
+    let env_lower = app_env.to_ascii_lowercase();
+    let tls_required_env = matches!(env_lower.as_str(), "production" | "staging");
 
     let tls_config = match grpc_tls::GrpcServerTlsConfig::from_env() {
         Ok(config) => {
@@ -805,21 +1050,21 @@ pub async fn start_grpc_server(
         }
         Err(e) => {
             tracing::warn!(
-                "mTLS disabled - TLS config not found for env '{}': {}. Starting without TLS.",
+                "mTLS disabled - TLS config not found for env '{}': {}.",
                 app_env,
                 e
             );
 
-            if is_production_env {
+            if tls_required_env {
                 return Err(format!(
-                    "Production requires mTLS - GRPC_SERVER_CERT_PATH must be set: {}",
+                    "Production/Staging requires mTLS - GRPC_SERVER_CERT_PATH must be set: {}",
                     e
                 )
                 .into());
             }
 
             tracing::info!(
-                "Non-production environment ({}): running gRPC server without TLS (NOT FOR PRODUCTION)",
+                "Development environment ({}): running gRPC server without TLS (NOT FOR PRODUCTION)",
                 app_env
             );
             None

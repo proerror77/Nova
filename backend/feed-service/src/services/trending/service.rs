@@ -185,127 +185,10 @@ impl TrendingService {
         &self,
         items: Vec<TrendingItem>,
     ) -> Result<Vec<TrendingItemWithMetadata>> {
-        let mut enriched = Vec::new();
-
-        for item in items {
-            let mut meta = TrendingItemWithMetadata::from(item.clone());
-
-            // Enrich based on content type
-            match item.content_type.as_str() {
-                "video" => {
-                    if let Ok(Some((title, creator_id, username, thumbnail))) =
-                        self.get_video_metadata(item.content_id).await
-                    {
-                        meta.title = Some(title);
-                        meta.creator_id = Some(creator_id);
-                        meta.creator_username = Some(username);
-                        meta.thumbnail_url = Some(thumbnail);
-                    }
-                }
-                "post" => {
-                    if let Ok(Some((content, creator_id, username))) =
-                        self.get_post_metadata(item.content_id).await
-                    {
-                        meta.title = Some(content);
-                        meta.creator_id = Some(creator_id);
-                        meta.creator_username = Some(username);
-                    }
-                }
-                "stream" => {
-                    if let Ok(Some((title, creator_id, username, thumbnail))) =
-                        self.get_stream_metadata(item.content_id).await
-                    {
-                        meta.title = Some(title);
-                        meta.creator_id = Some(creator_id);
-                        meta.creator_username = Some(username);
-                        meta.thumbnail_url = Some(thumbnail);
-                    }
-                }
-                _ => {}
-            }
-
-            enriched.push(meta);
-        }
-
-        Ok(enriched)
-    }
-
-    /// Get video metadata
-    async fn get_video_metadata(
-        &self,
-        video_id: Uuid,
-    ) -> Result<Option<(String, String, String, String)>> {
-        let result = sqlx::query_as::<_, (String, Uuid, String, String)>(
-            r#"
-            SELECT v.title, v.user_id, u.username, v.thumbnail_url
-            FROM videos v
-            JOIN users u ON v.user_id = u.id
-            WHERE v.id = $1 AND v.deleted_at IS NULL
-            "#,
-        )
-        .bind(video_id)
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(|e| {
-            error!("Failed to fetch video metadata: {}", e);
-            AppError::Database(e.to_string())
-        })?;
-
-        Ok(result.map(|(title, user_id, username, thumbnail)| {
-            (title, user_id.to_string(), username, thumbnail)
-        }))
-    }
-
-    /// Get post metadata
-    async fn get_post_metadata(&self, post_id: Uuid) -> Result<Option<(String, String, String)>> {
-        let result = sqlx::query_as::<_, (String, Uuid, String)>(
-            r#"
-            SELECT p.content, p.user_id, u.username
-            FROM posts p
-            JOIN users u ON p.user_id = u.id
-            WHERE p.id = $1 AND p.deleted_at IS NULL
-            "#,
-        )
-        .bind(post_id)
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(|e| {
-            error!("Failed to fetch post metadata: {}", e);
-            AppError::Database(e.to_string())
-        })?;
-
-        Ok(result.map(|(content, user_id, username)| (content, user_id.to_string(), username)))
-    }
-
-    /// Get stream metadata
-    async fn get_stream_metadata(
-        &self,
-        stream_id: Uuid,
-    ) -> Result<Option<(String, String, String, String)>> {
-        let result = sqlx::query_as::<_, (String, Uuid, String, Option<String>)>(
-            r#"
-            SELECT s.title, s.user_id, u.username, s.thumbnail_url
-            FROM streams s
-            JOIN users u ON s.user_id = u.id
-            WHERE s.id = $1
-            "#,
-        )
-        .bind(stream_id)
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(|e| {
-            error!("Failed to fetch stream metadata: {}", e);
-            AppError::Database(e.to_string())
-        })?;
-
-        Ok(result.map(|(title, user_id, username, thumbnail)| {
-            (
-                title,
-                user_id.to_string(),
-                username,
-                thumbnail.unwrap_or_default(),
-            )
-        }))
+        Ok(items
+            .into_iter()
+            .map(TrendingItemWithMetadata::from)
+            .collect())
     }
 
     /// Get from cache
@@ -343,7 +226,7 @@ impl TrendingService {
             AppError::Internal("Serialization failed".to_string())
         })?;
 
-        conn.set_ex(key, json, TRENDING_CACHE_TTL)
+        conn.set_ex::<_, _, ()>(key, json, TRENDING_CACHE_TTL)
             .await
             .map_err(|e| {
                 error!("Redis SET failed: {}", e);

@@ -106,4 +106,29 @@ impl LikeRepository {
 
         Ok(likes)
     }
+
+    /// Batch check like status for multiple posts
+    pub async fn batch_check_user_liked(
+        &self,
+        user_id: Uuid,
+        post_ids: &[Uuid],
+    ) -> Result<Vec<Uuid>> {
+        if post_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let liked_posts = sqlx::query_scalar(
+            r#"
+            SELECT post_id
+            FROM likes
+            WHERE user_id = $1 AND post_id = ANY($2)
+            "#,
+        )
+        .bind(user_id)
+        .bind(post_ids)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(liked_posts)
+    }
 }

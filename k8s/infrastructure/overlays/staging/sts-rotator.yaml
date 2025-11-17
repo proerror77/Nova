@@ -80,7 +80,7 @@ spec:
                   # Trigger rollout restarts
                   ts=$(date -Iseconds)
                   RPATCH=$(printf '{"spec":{"template":{"metadata":{"annotations":{"kubectl.kubernetes.io/restartedAt":"%s"}}}}}' "$ts")
-                  for d in user-service content-service media-service messaging-service streaming-service; do
+                  for d in content-service media-service messaging-service; do
                     curl -sS -X PATCH "$API/apis/apps/v1/namespaces/$ns/deployments/$d" \
                       -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/merge-patch+json' \
                       --cacert "$CACERT" -d "$RPATCH" >/dev/null || true

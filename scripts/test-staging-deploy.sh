@@ -165,13 +165,11 @@ check_deployed_services() {
 
     local services=(
         auth-service
-        user-service
         content-service
         feed-service
         media-service
         messaging-service
         search-service
-        streaming-service
     )
 
     local all_healthy=true

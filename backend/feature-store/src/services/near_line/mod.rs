@@ -4,9 +4,10 @@
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use clickhouse::Client;
+use serde_json::json;
 use sqlx::{PgPool, Row};
 use std::collections::HashMap;
-use tracing::warn;
+use tracing::{info, warn};
 use uuid::Uuid;
 
 use crate::models::{FeatureDefinition, FeatureType, FeatureValueData};
@@ -31,16 +32,26 @@ impl NearLineFeatureService {
         entity_type: &str,
         feature_name: &str,
     ) -> Result<Option<FeatureValueData>> {
-        // TODO: Implement ClickHouse query
-        // Query structure:
-        // SELECT feature_value, value_type, updated_at
-        // FROM features
-        // WHERE entity_type = ? AND entity_id = ? AND feature_name = ?
-        // ORDER BY updated_at DESC
-        // LIMIT 1
+        let row = self
+            .clickhouse_client
+            .query(
+                "SELECT feature_value, value_type \
+                 FROM features \
+                 WHERE entity_type = ? AND entity_id = ? AND feature_name = ? \
+                 ORDER BY updated_at DESC \
+                 LIMIT 1",
+            )
+            .bind(entity_type)
+            .bind(entity_id)
+            .bind(feature_name)
+            .fetch_optional::<(String, u8)>()
+            .await
+            .context("Failed to query ClickHouse for feature")?;
 
-        warn!("ClickHouse feature retrieval not implemented yet");
-        Ok(None)
+        match row {
+            Some((value, value_type)) => Ok(Some(decode_feature_value(value, value_type)?)),
+            None => Ok(None),
+        }
     }
 
     /// Get multiple features for a single entity from ClickHouse
@@ -50,11 +61,17 @@ impl NearLineFeatureService {
         entity_type: &str,
         feature_names: &[String],
     ) -> Result<HashMap<String, FeatureValueData>> {
-        // TODO: Implement batch ClickHouse query
-        // Use IN clause for feature_names
-
-        warn!("ClickHouse batch feature retrieval not implemented yet");
-        Ok(HashMap::new())
+        let mut result = HashMap::new();
+        for name in feature_names {
+            if let Some(value) = self
+                .get_feature(entity_id, entity_type, name)
+                .await
+                .context("Failed to fetch feature")?
+            {
+                result.insert(name.clone(), value);
+            }
+        }
+        Ok(result)
     }
 
     /// Batch get features for multiple entities from ClickHouse
@@ -64,11 +81,15 @@ impl NearLineFeatureService {
         entity_type: &str,
         feature_names: &[String],
     ) -> Result<HashMap<String, HashMap<String, FeatureValueData>>> {
-        // TODO: Implement large batch ClickHouse query
-        // Use IN clauses for both entity_ids and feature_names
-
-        warn!("ClickHouse batch multi-entity feature retrieval not implemented yet");
-        Ok(HashMap::new())
+        let mut result = HashMap::new();
+        for entity_id in entity_ids {
+            let features = self
+                .get_features(entity_id, entity_type, feature_names)
+                .await
+                .context("Failed to batch fetch features")?;
+            result.insert(entity_id.clone(), features);
+        }
+        Ok(result)
     }
 
     /// Sync feature from Redis to ClickHouse (called by background worker)
@@ -79,11 +100,29 @@ impl NearLineFeatureService {
         feature_name: &str,
         value: FeatureValueData,
     ) -> Result<()> {
-        // TODO: Implement ClickHouse insert
-        // INSERT INTO features (entity_type, entity_id, feature_name, feature_value, value_type, updated_at)
-        // VALUES (?, ?, ?, ?, ?, now())
+        let (value_str, value_type) = encode_feature_value(&value);
 
-        warn!("ClickHouse sync not implemented yet");
+        self.clickhouse_client
+            .query(
+                "INSERT INTO features (entity_type, entity_id, feature_name, feature_value, value_type, updated_at) \
+                 VALUES (?, ?, ?, ?, ?, now())",
+            )
+            .bind(entity_type)
+            .bind(entity_id)
+            .bind(feature_name)
+            .bind(value_str)
+            .bind(value_type as u8)
+            .execute()
+            .await
+            .context("Failed to sync feature to ClickHouse")?;
+
+        info!(
+            entity_type = %entity_type,
+            entity_id = %entity_id,
+            feature_name = %feature_name,
+            "Synced feature to ClickHouse"
+        );
+
         Ok(())
     }
 
@@ -153,6 +192,46 @@ impl NearLineFeatureService {
             .collect();
 
         Ok(results)
+    }
+}
+
+fn decode_feature_value(value: String, value_type: u8) -> Result<FeatureValueData> {
+    match value_type {
+        1 => {
+            let parsed = value.parse::<f64>()?;
+            Ok(FeatureValueData::Double(parsed))
+        }
+        2 => {
+            let parsed = value.parse::<i64>()?;
+            Ok(FeatureValueData::Int(parsed))
+        }
+        3 => Ok(FeatureValueData::String(value)),
+        4 => {
+            let parsed = value.parse::<bool>()?;
+            Ok(FeatureValueData::Bool(parsed))
+        }
+        5 => {
+            let parsed: Vec<f64> = serde_json::from_str(&value)?;
+            Ok(FeatureValueData::DoubleList(parsed))
+        }
+        6 => {
+            let parsed = value.parse::<i64>()?;
+            Ok(FeatureValueData::Timestamp(parsed))
+        }
+        _ => anyhow::bail!("Unknown feature value type: {}", value_type),
+    }
+}
+
+fn encode_feature_value(value: &FeatureValueData) -> (String, u8) {
+    match value {
+        FeatureValueData::Double(v) => (v.to_string(), 1),
+        FeatureValueData::Int(v) => (v.to_string(), 2),
+        FeatureValueData::String(v) => (v.clone(), 3),
+        FeatureValueData::Bool(v) => (v.to_string(), 4),
+        FeatureValueData::DoubleList(v) => {
+            (serde_json::to_string(v).unwrap_or_else(|_| "[]".into()), 5)
+        }
+        FeatureValueData::Timestamp(v) => (v.to_string(), 6),
     }
 }
 

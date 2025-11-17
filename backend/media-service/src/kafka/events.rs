@@ -47,8 +47,8 @@ impl MediaEventsProducer {
             "uploaded_at": upload.updated_at,
         });
 
-        let payload_str = serde_json::to_string(&payload)
-            .context("Failed to serialize MediaUploaded payload")?;
+        let payload_str =
+            serde_json::to_string(&payload).context("Failed to serialize MediaUploaded payload")?;
 
         let key = upload.user_id.to_string();
 
@@ -60,7 +60,9 @@ impl MediaEventsProducer {
         self.inner
             .send(record, Duration::from_secs(10))
             .await
-            .map_err(|(err, _)| anyhow::anyhow!("Failed to publish MediaUploaded event: {}", err))?;
+            .map_err(|(err, _)| {
+                anyhow::anyhow!("Failed to publish MediaUploaded event: {}", err)
+            })?;
 
         Ok(())
     }

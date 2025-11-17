@@ -168,8 +168,7 @@ impl KafkaEventStream {
 
     /// Filter feed events for a specific user
     /// In production, you'd filter based on user's interests
-    pub fn filter_feed_for_user(user_id: &str) -> impl Fn(KafkaEvent) -> bool {
-        let user_id = user_id.to_string();
+    pub fn filter_feed_for_user(_user_id: &str) -> impl Fn(KafkaEvent) -> bool {
         move |event: KafkaEvent| {
             // Filter logic: could check user's interests, muted creators, etc.
             // For now, accept all feed events

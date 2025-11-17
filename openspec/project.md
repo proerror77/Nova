@@ -92,15 +92,15 @@ error!(error = %err, "Database connection failed");
 ### Architecture Patterns
 
 #### 微服务架构（核心）
-当前 8 个后端服务，各司其职：
-1. **auth-service** - 身份验证、JWT、OAuth
-2. **user-service** - 用户档案、关注、粉丝
-3. **content-service** - 帖子、图片、视频上传
-4. **feed-service** - 推荐、时间线、推送算法
-5. **media-service** - 媒体处理、视频转码
-6. **messaging-service** - 私信、聊天、实时更新
-7. **search-service** - 全文搜索、索引（Neo4j/ElasticSearch）
-8. **streaming-service** - 直播、WebSocket、实时推流
+当前 V2 核心服务（legacy `user-/streaming-service` 已合并）：
+1. **identity-service**（原 auth-service）- 身份验证、JWT、OAuth
+2. **content-service** - 帖子、媒体上传与 CDC
+3. **feed-service** - 推荐、时间线、排序策略
+4. **media-service** - 媒体处理、转码、CDN（整合 video/streaming/cdn）
+5. **social-service** - Likes/Comments/Shares + 计数器、Outbox
+6. **realtime-chat-service** - 私信、WebSocket、实时推送
+7. **search-service** - 全文搜索、索引（ElasticSearch/ClickHouse）
+8. **notification-service** - 推播、Email、SMS、通知偏好
 
 **关键原则**：
 - 每个服务拥有自己的表（部分共享用户表以维护外键）

@@ -16,7 +16,7 @@ mod services;
 mod utils;
 
 use crate::config::Config;
-use crate::services::online::OnlineFeatureStore;
+use crate::services::{near_line::NearLineFeatureService, online::OnlineFeatureStore};
 
 #[actix_web::main]
 async fn main() -> Result<()> {
@@ -53,10 +53,11 @@ async fn main() -> Result<()> {
         .context("Failed to create PostgreSQL pool")?;
     info!("PostgreSQL connection pool created");
 
-    // TODO: Run migrations
-    // sqlx::migrate!("./migrations") requires DATABASE_URL at compile time
-    // For now, migrations must be run manually or via deployment scripts
-    warn!("Manual migrations required - run: sqlx migrate run --database-url $DATABASE_URL");
+    sqlx::migrate!("./migrations")
+        .run(&pg_pool)
+        .await
+        .context("Failed to run feature-store migrations")?;
+    info!("Database migrations applied");
 
     // Initialize Redis connection pool
     let redis_pool = redis_utils::RedisPool::connect(&config.redis_url, None)
@@ -65,8 +66,8 @@ async fn main() -> Result<()> {
     let redis_manager = redis_pool.manager();
     info!("Redis connection pool initialized");
 
-    // Initialize ClickHouse client (not used yet - placeholder for future implementation)
-    let _clickhouse_client = clickhouse::Client::default()
+    // Initialize ClickHouse client (for near-line service)
+    let clickhouse_client = clickhouse::Client::default()
         .with_url(&config.clickhouse_url)
         .with_database(&config.clickhouse_database);
     info!("ClickHouse client initialized");
@@ -75,8 +76,14 @@ async fn main() -> Result<()> {
     let online_store = Arc::new(OnlineFeatureStore::new(redis_manager));
     info!("OnlineFeatureStore initialized");
 
+    let near_line_service = Arc::new(NearLineFeatureService::new(
+        clickhouse_client.clone(),
+        pg_pool.clone(),
+    ));
+    info!("NearLineFeatureService initialized");
+
     // Create AppState for gRPC service
-    let app_state = Arc::new(grpc::AppState::new(online_store));
+    let app_state = Arc::new(grpc::AppState::new(online_store, near_line_service));
 
     // Compute HTTP and gRPC ports
     let http_port = config.http_port;
@@ -109,24 +116,34 @@ async fn main() -> Result<()> {
             Ok(req)
         }
 
-        // ✅ P0-1: Load mTLS configuration
+        // ✅ P0-1: Load mTLS configuration (prod/staging required)
+        let app_env = std::env::var("APP_ENV").unwrap_or_else(|_| "development".to_string());
+        let env_lower = app_env.to_ascii_lowercase();
+        let tls_required_env = matches!(env_lower.as_str(), "production" | "staging");
+
         let tls_config = match grpc_tls::GrpcServerTlsConfig::from_env() {
             Ok(config) => {
-                info!("mTLS enabled - service-to-service authentication active");
+                info!(
+                    "mTLS enabled - service-to-service authentication active (env = {})",
+                    app_env
+                );
                 Some(config)
             }
             Err(e) => {
-                warn!(
-                    "mTLS disabled - TLS config not found: {}. Using development mode for testing only.",
-                    e
-                );
-                if cfg!(debug_assertions) {
-                    info!("Development mode: Starting without TLS (NOT FOR PRODUCTION)");
-                    None
-                } else {
-                    error!("Production requires mTLS - GRPC_SERVER_CERT_PATH must be set");
+                if tls_required_env {
+                    error!(
+                        "Production/Staging requires mTLS - GRPC_SERVER_CERT_PATH must be set: {}",
+                        e
+                    );
                     return;
                 }
+
+                warn!(
+                    "mTLS disabled - TLS config not found for env '{}': {}. Starting without TLS (development only).",
+                    app_env,
+                    e
+                );
+                None
             }
         };
 
@@ -135,19 +152,37 @@ async fn main() -> Result<()> {
 
         if let Some(tls_cfg) = tls_config {
             match tls_cfg.build_server_tls() {
-                Ok(server_tls) => match server_builder.tls_config(server_tls) {
-                    Ok(builder) => {
-                        server_builder = builder;
-                        info!("gRPC server TLS configured successfully");
-                    }
-                    Err(e) => {
-                        error!("Failed to configure TLS on gRPC server: {}", e);
+                Ok(server_tls) => {
+                    let builder_result = server_builder.tls_config(server_tls);
+                    server_builder = match builder_result {
+                        Ok(builder) => {
+                            info!("gRPC server TLS configured successfully");
+                            builder
+                        }
+                        Err(e) => {
+                            if tls_required_env {
+                                error!("Failed to configure TLS on gRPC server: {}", e);
+                                return;
+                            }
+                            warn!(
+                                "Failed to configure TLS on gRPC server in env '{}': {}. Continuing without TLS.",
+                                app_env,
+                                e
+                            );
+                            GrpcServer::builder()
+                        }
+                    };
+                }
+                Err(e) => {
+                    if tls_required_env {
+                        error!("Failed to build server TLS config: {}", e);
                         return;
                     }
-                },
-                Err(e) => {
-                    error!("Failed to build server TLS config: {}", e);
-                    return;
+                    warn!(
+                        "Failed to build server TLS config in env '{}': {}. Continuing without TLS.",
+                        app_env,
+                        e
+                    );
                 }
             }
         }

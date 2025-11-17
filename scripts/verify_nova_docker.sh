@@ -4,8 +4,8 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")"/.. && pwd)"
 cd "$ROOT_DIR"
 
-echo "[1/5] Bringing up core services (postgres, redis, milvus, user-service, search-service)"
-docker compose up -d postgres redis milvus user-service search-service
+echo "[1/5] Bringing up core services (postgres, redis, milvus, search-service)"
+docker compose up -d postgres redis milvus search-service
 
 echo "[2/5] Waiting for Postgres & Redis health..."
 sleep 5
@@ -26,21 +26,12 @@ if [ "$HEALTH_OK" != "1" ]; then
 fi
 
 echo "[4/5] Checking service endpoints..."
-USER_SERVICE_BASE=${USER_SERVICE_BASE:-http://localhost:8001}
-ALT_USER_SERVICE_BASE=${ALT_USER_SERVICE_BASE:-http://localhost:8080}
 SEARCH_SERVICE_BASE="http://localhost:8081"
-
-echo -n "- user-service /api/v1/health: "
-if curl -sf "$USER_SERVICE_BASE/api/v1/health" >/dev/null; then echo OK; elif curl -sf "$ALT_USER_SERVICE_BASE/api/v1/health" >/dev/null; then USER_SERVICE_BASE=$ALT_USER_SERVICE_BASE; echo OK; else echo FAIL; exit 1; fi
-
-echo -n "- user-service /.well-known/jwks.json: "
-curl -sf "$USER_SERVICE_BASE/.well-known/jwks.json" >/dev/null && echo OK || { echo FAIL; exit 1; }
 
 echo -n "- search-service /health: "
 curl -sf "$SEARCH_SERVICE_BASE/health" >/dev/null && echo OK || { echo FAIL; exit 1; }
 
 echo "[5/5] Summary: All core endpoints are reachable."
-echo "- user-service: $USER_SERVICE_BASE"
 echo "- search-service: $SEARCH_SERVICE_BASE"
 echo "- milvus:       http://localhost:9091"
 

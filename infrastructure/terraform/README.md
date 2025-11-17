@@ -179,9 +179,8 @@ kubectl get pods -A
 │                                                               │
 │  nova-staging / nova-prod                                    │
 │  ├─ auth-service (pods)                                      │
-│  ├─ user-service (pods)                                      │
 │  ├─ content-service (pods)                                   │
-│  └─ ...（其他 8 个服务）                                     │
+│  └─ ...（其他服務：media、feed、social、search 等）          │
 │                                                               │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -190,13 +189,11 @@ kubectl get pods -A
 
 创建以下 ECR 仓库：
 - `nova/auth-service`
-- `nova/user-service`
 - `nova/content-service`
 - `nova/feed-service`
 - `nova/media-service`
 - `nova/messaging-service`
 - `nova/search-service`
-- `nova/streaming-service`
 
 ### 推送镜像到 ECR
 ```bash

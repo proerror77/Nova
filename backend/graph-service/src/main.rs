@@ -3,15 +3,19 @@ mod domain;
 mod grpc;
 mod repository;
 
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use config::Config;
 use grpc::server::graph::graph_service_server::GraphServiceServer;
 use grpc::GraphServiceImpl;
+use once_cell::sync::OnceCell;
 use repository::GraphRepository;
-use tonic::transport::Server;
+use tonic::{metadata::MetadataValue, transport::Server, Request, Status};
 use tonic_health::server::health_reporter;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+use uuid::Uuid;
+
+static INTERNAL_GRPC_API_KEY: OnceCell<Option<String>> = OnceCell::new();
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -70,13 +74,82 @@ async fn main() -> Result<()> {
 
     info!("Starting gRPC server on {}", addr);
 
-    // Start gRPC server
-    Server::builder()
+    let tls_required = matches!(
+        std::env::var("APP_ENV")
+            .unwrap_or_else(|_| "development".to_string())
+            .to_ascii_lowercase()
+            .as_str(),
+        "production" | "staging"
+    );
+
+    let tls_config = match grpc_tls::GrpcServerTlsConfig::from_env() {
+        Ok(cfg) => {
+            info!("gRPC TLS configuration loaded for graph-service");
+            Some(cfg)
+        }
+        Err(err) => {
+            if tls_required {
+                return Err(anyhow!(
+                    "TLS is required in production/staging but failed to load: {err}"
+                ));
+            }
+            warn!(
+                error=%err,
+                "TLS configuration missing - starting without TLS (development only)"
+            );
+            None
+        }
+    };
+
+    let mut server_builder = Server::builder();
+    if let Some(cfg) = tls_config {
+        let server_tls = cfg
+            .build_server_tls()
+            .context("Failed to build server TLS config")?;
+        server_builder = server_builder
+            .tls_config(server_tls)
+            .context("Failed to configure gRPC TLS")?;
+    }
+
+    server_builder
         .add_service(health_service)
-        .add_service(GraphServiceServer::new(graph_service))
+        .add_service(GraphServiceServer::with_interceptor(
+            graph_service,
+            grpc_server_interceptor,
+        ))
         .serve(addr)
         .await
         .context("gRPC server failed")?;
 
     Ok(())
+}
+
+fn grpc_server_interceptor(mut req: Request<()>) -> Result<Request<()>, Status> {
+    const CORRELATION_HEADER: &str = "x-correlation-id";
+    if let Some(existing) = req.metadata().get(CORRELATION_HEADER) {
+        if let Ok(val) = existing.to_str() {
+            req.extensions_mut().insert::<String>(val.to_string());
+        }
+    } else {
+        let correlation_id = Uuid::new_v4().to_string();
+        let value = MetadataValue::try_from(correlation_id.as_str())
+            .map_err(|_| Status::internal("failed to set correlation id"))?;
+        req.metadata_mut().insert(CORRELATION_HEADER, value);
+    }
+
+    if let Some(expected_key) = INTERNAL_GRPC_API_KEY
+        .get_or_init(|| std::env::var("INTERNAL_GRPC_API_KEY").ok())
+        .as_deref()
+    {
+        let provided = req
+            .metadata()
+            .get("x-internal-api-key")
+            .and_then(|val| val.to_str().ok())
+            .unwrap_or_default();
+        if provided != expected_key {
+            return Err(Status::unauthenticated("invalid internal api key"));
+        }
+    }
+
+    Ok(req)
 }

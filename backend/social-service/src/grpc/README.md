@@ -60,11 +60,11 @@ This gRPC server implements the **Transactional Outbox pattern** for reliable ev
 
 ### File Structure
 
-- **`server_v2.rs`**: Main gRPC service implementation with transactional-outbox
-  - Like operations: `CreateLike`, `DeleteLike`, `GetLikeCount`, `GetLikeStatus`, `GetLikers`
-  - Share operations: `CreateShare`, `GetShareCount`, `GetShares`
-  - Comment operations: Stubs (to be implemented)
-  - Batch operations: Stubs (to be implemented)
+- **`server.rs`**: Main gRPC service implementation with transactional-outbox
+  - Like operations: `CreateLike`, `DeleteLike`, `GetLikeCount`, `CheckUserLiked`, `BatchCheckUserLiked`, `GetPostLikes`
+  - Share operations: `CreateShare`, `GetShareCount`, `CheckUserShared`
+  - Comment operations: CRUD + listing/count
+  - Batch operations: `BatchGetPostStats`
 
 ### AppState
 

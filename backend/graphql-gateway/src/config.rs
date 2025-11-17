@@ -39,15 +39,14 @@ pub struct ServerConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServiceEndpoints {
     pub auth_service: String,
-    pub user_service: String,
     pub content_service: String,
     pub messaging_service: String,
     pub notification_service: String,
     pub feed_service: String,
     pub video_service: String,
     pub media_service: String,
-    pub streaming_service: String,
     pub search_service: String,
+    pub graph_service: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -106,8 +105,6 @@ impl Config {
             services: ServiceEndpoints {
                 auth_service: env::var("AUTH_SERVICE_URL")
                     .unwrap_or_else(|_| "http://auth-service:50051".to_string()),
-                user_service: env::var("USER_SERVICE_URL")
-                    .unwrap_or_else(|_| "http://user-service:50052".to_string()),
                 content_service: env::var("CONTENT_SERVICE_URL")
                     .unwrap_or_else(|_| "http://content-service:50053".to_string()),
                 messaging_service: env::var("MESSAGING_SERVICE_URL")
@@ -120,10 +117,10 @@ impl Config {
                     .unwrap_or_else(|_| "http://video-service:50057".to_string()),
                 media_service: env::var("MEDIA_SERVICE_URL")
                     .unwrap_or_else(|_| "http://media-service:50058".to_string()),
-                streaming_service: env::var("STREAMING_SERVICE_URL")
-                    .unwrap_or_else(|_| "http://streaming-service:50059".to_string()),
                 search_service: env::var("SEARCH_SERVICE_URL")
                     .unwrap_or_else(|_| "http://search-service:50060".to_string()),
+                graph_service: env::var("GRAPH_SERVICE_URL")
+                    .unwrap_or_else(|_| "http://graph-service:50061".to_string()),
             },
             database: DatabaseConfig {
                 url: env::var("DATABASE_URL")

@@ -15,8 +15,8 @@ pub mod websocket;
 // Re-export generated protobuf code
 pub mod nova {
     pub mod realtime_chat {
-        pub mod v1 {
-            tonic::include_proto!("nova.realtime_chat.v1");
+        pub mod v2 {
+            tonic::include_proto!("nova.realtime_chat.v2");
         }
     }
 }

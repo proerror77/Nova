@@ -26,72 +26,65 @@ commonAnnotations:
 # Use local docker registry for faster development iteration
 images:
   # Tier 1: Foundation
-  - name: identity-service
+  - name: nova/identity-service
     newName: localhost:5000/nova/identity-service
     newTag: dev
   
-  # Tier 2: User Management
-  - name: user-service
-    newName: localhost:5000/nova/user-service
-    newTag: dev
-  
   # Tier 3: Content Platform
-  - name: content-service
+  - name: nova/content-service
     newName: localhost:5000/nova/content-service
     newTag: dev
   
   # Tier 4: Social & Graph
-  - name: social-service
+  - name: nova/social-service
     newName: localhost:5000/nova/social-service
     newTag: dev
   
-  - name: graph-service
+  - name: nova/graph-service
     newName: localhost:5000/nova/graph-service
     newTag: dev
   
   # Tier 5: Advanced Features
-  - name: feed-service
+  - name: nova/feed-service
     newName: localhost:5000/nova/feed-service
     newTag: dev
   
-  - name: ranking-service
+  - name: nova/ranking-service
     newName: localhost:5000/nova/ranking-service
     newTag: dev
   
-  - name: analytics-service
+  - name: nova/analytics-service
     newName: localhost:5000/nova/analytics-service
     newTag: dev
   
-  - name: notification-service
+  - name: nova/notification-service
     newName: localhost:5000/nova/notification-service
     newTag: dev
   
-  - name: realtime-chat-service
+  - name: nova/realtime-chat-service
     newName: localhost:5000/nova/realtime-chat-service
     newTag: dev
   
-  - name: search-service
+  - name: nova/search-service
     newName: localhost:5000/nova/search-service
     newTag: dev
   
-  - name: media-service
+  - name: nova/media-service
     newName: localhost:5000/nova/media-service
     newTag: dev
   
-  - name: trust-safety-service
+  - name: nova/trust-safety-service
     newName: localhost:5000/nova/trust-safety-service
     newTag: dev
   
   # Tier 6: API Gateway
-  - name: graphql-gateway
+  - name: nova/graphql-gateway
     newName: localhost:5000/nova/graphql-gateway
     newTag: dev
 
 # Replica overrides for development (all services scaled to 1)
 replicas:
   - name: identity-service
-    count: 1
-  - name: user-service
     count: 1
   - name: content-service
     count: 1

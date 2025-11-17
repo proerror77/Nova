@@ -9,7 +9,7 @@
 ## 核心域划分 (Domain Boundaries)
 
 ### 1. Identity Domain (身份域)
-**Service**: `identity-service` (原 auth-service + user-service 合并)
+**Service**: `identity-service` (原 auth-service + user-service（已淘汰）整合)
 **Responsibility**: 用户身份、认证、授权、档案管理
 
 | Data Entity | Table Name | Operations | Access Pattern |
@@ -283,7 +283,7 @@ pub enum ConsistencyLevel {
 
 2. **明确认证边界** (Week 1)
    - auth-service → identity-service (扩展功能)
-   - user-service → 部分功能迁移到 identity-service
+  - user-service → 已完全移除，功能分別由 identity-service / social-service 承接
 
 3. **创建数据所有权文档** (Complete)
    - 本文档作为团队参考
