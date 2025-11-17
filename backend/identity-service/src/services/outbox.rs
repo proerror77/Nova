@@ -48,12 +48,19 @@ impl Default for OutboxConsumerConfig {
 
 #[derive(Debug, FromRow)]
 struct OutboxRecord {
-    id: i64,
+    /// Primary key of the outbox event
+    id: Uuid,
+    /// Aggregate type, e.g. "User"
     aggregate_type: String,
-    aggregate_id: Uuid,
+    /// Aggregate identifier (stored as text, typically a UUID)
+    aggregate_id: String,
+    /// Event type, e.g. "UserDeleted"
     event_type: String,
-    payload: Value,
+    /// Raw event payload stored in the database (event_data column)
+    event_data: Value,
+    /// Number of times this event has been retried
     retry_count: i32,
+    /// Creation timestamp of the event
     created_at: DateTime<Utc>,
 }
 
@@ -112,21 +119,22 @@ async fn process_batch(
 ) -> Result<(), sqlx::Error> {
     let events: Vec<OutboxRecord> = sqlx::query_as::<_, OutboxRecord>(
         r#"
-        SELECT id,
-               aggregate_type,
-               aggregate_id,
-               event_type,
-               payload,
-               retry_count,
-               created_at
+        SELECT
+            id,
+            aggregate_type,
+            aggregate_id,
+            event_type,
+            event_data,
+            retry_count,
+            created_at
         FROM outbox_events
-        WHERE published_at IS NULL
-          AND retry_count < $1
+        WHERE processed_at IS NULL
+          AND retry_count < max_retries
         ORDER BY created_at ASC
-        LIMIT $2
+        LIMIT $1
+        FOR UPDATE SKIP LOCKED
         "#,
     )
-    .bind(config.max_retries)
     .bind(config.batch_size)
     .fetch_all(db_pool)
     .await?;
@@ -140,7 +148,7 @@ async fn process_batch(
 
         let span = tracing::info_span!(
             "outbox_event",
-            event_id = event.id,
+            event_id = %event.id,
             aggregate_type = %event.aggregate_type,
             aggregate_id = %event.aggregate_id,
             event_type = %event.event_type,
@@ -282,10 +290,16 @@ async fn process_user_deleted(
     event: &OutboxRecord,
     producer: &KafkaEventProducer,
 ) -> Result<(), ProcessingFailure> {
-    let payload: UserDeletedPayload = serde_json::from_value(event.payload.clone())
+    let payload: UserDeletedPayload = serde_json::from_value(event.event_data.clone())
         .map_err(|err| ProcessingFailure::new("payload_error", err.to_string()))?;
 
-    let user_id = payload.user_id.unwrap_or(event.aggregate_id);
+    // aggregate_id is stored as text, usually a UUID
+    let aggregate_id = event
+        .aggregate_id
+        .parse::<Uuid>()
+        .map_err(|err| ProcessingFailure::new("payload_error", err.to_string()))?;
+
+    let user_id = payload.user_id.unwrap_or(aggregate_id);
     let deleted_at = payload.deleted_at.unwrap_or_else(Utc::now);
 
     producer
@@ -314,7 +328,7 @@ async fn send_to_dlq(
         "aggregate_type": event.aggregate_type,
         "aggregate_id": event.aggregate_id,
         "event_type": event.event_type,
-        "payload": event.payload,
+        "payload": event.event_data,
         "retry_count": event.retry_count,
         "failed_at": Utc::now(),
         "reason": failure.reason(),
@@ -329,11 +343,11 @@ async fn send_to_dlq(
         .map_err(|err| err.to_string())
 }
 
-async fn mark_published(db_pool: &PgPool, event_id: i64) -> Result<(), sqlx::Error> {
+async fn mark_published(db_pool: &PgPool, event_id: Uuid) -> Result<(), sqlx::Error> {
     sqlx::query(
         r#"
         UPDATE outbox_events
-        SET published_at = NOW()
+        SET processed_at = NOW()
         WHERE id = $1
         "#,
     )
@@ -343,7 +357,7 @@ async fn mark_published(db_pool: &PgPool, event_id: i64) -> Result<(), sqlx::Err
     .map(|_| ())
 }
 
-async fn increment_retry(db_pool: &PgPool, event_id: i64) -> Result<(), sqlx::Error> {
+async fn increment_retry(db_pool: &PgPool, event_id: Uuid) -> Result<(), sqlx::Error> {
     sqlx::query(
         r#"
         UPDATE outbox_events
