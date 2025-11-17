@@ -8,15 +8,15 @@ use uuid::Uuid;
 
 pub mod nova {
     pub mod search_service {
-        pub mod v1 {
-            tonic::include_proto!("nova.search_service.v1");
+        pub mod v2 {
+            tonic::include_proto!("nova.search_service.v2");
         }
-        pub use v1::*;
+        pub use v2::*;
     }
 }
 
-use nova::search_service::v1::search_service_server::SearchService;
-use nova::search_service::v1::*;
+use nova::search_service::v2::search_service_server::SearchService;
+use nova::search_service::v2::*;
 
 #[derive(Clone)]
 pub struct SearchServiceImpl {

@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package nova.media_service.v1;
+package nova.media_service.v2;
 
 import "common.proto";
 
@@ -49,7 +49,7 @@ message ReelTranscodeJob {
     string stage = 3;
     int32 progress = 4;
     int64 updated_at = 5;
-    .nova.common.v1.ErrorStatus error = 6;
+    .nova.common.v2.ErrorStatus error = 6;
 }
 
 message Reel {
@@ -83,7 +83,7 @@ message GetVideoRequest {
 message GetVideoResponse {
     Video video = 1;
     bool found = 2;
-    .nova.common.v1.ErrorStatus error = 3;
+    .nova.common.v2.ErrorStatus error = 3;
 }
 
 message GetUserVideosRequest {
@@ -93,7 +93,7 @@ message GetUserVideosRequest {
 
 message GetUserVideosResponse {
     repeated Video videos = 1;
-    .nova.common.v1.ErrorStatus error = 2;
+    .nova.common.v2.ErrorStatus error = 2;
 }
 
 message CreateVideoRequest {
@@ -105,7 +105,7 @@ message CreateVideoRequest {
 
 message CreateVideoResponse {
     Video video = 1;
-    .nova.common.v1.ErrorStatus error = 2;
+    .nova.common.v2.ErrorStatus error = 2;
 }
 
 message ListReelsRequest {
@@ -114,7 +114,7 @@ message ListReelsRequest {
 
 message ListReelsResponse {
     repeated Reel reels = 1;
-    .nova.common.v1.ErrorStatus error = 2;
+    .nova.common.v2.ErrorStatus error = 2;
 }
 
 message GetReelRequest {
@@ -124,7 +124,7 @@ message GetReelRequest {
 message GetReelResponse {
     Reel reel = 1;
     bool found = 2;
-    .nova.common.v1.ErrorStatus error = 3;
+    .nova.common.v2.ErrorStatus error = 3;
 }
 
 message CreateReelRequest {
@@ -142,7 +142,7 @@ message CreateReelRequest {
 
 message CreateReelResponse {
     Reel reel = 1;
-    .nova.common.v1.ErrorStatus error = 2;
+    .nova.common.v2.ErrorStatus error = 2;
 }
 
 message GetUploadRequest {
@@ -152,7 +152,7 @@ message GetUploadRequest {
 message GetUploadResponse {
     Upload upload = 1;
     bool found = 2;
-    .nova.common.v1.ErrorStatus error = 3;
+    .nova.common.v2.ErrorStatus error = 3;
 }
 
 message UpdateUploadProgressRequest {
@@ -162,7 +162,7 @@ message UpdateUploadProgressRequest {
 
 message UpdateUploadProgressResponse {
     Upload upload = 1;
-    .nova.common.v1.ErrorStatus error = 2;
+    .nova.common.v2.ErrorStatus error = 2;
 }
 
 message StartUploadRequest {
@@ -174,7 +174,7 @@ message StartUploadRequest {
 
 message StartUploadResponse {
     Upload upload = 1;
-    .nova.common.v1.ErrorStatus error = 2;
+    .nova.common.v2.ErrorStatus error = 2;
 }
 
 message CompleteUploadRequest {
@@ -183,7 +183,7 @@ message CompleteUploadRequest {
 
 message CompleteUploadResponse {
     Upload upload = 1;
-    .nova.common.v1.ErrorStatus error = 2;
+    .nova.common.v2.ErrorStatus error = 2;
 }
 
 service MediaService {

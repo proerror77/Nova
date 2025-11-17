@@ -9,10 +9,6 @@ fn main() {
     let services = vec![
         ("auth_service", format!("{}/auth_service.proto", base)),
         ("user_service", format!("{}/user_service.proto", base)),
-        (
-            "messaging_service",
-            format!("{}/messaging_service.proto", base),
-        ),
         ("content_service", format!("{}/content_service.proto", base)),
         ("feed_service", format!("{}/feed_service.proto", base)),
         ("search_service", format!("{}/search_service.proto", base)),

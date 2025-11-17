@@ -15,27 +15,27 @@ use tonic::Status;
 
 // Common protos - must be at crate root so generated code can find it
 pub mod common {
-    pub mod v1 {
-        tonic::include_proto!("nova.common.v1");
+    pub mod v2 {
+        tonic::include_proto!("nova.common.v2");
     }
 }
 
 // Proto module definitions from build.rs
 pub mod proto {
     pub mod auth {
-        tonic::include_proto!("nova.auth_service.v1");
+        tonic::include_proto!("nova.identity_service.v2");
     }
 
     pub mod user {
-        tonic::include_proto!("nova.user_service.v1");
+        tonic::include_proto!("nova.user_service.v2");
     }
 
     pub mod content {
-        tonic::include_proto!("nova.content_service.v1");
+        tonic::include_proto!("nova.content_service.v2");
     }
 
     pub mod feed {
-        tonic::include_proto!("nova.feed_service.v1");
+        tonic::include_proto!("nova.feed_service.v2");
     }
 }
 

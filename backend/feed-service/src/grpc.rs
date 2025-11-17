@@ -23,13 +23,13 @@ use tracing::{debug, info, warn};
 // Generated protobuf types and service traits
 pub mod proto {
     pub mod feed_service {
-        pub mod v1 {
-            tonic::include_proto!("nova.feed_service.v1");
+        pub mod v2 {
+            tonic::include_proto!("nova.feed_service.v2");
         }
     }
 }
 
-pub use proto::feed_service::v1::{
+pub use proto::feed_service::v2::{
     recommendation_service_server, FeedPost, GetFeedRequest, GetFeedResponse,
     GetRecommendedCreatorsRequest, GetRecommendedCreatorsResponse, InvalidateFeedCacheRequest,
     InvalidateFeedCacheResponse, RankPostsRequest, RankPostsResponse, RankablePost, RankedPost,

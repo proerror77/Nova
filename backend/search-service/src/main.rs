@@ -897,7 +897,7 @@ async fn main() -> std::io::Result<()> {
         let (mut health, health_service) = health_reporter();
         // Mark SearchService as serving
         health
-            .set_serving::<search_service::grpc::nova::search_service::v1::search_service_server::SearchServiceServer<search_service::grpc::SearchServiceImpl>>()
+            .set_serving::<search_service::grpc::nova::search_service::v2::search_service_server::SearchServiceServer<search_service::grpc::SearchServiceImpl>>()
             .await;
 
         // Create gRPC service with clients (only if all are available)
@@ -998,7 +998,7 @@ async fn main() -> std::io::Result<()> {
 
             if let Err(e) = server_builder
                 .add_service(health_service)
-                .add_service(search_service::grpc::nova::search_service::v1::search_service_server::SearchServiceServer::new(svc))
+                .add_service(search_service::grpc::nova::search_service::v2::search_service_server::SearchServiceServer::new(svc))
                 .serve(grpc_addr)
                 .await
             {

@@ -6,7 +6,7 @@ use uuid::Uuid;
 
 // Include generated protobuf code
 pub mod graph {
-    tonic::include_proto!("nova.graph_service.v1");
+    tonic::include_proto!("nova.graph_service.v2");
 }
 
 use graph::graph_service_server::GraphService;

@@ -59,9 +59,6 @@ pub struct GrpcConfig {
     /// User Service endpoint
     pub user_service_url: String,
 
-    /// Messaging Service endpoint
-    pub messaging_service_url: String,
-
     /// Content Service endpoint
     pub content_service_url: String,
 
@@ -135,8 +132,6 @@ impl GrpcConfig {
                 .unwrap_or_else(|_| "http://identity-service:9080".to_string()),
             user_service_url: env::var("GRPC_USER_SERVICE_URL")
                 .unwrap_or_else(|_| "http://user-service:9080".to_string()),
-            messaging_service_url: env::var("GRPC_MESSAGING_SERVICE_URL")
-                .unwrap_or_else(|_| "http://messaging-service:9080".to_string()),
             content_service_url: env::var("GRPC_CONTENT_SERVICE_URL")
                 .unwrap_or_else(|_| "http://content-service:9080".to_string()),
             feed_service_url: env::var("GRPC_FEED_SERVICE_URL")
@@ -344,7 +339,6 @@ impl GrpcConfig {
         Self {
             identity_service_url: "http://localhost:9080".to_string(),
             user_service_url: "http://localhost:9081".to_string(),
-            messaging_service_url: "http://localhost:9082".to_string(),
             content_service_url: "http://localhost:9083".to_string(),
             feed_service_url: "http://localhost:9084".to_string(),
             search_service_url: "http://localhost:9085".to_string(),

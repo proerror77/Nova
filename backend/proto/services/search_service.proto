@@ -1,5 +1,5 @@
 syntax = "proto3";
-package nova.search_service.v1;
+package nova.search_service.v2;
 
 // ============================================================================
 // Search Service gRPC API

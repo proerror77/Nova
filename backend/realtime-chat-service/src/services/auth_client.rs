@@ -5,7 +5,7 @@
 //! the shadow users table in messaging-service.
 
 use crate::error::AppError;
-use grpc_clients::nova::auth_service::v1::{CheckUserExistsRequest, GetUserRequest};
+use grpc_clients::nova::identity_service::v2::{CheckUserExistsRequest, GetUserRequest};
 use grpc_clients::{config::GrpcConfig, GrpcClientPool};
 use std::sync::Arc;
 use tonic::Request;

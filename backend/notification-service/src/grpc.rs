@@ -8,21 +8,21 @@ use uuid::Uuid;
 
 pub mod nova {
     pub mod common {
-        pub mod v1 {
-            tonic::include_proto!("nova.common.v1");
+        pub mod v2 {
+            tonic::include_proto!("nova.common.v2");
         }
-        pub use v1::*;
+        pub use v2::*;
     }
     pub mod notification_service {
-        pub mod v1 {
-            tonic::include_proto!("nova.notification_service.v1");
+        pub mod v2 {
+            tonic::include_proto!("nova.notification_service.v2");
         }
-        pub use v1::*;
+        pub use v2::*;
     }
 }
 
-use nova::notification_service::v1::notification_service_server::NotificationService;
-use nova::notification_service::v1::*;
+use nova::notification_service::v2::notification_service_server::NotificationService;
+use nova::notification_service::v2::*;
 
 use crate::models::{
     CreateNotificationRequest as CoreCreateRequest, NotificationPriority, NotificationType,

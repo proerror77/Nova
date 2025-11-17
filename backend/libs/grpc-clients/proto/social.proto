@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package nova.social_service.v1;
+package nova.social_service.v2;
 
 import "google/protobuf/timestamp.proto";
 

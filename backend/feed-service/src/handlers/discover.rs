@@ -30,7 +30,7 @@ pub struct SuggestedUsersResponse {
     pub count: usize,
 }
 
-/// GET /api/v1/discover/suggested-users
+/// GET /api/v2/discover/suggested-users
 ///
 /// Get personalized user suggestions for the authenticated user
 ///
@@ -53,7 +53,7 @@ pub struct SuggestedUsersResponse {
 ///   "count": 20
 /// }
 /// ```
-#[get("/api/v1/discover/suggested-users")]
+#[get("/api/v2/discover/suggested-users")]
 pub async fn get_suggested_users(
     query: web::Query<std::collections::HashMap<String, String>>,
     redis_manager: web::Data<redis::aio::ConnectionManager>,

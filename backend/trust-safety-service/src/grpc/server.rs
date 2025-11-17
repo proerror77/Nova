@@ -8,7 +8,7 @@ use uuid::Uuid;
 
 // Include generated proto code
 pub mod trust_safety {
-    tonic::include_proto!("nova.trust_safety.v1");
+    tonic::include_proto!("nova.trust_safety.v2");
 }
 
 use trust_safety::trust_safety_service_server::TrustSafetyService;

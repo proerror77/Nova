@@ -22,45 +22,45 @@ pub use server::UserServiceImpl;
 // Import generated proto code for gRPC service definitions
 pub mod nova {
     pub mod common {
-        pub mod v1 {
-            tonic::include_proto!("nova.common.v1");
+        pub mod v2 {
+            tonic::include_proto!("nova.common.v2");
         }
-        pub use v1::*;
+        pub use v2::*;
     }
     pub mod user_service {
-        pub mod v1 {
-            tonic::include_proto!("nova.user_service.v1");
+        pub mod v2 {
+            tonic::include_proto!("nova.user_service.v2");
         }
-        pub use v1::*;
+        pub use v2::*;
     }
     pub mod content_service {
-        pub mod v1 {
-            tonic::include_proto!("nova.content_service.v1");
+        pub mod v2 {
+            tonic::include_proto!("nova.content_service.v2");
         }
-        pub use v1::*;
+        pub use v2::*;
     }
     pub mod feed_service {
-        pub mod v1 {
-            tonic::include_proto!("nova.feed_service.v1");
+        pub mod v2 {
+            tonic::include_proto!("nova.feed_service.v2");
         }
-        pub use v1::*;
+        pub use v2::*;
     }
     pub mod media_service {
-        pub mod v1 {
-            tonic::include_proto!("nova.media_service.v1");
+        pub mod v2 {
+            tonic::include_proto!("nova.media_service.v2");
         }
-        pub use v1::*;
+        pub use v2::*;
     }
     pub mod auth_service {
-        pub mod v1 {
-            tonic::include_proto!("nova.auth_service.v1");
+        pub mod v2 {
+            tonic::include_proto!("nova.identity_service.v2");
         }
-        pub use v1::*;
+        pub use v2::*;
     }
     pub mod video_service {
-        pub mod v1 {
-            tonic::include_proto!("nova.video_service.v1");
+        pub mod v2 {
+            tonic::include_proto!("nova.video_service.v2");
         }
-        pub use v1::*;
+        pub use v2::*;
     }
 }

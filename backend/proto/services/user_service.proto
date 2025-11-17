@@ -1,5 +1,5 @@
 syntax = "proto3";
-package nova.user_service.v1;
+package nova.user_service.v2;
 
 // ============================================================================
 // User Service gRPC API

@@ -1,7 +1,7 @@
-use grpc_clients::nova::content_service::v1::{
+use grpc_clients::nova::content_service::v2::{
     GetPostsByAuthorRequest, GetPostsByAuthorResponse, GetPostsByIdsRequest, GetPostsByIdsResponse,
 };
-use grpc_clients::nova::user_service::v1::{
+use grpc_clients::nova::user_service::v2::{
     GetUserFollowingRequest, GetUserFollowingResponse, GetUserProfilesByIdsRequest,
     GetUserProfilesByIdsResponse,
 };
@@ -143,7 +143,7 @@ impl GraphServiceClient {
         user_id: Uuid,
         limit: usize,
     ) -> Result<Vec<(Uuid, u64)>, Status> {
-        use grpc_clients::nova::graph_service::v1::GetFollowingRequest;
+        use grpc_clients::nova::graph_service::v2::GetFollowingRequest;
 
         if !self.enabled {
             return Ok(Vec::new());

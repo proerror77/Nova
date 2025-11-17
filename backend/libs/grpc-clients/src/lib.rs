@@ -22,76 +22,70 @@ pub use auth_client::AuthClient;
 // Re-export generated proto client modules
 pub mod nova {
     pub mod common {
-        pub mod v1 {
-            tonic::include_proto!("nova.common.v1");
+        pub mod v2 {
+            tonic::include_proto!("nova.common.v2");
         }
-        pub use v1::*;
+        pub use v2::*;
     }
-    pub mod auth_service {
-        pub mod v1 {
-            tonic::include_proto!("nova.auth_service.v1");
+    pub mod identity_service {
+        pub mod v2 {
+            tonic::include_proto!("nova.identity_service.v2");
         }
-        pub use v1::*;
+        pub use v2::*;
     }
     pub mod user_service {
-        pub mod v1 {
-            tonic::include_proto!("nova.user_service.v1");
+        pub mod v2 {
+            tonic::include_proto!("nova.user_service.v2");
         }
-        pub use v1::*;
-    }
-    pub mod messaging_service {
-        pub mod v1 {
-            tonic::include_proto!("nova.messaging_service.v1");
-        }
-        pub use v1::*;
+        pub use v2::*;
     }
     pub mod content_service {
-        pub mod v1 {
-            tonic::include_proto!("nova.content_service.v1");
+        pub mod v2 {
+            tonic::include_proto!("nova.content_service.v2");
         }
-        pub use v1::*;
+        pub use v2::*;
     }
     pub mod feed_service {
-        pub mod v1 {
-            tonic::include_proto!("nova.feed_service.v1");
+        pub mod v2 {
+            tonic::include_proto!("nova.feed_service.v2");
         }
-        pub use v1::*;
+        pub use v2::*;
     }
     pub mod search_service {
-        pub mod v1 {
-            tonic::include_proto!("nova.search_service.v1");
+        pub mod v2 {
+            tonic::include_proto!("nova.search_service.v2");
         }
-        pub use v1::*;
+        pub use v2::*;
     }
     pub mod media_service {
-        pub mod v1 {
-            tonic::include_proto!("nova.media_service.v1");
+        pub mod v2 {
+            tonic::include_proto!("nova.media_service.v2");
         }
-        pub use v1::*;
+        pub use v2::*;
     }
     pub mod notification_service {
-        pub mod v1 {
-            tonic::include_proto!("nova.notification_service.v1");
+        pub mod v2 {
+            tonic::include_proto!("nova.notification_service.v2");
         }
-        pub use v1::*;
+        pub use v2::*;
     }
     pub mod events_service {
-        pub mod v1 {
-            tonic::include_proto!("nova.events_service.v1");
+        pub mod v2 {
+            tonic::include_proto!("nova.events_service.v2");
         }
-        pub use v1::*;
+        pub use v2::*;
     }
     pub mod graph_service {
-        pub mod v1 {
-            tonic::include_proto!("nova.graph_service.v1");
+        pub mod v2 {
+            tonic::include_proto!("nova.graph_service.v2");
         }
-        pub use v1::*;
+        pub use v2::*;
     }
     pub mod social_service {
-        pub mod v1 {
-            tonic::include_proto!("nova.social_service.v1");
+        pub mod v2 {
+            tonic::include_proto!("nova.social_service.v2");
         }
-        pub use v1::*;
+        pub use v2::*;
     }
     pub mod ranking_service {
         pub mod v1 {
@@ -100,10 +94,10 @@ pub mod nova {
         pub use v1::*;
     }
     pub mod trust_safety {
-        pub mod v1 {
-            tonic::include_proto!("nova.trust_safety.v1");
+        pub mod v2 {
+            tonic::include_proto!("nova.trust_safety.v2");
         }
-        pub use v1::*;
+        pub use v2::*;
     }
 }
 
@@ -117,13 +111,12 @@ use tonic::transport::Channel;
 
 pub use feature_store::feature_store_client::FeatureStoreClient;
 /// Client types for all services
-pub use nova::auth_service::auth_service_client::AuthServiceClient;
+pub use nova::identity_service::auth_service_client::AuthServiceClient;
 pub use nova::content_service::content_service_client::ContentServiceClient;
 pub use nova::events_service::events_service_client::EventsServiceClient;
 pub use nova::feed_service::recommendation_service_client::RecommendationServiceClient;
 pub use nova::graph_service::graph_service_client::GraphServiceClient;
 pub use nova::media_service::media_service_client::MediaServiceClient;
-pub use nova::messaging_service::messaging_service_client::MessagingServiceClient;
 pub use nova::notification_service::notification_service_client::NotificationServiceClient;
 pub use nova::ranking_service::ranking_service_client::RankingServiceClient;
 pub use nova::search_service::search_service_client::SearchServiceClient;
@@ -135,7 +128,6 @@ pub use nova::user_service::user_service_client::UserServiceClient;
 pub struct GrpcClientPool {
     auth_client: Arc<AuthServiceClient<Channel>>,
     user_client: Arc<UserServiceClient<Channel>>,
-    messaging_client: Arc<MessagingServiceClient<Channel>>,
     content_client: Arc<ContentServiceClient<Channel>>,
     feed_client: Arc<RecommendationServiceClient<Channel>>,
     search_client: Arc<SearchServiceClient<Channel>>,
@@ -193,10 +185,6 @@ impl GrpcClientPool {
         let user_client = Arc::new(UserServiceClient::new(
             connect_or_placeholder(config, &config.user_service_url, "user-service").await,
         ));
-        let messaging_client = Arc::new(MessagingServiceClient::new(
-            connect_or_placeholder(config, &config.messaging_service_url, "messaging-service")
-                .await,
-        ));
         let content_client = Arc::new(ContentServiceClient::new(
             connect_or_placeholder(config, &config.content_service_url, "content-service").await,
         ));
@@ -245,7 +233,6 @@ impl GrpcClientPool {
         Ok(Self {
             auth_client,
             user_client,
-            messaging_client,
             content_client,
             feed_client,
             search_client,
@@ -267,10 +254,6 @@ impl GrpcClientPool {
 
     pub fn user(&self) -> UserServiceClient<Channel> {
         (*self.user_client).clone()
-    }
-
-    pub fn messaging(&self) -> MessagingServiceClient<Channel> {
-        (*self.messaging_client).clone()
     }
 
     pub fn content(&self) -> ContentServiceClient<Channel> {

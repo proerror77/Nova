@@ -9,27 +9,27 @@ use crate::cache::MediaCache;
 use crate::error::AppError;
 use crate::models::{CreateReelRequest as CreateReelPayload, Upload as DbUpload, Video as DbVideo};
 use crate::services::{ReelService, ReelTranscodePipeline, VideoService};
-use nova::common::v1::ErrorStatus;
+use nova::common::v2::ErrorStatus;
 use tokio::sync::broadcast;
 
 // Import generated proto code
 pub mod nova {
     pub mod common {
-        pub mod v1 {
-            tonic::include_proto!("nova.common.v1");
+        pub mod v2 {
+            tonic::include_proto!("nova.common.v2");
         }
-        pub use v1::*;
+        pub use v2::*;
     }
     pub mod media_service {
-        pub mod v1 {
-            tonic::include_proto!("nova.media_service.v1");
+        pub mod v2 {
+            tonic::include_proto!("nova.media_service.v2");
         }
-        pub use v1::*;
+        pub use v2::*;
     }
 }
 
-use nova::media_service::v1::media_service_server::MediaService;
-use nova::media_service::v1::*;
+use nova::media_service::v2::media_service_server::MediaService;
+use nova::media_service::v2::*;
 
 /// Convert database `Video` model to gRPC proto message.
 fn video_to_proto(video: DbVideo) -> Video {

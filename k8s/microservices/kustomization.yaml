@@ -33,11 +33,6 @@ resources:
   
   - media-service-deployment.yaml
 
-  - messaging-service-deployment.yaml
-  - messaging-service-service.yaml
-  - messaging-service-configmap.yaml
-  - messaging-service-secret.yaml
-  - messaging-service-serviceaccount.yaml
 
   - notification-service-deployment.yaml
   - notification-service-service.yaml
@@ -87,5 +82,4 @@ resources:
   # - prometheus-monitoring-setup.yaml
   - s3-configmap.yaml
   - s3-secret.yaml
-  - messaging-service-cronjobs.yaml
   - turn-server-deployment.yaml
