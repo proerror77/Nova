@@ -1,0 +1,49 @@
+name: Backend Workspace Tests
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.github/workflows/backend-workspace-tests.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.github/workflows/backend-workspace-tests.yml'
+
+concurrency:
+  group: backend-workspace-tests-${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  cargo-test-workspace:
+    name: Cargo Test (workspace, all features)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain and cache
+        uses: ./.github/actions/setup-rust-env
+        with:
+          cache-key-suffix: workspace-tests
+
+      - name: Run cargo test --workspace --all-features
+        run: |
+          set -eo pipefail
+          touch cargo-test.log
+          cargo test --workspace --all-features --locked 2>&1 | tee cargo-test.log
+
+      - name: Upload cargo test log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cargo-test-log
+          path: cargo-test.log

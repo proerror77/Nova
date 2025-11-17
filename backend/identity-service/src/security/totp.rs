@@ -131,7 +131,8 @@ mod tests {
         let (secret, uri) = result.expect("should generate secret and URI successfully");
         assert!(!secret.is_empty());
         assert!(uri.contains("otpauth://totp/Nova"));
-        assert!(uri.contains("test@example.com"));
+        // Email should be percent-encoded per otpauth spec
+        assert!(uri.contains("test%40example.com"));
     }
 
     #[test]
