@@ -1,5 +1,5 @@
 syntax = "proto3";
-package nova.auth_service.v1;
+package nova.identity_service.v2;
 
 import "common.proto";
 import "google/protobuf/wrappers.proto";
@@ -38,7 +38,7 @@ message GetUserRequest {
 
 message GetUserResponse {
   User user = 1;
-  optional .nova.common.v1.ErrorStatus error = 2;
+  optional .nova.common.v2.ErrorStatus error = 2;
 }
 
 // ============================================================================
@@ -51,7 +51,7 @@ message GetUsersByIdsRequest {
 
 message GetUsersByIdsResponse {
   repeated User users = 1;
-  optional .nova.common.v1.ErrorStatus error = 2;
+  optional .nova.common.v2.ErrorStatus error = 2;
 }
 
 // ============================================================================
@@ -69,7 +69,7 @@ message VerifyTokenResponse {
   string username = 4;         // Username of token owner (if valid)
   int64 expires_at = 5;        // Unix timestamp when token expires
   bool is_revoked = 6;         // Whether token has been revoked
-  optional .nova.common.v1.ErrorStatus error = 7;
+  optional .nova.common.v2.ErrorStatus error = 7;
 }
 
 // ============================================================================
@@ -94,7 +94,7 @@ message GetUserByEmailRequest {
 
 message GetUserByEmailResponse {
   User user = 1;
-  optional .nova.common.v1.ErrorStatus error = 2;
+  optional .nova.common.v2.ErrorStatus error = 2;
 }
 
 // ============================================================================
@@ -110,7 +110,7 @@ message ListUsersRequest {
 message ListUsersResponse {
   repeated User users = 1;
   int32 total_count = 2;
-  optional .nova.common.v1.ErrorStatus error = 3;
+  optional .nova.common.v2.ErrorStatus error = 3;
 }
 
 // ============================================================================
@@ -124,7 +124,7 @@ message CheckPermissionRequest {
 
 message CheckPermissionResponse {
   bool has_permission = 1;
-  optional .nova.common.v1.ErrorStatus error = 2;
+  optional .nova.common.v2.ErrorStatus error = 2;
 }
 
 // ============================================================================
@@ -138,7 +138,7 @@ message GetUserPermissionsRequest {
 message GetUserPermissionsResponse {
   repeated string permissions = 1;
   repeated string roles = 2;
-  optional .nova.common.v1.ErrorStatus error = 3;
+  optional .nova.common.v2.ErrorStatus error = 3;
 }
 
 // ============================================================================
@@ -155,7 +155,7 @@ message RecordFailedLoginResponse {
   int32 failed_attempts = 1;
   bool is_locked = 2;
   optional int64 locked_until = 3;  // Unix timestamp (seconds) if locked
-  optional .nova.common.v1.ErrorStatus error = 4;
+  optional .nova.common.v2.ErrorStatus error = 4;
 }
 
 // ============================================================================
@@ -188,7 +188,7 @@ message UserProfile {
 
 message UpdateUserProfileResponse {
   optional UserProfile profile = 1;
-  optional .nova.common.v1.ErrorStatus error = 2;
+  optional .nova.common.v2.ErrorStatus error = 2;
 }
 
 // ============================================================================
@@ -202,7 +202,7 @@ message UpsertUserPublicKeyRequest {
 
 message UpsertUserPublicKeyResponse {
   bool success = 1;
-  optional .nova.common.v1.ErrorStatus error = 2;
+  optional .nova.common.v2.ErrorStatus error = 2;
 }
 
 message GetUserPublicKeyRequest {
@@ -212,7 +212,7 @@ message GetUserPublicKeyRequest {
 message GetUserPublicKeyResponse {
   bool found = 1;
   optional string public_key = 2;
-  optional .nova.common.v1.ErrorStatus error = 3;
+  optional .nova.common.v2.ErrorStatus error = 3;
 }
 
 // ============================================================================

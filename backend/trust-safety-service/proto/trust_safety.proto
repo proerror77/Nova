@@ -1,5 +1,5 @@
 syntax = "proto3";
-package nova.trust_safety.v1;
+package nova.trust_safety.v2;
 
 // Trust & Safety Service - Centralized UGC Moderation
 service TrustSafetyService {

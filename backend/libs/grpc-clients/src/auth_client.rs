@@ -10,7 +10,7 @@
 //! - Zero breaking changes - backward compatible with existing code
 
 use crate::config::GrpcConfig;
-use crate::nova::auth_service::v1::{
+use crate::nova::identity_service::v2::{
     auth_service_client::AuthServiceClient as TonicAuthServiceClient, CheckUserExistsRequest,
     GetUserRequest, GetUsersByIdsRequest,
 };

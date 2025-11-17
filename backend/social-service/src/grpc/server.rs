@@ -5,7 +5,7 @@ use uuid::Uuid;
 
 // Generated proto code
 pub mod social {
-    tonic::include_proto!("nova.social_service.v1");
+    tonic::include_proto!("nova.social_service.v2");
 }
 
 use social::social_service_server::SocialService;

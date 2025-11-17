@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package nova.content_service.v1;
+package nova.content_service.v2;
 
 import "common.proto";
 
@@ -30,7 +30,7 @@ message GetPostRequest {
 message GetPostResponse {
     Post post = 1;
     bool found = 2;
-    .nova.common.v1.ErrorStatus error = 3;
+    .nova.common.v2.ErrorStatus error = 3;
 }
 
 message CreatePostRequest {
@@ -40,7 +40,7 @@ message CreatePostRequest {
 
 message CreatePostResponse {
     Post post = 1;
-    .nova.common.v1.ErrorStatus error = 2;
+    .nova.common.v2.ErrorStatus error = 2;
 }
 
 message GetCommentsRequest {
@@ -52,7 +52,7 @@ message GetCommentsRequest {
 message GetCommentsResponse {
     repeated Comment comments = 1;
     int32 total = 2;
-    .nova.common.v1.ErrorStatus error = 3;
+    .nova.common.v2.ErrorStatus error = 3;
 }
 
 message LikePostRequest {
@@ -62,7 +62,7 @@ message LikePostRequest {
 
 message LikePostResponse {
     bool success = 1;
-    .nova.common.v1.ErrorStatus error = 2;
+    .nova.common.v2.ErrorStatus error = 2;
 }
 
 message GetUserBookmarksRequest {
@@ -74,7 +74,7 @@ message GetUserBookmarksRequest {
 message GetUserBookmarksResponse {
     repeated Post posts = 1;
     int32 total = 2;
-    .nova.common.v1.ErrorStatus error = 3;
+    .nova.common.v2.ErrorStatus error = 3;
 }
 
 // Feed-related messages removed - these belong to feed_service.proto
@@ -149,7 +149,7 @@ message CreateCommentRequest {
 
 message CreateCommentResponse {
     Comment comment = 1;
-    .nova.common.v1.ErrorStatus error = 2;
+    .nova.common.v2.ErrorStatus error = 2;
 }
 
 message UpdateCommentRequest {
@@ -160,7 +160,7 @@ message UpdateCommentRequest {
 
 message UpdateCommentResponse {
     Comment comment = 1;
-    .nova.common.v1.ErrorStatus error = 2;
+    .nova.common.v2.ErrorStatus error = 2;
 }
 
 message DeleteCommentRequest {
@@ -181,7 +181,7 @@ message UnlikePostRequest {
 
 message UnlikePostResponse {
     bool success = 1;
-    .nova.common.v1.ErrorStatus error = 2;
+    .nova.common.v2.ErrorStatus error = 2;
 }
 
 message GetPostLikesRequest {
@@ -198,7 +198,7 @@ message PostLike {
 message GetPostLikesResponse {
     repeated PostLike likes = 1;
     int32 total_count = 2;
-    .nova.common.v1.ErrorStatus error = 3;
+    .nova.common.v2.ErrorStatus error = 3;
 }
 
 // ContentService manages posts, comments, and likes

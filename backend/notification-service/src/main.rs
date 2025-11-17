@@ -81,7 +81,7 @@ async fn main() -> io::Result<()> {
     let grpc_notification_service = notification_service.clone();
     tokio::spawn(async move {
         use notification_service::grpc::{
-            nova::notification_service::v1::notification_service_server::NotificationServiceServer,
+            nova::notification_service::v2::notification_service_server::NotificationServiceServer,
             NotificationServiceImpl,
         };
         use notification_service::services::PushSender;

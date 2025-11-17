@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package nova.events_service.v1;
+package nova.events_service.v2;
 
 import "common.proto";
 
@@ -40,7 +40,7 @@ message OutboxEvent {
   string data = 5;                    // JSON event data
   string status = 6;                  // "pending", "published", "failed"
   int32 retry_count = 7;              // Number of publication attempts
-  .nova.common.v1.ErrorStatus error = 8;           // Error message if failed
+  .nova.common.v2.ErrorStatus error = 8;           // Error message if failed
   int64 created_at = 9;              // Unix timestamp (seconds)
   int64 published_at = 10;           // Unix timestamp (seconds) (when published)
 }

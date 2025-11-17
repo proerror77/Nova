@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package nova.graph_service.v1;
+package nova.graph_service.v2;
 
 // Graph Service - 關係圖服務
 // 管理 Follow/Mute/Block 有向邊

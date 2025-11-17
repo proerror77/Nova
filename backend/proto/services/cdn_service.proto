@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package nova.cdn_service.v1;
+package nova.cdn_service.v2;
 
 // ============================================================================
 // CDN Service gRPC API

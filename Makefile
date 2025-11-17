@@ -61,8 +61,8 @@ docker-build: ## Build all service Docker images
 docker-build-user: ## Build user-service Docker image only
 	docker build -t nova-user-service:latest -f ./backend/Dockerfile ./backend
 
-docker-build-messaging: ## Build messaging-service Docker image only
-	docker build -t nova-messaging-service:latest -f ./backend/Dockerfile.messaging ./backend
+docker-build-messaging: ## (deprecated) messaging-service 已淘汰，請改用 realtime-chat-service
+	@echo "messaging-service 已淘汰，請使用 realtime-chat-service 對應 Dockerfile"
 
 docker-build-search: ## Build search-service Docker image only
 	docker build -t nova-search-service:latest -f ./backend/search-service/Dockerfile ./backend/search-service

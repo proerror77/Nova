@@ -1,8 +1,8 @@
 syntax = "proto3";
 
-package nova.streaming_service.v1;
+package nova.streaming_service.v2;
 
-option go_package = "github.com/novacorp/nova/backend/proto/streaming_service/v1";
+option go_package = "github.com/novacorp/nova/backend/proto/streaming_service/v2";
 option java_multiple_files = true;
 option java_outer_classname = "StreamingProto";
 

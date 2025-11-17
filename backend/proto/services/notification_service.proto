@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package nova.notification_service.v1;
+package nova.notification_service.v2;
 
 import "common.proto";
 

@@ -27,7 +27,7 @@ pub struct RankingRequest {
     pub limit: usize,
 }
 
-/// Query parameters for GET /recommendations
+/// Query parameters for GET /recommendations (v2)
 #[derive(Debug, Deserialize)]
 pub struct RecommendationQuery {
     /// Number of recommendations to return (default: 20, max: 100)
@@ -79,10 +79,10 @@ pub struct RecommendationHandlerState {
     pub db_pool: sqlx::PgPool,
 }
 
-/// GET /api/v1/recommendations
+/// GET /api/v2/recommendations
 /// Get personalized recommendations for authenticated user
 /// Delegates ranking to ranking-service, with chronological fallback
-#[get("/api/v1/recommendations")]
+#[get("/api/v2/recommendations")]
 pub async fn get_recommendations(
     req: HttpRequest,
     query: web::Query<RecommendationQuery>,
@@ -186,9 +186,9 @@ async fn fetch_chronological_feed(
     Ok(posts)
 }
 
-/// GET /api/v1/recommendations/model-info
+/// GET /api/v2/recommendations/model-info
 /// Get current model version information (delegated to ranking-service)
-#[get("/api/v1/recommendations/model-info")]
+#[get("/api/v2/recommendations/model-info")]
 pub async fn get_model_info(_state: web::Data<RecommendationHandlerState>) -> Result<HttpResponse> {
     debug!("Model info endpoint deprecated - ranking handled by ranking-service");
 
@@ -201,10 +201,10 @@ pub async fn get_model_info(_state: web::Data<RecommendationHandlerState>) -> Re
     }))
 }
 
-/// POST /api/v1/recommendations/rank
+/// POST /api/v2/recommendations/rank
 /// Internal API for ranking candidates (delegated to ranking-service)
 /// Requires service-to-service authentication
-#[post("/api/v1/recommendations/rank")]
+#[post("/api/v2/recommendations/rank")]
 pub async fn rank_candidates(
     req: HttpRequest,
     _body: web::Json<RankingRequest>,
@@ -254,10 +254,10 @@ pub struct SemanticSearchResponse {
     pub count: usize,
 }
 
-/// POST /api/v1/recommendations/semantic-search
+/// POST /api/v2/recommendations/semantic-search
 /// Search for semantically similar posts (delegated to ranking-service or feature-store)
 /// Requires service-to-service authentication
-#[post("/api/v1/recommendations/semantic-search")]
+#[post("/api/v2/recommendations/semantic-search")]
 pub async fn semantic_search(
     req: HttpRequest,
     _body: web::Json<SemanticSearchRequest>,

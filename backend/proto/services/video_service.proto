@@ -1,10 +1,10 @@
 syntax = "proto3";
 
-package nova.video_service.v1;
+package nova.video_service.v2;
 
 import "common.proto";
 
-option go_package = "github.com/novacorp/nova/backend/proto/video_service/v1";
+option go_package = "github.com/novacorp/nova/backend/proto/video_service/v2";
 option java_multiple_files = true;
 option java_outer_classname = "VideoProto";
 
@@ -102,7 +102,7 @@ message TranscodingProgress {
   int32 progress_percent = 3;  // 0-100
   string current_resolution = 4;
   string estimated_time_remaining = 5;  // ISO 8601 duration
-  .nova.common.v1.ErrorStatus error = 6;
+  .nova.common.v2.ErrorStatus error = 6;
 }
 
 // ListVideosRequest requests list of videos

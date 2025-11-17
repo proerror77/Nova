@@ -104,10 +104,10 @@ fn empty_trending_response() -> serde_json::Value {
     })
 }
 
-/// GET /api/v1/trending
+/// GET /api/v2/trending
 ///
 /// Get trending content across all types or filtered by category
-#[get("/api/v1/trending")]
+#[get("/api/v2/trending")]
 pub async fn get_trending(
     query: web::Query<TrendingQuery>,
     pool: web::Data<PgPool>,
@@ -189,8 +189,8 @@ pub async fn get_trending(
     Ok(HttpResponse::Ok().json(response))
 }
 
-/// GET /api/v1/trending/videos
-#[get("/api/v1/trending/videos")]
+/// GET /api/v2/trending/videos
+#[get("/api/v2/trending/videos")]
 pub async fn get_trending_videos(
     query: web::Query<TrendingQuery>,
     pool: web::Data<PgPool>,
@@ -230,8 +230,8 @@ pub async fn get_trending_videos(
     Ok(HttpResponse::Ok().json(response))
 }
 
-/// GET /api/v1/trending/posts
-#[get("/api/v1/trending/posts")]
+/// GET /api/v2/trending/posts
+#[get("/api/v2/trending/posts")]
 pub async fn get_trending_posts(
     query: web::Query<TrendingQuery>,
     pool: web::Data<PgPool>,
@@ -271,8 +271,8 @@ pub async fn get_trending_posts(
     Ok(HttpResponse::Ok().json(response))
 }
 
-/// GET /api/v1/trending/streams
-#[get("/api/v1/trending/streams")]
+/// GET /api/v2/trending/streams
+#[get("/api/v2/trending/streams")]
 pub async fn get_trending_streams(
     query: web::Query<TrendingQuery>,
     pool: web::Data<PgPool>,
@@ -312,8 +312,8 @@ pub async fn get_trending_streams(
     Ok(HttpResponse::Ok().json(response))
 }
 
-/// GET /api/v1/trending/categories
-#[get("/api/v1/trending/categories")]
+/// GET /api/v2/trending/categories
+#[get("/api/v2/trending/categories")]
 pub async fn get_trending_categories() -> HttpResponse {
     #[derive(Serialize)]
     struct Category {
@@ -355,8 +355,8 @@ pub async fn get_trending_categories() -> HttpResponse {
     HttpResponse::Ok().json(serde_json::json!({ "categories": categories }))
 }
 
-/// POST /api/v1/trending/engagement
-#[post("/api/v1/trending/engagement")]
+/// POST /api/v2/trending/engagement
+#[post("/api/v2/trending/engagement")]
 pub async fn record_engagement(
     req: HttpRequest,
     body: web::Json<EngagementRequest>,

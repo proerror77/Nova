@@ -21,16 +21,16 @@ mod content_service_grpc_tests {
     // Include proto definitions to get generated client code
     pub mod nova {
         pub mod common {
-            pub mod v1 {
-                tonic::include_proto!("nova.common.v1");
+            pub mod v2 {
+                tonic::include_proto!("nova.common.v2");
             }
-            pub use v1::*;
+            pub use v2::*;
         }
         pub mod content_service {
-            pub mod v1 {
-                tonic::include_proto!("nova.content_service.v1");
+            pub mod v2 {
+                tonic::include_proto!("nova.content_service.v2");
             }
-            pub use v1::*;
+            pub use v2::*;
         }
         // Re-export content_service as content for backward compatibility
         pub use content_service as content;

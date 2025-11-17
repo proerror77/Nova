@@ -8,24 +8,24 @@ use uuid::Uuid;
 
 pub mod nova {
     pub mod common {
-        pub mod v1 {
-            tonic::include_proto!("nova.common.v1");
+        pub mod v2 {
+            tonic::include_proto!("nova.common.v2");
         }
-        pub use v1::*;
+        pub use v2::*;
     }
     pub mod events_service {
-        pub mod v1 {
-            tonic::include_proto!("nova.events_service.v1");
+        pub mod v2 {
+            tonic::include_proto!("nova.events_service.v2");
         }
-        pub use v1::*;
+        pub use v2::*;
     }
 }
 
-use nova::events_service::v1::events_service_server::EventsService;
-use nova::events_service::v1::*;
+use nova::events_service::v2::events_service_server::EventsService;
+use nova::events_service::v2::*;
 
 // Import proto-generated types with full qualification to avoid conflicts
-use nova::events_service::v1::{
+use nova::events_service::v2::{
     DomainEvent as ProtoDomainEvent, EventSchema as ProtoEventSchema,
     EventSubscription as ProtoEventSubscription, OutboxEvent as ProtoOutboxEvent,
 };
@@ -803,7 +803,7 @@ impl EventsService for EventsServiceImpl {
                 status: row.get("status"),
                 retry_count: row.get("retry_count"),
                 error: row.get::<Option<String>, _>("last_error").map(|e| {
-                    nova::common::v1::ErrorStatus {
+                    nova::common::v2::ErrorStatus {
                         code: "500".to_string(),
                         message: e,
                         metadata: std::collections::HashMap::new(),
@@ -866,7 +866,7 @@ impl EventsService for EventsServiceImpl {
             status: row.get("status"),
             retry_count: row.get("retry_count"),
             error: row.get::<Option<String>, _>("last_error").map(|e| {
-                nova::common::v1::ErrorStatus {
+                nova::common::v2::ErrorStatus {
                     code: "500".to_string(),
                     message: e,
                     metadata: std::collections::HashMap::new(),
@@ -934,7 +934,7 @@ impl EventsService for EventsServiceImpl {
             status: row.get("status"),
             retry_count: row.get("retry_count"),
             error: row.get::<Option<String>, _>("last_error").map(|e| {
-                nova::common::v1::ErrorStatus {
+                nova::common::v2::ErrorStatus {
                     code: "500".to_string(),
                     message: e,
                     metadata: std::collections::HashMap::new(),

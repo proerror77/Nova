@@ -88,176 +88,42 @@ create_namespace() {
 
 # Deploy RBAC
 deploy_rbac() {
-    print_header "部署RBAC配置"
-
-    kubectl apply -f "$SCRIPT_DIR/messaging-service-serviceaccount.yaml"
-    print_success "ServiceAccount 和 Role 已部署"
-    echo ""
+    print_header "部署RBAC配置 (messaging-service 已淘汰，請改用 realtime-chat-service 專用腳本)"
 }
 
 # Deploy ConfigMap and Secret
 deploy_config() {
-    print_header "部署配置和密钥"
-
-    kubectl apply -f "$SCRIPT_DIR/messaging-service-configmap-local.yaml"
-    print_success "ConfigMap (本地) 已部署"
-
-    kubectl apply -f "$SCRIPT_DIR/messaging-service-secret-local.yaml"
-    print_success "Secret (本地) 已部署"
-    echo ""
+    print_header "部署配置和密钥 (messaging-service 已淘汰，請改用 realtime-chat-service 專用腳本)"
 }
 
 # Build Docker image
 build_image() {
-    print_header "构建Docker镜像"
-
-    if [ ! -f "$SCRIPT_DIR/../../messaging-service/Cargo.toml" ]; then
-        print_warning "找不到Cargo.toml，跳过构建"
-        echo "请确保您位于正确的目录中，或手动构建镜像:"
-        echo "  cd backend/messaging-service"
-        echo "  docker build -t nova/messaging-service:latest -f ../Dockerfile.messaging ."
-        return
-    fi
-
-    print_warning "正在构建镜像，这可能需要2-5分钟..."
-    cd "$SCRIPT_DIR/../../messaging-service"
-
-    if docker build -t nova/messaging-service:latest -f ../Dockerfile.messaging .; then
-        print_success "镜像构建成功"
-    else
-        print_error "镜像构建失败"
-        exit 1
-    fi
-
-    cd "$SCRIPT_DIR"
-    echo ""
+    print_header "构建Docker镜像 (messaging-service 已淘汰，本脚本僅保留為歷史記錄，不再執行實際構建)"
 }
 
 # Load image to kind (if using kind)
 load_kind_image() {
-    CLUSTER_NAME=$(kubectl config current-context)
-
-    if [[ "$CLUSTER_NAME" == *"kind"* ]]; then
-        print_header "加载镜像到kind"
-
-        if kind load docker-image nova/messaging-service:latest --name "${CLUSTER_NAME#kind-}"; then
-            print_success "镜像已加载到kind集群"
-        else
-            print_warning "镜像加载失败，请手动运行:"
-            echo "  kind load docker-image nova/messaging-service:latest --name ${CLUSTER_NAME#kind-}"
-        fi
-        echo ""
-    fi
+    print_header "加载镜像到kind (messaging-service 已淘汰，略過)"
 }
 
 # Deploy application
 deploy_app() {
-    print_header "部署应用"
-
-    kubectl apply -f "$SCRIPT_DIR/messaging-service-deployment-local.yaml"
-    print_success "Deployment 已部署"
-
-    # Create simple service
-    kubectl apply -f - <<EOF
-apiVersion: v1
-kind: Service
-metadata:
-  name: messaging-service
-  namespace: $NAMESPACE
-  labels:
-    app: nova
-    component: messaging-service
-spec:
-  type: NodePort
-  ports:
-    - name: http
-      port: 3000
-      targetPort: 3000
-      nodePort: 30000
-    - name: metrics
-      port: 9090
-      targetPort: 9090
-      nodePort: 30090
-  selector:
-    app: nova
-    component: messaging-service
-EOF
-
-    print_success "Service 已创建"
-    echo ""
+    print_header "部署应用 (messaging-service 已淘汰，請改用 realtime-chat-service 的部署腳本)"
 }
 
 # Wait for deployment
 wait_deployment() {
-    print_header "等待部署完成"
-
-    echo "监控Pod启动... (Ctrl+C 停止)"
-    kubectl rollout status deployment/messaging-service -n $NAMESPACE --timeout=300s || {
-        print_error "部署超时或失败"
-        echo "查看Pod状态："
-        kubectl get pods -n $NAMESPACE
-        echo "查看日志："
-        kubectl logs -l component=messaging-service -n $NAMESPACE --tail=20
-        return 1
-    }
-
-    print_success "部署完成！"
-    echo ""
+    print_header "等待部署完成 (messaging-service 已淘汰)"
 }
 
 # Show access information
 show_access_info() {
-    print_header "访问信息"
-
-    CONTEXT=$(kubectl config current-context)
-    echo "当前K8s环境: $CONTEXT"
-    echo ""
-
-    echo "服务端点:"
-    if [[ "$CONTEXT" == *"kind"* ]]; then
-        echo "  API: http://localhost:30000"
-        echo "  Metrics: http://localhost:30090"
-    else
-        echo "  使用端口转发:"
-        echo "    kubectl port-forward svc/messaging-service 3000:3000"
-        echo "    kubectl port-forward svc/messaging-service 9090:9090"
-        echo ""
-        echo "  然后访问:"
-        echo "    API: http://localhost:3000"
-        echo "    Metrics: http://localhost:9090/metrics"
-    fi
-    echo ""
+    print_header "访问信息 (messaging-service 已淘汰，請改用 realtime-chat-service 的端點)"
 }
 
 # Show verification commands
 show_verification_commands() {
-    print_header "验证命令"
-
-    echo "1️⃣ 检查Pod状态:"
-    echo "   kubectl get pods -n $NAMESPACE -w"
-    echo ""
-
-    echo "2️⃣ 查看日志:"
-    echo "   kubectl logs -f -l component=messaging-service -n $NAMESPACE"
-    echo ""
-
-    echo "3️⃣ 测试健康检查:"
-    echo "   # 需要先运行端口转发或NodePort"
-    echo "   curl http://localhost:3000/health"
-    echo "   curl http://localhost:3000/health | jq"
-    echo ""
-
-    echo "4️⃣ 进入Pod调试:"
-    echo "   kubectl exec -it <pod-name> -n $NAMESPACE -- bash"
-    echo ""
-
-    echo "5️⃣ 查看资源使用:"
-    echo "   kubectl top pods -n $NAMESPACE"
-    echo ""
-
-    echo "6️⃣ 查看完整事件:"
-    echo "   kubectl get events -n $NAMESPACE --sort-by='.lastTimestamp'"
-    echo ""
+    print_header "验证命令 (messaging-service 已淘汰，請改用 realtime-chat-service 的驗證流程)"
 }
 
 # Cleanup function

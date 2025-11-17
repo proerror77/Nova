@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package nova.social_service.v1;
+package nova.social_service.v2;
 
 // Social Service - 社交互动服务
 // 管理 Likes/Comments/Shares 等社交互动
