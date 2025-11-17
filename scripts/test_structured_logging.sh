@@ -13,7 +13,7 @@ NC='\033[0m' # No Color
 
 # Test configuration
 TEST_DURATION=5  # seconds
-SERVICES=("identity-service" "feed-service" "graphql-gateway")
+SERVICES=("user-service" "feed-service" "graphql-gateway")
 
 echo -e "${GREEN}=== Structured Logging Test Suite ===${NC}\n"
 
@@ -173,7 +173,7 @@ main() {
     # Summary
     echo -e "${GREEN}=== Test Summary ===${NC}"
     echo "Test logs saved to /tmp/*_logs.txt"
-    echo "Review logs with: jq . /tmp/<service>_logs.txt"
+    echo "Review logs with: jq . /tmp/user-service_logs.txt"
     echo
 }
 

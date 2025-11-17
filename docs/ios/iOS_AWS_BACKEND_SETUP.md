@@ -80,12 +80,11 @@ init(httpClient: HTTPClient = HTTPClient(), cache: CacheManager = CacheManager()
 
 The AWS backend is running on EKS (Kubernetes) in ap-northeast-1 region:
 
-- ### Services Running:
+### Services Running:
 - **content-service** (port 8081) - Handles posts creation and management
-- **feed-service** (port 8084) - Personalized feed & ranking (aggregates other services)
-- **identity-service** (port 8083 gRPC) - Auth/JWT (via GraphQL gateway)
+- **user-service** (port 8083) - Handles feed, user profiles, relationships
 - **media-service** (port 8082) - Handles media uploads
-- **realtime-chat-service** (port 8080 HTTP / 9000 gRPC) - Messaging + WebSocket
+- **messaging-service** (port 8084) - Handles conversations and messages
 - **PostgreSQL** (port 5432) - Primary database
 - **Redis** (port 6379) - Cache/session store
 - **ClickHouse** (port 8123/9000) - Analytics database
@@ -113,8 +112,8 @@ Or manually:
 # Terminal 1: Content Service (Posts)
 kubectl port-forward -n nova svc/content-service 8081:8081
 
-# Terminal 2: GraphQL Gateway (Feed/Profiles)
-kubectl port-forward -n nova svc/graphql-gateway 8080:8080
+# Terminal 2: User Service (Feed)
+kubectl port-forward -n nova svc/user-service 8083:8083
 
 # Terminal 3: Media Service (Optional, for image uploads)
 kubectl port-forward -n nova svc/media-service 8082:8082
@@ -129,8 +128,8 @@ kubectl port-forward -n nova svc/messaging-service 8084:8084
 # Test content-service
 curl -H "Authorization: Bearer test-token" http://localhost:8081/health
 
-# Test GraphQL gateway (feeds/profiles)
-curl -H "Authorization: Bearer test-token" http://localhost:8080/health
+# Test user-service
+curl -H "Authorization: Bearer test-token" http://localhost:8083/health
 ```
 
 ### Step 3: Run iOS App

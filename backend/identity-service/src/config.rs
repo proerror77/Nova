@@ -233,8 +233,10 @@ impl JwtSettings {
         if let Ok(private_pem) = env::var("JWT_PRIVATE_KEY") {
             let public_pem = env::var("JWT_PUBLIC_KEY").ok();
 
-            let issuer = env::var("JWT_ISSUER").unwrap_or_else(|_| "nova-platform".to_string());
-            let audience_str = env::var("JWT_AUDIENCE").unwrap_or_else(|_| "api,web".to_string());
+            let issuer =
+                env::var("JWT_ISSUER").unwrap_or_else(|_| "nova-platform".to_string());
+            let audience_str =
+                env::var("JWT_AUDIENCE").unwrap_or_else(|_| "api,web".to_string());
             let audience = audience_str
                 .split(',')
                 .map(|s| s.trim().to_string())

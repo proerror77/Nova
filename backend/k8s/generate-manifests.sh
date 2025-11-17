@@ -2,7 +2,7 @@
 # ==============================================
 # Nova - Generate Kubernetes Manifests
 # ==============================================
-# This script generates Kubernetes manifests for all active services
+# This script generates Kubernetes manifests for all 11 services
 # following the same pattern to avoid duplication
 
 set -eo pipefail
@@ -10,12 +10,15 @@ set -eo pipefail
 # Service configuration: name:http_port pairs
 services=(
   "auth-service:8083"
+  "user-service:8080"
   "content-service:8081"
   "feed-service:8084"
   "media-service:8082"
   "messaging-service:8085"
   "search-service:8086"
+  "streaming-service:8087"
   "notification-service:8088"
+  "cdn-service:8089"
   "events-service:8090"
 )
 

@@ -16,7 +16,7 @@
 use actix_web::{
     dev::{forward_ready, Service, ServiceRequest, ServiceResponse, Transform},
     error::ErrorTooManyRequests,
-    Error,
+    Error, HttpMessage,
 };
 use futures_util::future::LocalBoxFuture;
 use governor::Quota;

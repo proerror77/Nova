@@ -920,8 +920,7 @@ async fn main() -> std::io::Result<()> {
             // In non-production environments (staging/development), we allow the
             // gRPC server to start without TLS so the environment remains usable.
             let app_env = std::env::var("APP_ENV").unwrap_or_else(|_| "development".to_string());
-            let env_lower = app_env.to_ascii_lowercase();
-            let tls_required_env = matches!(env_lower.as_str(), "production" | "staging");
+            let is_production_env = app_env.eq_ignore_ascii_case("production");
 
             // Try to load TLS config from environment
             let tls_config = match grpc_tls::GrpcServerTlsConfig::from_env() {
@@ -933,9 +932,9 @@ async fn main() -> std::io::Result<()> {
                     Some(config)
                 }
                 Err(e) => {
-                    if tls_required_env {
+                    if is_production_env {
                         tracing::error!(
-                            "Production/Staging requires mTLS - GRPC_SERVER_CERT_PATH must be set: {}",
+                            "Production requires mTLS - GRPC_SERVER_CERT_PATH must be set: {}",
                             e
                         );
                         return;
@@ -943,7 +942,7 @@ async fn main() -> std::io::Result<()> {
 
                     tracing::warn!(
                         "mTLS disabled - TLS config not found for env '{}': {}. \
-                         Starting gRPC server without TLS (development only).",
+                         Starting gRPC server without TLS (non-production only).",
                         app_env,
                         e
                     );
@@ -962,9 +961,9 @@ async fn main() -> std::io::Result<()> {
                             tracing::info!("gRPC server TLS configured successfully");
                         }
                         Err(e) => {
-                            if tls_required_env {
+                            if is_production_env {
                                 tracing::error!(
-                                    "Failed to configure TLS on gRPC server in production/staging: {}",
+                                    "Failed to configure TLS on gRPC server in production: {}",
                                     e
                                 );
                                 return;
@@ -972,16 +971,16 @@ async fn main() -> std::io::Result<()> {
 
                             tracing::warn!(
                                 "Failed to configure TLS on gRPC server in env '{}': {}. \
-                                 Falling back to non-TLS for development.",
+                                 Falling back to non-TLS for this environment.",
                                 app_env,
                                 e
                             );
                         }
                     },
                     Err(e) => {
-                        if tls_required_env {
+                        if is_production_env {
                             tracing::error!(
-                                "Failed to build server TLS config in production/staging: {}",
+                                "Failed to build server TLS config in production: {}",
                                 e
                             );
                             return;
@@ -989,7 +988,7 @@ async fn main() -> std::io::Result<()> {
 
                         tracing::warn!(
                             "Failed to build server TLS config in env '{}': {}. \
-                             Falling back to non-TLS for development.",
+                             Falling back to non-TLS for this environment.",
                             app_env,
                             e
                         );

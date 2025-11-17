@@ -187,6 +187,8 @@ impl TestEnvironment {
             "./backend/events-service/migrations",
             "./backend/search-service/migrations",
             "./backend/feed-service/migrations",
+            "./backend/streaming-service/migrations",
+            "./backend/cdn-service/migrations",
         ];
 
         for path in migration_paths {

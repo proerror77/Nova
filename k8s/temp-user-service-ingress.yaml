@@ -1,0 +1,47 @@
+---
+# Temporary Ingress to expose user-service directly via AWS ALB
+# This allows immediate API access while GraphQL Gateway is being built
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: nova-api-temp
+  namespace: nova
+  annotations:
+    # AWS ALB configuration
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}]'
+
+    # CORS configuration via ALB response headers
+    alb.ingress.kubernetes.io/actions.response-headers: |
+      {
+        "type": "fixed-response",
+        "fixedResponseConfig": {
+          "statusCode": "200"
+        }
+      }
+
+    # Health check
+    alb.ingress.kubernetes.io/healthcheck-path: /health
+    alb.ingress.kubernetes.io/healthcheck-interval-seconds: '15'
+    alb.ingress.kubernetes.io/healthcheck-timeout-seconds: '5'
+    alb.ingress.kubernetes.io/healthy-threshold-count: '2'
+    alb.ingress.kubernetes.io/unhealthy-threshold-count: '2'
+
+  labels:
+    app: nova-api
+    component: temp-ingress
+
+spec:
+  ingressClassName: alb
+  rules:
+    - http:
+        paths:
+          # All API requests go to user-service
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: user-service
+                port:
+                  number: 8080

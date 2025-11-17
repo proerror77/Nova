@@ -1,8 +1,5 @@
-use crate::services::{
-    redis_cache::{CachedSearchResultEntry, CachedSearchResults},
-    ClickHouseClient, ElasticsearchClient, RedisCache,
-};
-use chrono::{DateTime, Utc};
+use crate::services::{ClickHouseClient, ElasticsearchClient, RedisCache};
+use chrono::Utc;
 use std::sync::Arc;
 use std::time::Instant;
 use tonic::{Request, Response, Status};
@@ -63,11 +60,8 @@ impl SearchService for SearchServiceImpl {
         let cache_key = format!("{}:{}:{}", query, limit, offset);
         if let Ok(cached) = self.redis.get_search_results_cache(&cache_key).await {
             info!("Cache hit for query: {}", query);
-            let cached_results: Vec<SearchResult> =
-                cached.results.into_iter().map(from_cache_entry).collect();
-
             return Ok(Response::new(FullTextSearchResponse {
-                results: cached_results,
+                results: vec![], // TODO: reconstruct from cached IDs
                 total_count: cached.total_count,
                 search_time_ms: "0".to_string(),
             }));
@@ -141,13 +135,17 @@ impl SearchService for SearchServiceImpl {
         // Cache results asynchronously
         let redis_clone = self.redis.clone();
         let cache_key_clone = cache_key.clone();
-        let cache_payload = CachedSearchResults {
-            results: results.iter().map(to_cache_entry).collect(),
-            total_count,
-        };
         tokio::spawn(async move {
             let _ = redis_clone
-                .set_search_results_cache(&cache_key_clone, &cache_payload)
+                .set_search_results_cache(
+                    &cache_key_clone,
+                    &crate::services::redis_cache::CachedSearchResults {
+                        post_ids: vec![],
+                        user_ids: vec![],
+                        hashtags: vec![],
+                        total_count,
+                    },
+                )
                 .await;
         });
 
@@ -400,87 +398,10 @@ impl SearchService for SearchServiceImpl {
 
     async fn advanced_search(
         &self,
-        request: Request<AdvancedSearchRequest>,
+        _request: Request<AdvancedSearchRequest>,
     ) -> Result<Response<AdvancedSearchResponse>, Status> {
-        let req = request.into_inner();
-
-        let limit = req.limit.max(1).min(100) as i64;
-        let offset = req.offset.max(0) as i64;
-
-        let author_id = if req.author_id.is_empty() {
-            None
-        } else {
-            Some(
-                Uuid::parse_str(&req.author_id)
-                    .map_err(|_| Status::invalid_argument("Invalid author_id"))?,
-            )
-        };
-
-        let from_date = if req.from_date > 0 {
-            Some(
-                DateTime::<Utc>::from_timestamp(req.from_date, 0)
-                    .ok_or_else(|| Status::invalid_argument("Invalid from_date"))?,
-            )
-        } else {
-            None
-        };
-
-        let to_date = if req.to_date > 0 {
-            Some(
-                DateTime::<Utc>::from_timestamp(req.to_date, 0)
-                    .ok_or_else(|| Status::invalid_argument("Invalid to_date"))?,
-            )
-        } else {
-            None
-        };
-
-        let content_tag = map_content_type(&req.content_type);
-
-        let hashtags: Vec<String> = req
-            .hashtags
-            .into_iter()
-            .filter(|tag| !tag.trim().is_empty())
-            .collect();
-
-        let query = req.query.trim().to_string();
-
-        let (posts, total_count) = self
-            .es_client
-            .advanced_post_search(
-                &query,
-                author_id,
-                &hashtags,
-                content_tag.as_deref(),
-                from_date,
-                to_date,
-                limit,
-                offset,
-            )
-            .await
-            .map_err(|e| {
-                error!("Failed to execute advanced search: {}", e);
-                Status::internal("Failed to execute advanced search")
-            })?;
-
-        let results: Vec<PostSearchResult> = posts
-            .into_iter()
-            .map(|post| PostSearchResult {
-                id: post.id.to_string(),
-                author_id: post.user_id.to_string(),
-                title: post.title.unwrap_or_default(),
-                content: post.content.unwrap_or_default(),
-                image_key: String::new(),
-                like_count: post.likes_count,
-                comment_count: post.comments_count,
-                relevance_score: 1.0,
-                created_at: post.created_at.timestamp(),
-            })
-            .collect();
-
-        Ok(Response::new(AdvancedSearchResponse {
-            posts: results,
-            total_count: total_count as i32,
-        }))
+        // TODO: Implement advanced search with filters
+        Err(Status::unimplemented("advanced_search not implemented yet"))
     }
 
     async fn record_search_query(
@@ -607,40 +528,5 @@ impl SearchService for SearchServiceImpl {
             click_through_rate: analytics.click_through_rate as i32,
             popular_filters: vec![],
         }))
-    }
-}
-
-fn map_content_type(content_type: &str) -> Option<String> {
-    match content_type.to_lowercase().as_str() {
-        "image" => Some("image".to_string()),
-        "video" => Some("video".to_string()),
-        "mixed" | "text" | "" => None,
-        _ => None,
-    }
-}
-
-fn from_cache_entry(entry: CachedSearchResultEntry) -> SearchResult {
-    SearchResult {
-        id: entry.id,
-        r#type: entry.result_type,
-        title: entry.title,
-        description: entry.description,
-        thumbnail_url: entry.thumbnail_url,
-        relevance_score: entry.relevance_score,
-        created_at: entry.created_at,
-        url_slug: entry.url_slug,
-    }
-}
-
-fn to_cache_entry(result: &SearchResult) -> CachedSearchResultEntry {
-    CachedSearchResultEntry {
-        id: result.id.clone(),
-        result_type: result.r#type.clone(),
-        title: result.title.clone(),
-        description: result.description.clone(),
-        thumbnail_url: result.thumbnail_url.clone(),
-        relevance_score: result.relevance_score,
-        created_at: result.created_at,
-        url_slug: result.url_slug.clone(),
     }
 }

@@ -34,6 +34,8 @@ patches:
 images:
   - name: nova-auth-service
     newTag: v1.0.0
+  - name: nova-user-service
+    newTag: v1.0.0
   - name: nova-content-service
     newTag: v1.0.0
   - name: nova-feed-service
@@ -44,7 +46,11 @@ images:
     newTag: v1.0.0
   - name: nova-search-service
     newTag: v1.0.0
+  - name: nova-streaming-service
+    newTag: v1.0.0
   - name: nova-notification-service
+    newTag: v1.0.0
+  - name: nova-cdn-service
     newTag: v1.0.0
   - name: nova-events-service
     newTag: v1.0.0

@@ -110,13 +110,13 @@
 | Proto 文件 | 服务 | 核心方法 |
 |-----------|------|---------|
 | [`identity_service.proto`](../proto/services_v2/identity_service.proto) | Identity | Register, Login, VerifyToken, RefreshToken |
+| [`user_service.proto`](../proto/services_v2/user_service.proto) | User | GetUser, UpdateProfile, GetSettings |
 | [`content_service.proto`](../proto/services_v2/content_service.proto) | Content | CreatePost, GetPost, CreateComment |
 | [`social_service.proto`](../proto/services_v2/social_service.proto) | Social | FollowUser, LikeContent, GetUserFeed |
 | [`media_service.proto`](../proto/services_v2/media_service.proto) | Media | InitiateUpload, TranscodeVideo, GetStreamingUrl |
-| [`events_service.proto`](../proto/services_v2/events_service.proto) | Analytics | PublishEvent, Subscribe, GetEventHistory |
+| [`communication_service.proto`](../proto/services_v2/communication_service.proto) | Communication | SendMessage, SendNotification |
+| [`events_service.proto`](../proto/services_v2/events_service.proto) | Events | PublishEvent, Subscribe, GetEventHistory |
 | [`search_service.proto`](../proto/services_v2/search_service.proto) | Search | SearchContent, SearchUsers, GetTrendingTopics |
-| [`graph_service.proto`](../proto/services/graph_service.proto) | Graph | FollowGraph, SuggestedUsers |
-| [`feed_service.proto`](../proto/services/feed_service.proto) | Feed | GetRecommendations, GetTrending |
 
 **特点**:
 - ✅ 清晰的服务边界 (无重叠)

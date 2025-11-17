@@ -8,7 +8,7 @@ set -euo pipefail
 #
 # Usage:
 #   scripts/aws/setup_env.sh [-p PROFILE] [-r REGION] [-b BUCKET] [-c CLOUDFRONT_URL] \
-#                            [--media-grpc URL]
+#                            [--media-grpc URL] [--service user|media|both]
 #
 # Examples:
 #   scripts/aws/setup_env.sh -p default -r ap-northeast-1 -b nova-media-bucket \
@@ -19,6 +19,7 @@ REGION=""
 BUCKET=""
 CLOUDFRONT_URL=""
 MEDIA_GRPC_URL="http://127.0.0.1:9082"
+SERVICE_TARGET="both" # user | media | both
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -27,6 +28,7 @@ while [[ $# -gt 0 ]]; do
     -b|--bucket) BUCKET="$2"; shift 2;;
     -c|--cloudfront) CLOUDFRONT_URL="$2"; shift 2;;
     --media-grpc) MEDIA_GRPC_URL="$2"; shift 2;;
+    --service) SERVICE_TARGET="$2"; shift 2;;
     *) echo "Unknown arg: $1" >&2; exit 2;;
   esac
 done
@@ -83,11 +85,22 @@ gen_env_file() {
   echo "    Wrote $outfile"
 }
 
-echo "[4/5] Writing media-service .env ..."
-gen_env_file "backend/media-service"
+echo "[4/5] Writing .env files..."
+case "$SERVICE_TARGET" in
+  user)
+    gen_env_file "backend/user-service" ;;
+  media)
+    gen_env_file "backend/media-service" ;;
+  both)
+    gen_env_file "backend/user-service"
+    gen_env_file "backend/media-service" ;;
+  *)
+    echo "Unknown service target: $SERVICE_TARGET" >&2; rm -f "$TMP_ENV"; exit 2;;
+esac
 
 echo "[5/5] Done. Next steps:"
-echo "  - Review backend/media-service/.env contents"
-echo "  - Start media-service with the generated environment"
+echo "  - Review backend/*-service/.env contents"
+echo "  - Start services with those environments loaded"
 
 rm -f "$TMP_ENV"
+

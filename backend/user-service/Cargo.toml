@@ -1,0 +1,265 @@
+[package]
+name = "user-service"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "user-service"
+path = "src/main.rs"
+
+# [[bin]]
+# name = "job_worker"
+# path = "src/bin/job_worker.rs"
+# Note: Enable when job_worker.rs is introduced
+
+# Disabled: migrated to separate service
+# [[bin]]
+# name = "graph_backfill"
+# path = "src/bin/graph_backfill.rs"
+
+[lib]
+name = "user_service"
+path = "src/lib.rs"
+
+[features]
+default = []
+legacy_posts_tests = []
+legacy_video_tests = []
+legacy_recommendation_tests = []
+legacy_security_tests = []
+legacy_auth_tests = []
+legacy_messaging_tests = []
+legacy_internal_tests = []
+
+[dependencies]
+# Workspace dependencies
+actix-web.workspace = true
+actix-rt.workspace = true
+actix-cors.workspace = true
+actix = "0.13"
+actix-web-actors = "4.3"
+actix-http = "3.9"
+tokio.workspace = true
+sqlx.workspace = true
+redis.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+uuid.workspace = true
+chrono.workspace = true
+dotenv.workspace = true
+envy.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+tracing-actix-web.workspace = true
+thiserror.workspace = true
+anyhow.workspace = true
+argon2.workspace = true
+jsonwebtoken.workspace = true
+rand.workspace = true
+validator.workspace = true
+governor.workspace = true
+prometheus.workspace = true
+sha1.workspace = true
+sha2.workspace = true
+hex.workspace = true
+mime.workspace = true
+base64.workspace = true
+aes-gcm.workspace = true
+rdkafka.workspace = true
+async-trait.workspace = true
+reqwest.workspace = true
+urlencoding.workspace = true
+clickhouse.workspace = true
+hmac.workspace = true
+qrcode.workspace = true
+aws-config = "1.1"
+aws-sdk-s3 = "1.11"
+
+# Service-specific dependencies
+futures = "0.3"
+futures-util = "0.3"
+lazy_static = "1.4"
+actix-multipart = "0.4"
+num_cpus = "1.16"
+# neo4rs = "0.8"  # REMOVED - graph logic moved to graph-service (port 9080)
+tokio-stream = "0.1"
+regex = "1"
+redis-utils = { path = "../libs/redis-utils" }
+db-pool = { path = "../libs/db-pool" }
+url = "2"
+dashmap = "5.5"
+
+# Phase 4: Video Processing & gRPC
+tonic.workspace = true
+tonic-health.workspace = true
+prost.workspace = true
+ndarray = "0.15"
+http = "0.2"
+
+# ONNX Model Serving
+tract-onnx = "0.21"
+once_cell = "1.19"
+
+# Swagger/OpenAPI
+utoipa.workspace = true
+
+# Resilience (P0-5)
+resilience = { path = "../libs/resilience" }
+
+# TLS/mTLS (P0-1)
+grpc-tls = { path = "../libs/grpc-tls" }
+
+# Shared libraries
+error-types = { path = "../libs/error-types" }
+nova-fcm-shared = { path = "../libs/nova-fcm-shared" }
+grpc-metrics = { path = "../libs/grpc-metrics" }
+grpc-clients = { path = "../libs/grpc-clients" }
+transactional-outbox = { path = "../libs/transactional-outbox" }
+grpc-health = { path = "../libs/grpc-health" }
+
+[build-dependencies]
+tonic-build = "0.12"
+
+[dev-dependencies]
+tokio-test = "0.4"
+mockall = "0.12"
+actix-http = "3.9"
+tempfile = "3.8"
+testcontainers = "0.17"
+
+[[test]]
+name = "posts_test"
+path = "tests/posts_test.rs"
+required-features = ["legacy_posts_tests"]
+
+# Disabled: OAuth migrated to auth-service
+# [[test]]
+# name = "oauth_test"
+# path = "tests/oauth_test.rs"
+# required-features = ["legacy_auth_tests"]
+
+# [[test]]
+# name = "oauth_token_verification_test"
+# path = "tests/oauth_token_verification_test.rs"
+
+# Disabled: job functionality migrated
+# [[test]]
+# name = "job_test"
+# path = "tests/job_test.rs"
+
+[[test]]
+name = "security_test"
+path = "tests/integration/security_test.rs"
+required-features = ["legacy_security_tests"]
+
+# Disabled: load test obsolete
+# [[test]]
+# name = "load_test"
+# path = "tests/integration/load_test.rs"
+
+[[test]]
+name = "2fa_test"
+path = "tests/2fa_test.rs"
+required-features = ["legacy_security_tests"]
+
+[[test]]
+name = "events_integration_test"
+path = "tests/integration/events_integration_test.rs"
+
+[[test]]
+name = "events_dedup_test"
+path = "tests/integration/events_dedup_test.rs"
+
+[[test]]
+name = "events_advanced_test"
+path = "tests/integration/events_advanced_test.rs"
+
+# Disabled: events load test obsolete
+# [[test]]
+# name = "events_load_test"
+# path = "tests/performance/events_load_test.rs"
+
+# Phase 6: Video System Tests - DISABLED (migrated to media-service)
+# All video-related tests below are disabled as video processing moved to media-service
+
+# # Unit Tests (T131-T133)
+# # [[test]]
+# # name = "video_metadata_tests"
+# # path = "tests/unit/video/video_metadata_tests.rs"
+# # required-features = ["legacy_video_tests"]
+
+# # [[test]]
+# # name = "video_ranking_tests"
+# # path = "tests/unit/video/video_ranking_tests.rs"
+# # required-features = ["legacy_video_tests"]
+
+# # [[test]]
+# # name = "embedding_tests"
+# # path = "tests/unit/video/embedding_tests.rs"
+# # required-features = ["legacy_video_tests"]
+
+# # [[test]]
+# # name = "feature_extraction_test"
+# # path = "tests/unit/video/feature_extraction_test.rs"
+# # required-features = ["legacy_video_tests"]
+
+# # Integration Tests (T134-T137)
+# # [[test]]
+# # name = "video_e2e_tests"
+# # path = "tests/integration/video/video_e2e_tests.rs"
+# # required-features = ["legacy_video_tests"]
+
+# # [[test]]
+# # name = "video_ranking_integration_tests"
+# # path = "tests/integration/video/video_ranking_integration_tests.rs"
+# # required-features = ["legacy_video_tests"]
+
+# # [[test]]
+# # name = "video_streaming_engagement_tests"
+# # path = "tests/integration/video/video_streaming_engagement_tests.rs"
+# # required-features = ["legacy_video_tests"]
+
+# # Performance Tests (T138-T141)
+# # [[test]]
+# # name = "video_ranking_latency_test"
+# # path = "tests/performance/video/video_ranking_latency_test.rs"
+# # required-features = ["legacy_video_tests"]
+
+# # [[test]]
+# # name = "video_transcoding_throughput_test"
+# # path = "tests/performance/video/video_transcoding_throughput_test.rs"
+# # required-features = ["legacy_video_tests"]
+
+# # [[test]]
+# # name = "video_model_inference_test"
+# # path = "tests/performance/video/video_model_inference_test.rs"
+# # required-features = ["legacy_video_tests"]
+
+# # [[test]]
+# # name = "video_bitrate_switching_test"
+# # path = "tests/performance/video/video_bitrate_switching_test.rs"
+# # required-features = ["legacy_video_tests"]
+
+[[test]]
+name = "social_graph_tests"
+path = "tests/integration/social_graph_tests.rs"
+
+[[test]]
+name = "neo4j_suggest_tests"
+path = "tests/integration/neo4j_suggest_tests.rs"
+
+# Disabled: streaming moved to separate service
+# [[test]]
+# name = "streaming_integration_test"
+# path = "tests/streaming_integration_test.rs"
+
+[[test]]
+name = "cache_test"
+path = "tests/integration/cache_test.rs"
+
+[[test]]
+name = "circuit_breaker_test"
+path = "tests/integration/circuit_breaker_test.rs"

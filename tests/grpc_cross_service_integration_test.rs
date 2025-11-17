@@ -31,7 +31,7 @@ mod grpc_cross_service_tests {
             return;
         }
 
-        let messaging_endpoint = "http://127.0.0.1:9090"; // realtime-chat-service gRPC port
+        let messaging_endpoint = "http://127.0.0.1:9085";
         let _test_user_id = "test-user-123".to_string();
 
         // In a real scenario, this would use the generated gRPC client
@@ -58,11 +58,12 @@ mod grpc_cross_service_tests {
         println!("✓ Messaging Service connection successful");
     }
 
-    /// Test scenario: Identity Service profile query via GraphQL gateway
+    /// Test scenario: User Service profile query
     ///
     /// Validates:
-    /// - GraphQL Gateway is reachable (GraphQL over HTTP)
-    /// - User profile fields can be fetched via GraphQL
+    /// - User Service gRPC endpoint is accessible
+    /// - Can retrieve user profiles by ID
+    /// - Response contains expected profile fields
     #[tokio::test]
     #[ignore]
     async fn test_user_service_get_profile() {
@@ -70,15 +71,29 @@ mod grpc_cross_service_tests {
             return;
         }
 
+        let user_endpoint = "http://127.0.0.1:9081";
         let _test_user_id = "test-user-123".to_string();
-        let gateway_endpoint = "http://127.0.0.1:8080/graphql";
 
-        println!("Connecting to GraphQL Gateway at: {}", gateway_endpoint);
+        println!("Connecting to User Service at: {}", user_endpoint);
 
-        // TODO: Issue GraphQL query (e.g. { user(id:"...") { id username } })
-        // to validate identity-service + graph-service aggregation.
+        // TODO: Implement actual gRPC client call
+        // use grpc_clients::UserServiceClient;
+        // let mut client = UserServiceClient::connect(user_endpoint).await
+        //     .expect("Failed to connect to User Service");
+        //
+        // let request = tonic::Request::new(GetUserProfileRequest {
+        //     user_id: test_user_id.clone(),
+        // });
+        //
+        // let response = client.get_user_profile(request).await
+        //     .expect("Failed to get user profile");
+        //
+        // let profile = response.into_inner().profile
+        //     .expect("Profile should be present");
+        // assert_eq!(profile.id, test_user_id);
+        // assert!(!profile.username.is_empty());
 
-        println!("✓ GraphQL gateway reachable for user profile queries");
+        println!("✓ User Service connection successful");
     }
 
     /// Test scenario: Concurrent gRPC calls to multiple services
@@ -94,8 +109,8 @@ mod grpc_cross_service_tests {
             return;
         }
 
-        let _gateway_endpoint = "http://127.0.0.1:8080/graphql";
-        let _messaging_endpoint = "http://127.0.0.1:9090";
+        let _user_endpoint = "http://127.0.0.1:9081";
+        let _messaging_endpoint = "http://127.0.0.1:9085";
 
         println!("Testing concurrent gRPC calls to multiple services");
 

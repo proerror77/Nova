@@ -15,6 +15,7 @@
 //!
 //! # Against local environment (port-forwarded)
 //! kubectl port-forward -n nova svc/auth-service 8080:8080 &
+//! kubectl port-forward -n nova svc/user-service 8081:8080 &
 //! kubectl port-forward -n nova svc/content-service 8082:8080 &
 //! kubectl port-forward -n nova svc/messaging-service 8085:8080 &
 //! E2E_ENV=local cargo test --test e2e_real_services_test -- --nocapture --test-threads=1
@@ -28,6 +29,7 @@ use uuid::Uuid;
 /// Test environment configuration
 struct E2EConfig {
     auth_service_url: String,
+    user_service_url: String,
     content_service_url: String,
     messaging_service_url: String,
 }
@@ -39,6 +41,7 @@ impl E2EConfig {
         match env.as_str() {
             "staging" => Self {
                 auth_service_url: "http://auth-service.nova.svc.cluster.local:8080".to_string(),
+                user_service_url: "http://user-service.nova.svc.cluster.local:8080".to_string(),
                 content_service_url: "http://content-service.nova.svc.cluster.local:8080"
                     .to_string(),
                 messaging_service_url: "http://messaging-service.nova.svc.cluster.local:8080"
@@ -46,6 +49,7 @@ impl E2EConfig {
             },
             "local" => Self {
                 auth_service_url: "http://127.0.0.1:8080".to_string(),
+                user_service_url: "http://127.0.0.1:8081".to_string(),
                 content_service_url: "http://127.0.0.1:8082".to_string(),
                 messaging_service_url: "http://127.0.0.1:8085".to_string(),
             },
@@ -75,6 +79,18 @@ struct LoginResponse {
     refresh_token: String,
     user_id: String,
     expires_in: u64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct UserProfile {
+    id: String,
+    username: String,
+    display_name: String,
+    bio: Option<String>,
+    avatar_url: Option<String>,
+    is_verified: bool,
+    follower_count: i32,
+    following_count: i32,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -136,6 +152,32 @@ async fn login(config: &E2EConfig, email: &str, password: &str) -> LoginResponse
         .expect("Failed to parse login response")
 }
 
+/// Helper: Get user profile
+async fn get_user_profile(config: &E2EConfig, user_id: &str, access_token: &str) -> UserProfile {
+    let client = create_client();
+
+    let response = client
+        .get(&format!(
+            "{}/api/v1/users/{}",
+            config.user_service_url, user_id
+        ))
+        .bearer_auth(access_token)
+        .send()
+        .await
+        .expect("Failed to get user profile");
+
+    assert!(
+        response.status().is_success(),
+        "Get user profile failed: {}",
+        response.status()
+    );
+
+    response
+        .json::<UserProfile>()
+        .await
+        .expect("Failed to parse user profile")
+}
+
 /// Test 1: Authentication flow with real auth-service
 #[tokio::test]
 #[ignore]
@@ -165,6 +207,73 @@ async fn test_e2e_01_authentication_flow() {
     assert_ne!(alice_login.access_token, bob_login.access_token);
     println!("✓ Tokens are unique");
 
+    println!("=== Test Passed ===\n");
+}
+
+/// Test 2: User profile retrieval via user-service
+#[tokio::test]
+#[ignore]
+async fn test_e2e_02_user_profile_retrieval() {
+    let config = E2EConfig::from_env();
+
+    println!("=== E2E Test: User Profile Retrieval ===");
+
+    // Login as Alice
+    let alice_login = login(&config, TEST_USER_ALICE, TEST_PASSWORD).await;
+
+    // Get Alice's profile
+    println!("Fetching Alice's profile...");
+    let alice_profile = get_user_profile(&config, ALICE_ID, &alice_login.access_token).await;
+
+    assert_eq!(alice_profile.id, ALICE_ID);
+    assert_eq!(alice_profile.username, "alice_test");
+    assert_eq!(alice_profile.display_name, "Alice Smith");
+    assert!(alice_profile.is_verified);
+    println!("✓ Alice's profile retrieved:");
+    println!("  Username: {}", alice_profile.username);
+    println!("  Display name: {}", alice_profile.display_name);
+    println!("  Followers: {}", alice_profile.follower_count);
+
+    // Get Bob's profile (via Alice's token)
+    println!("Fetching Bob's profile (via Alice's token)...");
+    let bob_profile = get_user_profile(&config, BOB_ID, &alice_login.access_token).await;
+
+    assert_eq!(bob_profile.id, BOB_ID);
+    assert_eq!(bob_profile.username, "bob_test");
+    println!("✓ Bob's profile retrieved:");
+    println!("  Username: {}", bob_profile.username);
+    println!("  Followers: {}", bob_profile.follower_count);
+
+    println!("=== Test Passed ===\n");
+}
+
+/// Test 3: Cross-service data consistency (follow relationship)
+#[tokio::test]
+#[ignore]
+async fn test_e2e_03_follow_relationship_consistency() {
+    let config = E2EConfig::from_env();
+
+    println!("=== E2E Test: Follow Relationship Consistency ===");
+
+    let alice_login = login(&config, TEST_USER_ALICE, TEST_PASSWORD).await;
+
+    // Get Alice's profile (should show she's following 2 users from seed data)
+    let alice_profile = get_user_profile(&config, ALICE_ID, &alice_login.access_token).await;
+    println!("Alice's following count: {}", alice_profile.following_count);
+    assert!(
+        alice_profile.following_count >= 2,
+        "Alice should be following at least 2 users from seed data"
+    );
+
+    // Get Bob's profile (Alice follows Bob, so Bob's follower count should include Alice)
+    let bob_profile = get_user_profile(&config, BOB_ID, &alice_login.access_token).await;
+    println!("Bob's follower count: {}", bob_profile.follower_count);
+    assert!(
+        bob_profile.follower_count >= 1,
+        "Bob should have at least 1 follower (Alice)"
+    );
+
+    println!("✓ Follow relationships are consistent");
     println!("=== Test Passed ===\n");
 }
 
@@ -374,7 +483,8 @@ async fn test_e2e_00_health_checks() {
     println!("=== E2E Test: Health Checks ===");
 
     let services = vec![
-        ("identity-service", &config.auth_service_url),
+        ("auth-service", &config.auth_service_url),
+        ("user-service", &config.user_service_url),
         ("content-service", &config.content_service_url),
         ("messaging-service", &config.messaging_service_url),
     ];

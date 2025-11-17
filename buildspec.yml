@@ -27,7 +27,7 @@ phases:
       # 创建 ECR 仓库（如果不存在）
       - echo "📦 确保 ECR 仓库存在..."
       - |
-        for service in auth-service content-service feed-service media-service messaging-service search-service; do
+        for service in auth-service user-service content-service feed-service media-service messaging-service search-service streaming-service; do
           aws ecr describe-repositories --repository-names "$ECR_REGISTRY_ALIAS/$service" --region $AWS_REGION 2>/dev/null || \
           aws ecr create-repository --repository-name "$ECR_REGISTRY_ALIAS/$service" --region $AWS_REGION
         done
@@ -42,11 +42,13 @@ phases:
       - |
         SERVICES=(
           "auth-service"
+          "user-service"
           "content-service"
           "feed-service"
           "media-service"
           "messaging-service"
           "search-service"
+          "streaming-service"
         )
 
         ECR_REGISTRY="$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com"

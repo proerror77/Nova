@@ -118,11 +118,10 @@ aws ecr get-login-password --region us-east-1 | \
   docker login --username AWS --password-stdin \
   ${AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com
 
-# 構建並推送所有現役服務
-for service in identity-service content-service feed-service \
-               media-service messaging-service search-service realtime-chat-service \
-               notification-service analytics-service graph-service feature-store \
-               trust-safety-service; do
+# 構建並推送所有服務
+for service in auth-service user-service content-service feed-service \
+               media-service messaging-service search-service streaming-service \
+               notification-service cdn-service events-service; do
   docker build \
     --build-arg SERVICE_NAME=$service \
     -f backend/Dockerfile.template \
@@ -137,10 +136,9 @@ done
 
 ```bash
 # 更新 ECS 服務（強制新部署）
-for service in identity-service content-service feed-service \
-               media-service messaging-service search-service realtime-chat-service \
-               notification-service analytics-service graph-service feature-store \
-               trust-safety-service; do
+for service in auth-service user-service content-service feed-service \
+               media-service messaging-service search-service streaming-service \
+               notification-service cdn-service events-service; do
   aws ecs update-service \
     --cluster nova-staging \
     --service nova-$service \

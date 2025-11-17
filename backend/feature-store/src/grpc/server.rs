@@ -1,5 +1,5 @@
 // gRPC server implementation for FeatureStore service
-use crate::services::{near_line::NearLineFeatureService, online::OnlineFeatureStore};
+use crate::services::online::OnlineFeatureStore;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tonic::{Request, Response, Status};
@@ -17,18 +17,11 @@ use feature_store::*;
 #[derive(Clone)]
 pub struct AppState {
     pub online_store: Arc<OnlineFeatureStore>,
-    pub near_line_store: Arc<NearLineFeatureService>,
 }
 
 impl AppState {
-    pub fn new(
-        online_store: Arc<OnlineFeatureStore>,
-        near_line_store: Arc<NearLineFeatureService>,
-    ) -> Self {
-        Self {
-            online_store,
-            near_line_store,
-        }
+    pub fn new(online_store: Arc<OnlineFeatureStore>) -> Self {
+        Self { online_store }
     }
 }
 
@@ -165,20 +158,6 @@ impl FeatureStoreImpl {
             .get("correlation-id")
             .and_then(|v| v.to_str().ok())
             .map(|s| s.to_string())
-    }
-
-    fn convert_feature_type_proto(ft: crate::models::FeatureType) -> i32 {
-        use crate::models::FeatureType as InternalType;
-        use feature_store::FeatureType as ProtoType;
-
-        match ft {
-            InternalType::Double => ProtoType::Double as i32,
-            InternalType::Int => ProtoType::Int as i32,
-            InternalType::String => ProtoType::String as i32,
-            InternalType::Bool => ProtoType::Bool as i32,
-            InternalType::DoubleList => ProtoType::DoubleList as i32,
-            InternalType::Timestamp => ProtoType::Timestamp as i32,
-        }
     }
 }
 
@@ -465,35 +444,11 @@ impl FeatureStore for FeatureStoreImpl {
             req.entity_type, req.feature_name
         );
 
-        let metadata = self
-            .state
-            .near_line_store
-            .get_feature_metadata(&req.entity_type, &req.feature_name)
-            .await
-            .map_err(|e| {
-                error!(
-                    entity_type = %req.entity_type,
-                    feature_name = %req.feature_name,
-                    error = %e,
-                    "Failed to load feature metadata"
-                );
-                Status::internal("Failed to load feature metadata")
-            })?;
-
-        let definition = metadata.ok_or_else(|| {
-            Status::not_found(format!(
-                "Feature {} not found for entity type {}",
-                req.feature_name, req.entity_type
-            ))
-        })?;
-
-        Ok(Response::new(GetFeatureMetadataResponse {
-            feature_name: definition.name,
-            r#type: Self::convert_feature_type_proto(definition.feature_type),
-            ttl_seconds: definition.default_ttl_seconds,
-            last_updated_timestamp: definition.updated_at.timestamp(),
-            description: definition.description.unwrap_or_default(),
-        }))
+        // TODO: Implement metadata retrieval from PostgreSQL
+        // For now, return unimplemented
+        Err(Status::unimplemented(
+            "get_feature_metadata not yet implemented - requires PostgreSQL integration",
+        ))
     }
 }
 

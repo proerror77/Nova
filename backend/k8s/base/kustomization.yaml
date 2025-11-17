@@ -7,6 +7,7 @@ resources:
   - namespace.yaml
   - configmap.yaml
   - identity-service.yaml
+  - user-service.yaml
   - content-service.yaml
   - feed-service.yaml
   - graph-service.yaml

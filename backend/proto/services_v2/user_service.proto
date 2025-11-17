@@ -1,0 +1,237 @@
+syntax = "proto3";
+package nova.user.v1;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/empty.proto";
+import "google/protobuf/wrappers.proto";
+
+// ============================================================================
+// User Service - User Profiles & Settings
+//
+// Owns: users, user_profiles, user_settings, roles, permissions
+// Responsibilities:
+//   - User profile management
+//   - User settings and preferences
+//   - User roles and permissions
+//   - User metadata
+//
+// Does NOT own: authentication data (belongs to identity-service)
+// ============================================================================
+
+service UserService {
+  // ========== Profile Management ==========
+  rpc GetUser(GetUserRequest) returns (GetUserResponse);
+  rpc GetUsersByIds(GetUsersByIdsRequest) returns (GetUsersByIdsResponse);
+  rpc GetUserByUsername(GetUserByUsernameRequest) returns (GetUserResponse);
+  rpc UpdateProfile(UpdateProfileRequest) returns (UpdateProfileResponse);
+  rpc DeleteUser(DeleteUserRequest) returns (google.protobuf.Empty);
+
+  // ========== Settings ==========
+  rpc GetSettings(GetSettingsRequest) returns (GetSettingsResponse);
+  rpc UpdateSettings(UpdateSettingsRequest) returns (UpdateSettingsResponse);
+
+  // ========== User Search ==========
+  rpc SearchUsers(SearchUsersRequest) returns (SearchUsersResponse);
+
+  // ========== Verification ==========
+  rpc VerifyUser(VerifyUserRequest) returns (google.protobuf.Empty);
+  rpc UnverifyUser(UnverifyUserRequest) returns (google.protobuf.Empty);
+
+  // ========== Admin Operations ==========
+  rpc BanUser(BanUserRequest) returns (google.protobuf.Empty);
+  rpc UnbanUser(UnbanUserRequest) returns (google.protobuf.Empty);
+}
+
+// ============================================================================
+// Messages
+// ============================================================================
+
+// -------- User Model --------
+message User {
+  string id = 1;                  // UUID
+  string username = 2;            // Unique username
+  string email = 3;               // Email (from identity-service)
+  string display_name = 4;        // Display name
+  string bio = 5;                 // User biography
+  string avatar_url = 6;          // Avatar image URL
+  string cover_url = 7;           // Cover image URL
+  string website = 8;             // Personal website
+  string location = 9;            // Geographic location
+  bool is_verified = 10;          // Verified badge
+  bool is_private = 11;           // Private account
+  bool is_banned = 12;            // Account banned
+  int32 follower_count = 13;      // Number of followers
+  int32 following_count = 14;     // Number following
+  int32 post_count = 15;          // Number of posts
+  google.protobuf.Timestamp created_at = 16;
+  google.protobuf.Timestamp updated_at = 17;
+  google.protobuf.Timestamp deleted_at = 18;  // Soft delete
+}
+
+// -------- Settings Model --------
+message UserSettings {
+  string user_id = 1;
+  bool email_notifications = 2;
+  bool push_notifications = 3;
+  bool marketing_emails = 4;
+  string timezone = 5;            // IANA timezone
+  string language = 6;            // ISO 639-1 code
+  bool dark_mode = 7;
+  PrivacyLevel privacy_level = 8;
+  bool allow_messages = 9;
+  bool show_online_status = 10;
+  google.protobuf.Timestamp created_at = 11;
+  google.protobuf.Timestamp updated_at = 12;
+}
+
+enum PrivacyLevel {
+  PRIVACY_LEVEL_UNSPECIFIED = 0;
+  PRIVACY_LEVEL_PUBLIC = 1;
+  PRIVACY_LEVEL_PRIVATE = 2;
+  PRIVACY_LEVEL_FRIENDS_ONLY = 3;
+}
+
+// -------- Get User --------
+message GetUserRequest {
+  string user_id = 1;
+}
+
+message GetUserResponse {
+  User user = 1;
+}
+
+// -------- Get Users by IDs (Batch) --------
+message GetUsersByIdsRequest {
+  repeated string user_ids = 1;
+}
+
+message GetUsersByIdsResponse {
+  repeated User users = 1;
+  repeated string not_found_ids = 2;  // IDs not found
+}
+
+// -------- Get User by Username --------
+message GetUserByUsernameRequest {
+  string username = 1;
+}
+
+// -------- Update Profile --------
+message UpdateProfileRequest {
+  string user_id = 1;
+  google.protobuf.StringValue display_name = 2;
+  google.protobuf.StringValue bio = 3;
+  google.protobuf.StringValue avatar_url = 4;
+  google.protobuf.StringValue cover_url = 5;
+  google.protobuf.StringValue website = 6;
+  google.protobuf.StringValue location = 7;
+  google.protobuf.BoolValue is_private = 8;
+}
+
+message UpdateProfileResponse {
+  User user = 1;
+}
+
+// -------- Delete User --------
+message DeleteUserRequest {
+  string user_id = 1;
+  string reason = 2;              // Optional deletion reason
+}
+
+// -------- Get Settings --------
+message GetSettingsRequest {
+  string user_id = 1;
+}
+
+message GetSettingsResponse {
+  UserSettings settings = 1;
+}
+
+// -------- Update Settings --------
+message UpdateSettingsRequest {
+  string user_id = 1;
+  google.protobuf.BoolValue email_notifications = 2;
+  google.protobuf.BoolValue push_notifications = 3;
+  google.protobuf.BoolValue marketing_emails = 4;
+  google.protobuf.StringValue timezone = 5;
+  google.protobuf.StringValue language = 6;
+  google.protobuf.BoolValue dark_mode = 7;
+  PrivacyLevel privacy_level = 8;
+  google.protobuf.BoolValue allow_messages = 9;
+  google.protobuf.BoolValue show_online_status = 10;
+}
+
+message UpdateSettingsResponse {
+  UserSettings settings = 1;
+}
+
+// -------- Search Users --------
+message SearchUsersRequest {
+  string query = 1;               // Search term
+  int32 limit = 2;                // Max results (default 20)
+  int32 offset = 3;               // Pagination offset
+  SearchFilter filter = 4;        // Optional filters
+}
+
+message SearchFilter {
+  bool verified_only = 1;
+  bool exclude_banned = 2;
+  string location = 3;            // Filter by location
+}
+
+message SearchUsersResponse {
+  repeated User users = 1;
+  int32 total_count = 2;          // Total matching results
+  bool has_more = 3;              // More results available
+}
+
+// -------- Verification --------
+message VerifyUserRequest {
+  string user_id = 1;
+}
+
+message UnverifyUserRequest {
+  string user_id = 1;
+}
+
+// -------- Ban/Unban --------
+message BanUserRequest {
+  string user_id = 1;
+  string reason = 2;
+  google.protobuf.Timestamp banned_until = 3;  // Permanent if not set
+}
+
+message UnbanUserRequest {
+  string user_id = 1;
+}
+
+// ============================================================================
+// Events Published by User Service
+// ============================================================================
+
+// Kafka Topic: user.profile.updated
+message UserProfileUpdatedEvent {
+  string user_id = 1;
+  repeated string changed_fields = 2;  // List of changed field names
+  google.protobuf.Timestamp updated_at = 3;
+}
+
+// Kafka Topic: user.deleted
+message UserDeletedEvent {
+  string user_id = 1;
+  string reason = 2;
+  google.protobuf.Timestamp deleted_at = 3;
+}
+
+// Kafka Topic: user.verified
+message UserVerifiedEvent {
+  string user_id = 1;
+  google.protobuf.Timestamp verified_at = 2;
+}
+
+// Kafka Topic: user.banned
+message UserBannedEvent {
+  string user_id = 1;
+  string reason = 2;
+  google.protobuf.Timestamp banned_until = 3;
+  google.protobuf.Timestamp banned_at = 4;
+}

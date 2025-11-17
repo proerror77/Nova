@@ -33,6 +33,12 @@ pub mod nova {
         }
         pub use v2::*;
     }
+    pub mod user_service {
+        pub mod v2 {
+            tonic::include_proto!("nova.user_service.v2");
+        }
+        pub use v2::*;
+    }
     pub mod content_service {
         pub mod v2 {
             tonic::include_proto!("nova.content_service.v2");
@@ -104,22 +110,24 @@ use std::sync::Arc;
 use tonic::transport::Channel;
 
 pub use feature_store::feature_store_client::FeatureStoreClient;
+/// Client types for all services
+pub use nova::identity_service::auth_service_client::AuthServiceClient;
 pub use nova::content_service::content_service_client::ContentServiceClient;
 pub use nova::events_service::events_service_client::EventsServiceClient;
 pub use nova::feed_service::recommendation_service_client::RecommendationServiceClient;
 pub use nova::graph_service::graph_service_client::GraphServiceClient;
-/// Client types for all services
-pub use nova::identity_service::auth_service_client::AuthServiceClient;
 pub use nova::media_service::media_service_client::MediaServiceClient;
 pub use nova::notification_service::notification_service_client::NotificationServiceClient;
 pub use nova::ranking_service::ranking_service_client::RankingServiceClient;
 pub use nova::search_service::search_service_client::SearchServiceClient;
 pub use nova::social_service::social_service_client::SocialServiceClient;
 pub use nova::trust_safety::trust_safety_service_client::TrustSafetyServiceClient;
+pub use nova::user_service::user_service_client::UserServiceClient;
 
 #[derive(Clone)]
 pub struct GrpcClientPool {
     auth_client: Arc<AuthServiceClient<Channel>>,
+    user_client: Arc<UserServiceClient<Channel>>,
     content_client: Arc<ContentServiceClient<Channel>>,
     feed_client: Arc<RecommendationServiceClient<Channel>>,
     search_client: Arc<SearchServiceClient<Channel>>,
@@ -174,6 +182,9 @@ impl GrpcClientPool {
         let auth_client = Arc::new(AuthServiceClient::new(
             connect_or_placeholder(config, &config.identity_service_url, "identity-service").await,
         ));
+        let user_client = Arc::new(UserServiceClient::new(
+            connect_or_placeholder(config, &config.user_service_url, "user-service").await,
+        ));
         let content_client = Arc::new(ContentServiceClient::new(
             connect_or_placeholder(config, &config.content_service_url, "content-service").await,
         ));
@@ -221,6 +232,7 @@ impl GrpcClientPool {
 
         Ok(Self {
             auth_client,
+            user_client,
             content_client,
             feed_client,
             search_client,
@@ -238,6 +250,10 @@ impl GrpcClientPool {
     // Getters for each service client
     pub fn auth(&self) -> AuthServiceClient<Channel> {
         (*self.auth_client).clone()
+    }
+
+    pub fn user(&self) -> UserServiceClient<Channel> {
+        (*self.user_client).clone()
     }
 
     pub fn content(&self) -> ContentServiceClient<Channel> {

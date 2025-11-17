@@ -214,6 +214,7 @@ cargo build --release
 - `GRPC_SEARCH_SERVICE_URL`（默认 `http://search-service:9080`）
 - `GRPC_MEDIA_SERVICE_URL`（默认 `http://media-service:9080`）
 - `GRPC_NOTIFICATION_SERVICE_URL`（默认 `http://notification-service:9080`）
+- `GRPC_STREAMING_SERVICE_URL`（默认 `http://streaming-service:9080`）
 - `GRPC_CDN_SERVICE_URL`（默认 `http://cdn-service:9080`）
 - `GRPC_EVENTS_SERVICE_URL`（默认 `http://events-service:9080`）
 - `GRPC_VIDEO_SERVICE_URL`（默认 `http://video-service:9080`）

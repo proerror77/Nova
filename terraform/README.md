@@ -29,11 +29,10 @@ terraform/
 
 ## 快速開始
 
-### 1. 設定遠端 Backend
+### 1. 初始化 Terraform
 
 ```bash
-./setup-s3-backend.sh   # 僅首次執行
-terraform init -backend-config=backend.hcl
+terraform init
 ```
 
 ### 2. 驗證配置
@@ -42,14 +41,6 @@ terraform init -backend-config=backend.hcl
 terraform validate
 terraform plan -var-file="staging.tfvars"
 ```
-
-#### 如果之前使用 local backend
-
-```bash
-terraform init -migrate-state -backend-config=backend.hcl
-```
-
-會將 `terraform.tfstate` 從本機搬移到 S3 並在 DynamoDB 加上鎖。
 
 ### 3. 部署 Staging 環境
 
@@ -62,8 +53,6 @@ terraform apply -var-file="staging.tfvars"
 ```bash
 terraform apply -var-file="production.tfvars"
 ```
-
-> 💡 注意：Terraform 狀態檔 (`terraform.tfstate*`) 與計畫檔 (`*.tfplan`) 已透過 `.gitignore` 排除，請勿再加入版本控制。若需本機測試，可使用 `terraform workspace` 或替換 `backend.hcl` 的 `key` 值，但仍應存放於 S3/DynamoDB。
 
 ## 環境配置
 

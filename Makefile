@@ -54,8 +54,12 @@ check: ## Quick compile check (all services)
 	cd backend && cargo check --workspace --all-targets
 
 docker-build: ## Build all service Docker images
+	docker build -t nova-user-service:latest -f ./backend/Dockerfile ./backend
 	docker build -t nova-messaging-service:latest -f ./backend/Dockerfile.messaging ./backend
 	docker build -t nova-search-service:latest -f ./backend/search-service/Dockerfile ./backend/search-service
+
+docker-build-user: ## Build user-service Docker image only
+	docker build -t nova-user-service:latest -f ./backend/Dockerfile ./backend
 
 docker-build-messaging: ## (deprecated) messaging-service 已淘汰，請改用 realtime-chat-service
 	@echo "messaging-service 已淘汰，請使用 realtime-chat-service 對應 Dockerfile"
@@ -63,11 +67,17 @@ docker-build-messaging: ## (deprecated) messaging-service 已淘汰，請改用 
 docker-build-search: ## Build search-service Docker image only
 	docker build -t nova-search-service:latest -f ./backend/search-service/Dockerfile ./backend/search-service
 
+docker-run: ## Run Docker container (user-service)
+	docker run -p 8080:8080 --env-file .env nova-user-service:latest
+
 migrate: ## Run database migrations
 	cd backend && sqlx migrate run --database-url $${DATABASE_URL:-postgresql://postgres:postgres@localhost:5432/nova_auth}
 
 migrate-revert: ## Revert last migration
 	cd backend && sqlx migrate revert --database-url $${DATABASE_URL:-postgresql://postgres:postgres@localhost:5432/nova_auth}
+
+logs: ## Show user-service logs
+	docker-compose logs -f user-service
 
 logs-db: ## Show PostgreSQL logs
 	docker-compose logs -f postgres
@@ -93,9 +103,17 @@ audit: ## Run security audit
 coverage: ## Generate test coverage report
 	cd backend && cargo tarpaulin --out Html
 
+.PHONY: graph-backfill
+graph-backfill: ## Run follows -> Neo4j backfill (requires DB + Neo4j)
+	./scripts/graph_backfill.sh
+
 .PHONY: neo4j-init
 neo4j-init: ## Apply Neo4j schema (constraints/indexes)
 	./scripts/neo4j_init.sh || docker exec -i nova-neo4j cypher-shell -u $${NEO4J_USER:-neo4j} -p $${NEO4J_PASSWORD:-neo4j} < scripts/neo4j_schema.cypher
+
+.PHONY: test-social
+test-social: ## Run social graph lightweight tests only
+	cd backend/user-service && cargo test --test social_graph_tests -- --nocapture
 
 .PHONY: test-grpc-integration
 test-grpc-integration: ## Run gRPC cross-service integration tests
@@ -106,7 +124,7 @@ test-grpc-integration: ## Run gRPC cross-service integration tests
 test-grpc-integration-local: ## Run gRPC integration tests against local services
 	@echo "Running local gRPC integration tests..."
 	@echo "Make sure services are running on:"
-	@echo "  - Identity Service (Auth): http://127.0.0.1:9083"
+	@echo "  - User Service: http://127.0.0.1:9081"
 	@echo "  - Messaging Service: http://127.0.0.1:9085"
 	SERVICES_RUNNING=true cargo test --test grpc_cross_service_integration_test -- --nocapture --ignored
 

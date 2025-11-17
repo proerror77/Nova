@@ -229,16 +229,7 @@ impl RankingScorer {
         // 4. Fetch interaction history: analytics_service.get_interactions(user_id)
         // 5. Call score_candidates() with fetched data
 
-        debug!(
-            "score_with_feature_store invoked without feature-store integration (user_id={}, candidate_count={})",
-            user_id,
-            candidates.len()
-        );
-
-        Err(RankingError::FeatureStoreError(
-            "Feature-store integration not yet implemented. Provide pre-fetched features and call score_candidates instead."
-                .into(),
-        ))
+        unimplemented!("Feature store integration pending")
     }
 }
 
