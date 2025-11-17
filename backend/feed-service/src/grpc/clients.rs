@@ -31,6 +31,11 @@ impl ContentServiceClient {
         })
     }
 
+    /// Create ContentServiceClient from existing pool
+    pub fn from_pool(pool: Arc<GrpcClientPool>) -> Self {
+        Self { pool }
+    }
+
     /// Get posts by author
     pub async fn get_posts_by_author(
         &self,
@@ -71,6 +76,11 @@ impl UserServiceClient {
         Ok(Self {
             pool: Arc::new(pool),
         })
+    }
+
+    /// Create UserServiceClient from existing pool
+    pub fn from_pool(pool: Arc<GrpcClientPool>) -> Self {
+        Self { pool }
     }
 
     /// Get users this user is following

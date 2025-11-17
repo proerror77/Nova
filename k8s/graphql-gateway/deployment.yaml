@@ -14,20 +14,24 @@ metadata:
   name: graphql-gateway-config
   namespace: nova-gateway
 data:
+  # Logging
+  RUST_LOG: "info,graphql_gateway=debug,aws_secrets=debug"
+
   SERVER_HOST: "0.0.0.0"
   SERVER_PORT: "8080"
   SERVER_WORKERS: "4"
 
-  # Service Endpoints (gRPC) - All in nova-backend namespace
-  AUTH_SERVICE_URL: "http://auth-service.nova-backend.svc.cluster.local:9083"
-  USER_SERVICE_URL: "http://user-service.nova-backend.svc.cluster.local:9080"
-  CONTENT_SERVICE_URL: "http://content-service.nova-backend.svc.cluster.local:9081"
-  FEED_SERVICE_URL: "http://feed-service.nova-backend.svc.cluster.local:9084"
-  MESSAGING_SERVICE_URL: "http://messaging-service.nova-backend.svc.cluster.local:9085"
-  NOTIFICATION_SERVICE_URL: "http://notification-service.nova-backend.svc.cluster.local:9088"
-  SEARCH_SERVICE_URL: "http://search-service.nova-backend.svc.cluster.local:9090"
-  STREAMING_SERVICE_URL: "http://streaming-service.nova-backend.svc.cluster.local:9087"
-  MEDIA_SERVICE_URL: "http://media-service.nova-backend.svc.cluster.local:9086"
+  # Service Endpoints (gRPC) - staging services in nova-staging namespace
+  # All gRPC services are exposed on port 50051 via grpc-services.yaml
+  AUTH_SERVICE_URL: "http://identity-service.nova-staging.svc.cluster.local:50051"
+  USER_SERVICE_URL: "http://identity-service.nova-staging.svc.cluster.local:50051"
+  CONTENT_SERVICE_URL: "http://content-service.nova-staging.svc.cluster.local:50051"
+  FEED_SERVICE_URL: "http://feed-service.nova-staging.svc.cluster.local:50051"
+  MESSAGING_SERVICE_URL: "http://messaging-service.nova-staging.svc.cluster.local:50051"
+  NOTIFICATION_SERVICE_URL: "http://notification-service.nova-staging.svc.cluster.local:50051"
+  SEARCH_SERVICE_URL: "http://search-service.nova-staging.svc.cluster.local:50051"
+  STREAMING_SERVICE_URL: "http://realtime-chat-service.nova-staging.svc.cluster.local:50051"
+  MEDIA_SERVICE_URL: "http://media-service.nova-staging.svc.cluster.local:50051"
 
   # Database (value injected from AWS Secrets via ExternalSecrets)
   # Actual DATABASE_URL comes from graphql-gateway-db-credentials secret
@@ -44,8 +48,23 @@ data:
   GRAPHQL_MAX_COMPLEXITY: "1000"
   GRAPHQL_INTROSPECTION: "true" # Only for staging/development
 
-  # Logging
-  RUST_LOG: "info,graphql_gateway=debug"
+# Logging
+  RUST_LOG: "info,graphql_gateway=debug,aws_secrets=debug"
+
+---
+# ServiceAccount for GraphQL Gateway with IRSA access to AWS Secrets Manager
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: graphql-gateway
+  namespace: nova-gateway
+  labels:
+    app: graphql-gateway
+    component: gateway
+  annotations:
+    # Reuse the same IAM role as identity-service in staging, which already
+    # has permission to read nova/staging/nova-jwt-keys from AWS Secrets Manager.
+    eks.amazonaws.com/role-arn: arn:aws:iam::025434362120:role/nova-staging-secrets-manager-role
 
 ---
 # NOTE: Secrets are now managed by External Secrets Operator
@@ -72,6 +91,7 @@ spec:
         app: graphql-gateway
         component: gateway
     spec:
+      serviceAccountName: graphql-gateway
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000
@@ -90,10 +110,11 @@ spec:
         envFrom:
         - configMapRef:
             name: graphql-gateway-config
-        - secretRef:
-            name: graphql-gateway-db-credentials    # From ExternalSecrets
-        - secretRef:
-            name: graphql-gateway-jwt-credentials   # From ExternalSecrets
+        env:
+        - name: AWS_SECRETS_JWT_NAME
+          value: "nova/staging/nova-jwt-keys"
+        - name: AWS_REGION
+          value: "ap-northeast-1"
         resources:
           requests:
             memory: "256Mi"

@@ -12,7 +12,8 @@ enum APIEnvironment {
         case .development:
             return "http://localhost:8080"  // GraphQL Gateway for local development
         case .staging:
-            return "https://staging-api.nova.social"
+            // AWS EKS staging environment - Ingress LoadBalancer URL
+            return "http://a3326508b1e3c43239348cac7ce9ee03-1036729988.ap-northeast-1.elb.amazonaws.com"
         case .production:
             return "https://api.nova.social"
         }
@@ -29,52 +30,58 @@ enum APIEnvironment {
 }
 
 struct APIConfig {
-    static var current: APIEnvironment = {
-        #if DEBUG
-        return .development
-        #else
-        return .production
-        #endif
-    }()
+    // 🧪 TESTING: Temporarily forcing staging for Ingress testing
+    static var current: APIEnvironment = .staging
 
-    // MARK: - Endpoints
+    // Original configuration (commented out for testing):
+    // static var current: APIEnvironment = {
+    //     #if DEBUG
+    //     return .development
+    //     #else
+    //     return .production
+    //     #endif
+    // }()
+
+    // MARK: - Endpoints (API v1 for most services, v2 for feed-service)
+    // Most backend services use /api/v1, except feed-service which uses /api/v2/feed
 
     struct Graph {
-        static let followers = "/api/v1/graph/followers"
-        static let following = "/api/v1/graph/following"
-        static let follow = "/api/v1/graph/follow"
-        static let unfollow = "/api/v1/graph/unfollow"
-        static let isFollowing = "/api/v1/graph/is-following"
+        static let followers = "/api/v1/relationships/followers"
+        static let following = "/api/v1/relationships/following"
+        static let follow = "/api/v1/relationships/follow"
+        static let unfollow = "/api/v1/relationships/unfollow"
+        static let isFollowing = "/api/v1/relationships/is-following"
     }
 
     struct Social {
-        static let createLike = "/api/v1/social/like"
-        static let deleteLike = "/api/v1/social/unlike"
-        static let getLikes = "/api/v1/social/likes"
-        static let checkLiked = "/api/v1/social/check-liked"
-        static let createComment = "/api/v1/social/comment"
-        static let deleteComment = "/api/v1/social/comment/delete"
-        static let getComments = "/api/v1/social/comments"
-        static let createShare = "/api/v1/social/share"
-        static let getShareCount = "/api/v1/social/shares/count"
-        static let batchGetStats = "/api/v1/social/stats/batch"
+        // feed-service uses v2
+        static let createLike = "/api/v2/feed/like"
+        static let deleteLike = "/api/v2/feed/unlike"
+        static let getLikes = "/api/v2/feed/likes"
+        static let checkLiked = "/api/v2/feed/check-liked"
+        static let createComment = "/api/v2/feed/comment"
+        static let deleteComment = "/api/v2/feed/comment/delete"
+        static let getComments = "/api/v2/feed/comments"
+        static let createShare = "/api/v2/feed/share"
+        static let getShareCount = "/api/v2/feed/shares/count"
+        static let batchGetStats = "/api/v2/feed/stats/batch"
     }
 
     struct Content {
-        static let getPost = "/api/v1/content/post"
-        static let createPost = "/api/v1/content/post/create"
-        static let updatePost = "/api/v1/content/post/update"
-        static let deletePost = "/api/v1/content/post/delete"
-        static let postsByAuthor = "/api/v1/content/posts/author"
-        static let bookmarks = "/api/v1/content/bookmarks"
+        static let getPost = "/api/v1/posts/get"
+        static let createPost = "/api/v1/posts/create"
+        static let updatePost = "/api/v1/posts/update"
+        static let deletePost = "/api/v1/posts/delete"
+        static let postsByAuthor = "/api/v1/posts/author"
+        static let bookmarks = "/api/v1/posts/bookmarks"
     }
 
     struct Media {
-        static let uploadStart = "/api/v1/media/upload/start"
-        static let uploadProgress = "/api/v1/media/upload/progress"
-        static let uploadComplete = "/api/v1/media/upload/complete"
-        static let reels = "/api/v1/media/reels"
-        static let videos = "/api/v1/media/videos"
+        static let uploadStart = "/api/v1/uploads/start"
+        static let uploadProgress = "/api/v1/uploads/progress"
+        static let uploadComplete = "/api/v1/uploads/complete"
+        static let reels = "/api/v1/reels"
+        static let videos = "/api/v1/videos"
     }
 
     struct Auth {
