@@ -44,11 +44,22 @@ impl AuthClient {
         }
     }
 
+    /// Create from Channel directly (modern pattern with lazy connection)
+    ///
+    /// Accepts a pre-configured Channel (typically created with connect_lazy()).
+    /// This pattern avoids blocking during service initialization.
+    pub fn new(channel: Channel) -> Self {
+        Self {
+            client: TonicAuthServiceClient::new(channel),
+            request_timeout: Duration::from_millis(500),
+        }
+    }
+
     /// Create from URL (legacy compatibility pattern)
     ///
     /// Used by streaming/content/feed-service during migration.
-    /// Eventually all services should migrate to `from_pool()`.
-    pub async fn new(auth_service_url: &str) -> Result<Self> {
+    /// Eventually all services should migrate to `from_pool()` or `new()`.
+    pub async fn from_url(auth_service_url: &str) -> Result<Self> {
         tracing::info!("Creating auth service gRPC client: {}", auth_service_url);
 
         let config = GrpcConfig::from_env()
@@ -192,7 +203,7 @@ mod tests {
     #[tokio::test]
     #[ignore]
     async fn test_user_exists_integration() {
-        let client = AuthClient::new("http://localhost:50051")
+        let client = AuthClient::from_url("http://localhost:50051")
             .await
             .expect("Failed to create client");
 
@@ -204,7 +215,7 @@ mod tests {
     #[tokio::test]
     #[ignore]
     async fn test_validate_user_exists_integration() {
-        let client = AuthClient::new("http://localhost:50051")
+        let client = AuthClient::from_url("http://localhost:50051")
             .await
             .expect("Failed to create client");
 
@@ -216,7 +227,7 @@ mod tests {
     #[tokio::test]
     #[ignore]
     async fn test_get_user_integration() {
-        let client = AuthClient::new("http://localhost:50051")
+        let client = AuthClient::from_url("http://localhost:50051")
             .await
             .expect("Failed to create client");
 

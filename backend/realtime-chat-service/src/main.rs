@@ -1,6 +1,6 @@
 use actix_web::{web, App, HttpServer};
 use crypto_core::jwt as core_jwt;
-use grpc_clients::{config::GrpcConfig, AuthClient, GrpcClientPool};
+use grpc_clients::AuthClient;
 use realtime_chat_service::{
     config, db, error, grpc, logging,
     nova::realtime_chat::v1::realtime_chat_service_server::RealtimeChatServiceServer,
@@ -11,11 +11,12 @@ use realtime_chat_service::{
     websocket::streams::{start_streams_listener, StreamsConfig},
 };
 use redis_utils::{RedisPool, SentinelConfig};
+use std::env;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::task::JoinHandle;
-use tonic::transport::Server as GrpcServer;
+use tonic::transport::{Endpoint, Server as GrpcServer};
 
 #[tokio::main]
 async fn main() -> Result<(), error::AppError> {
@@ -52,17 +53,22 @@ async fn main() -> Result<(), error::AppError> {
     let encryption = Arc::new(EncryptionService::new(cfg.encryption_master_key));
     let key_exchange_service = Arc::new(KeyExchangeService::new(Arc::new(db.clone())));
 
-    // Initialize gRPC client pool with connection pooling
-    tracing::info!("Initializing gRPC client pool with connection pooling");
-    let grpc_config = GrpcConfig::from_env()
-        .map_err(|e| error::AppError::Config(format!("Failed to load gRPC config: {}", e)))?;
-    let grpc_pool = Arc::new(GrpcClientPool::new(&grpc_config).await.map_err(|e| {
-        error::AppError::StartServer(format!("Failed to create gRPC client pool: {}", e))
-    })?);
+    // Initialize AuthClient (identity-service only - lazy connection)
+    tracing::info!("Initializing Auth gRPC client (lazy connection)");
+    let identity_service_url = env::var("GRPC_IDENTITY_SERVICE_URL")
+        .unwrap_or_else(|_| "http://identity-service:50051".to_string());
 
-    // Initialize AuthClient from connection pool
-    let auth_client = Arc::new(AuthClient::from_pool(grpc_pool.clone()));
-    tracing::info!("✅ Auth-service gRPC client initialized from connection pool");
+    let identity_channel = Endpoint::from_shared(identity_service_url.clone())
+        .map_err(|e| error::AppError::Config(format!("Invalid identity service URL: {}", e)))?
+        .connect_timeout(Duration::from_secs(10))
+        .timeout(Duration::from_secs(30))
+        .tcp_keepalive(Some(Duration::from_secs(60)))
+        .http2_keep_alive_interval(Duration::from_secs(30))
+        .keep_alive_timeout(Duration::from_secs(10))
+        .connect_lazy(); // Lazy connection - won't block startup
+
+    let auth_client = Arc::new(AuthClient::new(identity_channel));
+    tracing::info!("✅ Auth gRPC client initialized (will connect on first use)");
 
     let state = AppState {
         db: db.clone(),
