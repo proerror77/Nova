@@ -8,8 +8,9 @@ terraform {
     }
   }
 
-  # 本地后端（临时用于本地部署/测试）
-  backend "local" {}
+  # Remote backend stored in S3 (configure via backend.hcl)
+  # Usage: terraform init -backend-config=backend.hcl
+  backend "s3" {}
 }
 
 provider "aws" {

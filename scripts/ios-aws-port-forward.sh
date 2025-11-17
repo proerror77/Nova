@@ -6,17 +6,17 @@ set -e
 
 NAMESPACE="nova"
 CONTENT_SERVICE_PORT=8081
-USER_SERVICE_PORT=8083
 MEDIA_SERVICE_PORT=8082
 MESSAGING_SERVICE_PORT=8084
+GRAPHQL_GATEWAY_PORT=8080
 
 echo "🚀 Setting up port-forwards for iOS AWS backend access..."
 echo ""
 echo "Services to forward:"
 echo "  - content-service:$CONTENT_SERVICE_PORT (Posts endpoint)"
-echo "  - user-service:$USER_SERVICE_PORT (Feed, Users endpoints)"
 echo "  - media-service:$MEDIA_SERVICE_PORT (Media upload)"
-echo "  - messaging-service:$MESSAGING_SERVICE_PORT (Messaging)"
+echo "  - messaging-service:$MESSAGING_SERVICE_PORT (Realtime chat)"
+echo "  - graphql-gateway:$GRAPHQL_GATEWAY_PORT (Public HTTP API)"
 echo ""
 
 # Function to start port-forward in background
@@ -30,9 +30,9 @@ start_port_forward() {
 
 # Start all port-forwards
 start_port_forward "content-service" $CONTENT_SERVICE_PORT
-start_port_forward "user-service" $USER_SERVICE_PORT
 start_port_forward "media-service" $MEDIA_SERVICE_PORT
 start_port_forward "messaging-service" $MESSAGING_SERVICE_PORT
+start_port_forward "graphql-gateway" $GRAPHQL_GATEWAY_PORT
 
 echo ""
 echo "✅ Port-forwards started successfully!"

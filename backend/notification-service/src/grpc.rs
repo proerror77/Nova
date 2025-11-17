@@ -25,7 +25,8 @@ use nova::notification_service::v2::notification_service_server::NotificationSer
 use nova::notification_service::v2::*;
 
 use crate::models::{
-    CreateNotificationRequest as CoreCreateRequest, NotificationPriority, NotificationType,
+    CreateNotificationRequest as CoreCreateRequest, Notification as CoreNotification,
+    NotificationPreference as CorePreference, NotificationPriority, NotificationType,
 };
 use crate::services::{NotificationService as CoreNotificationService, PushSender};
 
@@ -283,16 +284,7 @@ impl NotificationService for NotificationServiceImpl {
             user_id, req.notification_type
         );
 
-        let notification_type = match req.notification_type.to_lowercase().as_str() {
-            "like" => NotificationType::Like,
-            "comment" => NotificationType::Comment,
-            "follow" => NotificationType::Follow,
-            "mention" => NotificationType::Mention,
-            "message" => NotificationType::Message,
-            "stream" => NotificationType::Stream,
-            "video" => NotificationType::Video,
-            _ => NotificationType::System,
-        };
+        let notification_type = parse_notification_type(&req.notification_type);
 
         let data = if !req.data.is_empty() {
             serde_json::from_str(&req.data).ok()
@@ -315,6 +307,8 @@ impl NotificationService for NotificationServiceImpl {
 
         match self.core_service.create_notification(core_req).await {
             Ok(notif) => {
+                let proto_notif = convert_notification(&notif);
+
                 // Send push notifications asynchronously
                 let sender = self.push_sender.clone();
                 let notif_clone = notif.clone();
@@ -325,24 +319,7 @@ impl NotificationService for NotificationServiceImpl {
                 });
 
                 Ok(Response::new(CreateNotificationResponse {
-                    notification: Some(Notification {
-                        id: notif.id.to_string(),
-                        user_id: notif.recipient_id.to_string(),
-                        notification_type: notif.notification_type.as_str().to_string(),
-                        title: notif.title,
-                        body: notif.body,
-                        data: notif.metadata.map(|d| d.to_string()).unwrap_or_default(),
-                        related_user_id: notif.sender_id.map(|u| u.to_string()).unwrap_or_default(),
-                        related_post_id: notif.object_id.map(|u| u.to_string()).unwrap_or_default(),
-                        related_message_id: String::new(),
-                        is_read: notif.is_read,
-                        channel: "in_app".to_string(),
-                        status: notif.status.as_str().to_string(),
-                        created_at: notif.created_at.timestamp(),
-                        sent_at: 0,
-                        read_at: notif.read_at.map(|t| t.timestamp()).unwrap_or(0),
-                        deleted_at: 0,
-                    }),
+                    notification: Some(proto_notif),
                 }))
             }
             Err(e) => {
@@ -375,30 +352,7 @@ impl NotificationService for NotificationServiceImpl {
                 // Fetch updated notification
                 match self.core_service.get_notification(notification_id).await {
                     Ok(Some(notif)) => Ok(Response::new(MarkNotificationAsReadResponse {
-                        notification: Some(Notification {
-                            id: notif.id.to_string(),
-                            user_id: notif.recipient_id.to_string(),
-                            notification_type: notif.notification_type.as_str().to_string(),
-                            title: notif.title,
-                            body: notif.body,
-                            data: notif.metadata.map(|d| d.to_string()).unwrap_or_default(),
-                            related_user_id: notif
-                                .sender_id
-                                .map(|u| u.to_string())
-                                .unwrap_or_default(),
-                            related_post_id: notif
-                                .object_id
-                                .map(|u| u.to_string())
-                                .unwrap_or_default(),
-                            related_message_id: String::new(),
-                            is_read: notif.is_read,
-                            channel: "in_app".to_string(),
-                            status: notif.status.as_str().to_string(),
-                            created_at: notif.created_at.timestamp(),
-                            sent_at: 0,
-                            read_at: notif.read_at.map(|t| t.timestamp()).unwrap_or(0),
-                            deleted_at: 0,
-                        }),
+                        notification: Some(convert_notification(&notif)),
                     })),
                     Ok(None) => Err(Status::not_found(
                         "Notification not found after marking as read",
@@ -492,23 +446,7 @@ impl NotificationService for NotificationServiceImpl {
 
         match self.core_service.get_preferences(user_id).await {
             Ok(pref) => Ok(Response::new(GetNotificationPreferencesResponse {
-                preferences: Some(NotificationPreference {
-                    user_id: pref.user_id.to_string(),
-                    email_on_like: pref.like_enabled,
-                    email_on_comment: pref.comment_enabled,
-                    email_on_follow: pref.follow_enabled,
-                    email_on_mention: pref.mention_enabled,
-                    push_on_like: pref.like_enabled,
-                    push_on_comment: pref.comment_enabled,
-                    push_on_follow: pref.follow_enabled,
-                    push_on_mention: pref.mention_enabled,
-                    push_on_message: pref.message_enabled,
-                    quiet_hours_start: pref.quiet_hours_start.unwrap_or_default(),
-                    quiet_hours_end: pref.quiet_hours_end.unwrap_or_default(),
-                    disable_all: !pref.enabled,
-                    created_at: 0,
-                    updated_at: pref.updated_at.timestamp(),
-                }),
+                preferences: Some(convert_preferences(&pref)),
             })),
             Err(e) => {
                 error!("Failed to get preferences: {}", e);
@@ -523,12 +461,42 @@ impl NotificationService for NotificationServiceImpl {
     /// Update user's notification preferences
     async fn update_notification_preferences(
         &self,
-        _request: Request<UpdateNotificationPreferencesRequest>,
+        request: Request<UpdateNotificationPreferencesRequest>,
     ) -> Result<Response<UpdateNotificationPreferencesResponse>, Status> {
-        // TODO: Implement preferences update
-        Err(Status::unimplemented(
-            "update_notification_preferences is not implemented yet",
-        ))
+        let req = request.into_inner();
+
+        let user_id = Uuid::parse_str(&req.user_id)
+            .map_err(|e| Status::invalid_argument(format!("Invalid user_id: {}", e)))?;
+
+        let mut prefs = self
+            .core_service
+            .get_preferences(user_id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to load preferences: {}", e)))?;
+
+        prefs.enabled = !req.disable_all;
+        prefs.like_enabled = req.email_on_like || req.push_on_like;
+        prefs.comment_enabled = req.email_on_comment || req.push_on_comment;
+        prefs.follow_enabled = req.email_on_follow || req.push_on_follow;
+        prefs.mention_enabled = req.email_on_mention || req.push_on_mention;
+        prefs.message_enabled = req.push_on_message;
+
+        if !req.quiet_hours_start.is_empty() {
+            prefs.quiet_hours_start = Some(req.quiet_hours_start.clone());
+        }
+        if !req.quiet_hours_end.is_empty() {
+            prefs.quiet_hours_end = Some(req.quiet_hours_end.clone());
+        }
+
+        let updated = self
+            .core_service
+            .update_preferences(prefs)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to update preferences: {}", e)))?;
+
+        Ok(Response::new(UpdateNotificationPreferencesResponse {
+            preferences: Some(convert_preferences(&updated)),
+        }))
     }
 
     /// Register push token
@@ -648,12 +616,115 @@ impl NotificationService for NotificationServiceImpl {
     /// Batch create notifications
     async fn batch_create_notifications(
         &self,
-        _request: Request<BatchCreateNotificationsRequest>,
+        request: Request<BatchCreateNotificationsRequest>,
     ) -> Result<Response<BatchCreateNotificationsResponse>, Status> {
-        // TODO: Implement batch create
-        Err(Status::unimplemented(
-            "batch_create_notifications is not implemented yet",
-        ))
+        let req = request.into_inner();
+
+        if req.notifications.is_empty() {
+            return Err(Status::invalid_argument(
+                "notifications list cannot be empty",
+            ));
+        }
+
+        if req.notifications.len() > 100 {
+            return Err(Status::invalid_argument(
+                "notifications list cannot exceed 100 entries",
+            ));
+        }
+
+        let mut created = Vec::new();
+        let mut success_count = 0;
+        let mut failed_count = 0;
+
+        for entry in req.notifications {
+            let user_id = match Uuid::parse_str(&entry.user_id) {
+                Ok(id) => id,
+                Err(e) => {
+                    failed_count += 1;
+                    error!("Invalid user_id in batch notification: {}", e);
+                    continue;
+                }
+            };
+
+            let related_user_id = if entry.related_user_id.is_empty() {
+                None
+            } else {
+                match Uuid::parse_str(&entry.related_user_id) {
+                    Ok(id) => Some(id),
+                    Err(e) => {
+                        failed_count += 1;
+                        error!("Invalid related_user_id in batch notification: {}", e);
+                        continue;
+                    }
+                }
+            };
+
+            let related_post_id = if entry.related_post_id.is_empty() {
+                None
+            } else {
+                match Uuid::parse_str(&entry.related_post_id) {
+                    Ok(id) => Some(id),
+                    Err(e) => {
+                        failed_count += 1;
+                        error!("Invalid related_post_id in batch notification: {}", e);
+                        continue;
+                    }
+                }
+            };
+
+            let data = if entry.data.is_empty() {
+                None
+            } else {
+                match serde_json::from_str(&entry.data) {
+                    Ok(value) => Some(value),
+                    Err(e) => {
+                        failed_count += 1;
+                        error!("Invalid metadata JSON in batch notification: {}", e);
+                        continue;
+                    }
+                }
+            };
+
+            let core_req = CoreCreateRequest {
+                recipient_id: user_id,
+                sender_id: related_user_id,
+                notification_type: parse_notification_type(&entry.notification_type),
+                title: entry.title.clone(),
+                body: entry.body.clone(),
+                image_url: None,
+                object_id: related_post_id,
+                object_type: None,
+                metadata: data,
+                priority: NotificationPriority::Normal,
+            };
+
+            match self.core_service.create_notification(core_req).await {
+                Ok(notif) => {
+                    success_count += 1;
+                    let proto_notif = convert_notification(&notif);
+                    let sender = self.push_sender.clone();
+                    let notif_clone = notif.clone();
+                    tokio::spawn(async move {
+                        if let Err(e) =
+                            sender_send_push_for_notification(&sender, &notif_clone).await
+                        {
+                            warn!("Failed to send push notifications: {}", e);
+                        }
+                    });
+                    created.push(proto_notif);
+                }
+                Err(e) => {
+                    failed_count += 1;
+                    error!("Failed to create notification in batch: {}", e);
+                }
+            }
+        }
+
+        Ok(Response::new(BatchCreateNotificationsResponse {
+            created,
+            success_count,
+            failed_count,
+        }))
     }
 
     /// Get notification statistics
@@ -728,4 +799,62 @@ async fn sender_send_push_for_notification(
 
     info!("Sending push notifications for notification {}", notif.id);
     Ok(())
+}
+
+fn parse_notification_type(value: &str) -> NotificationType {
+    match value.to_lowercase().as_str() {
+        "like" => NotificationType::Like,
+        "comment" => NotificationType::Comment,
+        "follow" => NotificationType::Follow,
+        "mention" => NotificationType::Mention,
+        "message" => NotificationType::Message,
+        "stream" => NotificationType::Stream,
+        "video" => NotificationType::Video,
+        _ => NotificationType::System,
+    }
+}
+
+fn convert_notification(notif: &CoreNotification) -> Notification {
+    Notification {
+        id: notif.id.to_string(),
+        user_id: notif.recipient_id.to_string(),
+        notification_type: notif.notification_type.as_str().to_string(),
+        title: notif.title.clone(),
+        body: notif.body.clone(),
+        data: notif
+            .metadata
+            .as_ref()
+            .map(|d| d.to_string())
+            .unwrap_or_default(),
+        related_user_id: notif.sender_id.map(|u| u.to_string()).unwrap_or_default(),
+        related_post_id: notif.object_id.map(|u| u.to_string()).unwrap_or_default(),
+        related_message_id: String::new(),
+        is_read: notif.is_read,
+        channel: "in_app".to_string(),
+        status: notif.status.as_str().to_string(),
+        created_at: notif.created_at.timestamp(),
+        sent_at: 0,
+        read_at: notif.read_at.map(|t| t.timestamp()).unwrap_or(0),
+        deleted_at: 0,
+    }
+}
+
+fn convert_preferences(pref: &CorePreference) -> NotificationPreference {
+    NotificationPreference {
+        user_id: pref.user_id.to_string(),
+        email_on_like: pref.like_enabled,
+        email_on_comment: pref.comment_enabled,
+        email_on_follow: pref.follow_enabled,
+        email_on_mention: pref.mention_enabled,
+        push_on_like: pref.like_enabled,
+        push_on_comment: pref.comment_enabled,
+        push_on_follow: pref.follow_enabled,
+        push_on_mention: pref.mention_enabled,
+        push_on_message: pref.message_enabled,
+        quiet_hours_start: pref.quiet_hours_start.clone().unwrap_or_default(),
+        quiet_hours_end: pref.quiet_hours_end.clone().unwrap_or_default(),
+        disable_all: !pref.enabled,
+        created_at: 0,
+        updated_at: pref.updated_at.timestamp(),
+    }
 }

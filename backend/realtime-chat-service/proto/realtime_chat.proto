@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package nova.realtime_chat.v1;
+package nova.realtime_chat.v2;
 
 // RealtimeChat Service - WebSocket messaging and E2EE
 service RealtimeChatService {

@@ -27,6 +27,7 @@ impl Default for InvalidationStats {
 }
 
 /// Thread-safe statistics collector
+#[allow(dead_code)]
 #[derive(Clone)]
 pub struct StatsCollector {
     messages_published: Arc<AtomicU64>,
@@ -41,6 +42,7 @@ impl Default for StatsCollector {
     }
 }
 
+#[allow(dead_code)]
 impl StatsCollector {
     /// Create new statistics collector
     pub fn new() -> Self {

@@ -32,4 +32,3 @@ pub async fn handle_post_created(cache: &FeedCache, event: PostCreatedEvent) -> 
 
     Ok(())
 }
-

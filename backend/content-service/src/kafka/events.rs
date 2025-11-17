@@ -72,4 +72,3 @@ pub async fn publish_post_deleted(
         })
     )
 }
-

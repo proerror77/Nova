@@ -105,7 +105,7 @@ impl FeedCache {
             .arg(&key)
             .arg(self.config.feed_ttl)
             .arg(&json)
-            .query_async(&mut self.client.as_ref().clone())
+            .query_async::<_, ()>(&mut self.client.as_ref().clone())
             .await
             .map_err(|e| {
                 warn!("Redis SETEX failed for {}: {}", key, e);
@@ -141,7 +141,7 @@ impl FeedCache {
         if !keys.is_empty() {
             redis::cmd("DEL")
                 .arg(&keys)
-                .query_async(&mut self.client.as_ref().clone())
+                .query_async::<_, ()>(&mut self.client.as_ref().clone())
                 .await
                 .map_err(|e| {
                     warn!("Redis DEL failed: {}", e);
@@ -180,7 +180,7 @@ impl FeedCache {
         if !all_keys.is_empty() {
             redis::cmd("DEL")
                 .arg(&all_keys)
-                .query_async(&mut self.client.as_ref().clone())
+                .query_async::<_, ()>(&mut self.client.as_ref().clone())
                 .await
                 .map_err(|e| {
                     warn!("Redis DEL failed: {}", e);
@@ -227,7 +227,7 @@ impl FeedCache {
             .arg(&key)
             .arg(self.config.post_ttl)
             .arg(&json)
-            .query_async(&mut self.client.as_ref().clone())
+            .query_async::<_, ()>(&mut self.client.as_ref().clone())
             .await
             .map_err(|e| {
                 warn!("Redis SETEX failed for {}: {}", key, e);
@@ -271,7 +271,7 @@ impl FeedCache {
             .arg(&key)
             .arg(self.config.user_context_ttl)
             .arg(&json)
-            .query_async(&mut self.client.as_ref().clone())
+            .query_async::<_, ()>(&mut self.client.as_ref().clone())
             .await
             .map_err(|e| {
                 warn!("Redis SETEX failed for {}: {}", key, e);
@@ -284,7 +284,7 @@ impl FeedCache {
     /// Clear all feed caches (for testing/maintenance)
     pub async fn clear_all(&self) -> Result<()> {
         redis::cmd("FLUSHDB")
-            .query_async(&mut self.client.as_ref().clone())
+            .query_async::<_, ()>(&mut self.client.as_ref().clone())
             .await
             .map_err(|e| {
                 warn!("Redis FLUSHDB failed: {}", e);

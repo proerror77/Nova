@@ -3,7 +3,6 @@
 /// HTTP endpoints for personalized recommendations
 use actix_web::{get, post, web, HttpMessage, HttpRequest, HttpResponse};
 use serde::{Deserialize, Serialize};
-use sqlx::Row;
 use std::sync::Arc;
 use tracing::{debug, error, warn};
 use uuid::Uuid;
@@ -155,35 +154,14 @@ pub async fn get_recommendations(
 
 /// Fallback: Fetch chronological feed when ranking service is down
 async fn fetch_chronological_feed(
-    db_pool: &sqlx::PgPool,
-    user_id: Uuid,
-    limit: usize,
+    _db_pool: &sqlx::PgPool,
+    _user_id: Uuid,
+    _limit: usize,
 ) -> Result<Vec<Uuid>> {
-    let limit = limit as i64;
-
-    // Get posts from followed users, ordered by recency
-    let rows = sqlx::query(
-        "SELECT DISTINCT p.id
-         FROM posts p
-         JOIN follows f ON f.followee_id = p.user_id
-         WHERE f.follower_id = $1
-           AND p.status = 'published'
-           AND p.soft_delete IS NULL
-         ORDER BY p.created_at DESC
-         LIMIT $2",
-    )
-    .bind(user_id)
-    .bind(limit)
-    .fetch_all(db_pool)
-    .await
-    .map_err(|e| AppError::Internal(format!("Database error: {}", e)))?;
-
-    let posts: Vec<Uuid> = rows
-        .into_iter()
-        .filter_map(|row| row.try_get::<Uuid, _>("id").ok())
-        .collect();
-
-    Ok(posts)
+    // Legacy SQL-based chronological fallback has been removed to preserve service boundaries.
+    // If ranking-service is unavailable, we currently return an empty feed rather than
+    // directly querying posts/follows tables owned by other services.
+    Ok(Vec::new())
 }
 
 /// GET /api/v2/recommendations/model-info

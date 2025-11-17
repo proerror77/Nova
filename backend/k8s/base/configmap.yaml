@@ -42,15 +42,12 @@ data:
 
   # gRPC Configuration
   GRPC_AUTH_SERVICE_URL: "http://auth-service:9083"
-  GRPC_USER_SERVICE_URL: "http://user-service:9080"
   GRPC_CONTENT_SERVICE_URL: "http://content-service:9081"
   GRPC_FEED_SERVICE_URL: "http://feed-service:9084"
   GRPC_MEDIA_SERVICE_URL: "http://media-service:9082"
   GRPC_MESSAGING_SERVICE_URL: "http://messaging-service:9085"
   GRPC_SEARCH_SERVICE_URL: "http://search-service:9086"
-  GRPC_STREAMING_SERVICE_URL: "http://streaming-service:9087"
   GRPC_NOTIFICATION_SERVICE_URL: "http://notification-service:9088"
-  GRPC_CDN_SERVICE_URL: "http://cdn-service:9089"
   GRPC_EVENTS_SERVICE_URL: "http://events-service:9090"
 
   GRPC_CONNECTION_TIMEOUT_SECS: "10"

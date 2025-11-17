@@ -37,4 +37,3 @@ pub async fn handle_media_uploaded(event: MediaUploadedEvent) {
         event.media_id, event.user_id
     );
 }
-

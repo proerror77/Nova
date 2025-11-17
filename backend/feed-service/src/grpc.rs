@@ -10,9 +10,9 @@
 pub mod clients;
 pub mod nova;
 
-pub use clients::{ContentServiceClient, UserServiceClient};
+pub use clients::ContentServiceClient;
 
-use crate::cache::{CachedFeed, CachedFeedPost, FeedCache};
+use crate::cache::{CachedFeed, FeedCache};
 use chrono::Utc;
 use grpc_metrics::layer::RequestGuard;
 use sqlx::PgPool;

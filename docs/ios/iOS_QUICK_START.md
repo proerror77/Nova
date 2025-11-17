@@ -39,7 +39,7 @@ open ios/NovaSocial/NovaSocial.xcworkspace
 |-----------|--------|-----|
 | APIConfig | Added `.stagingAWS` environment | Point to AWS backend via localhost:8081 |
 | PostService | Changed `imageUrl` → `imageKey` + `contentType` | Match backend API spec |
-| FeedService | Auto-switch port 8081 → 8083 | Feed is on user-service, not content-service |
+| FeedService | Auto-switch port 8081 → 8080 | Feed/Profiles via GraphQL gateway |
 | ContentView | Updated PostService call | Use new image_key parameter |
 
 ## Architecture Overview
@@ -53,16 +53,16 @@ Port-Forward: kubectl port-forward -n nova svc/content-service 8081:8081
     ↓
 EKS Cluster (AWS ap-northeast-1)
     ├── content-service:8081 ← Posts endpoints
-    ├── user-service:8083 ← Feed endpoints
+    ├── graphql-gateway:8080 ← Feeds & users (aggregates identity/feed/social)
     ├── media-service:8082 ← Image upload
-    ├── messaging-service:8084 ← Chat
+    ├── realtime-chat-service:8080 ← Chat/WebSocket
     └── PostgreSQL:5432 ← Data storage
 ```
 
 ## Key Points to Remember
 
 1. **Port-forwards are REQUIRED** - Without them, app falls back to mock data
-2. **Two different ports**: Content-service (8081) and User-service (8083)
+2. **Two different ports**: content-service (8081) and GraphQL gateway (8080)
 3. **Default auth**: Uses `Bearer test-token` from APIConfig
 4. **Fallback to mock**: If any request fails, gracefully shows mock data instead of error
 5. **No database data yet**: Posts database may be empty, so you'll see mock data initially
@@ -72,11 +72,11 @@ EKS Cluster (AWS ap-northeast-1)
 ```bash
 # Test the endpoints directly
 curl -H "Authorization: Bearer test-token" http://localhost:8081/health
-curl -H "Authorization: Bearer test-token" http://localhost:8083/api/v1/feed
+curl -H "Authorization: Bearer test-token" http://localhost:8080/graphql
 
 # Check port-forwards are running
 lsof -i :8081
-lsof -i :8083
+lsof -i :8080
 ```
 
 ## Common Issues

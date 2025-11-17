@@ -624,6 +624,7 @@ async fn main() -> io::Result<()> {
     let feed_cache_grpc = feed_cache.clone();
     let feed_ranking_grpc = feed_ranking.clone();
     let auth_client_grpc = auth_client.clone();
+    let grpc_pool_grpc = grpc_pool.clone();
     tasks.spawn(async move {
         tracing::info!("gRPC server is running");
         content_service::grpc::start_grpc_server(
@@ -633,6 +634,7 @@ async fn main() -> io::Result<()> {
             feed_cache_grpc,
             feed_ranking_grpc,
             auth_client_grpc,
+            grpc_pool_grpc,
             grpc_shutdown,
         )
         .await

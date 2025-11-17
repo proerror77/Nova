@@ -165,10 +165,20 @@ pub struct TrendingSearchCache {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CachedSearchResults {
-    pub post_ids: Vec<String>,
-    pub user_ids: Vec<String>,
-    pub hashtags: Vec<String>,
+    pub results: Vec<CachedSearchResultEntry>,
     pub total_count: i32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CachedSearchResultEntry {
+    pub id: String,
+    pub result_type: String,
+    pub title: String,
+    pub description: String,
+    pub thumbnail_url: String,
+    pub relevance_score: f32,
+    pub created_at: i64,
+    pub url_slug: String,
 }
 
 #[cfg(test)]
