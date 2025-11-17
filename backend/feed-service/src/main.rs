@@ -11,8 +11,8 @@ use utoipa_swagger_ui::SwaggerUi;
 
 use recommendation_service::config::Config;
 use recommendation_service::handlers::{
-    get_model_info, get_recommendations, rank_candidates, semantic_search,
-    RecommendationHandlerState,
+    get_feed, get_model_info, get_recommendations, rank_candidates, semantic_search,
+    FeedHandlerState, RecommendationHandlerState,
 };
 use tracing::info;
 
@@ -122,6 +122,13 @@ async fn main() -> io::Result<()> {
         ranking_client,
         db_pool: db_pool.get_ref().clone(),
     });
+
+    // Initialize FeedHandlerState with gRPC clients
+    let feed_handler_state = web::Data::new(FeedHandlerState {
+        content_client: Arc::new(grpc_pool.content()),
+        user_client: Arc::new(grpc_pool.user()),
+    });
+    tracing::info!("FeedHandlerState initialized with content and user gRPC clients");
 
     // Kafka consumer removed - recommendation events now handled by ranking-service
     info!("Feed-service simplified - ranking delegated to ranking-service");
@@ -254,6 +261,7 @@ async fn main() -> io::Result<()> {
             .route("/api/v1/openapi.json", web::get().to(openapi_json))
             .app_data(db_pool.clone())
             .app_data(rec_handler_state.clone())
+            .app_data(feed_handler_state.clone())
             .route("/health", web::get().to(|| async { "OK" }))
             .route(
                 "/metrics",
@@ -295,6 +303,10 @@ async fn main() -> io::Result<()> {
             .service(get_model_info)
             .service(rank_candidates)
             .service(semantic_search)
+            .service(
+                web::scope("/api/v2/feed")
+                    .service(get_feed)
+            )
     })
     .bind(format!("0.0.0.0:{}", config.app.port))?
     .run()
