@@ -8,6 +8,7 @@ use crypto_core::jwt;
 use db_pool::{create_pool as create_pg_pool, DbConfig as DbPoolConfig};
 use media_service::cache::MediaCache;
 use media_service::handlers;
+use media_service::kafka::events::MediaEventsProducer;
 use media_service::middleware;
 use media_service::openapi::ApiDoc;
 use media_service::services::ReelTranscodePipeline;
@@ -136,6 +137,14 @@ async fn main() -> io::Result<()> {
     let media_cache = Arc::new(MediaCache::with_manager(redis_pool.manager(), None));
     let media_cache_http = media_cache.clone();
 
+    // Initialize Kafka producer for media events (e.g., MediaUploaded)
+    let media_events_producer = MediaEventsProducer::new(
+        &config.kafka.brokers,
+        &config.kafka.events_topic,
+    )
+    .map_err(|e| io::Error::other(format!("Failed to initialize media events producer: {e}")))?;
+    let media_events_producer_http = media_events_producer.clone();
+
     // Parse gRPC bind address
     let grpc_addr: SocketAddr = grpc_bind_address
         .parse()
@@ -156,6 +165,7 @@ async fn main() -> io::Result<()> {
             .app_data(web::Data::new(db_pool_http.clone()))
             .app_data(web::Data::new(reel_pipeline.clone()))
             .app_data(web::Data::new(media_cache_http.clone()))
+            .app_data(web::Data::new(media_events_producer_http.clone()))
             .wrap(Logger::default())
             .wrap(CorrelationIdMiddleware)
             .route(

@@ -22,3 +22,16 @@ spec:
       - name: grpc-ca-cert
         secret:
           secretName: grpc-ca-cert
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: search-service
+spec:
+  template:
+    spec:
+      containers:
+      - name: search-service
+        # Staging environment: run gRPC without TLS.
+        # Production will enable mTLS via environment-specific patches
+        # and APP_ENV-based gating in the service code.

@@ -1,6 +1,9 @@
 /// Post service - handles post creation, retrieval, and management
 use crate::cache::ContentCache;
 use crate::error::Result;
+use crate::kafka::events::{
+    publish_post_created, publish_post_deleted, publish_post_status_updated,
+};
 use crate::models::Post;
 use sqlx::PgPool;
 use std::sync::Arc;
@@ -129,21 +132,7 @@ impl PostService {
 
         // Publish event to outbox (same transaction)
         if let Some(outbox) = &self.outbox_repo {
-            publish_event!(
-                &mut tx,
-                outbox.as_ref(),
-                "content",
-                post.id,
-                "content.post.created",
-                serde_json::json!({
-                    "post_id": post.id.to_string(),
-                    "user_id": user_id.to_string(),
-                    "caption": caption,
-                    "content_type": content_type,
-                    "status": "published",
-                    "created_at": post.created_at,
-                })
-            )?;
+            publish_post_created(&mut tx, outbox.as_ref(), &post).await?;
         }
 
         // Commit transaction (both post and event committed atomically)
@@ -187,19 +176,8 @@ impl PostService {
         if updated {
             // Publish event to outbox (same transaction)
             if let Some(outbox) = &self.outbox_repo {
-                publish_event!(
-                    &mut tx,
-                    outbox.as_ref(),
-                    "content",
-                    post_id,
-                    "content.post.status_updated",
-                    serde_json::json!({
-                        "post_id": post_id.to_string(),
-                        "user_id": user_id.to_string(),
-                        "new_status": status,
-                        "updated_at": chrono::Utc::now(),
-                    })
-                )?;
+                publish_post_status_updated(&mut tx, outbox.as_ref(), post_id, user_id, status)
+                    .await?;
             }
         }
 
@@ -240,18 +218,7 @@ impl PostService {
         if deleted {
             // Publish event to outbox (same transaction)
             if let Some(outbox) = &self.outbox_repo {
-                publish_event!(
-                    &mut tx,
-                    outbox.as_ref(),
-                    "content",
-                    post_id,
-                    "content.post.deleted",
-                    serde_json::json!({
-                        "post_id": post_id.to_string(),
-                        "user_id": user_id.to_string(),
-                        "deleted_at": chrono::Utc::now(),
-                    })
-                )?;
+                publish_post_deleted(&mut tx, outbox.as_ref(), post_id, user_id).await?;
             }
         }
 

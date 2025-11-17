@@ -3,7 +3,7 @@
 # 这避免了级联故障和启动顺序混乱
 
 ---
-# feed-service 依赖：user-service + kafka
+# feed-service 依赖：kafka + content-service
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -12,24 +12,6 @@ spec:
   template:
     spec:
       initContainers:
-      - name: wait-for-user-service
-        image: busybox:1.35
-        command:
-        - sh
-        - -c
-        - |
-          echo "⏳ Waiting for user-service:50051..."
-          for i in $(seq 1 30); do
-            if nc -zv user-service.nova-staging.svc.cluster.local 50051 2>/dev/null; then
-              echo "✓ user-service is ready"
-              exit 0
-            fi
-            echo "  Attempt $i/30, retrying..."
-            sleep 2
-          done
-          echo "❌ user-service is not ready"
-          exit 1
-
       - name: wait-for-kafka
         image: busybox:1.35
         command:
@@ -49,7 +31,7 @@ spec:
           exit 1
 
 ---
-# messaging-service 依赖：user-service + postgres
+# messaging-service 依赖：postgres only (使用 JWT 认证，无需等待 identity-service)
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -58,22 +40,6 @@ spec:
   template:
     spec:
       initContainers:
-      - name: wait-for-user-service
-        image: busybox:1.35
-        command:
-        - sh
-        - -c
-        - |
-          echo "⏳ Waiting for user-service:50051..."
-          for i in $(seq 1 30); do
-            if nc -zv user-service.nova-staging.svc.cluster.local 50051 2>/dev/null; then
-              echo "✓ user-service is ready"
-              exit 0
-            fi
-            sleep 2
-          done
-          exit 1
-
       - name: wait-for-postgres
         image: postgres:15-alpine
         command:
@@ -302,7 +268,7 @@ spec:
               key: password
 
 ---
-# realtime-chat-service 依赖：user-service + messaging-service + redis
+# realtime-chat-service 依赖：redis + kafka only (通过 messaging-events 解耦)
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -311,38 +277,6 @@ spec:
   template:
     spec:
       initContainers:
-      - name: wait-for-user-service
-        image: busybox:1.35
-        command:
-        - sh
-        - -c
-        - |
-          echo "⏳ Waiting for user-service:50051..."
-          for i in $(seq 1 30); do
-            if nc -zv user-service.nova-staging.svc.cluster.local 50051 2>/dev/null; then
-              echo "✓ user-service is ready"
-              exit 0
-            fi
-            sleep 2
-          done
-          exit 1
-
-      - name: wait-for-messaging-service
-        image: busybox:1.35
-        command:
-        - sh
-        - -c
-        - |
-          echo "⏳ Waiting for messaging-service:50051..."
-          for i in $(seq 1 30); do
-            if nc -zv messaging-service.nova-staging.svc.cluster.local 50051 2>/dev/null; then
-              echo "✓ messaging-service is ready"
-              exit 0
-            fi
-            sleep 2
-          done
-          exit 1
-
       - name: wait-for-redis
         image: busybox:1.35
         command:
@@ -413,43 +347,6 @@ spec:
           exit 1
 
 ---
-# user-service 依赖：postgres (基础身份验证服务)
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: user-service
-spec:
-  template:
-    spec:
-      initContainers:
-      - name: wait-for-postgres
-        image: postgres:15-alpine
-        command:
-        - sh
-        - -c
-        - |
-          echo "⏳ Waiting for postgres:5432..."
-          for i in $(seq 1 30); do
-            if PGPASSWORD="$DB_PASSWORD" psql -h postgres.nova-staging.svc.cluster.local -U "$DB_USER" -d postgres -c "SELECT 1" 2>/dev/null; then
-              echo "✓ postgres is ready"
-              exit 0
-            fi
-            sleep 2
-          done
-          exit 1
-        env:
-        - name: DB_USER
-          valueFrom:
-            secretKeyRef:
-              name: nova-db-credentials
-              key: username
-        - name: DB_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: nova-db-credentials
-              key: password
-
----
 # content-service 依赖：postgres
 apiVersion: apps/v1
 kind: Deployment
@@ -487,7 +384,7 @@ spec:
               key: password
 
 ---
-# media-service 依赖：postgres + content-service
+# media-service 依赖：postgres only (通过 Kafka media-events 与 content-service 解耦)
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -523,24 +420,8 @@ spec:
               name: nova-db-credentials
               key: password
 
-      - name: wait-for-content-service
-        image: busybox:1.35
-        command:
-        - sh
-        - -c
-        - |
-          echo "⏳ Waiting for content-service:50051..."
-          for i in $(seq 1 30); do
-            if nc -zv content-service.nova-staging.svc.cluster.local 50051 2>/dev/null; then
-              echo "✓ content-service is ready"
-              exit 0
-            fi
-            sleep 2
-          done
-          exit 1
-
 ---
-# identity-service 依赖：postgres + user-service
+# identity-service 依赖：postgres only (替代了 user-service)
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -575,22 +456,6 @@ spec:
             secretKeyRef:
               name: nova-db-credentials
               key: password
-
-      - name: wait-for-user-service
-        image: busybox:1.35
-        command:
-        - sh
-        - -c
-        - |
-          echo "⏳ Waiting for user-service:50051..."
-          for i in $(seq 1 30); do
-            if nc -zv user-service.nova-staging.svc.cluster.local 50051 2>/dev/null; then
-              echo "✓ user-service is ready"
-              exit 0
-            fi
-            sleep 2
-          done
-          exit 1
 
 ---
 # feature-store 依赖：postgres + kafka + redis (特征存储)

@@ -168,7 +168,7 @@ metadata:
     app: redis-cluster
 spec:
   serviceName: redis-cluster-headless
-  replicas: 1
+  replicas: 3
   selector:
     matchLabels:
       app: redis-cluster
@@ -295,90 +295,10 @@ spec:
 
 ---
 # Redis Cluster initialization Job
-apiVersion: batch/v1
-kind: Job
-metadata:
-  name: redis-cluster-init
-  namespace: nova-staging
-  labels:
-    app: redis-cluster
-spec:
-  ttlSecondsAfterFinished: 3600
-  backoffLimit: 3
-  template:
-    metadata:
-      labels:
-        app: redis-cluster-init
-    spec:
-      restartPolicy: Never
-
-      initContainers:
-      - name: wait-for-redis
-        image: redis:7-alpine
-        command:
-        - sh
-        - -c
-        - |
-          echo "Waiting for Redis pods to be ready..."
-          for i in 0 1 2; do
-            for retry in $(seq 1 30); do
-              if redis-cli -h redis-cluster-$i.redis-cluster-headless.nova-staging.svc.cluster.local -p 6379 ping 2>/dev/null | grep -q PONG; then
-                echo "✓ redis-cluster-$i is ready"
-                break
-              fi
-
-              if [ $retry -eq 30 ]; then
-                echo "❌ redis-cluster-$i timeout"
-                exit 1
-              fi
-
-              sleep 1
-            done
-          done
-
-      containers:
-      - name: redis-cluster-init
-        image: redis:7-alpine
-        command:
-        - sh
-        - -c
-        - |
-          set -e
-          echo "🔴 Redis Cluster Initialization - $(date)"
-          echo "========================================="
-
-          # Wait for all nodes to be reachable
-          echo "Verifying all nodes are reachable..."
-          for i in 0 1 2; do
-            redis-cli -h redis-cluster-$i.redis-cluster-headless.nova-staging.svc.cluster.local -p 6379 ping
-          done
-
-          echo ""
-          echo "Creating cluster topology..."
-          redis-cli --cluster create \
-            redis-cluster-0.redis-cluster-headless.nova-staging.svc.cluster.local:6379 \
-            redis-cluster-1.redis-cluster-headless.nova-staging.svc.cluster.local:6379 \
-            redis-cluster-2.redis-cluster-headless.nova-staging.svc.cluster.local:6379 \
-            --cluster-replicas 1 \
-            --cluster-yes || true
-
-          echo ""
-          echo "========================================="
-          echo "✅ Redis Cluster Initialized"
-          echo ""
-          echo "Cluster Info:"
-          redis-cli -h redis-cluster-0.redis-cluster-headless.nova-staging.svc.cluster.local cluster info
-          echo ""
-          echo "Cluster Nodes:"
-          redis-cli -h redis-cluster-0.redis-cluster-headless.nova-staging.svc.cluster.local cluster nodes
-
-        resources:
-          requests:
-            cpu: 50m
-            memory: 128Mi
-          limits:
-            cpu: 200m
-            memory: 256Mi
+# NOTE: 在 nova-staging 環境中，Redis Cluster 已經手動初始化完成並驗證
+# cluster_state:ok。為了避免重複初始化導致 Job 失敗與 Pod Error 噪音，
+# 這裡暫時不自動建立 redis-cluster-init Job。如需在新環境初始化，請參考
+# STAGING_DEPLOYMENT_GUIDE.md 中的步驟手動執行。
 
 ---
 # Prometheus ServiceMonitor for Redis metrics (optional)

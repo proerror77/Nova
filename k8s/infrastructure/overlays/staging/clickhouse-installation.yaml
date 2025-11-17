@@ -517,8 +517,3 @@ spec:
           limits:
             cpu: 500m
             memory: 512Mi
-
-      volumes:
-      - name: init-scripts
-        configMap:
-          name: clickhouse-init-scripts

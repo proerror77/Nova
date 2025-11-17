@@ -26,29 +26,6 @@ spec:
         runAsNonRoot: true
         fsGroup: 1000
 
-      # Feed service depends on content-service being ready
-      initContainers:
-        - name: wait-for-content-service
-          image: busybox:1.35
-          securityContext:
-            runAsUser: 0
-            runAsNonRoot: false
-          command:
-            - sh
-            - -c
-            - |
-              echo "Waiting for content-service to be ready..."
-              for i in $(seq 1 300); do
-                if nc -z content-service.nova-content.svc.cluster.local 9085; then
-                  echo "✓ content-service is ready"
-                  exit 0
-                fi
-                echo "Attempt $i/300 - content-service not ready yet, retrying in 1s..."
-                sleep 1
-              done
-              echo "✗ FATAL: content-service not ready after 5 minutes"
-              exit 1
-
       affinity:
         podAntiAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:

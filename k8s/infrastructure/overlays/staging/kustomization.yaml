@@ -308,10 +308,12 @@ patchesStrategicMerge:
 - messaging-cronjob-patch.yaml
 - content-service-env-patch.yaml
 - content-service-probes-patch.yaml
-- feed-service-init-fix.yaml
+# - feed-service-init-fix.yaml  # ❌ 已移除：feed-service 通过 Kafka content-events 解耦，不再直接依赖 content-service
 - content-service-ports-patch.yaml
 - runasuser-patch.yaml
 - search-service-env-patch.yaml
+- notification-service-env-port-patch.yaml
+- notification-service-probes-patch.yaml
 - elasticsearch-replicas-patch.yaml
 - s3-env-patch.yaml
 - prefer-large-nodes-patch.yaml
@@ -363,7 +365,7 @@ images:
   newTag: c849ea7287e61bc77123ee9d58b3f47cb2901cb5
 - name: nova/search-service
   newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/search-service
-  newTag: e6aea57f4cccfd9367de59337757aa058862361c
+  newTag: 3bc3d089df39336265aebb0d902ceb1af1893e0a
 - name: nova/social-service
   newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/social-service
   newTag: c849ea7287e61bc77123ee9d58b3f47cb2901cb5
@@ -387,6 +389,8 @@ replicas:
   - name: api-gateway
     count: 0
   - name: feed-service
+    count: 0
+  - name: turn-server
     count: 0
 
   # Disable PgBouncer in staging for now to avoid hostPort conflicts and crashes
@@ -456,6 +460,7 @@ resources:
 
 # ClickHouse for analytics
 - clickhouse-installation.yaml
+- neo4j-statefulset.yaml
 
 # ========================================
 # P3 Priority: API Contract Management
@@ -468,6 +473,7 @@ resources:
 # ========================================
 # All application service deployments from microservices directory kustomization
 - ../../../microservices
+- api-gateway-configmap-patch.yaml
 
 # ========================================
 # PgBouncer connection pooling (P1 Priority)

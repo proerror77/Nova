@@ -416,7 +416,8 @@ spec:
           # Topics for various services
           TOPICS=(
             "user-events:3:1"
-            "content-events:3:1"
+            "content-events:6:1"
+            "media-events:3:1"
             "feed-updates:3:1"
             "messaging-events:3:1"
             "notification-events:2:1"
