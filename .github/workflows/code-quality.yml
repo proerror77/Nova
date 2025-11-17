@@ -17,7 +17,7 @@ jobs:
     name: Check for unwrap() in production code
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Check for unwrap() in production code
         run: |
@@ -56,7 +56,7 @@ jobs:
     name: Check for TODO comments
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Check for TODO comments
         run: |
@@ -81,7 +81,7 @@ jobs:
     name: Check for expect() without context
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Check for expect() calls
         run: |
@@ -107,7 +107,7 @@ jobs:
     name: Check for hardcoded secrets
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Check for potential hardcoded secrets
         run: |
@@ -137,7 +137,7 @@ jobs:
     name: Check for println! in production code
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Check for println! debugging
         run: |
@@ -168,7 +168,7 @@ jobs:
     name: Check for panic! in production code
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Check for panic! calls
         run: |
@@ -204,7 +204,7 @@ jobs:
     name: Clippy Lints
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install protoc
         run: |
@@ -238,7 +238,7 @@ jobs:
     name: Format Check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install Rust
         uses: actions-rust-lang/setup-rust-toolchain@v1
