@@ -6,10 +6,6 @@ metadata:
   name: graphql-gateway-ingress
   namespace: nova-gateway
   annotations:
-    # Nginx Ingress Controller annotations
-    nginx.ingress.kubernetes.io/rewrite-target: /
-    nginx.ingress.kubernetes.io/use-regex: "true"
-
     # CORS configuration
     nginx.ingress.kubernetes.io/enable-cors: "true"
     nginx.ingress.kubernetes.io/cors-allow-origin: "*"
@@ -21,14 +17,6 @@ metadata:
     # Rate limiting
     nginx.ingress.kubernetes.io/limit-rps: "100"
     nginx.ingress.kubernetes.io/limit-burst-multiplier: "5"
-
-    # Security headers
-    nginx.ingress.kubernetes.io/configuration-snippet: |
-      add_header X-Frame-Options "SAMEORIGIN" always;
-      add_header X-Content-Type-Options "nosniff" always;
-      add_header X-XSS-Protection "1; mode=block" always;
-      add_header Referrer-Policy "no-referrer-when-downgrade" always;
-      add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
 
     # Timeouts
     nginx.ingress.kubernetes.io/proxy-connect-timeout: "60"

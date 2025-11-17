@@ -137,14 +137,14 @@ spec:
           timeoutSeconds: 3
           failureThreshold: 3
 
-        # Resource limits - Identity service needs more resources for auth operations
+        # Resource limits - tuned for staging (prod can override via overlays)
         resources:
           requests:
-            memory: "512Mi"
-            cpu: "250m"
+            memory: "256Mi"
+            cpu: "100m"
           limits:
-            memory: "1Gi"
-            cpu: "500m"
+            memory: "512Mi"
+            cpu: "300m"
 
         # Volume mounts
         volumeMounts:

@@ -71,13 +71,13 @@ resources:
   - trust-safety-service-secret.yaml
   - trust-safety-service-serviceaccount.yaml
 
-  # API Gateway (separate)
+  # API Gateway (legacy deployment, kept for reference but not used in staging)
   - api-gateway/deployment.yaml
   - api-gateway/service.yaml
   - api-gateway/configmap-nginx.yaml
 
-  # Infrastructure and support services
-  - ingress.yaml
+  # NOTE: Ingress for nova-api-gateway is now managed in k8s/infrastructure/base/ingress.yaml
+  # to avoid duplicate Ingress definitions across environments.
   # Optional TLS + cert-manager integration (ClusterIssuer etc.)
   # ingress-tls-setup.yaml is disabled by default to avoid requiring cert-manager CRDs in all environments.
   # Apply manually when cert-manager is installed:

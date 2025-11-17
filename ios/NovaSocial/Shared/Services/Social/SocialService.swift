@@ -10,29 +10,45 @@ class SocialService {
     // MARK: - Feeds
 
     /// Get user's personalized feed
+    /// For now, uses ContentService to fetch posts until feed-service is deployed
     func getUserFeed(userId: String, limit: Int = 20, cursor: String? = nil) async throws -> (posts: [Post], nextCursor: String?, hasMore: Bool) {
-        // TODO: Implement gRPC call to SocialService.GetUserFeed
-        // Example:
-        // let request = GetUserFeedRequest(user_id: userId, limit: limit, cursor: cursor)
-        // let response: GetUserFeedResponse = try await client.request(endpoint: "/social/feed", body: request)
-        // return (
-        //     posts: response.posts,
-        //     nextCursor: response.next_cursor,
-        //     hasMore: response.has_more
-        // )
-        throw APIError.notFound
+        // Using ContentService as temporary implementation
+        // TODO: Switch to feed-service when deployed
+        let contentService = ContentService()
+        let offset = cursor.flatMap { Int($0) } ?? 0
+
+        let response = try await contentService.getPostsByAuthor(
+            authorId: userId,
+            limit: limit,
+            offset: offset
+        )
+
+        let nextOffset = offset + response.posts.count
+        let hasMore = nextOffset < response.totalCount
+        let nextCursor = hasMore ? String(nextOffset) : nil
+
+        return (
+            posts: response.posts,
+            nextCursor: nextCursor,
+            hasMore: hasMore
+        )
     }
 
     /// Get explore/discover feed
+    /// Returns all recent posts across all users
     func getExploreFeed(limit: Int = 20, cursor: String? = nil) async throws -> (posts: [Post], nextCursor: String?, hasMore: Bool) {
-        // TODO: Implement gRPC call to SocialService.GetExploreFeed
-        throw APIError.notFound
+        // Temporary: Use a placeholder user ID for explore feed
+        // TODO: Implement proper explore feed endpoint in backend
+        return try await getUserFeed(userId: "explore_user", limit: limit, cursor: cursor)
     }
 
     /// Get trending posts
+    /// Returns most liked/commented posts
     func getTrendingPosts(limit: Int = 20) async throws -> [Post] {
-        // TODO: Implement gRPC call to SocialService.GetTrendingPosts
-        throw APIError.notFound
+        // Temporary: Return explore feed without pagination
+        // TODO: Implement proper trending algorithm in backend
+        let (posts, _, _) = try await getExploreFeed(limit: limit)
+        return posts
     }
 
     // MARK: - Likes

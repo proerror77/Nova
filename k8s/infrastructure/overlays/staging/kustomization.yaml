@@ -473,7 +473,6 @@ resources:
 # ========================================
 # All application service deployments from microservices directory kustomization
 - ../../../microservices
-- api-gateway-configmap-patch.yaml
 
 # ========================================
 # PgBouncer connection pooling (P1 Priority)
