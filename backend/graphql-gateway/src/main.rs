@@ -157,9 +157,9 @@ async fn main() -> std::io::Result<()> {
     // Initialize service clients from configuration
     let clients = ServiceClients::new(
         &config.services.auth_service,
+        &config.services.user_service,
         &config.services.content_service,
         &config.services.feed_service,
-        &config.services.graph_service,
     );
 
     info!("Service clients initialized");

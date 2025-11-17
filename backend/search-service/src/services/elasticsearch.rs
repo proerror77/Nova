@@ -363,104 +363,6 @@ impl ElasticsearchClient {
         }
     }
 
-    pub async fn advanced_post_search(
-        &self,
-        query: &str,
-        author_id: Option<Uuid>,
-        hashtags: &[String],
-        content_tag: Option<&str>,
-        from_date: Option<DateTime<Utc>>,
-        to_date: Option<DateTime<Utc>>,
-        limit: i64,
-        offset: i64,
-    ) -> Result<(Vec<PostDocument>, i64), ElasticsearchError> {
-        let size = limit.clamp(1, 100);
-        let from = offset.max(0);
-
-        let mut must_clauses = Vec::new();
-        if query.trim().is_empty() {
-            must_clauses.push(json!({ "match_all": {} }));
-        } else {
-            must_clauses.push(json!({
-                "multi_match": {
-                    "query": query,
-                    "fields": ["title^2", "content", "tags"],
-                    "type": "best_fields"
-                }
-            }));
-        }
-
-        let mut filter_clauses = Vec::new();
-
-        if let Some(author) = author_id {
-            filter_clauses.push(json!({ "term": { "user_id": author.to_string() } }));
-        }
-
-        if !hashtags.is_empty() {
-            filter_clauses.push(json!({ "terms": { "tags": hashtags } }));
-        }
-
-        if let Some(tag) = content_tag {
-            filter_clauses.push(json!({ "term": { "tags": tag } }));
-        }
-
-        if from_date.is_some() || to_date.is_some() {
-            let mut range = serde_json::Map::new();
-            if let Some(from_dt) = from_date {
-                range.insert("gte".to_string(), json!(from_dt.to_rfc3339()));
-            }
-            if let Some(to_dt) = to_date {
-                range.insert("lte".to_string(), json!(to_dt.to_rfc3339()));
-            }
-            filter_clauses
-                .push(json!({ "range": { "created_at": serde_json::Value::Object(range) } }));
-        }
-
-        let mut bool_query = serde_json::Map::new();
-        bool_query.insert("must".to_string(), json!(must_clauses));
-        if !filter_clauses.is_empty() {
-            bool_query.insert("filter".to_string(), json!(filter_clauses));
-        }
-
-        let body = json!({
-            "size": size,
-            "from": from,
-            "query": { "bool": serde_json::Value::Object(bool_query) },
-            "sort": [
-                { "_score": { "order": "desc" }},
-                { "created_at": { "order": "desc" }}
-            ]
-        });
-
-        let response = self
-            .client
-            .search(SearchParts::Index(&[self.post_index.as_str()]))
-            .body(body)
-            .send()
-            .await?;
-
-        let status = response.status_code();
-        if !status.is_success() {
-            return Ok((vec![], 0));
-        }
-
-        let search_response: SearchResponse = response.json().await?;
-        let total = search_response
-            .hits
-            .total
-            .as_ref()
-            .map(|t| t.value)
-            .unwrap_or_else(|| search_response.hits.hits.len() as i64);
-        let docs = search_response
-            .hits
-            .hits
-            .into_iter()
-            .filter_map(|hit| hit.source)
-            .collect();
-
-        Ok((docs, total))
-    }
-
     pub async fn search_users(
         &self,
         query: &str,
@@ -735,14 +637,7 @@ struct SearchResponse {
 
 #[derive(Debug, Deserialize)]
 struct InnerHits {
-    #[serde(default)]
-    total: Option<SearchTotal>,
     hits: Vec<PostHit>,
-}
-
-#[derive(Debug, Deserialize)]
-struct SearchTotal {
-    value: i64,
 }
 
 #[derive(Debug, Deserialize)]

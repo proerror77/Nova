@@ -29,12 +29,22 @@ images:
 - name: nova/media-service
   newTag: v1.0.0
   newName: nova/media-service
+- name: nova/user-service
+  newTag: v1.0.0
+  newName: nova/user-service
+- name: nova/messaging-service
+  newTag: v1.0.0
+  newName: nova/messaging-service
 
 # 副本数（生产环境至少3个）
 replicas:
 - name: content-service
   count: 3
 - name: media-service
+  count: 3
+- name: user-service
+  count: 3
+- name: messaging-service
   count: 3
 
 commonAnnotations:

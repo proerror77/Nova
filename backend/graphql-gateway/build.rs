@@ -16,9 +16,9 @@ fn main() {
             &[
                 "../proto/services/common.proto",
                 "../proto/services/auth_service.proto",
+                "../proto/services/user_service.proto",
                 "../proto/services/content_service.proto",
                 "../proto/services/feed_service.proto",
-                "../proto/services/graph_service.proto",
             ],
             &["../proto/services/"],
         )

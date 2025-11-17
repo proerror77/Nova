@@ -13,10 +13,10 @@ k8s/
 │   │   ├── secrets.yaml
 │   │   ├── namespace.yaml
 │   │   ├── postgres.yaml
-│   │   ├── identity-service.yaml
+│   │   ├── user-service.yaml
 │   │   ├── content-service.yaml
 │   │   ├── media-service.yaml
-│   │   ├── social-service.yaml
+│   │   ├── messaging-service.yaml
 │   │   └── ingress.yaml
 │   ├── overlays/               # 环境覆盖 (dev, prod, staging)
 │   │   ├── dev/
@@ -46,13 +46,17 @@ k8s/
 │   │   ├── deployment.yaml
 │   │   ├── namespace.yaml
 │   │   └── service.yaml
-│   ├── realtime-chat-service-deployment.yaml
-│   ├── realtime-chat-service-configmap.yaml
-│   ├── realtime-chat-service-secret.yaml
-│   ├── realtime-chat-service-service.yaml
-│   ├── realtime-chat-service-serviceaccount.yaml
-│   ├── realtime-chat-service-hpa.yaml
-│   ├── realtime-chat-service-pdb.yaml
+│   ├── messaging-service-deployment.yaml
+│   ├── messaging-service-deployment-local.yaml
+│   ├── messaging-service-configmap.yaml
+│   ├── messaging-service-configmap-local.yaml
+│   ├── messaging-service-secret.yaml
+│   ├── messaging-service-secret-local.yaml
+│   ├── messaging-service-service.yaml
+│   ├── messaging-service-serviceaccount.yaml
+│   ├── messaging-service-hpa.yaml
+│   ├── messaging-service-pdb.yaml
+│   ├── messaging-service-namespace.yaml
 │   ├── ingress.yaml            # 微服务路由配置
 │   ├── ingress-tls-setup.yaml  # TLS 安全配置
 │   ├── gitops-argocd-setup.yaml # GitOps / ArgoCD 配置

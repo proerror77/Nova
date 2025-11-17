@@ -1,0 +1,94 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": [
+          "TEAM_ID.com.nova.social",
+          "TEAM_ID.com.nova.social.debug"
+        ],
+        "components": [
+          {
+            "#": "no_universal_links",
+            "exclude": true,
+            "comment": "Matches any URL with a fragment identifier"
+          },
+          {
+            "/": "/user/*",
+            "comment": "User profile pages"
+          },
+          {
+            "/": "/u/*",
+            "comment": "Short user profile links"
+          },
+          {
+            "/": "/@*",
+            "comment": "Username-based profile links"
+          },
+          {
+            "/": "/post/*",
+            "comment": "Post detail pages"
+          },
+          {
+            "/": "/p/*",
+            "comment": "Short post links"
+          },
+          {
+            "/": "/search",
+            "?": {
+              "q": "*"
+            },
+            "comment": "Search with query parameter"
+          },
+          {
+            "/": "/hashtag/*",
+            "comment": "Hashtag search pages"
+          },
+          {
+            "/": "/tag/*",
+            "comment": "Tag search pages (alias)"
+          },
+          {
+            "/": "/notifications",
+            "comment": "Notifications page"
+          },
+          {
+            "/": "/explore",
+            "comment": "Explore/discover page"
+          },
+          {
+            "/": "/settings",
+            "comment": "Settings root"
+          },
+          {
+            "/": "/settings/*",
+            "comment": "Settings subpages"
+          },
+          {
+            "/": "/verify",
+            "?": {
+              "token": "*"
+            },
+            "comment": "Email verification"
+          },
+          {
+            "/": "/reset-password",
+            "?": {
+              "token": "*"
+            },
+            "comment": "Password reset"
+          }
+        ]
+      }
+    ]
+  },
+  "webcredentials": {
+    "apps": [
+      "TEAM_ID.com.nova.social"
+    ]
+  },
+  "appclips": {
+    "apps": [
+      "TEAM_ID.com.nova.social.Clip"
+    ]
+  }
+}

@@ -17,27 +17,33 @@ TIMEOUT="${TIMEOUT:-10}"
 
 CHECKS=(
   "auth-service:8084:/health"
+  "user-service:8080:/api/v1/health"
   "content-service:8081:/api/v1/health"
   "media-service:8082:/api/v1/health"
   "realtime-chat-service:8080:/health"
   "feed-service:8000:/health"
   "notification-service:8000:/health"
+  "streaming-service:8083:/health"
 )
 
 METRICS_CHECKS=(
   "auth-service:8084:/metrics"
   "media-service:8082:/metrics"
   "feed-service:8000:/metrics"
+  "user-service:8080:/metrics"
   "content-service:8081:/metrics"
   "notification-service:8000:/metrics"
+  "streaming-service:8083:/metrics"
 )
 
 OPENAPI_CHECKS=(
   "auth-service:8084:/api/v1/openapi.json"
+  "user-service:8080:/api/v1/openapi.json"
   "content-service:8081:/api/v1/openapi.json"
   "feed-service:8000:/api/v1/openapi.json"
   "media-service:8082:/api/v1/openapi.json"
   "search-service:8080:/api/v1/openapi.json"
+  "streaming-service:8083:/api/v1/openapi.json"
 )
 
 echo ">>> Using namespace: ${NAMESPACE}"

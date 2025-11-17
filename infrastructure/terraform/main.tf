@@ -97,11 +97,13 @@ module "ecr" {
 
   services = [
     "auth-service",
+    "user-service",
     "content-service",
     "feed-service",
     "media-service",
     "messaging-service",
     "search-service",
+    "streaming-service",
   ]
 
   ecr_registry_alias = var.ecr_registry_alias

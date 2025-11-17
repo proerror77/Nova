@@ -26,6 +26,10 @@ pub mod proto {
         tonic::include_proto!("nova.identity_service.v2");
     }
 
+    pub mod user {
+        tonic::include_proto!("nova.user_service.v2");
+    }
+
     pub mod content {
         tonic::include_proto!("nova.content_service.v2");
     }
@@ -33,16 +37,12 @@ pub mod proto {
     pub mod feed {
         tonic::include_proto!("nova.feed_service.v2");
     }
-
-    pub mod graph {
-        tonic::include_proto!("nova.graph_service.v2");
-    }
 }
 
 use proto::auth::auth_service_client::AuthServiceClient;
 use proto::content::content_service_client::ContentServiceClient;
 use proto::feed::recommendation_service_client::RecommendationServiceClient;
-use proto::graph::graph_service_client::GraphServiceClient;
+use proto::user::user_service_client::UserServiceClient;
 
 /// Service client manager with pooled gRPC connections and circuit breaker protection
 ///
@@ -67,23 +67,23 @@ use proto::graph::graph_service_client::GraphServiceClient;
 #[derive(Clone)]
 pub struct ServiceClients {
     auth_channel: Arc<Channel>,
+    user_channel: Arc<Channel>,
     content_channel: Arc<Channel>,
     feed_channel: Arc<Channel>,
-    graph_channel: Arc<Channel>,
     // Circuit breakers (one per service)
     auth_cb: Arc<CircuitBreaker>,
+    user_cb: Arc<CircuitBreaker>,
     content_cb: Arc<CircuitBreaker>,
     feed_cb: Arc<CircuitBreaker>,
-    graph_cb: Arc<CircuitBreaker>,
 }
 
 impl Default for ServiceClients {
     fn default() -> Self {
         Self::new(
             "http://auth-service.nova-backend.svc.cluster.local:9083",
+            "http://user-service.nova-backend.svc.cluster.local:9080",
             "http://content-service.nova-backend.svc.cluster.local:9081",
             "http://feed-service.nova-backend.svc.cluster.local:9084",
-            "http://graph-service.nova-backend.svc.cluster.local:9080",
         )
     }
 }
@@ -117,9 +117,9 @@ impl ServiceClients {
     /// hardcoded or validated at startup, so this is acceptable.
     pub fn new(
         auth_endpoint: &str,
+        user_endpoint: &str,
         content_endpoint: &str,
         feed_endpoint: &str,
-        graph_endpoint: &str,
     ) -> Self {
         // Circuit breaker configuration
         let cb_config = CircuitBreakerConfig {
@@ -132,13 +132,13 @@ impl ServiceClients {
 
         Self {
             auth_channel: Arc::new(Self::create_channel(auth_endpoint)),
+            user_channel: Arc::new(Self::create_channel(user_endpoint)),
             content_channel: Arc::new(Self::create_channel(content_endpoint)),
             feed_channel: Arc::new(Self::create_channel(feed_endpoint)),
-            graph_channel: Arc::new(Self::create_channel(graph_endpoint)),
             auth_cb: Arc::new(CircuitBreaker::new(cb_config.clone())),
+            user_cb: Arc::new(CircuitBreaker::new(cb_config.clone())),
             content_cb: Arc::new(CircuitBreaker::new(cb_config.clone())),
-            feed_cb: Arc::new(CircuitBreaker::new(cb_config.clone())),
-            graph_cb: Arc::new(CircuitBreaker::new(cb_config)),
+            feed_cb: Arc::new(CircuitBreaker::new(cb_config)),
         }
     }
 
@@ -213,7 +213,45 @@ impl ServiceClients {
             .map_err(|e| match e {
                 resilience::circuit_breaker::CircuitBreakerError::Open => {
                     ServiceError::Unavailable {
-                        service: "identity-service".to_string(),
+                        service: "auth-service".to_string(),
+                    }
+                }
+                resilience::circuit_breaker::CircuitBreakerError::CallFailed(msg) => {
+                    ServiceError::ConnectionError(msg)
+                }
+            })
+    }
+
+    /// Get user service client with circuit breaker protection
+    ///
+    /// # Circuit Breaker:
+    /// Use `call_user()` to wrap gRPC calls with circuit breaker protection.
+    pub fn user_client(&self) -> UserServiceClient<Channel> {
+        UserServiceClient::new((*self.user_channel).clone())
+    }
+
+    /// Execute user service call with circuit breaker protection
+    ///
+    /// # Example:
+    /// ```rust
+    /// let mut client = clients.user_client();
+    /// let result = clients.call_user(|| async move {
+    ///     client.get_user(request).await
+    /// }).await?;
+    /// ```
+    pub async fn call_user<F, Fut, T>(&self, f: F) -> Result<T, ServiceError>
+    where
+        F: FnOnce() -> Fut,
+        Fut: std::future::Future<Output = Result<tonic::Response<T>, Status>>,
+    {
+        self.user_cb
+            .call(f)
+            .await
+            .map(|response| response.into_inner())
+            .map_err(|e| match e {
+                resilience::circuit_breaker::CircuitBreakerError::Open => {
+                    ServiceError::Unavailable {
+                        service: "user-service".to_string(),
                     }
                 }
                 resilience::circuit_breaker::CircuitBreakerError::CallFailed(msg) => {
@@ -252,33 +290,6 @@ impl ServiceClients {
                 resilience::circuit_breaker::CircuitBreakerError::Open => {
                     ServiceError::Unavailable {
                         service: "content-service".to_string(),
-                    }
-                }
-                resilience::circuit_breaker::CircuitBreakerError::CallFailed(msg) => {
-                    ServiceError::ConnectionError(msg)
-                }
-            })
-    }
-
-    /// Get graph service client with circuit breaker protection
-    pub fn graph_client(&self) -> GraphServiceClient<Channel> {
-        GraphServiceClient::new((*self.graph_channel).clone())
-    }
-
-    /// Execute graph service call with circuit breaker protection
-    pub async fn call_graph<F, Fut, T>(&self, f: F) -> Result<T, ServiceError>
-    where
-        F: FnOnce() -> Fut,
-        Fut: std::future::Future<Output = Result<tonic::Response<T>, Status>>,
-    {
-        self.graph_cb
-            .call(f)
-            .await
-            .map(|response| response.into_inner())
-            .map_err(|e| match e {
-                resilience::circuit_breaker::CircuitBreakerError::Open => {
-                    ServiceError::Unavailable {
-                        service: "graph-service".to_string(),
                     }
                 }
                 resilience::circuit_breaker::CircuitBreakerError::CallFailed(msg) => {
@@ -344,10 +355,10 @@ impl ServiceClients {
     /// ```
     pub fn health_status(&self) -> Vec<(&'static str, CircuitState)> {
         vec![
-            ("identity-service", self.auth_cb.state()),
+            ("auth-service", self.auth_cb.state()),
+            ("user-service", self.user_cb.state()),
             ("content-service", self.content_cb.state()),
             ("feed-service", self.feed_cb.state()),
-            ("graph-service", self.graph_cb.state()),
         ]
     }
 
@@ -355,9 +366,9 @@ impl ServiceClients {
     pub fn get_circuit_breaker(&self, service: &str) -> Option<&CircuitBreaker> {
         match service {
             "auth" => Some(&self.auth_cb),
+            "user" => Some(&self.user_cb),
             "content" => Some(&self.content_cb),
             "feed" => Some(&self.feed_cb),
-            "graph" => Some(&self.graph_cb),
             _ => None,
         }
     }

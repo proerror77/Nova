@@ -3,7 +3,7 @@ use crypto_core::jwt as core_jwt;
 use grpc_clients::AuthClient;
 use realtime_chat_service::{
     config, db, error, grpc, logging,
-    nova::realtime_chat::v2::realtime_chat_service_server::RealtimeChatServiceServer,
+    nova::realtime_chat::v1::realtime_chat_service_server::RealtimeChatServiceServer,
     redis_client::RedisClient,
     routes,
     services::{encryption::EncryptionService, key_exchange::KeyExchangeService},

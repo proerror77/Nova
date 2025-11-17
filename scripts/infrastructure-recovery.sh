@@ -165,7 +165,92 @@ fi
 
 echo ""
 echo "==============================================="
-echo "STEP 2: Fix Kafka Cluster"
+echo "STEP 2: Deploy User Service"
+echo "==============================================="
+
+# Check if User Service deployment exists
+if kubectl get deployment user-service -n nova-backend 2>/dev/null | grep -q user-service; then
+    echo -e "${YELLOW}User Service deployment already exists${NC}"
+else
+    echo "Looking for User Service deployment manifest..."
+
+    if [ -f "/Users/proerror/Documents/nova/k8s/user-service-deployment.yaml" ]; then
+        echo "Found User Service deployment manifest"
+        kubectl apply -f /Users/proerror/Documents/nova/k8s/user-service-deployment.yaml
+        check_success "User Service deployment created"
+    else
+        echo "Creating User Service deployment..."
+        cat > /tmp/user-service-deployment.yaml <<EOF
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: user-service
+  namespace: nova-backend
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: user-service
+  template:
+    metadata:
+      labels:
+        app: user-service
+    spec:
+      containers:
+      - name: user-service
+        image: nova/user-service:latest
+        ports:
+        - containerPort: 50051
+        env:
+        - name: DATABASE_URL
+          value: "postgresql://postgres:postgres123@postgres.nova-backend.svc.cluster.local:5432/nova"
+        - name: RUST_LOG
+          value: "info"
+        - name: KAFKA_BROKERS
+          value: "kafka-0.kafka.kafka.svc.cluster.local:9092"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 50051
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 50051
+          initialDelaySeconds: 10
+          periodSeconds: 5
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: user-service
+  namespace: nova-backend
+spec:
+  type: ClusterIP
+  ports:
+  - port: 50051
+    targetPort: 50051
+    protocol: TCP
+  selector:
+    app: user-service
+EOF
+
+        kubectl apply -f /tmp/user-service-deployment.yaml
+        check_success "User Service deployment created"
+    fi
+fi
+
+echo ""
+echo "==============================================="
+echo "STEP 3: Fix Kafka Cluster"
 echo "==============================================="
 
 # Check Kafka namespace
@@ -283,6 +368,7 @@ SERVICES=(
     "nova-backend/cdn-service"
     "nova-backend/notification-service"
     "nova-backend/messaging-service"
+    "nova-backend/user-service"
     "nova-feed/feed-service"
     "nova-media/media-service"
 )

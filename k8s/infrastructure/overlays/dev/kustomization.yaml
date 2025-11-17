@@ -19,15 +19,6 @@ configMapGenerator:
   - LOG_LEVEL=debug
   - RUST_LOG=debug,actix_web=debug
 
-# 镜像配置（用于本地开发，可能需要 imagePullPolicy: Never）
-images:
-- name: nova/content-service
-  newTag: dev-latest
-  newName: nova/content-service
-- name: nova/media-service
-  newTag: dev-latest
-  newName: nova/media-service
-
 # 副本数（开发环境使用1个副本）
 replicas:
 - name: analytics-service

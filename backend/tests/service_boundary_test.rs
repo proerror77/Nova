@@ -338,11 +338,10 @@ impl ServiceBoundaryValidator {
         // Check for proper service role configuration
         let service_roles = vec![
             "identity_service",
+            "user_service",
             "content_service",
-            "social_service",
-            "media_service",
+            "messaging_service",
             "notification_service",
-            "realtime_chat_service",
         ];
 
         for role in service_roles {

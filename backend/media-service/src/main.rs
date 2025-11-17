@@ -138,10 +138,11 @@ async fn main() -> io::Result<()> {
     let media_cache_http = media_cache.clone();
 
     // Initialize Kafka producer for media events (e.g., MediaUploaded)
-    let media_events_producer =
-        MediaEventsProducer::new(&config.kafka.brokers, &config.kafka.events_topic).map_err(
-            |e| io::Error::other(format!("Failed to initialize media events producer: {e}")),
-        )?;
+    let media_events_producer = MediaEventsProducer::new(
+        &config.kafka.brokers,
+        &config.kafka.events_topic,
+    )
+    .map_err(|e| io::Error::other(format!("Failed to initialize media events producer: {e}")))?;
     let media_events_producer_http = media_events_producer.clone();
 
     // Parse gRPC bind address

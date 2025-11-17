@@ -1,0 +1,81 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: communication-service-configmap
+  labels:
+    app: communication-service
+    version: v2
+data:
+  # Redis configuration
+  redis-url: "redis://redis-cluster:6379"
+
+  # Kafka brokers for event streaming
+  kafka-brokers: "kafka-broker-0.kafka-headless.kafka:9092,kafka-broker-1.kafka-headless.kafka:9092,kafka-broker-2.kafka-headless.kafka:9092"
+
+  # Logging level
+  log-level: "info"
+
+  # gRPC configuration
+  grpc-port: "50053"
+  grpc-max-concurrent-streams: "1000"
+  grpc-keepalive-interval: "30s"
+  grpc-keepalive-timeout: "10s"
+
+  # Database connection pool settings (PgBouncer aware)
+  db-pool-min: "5"
+  db-pool-max: "12"
+  db-acquire-timeout: "10s"
+  db-idle-timeout: "300s"
+  db-max-lifetime: "1800s"
+
+  # Rate limiting configuration
+  rate-limit-window: "1m"
+  rate-limit-max-requests: "5000"
+
+  # Messaging configuration
+  max-message-length: "10000"
+  max-attachments-per-message: "10"
+  message-retention-days: "90"
+
+  # Notification configuration
+  notification-batch-size: "100"
+  notification-retry-attempts: "3"
+  notification-retention-days: "30"
+
+  # WebSocket configuration
+  ws-heartbeat-interval: "30s"
+  ws-connection-timeout: "60s"
+  ws-max-connections-per-user: "5"
+
+  # Email configuration
+  email-batch-size: "50"
+  email-retry-attempts: "3"
+  email-rate-limit-per-hour: "100"
+
+  # Push notification configuration
+  push-batch-size: "1000"
+  push-retry-attempts: "3"
+
+  # Outbox pattern configuration
+  outbox-poll-interval: "2000"  # More frequent for real-time messaging
+  outbox-batch-size: "200"
+  outbox-max-retries: "3"
+  outbox-retry-backoff: "500"
+
+  # Circuit breaker configuration
+  circuit-breaker-failure-threshold: "5"
+  circuit-breaker-success-threshold: "2"
+  circuit-breaker-timeout: "60s"
+
+  # Timeout configuration
+  db-timeout: "5s"
+  redis-timeout: "2s"
+  kafka-timeout: "10s"
+  smtp-timeout: "30s"
+  fcm-timeout: "10s"
+  apns-timeout: "10s"
+
+  # Cache configuration
+  cache-online-users-ttl: "60"
+  cache-unread-counts-ttl: "30"
+  cache-notification-preferences-ttl: "300"

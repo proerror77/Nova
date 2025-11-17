@@ -1,6 +1,5 @@
 use crate::repository::{CommentRepository, LikeRepository, ShareRepository};
 use crate::services::CounterService;
-use std::collections::{HashMap, HashSet};
 use tonic::{Request, Response, Status};
 use uuid::Uuid;
 
@@ -139,56 +138,10 @@ impl SocialService for SocialServiceImpl {
 
     async fn batch_check_user_liked(
         &self,
-        request: Request<BatchCheckUserLikedRequest>,
+        _request: Request<BatchCheckUserLikedRequest>,
     ) -> Result<Response<BatchCheckUserLikedResponse>, Status> {
-        let req = request.into_inner();
-
-        if req.post_ids.len() > 100 {
-            return Err(Status::invalid_argument(
-                "Maximum 100 post IDs allowed per request",
-            ));
-        }
-
-        let user_id = Uuid::parse_str(&req.user_id)
-            .map_err(|_| Status::invalid_argument("Invalid user_id"))?;
-
-        let mut processed: Vec<(String, Uuid)> = Vec::with_capacity(req.post_ids.len());
-        for raw in req.post_ids.iter() {
-            if raw.is_empty() {
-                continue;
-            }
-            let post_id = Uuid::parse_str(raw)
-                .map_err(|_| Status::invalid_argument("Invalid post_id in request"))?;
-            processed.push((raw.clone(), post_id));
-        }
-
-        if processed.is_empty() {
-            return Ok(Response::new(BatchCheckUserLikedResponse {
-                results: HashMap::new(),
-            }));
-        }
-
-        let mut unique_ids = Vec::new();
-        let mut seen = HashSet::new();
-        for (_, post_id) in processed.iter() {
-            if seen.insert(*post_id) {
-                unique_ids.push(*post_id);
-            }
-        }
-
-        let liked_posts = self
-            .like_repo
-            .batch_check_user_liked(user_id, &unique_ids)
-            .await
-            .map_err(|e| Status::internal(format!("Failed to batch check likes: {}", e)))?;
-        let liked_set: HashSet<Uuid> = liked_posts.into_iter().collect();
-
-        let mut results = HashMap::new();
-        for (raw, post_id) in processed {
-            results.insert(raw, liked_set.contains(&post_id));
-        }
-
-        Ok(Response::new(BatchCheckUserLikedResponse { results }))
+        // TODO: Implement batch check
+        Err(Status::unimplemented("Batch check not yet implemented"))
     }
 
     async fn get_post_likes(
@@ -211,7 +164,11 @@ impl SocialService for SocialServiceImpl {
             .await
             .map_err(|e| Status::internal(format!("Failed to get likes: {}", e)))?;
 
-        let total_count = self.like_repo.get_like_count(post_id).await.unwrap_or(0) as i32;
+        let total_count = self
+            .like_repo
+            .get_like_count(post_id)
+            .await
+            .unwrap_or(0) as i32;
 
         let proto_likes: Vec<Like> = likes
             .into_iter()
@@ -266,10 +223,7 @@ impl SocialService for SocialServiceImpl {
             post_id: comment.post_id.to_string(),
             user_id: comment.user_id.to_string(),
             content: comment.content,
-            parent_comment_id: comment
-                .parent_comment_id
-                .map(|id| id.to_string())
-                .unwrap_or_default(),
+            parent_comment_id: comment.parent_comment_id.map(|id| id.to_string()).unwrap_or_default(),
             created_at: comment.created_at.to_rfc3339(),
             updated_at: comment.updated_at.to_rfc3339(),
         };
@@ -292,10 +246,7 @@ impl SocialService for SocialServiceImpl {
             .map_err(|_| Status::invalid_argument("Invalid user_id"))?;
 
         // Get comment first to get post_id for counter decrement
-        let comment = self
-            .comment_repo
-            .get_comment(comment_id)
-            .await
+        let comment = self.comment_repo.get_comment(comment_id).await
             .map_err(|e| Status::internal(format!("Failed to get comment: {}", e)))?
             .ok_or_else(|| Status::not_found("Comment not found"))?;
 
@@ -307,10 +258,7 @@ impl SocialService for SocialServiceImpl {
 
         if deleted {
             // Decrement counter in Redis
-            let _ = self
-                .counter_service
-                .decrement_comment_count(comment.post_id)
-                .await;
+            let _ = self.counter_service.decrement_comment_count(comment.post_id).await;
         }
 
         Ok(Response::new(DeleteCommentResponse {
@@ -345,10 +293,7 @@ impl SocialService for SocialServiceImpl {
             post_id: comment.post_id.to_string(),
             user_id: comment.user_id.to_string(),
             content: comment.content,
-            parent_comment_id: comment
-                .parent_comment_id
-                .map(|id| id.to_string())
-                .unwrap_or_default(),
+            parent_comment_id: comment.parent_comment_id.map(|id| id.to_string()).unwrap_or_default(),
             created_at: comment.created_at.to_rfc3339(),
             updated_at: comment.updated_at.to_rfc3339(),
         };
@@ -403,10 +348,7 @@ impl SocialService for SocialServiceImpl {
                 post_id: comment.post_id.to_string(),
                 user_id: comment.user_id.to_string(),
                 content: comment.content,
-                parent_comment_id: comment
-                    .parent_comment_id
-                    .map(|id| id.to_string())
-                    .unwrap_or_default(),
+                parent_comment_id: comment.parent_comment_id.map(|id| id.to_string()).unwrap_or_default(),
                 created_at: comment.created_at.to_rfc3339(),
                 updated_at: comment.updated_at.to_rfc3339(),
             })
@@ -441,10 +383,7 @@ impl SocialService for SocialServiceImpl {
             post_id: comment.post_id.to_string(),
             user_id: comment.user_id.to_string(),
             content: comment.content,
-            parent_comment_id: comment
-                .parent_comment_id
-                .map(|id| id.to_string())
-                .unwrap_or_default(),
+            parent_comment_id: comment.parent_comment_id.map(|id| id.to_string()).unwrap_or_default(),
             created_at: comment.created_at.to_rfc3339(),
             updated_at: comment.updated_at.to_rfc3339(),
         };
@@ -465,11 +404,7 @@ impl SocialService for SocialServiceImpl {
         // Try Redis first, fallback to PostgreSQL
         let count = match self.counter_service.get_comment_count(post_id).await {
             Ok(count) => count,
-            Err(_) => self
-                .comment_repo
-                .get_comment_count(post_id)
-                .await
-                .unwrap_or(0),
+            Err(_) => self.comment_repo.get_comment_count(post_id).await.unwrap_or(0),
         };
 
         Ok(Response::new(GetCommentCountResponse { count }))
@@ -556,11 +491,13 @@ impl SocialService for SocialServiceImpl {
             ));
         }
 
-        let post_ids: Result<Vec<Uuid>, _> =
-            req.post_ids.iter().map(|id| Uuid::parse_str(id)).collect();
+        let post_ids: Result<Vec<Uuid>, _> = req
+            .post_ids
+            .iter()
+            .map(|id| Uuid::parse_str(id))
+            .collect();
 
-        let post_ids =
-            post_ids.map_err(|_| Status::invalid_argument("Invalid post_id in batch"))?;
+        let post_ids = post_ids.map_err(|_| Status::invalid_argument("Invalid post_id in batch"))?;
 
         let stats_map = self
             .counter_service

@@ -131,13 +131,6 @@ pub use services::CounterService;
 Created comprehensive documentation:
 - **`src/grpc/README.md`**: Architecture, data flow, transaction patterns
 - **`IMPLEMENTATION_SUMMARY.md`**: This file
- - **Env requirements**:
-   - `KAFKA_BROKERS` (必填，逗號分隔)
-   - `KAFKA_TOPIC_PREFIX` (預設 `nova.social`)
-   - `OUTBOX_POLL_INTERVAL_SECS` (預設 `5`)
-   - `OUTBOX_BATCH_SIZE` (預設 `100`)
-   - `OUTBOX_MAX_RETRIES` (預設 `5`)
-   - 以上任一缺失會導致 outbox processor 跳過運行並記錄 `WARN`
 
 ## Architecture Highlights
 

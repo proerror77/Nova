@@ -65,11 +65,7 @@ impl Config {
 
         Ok(Self {
             server: ServerConfig { grpc_port },
-            neo4j: Neo4jConfig {
-                uri,
-                user,
-                password,
-            },
+            neo4j: Neo4jConfig { uri, user, password },
         })
     }
 }

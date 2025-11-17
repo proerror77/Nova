@@ -14,26 +14,19 @@ The integration tests validate:
 
 ## Architecture
 
-> ⚠️ **注意**：本文件原始版本針對 V1 `user-service` / `messaging-service`。目前兩個服務皆已淘汰，整個身份與即時訊息域分別由 **identity-service** 與 **realtime-chat-service** 負責。以下章節已更新為 V2 架構，若需查閱舊版流程請參考 `docs/legacy/` 目錄。
->
-> | Legacy 名稱 | 目前對應服務 | 備註 |
-> |-------------|--------------|------|
-> | user-service | identity-service | Auth / Profile API 全數併入 identity-service |
-> | messaging-service | realtime-chat-service | 即時訊息、歷史查詢、呼叫、typing indicator |
-> | auth-service | identity-service | 舊命名僅保留於 proto 套件 `nova.identity_service.v2` |
-
 ### Services Under Test
 
-1. **Identity Service** (gRPC: port 50051)
-   - Auth、Token、使用者基本資料查詢
-   - gRPC endpoint: `http://127.0.0.1:50051`
+1. **User Service** (gRPC: port 9081)
+   - 12 RPC methods for user profile and relationship management
+   - gRPC endpoint: `http://127.0.0.1:9081`
 
-2. **Realtime Chat Service** (gRPC: port 50052)
-   - Conversation、Message、Call signaling、Typing indicator
-   - gRPC endpoint: `http://127.0.0.1:50052`
+2. **Messaging Service** (gRPC: port 9085)
+   - 10 RPC methods for conversation and message management
+   - gRPC endpoint: `http://127.0.0.1:9085`
 
-3. **Graph Service** (gRPC: port 9083)
-   - Follow/Mute/Block 圖譜，供 gateway 與 feed-service 查詢
+3. **Auth Service** (gRPC: port 9086)
+   - Core authentication and token validation
+   - gRPC endpoint: `http://127.0.0.1:9086`
 
 ### Service Dependencies
 
@@ -58,9 +51,9 @@ The integration tests validate:
 
 ```bash
 # Start all services locally
-cargo run -p identity-service &
-cargo run -p realtime-chat-service &
-cargo run -p graph-service &
+cargo run -p auth-service &
+cargo run -p user-service &
+cargo run -p messaging-service &
 
 # Wait for services to be ready (check logs)
 sleep 5
@@ -191,30 +184,30 @@ Helper utilities for gRPC testing:
 
 ## Test Scenarios
 
-### Scenario 1: Identity Service → Realtime Chat Service
+### Scenario 1: User Service → Messaging Service
 
 **Flow:**
-1. 在 identity-service 建立測試使用者
-2. 透過 `AuthService.GenerateToken` 取得 access token
-3. realtime-chat-service 使用 token 呼叫 `ValidateSession` 取得 caller claims
-4. 驗證 conversation metadata 回傳的 user profile 與 identity-service 一致
+1. Create a user in User Service
+2. Start a conversation in Messaging Service
+3. User Service queries Messaging Service gRPC for conversation metadata
+4. Validate response contains correct user references
 
 **Test Command:**
 ```bash
-SERVICES_RUNNING=true cargo test test_identity_service_validates_realtime_chat -- --nocapture --ignored
+SERVICES_RUNNING=true cargo test test_user_service_queries_messaging_service -- --nocapture --ignored
 ```
 
-### Scenario 2: Realtime Chat Service → Identity Service
+### Scenario 2: Messaging Service → User Service
 
 **Flow:**
-1. realtime-chat-service 產生訊息事件
-2. 透過 Auth gRPC 查 sender profile
-3. 再查 recipient profile
-4. 在訊息存檔時同時寫入 profile snapshot
+1. Messaging Service receives a message
+2. Queries User Service gRPC for sender's profile
+3. Queries User Service gRPC for recipient's profile
+4. Stores message with user references
 
 **Test Command:**
 ```bash
-SERVICES_RUNNING=true cargo test test_realtime_chat_queries_identity_profiles -- --nocapture --ignored
+SERVICES_RUNNING=true cargo test test_messaging_service_queries_user_service -- --nocapture --ignored
 ```
 
 ### Scenario 3: Concurrent Cross-Service Calls
@@ -233,11 +226,11 @@ SERVICES_RUNNING=true cargo test test_concurrent_cross_service_calls -- --nocapt
 ### Scenario 4: E2E Message Flow
 
 **Flow:**
-1. 透過 identity-service 建立 User A 與 User B
-2. 在 realtime-chat-service 建立 conversation
-3. User A 傳送訊息
-4. realtime-chat-service 驗證 token 並查詢 identity profile
-5. User B 拉取訊息並收到 sender profile snapshot
+1. Create User A and User B in User Service
+2. Create conversation between A and B in Messaging Service
+3. A sends message to B via Messaging Service
+4. Messaging Service queries User Service for profile data
+5. B retrieves message with sender's profile
 
 **Test Command:**
 ```bash
@@ -253,9 +246,9 @@ SERVICES_RUNNING=true cargo test test_e2e_message_with_user_lookup -- --nocaptur
 export SERVICES_RUNNING=true
 
 # Set custom service endpoints
-export IDENTITY_SERVICE_ENDPOINT="http://127.0.0.1:50051"
-export REALTIME_CHAT_SERVICE_ENDPOINT="http://127.0.0.1:50052"
-export GRAPH_SERVICE_ENDPOINT="http://127.0.0.1:9083"
+export USER_SERVICE_ENDPOINT="http://127.0.0.1:9081"
+export MESSAGING_SERVICE_ENDPOINT="http://127.0.0.1:9085"
+export AUTH_SERVICE_ENDPOINT="http://127.0.0.1:9086"
 
 # Set timeout values
 export GRPC_CONNECTION_TIMEOUT="5s"

@@ -1,0 +1,720 @@
+pub mod job_config;
+// pub mod video_config; // REMOVED - moved to media-service (port 8082)
+
+use serde::Deserialize;
+use std::env;
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct Config {
+    pub app: AppConfig,
+    pub database: DatabaseConfig,
+    pub redis: RedisConfig,
+    pub jwt: JwtConfig,
+    pub email: EmailConfig,
+    pub rate_limit: RateLimitConfig,
+    pub s3: S3Config,
+    pub cors: CorsConfig,
+    pub clickhouse: ClickHouseConfig,
+    pub kafka: KafkaConfig,
+    pub graph: GraphConfig,
+    // pub video: video_config::VideoConfig,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct AppConfig {
+    #[serde(default = "default_app_env")]
+    pub env: String,
+
+    #[serde(default = "default_app_host")]
+    pub host: String,
+
+    #[serde(default = "default_app_port")]
+    pub port: u16,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct DatabaseConfig {
+    pub url: String,
+
+    #[serde(default = "default_db_max_connections")]
+    pub max_connections: u32,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct RedisConfig {
+    pub url: String,
+
+    #[serde(default = "default_redis_pool_size")]
+    pub pool_size: u32,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct JwtConfig {
+    pub secret: String,
+
+    #[serde(default = "default_jwt_access_ttl")]
+    pub access_token_ttl: i64,
+
+    #[serde(default = "default_jwt_refresh_ttl")]
+    pub refresh_token_ttl: i64,
+
+    /// Private key for signing tokens (PEM format, base64-encoded for env var)
+    pub private_key_pem: String,
+
+    /// Public key for validating tokens (PEM format, base64-encoded for env var)
+    pub public_key_pem: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct EmailConfig {
+    pub smtp_host: String,
+
+    #[serde(default = "default_smtp_port")]
+    pub smtp_port: u16,
+
+    #[serde(default)]
+    pub smtp_username: String,
+
+    #[serde(default)]
+    pub smtp_password: String,
+
+    pub smtp_from: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct RateLimitConfig {
+    #[serde(default = "default_rate_limit_max_requests")]
+    pub max_requests: u32,
+
+    #[serde(default = "default_rate_limit_window_secs")]
+    pub window_secs: u64,
+
+    /// Per-endpoint rate limit overrides
+    /// Format: "endpoint_pattern:max_requests:window_secs"
+    /// Example: "auth/register:30:60,auth/login:20:60"
+    /// If not set, uses global max_requests and window_secs
+    #[serde(default)]
+    pub endpoint_overrides: String,
+
+    /// Trusted proxy IPs (comma-separated via env)
+    #[serde(default)]
+    pub trusted_proxies: Vec<String>,
+}
+
+/// Per-endpoint rate limit configuration
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct EndpointRateLimitOverride {
+    /// Endpoint pattern to match (e.g., "auth/register", "user/posts")
+    pub pattern: String,
+    /// Max requests for this endpoint
+    pub max_requests: u32,
+    /// Time window in seconds for this endpoint
+    pub window_secs: u64,
+}
+
+impl RateLimitConfig {
+    /// Parse endpoint overrides from string format
+    /// Format: "pattern1:max_requests:window_secs,pattern2:max_requests:window_secs"
+    /// Returns a map of pattern -> EndpointRateLimitOverride
+    pub fn parse_endpoint_overrides(
+        &self,
+    ) -> std::collections::HashMap<String, EndpointRateLimitOverride> {
+        let mut overrides = std::collections::HashMap::new();
+
+        if self.endpoint_overrides.is_empty() {
+            return overrides;
+        }
+
+        for override_str in self.endpoint_overrides.split(',') {
+            let parts: Vec<&str> = override_str.trim().split(':').collect();
+            if parts.len() == 3 {
+                if let (Ok(max_req), Ok(window)) = (
+                    parts[1].trim().parse::<u32>(),
+                    parts[2].trim().parse::<u64>(),
+                ) {
+                    let pattern = parts[0].trim().to_string();
+                    overrides.insert(
+                        pattern.clone(),
+                        EndpointRateLimitOverride {
+                            pattern,
+                            max_requests: max_req,
+                            window_secs: window,
+                        },
+                    );
+                }
+            }
+        }
+
+        overrides
+    }
+
+    /// Get rate limit config for a specific endpoint
+    /// Returns (max_requests, window_secs) - either override or global defaults
+    pub fn get_endpoint_config(&self, endpoint: &str) -> (u32, u64) {
+        let overrides = self.parse_endpoint_overrides();
+
+        // Exact match first
+        if let Some(override_cfg) = overrides.get(endpoint) {
+            return (override_cfg.max_requests, override_cfg.window_secs);
+        }
+
+        // Prefix match (e.g., "auth/*" matches "auth/register")
+        for (pattern, override_cfg) in &overrides {
+            if pattern.ends_with("/*") {
+                let prefix = &pattern[..pattern.len() - 2];
+                if endpoint.starts_with(prefix) && endpoint.chars().nth(prefix.len()) == Some('/') {
+                    return (override_cfg.max_requests, override_cfg.window_secs);
+                }
+            }
+        }
+
+        // Fall back to global config
+        (self.max_requests, self.window_secs)
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct S3Config {
+    pub bucket_name: String,
+    pub region: String,
+    pub aws_access_key_id: String,
+    pub aws_secret_access_key: String,
+    pub cloudfront_url: String,
+    #[serde(default)]
+    pub endpoint: Option<String>,
+
+    #[serde(default = "default_s3_presigned_url_expiry_secs")]
+    pub presigned_url_expiry_secs: u64,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct CorsConfig {
+    /// Comma-separated list of allowed origins (e.g., "https://example.com,https://app.example.com")
+    /// Set to "*" to allow all origins (NOT recommended for production)
+    pub allowed_origins: String,
+
+    #[serde(default = "default_cors_max_age")]
+    pub max_age: u64,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct ClickHouseConfig {
+    #[serde(default = "default_clickhouse_enabled")]
+    pub enabled: bool,
+    pub url: String,
+    #[serde(default = "default_clickhouse_database")]
+    pub database: String,
+    #[serde(default = "default_clickhouse_user")]
+    pub username: String,
+    #[serde(default = "default_clickhouse_password")]
+    pub password: String,
+    #[serde(default = "default_clickhouse_timeout_ms")]
+    pub timeout_ms: u64,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct KafkaConfig {
+    pub brokers: String,
+    #[serde(default = "default_events_topic")]
+    pub events_topic: String,
+    #[serde(default = "default_kafka_request_timeout_ms")]
+    pub request_timeout_ms: u64,
+    #[serde(default = "default_kafka_retry_backoff_ms")]
+    pub retry_backoff_ms: u64,
+    #[serde(default = "default_kafka_retry_attempts")]
+    pub retry_attempts: u32,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct GraphConfig {
+    /// Enable Neo4j graph integration
+    #[serde(default = "default_graph_enabled")]
+    pub enabled: bool,
+    /// Bolt URI, e.g., bolt://neo4j:7687
+    #[serde(default = "default_neo4j_uri")]
+    pub neo4j_uri: String,
+    #[serde(default = "default_neo4j_user")]
+    pub neo4j_user: String,
+    #[serde(default = "default_neo4j_password")]
+    pub neo4j_password: String,
+}
+
+// Default value functions
+fn default_app_env() -> String {
+    "development".to_string()
+}
+
+fn default_app_host() -> String {
+    "0.0.0.0".to_string()
+}
+
+fn default_app_port() -> u16 {
+    8080
+}
+
+fn default_db_max_connections() -> u32 {
+    10
+}
+
+fn default_redis_pool_size() -> u32 {
+    10
+}
+
+fn default_jwt_access_ttl() -> i64 {
+    900 // 15 minutes
+}
+
+fn default_jwt_refresh_ttl() -> i64 {
+    604800 // 7 days
+}
+
+fn default_smtp_port() -> u16 {
+    587
+}
+
+fn default_rate_limit_max_requests() -> u32 {
+    100
+}
+
+fn default_rate_limit_window_secs() -> u64 {
+    60
+}
+
+fn default_s3_presigned_url_expiry_secs() -> u64 {
+    900 // 15 minutes
+}
+
+fn default_cors_max_age() -> u64 {
+    3600 // 1 hour
+}
+
+fn default_clickhouse_enabled() -> bool {
+    true
+}
+
+fn default_clickhouse_database() -> String {
+    "nova_feed".to_string()
+}
+
+fn default_clickhouse_user() -> String {
+    "default".to_string()
+}
+
+fn default_clickhouse_password() -> String {
+    "clickhouse".to_string()
+}
+
+fn default_clickhouse_timeout_ms() -> u64 {
+    5000
+}
+
+fn default_events_topic() -> String {
+    "events".to_string()
+}
+
+fn default_kafka_request_timeout_ms() -> u64 {
+    5_000
+}
+
+fn default_kafka_retry_backoff_ms() -> u64 {
+    200
+}
+
+fn default_kafka_retry_attempts() -> u32 {
+    3
+}
+
+fn default_graph_enabled() -> bool {
+    false
+}
+
+fn default_neo4j_uri() -> String {
+    "bolt://localhost:7687".to_string()
+}
+
+fn default_neo4j_user() -> String {
+    "neo4j".to_string()
+}
+
+fn default_neo4j_password() -> String {
+    "password".to_string()
+}
+
+impl Config {
+    pub fn from_env() -> Result<Self, envy::Error> {
+        dotenv::dotenv().ok();
+
+        let app_env = env::var("APP_ENV").unwrap_or_else(|_| default_app_env());
+
+        let app = AppConfig {
+            env: app_env.clone(),
+            host: env::var("APP_HOST").unwrap_or_else(|_| default_app_host()),
+            port: env::var("APP_PORT")
+                .unwrap_or_else(|_| default_app_port().to_string())
+                .parse()
+                .unwrap_or(default_app_port()),
+        };
+
+        let database = DatabaseConfig {
+            url: env::var("DATABASE_URL").expect("DATABASE_URL must be set"),
+            max_connections: env::var("DATABASE_MAX_CONNECTIONS")
+                .unwrap_or_else(|_| default_db_max_connections().to_string())
+                .parse()
+                .unwrap_or(default_db_max_connections()),
+        };
+
+        let redis = RedisConfig {
+            url: env::var("REDIS_URL").expect("REDIS_URL must be set"),
+            pool_size: env::var("REDIS_POOL_SIZE")
+                .unwrap_or_else(|_| default_redis_pool_size().to_string())
+                .parse()
+                .unwrap_or(default_redis_pool_size()),
+        };
+
+        let jwt_secret = env::var("JWT_SECRET").expect("JWT_SECRET must be set");
+
+        if app_env.eq_ignore_ascii_case("production") {
+            if jwt_secret.trim().is_empty() {
+                panic!("JWT_SECRET must not be empty in production");
+            }
+            if jwt_secret.trim() == "dev_secret_change_in_production_32chars" {
+                panic!("JWT_SECRET must be overridden in production");
+            }
+            if jwt_secret.len() < 32 {
+                panic!("JWT_SECRET must be at least 32 characters in production");
+            }
+        }
+
+        let jwt = JwtConfig {
+            secret: jwt_secret,
+            access_token_ttl: env::var("JWT_ACCESS_TOKEN_TTL")
+                .unwrap_or_else(|_| default_jwt_access_ttl().to_string())
+                .parse()
+                .unwrap_or(default_jwt_access_ttl()),
+            refresh_token_ttl: env::var("JWT_REFRESH_TOKEN_TTL")
+                .unwrap_or_else(|_| default_jwt_refresh_ttl().to_string())
+                .parse()
+                .unwrap_or(default_jwt_refresh_ttl()),
+            // 允許透過檔案讀取金鑰，這裡若環境變數不存在則給空字串，交由 main.rs 落地處理
+            private_key_pem: env::var("JWT_PRIVATE_KEY_PEM").unwrap_or_default(),
+            public_key_pem: env::var("JWT_PUBLIC_KEY_PEM").unwrap_or_default(),
+        };
+
+        let email = EmailConfig {
+            smtp_host: env::var("SMTP_HOST").unwrap_or_else(|_| "localhost".to_string()),
+            smtp_port: env::var("SMTP_PORT")
+                .unwrap_or_else(|_| default_smtp_port().to_string())
+                .parse()
+                .unwrap_or(default_smtp_port()),
+            smtp_username: env::var("SMTP_USERNAME").unwrap_or_default(),
+            smtp_password: env::var("SMTP_PASSWORD").unwrap_or_default(),
+            smtp_from: env::var("SMTP_FROM").unwrap_or_else(|_| "noreply@nova.dev".to_string()),
+        };
+
+        let rate_limit = RateLimitConfig {
+            max_requests: env::var("RATE_LIMIT_MAX_REQUESTS")
+                .unwrap_or_else(|_| default_rate_limit_max_requests().to_string())
+                .parse()
+                .unwrap_or(default_rate_limit_max_requests()),
+            window_secs: env::var("RATE_LIMIT_WINDOW_SECS")
+                .unwrap_or_else(|_| default_rate_limit_window_secs().to_string())
+                .parse()
+                .unwrap_or(default_rate_limit_window_secs()),
+            endpoint_overrides: env::var("RATE_LIMIT_ENDPOINT_OVERRIDES").unwrap_or_default(),
+            trusted_proxies: env::var("RATE_LIMIT_TRUSTED_PROXIES")
+                .unwrap_or_default()
+                .split(',')
+                .filter_map(|s| {
+                    let trimmed = s.trim();
+                    if trimmed.is_empty() {
+                        None
+                    } else {
+                        Some(trimmed.to_string())
+                    }
+                })
+                .collect(),
+        };
+
+        let s3_endpoint = env::var("S3_ENDPOINT").ok();
+
+        let s3 = S3Config {
+            bucket_name: env::var("S3_BUCKET_NAME").expect("S3_BUCKET_NAME must be set"),
+            region: env::var("S3_REGION").expect("S3_REGION must be set"),
+            aws_access_key_id: env::var("AWS_ACCESS_KEY_ID")
+                .expect("AWS_ACCESS_KEY_ID must be set"),
+            aws_secret_access_key: env::var("AWS_SECRET_ACCESS_KEY")
+                .expect("AWS_SECRET_ACCESS_KEY must be set"),
+            cloudfront_url: env::var("CLOUDFRONT_URL").expect("CLOUDFRONT_URL must be set"),
+            endpoint: s3_endpoint,
+            presigned_url_expiry_secs: env::var("S3_PRESIGNED_URL_EXPIRY_SECS")
+                .unwrap_or_else(|_| default_s3_presigned_url_expiry_secs().to_string())
+                .parse()
+                .unwrap_or(default_s3_presigned_url_expiry_secs()),
+        };
+
+        let cors_allowed_origins = match env::var("CORS_ALLOWED_ORIGINS") {
+            Ok(value) => value,
+            Err(_) if app_env.eq_ignore_ascii_case("production") => {
+                panic!("CORS_ALLOWED_ORIGINS must be set in production")
+            }
+            Err(_) => "http://localhost:3000".to_string(),
+        };
+
+        if app_env.eq_ignore_ascii_case("production") && cors_allowed_origins.trim() == "*" {
+            panic!("CORS_ALLOWED_ORIGINS cannot be '*' in production");
+        }
+
+        let cors = CorsConfig {
+            allowed_origins: cors_allowed_origins,
+            max_age: env::var("CORS_MAX_AGE")
+                .unwrap_or_else(|_| default_cors_max_age().to_string())
+                .parse()
+                .unwrap_or(default_cors_max_age()),
+        };
+
+        let clickhouse = ClickHouseConfig {
+            enabled: env::var("CLICKHOUSE_ENABLED")
+                .unwrap_or_else(|_| default_clickhouse_enabled().to_string())
+                .parse()
+                .unwrap_or(default_clickhouse_enabled()),
+            url: env::var("CLICKHOUSE_URL").expect("CLICKHOUSE_URL must be set"),
+            database: env::var("CLICKHOUSE_DB").unwrap_or_else(|_| default_clickhouse_database()),
+            username: env::var("CLICKHOUSE_USER").unwrap_or_else(|_| default_clickhouse_user()),
+            password: env::var("CLICKHOUSE_PASSWORD")
+                .unwrap_or_else(|_| default_clickhouse_password()),
+            timeout_ms: env::var("CLICKHOUSE_TIMEOUT_MS")
+                .unwrap_or_else(|_| default_clickhouse_timeout_ms().to_string())
+                .parse()
+                .unwrap_or(default_clickhouse_timeout_ms()),
+        };
+
+        let kafka = KafkaConfig {
+            brokers: env::var("KAFKA_BROKERS").expect("KAFKA_BROKERS must be set"),
+            events_topic: env::var("KAFKA_EVENTS_TOPIC").unwrap_or_else(|_| default_events_topic()),
+            request_timeout_ms: env::var("KAFKA_REQUEST_TIMEOUT_MS")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or_else(default_kafka_request_timeout_ms),
+            retry_backoff_ms: env::var("KAFKA_RETRY_BACKOFF_MS")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or_else(default_kafka_retry_backoff_ms),
+            retry_attempts: env::var("KAFKA_RETRY_ATTEMPTS")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or_else(default_kafka_retry_attempts),
+        };
+
+        let graph = GraphConfig {
+            enabled: env::var("NEO4J_ENABLED")
+                .unwrap_or_else(|_| default_graph_enabled().to_string())
+                .parse()
+                .unwrap_or(default_graph_enabled()),
+            neo4j_uri: env::var("NEO4J_URI").unwrap_or_else(|_| default_neo4j_uri()),
+            neo4j_user: env::var("NEO4J_USER").unwrap_or_else(|_| default_neo4j_user()),
+            neo4j_password: env::var("NEO4J_PASSWORD").unwrap_or_else(|_| default_neo4j_password()),
+        };
+
+        // let video = video_config::VideoConfig::from_env();
+
+        Ok(Config {
+            app,
+            database,
+            redis,
+            jwt,
+            email,
+            rate_limit,
+            s3,
+            cors,
+            clickhouse,
+            kafka,
+            graph,
+            // video,
+        })
+    }
+
+    pub fn is_production(&self) -> bool {
+        self.app.env == "production"
+    }
+
+    pub fn is_development(&self) -> bool {
+        self.app.env == "development"
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_default_values() {
+        assert_eq!(default_app_env(), "development");
+        assert_eq!(default_app_host(), "0.0.0.0");
+        assert_eq!(default_app_port(), 8080);
+        assert_eq!(default_db_max_connections(), 10);
+        assert_eq!(default_redis_pool_size(), 10);
+        assert_eq!(default_jwt_access_ttl(), 900);
+        assert_eq!(default_jwt_refresh_ttl(), 604800);
+    }
+
+    #[test]
+    fn test_parse_endpoint_overrides_empty() {
+        let config = RateLimitConfig {
+            max_requests: 100,
+            window_secs: 60,
+            endpoint_overrides: String::new(),
+            trusted_proxies: Vec::new(),
+        };
+
+        let overrides = config.parse_endpoint_overrides();
+        assert!(overrides.is_empty());
+    }
+
+    #[test]
+    fn test_parse_endpoint_overrides_single() {
+        let config = RateLimitConfig {
+            max_requests: 100,
+            window_secs: 60,
+            endpoint_overrides: "auth/register:30:60".to_string(),
+            trusted_proxies: Vec::new(),
+        };
+
+        let overrides = config.parse_endpoint_overrides();
+        assert_eq!(overrides.len(), 1);
+        assert_eq!(overrides.get("auth/register").unwrap().max_requests, 30);
+        assert_eq!(overrides.get("auth/register").unwrap().window_secs, 60);
+    }
+
+    #[test]
+    fn test_parse_endpoint_overrides_multiple() {
+        let config = RateLimitConfig {
+            max_requests: 100,
+            window_secs: 60,
+            endpoint_overrides: "auth/register:30:60,auth/login:20:30,user/posts:50:120"
+                .to_string(),
+            trusted_proxies: Vec::new(),
+        };
+
+        let overrides = config.parse_endpoint_overrides();
+        assert_eq!(overrides.len(), 3);
+
+        assert_eq!(overrides.get("auth/register").unwrap().max_requests, 30);
+        assert_eq!(overrides.get("auth/login").unwrap().max_requests, 20);
+        assert_eq!(overrides.get("user/posts").unwrap().max_requests, 50);
+    }
+
+    #[test]
+    fn test_parse_endpoint_overrides_with_whitespace() {
+        let config = RateLimitConfig {
+            max_requests: 100,
+            window_secs: 60,
+            endpoint_overrides: " auth/register : 30 : 60 , auth/login : 20 : 30 ".to_string(),
+            trusted_proxies: Vec::new(),
+        };
+
+        let overrides = config.parse_endpoint_overrides();
+        assert_eq!(overrides.len(), 2);
+        assert_eq!(overrides.get("auth/register").unwrap().max_requests, 30);
+        assert_eq!(overrides.get("auth/login").unwrap().max_requests, 20);
+    }
+
+    #[test]
+    fn test_parse_endpoint_overrides_invalid_format() {
+        let config = RateLimitConfig {
+            max_requests: 100,
+            window_secs: 60,
+            endpoint_overrides: "auth/register:30,invalid_entry".to_string(),
+            trusted_proxies: Vec::new(),
+        };
+
+        let overrides = config.parse_endpoint_overrides();
+        // Only valid entries should be parsed
+        assert_eq!(overrides.len(), 0);
+    }
+
+    #[test]
+    fn test_get_endpoint_config_exact_match() {
+        let config = RateLimitConfig {
+            max_requests: 100,
+            window_secs: 60,
+            endpoint_overrides: "auth/register:30:60".to_string(),
+            trusted_proxies: Vec::new(),
+        };
+
+        let (max_req, window) = config.get_endpoint_config("auth/register");
+        assert_eq!(max_req, 30);
+        assert_eq!(window, 60);
+    }
+
+    #[test]
+    fn test_get_endpoint_config_fallback_to_global() {
+        let config = RateLimitConfig {
+            max_requests: 100,
+            window_secs: 60,
+            endpoint_overrides: "auth/register:30:60".to_string(),
+            trusted_proxies: Vec::new(),
+        };
+
+        let (max_req, window) = config.get_endpoint_config("user/posts");
+        assert_eq!(max_req, 100);
+        assert_eq!(window, 60);
+    }
+
+    #[test]
+    fn test_get_endpoint_config_prefix_match() {
+        let config = RateLimitConfig {
+            max_requests: 100,
+            window_secs: 60,
+            endpoint_overrides: "auth/*:30:60".to_string(),
+            trusted_proxies: Vec::new(),
+        };
+
+        let (max_req, window) = config.get_endpoint_config("auth/register");
+        assert_eq!(max_req, 30);
+        assert_eq!(window, 60);
+
+        let (max_req, window) = config.get_endpoint_config("auth/login");
+        assert_eq!(max_req, 30);
+        assert_eq!(window, 60);
+
+        // Should fall back to global for non-matching prefix
+        let (max_req, window) = config.get_endpoint_config("user/posts");
+        assert_eq!(max_req, 100);
+        assert_eq!(window, 60);
+    }
+
+    #[test]
+    fn test_get_endpoint_config_prefix_match_no_false_positive() {
+        let config = RateLimitConfig {
+            max_requests: 100,
+            window_secs: 60,
+            endpoint_overrides: "auth/*:30:60".to_string(),
+            trusted_proxies: vec![],
+        };
+
+        // "auth_other" should not match "auth/*" pattern
+        let (max_req, window) = config.get_endpoint_config("auth_other");
+        assert_eq!(max_req, 100); // Falls back to global
+        assert_eq!(window, 60);
+    }
+
+    #[test]
+    fn test_get_endpoint_config_exact_match_precedence_over_prefix() {
+        let config = RateLimitConfig {
+            max_requests: 100,
+            window_secs: 60,
+            endpoint_overrides: "auth/register:30:60,auth/*:40:90".to_string(),
+            trusted_proxies: vec![],
+        };
+
+        // Exact match should take precedence
+        let (max_req, window) = config.get_endpoint_config("auth/register");
+        assert_eq!(max_req, 30);
+        assert_eq!(window, 60);
+
+        // Prefix match for others under auth
+        let (max_req, window) = config.get_endpoint_config("auth/login");
+        assert_eq!(max_req, 40);
+        assert_eq!(window, 90);
+    }
+}

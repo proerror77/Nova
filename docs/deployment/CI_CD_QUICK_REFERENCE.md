@@ -66,18 +66,18 @@ cargo tarpaulin --workspace --out Xml
 All 12 services tested in parallel (6 at a time):
 
 ```
-✓ identity-service
+✓ auth-service
+✓ user-service
 ✓ messaging-service
 ✓ content-service
 ✓ feed-service
 ✓ search-service
 ✓ media-service
 ✓ notification-service
-✓ realtime-chat-service
-✓ analytics-service
-✓ graph-service
-✓ feature-store
-✓ trust-safety-service
+✓ streaming-service
+✓ video-service
+✓ cdn-service
+✓ events-service
 ```
 
 ## Testing a Single Service Locally

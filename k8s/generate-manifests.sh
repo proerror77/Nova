@@ -64,6 +64,7 @@ ENVIRONMENT="${DEFAULT_ENV}"
 declare -a SERVICES=(
   # Tier 1: Core Services
   "identity-service:8081:9081:tier1:500m:512Mi:1000m:1Gi"
+  "user-service:8080:9080:tier1:500m:512Mi:1000m:1Gi"
   "content-service:8082:9082:tier1:500m:512Mi:1000m:1Gi"
 
   # Tier 2: Essential Services

@@ -293,6 +293,7 @@ GRPC_MEDIA_SERVICE_URL=http://media-service:9080
 
 # 通知和流式传输
 GRPC_NOTIFICATION_SERVICE_URL=http://notification-service:9080
+GRPC_STREAMING_SERVICE_URL=http://streaming-service:9080
 
 # CDN 和事件
 GRPC_CDN_SERVICE_URL=http://cdn-service:9080

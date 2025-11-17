@@ -1,3 +1,2 @@
-pub mod models;
-
-pub use models::{Comment, Like, Share};
+// Domain models for social interactions
+// TODO: Define Like, Comment, Share domain entities

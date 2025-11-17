@@ -15,12 +15,15 @@ variable "services" {
   type        = list(string)
   default = [
     "auth-service",
+    "user-service",
     "content-service",
     "feed-service",
     "media-service",
     "messaging-service",
     "search-service",
+    "streaming-service",
     "notification-service",
+    "cdn-service",
     "events-service"
   ]
 }
