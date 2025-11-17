@@ -42,8 +42,6 @@ runs:
         file: ${{ steps.dockerfile.outputs.path }}
         platforms: linux/amd64
         push: true
-        tags: |
-          ${{ inputs.ecr-registry }}/${{ inputs.registry-alias }}/${{ inputs.service-name }}:${{ inputs.image-tag }}
-          ${{ inputs.ecr-registry }}/${{ inputs.registry-alias }}/${{ inputs.service-name }}:latest
+        tags: ${{ inputs.ecr-registry }}/${{ inputs.registry-alias }}/${{ inputs.service-name }}:${{ inputs.image-tag }}
         cache-from: type=gha
         cache-to: type=gha,mode=max

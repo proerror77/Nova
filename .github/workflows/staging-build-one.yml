@@ -8,14 +8,19 @@ on:
         required: true
         type: choice
         options:
-          - auth-service
-          - identity-service
+          - analytics-service
           - content-service
           - feed-service
+          - graph-service
+          - graphql-gateway
+          - identity-service
           - media-service
-          - messaging-service
+          - notification-service
+          - ranking-service
+          - realtime-chat-service
           - search-service
-          - streaming-service
+          - social-service
+          - trust-safety-service
 
 env:
   AWS_REGION: ap-northeast-1

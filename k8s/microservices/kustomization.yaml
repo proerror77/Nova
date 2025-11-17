@@ -33,6 +33,8 @@ resources:
   
   - media-service-deployment.yaml
 
+  # messaging-service: DEPRECATED - replaced by realtime-chat-service
+  # All messaging functionality (DM + WebSocket + E2EE) is now in realtime-chat-service
 
   - notification-service-deployment.yaml
   - notification-service-service.yaml
@@ -82,4 +84,5 @@ resources:
   # - prometheus-monitoring-setup.yaml
   - s3-configmap.yaml
   - s3-secret.yaml
+  # messaging-service-cronjobs.yaml: DEPRECATED - messaging-service replaced by realtime-chat-service
   - turn-server-deployment.yaml

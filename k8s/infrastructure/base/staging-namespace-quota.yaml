@@ -1,0 +1,47 @@
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: staging-compute-quota
+  namespace: nova-staging
+spec:
+  hard:
+    # CPU 限制 - 基于现有使用量
+    requests.cpu: "10"      # 总请求 10 cores (现有服务总和约 5-6 cores + 预留)
+    limits.cpu: "25"        # 总限制 25 cores
+    # 内存限制
+    requests.memory: "8Gi"  # 总请求 8Gi
+    limits.memory: "20Gi"   # 总限制 20Gi
+    # Pod 数量限制
+    pods: "100"             # 允许更多 pods (基础设施 + 服务 + 任务)
+    # Service 限制
+    services: "50"
+    # PVC 限制
+    persistentvolumeclaims: "20"
+---
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: staging-default-limits
+  namespace: nova-staging
+spec:
+  limits:
+    # 容器默认限制
+    - type: Container
+      default:
+        cpu: "500m"
+        memory: "512Mi"
+      defaultRequest:
+        cpu: "100m"
+        memory: "256Mi"
+      max:
+        cpu: "2"
+        memory: "2Gi"
+      min:
+        cpu: "10m"
+        memory: "32Mi"
+    # Pod 总限制
+    - type: Pod
+      max:
+        cpu: "4"
+        memory: "4Gi"

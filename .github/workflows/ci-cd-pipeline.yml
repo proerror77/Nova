@@ -65,17 +65,19 @@ jobs:
     strategy:
       matrix:
         service:
-          - auth-service
-          - messaging-service
+          - analytics-service
           - content-service
           - feed-service
-          - search-service
+          - graph-service
+          - graphql-gateway
+          - identity-service
           - media-service
           - notification-service
-          - streaming-service
-          - video-service
-          - cdn-service
-          - events-service
+          - ranking-service
+          - realtime-chat-service
+          - search-service
+          - social-service
+          - trust-safety-service
       max-parallel: 6
       fail-fast: false
 
@@ -360,17 +362,19 @@ jobs:
     strategy:
       matrix:
         service:
-          - user-service
-          - auth-service
+          - analytics-service
           - content-service
           - feed-service
+          - graph-service
+          - graphql-gateway
+          - identity-service
           - media-service
-          - messaging-service
-          - search-service
-          - streaming-service
           - notification-service
-          - cdn-service
-          - events-service
+          - ranking-service
+          - realtime-chat-service
+          - search-service
+          - social-service
+          - trust-safety-service
       max-parallel: 4
       fail-fast: false
 
@@ -829,19 +833,20 @@ jobs:
           echo "  • Dependency audit: CHECKED (cargo deny)"
           echo "  • Code coverage: 50% MINIMUM"
           echo ""
-          echo "📦 Services Tested:"
-          echo "  • auth-service"
-          echo "  • user-service"
-          echo "  • messaging-service"
+          echo "📦 Services Tested (v2 架構):"
+          echo "  • analytics-service"
           echo "  • content-service"
           echo "  • feed-service"
-          echo "  • search-service"
+          echo "  • graph-service"
+          echo "  • graphql-gateway"
+          echo "  • identity-service"
           echo "  • media-service"
           echo "  • notification-service"
-          echo "  • streaming-service"
-          echo "  • video-service"
-          echo "  • cdn-service"
-          echo "  • events-service"
+          echo "  • ranking-service"
+          echo "  • realtime-chat-service (替代 messaging-service)"
+          echo "  • search-service"
+          echo "  • social-service"
+          echo "  • trust-safety-service"
           echo ""
           echo "════════════════════════════════════════════════════"
 
