@@ -1031,7 +1031,7 @@ async fn main() -> std::io::Result<()> {
             .route("/docs", web::get().to(docs))
             // API endpoints (with auth middleware if needed)
             .service(
-                web::scope("/api/v1/search")
+                web::scope("/api/v2/search")
                     // Unified search endpoint
                     .route("", web::get().to(unified_search))
                     // Type-specific search endpoints
