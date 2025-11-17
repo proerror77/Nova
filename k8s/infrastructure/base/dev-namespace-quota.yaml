@@ -1,0 +1,47 @@
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: dev-compute-quota
+  namespace: nova-dev
+spec:
+  hard:
+    # CPU 限制
+    requests.cpu: "4"      # 总请求 4 cores
+    limits.cpu: "8"        # 总限制 8 cores
+    # 内存限制
+    requests.memory: "8Gi"
+    limits.memory: "16Gi"
+    # Pod 数量限制
+    pods: "50"
+    # Service 限制
+    services: "20"
+    # PVC 限制
+    persistentvolumeclaims: "10"
+---
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: dev-default-limits
+  namespace: nova-dev
+spec:
+  limits:
+    # 容器默认限制
+    - type: Container
+      default:
+        cpu: "200m"
+        memory: "256Mi"
+      defaultRequest:
+        cpu: "50m"
+        memory: "128Mi"
+      max:
+        cpu: "1"
+        memory: "1Gi"
+      min:
+        cpu: "10m"
+        memory: "32Mi"
+    # Pod 总限制
+    - type: Pod
+      max:
+        cpu: "2"
+        memory: "2Gi"

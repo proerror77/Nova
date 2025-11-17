@@ -118,163 +118,180 @@ jobs:
             --query 'imageDetails[0].{Tags:join(`,`,imageTags),Size:imageSizeInBytes,PushedAt:imagePushedAt}' \
             --output table
 
-  update-kustomization:
-    name: Update Kustomization
+  deploy-staging:
+    name: Deploy to Staging
     needs: [verify-aws, build-and-push]
     if: needs.verify-aws.outputs.has_aws == 'true'
     runs-on: ubuntu-22.04
     permissions:
-      contents: write
+      contents: read
+      id-token: write
 
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Set up Kustomize
-        run: |
-          curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash
-          sudo mv kustomize /usr/local/bin/
-
-      - name: Update image tags
-        run: |
-          cd ${{ env.KUSTOMIZE_PATH }}
-
-          echo "📝 Updating image tags to: ${{ github.sha }}"
-
-          kustomize edit set image \
-            nova/analytics-service=${{ env.REGISTRY }}/${{ env.REGISTRY_ALIAS }}/analytics-service:${{ github.sha }} \
-            nova/content-service=${{ env.REGISTRY }}/${{ env.REGISTRY_ALIAS }}/content-service:${{ github.sha }} \
-            nova/feed-service=${{ env.REGISTRY }}/${{ env.REGISTRY_ALIAS }}/feed-service:${{ github.sha }} \
-            nova/graph-service=${{ env.REGISTRY }}/${{ env.REGISTRY_ALIAS }}/graph-service:${{ github.sha }} \
-            nova/graphql-gateway=${{ env.REGISTRY }}/${{ env.REGISTRY_ALIAS }}/graphql-gateway:${{ github.sha }} \
-            nova/identity-service=${{ env.REGISTRY }}/${{ env.REGISTRY_ALIAS }}/identity-service:${{ github.sha }} \
-            nova/media-service=${{ env.REGISTRY }}/${{ env.REGISTRY_ALIAS }}/media-service:${{ github.sha }} \
-            nova/notification-service=${{ env.REGISTRY }}/${{ env.REGISTRY_ALIAS }}/notification-service:${{ github.sha }} \
-            nova/ranking-service=${{ env.REGISTRY }}/${{ env.REGISTRY_ALIAS }}/ranking-service:${{ github.sha }} \
-            nova/realtime-chat-service=${{ env.REGISTRY }}/${{ env.REGISTRY_ALIAS }}/realtime-chat-service:${{ github.sha }} \
-            nova/search-service=${{ env.REGISTRY }}/${{ env.REGISTRY_ALIAS }}/search-service:${{ github.sha }} \
-            nova/social-service=${{ env.REGISTRY }}/${{ env.REGISTRY_ALIAS }}/social-service:${{ github.sha }} \
-            nova/trust-safety-service=${{ env.REGISTRY }}/${{ env.REGISTRY_ALIAS }}/trust-safety-service:${{ github.sha }} \
-            nova/user-service=${{ env.REGISTRY }}/${{ env.REGISTRY_ALIAS }}/user-service:${{ github.sha }}
-
-      # 优化: 验证 kustomization 语法
-      - name: Validate kustomization
-        run: |
-          cd ${{ env.KUSTOMIZE_PATH }}
-          kustomize build . > /tmp/rendered.yaml
-          echo "✅ Kustomization valid"
-          echo "📦 Preview (first 30 lines):"
-          head -30 /tmp/rendered.yaml
-
-      - name: Configure Git
-        run: |
-          git config --global user.email "github-actions@nova.dev"
-          git config --global user.name "GitHub Actions Bot"
-
-      - name: Commit and push directly to main
-        run: |
-          cd ${{ github.workspace }}
-          git add ${{ env.KUSTOMIZE_PATH }}/kustomization.yaml
-          git commit -m "chore(staging): update images to ${{ github.sha }}" || echo "No changes to commit"
-          git push origin main
-          echo "✅ Pushed kustomization update to main branch"
-          echo "🚀 ArgoCD will detect the change and deploy automatically"
-
-
-  # 优化: 实际验证 ArgoCD sync
-  verify-argocd-sync:
-    name: Verify ArgoCD Sync
-    needs: [verify-aws, update-kustomization]
-    if: needs.verify-aws.outputs.has_aws == 'true'
-    runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        service:
+          - analytics-service
+          - content-service
+          - feed-service
+          - graph-service
+          - graphql-gateway
+          - identity-service
+          - media-service
+          - notification-service
+          - ranking-service
+          - realtime-chat-service
+          - search-service
+          - social-service
+          - trust-safety-service
+      max-parallel: 6  # 并行部署提升速度
+      fail-fast: false
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # 如果有 kubeconfig,可以实际检查
-      - name: Check ArgoCD application status
-        run: |
-          echo "📋 ArgoCD Application Check"
-          echo ""
-          echo "Expected Application:"
-          echo "  Name: nova-staging"
-          echo "  Namespace: argocd"
-          echo "  Path: k8s/infrastructure/overlays/staging"
-          echo ""
-          echo "To verify sync status manually:"
-          echo "  kubectl get application nova-staging -n argocd"
-          echo "  kubectl get pods -n nova"
-          echo ""
-          echo "Images deployed:"
-          echo "  All services: ${{ github.sha }}"
-
-  # 优化: 实际 Smoke Test
-  smoke-test:
-    name: Staging Smoke Test
-    needs: [verify-aws, verify-argocd-sync]
-    if: needs.verify-aws.outputs.has_aws == 'true'
-    runs-on: ubuntu-22.04
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Ensure kubeconfig secret is present
-        shell: bash
-        env:
-          KUBECONFIG_B64: ${{ secrets.STAGING_KUBE_CONFIG }}
-        run: |
-          if [[ -z "$KUBECONFIG_B64" ]]; then
-            echo "::warning::No STAGING_KUBE_CONFIG provided; skipping kubectl-based checks."
-          fi
-
-      - name: Install kubectl
-        if: ${{ env.KUBECONFIG_B64 != '' }}
-        uses: azure/setup-kubectl@v4
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
         with:
-          version: "latest"
-      - name: Wait for ArgoCD sync
-        run: |
-          echo "⏱️  Waiting 2 minutes for ArgoCD to sync..."
-          sleep 120
+          role-to-assume: arn:aws:iam::025434362120:role/github-actions-role
+          aws-region: ${{ env.AWS_REGION }}
+          audience: sts.amazonaws.com
+          role-session-name: gha-deploy-${{ github.run_id }}-${{ matrix.service }}
+          role-skip-session-tagging: true
 
-      # 如果有 kubeconfig,可以检查 Pod 状态
       - name: Configure kubeconfig
-        if: ${{ env.KUBECONFIG_B64 != '' }}
-        shell: bash
         env:
           KUBECONFIG_B64: ${{ secrets.STAGING_KUBE_CONFIG }}
         run: |
           mkdir -p ~/.kube
           echo "$KUBECONFIG_B64" | base64 --decode > ~/.kube/config
           chmod 600 ~/.kube/config
-          kubectl get ns | head -n 5 || true
 
-      - name: Verify deployments
-        shell: bash
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: "latest"
+
+      # 直接使用 kubectl set image 部署到 nova-staging namespace
+      - name: Deploy to staging
         run: |
-          echo "🧪 Smoke Test Checklist:"
-          if [[ -f ~/.kube/config ]]; then
-            set -e
-            echo "1. Verify pods"
-            kubectl get pods -n nova -o wide || true
-            echo "2. Rollout status"
-            kubectl rollout status deployment/auth-service -n nova --timeout=120s || true
-            echo "3. Health check"
-            kubectl run tmp-curl --rm -i --tty --image=curlimages/curl:8.10.1 -n nova --restart=Never -- sh -lc 'curl -sS http://auth-service.nova.svc.cluster.local:8080/health' || true
-            echo "✅ kubectl-based checks completed"
+          SERVICE_NAME="${{ matrix.service }}"
+          IMAGE="${{ env.REGISTRY }}/${{ env.REGISTRY_ALIAS }}/${SERVICE_NAME}:${{ github.sha }}"
+          NAMESPACE="nova-staging"
+
+          echo "🚀 Deploying $SERVICE_NAME to $NAMESPACE"
+
+          # 检查 deployment 是否存在
+          if kubectl get deployment "$SERVICE_NAME" -n $NAMESPACE &>/dev/null; then
+            echo "📦 Updating deployment image"
+            kubectl set image deployment/"$SERVICE_NAME" \
+              "$SERVICE_NAME=$IMAGE" \
+              -n $NAMESPACE
+
+            echo "⏳ Waiting for rollout (timeout: 5 minutes)..."
+            kubectl rollout status deployment/"$SERVICE_NAME" -n $NAMESPACE --timeout=5m
+
+            echo "✅ $SERVICE_NAME deployed successfully!"
+            kubectl get pods -n $NAMESPACE -l app="$SERVICE_NAME" -o wide
           else
-            echo "⚠️  No kubeconfig; manual verification only"
+            echo "⚠️  Deployment $SERVICE_NAME not found in $NAMESPACE"
+            echo "Available deployments:"
+            kubectl get deployments -n $NAMESPACE
+            exit 1
           fi
+
+      - name: Health check
+        run: |
+          SERVICE_NAME="${{ matrix.service }}"
+          NAMESPACE="nova-staging"
+
+          echo "🏥 Health check for $SERVICE_NAME"
+
+          # 获取 pod 状态
+          kubectl get pods -n $NAMESPACE -l app="$SERVICE_NAME" -o wide
+
+          # 检查是否有健康的 pod
+          READY_PODS=$(kubectl get pods -n $NAMESPACE -l app="$SERVICE_NAME" -o jsonpath='{.items[*].status.conditions[?(@.type=="Ready")].status}' | grep -o "True" | wc -l)
+
+          if [ "$READY_PODS" -gt 0 ]; then
+            echo "✅ $READY_PODS pod(s) ready"
+          else
+            echo "⚠️  No ready pods found"
+            kubectl describe pods -n $NAMESPACE -l app="$SERVICE_NAME" | tail -50
+            exit 1
+          fi
+
+  # 优化: 实际 Smoke Test
+  smoke-test:
+    name: Staging Smoke Test
+    needs: [verify-aws, deploy-staging]
+    if: needs.verify-aws.outputs.has_aws == 'true'
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::025434362120:role/github-actions-role
+          aws-region: ${{ env.AWS_REGION }}
+          audience: sts.amazonaws.com
+          role-session-name: gha-smoke-${{ github.run_id }}
+          role-skip-session-tagging: true
+
+      - name: Configure kubeconfig
+        env:
+          KUBECONFIG_B64: ${{ secrets.STAGING_KUBE_CONFIG }}
+        run: |
+          mkdir -p ~/.kube
+          echo "$KUBECONFIG_B64" | base64 --decode > ~/.kube/config
+          chmod 600 ~/.kube/config
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: "latest"
+
+      - name: Verify all deployments
+        run: |
+          NAMESPACE="nova-staging"
+          echo "🧪 Smoke Test - Verifying all services in $NAMESPACE"
+          echo ""
+
+          # 检查所有 pods
+          echo "1. All pods:"
+          kubectl get pods -n $NAMESPACE -o wide
+
+          echo ""
+          echo "2. Deployment status:"
+          kubectl get deployments -n $NAMESPACE
+
+          echo ""
+          echo "3. Check for any pods not running:"
+          NOT_RUNNING=$(kubectl get pods -n $NAMESPACE --field-selector=status.phase!=Running --no-headers 2>/dev/null | wc -l)
+          if [ "$NOT_RUNNING" -gt 0 ]; then
+            echo "⚠️  Found $NOT_RUNNING pods not in Running state:"
+            kubectl get pods -n $NAMESPACE --field-selector=status.phase!=Running
+          else
+            echo "✅ All pods are running"
+          fi
+
+          echo ""
+          echo "4. Health check sample (identity-service):"
+          kubectl run tmp-curl --rm -i --tty --image=curlimages/curl:8.10.1 -n $NAMESPACE --restart=Never -- sh -lc 'curl -sS http://identity-service.nova-staging.svc.cluster.local:8080/health || echo "Service not responding"'
+
+          echo ""
+          echo "✅ Smoke test completed"
 
   # 优化: 失败通知
   notify-on-failure:
     name: Notify on Failure
-    needs: [verify-aws, build-and-push, update-kustomization, verify-argocd-sync, smoke-test]
+    needs: [verify-aws, build-and-push, deploy-staging, smoke-test]
     if: failure()
     runs-on: ubuntu-22.04
 
@@ -290,7 +307,7 @@ jobs:
 
   summary:
     name: Deployment Summary
-    needs: [verify-aws, build-and-push, update-kustomization, verify-argocd-sync, smoke-test]
+    needs: [verify-aws, build-and-push, deploy-staging, smoke-test]
     if: always()
     runs-on: ubuntu-22.04
 
@@ -304,27 +321,31 @@ jobs:
           echo "📊 Status:"
           echo "  AWS Access: ${{ needs.verify-aws.outputs.has_aws }}"
           echo "  Build: ${{ needs.build-and-push.result }}"
-          echo "  Kustomization: ${{ needs.update-kustomization.result }}"
-          echo "  ArgoCD Sync: ${{ needs.verify-argocd-sync.result }}"
+          echo "  Deploy: ${{ needs.deploy-staging.result }}"
           echo "  Smoke Test: ${{ needs.smoke-test.result }}"
           echo ""
           echo "🚀 Deployment:"
           echo "  Commit: ${{ github.sha }}"
           echo "  Branch: ${{ github.ref_name }}"
           echo "  ECR: ${{ env.REGISTRY }}/${{ env.REGISTRY_ALIAS }}"
+          echo "  Namespace: nova-staging"
           echo ""
-          echo "📦 Services (8 total):"
-          echo "  - auth-service:${{ github.sha }}"
-          echo "  - user-service:${{ github.sha }}"
+          echo "📦 Services deployed (13 total):"
+          echo "  - analytics-service:${{ github.sha }}"
           echo "  - content-service:${{ github.sha }}"
           echo "  - feed-service:${{ github.sha }}"
+          echo "  - graph-service:${{ github.sha }}"
+          echo "  - graphql-gateway:${{ github.sha }}"
+          echo "  - identity-service:${{ github.sha }}"
           echo "  - media-service:${{ github.sha }}"
-          echo "  - messaging-service:${{ github.sha }}"
+          echo "  - notification-service:${{ github.sha }}"
+          echo "  - ranking-service:${{ github.sha }}"
+          echo "  - realtime-chat-service:${{ github.sha }}"
           echo "  - search-service:${{ github.sha }}"
-          echo "  - streaming-service:${{ github.sha }}"
+          echo "  - social-service:${{ github.sha }}"
+          echo "  - trust-safety-service:${{ github.sha }}"
           echo ""
-          echo "🔗 Next Steps:"
-          echo "  1. kubectl get application nova-staging -n argocd"
-          echo "  2. kubectl get pods -n nova"
-          echo "  3. kubectl logs -f deployment/auth-service -n nova"
+          echo "🔗 Verification:"
+          echo "  kubectl get pods -n nova-staging"
+          echo "  kubectl logs -f deployment/identity-service -n nova-staging"
           echo "════════════════════════════════════════════════════"

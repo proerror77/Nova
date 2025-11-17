@@ -1,0 +1,239 @@
+name: Dev Fast Deploy
+
+on:
+  push:
+    branches:
+      - 'dev/**'
+      - 'feature/**'
+    paths:
+      - 'backend/**'
+
+# 允许同一分支上的后续推送取消之前的部署
+concurrency:
+  group: dev-deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  AWS_REGION: ap-northeast-1
+  REGISTRY: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com
+  REGISTRY_ALIAS: nova
+  NAMESPACE: nova-dev
+
+jobs:
+  detect-changes:
+    name: Detect Changed Services
+    runs-on: ubuntu-22.04
+    outputs:
+      services: ${{ steps.detect.outputs.services }}
+      has_changes: ${{ steps.detect.outputs.has_changes }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2  # 需要至少2个commit来做diff
+
+      - name: Detect changed services
+        id: detect
+        run: |
+          # 获取变更的文件
+          CHANGED_FILES=$(git diff --name-only HEAD^..HEAD)
+          echo "Changed files:"
+          echo "$CHANGED_FILES"
+
+          # 检测哪些服务变更了
+          SERVICES=""
+
+          # 所有可能的服务列表
+          ALL_SERVICES=(
+            "analytics-service"
+            "content-service"
+            "feed-service"
+            "graph-service"
+            "graphql-gateway"
+            "identity-service"
+            "media-service"
+            "notification-service"
+            "ranking-service"
+            "realtime-chat-service"
+            "search-service"
+            "social-service"
+            "trust-safety-service"
+          )
+
+          # 检查每个服务是否有变更
+          for service in "${ALL_SERVICES[@]}"; do
+            if echo "$CHANGED_FILES" | grep -q "backend/$service/"; then
+              if [ -z "$SERVICES" ]; then
+                SERVICES="\"$service\""
+              else
+                SERVICES="$SERVICES,\"$service\""
+              fi
+              echo "✅ Detected change: $service"
+            fi
+          done
+
+          # 检查共享库变更
+          if echo "$CHANGED_FILES" | grep -q "backend/libs/"; then
+            echo "⚠️  Shared lib changed - building ALL services"
+            # 如果共享库变更，构建所有服务
+            SERVICES=""
+            for service in "${ALL_SERVICES[@]}"; do
+              if [ -z "$SERVICES" ]; then
+                SERVICES="\"$service\""
+              else
+                SERVICES="$SERVICES,\"$service\""
+              fi
+            done
+          fi
+
+          if [ -z "$SERVICES" ]; then
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+            echo "services=[]" >> "$GITHUB_OUTPUT"
+            echo "⚠️  No service changes detected"
+          else
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+            echo "services=[$SERVICES]" >> "$GITHUB_OUTPUT"
+            echo "📦 Services to build: [$SERVICES]"
+          fi
+
+  build-and-deploy:
+    name: Build & Deploy
+    needs: detect-changes
+    if: needs.detect-changes.outputs.has_changes == 'true'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+
+    strategy:
+      matrix:
+        service: ${{ fromJson(needs.detect-changes.outputs.services) }}
+      max-parallel: 3  # Dev环境可以并行构建
+      fail-fast: false
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::025434362120:role/github-actions-role
+          aws-region: ${{ env.AWS_REGION }}
+          audience: sts.amazonaws.com
+          role-session-name: gha-dev-${{ github.run_id }}-${{ matrix.service }}
+          role-skip-session-tagging: true
+
+      - name: Login to ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # 使用 dev- 前缀的 SHA tag
+      - uses: ./.github/actions/build-push-ecr
+        with:
+          service-name: ${{ matrix.service }}
+          image-tag: dev-${{ github.sha }}
+          ecr-registry: ${{ env.REGISTRY }}
+          registry-alias: ${{ env.REGISTRY_ALIAS }}
+
+      - name: Verify image
+        run: |
+          echo "✅ Built: ${{ matrix.service }}:dev-${{ github.sha }}"
+          aws ecr describe-images \
+            --repository-name "${{ env.REGISTRY_ALIAS }}/${{ matrix.service }}" \
+            --region ${{ env.AWS_REGION }} \
+            --image-ids imageTag=dev-${{ github.sha }} \
+            --query 'imageDetails[0].{Size:imageSizeInBytes,PushedAt:imagePushedAt}' \
+            --output table
+
+      - name: Configure kubeconfig
+        env:
+          KUBECONFIG_B64: ${{ secrets.STAGING_KUBE_CONFIG }}
+        run: |
+          mkdir -p ~/.kube
+          echo "$KUBECONFIG_B64" | base64 --decode > ~/.kube/config
+          chmod 600 ~/.kube/config
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: "latest"
+
+      # 直接部署到 dev namespace - 使用 kubectl set image
+      - name: Deploy to dev namespace
+        run: |
+          SERVICE_NAME="${{ matrix.service }}"
+          IMAGE="${{ env.REGISTRY }}/${{ env.REGISTRY_ALIAS }}/${SERVICE_NAME}:dev-${{ github.sha }}"
+
+          echo "🚀 Deploying $SERVICE_NAME to ${{ env.NAMESPACE }}"
+
+          # 检查 deployment 是否存在
+          if kubectl get deployment "$SERVICE_NAME" -n ${{ env.NAMESPACE }} &>/dev/null; then
+            echo "📦 Updating existing deployment"
+            kubectl set image deployment/"$SERVICE_NAME" \
+              "$SERVICE_NAME=$IMAGE" \
+              -n ${{ env.NAMESPACE }}
+
+            echo "⏳ Waiting for rollout..."
+            kubectl rollout status deployment/"$SERVICE_NAME" -n ${{ env.NAMESPACE }} --timeout=3m
+
+            echo "✅ Deployment successful!"
+            kubectl get pods -n ${{ env.NAMESPACE }} -l app="$SERVICE_NAME"
+          else
+            echo "⚠️  Deployment $SERVICE_NAME not found in ${{ env.NAMESPACE }}"
+            echo "To create it, copy from staging and apply manually:"
+            echo "  kubectl get deployment $SERVICE_NAME -n nova-staging -o yaml | sed 's/nova-staging/nova-dev/g' | kubectl apply -f -"
+            exit 1
+          fi
+
+      - name: Health check
+        run: |
+          SERVICE_NAME="${{ matrix.service }}"
+          echo "🏥 Health check for $SERVICE_NAME"
+
+          # 获取 pod 状态
+          kubectl get pods -n ${{ env.NAMESPACE }} -l app="$SERVICE_NAME" -o wide
+
+          # 检查是否有健康的 pod
+          READY_PODS=$(kubectl get pods -n ${{ env.NAMESPACE }} -l app="$SERVICE_NAME" -o jsonpath='{.items[*].status.conditions[?(@.type=="Ready")].status}' | grep -o "True" | wc -l)
+
+          if [ "$READY_PODS" -gt 0 ]; then
+            echo "✅ $READY_PODS pod(s) ready"
+          else
+            echo "⚠️  No ready pods found"
+            kubectl describe pods -n ${{ env.NAMESPACE }} -l app="$SERVICE_NAME"
+            exit 1
+          fi
+
+  summary:
+    name: Deployment Summary
+    needs: [detect-changes, build-and-deploy]
+    if: always()
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Print summary
+        run: |
+          echo "════════════════════════════════════════════════════"
+          echo "⚡ DEV FAST DEPLOY COMPLETED"
+          echo "════════════════════════════════════════════════════"
+          echo ""
+          echo "📊 Status:"
+          echo "  Changes Detected: ${{ needs.detect-changes.outputs.has_changes }}"
+          echo "  Build & Deploy: ${{ needs.build-and-deploy.result }}"
+          echo ""
+          echo "🚀 Deployment:"
+          echo "  Branch: ${{ github.ref_name }}"
+          echo "  Commit: ${{ github.sha }}"
+          echo "  Namespace: ${{ env.NAMESPACE }}"
+          echo "  Image Tag: dev-${{ github.sha }}"
+          echo ""
+          echo "📦 Services deployed:"
+          echo "  ${{ needs.detect-changes.outputs.services }}"
+          echo ""
+          echo "🔗 Verification:"
+          echo "  kubectl get pods -n nova-dev"
+          echo "  kubectl logs -f deployment/<service> -n nova-dev"
+          echo "════════════════════════════════════════════════════"

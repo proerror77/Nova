@@ -4,12 +4,11 @@ kind: Kustomization
 bases:
 - ../../base
 
-namespace: nova
+namespace: nova-dev
 
-# 开发环境特定配置
+# 开发环境特定配置 - 资源限制较低以节省成本
 patchesStrategicMerge:
 - deployment-patch.yaml
-- replicas-patch.yaml
 
 # 环境变量覆盖
 configMapGenerator:
@@ -20,30 +19,33 @@ configMapGenerator:
   - LOG_LEVEL=debug
   - RUST_LOG=debug,actix_web=debug
 
-# 镜像配置（用于本地开发，可能需要 imagePullPolicy: Never）
-images:
-- name: nova/content-service
-  newTag: dev-latest
-  newName: nova/content-service
-- name: nova/media-service
-  newTag: dev-latest
-  newName: nova/media-service
-- name: nova/user-service
-  newTag: dev-latest
-  newName: nova/user-service
-- name: nova/messaging-service
-  newTag: dev-latest
-  newName: nova/messaging-service
-
-# 副本数（开发环境可以只用1个）
+# 副本数（开发环境使用1个副本）
 replicas:
+- name: analytics-service
+  count: 1
 - name: content-service
+  count: 1
+- name: feed-service
+  count: 1
+- name: graph-service
+  count: 1
+- name: graphql-gateway
+  count: 1
+- name: identity-service
   count: 1
 - name: media-service
   count: 1
-- name: user-service
+- name: notification-service
   count: 1
-- name: messaging-service
+- name: ranking-service
+  count: 1
+- name: realtime-chat-service
+  count: 1
+- name: search-service
+  count: 1
+- name: social-service
+  count: 1
+- name: trust-safety-service
   count: 1
 
 commonAnnotations:

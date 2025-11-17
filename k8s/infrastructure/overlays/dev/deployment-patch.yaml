@@ -1,3 +1,24 @@
+# Dev Environment Resource Limits - Lower limits for cost efficiency
+# All services use minimal resources for fast iteration
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: analytics-service
+spec:
+  template:
+    spec:
+      containers:
+      - name: analytics-service
+        imagePullPolicy: Always
+        resources:
+          requests:
+            cpu: 50m
+            memory: 128Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -7,6 +28,78 @@ spec:
     spec:
       containers:
       - name: content-service
+        imagePullPolicy: Always
+        resources:
+          requests:
+            cpu: 50m
+            memory: 128Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: feed-service
+spec:
+  template:
+    spec:
+      containers:
+      - name: feed-service
+        imagePullPolicy: Always
+        resources:
+          requests:
+            cpu: 50m
+            memory: 128Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: graph-service
+spec:
+  template:
+    spec:
+      containers:
+      - name: graph-service
+        imagePullPolicy: Always
+        resources:
+          requests:
+            cpu: 50m
+            memory: 128Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: graphql-gateway
+spec:
+  template:
+    spec:
+      containers:
+      - name: graphql-gateway
+        imagePullPolicy: Always
+        resources:
+          requests:
+            cpu: 50m
+            memory: 128Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: identity-service
+spec:
+  template:
+    spec:
+      containers:
+      - name: identity-service
         imagePullPolicy: Always
         resources:
           requests:
@@ -37,12 +130,12 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: user-service
+  name: notification-service
 spec:
   template:
     spec:
       containers:
-      - name: user-service
+      - name: notification-service
         imagePullPolicy: Always
         resources:
           requests:
@@ -55,12 +148,30 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: messaging-service
+  name: ranking-service
 spec:
   template:
     spec:
       containers:
-      - name: messaging-service
+      - name: ranking-service
+        imagePullPolicy: Always
+        resources:
+          requests:
+            cpu: 50m
+            memory: 128Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: realtime-chat-service
+spec:
+  template:
+    spec:
+      containers:
+      - name: realtime-chat-service
         imagePullPolicy: Always
         resources:
           requests:
@@ -69,3 +180,57 @@ spec:
           limits:
             cpu: 300m
             memory: 512Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: search-service
+spec:
+  template:
+    spec:
+      containers:
+      - name: search-service
+        imagePullPolicy: Always
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: social-service
+spec:
+  template:
+    spec:
+      containers:
+      - name: social-service
+        imagePullPolicy: Always
+        resources:
+          requests:
+            cpu: 50m
+            memory: 128Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: trust-safety-service
+spec:
+  template:
+    spec:
+      containers:
+      - name: trust-safety-service
+        imagePullPolicy: Always
+        resources:
+          requests:
+            cpu: 50m
+            memory: 128Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi
