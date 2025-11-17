@@ -30,7 +30,7 @@ jobs:
       findings-count: ${{ steps.security.outputs.findings-count }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -157,7 +157,7 @@ jobs:
     if: success()  # Only run if security passed
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -236,7 +236,7 @@ jobs:
     if: success()
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Check if Codex review already triggered
         env:
@@ -293,7 +293,7 @@ jobs:
     if: always()
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Check all reviews passed
         run: |
