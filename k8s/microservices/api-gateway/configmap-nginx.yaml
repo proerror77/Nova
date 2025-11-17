@@ -40,24 +40,21 @@ data:
       # 负载均衡 - 上游服务定义
       upstream user_service {
         least_conn;
-        # 在 Kubernetes 中，服务名可作为 DNS 名
-        server user-service.nova-services.svc.cluster.local:8080 weight=10;
+        # 暫時路由到 nova-staging 的 messaging-service 外部 ELB
+        # （方便先讓前端串接，之後可以再改回 cluster IP）
+        server a1ed70127828042ad9cee1dfd13d9b4b-1885124492.ap-northeast-1.elb.amazonaws.com:8080 weight=10;
         keepalive 32;
       }
 
       upstream content_service {
         least_conn;
-        # content-service 在分离时启用
-        # server content-service.nova-services.svc.cluster.local:8080 weight=10;
-        server user-service.nova-services.svc.cluster.local:8080 weight=10;  # 当前仍通过 user-service
+        server a1ed70127828042ad9cee1dfd13d9b4b-1885124492.ap-northeast-1.elb.amazonaws.com:8080 weight=10;
         keepalive 32;
       }
 
       upstream media_service {
         least_conn;
-        # media-service 在分离时启用
-        # server media-service.nova-services.svc.cluster.local:8080 weight=10;
-        server user-service.nova-services.svc.cluster.local:8080 weight=10;  # 当前仍通过 user-service
+        server a1ed70127828042ad9cee1dfd13d9b4b-1885124492.ap-northeast-1.elb.amazonaws.com:8080 weight=10;
         keepalive 32;
       }
 

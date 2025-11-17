@@ -10,6 +10,7 @@ use crate::cache::MediaCache;
 use crate::config::Config;
 use crate::db::upload_repo;
 use crate::error::{AppError, Result};
+use crate::kafka::events::MediaEventsProducer;
 use crate::middleware::UserId;
 use crate::models::{StartUploadRequest, UploadResponse};
 use crate::services::UploadService;
@@ -103,6 +104,7 @@ pub async fn update_upload_progress(
 pub async fn complete_upload(
     pool: web::Data<PgPool>,
     cache: web::Data<Arc<MediaCache>>,
+    events: web::Data<MediaEventsProducer>,
     upload_id: web::Path<String>,
 ) -> Result<HttpResponse> {
     let upload_uuid = Uuid::parse_str(&upload_id)
@@ -114,6 +116,10 @@ pub async fn complete_upload(
 
     if let Err(err) = cache.cache_upload(&upload).await {
         tracing::debug!(%upload_uuid, "upload cache set failed: {}", err);
+    }
+
+    if let Err(err) = events.publish_media_uploaded(&upload).await {
+        tracing::warn!(%upload_uuid, "Failed to publish MediaUploaded event: {}", err);
     }
 
     Ok(HttpResponse::Ok().json(UploadResponse::from(upload)))

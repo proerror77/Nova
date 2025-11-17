@@ -8,6 +8,7 @@ pub mod config;
 pub mod db;
 pub mod error;
 pub mod grpc;
+pub mod kafka;
 pub mod handlers;
 pub mod metrics;
 pub mod middleware;

@@ -73,6 +73,8 @@ resources:
 
   # API Gateway (separate)
   - api-gateway/deployment.yaml
+  - api-gateway/service.yaml
+  - api-gateway/configmap-nginx.yaml
 
   # Infrastructure and support services
   - ingress.yaml

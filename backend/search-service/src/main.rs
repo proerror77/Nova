@@ -915,24 +915,38 @@ async fn main() -> std::io::Result<()> {
 
         if let Some(svc) = svc {
             // ✅ P0-1: Load mTLS configuration
+            //
+            // In production, missing or invalid TLS configuration is a hard error.
+            // In non-production environments (staging/development), we allow the
+            // gRPC server to start without TLS so the environment remains usable.
+            let app_env = std::env::var("APP_ENV").unwrap_or_else(|_| "development".to_string());
+            let is_production_env = app_env.eq_ignore_ascii_case("production");
+
+            // Try to load TLS config from environment
             let tls_config = match grpc_tls::GrpcServerTlsConfig::from_env() {
                 Ok(config) => {
-                    tracing::info!("mTLS enabled - service-to-service authentication active");
+                    tracing::info!(
+                        "mTLS enabled - service-to-service authentication active (env = {})",
+                        app_env
+                    );
                     Some(config)
                 }
                 Err(e) => {
-                    tracing::warn!("mTLS disabled - TLS config not found: {}. Using development mode for testing only.", e);
-                    if cfg!(debug_assertions) {
-                        tracing::info!(
-                            "Development mode: Starting without TLS (NOT FOR PRODUCTION)"
-                        );
-                        None
-                    } else {
+                    if is_production_env {
                         tracing::error!(
-                            "Production requires mTLS - GRPC_SERVER_CERT_PATH must be set"
+                            "Production requires mTLS - GRPC_SERVER_CERT_PATH must be set: {}",
+                            e
                         );
                         return;
                     }
+
+                    tracing::warn!(
+                        "mTLS disabled - TLS config not found for env '{}': {}. \
+                         Starting gRPC server without TLS (non-production only).",
+                        app_env,
+                        e
+                    );
+                    None
                 }
             };
 
@@ -941,19 +955,43 @@ async fn main() -> std::io::Result<()> {
 
             if let Some(tls_cfg) = tls_config {
                 match tls_cfg.build_server_tls() {
-                    Ok(server_tls) => match server_builder.tls_config(server_tls) {
+                    Ok(server_tls) => match GrpcServer::builder().tls_config(server_tls) {
                         Ok(builder) => {
                             server_builder = builder;
                             tracing::info!("gRPC server TLS configured successfully");
                         }
                         Err(e) => {
-                            tracing::error!("Failed to configure TLS on gRPC server: {}", e);
-                            return;
+                            if is_production_env {
+                                tracing::error!(
+                                    "Failed to configure TLS on gRPC server in production: {}",
+                                    e
+                                );
+                                return;
+                            }
+
+                            tracing::warn!(
+                                "Failed to configure TLS on gRPC server in env '{}': {}. \
+                                 Falling back to non-TLS for this environment.",
+                                app_env,
+                                e
+                            );
                         }
                     },
                     Err(e) => {
-                        tracing::error!("Failed to build server TLS config: {}", e);
-                        return;
+                        if is_production_env {
+                            tracing::error!(
+                                "Failed to build server TLS config in production: {}",
+                                e
+                            );
+                            return;
+                        }
+
+                        tracing::warn!(
+                            "Failed to build server TLS config in env '{}': {}. \
+                             Falling back to non-TLS for this environment.",
+                            app_env,
+                            e
+                        );
                     }
                 }
             }

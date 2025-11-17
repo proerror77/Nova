@@ -112,6 +112,7 @@ actix-middleware = { path = "../libs/actix-middleware" }
 grpc-metrics = { path = "../libs/grpc-metrics" }
 grpc-clients = { path = "../libs/grpc-clients" }  # From streaming-service
 video-core = { path = "../libs/video-core" }  # From video-service
+transactional-outbox = { path = "../libs/transactional-outbox" }
 
 [build-dependencies]
 tonic-build = "0.12"

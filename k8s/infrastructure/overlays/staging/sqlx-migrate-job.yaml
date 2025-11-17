@@ -207,13 +207,13 @@ spec:
           valueFrom:
             secretKeyRef:
               name: nova-db-credentials
-              key: username
+              key: DB_USER
               optional: false
         - name: DB_PASSWORD
           valueFrom:
             secretKeyRef:
               name: nova-db-credentials
-              key: password
+              key: DB_PASSWORD
               optional: false
 
         # 资源限制
