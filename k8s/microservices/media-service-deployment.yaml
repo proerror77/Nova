@@ -6,7 +6,7 @@ metadata:
     app: media-service
     tier: backend
 spec:
-  replicas: 2
+  replicas: 1
   strategy:
     type: RollingUpdate
     rollingUpdate:
@@ -61,11 +61,11 @@ spec:
               protocol: TCP
           resources:
             requests:
-              memory: "512Mi"
-              cpu: "250m"
+              memory: "256Mi"
+              cpu: "100m"
             limits:
-              memory: "1Gi"
-              cpu: "1000m"
+              memory: "512Mi"
+              cpu: "500m"
 
           # Startup probe: Allows longer initial startup time for initialization
           startupProbe:
@@ -98,6 +98,8 @@ spec:
           envFrom:
             - configMapRef:
                 name: media-service-config
+            - secretRef:
+                name: media-service-secret
 
           volumeMounts:
             - name: tmp

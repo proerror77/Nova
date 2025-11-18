@@ -17,6 +17,7 @@ resources:
   - feed-service-deployment.yaml
   - feed-service-configmap.yaml
   
+  - media-service-configmap.yaml
   - graph-service-deployment.yaml
   - graph-service-service.yaml
   - graph-service-configmap.yaml

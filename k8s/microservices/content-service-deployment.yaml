@@ -88,9 +88,9 @@ spec:
 
           readinessProbe:
             httpGet:
-              path: /api/v1/health/ready
+              path: /api/v1/health
               port: 8080
-            initialDelaySeconds: 60  # Wait for initialization to complete
+            initialDelaySeconds: 30  # Faster readiness without ClickHouse dependency
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 3
