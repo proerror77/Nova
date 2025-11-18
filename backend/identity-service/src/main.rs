@@ -26,6 +26,12 @@ static INTERNAL_GRPC_API_KEY: OnceCell<Option<String>> = OnceCell::new();
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    // rustls 0.23 requires selecting a CryptoProvider at runtime
+    if let Err(err) = rustls::crypto::aws_lc_rs::default_provider().install_default() {
+        eprintln!("Failed to install rustls crypto provider: {:?}", err);
+        return Err(anyhow!("Unable to install TLS crypto provider: {err}"));
+    }
+
     // Initialize tracing
     tracing_subscriber::fmt()
         .with_env_filter(
