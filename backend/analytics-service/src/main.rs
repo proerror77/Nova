@@ -2,6 +2,7 @@ use actix_web::{web, App, HttpServer};
 use analytics_service::services::{OutboxConfig, OutboxPublisher};
 use anyhow::{Context, Result};
 use db_pool::{create_pool as create_pg_pool, DbConfig as DbPoolConfig};
+use analytics_service::grpc::nova::events_service::v2::events_service_server::EventsServiceServer;
 use std::sync::Arc;
 use tonic::transport::Server as GrpcServer;
 use tonic_health::server::health_reporter;
@@ -91,7 +92,9 @@ async fn main() -> Result<()> {
 
     tokio::spawn(async move {
         let (mut health, health_service) = health_reporter();
-        health.set_serving::<analytics_service::grpc::nova::events_service::v1::events_service_server::EventsServiceServer<analytics_service::grpc::EventsServiceImpl>>().await;
+        health
+            .set_serving::<EventsServiceServer<analytics_service::grpc::EventsServiceImpl>>()
+            .await;
 
         // Server-side correlation-id extractor interceptor
         fn server_interceptor(
@@ -152,12 +155,10 @@ async fn main() -> Result<()> {
 
         if let Err(e) = server_builder
             .add_service(health_service)
-            .add_service(
-                analytics_service::grpc::nova::events_service::v1::events_service_server::EventsServiceServer::with_interceptor(
-                    svc,
-                    server_interceptor
-                )
-            )
+            .add_service(EventsServiceServer::with_interceptor(
+                svc,
+                server_interceptor,
+            ))
             .serve(grpc_addr)
             .await
         {
