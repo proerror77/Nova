@@ -59,6 +59,10 @@ async fn openapi_json(doc: web::Data<utoipa::openapi::OpenApi>) -> actix_web::Re
 
 #[actix_web::main]
 async fn main() -> io::Result<()> {
+    if let Err(err) = rustls::crypto::aws_lc_rs::default_provider().install_default() {
+        eprintln!("ERROR: failed to install rustls crypto provider: {:?}", err);
+        return Err(io::Error::other("failed to install rustls crypto provider"));
+    }
     // Initialize logging
     tracing_subscriber::fmt::init();
 
