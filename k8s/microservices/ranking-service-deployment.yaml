@@ -53,44 +53,50 @@ spec:
           imagePullPolicy: Always
           ports:
             - name: http
-              containerPort: 8080
+              containerPort: 8011
               protocol: TCP
             - name: grpc
-              containerPort: 9094
+              containerPort: 9011
               protocol: TCP
           resources:
             requests:
               memory: "256Mi"
-              cpu: "250m"
+              cpu: "50m"
             limits:
               memory: "512Mi"
               cpu: "1000m"
           startupProbe:
-            httpGet:
-              path: /health
-              port: 8080
+            tcpSocket:
+              port: 9011
             initialDelaySeconds: 10
             periodSeconds: 5
             timeoutSeconds: 5
             failureThreshold: 60
 
           livenessProbe:
-            httpGet:
-              path: /health
-              port: 8080
+            tcpSocket:
+              port: 9011
             initialDelaySeconds: 60
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 3
 
           readinessProbe:
-            httpGet:
-              path: /health/ready
-              port: 8080
+            tcpSocket:
+              port: 9011
             initialDelaySeconds: 60
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 3
+          env:
+            - name: GRPC_SERVER_CERT_PATH
+              value: /etc/nova/certs/server.crt
+            - name: GRPC_SERVER_KEY_PATH
+              value: /etc/nova/certs/server.key
+            - name: GRPC_CLIENT_CA_CERT_PATH
+              value: /etc/nova/certs/ca.crt
+            - name: GRPC_REQUIRE_CLIENT_CERT
+              value: "true"
           envFrom:
             - configMapRef:
                 name: ranking-service-config
@@ -101,8 +107,14 @@ spec:
               mountPath: /tmp
             - name: var-tmp
               mountPath: /var/tmp
+            - name: grpc-mtls-shared
+              mountPath: /etc/nova/certs
+              readOnly: true
       volumes:
         - name: tmp
           emptyDir: {}
         - name: var-tmp
           emptyDir: {}
+        - name: grpc-mtls-shared
+          secret:
+            secretName: grpc-mtls-shared

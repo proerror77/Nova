@@ -7,7 +7,7 @@ metadata:
     version: v2
   annotations:
     prometheus.io/scrape: "true"
-    prometheus.io/port: "8081"
+    prometheus.io/port: "8006"
     prometheus.io/path: "/metrics"
 spec:
   type: ClusterIP
@@ -15,8 +15,8 @@ spec:
     app: social-service
   ports:
     - name: http
-      port: 8081
-      targetPort: 8081
+      port: 8006
+      targetPort: 8006
       protocol: TCP
     - name: grpc
       port: 50052
