@@ -62,19 +62,21 @@ spec:
         env:
         - name: RUST_LOG
           value: "info,identity_service=debug"
+        - name: APP_ENV
+          value: "staging"
         - name: SERVICE_NAME
           value: "identity-service"
         - name: SERVER_HOST
           value: "0.0.0.0"
         - name: SERVER_PORT
-          value: "8080"
+          value: "50051"
         - name: GRPC_PORT
           value: "50051"
         - name: DATABASE_URL
           valueFrom:
             secretKeyRef:
-              name: identity-service-secret
-              key: database-url
+              name: nova-db-credentials
+              key: auth-db-url
         # JWT configuration for local/dev and non-AWS environments:
         # use RSA keys from the Kubernetes Secret so that
         # crypto-core::jwt can initialize RS256 keys correctly.
@@ -119,11 +121,19 @@ spec:
           value: "5"
         - name: LOCKOUT_DURATION_MINUTES
           value: "30"
+        - name: GRPC_SERVER_CERT_PATH
+          value: /etc/nova/certs/server.crt
+        - name: GRPC_SERVER_KEY_PATH
+          value: /etc/nova/certs/server.key
+        - name: GRPC_CLIENT_CA_CERT_PATH
+          value: /etc/nova/certs/ca.crt
+        - name: GRPC_REQUIRE_CLIENT_CERT
+          value: "true"
 
         # Health checks
         livenessProbe:
           tcpSocket:
-            port: 8080
+            port: 50051
           initialDelaySeconds: 10
           periodSeconds: 10
           timeoutSeconds: 5
@@ -131,7 +141,7 @@ spec:
 
         readinessProbe:
           tcpSocket:
-            port: 8080
+            port: 50051
           initialDelaySeconds: 5
           periodSeconds: 5
           timeoutSeconds: 3
@@ -152,6 +162,9 @@ spec:
           mountPath: /tmp
         - name: cache
           mountPath: /var/cache
+        - name: grpc-mtls-shared
+          mountPath: /etc/nova/certs
+          readOnly: true
 
       # Volumes
       volumes:
@@ -159,6 +172,9 @@ spec:
         emptyDir: {}
       - name: cache
         emptyDir: {}
+      - name: grpc-mtls-shared
+        secret:
+          secretName: grpc-mtls-shared
 
       # Anti-affinity to spread pods across nodes
       affinity:
