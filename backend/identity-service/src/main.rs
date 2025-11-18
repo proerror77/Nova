@@ -29,7 +29,7 @@ async fn main() -> Result<()> {
     // rustls 0.23 requires selecting a CryptoProvider at runtime
     if let Err(err) = rustls::crypto::aws_lc_rs::default_provider().install_default() {
         eprintln!("Failed to install rustls crypto provider: {:?}", err);
-        return Err(anyhow!("Unable to install TLS crypto provider: {err}"));
+        return Err(anyhow!("Unable to install TLS crypto provider: {:?}", err));
     }
 
     // Initialize tracing

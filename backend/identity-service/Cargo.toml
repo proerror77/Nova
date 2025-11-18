@@ -51,6 +51,7 @@ resilience = { path = "../libs/resilience" }
 
 # TLS/mTLS (P0-1)
 grpc-tls = { path = "../libs/grpc-tls" }
+rustls = { version = "0.23", default-features = false, features = ["std", "aws-lc-rs"] }
 
 # Utilities
 chrono = { version = "0.4", features = ["serde"] }

@@ -4362,6 +4362,7 @@ dependencies = [
  "regex",
  "reqwest",
  "resilience",
+ "rustls 0.23.33",
  "serde",
  "serde_json",
  "serial_test",
