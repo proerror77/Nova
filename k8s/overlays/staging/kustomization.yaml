@@ -7,149 +7,77 @@ kind: Kustomization
 
 namespace: nova-staging
 
-# Base from production manifests
-bases:
+# Base resources
+resources:
   - ../../base/
+  - external-secret.yaml
 
 # Common labels for all resources in staging environment
-commonLabels:
-  app.kubernetes.io/environment: staging
-  app.kubernetes.io/managed-by: kustomize
-
-# Common annotations
-commonAnnotations:
-  description: "Nova Staging Environment"
-  environment: "staging"
-  managed-by: "kustomize"
+labels:
+  - includeSelectors: true
+    pairs:
+      app.kubernetes.io/environment: staging
+      app.kubernetes.io/managed-by: kustomize
 
 # Staging-specific image overrides
 # Use GCR staging registry for pre-production testing
 images:
   # Tier 1: Foundation
-  - name: identity-service
-    newName: gcr.io/nova-staging/nova/identity-service
-    newTag: staging
-  
-  # Tier 2: User Management
-  - name: user-service
-    newName: gcr.io/nova-staging/nova/user-service
-    newTag: staging
-  
+  - name: nova/identity-service
+    newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/identity-service
+    newTag: main-bd6fbdba24e1dec6873163aa51d2297d45cc5cc3
+
   # Tier 3: Content Platform
-  - name: content-service
-    newName: gcr.io/nova-staging/nova/content-service
-    newTag: staging
-  
+  - name: nova/content-service
+    newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/content-service
+    newTag: main-bd6fbdba24e1dec6873163aa51d2297d45cc5cc3
+
   # Tier 4: Social & Graph
-  - name: social-service
-    newName: gcr.io/nova-staging/nova/social-service
-    newTag: staging
-  
-  - name: graph-service
-    newName: gcr.io/nova-staging/nova/graph-service
-    newTag: staging
-  
+  - name: nova/social-service
+    newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/social-service
+    newTag: main-bd6fbdba24e1dec6873163aa51d2297d45cc5cc3
+
+  - name: nova/graph-service
+    newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/graph-service
+    newTag: main-bd6fbdba24e1dec6873163aa51d2297d45cc5cc3
+
   # Tier 5: Advanced Features
-  - name: feed-service
-    newName: gcr.io/nova-staging/nova/feed-service
-    newTag: staging
-  
-  - name: ranking-service
-    newName: gcr.io/nova-staging/nova/ranking-service
-    newTag: staging
-  
-  - name: analytics-service
-    newName: gcr.io/nova-staging/nova/analytics-service
-    newTag: staging
-  
-  - name: notification-service
-    newName: gcr.io/nova-staging/nova/notification-service
-    newTag: staging
-  
-  - name: realtime-chat-service
-    newName: gcr.io/nova-staging/nova/realtime-chat-service
-    newTag: staging
-  
-  - name: search-service
-    newName: gcr.io/nova-staging/nova/search-service
-    newTag: staging
-  
-  - name: media-service
-    newName: gcr.io/nova-staging/nova/media-service
-    newTag: staging
-  
-  - name: trust-safety-service
-    newName: gcr.io/nova-staging/nova/trust-safety-service
-    newTag: staging
-  
+  - name: nova/feed-service
+    newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/feed-service
+    newTag: main-bd6fbdba24e1dec6873163aa51d2297d45cc5cc3
+
+  - name: nova/ranking-service
+    newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/ranking-service
+    newTag: main-bd6fbdba24e1dec6873163aa51d2297d45cc5cc3
+
+  - name: nova/analytics-service
+    newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/analytics-service
+    newTag: main-bd6fbdba24e1dec6873163aa51d2297d45cc5cc3
+
+  - name: nova/notification-service
+    newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/notification-service
+    newTag: main-bd6fbdba24e1dec6873163aa51d2297d45cc5cc3
+
+  - name: nova/realtime-chat-service
+    newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/realtime-chat-service
+    newTag: main-bd6fbdba24e1dec6873163aa51d2297d45cc5cc3
+
+  - name: nova/search-service
+    newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/search-service
+    newTag: main-bd6fbdba24e1dec6873163aa51d2297d45cc5cc3
+
+  - name: nova/media-service
+    newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/media-service
+    newTag: main-bd6fbdba24e1dec6873163aa51d2297d45cc5cc3
+
+  - name: nova/trust-safety-service
+    newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/trust-safety-service
+    newTag: main-bd6fbdba24e1dec6873163aa51d2297d45cc5cc3
+
   # Tier 6: API Gateway
-  - name: graphql-gateway
-    newName: gcr.io/nova-staging/nova/graphql-gateway
-    newTag: staging
-
-# Replica overrides for staging (2 replicas for HA testing)
-replicas:
-  - name: identity-service
-    count: 2
-  - name: user-service
-    count: 2
-  - name: content-service
-    count: 2
-  - name: social-service
-    count: 2
-  - name: graph-service
-    count: 2
-  - name: feed-service
-    count: 2
-  - name: ranking-service
-    count: 2
-  - name: analytics-service
-    count: 2
-  - name: notification-service
-    count: 2
-  - name: realtime-chat-service
-    count: 2
-  - name: search-service
-    count: 2
-  - name: media-service
-    count: 2
-  - name: trust-safety-service
-    count: 2
-  - name: graphql-gateway
-    count: 2
-
-# Resource limits for staging (moderate)
-# CPU: 250m-500m, Memory: 256Mi-512Mi
-patches:
-  - target:
-      kind: Deployment
-      apiVersion: apps/v1
-    patch: |-
-      - op: replace
-        path: /spec/template/spec/containers/0/resources/requests/cpu
-        value: "250m"
-      - op: replace
-        path: /spec/template/spec/containers/0/resources/requests/memory
-        value: "256Mi"
-      - op: replace
-        path: /spec/template/spec/containers/0/resources/limits/cpu
-        value: "500m"
-      - op: replace
-        path: /spec/template/spec/containers/0/resources/limits/memory
-        value: "512Mi"
-      # Enable health checks for staging
-      - op: replace
-        path: /spec/template/spec/containers/0/livenessProbe/initialDelaySeconds
-        value: 30
-      - op: replace
-        path: /spec/template/spec/containers/0/livenessProbe/periodSeconds
-        value: 10
-      - op: replace
-        path: /spec/template/spec/containers/0/readinessProbe/initialDelaySeconds
-        value: 5
-      - op: replace
-        path: /spec/template/spec/containers/0/readinessProbe/periodSeconds
-        value: 5
+  - name: nova/graphql-gateway
+    newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/graphql-gateway
+    newTag: main-bd6fbdba24e1dec6873163aa51d2297d45cc5cc3
 
 # Staging-specific ConfigMap
 configMapGenerator:
@@ -169,164 +97,27 @@ configMapGenerator:
       - CORS_ALLOWED_ORIGINS="https://staging.nova.io,https://api-staging.nova.io"
       - FEATURE_FLAGS_ENABLED=true
 
-# Image pull policy for staging (IfNotPresent for efficiency)
-patchesJson6902:
+# Resource and probe adjustments for staging
+patches:
   - target:
+      group: apps
+      version: v1
       kind: Deployment
-      apiVersion: apps/v1
     patch: |-
       - op: add
-        path: /spec/template/spec/imagePullPolicy
+        path: /spec/template/spec/containers/0/imagePullPolicy
         value: IfNotPresent
-
-# Environment-specific secrets (loaded from external secrets)
-secretGenerator:
-  - name: nova-secrets-staging
-    behavior: create
-    envs:
-      - .env.staging
-
-# Image pull secrets for GCR
-imagePullSecrets:
-  - name: gcr-staging-secret
-
-# Service account for staging
-serviceAccount:
-  name: nova-staging-sa
-
-# Strict network policies for staging
-networkPolicy:
-  name: nova-staging-network-policy
-  podSelector:
-    matchLabels:
-      app.kubernetes.io/environment: staging
-  policyTypes:
-    - Ingress
-    - Egress
-  ingress:
-    - from:
-        - podSelector:
-            matchLabels:
-              app.kubernetes.io/environment: staging
-      ports:
-        - protocol: TCP
-          port: 8080
-        - protocol: TCP
-          port: 50051
-  egress:
-    - to:
-        - podSelector:
-            matchLabels:
-              app.kubernetes.io/environment: staging
-      ports:
-        - protocol: TCP
-          port: 8080
-        - protocol: TCP
-          port: 50051
-    - to:
-        - namespaceSelector: {}
-      ports:
-        - protocol: TCP
-          port: 53
-        - protocol: UDP
-          port: 53
-        - protocol: TCP
-          port: 5432
-        - protocol: TCP
-          port: 6379
-
-# Resource quota for staging environment
-resourceQuota:
-  name: nova-staging-quota
-  hard:
-    requests.cpu: "10"
-    requests.memory: "16Gi"
-    limits.cpu: "20"
-    limits.memory: "32Gi"
-    pods: "50"
-
-# Service monitor for Prometheus scraping
-serviceMonitor:
-  enabled: true
-  interval: 30s
-  path: /metrics
-
-# Pod disruption budget for staging HA testing
-podDisruptionBudget:
-  minAvailable: 1
-
-# Horizontal pod autoscaling for staging (optional)
-horizontalPodAutoscaler:
-  enabled: false
-  minReplicas: 2
-  maxReplicas: 5
-  targetCPUUtilizationPercentage: 75
-  targetMemoryUtilizationPercentage: 80
-
-# Priority class for staging
-priorityClassName: nova-staging-priority
-
-# Image automation configuration (for external sync)
-images:
-  - name: identity-service
-    policy:
-      semver:
-        range: '~1.0'
-  - name: user-service
-    policy:
-      semver:
-        range: '~1.0'
-  - name: content-service
-    policy:
-      semver:
-        range: '~1.0'
-  - name: social-service
-    policy:
-      semver:
-        range: '~1.0'
-  - name: graph-service
-    policy:
-      semver:
-        range: '~1.0'
-  - name: feed-service
-    policy:
-      semver:
-        range: '~1.0'
-  - name: ranking-service
-    policy:
-      semver:
-        range: '~1.0'
-  - name: analytics-service
-    policy:
-      semver:
-        range: '~1.0'
-  - name: notification-service
-    policy:
-      semver:
-        range: '~1.0'
-  - name: realtime-chat-service
-    policy:
-      semver:
-        range: '~1.0'
-  - name: search-service
-    policy:
-      semver:
-        range: '~1.0'
-  - name: media-service
-    policy:
-      semver:
-        range: '~1.0'
-  - name: trust-safety-service
-    policy:
-      semver:
-        range: '~1.0'
-  - name: graphql-gateway
-    policy:
-      semver:
-        range: '~1.0'
-
-# ArgoCD annotation for GitOps
-metadata:
-  annotations:
-    argocd.argoproj.io/compare-result: "true"
-    argocd.argoproj.io/project: "nova"
+  - target:
+      group: apps
+      version: v1
+      kind: Deployment
+    patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: placeholder
+      spec:
+        template:
+          spec:
+            securityContext:
+              runAsNonRoot: false

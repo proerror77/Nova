@@ -38,7 +38,7 @@ spec:
 
       containers:
       - name: identity-service
-        image: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/identity-service:c849ea7287e61bc77123ee9d58b3f47cb2901cb5
+        image: nova/identity-service
         imagePullPolicy: IfNotPresent
 
         # Security context for the container

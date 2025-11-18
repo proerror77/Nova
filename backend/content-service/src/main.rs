@@ -117,6 +117,7 @@ async fn health_summary(state: web::Data<HealthState>) -> HttpResponse {
 async fn readiness_summary(state: web::Data<HealthState>) -> HttpResponse {
     let mut checks = HashMap::new();
     let mut ready = true;
+    let mut degraded = false;
 
     let start = Instant::now();
     let pg_result = state.check_postgres().await;
@@ -168,7 +169,7 @@ async fn readiness_summary(state: web::Data<HealthState>) -> HttpResponse {
             latency_ms: clickhouse_latency,
         },
         Err(e) => {
-            ready = false;
+            degraded = true;
             ComponentCheck {
                 status: ComponentStatus::Degraded,
                 message: format!("ClickHouse health check failed: {}", e),
@@ -178,10 +179,12 @@ async fn readiness_summary(state: web::Data<HealthState>) -> HttpResponse {
     };
     checks.insert("clickhouse".to_string(), clickhouse_check);
 
-    let status = if ready {
-        ComponentStatus::Healthy
-    } else {
+    let status = if !ready {
         ComponentStatus::Unhealthy
+    } else if degraded {
+        ComponentStatus::Degraded
+    } else {
+        ComponentStatus::Healthy
     };
 
     let response = ReadinessResponse {
@@ -357,6 +360,13 @@ async fn main() -> io::Result<()> {
     let db_pool_http = db_pool.clone();
 
     tracing::info!("Connected to database via db-pool crate");
+
+    // Ensure database schema is up to date before wiring runtime components
+    if let Err(e) = sqlx::migrate!("./migrations").run(&db_pool).await {
+        tracing::error!("Database migrations failed: {:#}", e);
+        return Err(io::Error::other("Failed to run database migrations"));
+    }
+    tracing::info!("Database migrations completed successfully");
 
     // Initialize Kafka producer with idempotent configuration (required for transactional outbox)
     let kafka_producer: rdkafka::producer::FutureProducer = rdkafka::ClientConfig::new()
