@@ -91,6 +91,13 @@ spec:
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 3
+          env:
+            - name: GRPC_SERVER_CERT_PATH
+              value: /etc/grpc/certs/server.crt
+            - name: GRPC_SERVER_KEY_PATH
+              value: /etc/grpc/certs/server.key
+            - name: GRPC_CA_CERT_PATH
+              value: /etc/grpc/certs/ca.crt
           envFrom:
             - configMapRef:
                 name: analytics-service-config
@@ -101,8 +108,14 @@ spec:
               mountPath: /tmp
             - name: var-tmp
               mountPath: /var/tmp
+            - name: grpc-certs
+              mountPath: /etc/grpc/certs
+              readOnly: true
       volumes:
         - name: tmp
           emptyDir: {}
         - name: var-tmp
           emptyDir: {}
+        - name: grpc-certs
+          secret:
+            secretName: grpc-mtls-shared
