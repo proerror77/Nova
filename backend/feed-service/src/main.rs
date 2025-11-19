@@ -72,6 +72,35 @@ async fn main() -> io::Result<()> {
     );
     tracing::info!("Environment: {}", config.app.env);
 
+    // Initialize JWT keys from environment variables
+    let jwt_public_key = match std::env::var("JWT_PUBLIC_KEY_PEM") {
+        Ok(key) => key,
+        Err(_) => {
+            tracing::error!("JWT_PUBLIC_KEY_PEM environment variable not set");
+            eprintln!("ERROR: JWT_PUBLIC_KEY_PEM must be set for JWT authentication");
+            std::process::exit(1);
+        }
+    };
+    
+    let jwt_private_key = match std::env::var("JWT_PRIVATE_KEY_PEM") {
+        Ok(key) => key,
+        Err(_) => {
+            tracing::error!("JWT_PRIVATE_KEY_PEM environment variable not set");
+            eprintln!("ERROR: JWT_PRIVATE_KEY_PEM must be set for JWT authentication");
+            std::process::exit(1);
+        }
+    };
+
+    if let Err(e) = recommendation_service::security::jwt::initialize_keys(
+        &jwt_private_key,
+        &jwt_public_key,
+    ) {
+        tracing::error!("Failed to initialize JWT keys: {}", e);
+        eprintln!("ERROR: Failed to initialize JWT keys: {}", e);
+        std::process::exit(1);
+    }
+    tracing::info!("✅ JWT keys initialized successfully");
+
     // Initialize database (standardized pool)
     let mut db_cfg = db_pool::DbConfig::for_service("feed-service");
     if db_cfg.database_url.is_empty() {
