@@ -1,0 +1,67 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: nova-staging
+  namespace: argocd
+  # Finalizer确保Application被删除时清理所有资源
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  # 项目名称（default是ArgoCD默认项目）
+  project: default
+
+  # Git仓库配置
+  source:
+    repoURL: https://github.com/proerror77/Nova.git
+    targetRevision: main
+    path: k8s/infrastructure/overlays/staging
+
+  # 目标集群和命名空间
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: nova-staging
+
+  # 同步策略
+  syncPolicy:
+    # 关键：使用manual sync，不自动同步
+    # automated字段注释掉，表示需要手动触发sync
+    # automated:
+    #   prune: false      # 不自动删除Git中不存在的资源
+    #   selfHeal: false   # 不自动修复手动更改
+
+    # 同步选项
+    syncOptions:
+      - CreateNamespace=true  # 如果namespace不存在则创建
+      - PruneLast=true        # 最后才删除资源（如果启用prune）
+      - RespectIgnoreDifferences=true  # 遵守ignoreDifferences配置
+
+    # 重试策略
+    retry:
+      limit: 3
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+
+  # 忽略差异配置 - 关键配置！
+  # 这样CI/CD更新镜像时，ArgoCD不会认为资源out-of-sync而重启pod
+  ignoreDifferences:
+    # 忽略所有Deployment的镜像字段变更
+    - group: apps
+      kind: Deployment
+      jsonPointers:
+        - /spec/template/spec/containers/0/image
+        - /spec/template/spec/containers/1/image
+        - /spec/template/spec/containers/2/image
+
+    # 忽略Deployment的replicas字段（允许HPA或手动调整）
+    - group: apps
+      kind: Deployment
+      jsonPointers:
+        - /spec/replicas
+
+    # 忽略Pod的resourceVersion（K8s自动更新）
+    - group: ""
+      kind: Pod
+      managedFieldsManagers:
+        - kube-controller-manager

@@ -351,14 +351,12 @@ images:
   newTag: c849ea7287e61bc77123ee9d58b3f47cb2901cb5
 
 # Staging replica overrides to keep core path light
-  # Disable non-critical services temporarily to free CPU for DB/Redis
-
-  # Disable PgBouncer in staging for now to avoid hostPort conflicts and crashes
-  - name: pgbouncer
-    count: 0
-
-  # Keep a single replica for core path services
+# Disable non-critical services temporarily to free CPU for DB/Redis
+# Disable PgBouncer in staging for now to avoid hostPort conflicts and crashes
+# Keep a single replica for core path services
 replicas:
+- count: 0
+  name: pgbouncer
 - count: 0
   name: analytics-service
 - count: 0
