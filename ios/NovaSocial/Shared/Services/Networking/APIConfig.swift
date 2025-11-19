@@ -12,7 +12,8 @@ enum APIEnvironment {
         case .development:
             return "http://localhost:8080"  // GraphQL Gateway for local development
         case .staging:
-            // AWS EKS staging environment - Ingress LoadBalancer URL
+            // AWS EKS staging environment - Ingress LoadBalancer URL (Updated: 2025-11-18)
+            // Note: Requires Host header "Host: api.nova.local" for Ingress routing
             return "http://a3326508b1e3c43239348cac7ce9ee03-1036729988.ap-northeast-1.elb.amazonaws.com"
         case .production:
             return "https://api.nova.social"
@@ -42,19 +43,32 @@ struct APIConfig {
     //     #endif
     // }()
 
-    // MARK: - Endpoints (API v1 for most services, v2 for feed-service)
-    // Most backend services use /api/v1, except feed-service which uses /api/v2/feed
+    // MARK: - Endpoints (API v2 - All services migrated to v2)
+    // All backend services now use /api/v2 endpoints
 
     struct Graph {
-        static let followers = "/api/v1/relationships/followers"
-        static let following = "/api/v1/relationships/following"
-        static let follow = "/api/v1/relationships/follow"
-        static let unfollow = "/api/v1/relationships/unfollow"
-        static let isFollowing = "/api/v1/relationships/is-following"
+        // Relationships API (v2)
+        static let followers = "/api/v2/relationships/followers"
+        static let following = "/api/v2/relationships/following"
+        static let follow = "/api/v2/relationships/follow"
+        static let unfollow = "/api/v2/relationships/unfollow"
+        static let isFollowing = "/api/v2/relationships/is-following"
+    }
+
+    struct Feed {
+        // Feed API (v2) - feed-service
+        // Note: Backend uses GET with query parameters, not POST with body
+        static let baseFeed = "/api/v2/feed"  // GET /api/v2/feed?user_id=xxx&limit=20&cursor=xxx
+
+        // TODO: Following endpoints are defined in backend but not registered yet
+        // Will return 404 until backend handlers are registered in main.rs
+        // static let trending = "/api/v2/trending"
+        // static let trendingVideos = "/api/v2/trending/videos"
+        // static let trendingPosts = "/api/v2/trending/posts"
     }
 
     struct Social {
-        // feed-service uses v2
+        // Social interactions API (v2) - feed-service
         static let createLike = "/api/v2/feed/like"
         static let deleteLike = "/api/v2/feed/unlike"
         static let getLikes = "/api/v2/feed/likes"
@@ -68,27 +82,46 @@ struct APIConfig {
     }
 
     struct Content {
-        static let getPost = "/api/v1/posts/get"
-        static let createPost = "/api/v1/posts/create"
-        static let updatePost = "/api/v1/posts/update"
-        static let deletePost = "/api/v1/posts/delete"
-        static let postsByAuthor = "/api/v1/posts/author"
-        static let bookmarks = "/api/v1/posts/bookmarks"
+        // Content API (v2) - content-service
+        static let getPost = "/api/v2/posts"  // GET /api/v2/posts/{id}
+        static let createPost = "/api/v2/posts/create"
+        static let updatePost = "/api/v2/posts/update"
+        static let deletePost = "/api/v2/posts/delete"
+        static let postsByAuthor = "/api/v2/posts/author"  // GET /api/v2/posts/author/{author_id}
+        static let bookmarks = "/api/v2/posts/bookmarks"
     }
 
     struct Media {
-        static let uploadStart = "/api/v1/uploads/start"
-        static let uploadProgress = "/api/v1/uploads/progress"
-        static let uploadComplete = "/api/v1/uploads/complete"
-        static let reels = "/api/v1/reels"
-        static let videos = "/api/v1/videos"
+        // Media API (v2) - media-service
+        static let uploadStart = "/api/v2/uploads/start"
+        static let uploadProgress = "/api/v2/uploads/progress"
+        static let uploadComplete = "/api/v2/uploads/complete"
+        static let reels = "/api/v2/reels"
+        static let videos = "/api/v2/videos"  // GET /api/v2/videos/{id}
     }
 
     struct Auth {
-        static let login = "/api/v1/auth/login"
-        static let register = "/api/v1/auth/register"
-        static let refresh = "/api/v1/auth/refresh"
-        static let logout = "/api/v1/auth/logout"
+        // Authentication API (v2) - identity-service
+        static let login = "/api/v2/auth/login"
+        static let register = "/api/v2/auth/register"
+        static let refresh = "/api/v2/auth/refresh"
+        static let logout = "/api/v2/auth/logout"
+        static let getUser = "/api/v2/users"  // GET /api/v2/users/{id}
+        static let updateUser = "/api/v2/users"  // PUT /api/v2/users/{id}
+    }
+
+    struct Search {
+        // Search API (v2) - search-service
+        static let search = "/api/v2/search"  // GET /api/v2/search?q={query}
+        static let searchUsers = "/api/v2/search/users"  // GET /api/v2/search/users?q={query}
+        static let searchPosts = "/api/v2/search/posts"  // GET /api/v2/search/posts?q={query}
+    }
+
+    struct Notification {
+        // Notification API (v2) - notification-service
+        static let getNotifications = "/api/v2/notifications"
+        static let markRead = "/api/v2/notifications/mark-read"
+        static let delete = "/api/v2/notifications"  // DELETE /api/v2/notifications/{id}
     }
 
     // MARK: - Service Ports (for direct gRPC access if needed)

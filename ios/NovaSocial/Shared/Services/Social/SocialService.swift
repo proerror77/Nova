@@ -9,46 +9,101 @@ class SocialService {
 
     // MARK: - Feeds
 
-    /// Get user's personalized feed
-    /// For now, uses ContentService to fetch posts until feed-service is deployed
+    // MARK: - Request/Response Models for Feed API
+
+    struct FeedRequest: Codable {
+        let userId: String?
+        let limit: Int
+        let cursor: String?
+
+        enum CodingKeys: String, CodingKey {
+            case userId = "user_id"
+            case limit
+            case cursor
+        }
+    }
+
+    struct FeedResponse: Codable {
+        let posts: [Post]
+        let nextCursor: String?
+        let hasMore: Bool
+
+        enum CodingKeys: String, CodingKey {
+            case posts
+            case nextCursor = "next_cursor"
+            case hasMore = "has_more"
+        }
+    }
+
+    /// Get user's personalized feed (v2 API)
+    /// GET /api/v2/feed?user_id={userId}&limit={limit}&cursor={cursor}
+    /// Calls feed-service which aggregates content from multiple sources
+    /// Note: Backend uses GET with query parameters, not POST with JSON body
     func getUserFeed(userId: String, limit: Int = 20, cursor: String? = nil) async throws -> (posts: [Post], nextCursor: String?, hasMore: Bool) {
-        // Using ContentService as temporary implementation
-        // TODO: Switch to feed-service when deployed
-        let contentService = ContentService()
-        let offset = cursor.flatMap { Int($0) } ?? 0
+        // Build query string with URL encoding
+        var endpoint = "\(APIConfig.Feed.baseFeed)?user_id=\(userId)&limit=\(limit)"
+        if let cursor = cursor, !cursor.isEmpty {
+            if let encodedCursor = cursor.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) {
+                endpoint += "&cursor=\(encodedCursor)"
+            }
+        }
 
-        let response = try await contentService.getPostsByAuthor(
-            authorId: userId,
-            limit: limit,
-            offset: offset
+        let response: FeedResponse = try await client.request(
+            endpoint: endpoint,
+            method: "GET"
         )
-
-        let nextOffset = offset + response.posts.count
-        let hasMore = nextOffset < response.totalCount
-        let nextCursor = hasMore ? String(nextOffset) : nil
 
         return (
             posts: response.posts,
-            nextCursor: nextCursor,
-            hasMore: hasMore
+            nextCursor: response.nextCursor,
+            hasMore: response.hasMore
         )
     }
 
-    /// Get explore/discover feed
-    /// Returns all recent posts across all users
+    /// Get explore/discover feed (v2 API)
+    /// GET /api/v2/feed?user_id=explore&limit={limit}
+    /// Note: Backend's discover handler is not registered yet, using base feed with "explore" user_id as workaround
+    /// TODO: Update to /api/v2/discover when backend handler is registered
     func getExploreFeed(limit: Int = 20, cursor: String? = nil) async throws -> (posts: [Post], nextCursor: String?, hasMore: Bool) {
-        // Temporary: Use a placeholder user ID for explore feed
-        // TODO: Implement proper explore feed endpoint in backend
-        return try await getUserFeed(userId: "explore_user", limit: limit, cursor: cursor)
+        // Temporary workaround: use base feed endpoint with special "explore" user_id
+        // Backend's get_suggested_users handler exists but is not registered in main.rs
+        var endpoint = "\(APIConfig.Feed.baseFeed)?user_id=explore&limit=\(limit)"
+        if let cursor = cursor, !cursor.isEmpty {
+            if let encodedCursor = cursor.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) {
+                endpoint += "&cursor=\(encodedCursor)"
+            }
+        }
+
+        let response: FeedResponse = try await client.request(
+            endpoint: endpoint,
+            method: "GET"
+        )
+
+        return (
+            posts: response.posts,
+            nextCursor: response.nextCursor,
+            hasMore: response.hasMore
+        )
     }
 
-    /// Get trending posts
-    /// Returns most liked/commented posts
+    /// Get trending posts (v2 API)
+    /// GET /api/v2/feed?user_id=trending&limit={limit}
+    /// Note: Backend's trending handlers are not registered yet, using base feed with "trending" user_id as workaround
+    /// TODO: Update to /api/v2/trending when backend handlers (get_trending, get_trending_posts) are registered
     func getTrendingPosts(limit: Int = 20) async throws -> [Post] {
-        // Temporary: Return explore feed without pagination
-        // TODO: Implement proper trending algorithm in backend
-        let (posts, _, _) = try await getExploreFeed(limit: limit)
-        return posts
+        // Temporary workaround: use base feed endpoint with special "trending" user_id
+        // Backend's trending handlers exist but are not registered in main.rs:
+        // - get_trending()
+        // - get_trending_posts()
+        // - get_trending_videos()
+        let endpoint = "\(APIConfig.Feed.baseFeed)?user_id=trending&limit=\(limit)"
+
+        let response: FeedResponse = try await client.request(
+            endpoint: endpoint,
+            method: "GET"
+        )
+
+        return response.posts
     }
 
     // MARK: - Likes

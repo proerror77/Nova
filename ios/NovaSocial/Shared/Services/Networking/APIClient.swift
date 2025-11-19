@@ -38,6 +38,11 @@ class APIClient {
         request.httpMethod = method
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
+        // Set Host header for Ingress routing (required for staging environment)
+        if APIConfig.current == .staging {
+            request.setValue("api.nova.local", forHTTPHeaderField: "Host")
+        }
+
         if let token = authToken {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
