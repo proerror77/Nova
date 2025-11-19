@@ -100,7 +100,7 @@ struct APIConfig {
     }
 
     struct Auth {
-        // Authentication API (v2) - identity-service
+        // Authentication & User API (v2) - identity-service (consolidated auth + user management)
         static let login = "/api/v2/auth/login"
         static let register = "/api/v2/auth/register"
         static let refresh = "/api/v2/auth/refresh"
