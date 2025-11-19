@@ -1,0 +1,6 @@
+# JWT Production Keys - DO NOT COMMIT PRIVATE KEY
+production-jwt-private.pem
+
+# Temporary files
+*.tmp
+*.bak
