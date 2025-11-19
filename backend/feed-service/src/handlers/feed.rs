@@ -6,7 +6,7 @@ use tracing::{debug, info};
 use uuid::Uuid;
 
 use crate::error::{AppError, Result};
-use crate::grpc::clients::{ContentServiceClient, GraphServiceClient, UserServiceClient};
+use crate::grpc::clients::{ContentServiceClient, GraphServiceClient};
 use crate::middleware::jwt_auth::UserId;
 use crate::models::FeedResponse;
 use grpc_clients::nova::graph_service::v2::GetFollowingRequest;
@@ -52,7 +52,6 @@ impl FeedQueryParams {
 
 pub struct FeedHandlerState {
     pub content_client: Arc<ContentServiceClient>,
-    pub user_client: Arc<UserServiceClient>,
     pub graph_client: Arc<GraphServiceClient>,
 }
 
