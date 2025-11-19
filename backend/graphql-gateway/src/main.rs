@@ -9,6 +9,7 @@ mod clients;
 mod config;
 mod kafka; // ✅ P0-5: Kafka integration for subscriptions
 mod middleware;
+mod rest_api; // HTTP REST API v2 for mobile clients
 mod schema;
 mod security; // ✅ P0-2: GraphQL security extensions
 
@@ -237,6 +238,15 @@ async fn main() -> std::io::Result<()> {
                 "/health/circuit-breakers",
                 web::get().to(circuit_breaker_health_handler),
             )
+            // ✅ REST API v2 endpoints for mobile clients
+            // Authentication
+            .route("/api/v2/auth/register", web::post().to(rest_api::register))
+            .route("/api/v2/auth/login", web::post().to(rest_api::login))
+            .route("/api/v2/auth/refresh", web::post().to(rest_api::refresh_token))
+            .route("/api/v2/auth/logout", web::post().to(rest_api::logout))
+            // Users
+            .route("/api/v2/users/{id}", web::get().to(rest_api::get_user))
+            .route("/api/v2/users/{id}", web::put().to(rest_api::update_user))
     })
     .bind(&bind_addr)?
     .run()
