@@ -36,6 +36,12 @@ async fn openapi_json(
 
 #[actix_web::main]
 async fn main() -> io::Result<()> {
+    // Initialize rustls crypto provider early (before any TLS operations)
+    if let Err(err) = rustls::crypto::aws_lc_rs::default_provider().install_default() {
+        eprintln!("ERROR: Failed to install rustls crypto provider: {:?}", err);
+        std::process::exit(1);
+    }
+
     // Initialize structured logging with JSON format for production-grade observability
     // Includes: timestamp, level, target, thread IDs, line numbers, and structured fields
     tracing_subscriber::registry()
