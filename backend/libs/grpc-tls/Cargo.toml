@@ -13,7 +13,7 @@ thiserror = "2.0"
 anyhow = "1.0"
 
 # TLS/Certificate handling (MUST match tonic 0.12 requirements)
-rustls = "0.22"
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 tokio-rustls = "0.25"
 rustls-pemfile = "2.0"
 rustls-native-certs = "0.7"
