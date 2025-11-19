@@ -30,44 +30,6 @@ spec:
           echo "❌ kafka is not ready"
           exit 1
 
----
-# messaging-service 依赖：postgres only (使用 JWT 认证，无需等待 identity-service)
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: messaging-service
-spec:
-  template:
-    spec:
-      initContainers:
-      - name: wait-for-postgres
-        image: postgres:15-alpine
-        command:
-        - sh
-        - -c
-        - |
-          echo "⏳ Waiting for postgres:5432..."
-          for i in $(seq 1 30); do
-            if PGPASSWORD="$DB_PASSWORD" psql -h postgres.nova-staging.svc.cluster.local -U "$DB_USER" -d postgres -c "SELECT 1" 2>/dev/null; then
-              echo "✓ postgres is ready"
-              exit 0
-            fi
-            sleep 2
-          done
-          exit 1
-        env:
-        - name: DB_USER
-          valueFrom:
-            secretKeyRef:
-              name: nova-db-credentials
-              key: username
-        - name: DB_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: nova-db-credentials
-              key: password
-
----
 # search-service 依赖：postgres + elasticsearch
 apiVersion: apps/v1
 kind: Deployment

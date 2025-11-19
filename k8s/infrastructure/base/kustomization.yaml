@@ -17,6 +17,8 @@ resources:
 - redis-pvc.yaml
 - elasticsearch.yaml
 - ingress.yaml
+- nova-api-certificate.yaml
+- cert-manager-issuer.yaml
 # NOTE: Microservices are now defined in k8s/microservices/ directory
 # Do NOT include them here to avoid duplication and conflicts
 # Legacy service definitions (user-service.yaml, content-service.yaml, etc.) have been removed

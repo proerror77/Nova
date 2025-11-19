@@ -249,11 +249,10 @@ kubectl exec -it nova-clickhouse-0 -n nova-staging -- \
 - Init Containers for 8 critical services
 - Dependency chains:
   - feed-service → user-service + kafka
-  - messaging-service → user-service + postgres
   - search-service → postgres + elasticsearch
   - analytics-service → kafka + clickhouse
   - ranking-service → redis + postgres
-  - realtime-chat-service → user-service + messaging-service + redis
+  - realtime-chat-service → user-service + redis (legacy messaging-service 已退役)
   - trust-safety-service → postgres + kafka
 
 ### P2: Data Infrastructure
@@ -294,7 +293,6 @@ Core (no dependencies):
 Depends on user-service:
 ├── content-service
 ├── graph-service
-├── messaging-service
 └── trust-safety-service
 
 Depends on multiple services:
@@ -302,7 +300,7 @@ Depends on multiple services:
 ├── search-service (content + elasticsearch)
 ├── ranking-service (user + content + redis)
 ├── analytics-service (kafka + clickhouse)
-└── realtime-chat-service (user + messaging + redis)
+└── realtime-chat-service (user + redis, replaces legacy messaging-service)
 
 Gateway:
 └── graphql-gateway (all services)
@@ -316,7 +314,6 @@ Gateway:
 | user-service | nova_user | nova_user_svc | User profiles |
 | content-service | nova_content | nova_content_svc | User-generated content |
 | feed-service | nova_feed | nova_feed_svc | Feed generation |
-| messaging-service | nova_messaging | nova_messaging_svc | Direct messaging |
 | search-service | nova_search | nova_search_svc | Search indexes |
 | notification-service | nova_notification | nova_notification_svc | Notifications |
 | media-service | nova_media | nova_media_svc | Media metadata |
@@ -327,6 +324,8 @@ Gateway:
 | identity-service | nova_identity | nova_identity_svc | Identity verification |
 | trust-safety-service | nova_trust_safety | nova_trust_safety_svc | Safety checks |
 | realtime-chat-service | nova_realtime_chat | nova_realtime_chat_svc | Real-time chat |
+
+> 備註：`nova_messaging` 資料庫僅供歷史資料備援，原 messaging-service 已由 realtime-chat-service 取代，部署時不再驗證該服務。
 
 ## Monitoring & Verification
 

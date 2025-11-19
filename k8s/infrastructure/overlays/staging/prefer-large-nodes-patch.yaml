@@ -14,24 +14,6 @@ spec:
               - key: nodegroup
                 operator: In
                 values: ["large"]
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: messaging-service
-spec:
-  template:
-    spec:
-      affinity:
-        nodeAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-          - weight: 100
-            preference:
-              matchExpressions:
-              - key: nodegroup
-                operator: In
-                values: ["large"]
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:

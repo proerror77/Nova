@@ -71,30 +71,6 @@ spec:
     targetPort: 9090
     protocol: TCP
 
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: messaging-service
-  namespace: nova-staging
-  labels:
-    app: messaging-service
-    service-type: grpc
-spec:
-  type: ClusterIP
-  selector:
-    app: messaging-service
-  ports:
-  - name: grpc
-    port: 50051
-    targetPort: 50051
-    protocol: TCP
-  - name: metrics
-    port: 9090
-    targetPort: 9090
-    protocol: TCP
-
----
 apiVersion: v1
 kind: Service
 metadata:

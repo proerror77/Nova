@@ -1,0 +1,16 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: nova-api-gateway-tls
+  labels:
+    app: nova-api-gateway
+spec:
+  secretName: nova-tls-secret
+  commonName: api.nova.local
+  dnsNames:
+  - api.nova.local
+  duration: 2160h  # 90 days
+  renewBefore: 360h  # 15 days
+  issuerRef:
+    kind: ClusterIssuer
+    name: nova-ca-issuer

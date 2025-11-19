@@ -8,7 +8,7 @@
 
 ## Executive Summary
 
-Implemented a complete, production-ready staging environment supporting Nova's 14 microservices + GraphQL gateway with enterprise-grade infrastructure. The staging environment now provides:
+Implemented a complete, production-ready staging environment supporting Nova's active microservices suite (legacy messaging-service retired in favor of realtime-chat-service) plus the GraphQL gateway with enterprise-grade infrastructure. The staging environment now provides:
 
 ✅ **Automated service orchestration** with proper startup ordering
 ✅ **Multi-database architecture** with 15 isolated PostgreSQL databases
@@ -38,7 +38,6 @@ Implemented a complete, production-ready staging environment supporting Nova's 1
 - content-service
 - feed-service
 - search-service
-- messaging-service
 - notification-service
 - media-service
 - analytics-service
@@ -48,6 +47,8 @@ Implemented a complete, production-ready staging environment supporting Nova's 1
 - identity-service
 - trust-safety-service
 - realtime-chat-service
+
+> Legacy messaging-service has been decomposed; realtime-chat-service now owns direct messaging traffic.
 
 **Impact**: Services can now discover and communicate with each other via `<service>.nova-staging.svc.cluster.local:50051`
 
@@ -90,7 +91,7 @@ nova_auth              → auth-service
 nova_user              → user-service
 nova_content           → content-service
 nova_feed              → feed-service
-nova_messaging         → messaging-service
+nova_messaging         → (legacy messaging-service, retained read-only)
 nova_search            → search-service
 nova_notification      → notification-service
 nova_media             → media-service
@@ -110,7 +111,7 @@ nova_realtime_chat     → realtime-chat-service
 ### P1: Service Startup Orchestration
 
 #### 4. **Init Container Dependencies** (`service-init-containers-patch.yaml`)
-**What**: Kubernetes Init Containers for service dependency management for all 14 microservices
+**What**: Kubernetes Init Containers for service dependency management across active microservices
 **Why**: Prevents cascade failures and flaky startup errors
 **How**:
 - All 14 microservices have Init Containers that verify dependency readiness
@@ -118,7 +119,7 @@ nova_realtime_chat     → realtime-chat-service
 - Uses postgres:15-alpine for database connectivity
 - 30 retry attempts with 2-second intervals (60 seconds max)
 
-**Complete Dependency Chains for All 14 Services**:
+**Complete Dependency Chains**:
 ```
 1. user-service (基础身份验证)
    └─ wait-for-postgres:5432
@@ -143,34 +144,29 @@ nova_realtime_chat     → realtime-chat-service
    ├─ wait-for-user-service:50051
    └─ wait-for-kafka:9092
 
-7. messaging-service (消息传递)
-   ├─ wait-for-user-service:50051
-   └─ wait-for-postgres:5432
-
-8. search-service (搜索)
+7. search-service (搜索)
    ├─ wait-for-postgres:5432
    └─ wait-for-elasticsearch:9200
 
-9. analytics-service (分析)
+8. analytics-service (分析)
    ├─ wait-for-kafka:9092
    └─ wait-for-clickhouse:9000
 
-10. graph-service (关系图)
+9. graph-service (关系图)
     └─ wait-for-neo4j:7687
 
-11. notification-service (通知)
+10. notification-service (通知)
     └─ wait-for-redis:6379
 
-12. ranking-service (排序)
+11. ranking-service (排序)
     ├─ wait-for-redis:6379
     └─ wait-for-postgres:5432
 
-13. realtime-chat-service (实时聊天)
+12. realtime-chat-service (实时聊天，取代 messaging-service)
     ├─ wait-for-user-service:50051
-    ├─ wait-for-messaging-service:50051
     └─ wait-for-redis:6379
 
-14. trust-safety-service (信任安全)
+13. trust-safety-service (信任安全)
     ├─ wait-for-postgres:5432
     └─ wait-for-kafka:9092
 ```

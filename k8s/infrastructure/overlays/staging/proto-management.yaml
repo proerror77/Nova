@@ -308,7 +308,6 @@ data:
     - user-service
     - content-service
     - feed-service
-    - messaging-service
     - search-service
     - notification-service
     - media-service
@@ -439,14 +438,6 @@ data:
           "health_check": "Search"
         },
         {
-          "name": "messaging-service",
-          "grpc_port": 50051,
-          "proto_package": "nova.messaging",
-          "dependencies": ["user-service"],
-          "databases": ["nova_messaging"],
-          "health_check": "GetMessages"
-        },
-        {
           "name": "notification-service",
           "grpc_port": 50051,
           "proto_package": "nova.notification",
@@ -515,7 +506,7 @@ data:
           "grpc_port": 50051,
           "websocket_port": 8080,
           "proto_package": "nova.realtime_chat",
-          "dependencies": ["user-service", "messaging-service"],
+          "dependencies": ["user-service"],
           "databases": ["nova_realtime_chat"],
           "health_check": "GetChat"
         }
@@ -639,8 +630,7 @@ data:
     │   ├── feed-service
     │   │   └── search-service
     │   └── ranking-service
-    ├── messaging-service
-    │   └── realtime-chat-service
+    ├── realtime-chat-service
     ├── identity-service
     ├── graph-service
     └── trust-safety-service

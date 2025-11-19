@@ -78,28 +78,7 @@ spec:
             cpu: 100m
             memory: 128Mi
 
-# Pattern 2: Messaging service (slightly heavier)
-# Actual usage: 1-5m CPU, 6-15Mi memory (based on content-service pattern)
-# Optimized: 30m CPU, 100Mi memory
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: messaging-service
-spec:
-  template:
-    spec:
-      containers:
-      - name: messaging-service
-        resources:
-          requests:
-            cpu: 30m           # 100m → 30m
-            memory: 100Mi      # 512Mi → 100Mi
-          limits:
-            cpu: 120m          # 500m → 120m
-            memory: 256Mi      # 1Gi → 256Mi
-
-# Pattern 3: Streaming service (similar to messaging)
+# Pattern 2: Streaming service (lightweight async workers)
 ---
 apiVersion: apps/v1
 kind: Deployment

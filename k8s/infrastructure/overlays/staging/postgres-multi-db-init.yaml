@@ -59,7 +59,7 @@ data:
         GRANT ALL PRIVILEGES ON DATABASE nova_feed TO nova_feed_svc;
       END IF;
 
-      -- messaging-service 用户
+      -- messaging-service (legacy, read-only) 用户
       IF NOT EXISTS (SELECT FROM pg_user WHERE usename = 'nova_messaging_svc') THEN
         CREATE USER nova_messaging_svc WITH ENCRYPTED PASSWORD 'nova_messaging_staging_pwd';
         GRANT ALL PRIVILEGES ON DATABASE nova_messaging TO nova_messaging_svc;
@@ -198,7 +198,7 @@ data:
     2. user-service → nova_user
     3. content-service → nova_content
     4. feed-service → nova_feed
-    5. messaging-service → nova_messaging
+    5. legacy messaging-service → nova_messaging (read-only)
     6. search-service → nova_search
     7. notification-service → nova_notification
     8. media-service → nova_media

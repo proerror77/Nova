@@ -8,7 +8,6 @@ metadata:
     app: nova-api-gateway
   annotations:
     # 使用 Nginx 作为 Ingress Controller
-    kubernetes.io/ingress.class: nginx
 
     # CORS 配置
     nginx.ingress.kubernetes.io/enable-cors: "true"
@@ -31,8 +30,15 @@ metadata:
 
     # 速率限制
     nginx.ingress.kubernetes.io/limit-rps: "100"
+    # 讓 cert-manager 自動簽發 TLS
+    cert-manager.io/cluster-issuer: nova-ca-issuer
 
 spec:
+  ingressClassName: nginx
+  tls:
+  - hosts:
+    - api.nova.local
+    secretName: nova-tls-secret
   rules:
   # 贴文相关 API
   - host: api.nova.local
@@ -96,17 +102,17 @@ spec:
         pathType: Prefix
         backend:
           service:
-            name: social-service
+            name: feed-service
             port:
-              number: 8081
+              number: 8084
 
       - path: /api/v2/discover
         pathType: Prefix
         backend:
           service:
-            name: social-service
+            name: feed-service
             port:
-              number: 8081
+              number: 8084
 
       - path: /api/v2/relationships
         pathType: Prefix
@@ -120,9 +126,9 @@ spec:
         pathType: Prefix
         backend:
           service:
-            name: social-service
+            name: feed-service
             port:
-              number: 8081
+              number: 8084
 
       # Messaging Service - Messages/Calls/Notifications
       - path: /api/v2/messages
@@ -210,6 +216,13 @@ spec:
             port:
               number: 8080
 
+      - path: /graphql
+        pathType: Prefix
+        backend:
+          service:
+            name: graphql-gateway
+            port:
+              number: 8080
       # WebSocket endpoint for messaging
       - path: /ws
         pathType: Prefix
@@ -228,31 +241,6 @@ spec:
             port:
               number: 8080
 
----
-# TLS 证书（使用自签名或 Let's Encrypt）
-apiVersion: v1
-kind: Secret
-metadata:
-  name: nova-tls-secret
-  labels:
-    app: nova-api-gateway
-type: kubernetes.io/tls
-stringData:
-  # 这些值应该由 CI/CD 或 cert-manager 生成（這裡使用佔位內容，避免 base64 解析錯誤）
-  tls.crt: |
-    -----BEGIN CERTIFICATE-----
-    MIIBozCCAQygAwIBAgIUWplaceholdercertu8dYlY0wmU0YbEwDQYJKoZIhvcNAQEL
-    BQAwEjEQMA4GA1UEAwwHb3JpZ2luMB4XDTI1MTAzMTAwMDAwMFoXDTI2MTAzMTAw
-    MDAwMFowEjEQMA4GA1UEAwwHb3JpZ2luMFwwDQYJKoZIhvcNAQEBBQADSwAwSAJB
-    AMxplaceholderR6bXlG9z1b2rY8wq3lWuhm4BThc7Me6pM2QWc/1xXw1u
-    2JwYdV7z2kT+placeholderGsgYfYzK4YbFQKCAQEA
-    -----END CERTIFICATE-----
-  tls.key: |
-    -----BEGIN PRIVATE KEY-----
-    MIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDplaceholderkey
-    tJg+placeholderf3V9bJ0uK5QX7lGf0M2D8Z2H3rJ7XXlZ0s6vWq6wVt8u
-    sZ9placeholderYwIDAQABAoIBAHplaceholdertail
-    -----END PRIVATE KEY-----
 ---
 # NetworkPolicy for security
 apiVersion: networking.k8s.io/v1
@@ -282,9 +270,6 @@ spec:
     - podSelector:
         matchLabels:
           app: media-service
-    - podSelector:
-        matchLabels:
-          app: user-service
     - podSelector:
         matchLabels:
           app: messaging-service

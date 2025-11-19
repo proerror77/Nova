@@ -53,10 +53,10 @@ spec:
           imagePullPolicy: Always
           ports:
             - name: http
-              containerPort: 8080
+              containerPort: 8084
               protocol: TCP
             - name: grpc
-              containerPort: 9080
+              containerPort: 9084
               protocol: TCP
           resources:
             requests:
@@ -69,8 +69,8 @@ spec:
           # Startup probe: Allows longer initial startup time for dependency initialization
           startupProbe:
             httpGet:
-              path: /api/v1/health
-              port: 8080
+              path: /health
+              port: 8084
             initialDelaySeconds: 10
             periodSeconds: 5
             timeoutSeconds: 5
@@ -78,8 +78,8 @@ spec:
 
           livenessProbe:
             httpGet:
-              path: /api/v1/health
-              port: 8080
+              path: /health
+              port: 8084
             initialDelaySeconds: 60  # Wait for initialization to complete
             periodSeconds: 10
             timeoutSeconds: 5
@@ -87,8 +87,8 @@ spec:
 
           readinessProbe:
             httpGet:
-              path: /api/v1/health/ready
-              port: 8080
+              path: /health
+              port: 8084
             initialDelaySeconds: 60  # Wait for initialization to complete
             periodSeconds: 10
             timeoutSeconds: 5
@@ -148,12 +148,12 @@ spec:
   type: ClusterIP
   ports:
     - name: http
-      port: 8080
-      targetPort: 8080
+      port: 8084
+      targetPort: 8084
       protocol: TCP
     - name: grpc
-      port: 9080
-      targetPort: 9080
+      port: 9084
+      targetPort: 9084
       protocol: TCP
   selector:
     app: feed-service

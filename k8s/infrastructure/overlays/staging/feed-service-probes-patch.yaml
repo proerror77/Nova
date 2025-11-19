@@ -11,7 +11,7 @@ spec:
         startupProbe:
           httpGet:
             path: /health
-            port: 8080
+            port: 8084
           initialDelaySeconds: 10
           periodSeconds: 5
           failureThreshold: 60
@@ -19,8 +19,8 @@ spec:
         # Readiness probe: Determines if service can receive traffic
         readinessProbe:
           httpGet:
-            path: /readiness
-            port: 8080
+            path: /health
+            port: 8084
           initialDelaySeconds: 5
           periodSeconds: 5
           timeoutSeconds: 3
@@ -30,7 +30,7 @@ spec:
         livenessProbe:
           httpGet:
             path: /health
-            port: 8080
+            port: 8084
           initialDelaySeconds: 30
           periodSeconds: 10
           timeoutSeconds: 5

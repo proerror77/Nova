@@ -9,7 +9,7 @@ spec:
       - name: feed-service
         env:
         - name: APP_PORT
-          value: "8080"
+          value: "8084"
         - name: KAFKA_BOOTSTRAP_SERVERS
           valueFrom:
             configMapKeyRef:

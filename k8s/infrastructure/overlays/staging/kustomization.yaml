@@ -6,14 +6,9 @@ namespace: nova-staging
 # Strategic merge patches for staging environment
 # Using JSON 6902 patches with explicit namespace targeting
 # This allows patches to work correctly with nested kustomizations
+# Patch to ensure only one search-service Service definition is used
 patches:
-- target:
-    group: apps
-    version: v1
-    kind: Deployment
-    name: content-service
-    namespace: nova-staging
-  patch: |-
+- patch: |-
     - op: replace
       path: /spec/template/spec/containers/0/imagePullPolicy
       value: Always
@@ -26,13 +21,32 @@ patches:
         limits:
           cpu: 500m
           memory: 512Mi
-- target:
+  target:
     group: apps
+    kind: Deployment
+    name: content-service
+    namespace: nova-staging
     version: v1
+- patch: |-
+    - op: replace
+      path: /spec/template/spec/containers/0/imagePullPolicy
+      value: Always
+    - op: replace
+      path: /spec/template/spec/containers/0/resources
+      value:
+        requests:
+          cpu: 100m
+          memory: 512Mi
+        limits:
+          cpu: 500m
+          memory: 1Gi
+  target:
+    group: apps
     kind: Deployment
     name: feed-service
     namespace: nova-staging
-  patch: |-
+    version: v1
+- patch: |-
     - op: replace
       path: /spec/template/spec/containers/0/imagePullPolicy
       value: Always
@@ -45,51 +59,13 @@ patches:
         limits:
           cpu: 500m
           memory: 1Gi
-- target:
+  target:
     group: apps
-    version: v1
     kind: Deployment
     name: media-service
     namespace: nova-staging
-  patch: |-
-    - op: replace
-      path: /spec/template/spec/containers/0/imagePullPolicy
-      value: Always
-    - op: replace
-      path: /spec/template/spec/containers/0/resources
-      value:
-        requests:
-          cpu: 100m
-          memory: 512Mi
-        limits:
-          cpu: 500m
-          memory: 1Gi
-- target:
-    group: apps
     version: v1
-    kind: Deployment
-    name: messaging-service
-    namespace: nova-staging
-  patch: |-
-    - op: replace
-      path: /spec/template/spec/containers/0/imagePullPolicy
-      value: Always
-    - op: replace
-      path: /spec/template/spec/containers/0/resources
-      value:
-        requests:
-          cpu: 100m
-          memory: 512Mi
-        limits:
-          cpu: 500m
-          memory: 1Gi
-- target:
-    group: apps
-    version: v1
-    kind: Deployment
-    name: search-service
-    namespace: nova-staging
-  patch: |-
+- patch: |-
     - op: replace
       path: /spec/template/spec/containers/0/imagePullPolicy
       value: Always
@@ -102,13 +78,32 @@ patches:
         limits:
           cpu: 1000m
           memory: 2Gi
-- target:
+  target:
     group: apps
+    kind: Deployment
+    name: search-service
+    namespace: nova-staging
     version: v1
+- patch: |-
+    - op: replace
+      path: /spec/template/spec/containers/0/imagePullPolicy
+      value: Always
+    - op: replace
+      path: /spec/template/spec/containers/0/resources
+      value:
+        requests:
+          cpu: 100m
+          memory: 256Mi
+        limits:
+          cpu: 500m
+          memory: 512Mi
+  target:
+    group: apps
     kind: Deployment
     name: analytics-service
     namespace: nova-staging
-  patch: |-
+    version: v1
+- patch: |-
     - op: replace
       path: /spec/template/spec/containers/0/imagePullPolicy
       value: Always
@@ -121,13 +116,13 @@ patches:
         limits:
           cpu: 500m
           memory: 512Mi
-- target:
+  target:
     group: apps
-    version: v1
     kind: Deployment
     name: graph-service
     namespace: nova-staging
-  patch: |-
+    version: v1
+- patch: |-
     - op: replace
       path: /spec/template/spec/containers/0/imagePullPolicy
       value: Always
@@ -140,13 +135,13 @@ patches:
         limits:
           cpu: 500m
           memory: 512Mi
-- target:
+  target:
     group: apps
-    version: v1
     kind: Deployment
     name: graphql-gateway
     namespace: nova-staging
-  patch: |-
+    version: v1
+- patch: |-
     - op: replace
       path: /spec/template/spec/containers/0/imagePullPolicy
       value: Always
@@ -159,13 +154,13 @@ patches:
         limits:
           cpu: 500m
           memory: 512Mi
-- target:
+  target:
     group: apps
-    version: v1
     kind: Deployment
     name: identity-service
     namespace: nova-staging
-  patch: |-
+    version: v1
+- patch: |-
     - op: replace
       path: /spec/template/spec/containers/0/imagePullPolicy
       value: Always
@@ -178,13 +173,13 @@ patches:
         limits:
           cpu: 500m
           memory: 512Mi
-- target:
+  target:
     group: apps
-    version: v1
     kind: Deployment
     name: notification-service
     namespace: nova-staging
-  patch: |-
+    version: v1
+- patch: |-
     - op: replace
       path: /spec/template/spec/containers/0/imagePullPolicy
       value: Always
@@ -197,13 +192,13 @@ patches:
         limits:
           cpu: 500m
           memory: 512Mi
-- target:
+  target:
     group: apps
-    version: v1
     kind: Deployment
     name: ranking-service
     namespace: nova-staging
-  patch: |-
+    version: v1
+- patch: |-
     - op: replace
       path: /spec/template/spec/containers/0/imagePullPolicy
       value: Always
@@ -216,13 +211,13 @@ patches:
         limits:
           cpu: 500m
           memory: 512Mi
-- target:
+  target:
     group: apps
-    version: v1
     kind: Deployment
     name: realtime-chat-service
     namespace: nova-staging
-  patch: |-
+    version: v1
+- patch: |-
     - op: replace
       path: /spec/template/spec/containers/0/imagePullPolicy
       value: Always
@@ -235,13 +230,13 @@ patches:
         limits:
           cpu: 500m
           memory: 512Mi
-- target:
+  target:
     group: apps
-    version: v1
     kind: Deployment
     name: social-service
     namespace: nova-staging
-  patch: |-
+    version: v1
+- patch: |-
     - op: replace
       path: /spec/template/spec/containers/0/imagePullPolicy
       value: Always
@@ -254,32 +249,13 @@ patches:
         limits:
           cpu: 500m
           memory: 512Mi
-- target:
+  target:
     group: apps
-    version: v1
     kind: Deployment
     name: trust-safety-service
     namespace: nova-staging
-  patch: |-
-    - op: replace
-      path: /spec/template/spec/containers/0/imagePullPolicy
-      value: Always
-    - op: replace
-      path: /spec/template/spec/containers/0/resources
-      value:
-        requests:
-          cpu: 100m
-          memory: 256Mi
-        limits:
-          cpu: 500m
-          memory: 512Mi
-# Patch to ensure only one search-service Service definition is used
-- target:
     version: v1
-    kind: Service
-    name: search-service
-    namespace: nova-staging
-  patch: |-
+- patch: |-
     - op: replace
       path: /spec/ports
       value:
@@ -287,44 +263,45 @@ patches:
           port: 8086
           targetPort: 8086
           protocol: TCP
+  target:
+    kind: Service
+    name: search-service
+    namespace: nova-staging
+    version: v1
+- path: configmap-patch.yaml
+- path: deployment-images-patch.yaml
+- path: postgres-deploy-patch.yaml
+- path: service-selectors-patch.yaml
+- path: redis-deploy-patch.yaml
+- path: deploy-labels-patch.yaml
+- path: feed-service-env-patch.yaml
+- path: analytics-service-env-patch.yaml
+- path: content-service-env-patch.yaml
+- path: content-service-probes-patch.yaml
+- path: content-service-ports-patch.yaml
+- path: runasuser-patch.yaml
+- path: search-service-env-patch.yaml
+- path: notification-service-env-port-patch.yaml
+- path: notification-service-probes-patch.yaml
+- path: elasticsearch-replicas-patch.yaml
+- path: s3-env-patch.yaml
+- path: prefer-large-nodes-patch.yaml
+- path: identity-service-probes-patch.yaml
+- path: feed-service-probes-patch.yaml
+- path: service-db-env-patch.yaml
+- path: service-redis-env-patch.yaml
+- path: grpc-tls-env-patch.yaml
 
 # (migrated to strategic merge patches per service to avoid jsonpatch parent missing)
 
 
 # 启用以下 patches 以完整配置 staging 环境（strategic merge）
-patchesStrategicMerge:
-- configmap-patch.yaml
-- deployment-images-patch.yaml
-- postgres-deploy-patch.yaml
-- service-selectors-patch.yaml
-- redis-deploy-patch.yaml
-- deploy-labels-patch.yaml
-- feed-service-env-patch.yaml
-# - feed-service-probes-patch.yaml  # TODO: 检查 probe 配置
-- analytics-service-env-patch.yaml
-- messaging-service-env-patch.yaml
-- messaging-service-env-port-patch.yaml
-- messaging-service-probes-patch.yaml
-- messaging-cronjob-patch.yaml
-- content-service-env-patch.yaml
-- content-service-probes-patch.yaml
 # - feed-service-init-fix.yaml  # ❌ 已移除：feed-service 通过 Kafka content-events 解耦，不再直接依赖 content-service
-- content-service-ports-patch.yaml
-- runasuser-patch.yaml
-- search-service-env-patch.yaml
-- notification-service-env-port-patch.yaml
-- notification-service-probes-patch.yaml
-- elasticsearch-replicas-patch.yaml
-- s3-env-patch.yaml
-- prefer-large-nodes-patch.yaml
 # Identity-service gRPC-only health checks (no HTTP server)
-- identity-service-probes-patch.yaml
+# Feed-service 探針需對應 8084 + /health，必須啟用
 # Shared DATABASE_URL wiring for core services
-- service-db-env-patch.yaml
 # Shared Redis URL wiring for services using Redis
-- service-redis-env-patch.yaml
 # - resource-optimization-patch.yaml  # 可选：资源优化
-- grpc-tls-env-patch.yaml
 #
 # PgBouncer images now patched in base manifests (k8s/infrastructure/pgbouncer),
 # staging overlay does not need additional image patches.
@@ -374,62 +351,49 @@ images:
   newTag: c849ea7287e61bc77123ee9d58b3f47cb2901cb5
 
 # Staging replica overrides to keep core path light
-replicas:
   # Disable non-critical services temporarily to free CPU for DB/Redis
-  - name: analytics-service
-    count: 0
-  - name: ranking-service
-    count: 0
-  - name: realtime-chat-service
-    count: 0
-  - name: trust-safety-service
-    count: 0
-  - name: social-service
-    count: 0
-  - name: api-gateway
-    count: 0
-  - name: feed-service
-    count: 0
-  - name: turn-server
-    count: 0
 
-  # Enable PgBouncer to test for crashes
+  # Disable PgBouncer in staging for now to avoid hostPort conflicts and crashes
   - name: pgbouncer
-    count: 1
+    count: 0
 
   # Keep a single replica for core path services
-  - name: content-service
-    count: 1
-  - name: graph-service
-    count: 0
-  - name: graphql-gateway
-    count: 0
-  - name: media-service
-    count: 1
-  - name: notification-service
-    count: 1
-  - name: search-service
-    count: 1
+replicas:
+- count: 0
+  name: analytics-service
+- count: 0
+  name: ranking-service
+- count: 0
+  name: realtime-chat-service
+- count: 0
+  name: trust-safety-service
+- count: 0
+  name: social-service
+- count: 0
+  name: api-gateway
+- count: 0
+  name: feed-service
+- count: 0
+  name: turn-server
+- count: 0
+  name: pgbouncer
+- count: 1
+  name: content-service
+- count: 0
+  name: graph-service
+- count: 0
+  name: graphql-gateway
+- count: 1
+  name: media-service
+- count: 1
+  name: notification-service
+- count: 1
+  name: search-service
 
 commonAnnotations:
   argocd.argoproj.io/compare-result: "false"
   environment: staging
 
-resources:
-- ../../base
-- postgres-pvc-gp3.yaml
-- clickhouse-pvc.yaml
-- sts-rotator.yaml
-- secrets-sync.yaml
-- content-service-configmap.yaml
-- media-service-configmap.yaml
-- resource-optimization-info.configmap.yaml
-- nova-messaging-keys.yaml
-- nova-clickhouse-credentials.yaml
-- clickhouse-chi.yaml
-- clickhouse-service-clusterip.yaml
-- clickhouse-service-internal.yaml
-- seed-data-job.yaml
 
 # ========================================
 # P0 Priority: Core Service Infrastructure
@@ -437,10 +401,8 @@ resources:
 # gRPC service discovery和 networking 交由 microservices 自带 Service 定义管理，避免重复
 
 # Database migration job (runs before services start)
-- sqlx-migrate-job.yaml
 
 # PostgreSQL multi-database initialization
-- postgres-multi-db-init.yaml
 
 # ========================================
 # P1 Priority: Service Startup Orchestration
@@ -453,28 +415,43 @@ resources:
 # P2 Priority: Data & Event Infrastructure
 # ========================================
 # Redis cluster for caching and sessions
-- redis-cluster-statefulset.yaml
 
 # Kafka + Zookeeper for event streaming
-- kafka-zookeeper-deployment.yaml
 
 # ClickHouse for analytics
-- clickhouse-installation.yaml
-- neo4j-statefulset.yaml
 
 # ========================================
 # P3 Priority: API Contract Management
 # ========================================
 # Protocol Buffer definitions and service registry
-- proto-management.yaml
 
 # ========================================
 # P4 Priority: Microservice Deployments
 # ========================================
 # All application service deployments from microservices directory kustomization
-- ../../../microservices
 
 # ========================================
 # PgBouncer connection pooling (P1 Priority)
 # ========================================
+resources:
+- ../../base
+- postgres-pvc-gp3.yaml
+- clickhouse-pvc.yaml
+- sts-rotator.yaml
+- secrets-sync.yaml
+- content-service-configmap.yaml
+- resource-optimization-info.configmap.yaml
+- nova-clickhouse-credentials.yaml
+- clickhouse-chi.yaml
+- clickhouse-service-clusterip.yaml
+- clickhouse-service-internal.yaml
+- seed-data-job.yaml
+- sqlx-migrate-job.yaml
+- postgres-multi-db-init.yaml
+- redis-cluster-statefulset.yaml
+- kafka-zookeeper-deployment.yaml
+- clickhouse-installation.yaml
+- neo4j-statefulset.yaml
+- proto-management.yaml
+- ../../../microservices
 - ../../pgbouncer

@@ -74,18 +74,6 @@ spec:
       securityContext:
         runAsNonRoot: true
         runAsUser: 1001
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: messaging-service
-spec:
-  template:
-    spec:
-      securityContext:
-        runAsNonRoot: true
-        runAsUser: 1001
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:

@@ -40,16 +40,6 @@ spec:
   selector:
     app: nova
     component: media-service
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: messaging-service
-spec:
-  selector:
-    app: nova
-    component: messaging-service
----
 apiVersion: v1
 kind: Service
 metadata:

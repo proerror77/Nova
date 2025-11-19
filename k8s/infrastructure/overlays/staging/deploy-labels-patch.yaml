@@ -42,22 +42,6 @@ spec:
       labels:
         app: nova
         component: media-service
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: messaging-service
-spec:
-  selector:
-    matchLabels:
-      app: nova
-      component: messaging-service
-  template:
-    metadata:
-      labels:
-        app: nova
-        component: messaging-service
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:
