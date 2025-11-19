@@ -6,10 +6,10 @@ use tracing::{debug, info};
 use uuid::Uuid;
 
 use crate::error::{AppError, Result};
-use crate::grpc::clients::{ContentServiceClient, UserServiceClient};
+use crate::grpc::clients::{ContentServiceClient, GraphServiceClient, UserServiceClient};
 use crate::middleware::jwt_auth::UserId;
 use crate::models::FeedResponse;
-use grpc_clients::nova::user_service::v2::GetUserFollowingRequest;
+use grpc_clients::nova::graph_service::v2::GetFollowingRequest;
 
 #[derive(Debug, Deserialize)]
 pub struct FeedQueryParams {
@@ -53,6 +53,7 @@ impl FeedQueryParams {
 pub struct FeedHandlerState {
     pub content_client: Arc<ContentServiceClient>,
     pub user_client: Arc<UserServiceClient>,
+    pub graph_client: Arc<GraphServiceClient>,
 }
 
 #[get("")]
@@ -81,23 +82,25 @@ pub async fn get_feed(
         user_id, query.algo, limit, offset
     );
 
-    // Step 1: Get user's following list via gRPC
+    // Step 1: Get user's following list via graph-service gRPC
     let following_resp = state
-        .user_client
-        .get_user_following(GetUserFollowingRequest {
+        .graph_client
+        .pool
+        .graph()
+        .get_following(GetFollowingRequest {
             user_id: user_id.to_string(),
             limit: 1000,
             offset: 0,
         })
         .await
-        .map_err(|e| AppError::Internal(format!("Failed to fetch following list: {}", e)))?;
+        .map_err(|e| AppError::Internal(format!("Failed to fetch following list: {}", e)))?
+        .into_inner();
 
     // Step 2: Get posts from followed users via batch gRPC call
     let followed_user_ids: Vec<String> = following_resp
-        .profiles
-        .iter()
+        .user_ids
+        .into_iter()
         .take(100) // Limit to prevent huge batch requests
-        .map(|profile| profile.id.clone())
         .collect();
 
     if followed_user_ids.is_empty() {

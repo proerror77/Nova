@@ -112,8 +112,8 @@ impl UserServiceClient {
 /// Provides access to relationship graph operations (follow/mute/block)
 #[derive(Clone)]
 pub struct GraphServiceClient {
-    pool: Arc<GrpcClientPool>,
-    enabled: bool,
+    pub pool: Arc<GrpcClientPool>,
+    pub enabled: bool,
 }
 
 impl GraphServiceClient {
