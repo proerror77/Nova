@@ -74,8 +74,16 @@ where
         let method = req.method().to_string();
         let path = req.path().to_string();
 
-        // Skip auth for health check and metrics endpoints
-        if req.path() == "/health" || req.path() == "/metrics" {
+        // Skip auth for health check, metrics, and public auth endpoints
+        let public_paths = [
+            "/health",
+            "/metrics",
+            "/api/v2/auth/register",
+            "/api/v2/auth/login",
+            "/api/v2/auth/refresh",
+        ];
+
+        if public_paths.contains(&req.path()) {
             let fut = self.service.call(req);
             return Box::pin(async move {
                 let res = fut.await?;
