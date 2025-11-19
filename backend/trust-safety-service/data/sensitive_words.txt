@@ -1,0 +1,28 @@
+# Sensitive Words List for Content Moderation
+# Format: One word per line (case-insensitive)
+# Lines starting with # are comments
+
+# Profanity (placeholder - expand with comprehensive list)
+fuck
+shit
+damn
+ass
+bitch
+bastard
+crap
+
+# Hate speech (placeholder - requires comprehensive multi-language list)
+nigger
+faggot
+retard
+
+# Harassment terms
+kill yourself
+kys
+die
+
+# Spam indicators
+viagra
+cialis
+casino
+lottery
