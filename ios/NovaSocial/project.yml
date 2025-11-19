@@ -18,6 +18,7 @@ targets:
           - "*.xcodeproj"
           - "*.yml"
           - "Info.plist"
+          - "build"
     resources:
       - Assets.xcassets
     settings:
