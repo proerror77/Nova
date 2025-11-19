@@ -7,102 +7,119 @@ metadata:
     tier: backend
 spec:
   replicas: 1
-  strategy:
-    type: RollingUpdate
-    rollingUpdate:
-      maxSurge: 1
-      maxUnavailable: 0
   selector:
     matchLabels:
       app: realtime-chat-service
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+    type: RollingUpdate
   template:
     metadata:
       labels:
         app: realtime-chat-service
         tier: backend
     spec:
-      serviceAccountName: realtime-chat-service
-      securityContext:
-        runAsNonRoot: true
-        fsGroup: 1000
-
       affinity:
-        podAntiAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-            - weight: 100
-              podAffinityTerm:
-                labelSelector:
-                  matchExpressions:
-                    - key: app
-                      operator: In
-                      values:
-                        - realtime-chat-service
-                topologyKey: kubernetes.io/hostname
         nodeAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
-            - weight: 50
-              preference:
+          - preference:
+              matchExpressions:
+              - key: tier
+                operator: In
+                values:
+                - backend
+            weight: 50
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - podAffinityTerm:
+              labelSelector:
                 matchExpressions:
-                  - key: tier
-                    operator: In
-                    values:
-                      - backend
+                - key: app
+                  operator: In
+                  values:
+                  - realtime-chat-service
+              topologyKey: kubernetes.io/hostname
+            weight: 100
       containers:
-        - name: realtime-chat-service
-          image: nova/realtime-chat-service
-          imagePullPolicy: Always
-          ports:
-            - name: http
-              containerPort: 8080
-              protocol: TCP
-            - name: grpc
-              containerPort: 9095
-              protocol: TCP
-          resources:
-            requests:
-              memory: "256Mi"
-              cpu: "250m"
-            limits:
-              memory: "512Mi"
-              cpu: "1000m"
-          startupProbe:
-            httpGet:
-              path: /health
-              port: 8080
-            initialDelaySeconds: 10
-            periodSeconds: 5
-            timeoutSeconds: 5
-            failureThreshold: 60
-
-          livenessProbe:
-            httpGet:
-              path: /health
-              port: 8080
-            initialDelaySeconds: 60
-            periodSeconds: 10
-            timeoutSeconds: 5
-            failureThreshold: 3
-
-          readinessProbe:
-            httpGet:
-              path: /health/ready
-              port: 8080
-            initialDelaySeconds: 60
-            periodSeconds: 10
-            timeoutSeconds: 5
-            failureThreshold: 3
-          envFrom:
-            - configMapRef:
-                name: realtime-chat-service-config
-            - secretRef:
-                name: realtime-chat-service-secret
-          volumeMounts:
-            - name: tmp
-              mountPath: /tmp
-            - name: var-tmp
-              mountPath: /var/tmp
+      - env:
+        - name: GRPC_SERVER_CERT_PATH
+          value: /etc/grpc/certs/server.crt
+        - name: GRPC_SERVER_KEY_PATH
+          value: /etc/grpc/certs/server.key
+        - name: GRPC_CA_CERT_PATH
+          value: /etc/grpc/certs/ca.crt
+        envFrom:
+        - configMapRef:
+            name: realtime-chat-service-config
+        - secretRef:
+            name: realtime-chat-service-secret
+        image: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/realtime-chat-service:main-bd6fbdba24e1dec6873163aa51d2297d45cc5cc3
+        livenessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /health
+            port: 8080
+            scheme: HTTP
+          initialDelaySeconds: 60
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 5
+        name: realtime-chat-service
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+        - containerPort: 9095
+          name: grpc
+          protocol: TCP
+        readinessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /health/ready
+            port: 8080
+            scheme: HTTP
+          initialDelaySeconds: 60
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 5
+        resources:
+          limits:
+            cpu: '1'
+            memory: 512Mi
+          requests:
+            cpu: 250m
+            memory: 256Mi
+        startupProbe:
+          failureThreshold: 60
+          httpGet:
+            path: /health
+            port: 8080
+            scheme: HTTP
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          successThreshold: 1
+          timeoutSeconds: 5
+        volumeMounts:
+        - mountPath: /tmp
+          name: tmp
+        - mountPath: /var/tmp
+          name: var-tmp
+        - mountPath: /etc/grpc/certs
+          name: grpc-certs
+          readOnly: true
+      securityContext:
+        fsGroup: 1000
+        runAsNonRoot: false
+      serviceAccount: realtime-chat-service
+      serviceAccountName: realtime-chat-service
       volumes:
-        - name: tmp
-          emptyDir: {}
-        - name: var-tmp
-          emptyDir: {}
+      - emptyDir: {}
+        name: tmp
+      - emptyDir: {}
+        name: var-tmp
+      - name: grpc-certs
+        secret:
+          defaultMode: 420
+          secretName: grpc-mtls-shared

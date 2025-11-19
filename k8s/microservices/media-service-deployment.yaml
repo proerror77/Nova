@@ -7,145 +7,127 @@ metadata:
     tier: backend
 spec:
   replicas: 1
-  strategy:
-    type: RollingUpdate
-    rollingUpdate:
-      maxSurge: 1
-      maxUnavailable: 0
   selector:
     matchLabels:
       app: media-service
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+    type: RollingUpdate
   template:
     metadata:
       labels:
         app: media-service
         tier: backend
     spec:
-      serviceAccountName: media-service
-      securityContext:
-        runAsNonRoot: true
-        fsGroup: 1000
-
-      # No InitContainers - media-service has no upstream dependencies
       affinity:
-        podAntiAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-            - weight: 100
-              podAffinityTerm:
-                labelSelector:
-                  matchExpressions:
-                    - key: app
-                      operator: In
-                      values:
-                        - media-service
-                topologyKey: kubernetes.io/hostname
         nodeAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
-            - weight: 50
-              preference:
+          - preference:
+              matchExpressions:
+              - key: tier
+                operator: In
+                values:
+                - backend
+            weight: 50
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - podAffinityTerm:
+              labelSelector:
                 matchExpressions:
-                  - key: tier
-                    operator: In
-                    values:
-                      - backend
+                - key: app
+                  operator: In
+                  values:
+                  - media-service
+              topologyKey: kubernetes.io/hostname
+            weight: 100
       containers:
-        - name: media-service
-          image: nova/media-service
-          imagePullPolicy: Always
-          ports:
-            - name: http
-              containerPort: 8082
-              protocol: TCP
-            - name: grpc
-              containerPort: 9082
-              protocol: TCP
-          resources:
-            requests:
-              memory: "256Mi"
-              cpu: "100m"
-            limits:
-              memory: "512Mi"
-              cpu: "500m"
-
-          # Startup probe: Allows longer initial startup time for initialization
-          startupProbe:
-            httpGet:
-              path: /api/v1/health
-              port: 8082
-            initialDelaySeconds: 10
-            periodSeconds: 5
-            timeoutSeconds: 5
-            failureThreshold: 60  # 5 minutes for initialization
-
-          livenessProbe:
-            httpGet:
-              path: /api/v1/health
-              port: 8082
-            initialDelaySeconds: 60  # Wait for initialization to complete
-            periodSeconds: 10
-            timeoutSeconds: 5
-            failureThreshold: 3
-
-          readinessProbe:
-            httpGet:
-              path: /api/v1/health/ready
-              port: 8082
-            initialDelaySeconds: 60  # Wait for initialization to complete
-            periodSeconds: 10
-            timeoutSeconds: 5
-            failureThreshold: 3
-
-          envFrom:
-            - configMapRef:
-                name: media-service-config
-            - secretRef:
-                name: media-service-secret
-
-          env:
-            - name: APP_ENV
-              value: "staging"
-            # TODO: Enable mTLS after new image with Rustls crypto provider fix is deployed
-            # Current issue: Missing rustls::crypto::aws_lc_rs::default_provider().install_default()
-            # Fixed in commit: 8b7d03ef (fix(media): install rustls crypto provider)
-            # Temporarily disabled TLS for staging until new image is available
-            - name: GRPC_TLS_ENABLED
-              value: "false"
-
-          volumeMounts:
-            - name: tmp
-              mountPath: /tmp
-            - name: var-tmp
-              mountPath: /var/tmp
-
+      - env:
+        - name: GRPC_TLS_ENABLED
+          value: 'false'
+        - name: GRPC_TLS_DOMAIN_NAME
+          value: identity-service.nova-staging.svc.cluster.local
+        - name: GRPC_SERVER_KEY_PATH
+          value: /etc/nova/certs/server.key
+        - name: APP_ENV
+          value: staging
+        - name: GRPC_SERVER_CERT_PATH
+          value: /etc/nova/certs/server.crt
+        - name: GRPC_CLIENT_CA_CERT_PATH
+          value: /etc/nova/certs/ca.crt
+        - name: GRPC_REQUIRE_CLIENT_CERT
+          value: 'false'
+        envFrom:
+        - configMapRef:
+            name: media-service-config
+        - secretRef:
+            name: media-service-secret
+        image: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/media-service:latest
+        livenessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /api/v1/health
+            port: 8082
+            scheme: HTTP
+          initialDelaySeconds: 60
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 5
+        name: media-service
+        ports:
+        - containerPort: 8082
+          name: http
+          protocol: TCP
+        - containerPort: 9082
+          name: grpc
+          protocol: TCP
+        readinessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /api/v1/health/ready
+            port: 8082
+            scheme: HTTP
+          initialDelaySeconds: 60
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 5
+        resources:
+          limits:
+            cpu: 500m
+            memory: 512Mi
+          requests:
+            cpu: 100m
+            memory: 256Mi
+        startupProbe:
+          failureThreshold: 60
+          httpGet:
+            path: /api/v1/health
+            port: 8082
+            scheme: HTTP
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          successThreshold: 1
+          timeoutSeconds: 5
+        volumeMounts:
+        - mountPath: /tmp
+          name: tmp
+        - mountPath: /var/tmp
+          name: var-tmp
+        - mountPath: /etc/nova/certs
+          name: grpc-mtls-shared
+          readOnly: true
+      securityContext:
+        fsGroup: 1000
+        runAsNonRoot: false
+      serviceAccount: media-service
+      serviceAccountName: media-service
       volumes:
-        - name: tmp
-          emptyDir: {}
-        - name: var-tmp
-          emptyDir: {}
-
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: media-service
-  labels:
-    app: media-service
-spec:
-  type: ClusterIP
-  ports:
-    - name: http
-      port: 8082
-      targetPort: 8082
-      protocol: TCP
-    - name: grpc
-      port: 9082
-      targetPort: 9082
-      protocol: TCP
-  selector:
-    app: media-service
-
----
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: media-service
+      - emptyDir: {}
+        name: tmp
+      - emptyDir: {}
+        name: var-tmp
+      - name: grpc-mtls-shared
+        secret:
+          defaultMode: 420
+          secretName: grpc-mtls-shared
