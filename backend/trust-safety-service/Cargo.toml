@@ -55,7 +55,7 @@ resilience = { path = "../libs/resilience" }
 error-types = { path = "../libs/error-types" }
 
 # ONNX Runtime for ML inference
-ort = { version = "2.0.0-rc.10", features = ["load-dynamic"] }
+ort = { version = "2.0.0-rc.10", features = ["download-binaries"] }
 
 # Image processing for NSFW detection
 image = "0.25"
