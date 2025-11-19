@@ -40,6 +40,10 @@ WORKDIR /app
 # Copy binary
 COPY --from=builder /app/target/release/trust-safety-service /app/trust-safety-service
 
+# Copy model files
+COPY --from=builder /app/backend/trust-safety-service/models /app/models
+COPY --from=builder /app/backend/trust-safety-service/data /app/data
+
 # Adjust ownership
 RUN chown -R appuser:appuser /app
 USER appuser
