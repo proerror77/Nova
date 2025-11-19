@@ -393,9 +393,9 @@ replicas:
   - name: turn-server
     count: 0
 
-  # Disable PgBouncer in staging for now to avoid hostPort conflicts and crashes
+  # Enable PgBouncer to test for crashes
   - name: pgbouncer
-    count: 0
+    count: 1
 
   # Keep a single replica for core path services
   - name: content-service

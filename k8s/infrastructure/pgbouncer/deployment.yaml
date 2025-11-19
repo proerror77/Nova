@@ -77,6 +77,36 @@ spec:
         runAsUser: 999  # pgbouncer user
         fsGroup: 999
       
+      # Init container to copy config files to writable location
+      initContainers:
+      - name: config-init
+        image: busybox:latest
+        command:
+        - /bin/sh
+        - -c
+        - |
+          echo "Copying configuration files to /etc/pgbouncer..."
+          cp /config-source/pgbouncer.ini /etc/pgbouncer/pgbouncer.ini
+          cp /config-source/userlist.txt /etc/pgbouncer/userlist.txt
+          chmod 644 /etc/pgbouncer/pgbouncer.ini
+          chmod 600 /etc/pgbouncer/userlist.txt
+          echo "Configuration files copied successfully"
+          ls -la /etc/pgbouncer/
+        volumeMounts:
+        - name: config-source
+          mountPath: /config-source/pgbouncer.ini
+          subPath: pgbouncer.ini
+          readOnly: true
+        - name: userlist-source
+          mountPath: /config-source/userlist.txt
+          subPath: userlist.txt
+          readOnly: true
+        - name: pgbouncer-config
+          mountPath: /etc/pgbouncer
+        securityContext:
+          runAsUser: 999
+          runAsNonRoot: true
+      
       # Containers
       containers:
       - name: pgbouncer
@@ -89,7 +119,7 @@ spec:
           capabilities:
             drop:
             - ALL
-          readOnlyRootFilesystem: true
+          readOnlyRootFilesystem: false  # Allow writes to mounted emptyDir volumes
         
         # Port definitions
         ports:
@@ -147,17 +177,9 @@ spec:
         
         # Volume mounts
         volumeMounts:
-        # Configuration file (read-only)
-        - name: config
-          mountPath: /etc/pgbouncer/pgbouncer.ini
-          subPath: pgbouncer.ini
-          readOnly: true
-        
-        # User authentication file (read-only)
-        - name: userlist
-          mountPath: /etc/pgbouncer/userlist.txt
-          subPath: userlist.txt
-          readOnly: true
+        # PgBouncer configuration directory (writable, populated by initContainer)
+        - name: pgbouncer-config
+          mountPath: /etc/pgbouncer
         
         # Temporary directory for PgBouncer (writable)
         - name: tmp
@@ -178,13 +200,10 @@ spec:
           failureThreshold: 3
         
         # Readiness probe: checks if PgBouncer is ready to accept connections
-        # Uses the admin console to verify pool status
+        # Uses TCP socket check (psql not available in container)
         readinessProbe:
-          exec:
-            command:
-            - /bin/sh
-            - -c
-            - psql -h 127.0.0.1 -p 6432 -U admin pgbouncer -c "SHOW POOLS" -t | grep -q nova
+          tcpSocket:
+            port: pgbouncer
           initialDelaySeconds: 5
           periodSeconds: 5
           timeoutSeconds: 3
@@ -216,17 +235,22 @@ spec:
       
       # Volumes
       volumes:
-      # ConfigMap with PgBouncer configuration
-      - name: config
+      # Source ConfigMap with PgBouncer configuration (read-only, for initContainer)
+      - name: config-source
         configMap:
           name: pgbouncer-config
           defaultMode: 0444  # Read-only
       
-      # Secret with user authentication data
-      - name: userlist
+      # Source Secret with user authentication data (read-only, for initContainer)
+      - name: userlist-source
         secret:
           secretName: pgbouncer-userlist
           defaultMode: 0400  # Read-only for owner only
+      
+      # Writable config directory (emptyDir, populated by initContainer)
+      - name: pgbouncer-config
+        emptyDir:
+          sizeLimit: 10Mi
       
       # Temporary storage (emptyDir)
       - name: tmp
