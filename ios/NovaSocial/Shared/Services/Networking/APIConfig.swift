@@ -13,7 +13,7 @@ enum APIEnvironment {
             return "http://localhost:8080"  // GraphQL Gateway for local development
         case .staging:
             // AWS EKS staging environment - Ingress LoadBalancer URL (Updated: 2025-11-19)
-            return "http://abf1c7cfd91c44c8cb038c34cc857372-567097626.ap-northeast-1.elb.amazonaws.com"
+            return "http://a3326508b1e3c43239348cac7ce9ee03-1036729988.ap-northeast-1.elb.amazonaws.com"
         case .production:
             return "https://api.nova.social"
         }
