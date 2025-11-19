@@ -111,10 +111,21 @@ spec:
         - configMapRef:
             name: graphql-gateway-config
         env:
-        - name: AWS_SECRETS_JWT_NAME
-          value: "nova/staging/nova-jwt-keys"
         - name: AWS_REGION
           value: "ap-northeast-1"
+        # JWT keys from External Secrets (synced from AWS Secrets Manager)
+        - name: JWT_ALGORITHM
+          value: "RS256"
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: graphql-gateway-secret
+              key: jwt-private-key
+        - name: JWT_VALIDATION_KEY
+          valueFrom:
+            secretKeyRef:
+              name: graphql-gateway-secret
+              key: jwt-public-key
         resources:
           requests:
             memory: "256Mi"
