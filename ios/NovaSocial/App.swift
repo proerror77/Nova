@@ -18,6 +18,24 @@ struct FigmaDesignAppApp: App {
                 case .account:
                     ProfileView(currentPage: $currentPage)
                         .transition(.identity)
+                case .setting:
+                    SettingsView(currentPage: $currentPage)
+                        .transition(.identity)
+                case .profileSetting:
+                    ProfileSettingView(currentPage: $currentPage)
+                        .transition(.identity)
+                case .accounts:
+                    AccountsView(currentPage: $currentPage)
+                        .transition(.identity)
+                case .devices:
+                    DevicesView(currentPage: $currentPage)
+                        .transition(.identity)
+                case .inviteFriends:
+                    InviteFriendsView(currentPage: $currentPage)
+                        .transition(.identity)
+                case .myChannels:
+                    MyChannelsView(currentPage: $currentPage)
+                        .transition(.identity)
                 default:
                     HomeView(currentPage: $currentPage)
                         .transition(.identity)

@@ -1,12 +1,11 @@
 import SwiftUI
 
 struct SettingsView: View {
-    @Binding var showSetting: Bool
+    @Binding var currentPage: AppPage
     @State private var isDarkMode = false
 
     var body: some View {
         ZStack {
-            // 背景色
             Color.white
                 .ignoresSafeArea()
 
@@ -14,17 +13,17 @@ struct SettingsView: View {
                 // MARK: - 顶部导航栏
                 HStack {
                     Button(action: {
-                        showSetting = false
+                        currentPage = .account
                     }) {
                         Image(systemName: "chevron.left")
-                            .font(.system(size: 20, weight: .medium))
+                            .font(.system(size: 20))
                             .foregroundColor(.black)
                     }
 
                     Spacer()
 
                     Text("Settings")
-                        .font(Font.custom("Helvetica Neue", size: 24).weight(.medium))
+                        .font(.system(size: 24, weight: .medium))
                         .foregroundColor(.black)
 
                     Spacer()
@@ -33,27 +32,70 @@ struct SettingsView: View {
                     Color.clear
                         .frame(width: 20)
                 }
-                .frame(height: 56)
-                .padding(.horizontal, 16)
+                .frame(height: DesignTokens.topBarHeight)
+                .padding(.horizontal, 20)
                 .background(Color.white)
-
-                Divider()
-                    .frame(height: 0.5)
-                    .background(Color(red: 0.74, green: 0.74, blue: 0.74))
 
                 ScrollView {
                     VStack(spacing: 16) {
                         // MARK: - 第一组设置项
                         VStack(spacing: 0) {
-                            SettingItem(title: "Profile Settings", showChevron: true)
-                            Divider().padding(.leading, 50)
-                            SettingItem(title: "My Account", showChevron: true)
-                            Divider().padding(.leading, 50)
-                            SettingItem(title: "Devices", showChevron: true)
-                            Divider().padding(.leading, 50)
-                            SettingItem(title: "Invite Friends", showChevron: true)
-                            Divider().padding(.leading, 50)
-                            SettingItem(title: "My Channels", showChevron: true)
+                            SettingsRow(
+                                icon: "person.2",
+                                title: "Profile Settings",
+                                showChevron: true,
+                                action: {
+                                    currentPage = .profileSetting
+                                }
+                            )
+
+                            Divider()
+                                .padding(.leading, 50)
+
+                            SettingsRow(
+                                icon: "person.circle",
+                                title: "My Account",
+                                showChevron: true,
+                                action: {
+                                    currentPage = .accounts
+                                }
+                            )
+
+                            Divider()
+                                .padding(.leading, 50)
+
+                            SettingsRow(
+                                icon: "iphone",
+                                title: "Devices",
+                                showChevron: true,
+                                action: {
+                                    currentPage = .devices
+                                }
+                            )
+
+                            Divider()
+                                .padding(.leading, 50)
+
+                            SettingsRow(
+                                icon: "person.badge.plus",
+                                title: "Invite Friends",
+                                showChevron: true,
+                                action: {
+                                    currentPage = .inviteFriends
+                                }
+                            )
+
+                            Divider()
+                                .padding(.leading, 50)
+
+                            SettingsRow(
+                                icon: "tv",
+                                title: "My Channels",
+                                showChevron: true,
+                                action: {
+                                    currentPage = .myChannels
+                                }
+                            )
                         }
                         .background(Color.white)
                         .cornerRadius(6)
@@ -61,17 +103,17 @@ struct SettingsView: View {
                             RoundedRectangle(cornerRadius: 6)
                                 .stroke(Color(red: 0.68, green: 0.68, blue: 0.68), lineWidth: 0.5)
                         )
-                        .padding(.horizontal, 21)
+                        .padding(.horizontal, 12)
 
                         // MARK: - Dark Mode
                         HStack {
-                            Image(systemName: "person.fill")
-                                .font(.system(size: 20))
-                                .foregroundColor(Color(red: 0.82, green: 0.13, blue: 0.25))
+                            Image(systemName: "moon.fill")
+                                .font(.system(size: 18))
+                                .foregroundColor(Color(red: 0.82, green: 0.11, blue: 0.26))
                                 .frame(width: 24)
 
                             Text("Dark Mode")
-                                .font(Font.custom("Helvetica Neue", size: 15).weight(.medium))
+                                .font(.system(size: 14, weight: .medium))
                                 .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
 
                             Spacer()
@@ -80,39 +122,43 @@ struct SettingsView: View {
                                 .labelsHidden()
                         }
                         .padding(.horizontal, 20)
-                        .frame(height: 54)
+                        .padding(.vertical, 16)
                         .background(Color.white)
                         .cornerRadius(6)
                         .overlay(
                             RoundedRectangle(cornerRadius: 6)
                                 .stroke(Color(red: 0.68, green: 0.68, blue: 0.68), lineWidth: 0.5)
                         )
-                        .padding(.horizontal, 21)
+                        .padding(.horizontal, 12)
 
                         // MARK: - Sign Out
-                        HStack {
-                            Image(systemName: "person.fill")
-                                .font(.system(size: 20))
-                                .foregroundColor(Color(red: 0.82, green: 0.13, blue: 0.25))
-                                .frame(width: 24)
+                        Button(action: {
+                            // TODO: 实现登出功能
+                        }) {
+                            HStack {
+                                Image(systemName: "rectangle.portrait.and.arrow.right")
+                                    .font(.system(size: 18))
+                                    .foregroundColor(Color(red: 0.82, green: 0.11, blue: 0.26))
+                                    .frame(width: 24)
 
-                            Text("Sign Out")
-                                .font(Font.custom("Helvetica Neue", size: 15).weight(.medium))
-                                .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
+                                Text("Sign Out")
+                                    .font(.system(size: 14, weight: .medium))
+                                    .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
 
-                            Spacer()
+                                Spacer()
+                            }
+                            .padding(.horizontal, 20)
+                            .padding(.vertical, 16)
                         }
-                        .padding(.horizontal, 20)
-                        .frame(height: 54)
                         .background(Color.white)
                         .cornerRadius(6)
                         .overlay(
                             RoundedRectangle(cornerRadius: 6)
                                 .stroke(Color(red: 0.68, green: 0.68, blue: 0.68), lineWidth: 0.5)
                         )
-                        .padding(.horizontal, 21)
+                        .padding(.horizontal, 12)
                     }
-                    .padding(.top, 24)
+                    .padding(.top, 20)
                 }
 
                 Spacer()
@@ -121,36 +167,41 @@ struct SettingsView: View {
     }
 }
 
-// MARK: - 设置项组件
-struct SettingItem: View {
+// MARK: - 设置行组件
+struct SettingsRow: View {
+    let icon: String
     let title: String
-    let showChevron: Bool
+    var showChevron: Bool = false
+    var action: (() -> Void)? = nil
 
     var body: some View {
-        HStack {
-            Image(systemName: "person.fill")
-                .font(.system(size: 20))
-                .foregroundColor(Color(red: 0.82, green: 0.13, blue: 0.25))
-                .frame(width: 24)
+        Button(action: {
+            action?()
+        }) {
+            HStack(spacing: 16) {
+                Image(systemName: icon)
+                    .font(.system(size: 18))
+                    .foregroundColor(Color(red: 0.82, green: 0.11, blue: 0.26))
+                    .frame(width: 24)
 
-            Text(title)
-                .font(Font.custom("Helvetica Neue", size: 15).weight(.medium))
-                .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
+                Text(title)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
 
-            Spacer()
+                Spacer()
 
-            if showChevron {
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 12))
-                    .foregroundColor(Color(red: 0.68, green: 0.68, blue: 0.68))
+                if showChevron {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 12))
+                        .foregroundColor(Color.gray.opacity(0.5))
+                }
             }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 16)
         }
-        .padding(.horizontal, 20)
-        .frame(height: 50)
-        .background(Color.white)
     }
 }
 
 #Preview {
-    SettingsView(showSetting: .constant(true))
+    SettingsView(currentPage: .constant(.setting))
 }

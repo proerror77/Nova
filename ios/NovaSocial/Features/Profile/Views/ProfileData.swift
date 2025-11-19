@@ -1,17 +1,18 @@
 import Foundation
 import SwiftUI
 
+@Observable
 @MainActor
-class ProfileViewModel: ObservableObject {
-    // MARK: - Published Properties
+class ProfileData {
+    // MARK: - Properties
 
-    @Published var userProfile: UserProfile?
-    @Published var posts: [Post] = []
-    @Published var savedPosts: [Post] = []
-    @Published var likedPosts: [Post] = []
+    var userProfile: UserProfile?
+    var posts: [Post] = []
+    var savedPosts: [Post] = []
+    var likedPosts: [Post] = []
 
-    @Published var isLoading = false
-    @Published var errorMessage: String?
+    var isLoading = false
+    var errorMessage: String?
 
     // MARK: - Services
 
@@ -33,7 +34,7 @@ class ProfileViewModel: ObservableObject {
         case liked
     }
 
-    @Published var selectedTab: ContentTab = .posts
+    var selectedTab: ContentTab = .posts
 
     // MARK: - Lifecycle Methods
 
@@ -213,9 +214,9 @@ class ProfileViewModel: ObservableObject {
 
     // MARK: - Mock Data for Preview
     #if DEBUG
-    static func preview() -> ProfileViewModel {
-        let viewModel = ProfileViewModel()
-        viewModel.userProfile = UserProfile(
+    static func preview() -> ProfileData {
+        let data = ProfileData()
+        data.userProfile = UserProfile(
             id: "mock-user-id",
             username: "bruce_li",
             email: "bruce@example.com",
@@ -234,7 +235,7 @@ class ProfileViewModel: ObservableObject {
             updatedAt: Int64(Date().timeIntervalSince1970),
             deletedAt: nil
         )
-        return viewModel
+        return data
     }
     #endif
 }
