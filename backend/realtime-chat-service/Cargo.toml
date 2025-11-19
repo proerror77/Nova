@@ -24,6 +24,9 @@ tonic = { workspace = true }
 tonic-health = { workspace = true }
 prost = { workspace = true }
 
+# TLS/Crypto
+rustls = { version = "0.23", default-features = false, features = ["aws-lc-rs", "std", "tls12"] }
+
 # HTTP Server
 actix-web = { workspace = true }
 actix-rt = { workspace = true }

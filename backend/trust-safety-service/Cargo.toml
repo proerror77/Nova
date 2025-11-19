@@ -43,6 +43,9 @@ prost.workspace = true
 prost-types.workspace = true
 tonic-health.workspace = true
 
+# TLS/Crypto
+rustls = { version = "0.23", default-features = false, features = ["aws-lc-rs", "std", "tls12"] }
+
 # Shared libraries
 db-pool = { path = "../libs/db-pool" }
 grpc-tls = { path = "../libs/grpc-tls" }

@@ -11,6 +11,12 @@ use trust_safety_service::{
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Initialize rustls crypto provider
+    if let Err(err) = rustls::crypto::aws_lc_rs::default_provider().install_default() {
+        eprintln!("ERROR: failed to install rustls crypto provider: {:?}", err);
+        return Err("failed to install rustls crypto provider".into());
+    }
+
     // Initialize tracing
     tracing_subscriber::fmt()
         .with_target(false)

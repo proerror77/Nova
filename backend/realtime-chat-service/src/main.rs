@@ -20,6 +20,14 @@ use tonic::transport::{Endpoint, Server as GrpcServer};
 
 #[tokio::main]
 async fn main() -> Result<(), error::AppError> {
+    // Initialize rustls crypto provider
+    if let Err(err) = rustls::crypto::aws_lc_rs::default_provider().install_default() {
+        eprintln!("ERROR: failed to install rustls crypto provider: {:?}", err);
+        return Err(error::AppError::StartServer(
+            "failed to install rustls crypto provider".to_string(),
+        ));
+    }
+
     logging::init_tracing();
     let cfg = Arc::new(config::Config::from_env()?);
 
