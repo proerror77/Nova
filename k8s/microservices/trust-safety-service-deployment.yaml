@@ -51,6 +51,15 @@ spec:
         - name: trust-safety-service
           image: nova/trust-safety-service
           imagePullPolicy: Always
+          env:
+            - name: GRPC_SERVER_CERT_PATH
+              value: /etc/grpc/certs/server.crt
+            - name: GRPC_SERVER_KEY_PATH
+              value: /etc/grpc/certs/server.key
+            - name: GRPC_CA_CERT_PATH
+              value: /etc/grpc/certs/ca.crt
+            - name: NSFW_DETECTION_ENABLED
+              value: "false"
           ports:
             - name: http
               containerPort: 8080
@@ -101,8 +110,14 @@ spec:
               mountPath: /tmp
             - name: var-tmp
               mountPath: /var/tmp
+            - name: grpc-certs
+              mountPath: /etc/grpc/certs
+              readOnly: true
       volumes:
         - name: tmp
           emptyDir: {}
         - name: var-tmp
           emptyDir: {}
+        - name: grpc-certs
+          secret:
+            secretName: grpc-mtls-shared
