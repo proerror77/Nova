@@ -1,2 +1,6 @@
 // Repository layer for data access
-// TODO: Implement repositories for social interactions
+// Re-export from crate::repository for backward compatibility
+
+pub use crate::repository::{
+    comments::CommentRepository, likes::LikeRepository, shares::ShareRepository,
+};

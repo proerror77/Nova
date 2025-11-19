@@ -12,6 +12,9 @@ name = "social_service"
 path = "src/lib.rs"
 
 [dependencies]
+# Async runtime
+tokio.workspace = true
+
 # Web & gRPC
 actix-web.workspace = true
 actix-rt.workspace = true
@@ -36,6 +39,9 @@ rdkafka.workspace = true
 # Error handling
 anyhow.workspace = true
 thiserror.workspace = true
+
+# TLS/Crypto
+rustls = { version = "0.23", default-features = false, features = ["aws-lc-rs", "std", "tls12"] }
 
 # Logging
 tracing.workspace = true
