@@ -17,20 +17,21 @@ resources:
   - feed-service-deployment.yaml
   - feed-service-configmap.yaml
   
-  - media-service-configmap.yaml
   - graph-service-deployment.yaml
   - graph-service-service.yaml
   - graph-service-configmap.yaml
   - graph-service-serviceaccount.yaml
-  
+
   - graphql-gateway-deployment.yaml
   - graphql-gateway-service.yaml
   - graphql-gateway-configmap.yaml
   - graphql-gateway-serviceaccount.yaml
-  
+
   - identity-service-deployment.yaml
-  
+
   - media-service-deployment.yaml
+  - media-service-service.yaml
+  - media-service-configmap.yaml
 
   # messaging-service: DEPRECATED - replaced by realtime-chat-service
   # All messaging functionality (DM + WebSocket + E2EE) is now in realtime-chat-service
