@@ -4,6 +4,12 @@ import SwiftUI
 struct FigmaDesignAppApp: App {
     @State private var currentPage: AppPage = .home
 
+    init() {
+        // Enable mock authentication for testing
+        // TODO: Remove this once real authentication is implemented
+        APIClient.shared.enableMockAuth()
+    }
+
     var body: some Scene {
         WindowGroup {
             ZStack {

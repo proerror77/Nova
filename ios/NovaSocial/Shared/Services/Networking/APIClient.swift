@@ -23,6 +23,16 @@ class APIClient {
         self.authToken = token
     }
 
+    /// Enable mock authentication for development/testing
+    /// WARNING: This is a temporary solution for testing only
+    /// TODO: Replace with real authentication flow once identity-service HTTP API is available
+    func enableMockAuth() {
+        #if DEBUG
+        self.authToken = "mock-dev-token-for-testing"
+        print("⚠️ Mock authentication enabled - for testing only!")
+        #endif
+    }
+
     // MARK: - Generic Request Method
 
     func request<T: Decodable>(
