@@ -1,11 +1,40 @@
 # iOS Authentication Status
 
 **Date**: 2025-11-19
-**Status**: ⚠️ Blocked - Backend Configuration Issue
+**Status**: ✅ Backend Fixed - Deploying to Staging
 
 ---
 
-## 🔍 Problem Summary
+## ✅ Fix Applied (2025-11-19)
+
+### Backend Changes
+
+**Commit**: `1ce811e6` - fix(feed-service): apply JWT authentication middleware to feed routes
+
+**File**: `backend/feed-service/src/main.rs`
+
+```diff
++ use recommendation_service::middleware::JwtAuthMiddleware;
+
+  .service(
+      web::scope("/api/v2/feed")
++         .wrap(JwtAuthMiddleware)
+          .service(get_feed)
+  )
+```
+
+### Deployment Status
+
+- ✅ Code committed and pushed to main branch
+- 🔄 GitHub Actions workflow triggered: `staging-deploy-optimized.yml`
+- ⏳ Deployment in progress to nova-staging namespace
+- 📋 Workflow run: https://github.com/proerror77/Nova/actions
+
+**Next**: Wait for deployment to complete (~5-10 minutes), then test with generated JWT token
+
+---
+
+## 🔍 Problem Summary (Original Issue)
 
 Feed API 一直返回 401 "Missing user context"，即使提供了有效的 JWT token。
 
@@ -304,20 +333,24 @@ curl -X GET "http://api.nova.local/api/v2/feed?user_id=00000000-0000-0000-0000-0
 
 ---
 
-## 🚨 Current Blocker
+## 🚨 Current Status
 
-**Status**: ⛔ **BLOCKED**
+**Status**: ✅ **FIXED - DEPLOYING**
 
-**Blocker**: Backend feed-service JWT middleware not applied to routes
+**Resolution**: JWT middleware applied to feed-service routes
 
-**Impact**:
-- Cannot test feed loading in iOS app
-- All authenticated endpoints return 401
-- Authentication flow cannot be validated end-to-end
+**Deployment**:
+- ✅ Code committed: `1ce811e6`
+- ✅ Pushed to main branch
+- 🔄 CI/CD pipeline running (staging-deploy-optimized.yml)
+- ⏳ Deploying to nova-staging namespace
+- 📋 ETA: ~5-10 minutes
 
-**Owner**: Backend team
-
-**ETA**: Waiting for backend fix
+**Next Steps**:
+1. ⏳ Wait for deployment to complete
+2. 🧪 Test API with generated JWT token
+3. ✅ If successful, update iOS app to use real authentication
+4. 📱 Implement full login flow in iOS app
 
 ---
 
