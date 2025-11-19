@@ -101,6 +101,16 @@ spec:
             - secretRef:
                 name: media-service-secret
 
+          env:
+            - name: APP_ENV
+              value: "staging"
+            # TODO: Enable mTLS after new image with Rustls crypto provider fix is deployed
+            # Current issue: Missing rustls::crypto::aws_lc_rs::default_provider().install_default()
+            # Fixed in commit: 8b7d03ef (fix(media): install rustls crypto provider)
+            # Temporarily disabled TLS for staging until new image is available
+            - name: GRPC_TLS_ENABLED
+              value: "false"
+
           volumeMounts:
             - name: tmp
               mountPath: /tmp
