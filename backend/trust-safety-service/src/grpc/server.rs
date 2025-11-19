@@ -17,7 +17,7 @@ use trust_safety::*;
 /// gRPC service implementation
 pub struct TrustSafetyServiceImpl {
     config: Arc<Config>,
-    nsfw_detector: Arc<NsfwDetector>,
+    nsfw_detector: Option<Arc<NsfwDetector>>,
     text_moderator: Arc<TextModerator>,
     spam_detector: Arc<SpamDetector>,
     appeal_service: Arc<AppealService>,
@@ -27,7 +27,7 @@ pub struct TrustSafetyServiceImpl {
 impl TrustSafetyServiceImpl {
     pub fn new(
         config: Arc<Config>,
-        nsfw_detector: Arc<NsfwDetector>,
+        nsfw_detector: Option<Arc<NsfwDetector>>,
         text_moderator: Arc<TextModerator>,
         spam_detector: Arc<SpamDetector>,
         appeal_service: Arc<AppealService>,
@@ -67,20 +67,22 @@ impl TrustSafetyService for TrustSafetyServiceImpl {
         let mut nsfw_score = 0.0f32;
         let mut nsfw_categories = Vec::new();
 
-        for image_url in &req.image_urls {
-            match self.nsfw_detector.detect(image_url).await {
-                Ok(score) => {
-                    if score > nsfw_score {
-                        nsfw_score = score;
+        if let Some(detector) = &self.nsfw_detector {
+            for image_url in &req.image_urls {
+                match detector.detect(image_url).await {
+                    Ok(score) => {
+                        if score > nsfw_score {
+                            nsfw_score = score;
+                        }
+                        if score > self.config.nsfw_threshold {
+                            nsfw_categories.push(format!("nsfw_image:{}", image_url));
+                        }
                     }
-                    if score > self.config.nsfw_threshold {
-                        nsfw_categories.push(format!("nsfw_image:{}", image_url));
-                    }
-                }
                 Err(e) => {
                     tracing::warn!("NSFW detection failed for {}: {}", image_url, e);
                     // Continue with other checks
                 }
+            }
             }
         }
 
@@ -203,9 +205,11 @@ impl TrustSafetyService for TrustSafetyServiceImpl {
         let toxicity_score = self.text_moderator.calculate_toxicity_score(&req.text);
 
         let mut nsfw_score = 0.0f32;
-        for image_url in &req.image_urls {
-            if let Ok(score) = self.nsfw_detector.detect(image_url).await {
-                nsfw_score = nsfw_score.max(score);
+        if let Some(detector) = &self.nsfw_detector {
+            for image_url in &req.image_urls {
+                if let Ok(score) = detector.detect(image_url).await {
+                    nsfw_score = nsfw_score.max(score);
+                }
             }
         }
 

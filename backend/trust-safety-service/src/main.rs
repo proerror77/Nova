@@ -52,20 +52,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         })?;
     tracing::info!("Migrations completed successfully");
 
-    // Initialize NSFW detector
+    // Initialize NSFW detector (optional - service can run without it)
     tracing::info!("Loading NSFW detection model...");
     let nsfw_detector = match NsfwDetector::new(&config.nsfw_model_path) {
         Ok(detector) => {
-            tracing::info!("NSFW detector initialized");
-            Arc::new(detector)
+            tracing::info!("NSFW detector initialized successfully");
+            Some(Arc::new(detector))
         }
         Err(e) => {
             tracing::warn!(
                 "NSFW detector initialization failed: {}. Service will run without NSFW detection.",
                 e
             );
-            // Create a dummy detector for now (production should fail here)
-            return Err(format!("NSFW detector required but failed to load: {}", e).into());
+            None
         }
     };
 
