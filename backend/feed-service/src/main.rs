@@ -17,6 +17,7 @@ use recommendation_service::handlers::{
 use tracing::info;
 
 use grpc_clients::{config::GrpcConfig, AuthClient, GrpcClientPool};
+use recommendation_service::middleware::JwtAuthMiddleware;
 
 async fn openapi_json(
     doc: web::Data<utoipa::openapi::OpenApi>,
@@ -305,6 +306,7 @@ async fn main() -> io::Result<()> {
             .service(semantic_search)
             .service(
                 web::scope("/api/v2/feed")
+                    .wrap(JwtAuthMiddleware)
                     .service(get_feed)
             )
     })
