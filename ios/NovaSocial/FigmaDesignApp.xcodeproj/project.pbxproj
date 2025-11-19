@@ -19,6 +19,7 @@
 		4A09C7CE82196707BAB194FB /* SocialService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0DC01C12BC58AA2D98CDC03F /* SocialService.swift */; };
 		4F5189D9ED25E0B374287848 /* CreatePostViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 943160B2DFC2AAF6CD2EEF80 /* CreatePostViewModel.swift */; };
 		5BFEC787522ED006544C8E92 /* IdentityService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E726662A13B99E2BE8109CE4 /* IdentityService.swift */; };
+		5DDB42EE9E764CED40D22FB3 /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C374FC3A50B098FA903B6A4 /* LoginView.swift */; };
 		5EC1D819A8C296643A75059B /* SearchViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = CDD027006616FE4341B54565 /* SearchViewModel.swift */; };
 		63B22A9F26DFB37DE9D67ACD /* CarouselView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB74F32C6BC54E9B7DE38BDD /* CarouselView.swift */; };
 		66EFE70500BB7EF714EAAC32 /* ContentService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FA7AA7E22A29086861F985F /* ContentService.swift */; };
@@ -39,9 +40,11 @@
 		8F09936DEAE3749EBCFAB662 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 0CEC6778F7F6BAFBBBF847B9 /* Assets.xcassets */; };
 		947975D4CFDA4B870FE1DD42 /* SimpleCarouselView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD6D59BF9871981B7FBA115D /* SimpleCarouselView.swift */; };
 		9E4619C894887F2F80288283 /* MessageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45DA960EAF1BBBBC18F81EC3 /* MessageView.swift */; };
+		A43A4C0DA07F1C2520FFDC16 /* LoginViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC2E42B390B148D70FCFC5DA /* LoginViewModel.swift */; };
 		BDC106FE62EE927E9254E802 /* NotificationModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2209DC0250249AF1C3BB7DA4 /* NotificationModels.swift */; };
 		C083A5BDD281AC1B35C99172 /* SearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE91F4052F01FE38EBE1170A /* SearchView.swift */; };
 		C227819EE09A07E77B0C448F /* AppPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 817F6537589781480741FFB5 /* AppPage.swift */; };
+		C7CB4D30BBDD32BCD9D30390 /* AuthenticationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3AF74B2A94681DE4DCF2BB9B /* AuthenticationManager.swift */; };
 		C82B6B2CD19D5A1EC755D09B /* UserService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29337E35C69E1124B0E50774 /* UserService.swift */; };
 		CB37E7011E14A06A0EBD08EB /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = CEB8BD0C8A93BBE1E9670B07 /* APIClient.swift */; };
 		CCAFF6E79E7ACB7CB46172FF /* GraphService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A242CA445BD03C224A4AAA2 /* GraphService.swift */; };
@@ -63,12 +66,14 @@
 		0DC01C12BC58AA2D98CDC03F /* SocialService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SocialService.swift; sourceTree = "<group>"; };
 		13853E573F5F9E4DAA1DFBA3 /* ThankYouModal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThankYouModal.swift; sourceTree = "<group>"; };
 		160C28E97EF8EE17C3E30A7C /* ProfileViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileViewModel.swift; sourceTree = "<group>"; };
+		1C374FC3A50B098FA903B6A4 /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = LoginView.swift; path = Features/Auth/Views/LoginView.swift; sourceTree = SOURCE_ROOT; };
 		1D3041E7FCC0ACD7F53D08BA /* FigmaDesignApp.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = FigmaDesignApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		1F2AEFDFBC28D0D641DE1964 /* .gitattributes */ = {isa = PBXFileReference; path = .gitattributes; sourceTree = "<group>"; };
 		2209DC0250249AF1C3BB7DA4 /* NotificationModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationModels.swift; sourceTree = "<group>"; };
 		29337E35C69E1124B0E50774 /* UserService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserService.swift; sourceTree = "<group>"; };
 		3458B914CACC60BDB462C58D /* ProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileView.swift; sourceTree = "<group>"; };
 		3880EF1CA343B17A09E2209E /* APIError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIError.swift; sourceTree = "<group>"; };
+		3AF74B2A94681DE4DCF2BB9B /* AuthenticationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AuthenticationManager.swift; path = Shared/Services/Auth/AuthenticationManager.swift; sourceTree = SOURCE_ROOT; };
 		3B53881EFE11477A9FE157D2 /* MediaService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaService.swift; sourceTree = "<group>"; };
 		41A955EE6EA8D06F94D11660 /* HomeViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeViewModel.swift; sourceTree = "<group>"; };
 		447A4AD653C6C047D9369F9F /* NotificationViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationViewModel.swift; sourceTree = "<group>"; };
@@ -108,6 +113,7 @@
 		E5F77721CA146200F98657F7 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		E726662A13B99E2BE8109CE4 /* IdentityService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdentityService.swift; sourceTree = "<group>"; };
 		EA1551A659F460A621C63645 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
+		EC2E42B390B148D70FCFC5DA /* LoginViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = LoginViewModel.swift; path = Features/Auth/ViewModels/LoginViewModel.swift; sourceTree = SOURCE_ROOT; };
 		F4DF07BE1A3EB9BB026D89A6 /* ChatViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatViewModel.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -437,6 +443,9 @@
 				83156329836565A2778B94AC /* NovaSocial */,
 				565E49CEA7D25E6D91A52C2B /* Shared */,
 				7C3FDB1C3B7BCF5AF8E3D483 /* Products */,
+				3AF74B2A94681DE4DCF2BB9B /* AuthenticationManager.swift */,
+				EC2E42B390B148D70FCFC5DA /* LoginViewModel.swift */,
+				1C374FC3A50B098FA903B6A4 /* LoginView.swift */,
 			);
 			sourceTree = "<group>";
 		};
@@ -689,6 +698,9 @@
 				E5A9BFF109109BA9B0D167FF /* UserModels.swift in Sources */,
 				C82B6B2CD19D5A1EC755D09B /* UserService.swift in Sources */,
 				1FD0CA3DAB6726E2D2B0A946 /* VideoScreen.swift in Sources */,
+				C7CB4D30BBDD32BCD9D30390 /* AuthenticationManager.swift in Sources */,
+				A43A4C0DA07F1C2520FFDC16 /* LoginViewModel.swift in Sources */,
+				5DDB42EE9E764CED40D22FB3 /* LoginView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
