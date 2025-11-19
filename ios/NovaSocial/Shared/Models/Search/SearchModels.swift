@@ -4,15 +4,15 @@ import Foundation
 
 /// Unified search result that can represent different types
 enum SearchResult: Identifiable {
-    case user(id: String, username: String, displayName: String, avatarUrl: String?, isVerified: Bool)
-    case post(id: String, content: String, author: String, createdAt: Date, likeCount: Int)
+    case user(id: String, username: String, displayName: String, avatarUrl: String?, isVerified: Bool, followerCount: Int)
+    case post(id: String, content: String, author: String, createdAt: Date, likeCount: Int, commentCount: Int)
     case hashtag(tag: String, postCount: Int)
 
     var id: String {
         switch self {
-        case .user(let id, _, _, _, _):
+        case .user(let id, _, _, _, _, _):
             return "user_\(id)"
-        case .post(let id, _, _, _, _):
+        case .post(let id, _, _, _, _, _):
             return "post_\(id)"
         case .hashtag(let tag, _):
             return "hashtag_\(tag)"

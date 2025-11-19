@@ -99,10 +99,6 @@ class SearchService {
 
         case .hashtags:
             return try await searchHashtags(query: query, limit: limit, offset: offset)
-
-        case .recent:
-            // Return recent searches (not actual search results)
-            return []
         }
     }
 
