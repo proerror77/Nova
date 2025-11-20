@@ -79,10 +79,10 @@ pub struct ServiceClients {
 impl Default for ServiceClients {
     fn default() -> Self {
         Self::new(
-            "http://auth-service.nova-backend.svc.cluster.local:9083",
+            "http://identity-service.nova-staging.svc.cluster.local:9083",
             // user-service removed - deprecated
-            "http://content-service.nova-backend.svc.cluster.local:9081",
-            "http://feed-service.nova-backend.svc.cluster.local:9084",
+            "http://content-service.nova-staging.svc.cluster.local:9081",
+            "http://feed-service.nova-staging.svc.cluster.local:9084",
         )
     }
 }
