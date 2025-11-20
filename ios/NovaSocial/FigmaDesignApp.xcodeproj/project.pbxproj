@@ -26,6 +26,7 @@
 		7497C0650FC47403F0170F98 /* PhotoPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C95F3DFA41E6D70BF4A53354 /* PhotoPickerView.swift */; };
 		780124131B160D8EE47456B9 /* App.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0393038DC4D72E8421D1B35 /* App.swift */; };
 		798BD538D3CE05BE08542CF8 /* DevicesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 539767459F07A98D4EFC00A8 /* DevicesView.swift */; };
+		81DBF2635C69458C97BF413D /* AliceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D61BB9ACC8B85E84B02B21DC /* AliceView.swift */; };
 		897C328B00A7B7A919E1CD8A /* API_INTEGRATION_README.md in Resources */ = {isa = PBXBuildFile; fileRef = B9C4CFAF123EE4E11450EE6E /* API_INTEGRATION_README.md */; };
 		8B53029B6B554F0C81155B40 /* ProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3458B914CACC60BDB462C58D /* ProfileView.swift */; };
 		8B8925BC9FAC9B30C397E33D /* NewPostView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55318219C3A650A6D7EC96E0 /* NewPostView.swift */; };
@@ -96,6 +97,7 @@
 		CD6D59BF9871981B7FBA115D /* SimpleCarouselView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SimpleCarouselView.swift; sourceTree = "<group>"; };
 		CEB8BD0C8A93BBE1E9670B07 /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
 		D3EAA5060C5B9890ED58A464 /* SearchService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchService.swift; sourceTree = "<group>"; };
+		D61BB9ACC8B85E84B02B21DC /* AliceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AliceView.swift; sourceTree = "<group>"; };
 		DB74F32C6BC54E9B7DE38BDD /* CarouselView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarouselView.swift; sourceTree = "<group>"; };
 		DDA5192B35945D0638208E85 /* DesignTokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignTokens.swift; sourceTree = "<group>"; };
 		E41CFF50904A2F54FD5621BF /* APIConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIConfig.swift; sourceTree = "<group>"; };
@@ -170,6 +172,7 @@
 		30188A2E994C571943EC7EDF /* Features */ = {
 			isa = PBXGroup;
 			children = (
+				8D8AB230DC69647EC22A8EB9 /* Alice */,
 				23D90C1C4206D55926A7DE18 /* Chat */,
 				C4D9377AE46FE3A69C99E0E6 /* CreatePost */,
 				E38A78AF007C03E832DC0CDA /* Home */,
@@ -358,12 +361,28 @@
 			path = Search;
 			sourceTree = "<group>";
 		};
+		8D8AB230DC69647EC22A8EB9 /* Alice */ = {
+			isa = PBXGroup;
+			children = (
+				944F1DB47089C67AD79B379A /* Views */,
+			);
+			path = Alice;
+			sourceTree = "<group>";
+		};
 		91EEF53CA9B004D13EF89FFB /* Notifications */ = {
 			isa = PBXGroup;
 			children = (
 				EB796057FC68D65358E5AF8B /* Views */,
 			);
 			path = Notifications;
+			sourceTree = "<group>";
+		};
+		944F1DB47089C67AD79B379A /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				D61BB9ACC8B85E84B02B21DC /* AliceView.swift */,
+			);
+			path = Views;
 			sourceTree = "<group>";
 		};
 		95DA8974C80C226E0EEFD27B /* Views */ = {
@@ -572,6 +591,7 @@
 				FFBE6F87D8D9D1645B5A0913 /* APIConfig.swift in Sources */,
 				F8F07FF6FE20AC20ECCB5BF2 /* APIError.swift in Sources */,
 				AB5DF317C7D5976DC7227835 /* AccountsView.swift in Sources */,
+				81DBF2635C69458C97BF413D /* AliceView.swift in Sources */,
 				780124131B160D8EE47456B9 /* App.swift in Sources */,
 				C227819EE09A07E77B0C448F /* AppPage.swift in Sources */,
 				72D49C23514EC64A3D35FF5F /* CameraScreen.swift in Sources */,

@@ -18,6 +18,9 @@ struct FigmaDesignAppApp: App {
                 case .account:
                     ProfileView(currentPage: $currentPage)
                         .transition(.identity)
+                case .alice:
+                    AliceView(currentPage: $currentPage)
+                        .transition(.identity)
                 case .setting:
                     SettingsView(currentPage: $currentPage)
                         .transition(.identity)
