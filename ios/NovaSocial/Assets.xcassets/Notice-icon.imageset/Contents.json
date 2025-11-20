@@ -1,23 +1,15 @@
 {
   "images" : [
     {
-      "filename" : "Notice.png",
-      "idiom" : "universal",
-      "scale" : "1x"
-    },
-    {
-      "filename" : "Notice@2x.png",
-      "idiom" : "universal",
-      "scale" : "2x"
-    },
-    {
-      "filename" : "Notice@3x.png",
-      "idiom" : "universal",
-      "scale" : "3x"
+      "filename" : "Notice.pdf",
+      "idiom" : "universal"
     }
   ],
   "info" : {
     "author" : "xcode",
     "version" : 1
+  },
+  "properties" : {
+    "preserves-vector-representation" : true
   }
 }
