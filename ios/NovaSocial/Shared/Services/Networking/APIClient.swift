@@ -18,6 +18,13 @@ class APIClient {
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = APIConfig.current.timeout
         config.timeoutIntervalForResource = 300
+
+        // Staging traffic must bypass any system HTTP proxies (e.g., macOS global/Charles)
+        // or ELB will reply 502 with a Proxy-Connection header before reaching ingress.
+        if APIConfig.current == .staging {
+            config.connectionProxyDictionary = [:]
+        }
+
         self.session = URLSession(configuration: config)
     }
 

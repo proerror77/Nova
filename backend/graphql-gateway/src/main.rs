@@ -247,6 +247,8 @@ async fn main() -> std::io::Result<()> {
                 web::post().to(rest_api::refresh_token),
             )
             .route("/api/v2/auth/logout", web::post().to(rest_api::logout))
+            // Feed API
+            .route("/api/v2/feed", web::get().to(rest_api::get_feed))
         // Users API temporarily disabled - user-service is deprecated
         // Will be re-implemented using identity-service + social-service
         // .route("/api/v2/users/{id}", web::get().to(rest_api::get_user))

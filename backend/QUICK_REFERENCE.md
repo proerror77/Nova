@@ -5,6 +5,7 @@
 ```
 8081  → content-service   (发布、评论、故事)
 8082  → media-service     (上传、视频、Reels)
+8088  → streaming-service (RTMP webhook)
 8083  → auth-service
 8085  → messaging-service (消息、通话、位置)
 8086  → search-service    (搜索、建议)

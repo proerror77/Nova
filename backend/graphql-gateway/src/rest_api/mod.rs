@@ -12,9 +12,11 @@
 /// gRPC Client → Microservice
 /// ```
 pub mod auth;
-// users module temporarily disabled - user-service is deprecated
+pub mod feed;
+// users module requires user-service gRPC - will be re-implemented when user-service v2 is available
 // pub mod users;
 pub mod models;
 
 pub use auth::*;
-// pub use users::*; // Disabled - user-service is deprecated
+pub use feed::*;
+// pub use users::*;

@@ -42,6 +42,10 @@ async fn rtmp_done(query: web::Query<RtmpAuthQuery>) -> HttpResponse {
     HttpResponse::Ok().finish()
 }
 
+async fn health() -> HttpResponse {
+    HttpResponse::Ok().body("ok")
+}
+
 #[actix_web::main]
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
@@ -66,6 +70,7 @@ async fn main() -> anyhow::Result<()> {
                     .route("/auth", web::post().to(rtmp_auth))
                     .route("/done", web::post().to(rtmp_done)),
             )
+            .route("/health", web::get().to(health))
     })
     .bind(&bind_addr)
     .with_context(|| format!("Failed to bind on {bind_addr}"))?

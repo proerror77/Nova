@@ -92,6 +92,30 @@ pub struct UpdateUserResponse {
 }
 
 // ============================================================================
+// Feed Models
+// ============================================================================
+
+#[derive(Debug, Serialize)]
+pub struct FeedPost {
+    pub id: String,
+    pub user_id: String,
+    pub content: String,
+    pub created_at: i64,
+    pub ranking_score: f64,
+    pub like_count: u32,
+    pub comment_count: u32,
+    pub share_count: u32,
+}
+
+#[derive(Debug, Serialize)]
+pub struct GetFeedResponse {
+    pub posts: Vec<FeedPost>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub next_cursor: Option<String>,
+    pub has_more: bool,
+}
+
+// ============================================================================
 // Error Response
 // ============================================================================
 

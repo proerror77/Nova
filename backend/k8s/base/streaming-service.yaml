@@ -32,13 +32,13 @@ spec:
               name: http
           livenessProbe:
             httpGet:
-              path: /api/v1/streams/auth
+              path: /health
               port: 8088
             initialDelaySeconds: 5
             periodSeconds: 10
           readinessProbe:
             httpGet:
-              path: /api/v1/streams/auth
+              path: /health
               port: 8088
             initialDelaySeconds: 5
             periodSeconds: 10

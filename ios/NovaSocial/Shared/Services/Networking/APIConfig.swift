@@ -12,7 +12,8 @@ enum APIEnvironment {
         case .development:
             return "http://localhost:8080"  // GraphQL Gateway for local development
         case .staging:
-            // AWS EKS staging environment - Ingress LoadBalancer URL (Updated: 2025-11-19)
+            // AWS EKS staging environment - Ingress LoadBalancer URL (GraphQL Gateway)
+            // Updated: 2025-11-20 - Use graphql-gateway Ingress (api-gateway service has no pods)
             return "http://a3326508b1e3c43239348cac7ce9ee03-1036729988.ap-northeast-1.elb.amazonaws.com"
         case .production:
             return "https://api.nova.social"
