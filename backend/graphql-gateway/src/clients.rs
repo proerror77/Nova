@@ -151,6 +151,10 @@ impl ServiceClients {
     /// Each Channel handles ~100 concurrent streams. No need for connection pools
     /// in the traditional sense. One connection per service is sufficient for
     /// most workloads.
+    ///
+    /// # TLS/mTLS Support:
+    /// Endpoints using https:// scheme will automatically use TLS.
+    /// Service discovery and cert verification happen transparently.
     fn create_channel(endpoint: &str) -> Channel {
         Endpoint::from_shared(endpoint.to_string())
             .expect("Invalid endpoint URL")
