@@ -39,7 +39,7 @@ pub struct ServerConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServiceEndpoints {
     pub auth_service: String,
-    pub user_service: String,
+    // user_service removed - service is deprecated
     pub content_service: String,
     pub messaging_service: String,
     pub notification_service: String,
@@ -106,8 +106,7 @@ impl Config {
             services: ServiceEndpoints {
                 auth_service: env::var("AUTH_SERVICE_URL")
                     .unwrap_or_else(|_| "http://auth-service:50051".to_string()),
-                user_service: env::var("USER_SERVICE_URL")
-                    .unwrap_or_else(|_| "http://user-service:50052".to_string()),
+                // user_service removed - service is deprecated
                 content_service: env::var("CONTENT_SERVICE_URL")
                     .unwrap_or_else(|_| "http://content-service:50053".to_string()),
                 messaging_service: env::var("MESSAGING_SERVICE_URL")

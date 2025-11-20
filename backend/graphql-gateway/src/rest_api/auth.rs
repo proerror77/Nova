@@ -10,7 +10,7 @@ use tracing::{error, info};
 
 use crate::clients::{
     proto::auth::{LoginRequest as GrpcLoginRequest, RegisterRequest as GrpcRegisterRequest},
-    proto::user::GetUserProfileRequest,
+    // GetUserProfileRequest removed - user-service is deprecated
     ServiceClients,
 };
 use super::models::{
@@ -38,60 +38,38 @@ pub async fn register(
         Ok(response) => {
             let auth_response = response.into_inner();
 
-            // Now get full user profile from user-service
-            let mut user_client = clients.user_client();
-            let user_request = tonic::Request::new(GetUserProfileRequest {
-                user_id: auth_response.user_id.clone(),
-            });
+            // Create basic user profile from registration data
+            let profile = UserProfile {
+                id: auth_response.user_id.clone(),
+                username: req.username.clone(),
+                email: req.email.clone(),
+                display_name: req.display_name.clone(),
+                bio: None,
+                avatar_url: None,
+                cover_url: None,
+                website: None,
+                location: None,
+                is_verified: false,
+                is_private: false,
+                follower_count: 0,
+                following_count: 0,
+                post_count: 0,
+                created_at: chrono::Utc::now().timestamp(),
+                updated_at: chrono::Utc::now().timestamp(),
+                deleted_at: None,
+            };
 
-            match user_client.get_user_profile(user_request).await {
-                Ok(user_response) => {
-                    let user = user_response.into_inner().profile.ok_or_else(|| {
-                        error!(user_id = %auth_response.user_id, "User not found after registration");
-                        actix_web::error::ErrorInternalServerError("Registration failed")
-                    })?;
+            info!(user_id = %profile.id, username = %profile.username, "User registered successfully");
 
-                    let profile = UserProfile {
-                        id: user.id,
-                        username: user.username,
-                        email: user.email,
-                        display_name: user.display_name,
-                        bio: if user.bio.is_empty() { None } else { Some(user.bio) },
-                        avatar_url: if user.avatar_url.is_empty() { None } else { Some(user.avatar_url) },
-                        cover_url: if user.cover_url.is_empty() { None } else { Some(user.cover_url) },
-                        website: if user.website.is_empty() { None } else { Some(user.website) },
-                        location: if user.location.is_empty() { None } else { Some(user.location) },
-                        is_verified: user.is_verified,
-                        is_private: user.is_private,
-                        follower_count: user.follower_count,
-                        following_count: user.following_count,
-                        post_count: user.post_count,
-                        created_at: user.created_at,
-                        updated_at: user.updated_at,
-                        deleted_at: if user.deleted_at == 0 { None } else { Some(user.deleted_at) },
-                    };
-
-                    info!(user_id = %profile.id, username = %profile.username, "User registered successfully");
-
-                    Ok(HttpResponse::Ok().json(AuthResponse {
-                        token: auth_response.token,
-                        refresh_token: if auth_response.refresh_token.is_empty() {
-                            None
-                        } else {
-                            Some(auth_response.refresh_token)
-                        },
-                        user: profile,
-                    }))
-                }
-                Err(user_status) => {
-                    error!(
-                        user_id = %auth_response.user_id,
-                        error = %user_status,
-                        "Failed to get user profile after registration"
-                    );
-                    Err(actix_web::error::ErrorInternalServerError("Failed to get user profile"))
-                }
-            }
+            Ok(HttpResponse::Ok().json(AuthResponse {
+                token: auth_response.token,
+                refresh_token: if auth_response.refresh_token.is_empty() {
+                    None
+                } else {
+                    Some(auth_response.refresh_token)
+                },
+                user: profile,
+            }))
         }
         Err(status) => {
             error!(
@@ -140,60 +118,45 @@ pub async fn login(
         Ok(response) => {
             let auth_response = response.into_inner();
 
-            // Now get full user profile from user-service
-            let mut user_client = clients.user_client();
-            let user_request = tonic::Request::new(GetUserProfileRequest {
-                user_id: auth_response.user_id.clone(),
-            });
+            // Extract email from JWT token for profile
+            // LoginResponse doesn't include user details, need to decode token
+            let email = crypto_core::jwt::get_email_from_token(&auth_response.token)
+                .unwrap_or_else(|_| String::new());
+            let username = crypto_core::jwt::get_username_from_token(&auth_response.token)
+                .unwrap_or_else(|_| email.split('@').next().unwrap_or("").to_string());
 
-            match user_client.get_user_profile(user_request).await {
-                Ok(user_response) => {
-                    let user = user_response.into_inner().profile.ok_or_else(|| {
-                        error!(user_id = %auth_response.user_id, "User not found after login");
-                        actix_web::error::ErrorInternalServerError("Login failed")
-                    })?;
+            // Create basic user profile from login response
+            let profile = UserProfile {
+                id: auth_response.user_id.clone(),
+                username: username.clone(),
+                email: email.clone(),
+                display_name: username.clone(), // Use username as default display name
+                bio: None,
+                avatar_url: None,
+                cover_url: None,
+                website: None,
+                location: None,
+                is_verified: false, // Not available in LoginResponse
+                is_private: false,
+                follower_count: 0,
+                following_count: 0,
+                post_count: 0,
+                created_at: chrono::Utc::now().timestamp(),
+                updated_at: chrono::Utc::now().timestamp(),
+                deleted_at: None,
+            };
 
-                    let profile = UserProfile {
-                        id: user.id,
-                        username: user.username,
-                        email: user.email,
-                        display_name: user.display_name,
-                        bio: if user.bio.is_empty() { None } else { Some(user.bio) },
-                        avatar_url: if user.avatar_url.is_empty() { None } else { Some(user.avatar_url) },
-                        cover_url: if user.cover_url.is_empty() { None } else { Some(user.cover_url) },
-                        website: if user.website.is_empty() { None } else { Some(user.website) },
-                        location: if user.location.is_empty() { None } else { Some(user.location) },
-                        is_verified: user.is_verified,
-                        is_private: user.is_private,
-                        follower_count: user.follower_count,
-                        following_count: user.following_count,
-                        post_count: user.post_count,
-                        created_at: user.created_at,
-                        updated_at: user.updated_at,
-                        deleted_at: if user.deleted_at == 0 { None } else { Some(user.deleted_at) },
-                    };
+            info!(user_id = %profile.id, username = %profile.username, "User logged in successfully");
 
-                    info!(user_id = %profile.id, username = %profile.username, "User logged in successfully");
-
-                    Ok(HttpResponse::Ok().json(AuthResponse {
-                        token: auth_response.token,
-                        refresh_token: if auth_response.refresh_token.is_empty() {
-                            None
-                        } else {
-                            Some(auth_response.refresh_token)
-                        },
-                        user: profile,
-                    }))
-                }
-                Err(user_status) => {
-                    error!(
-                        user_id = %auth_response.user_id,
-                        error = %user_status,
-                        "Failed to get user profile after login"
-                    );
-                    Err(actix_web::error::ErrorInternalServerError("Failed to get user profile"))
-                }
-            }
+            Ok(HttpResponse::Ok().json(AuthResponse {
+                token: auth_response.token,
+                refresh_token: if auth_response.refresh_token.is_empty() {
+                    None
+                } else {
+                    Some(auth_response.refresh_token)
+                },
+                user: profile,
+            }))
         }
         Err(status) => {
             error!(
@@ -257,56 +220,35 @@ pub async fn refresh_token(
                     actix_web::error::ErrorInternalServerError("Invalid token")
                 })?;
 
-            // Now get full user profile from user-service
-            let mut user_client = clients.user_client();
-            let user_request = tonic::Request::new(GetUserProfileRequest {
-                user_id: user_id.to_string(),
-            });
+            // Create basic user profile from token data
+            // Full profile can be fetched separately if needed via GET /api/v2/users/{id}
+            let profile = UserProfile {
+                id: user_id.to_string(),
+                username: String::new(), // Not available in refresh token
+                email: String::new(),    // Not available in refresh token
+                display_name: String::new(), // Not available in refresh token
+                bio: None,
+                avatar_url: None,
+                cover_url: None,
+                website: None,
+                location: None,
+                is_verified: false,
+                is_private: false,
+                follower_count: 0,
+                following_count: 0,
+                post_count: 0,
+                created_at: chrono::Utc::now().timestamp(),
+                updated_at: chrono::Utc::now().timestamp(),
+                deleted_at: None,
+            };
 
-            match user_client.get_user_profile(user_request).await {
-                Ok(user_response) => {
-                    let user = user_response.into_inner().profile.ok_or_else(|| {
-                        error!(user_id = %user_id, "User not found after token refresh");
-                        actix_web::error::ErrorInternalServerError("Refresh failed")
-                    })?;
+            info!(user_id = %user_id, "Token refreshed successfully");
 
-                    let profile = UserProfile {
-                        id: user.id,
-                        username: user.username,
-                        email: user.email,
-                        display_name: user.display_name,
-                        bio: if user.bio.is_empty() { None } else { Some(user.bio) },
-                        avatar_url: if user.avatar_url.is_empty() { None } else { Some(user.avatar_url) },
-                        cover_url: if user.cover_url.is_empty() { None } else { Some(user.cover_url) },
-                        website: if user.website.is_empty() { None } else { Some(user.website) },
-                        location: if user.location.is_empty() { None } else { Some(user.location) },
-                        is_verified: user.is_verified,
-                        is_private: user.is_private,
-                        follower_count: user.follower_count,
-                        following_count: user.following_count,
-                        post_count: user.post_count,
-                        created_at: user.created_at,
-                        updated_at: user.updated_at,
-                        deleted_at: if user.deleted_at == 0 { None } else { Some(user.deleted_at) },
-                    };
-
-                    info!(user_id = %profile.id, "Token refreshed successfully");
-
-                    Ok(HttpResponse::Ok().json(AuthResponse {
-                        token: auth_response.token,
-                        refresh_token: None, // RefreshTokenResponse doesn't include new refresh_token
-                        user: profile,
-                    }))
-                }
-                Err(user_status) => {
-                    error!(
-                        user_id = %user_id,
-                        error = %user_status,
-                        "Failed to get user profile after token refresh"
-                    );
-                    Err(actix_web::error::ErrorInternalServerError("Failed to get user profile"))
-                }
-            }
+            Ok(HttpResponse::Ok().json(AuthResponse {
+                token: auth_response.token,
+                refresh_token: None, // RefreshTokenResponse doesn't include new refresh_token
+                user: profile,
+            }))
         }
         Err(status) => {
             error!(error = %status, "Token refresh failed");

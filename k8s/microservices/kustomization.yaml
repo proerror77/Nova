@@ -28,6 +28,9 @@ resources:
   - graphql-gateway-serviceaccount.yaml
 
   - identity-service-deployment.yaml
+  - identity-service-service.yaml
+  - identity-service-configmap.yaml
+  - identity-service-serviceaccount.yaml
 
   - media-service-deployment.yaml
   - media-service-service.yaml

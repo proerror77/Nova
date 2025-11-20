@@ -29,6 +29,9 @@ metadata:
     # WebSocket support
     nginx.ingress.kubernetes.io/websocket-services: "graphql-gateway"
 
+    # Force HTTP/1.1 for backend communication
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
+
     # SSL/TLS (uncomment when ready)
     # cert-manager.io/cluster-issuer: "letsencrypt-prod"
     # nginx.ingress.kubernetes.io/ssl-redirect: "true"
@@ -71,6 +74,15 @@ spec:
           # Health check
           - path: /health
             pathType: Exact
+            backend:
+              service:
+                name: graphql-gateway
+                port:
+                  number: 8080
+
+          # REST API endpoints (v2)
+          - path: /api/v2
+            pathType: Prefix
             backend:
               service:
                 name: graphql-gateway

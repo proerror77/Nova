@@ -10,7 +10,8 @@ pub mod content;
 pub mod loaders;
 pub mod pagination;
 pub mod subscription;
-pub mod user;
+// user module temporarily disabled - user-service is deprecated
+// pub mod user;
 
 use async_graphql::{dataloader::DataLoader, MergedObject, Schema};
 
@@ -18,19 +19,20 @@ use crate::clients::ServiceClients;
 use crate::security::{ComplexityLimit, RequestBudget, SecurityConfig};
 
 /// Root query object (federated)
+/// user::UserQuery temporarily disabled - user-service is deprecated
 #[derive(MergedObject, Default)]
-pub struct QueryRoot(user::UserQuery, content::ContentQuery, auth::AuthQuery);
+pub struct QueryRoot(content::ContentQuery, auth::AuthQuery);
 
 /// Root mutation object (federated)
-/// Each mutation type (UserMutation, ContentMutation, AuthMutation) must:
+/// Each mutation type (ContentMutation, AuthMutation) must:
 /// 1. Implement #[Object] on their impl block
 /// 2. Have #[derive(Default)] on the struct
 /// 3. Be owned types (not references) in the MergedObject tuple
+/// user::UserMutation temporarily disabled - user-service is deprecated
 #[derive(MergedObject, Default)]
 pub struct MutationRoot(
     auth::AuthMutation,
     content::ContentMutation,
-    user::UserMutation,
 );
 
 /// GraphQL App Schema type with WebSocket subscriptions
@@ -62,10 +64,11 @@ pub fn build_schema(clients: ServiceClients) -> AppSchema {
     .data(clients)
     // ✅ P0-5: Add DataLoaders for batch loading
     // DataLoaders prevent N+1 queries by batching database requests
-    .data(DataLoader::new(
-        loaders::UserIdLoader::new(),
-        tokio::task::spawn,
-    ))
+    // UserIdLoader temporarily disabled - user-service is deprecated
+    // .data(DataLoader::new(
+    //     loaders::UserIdLoader::new(),
+    //     tokio::task::spawn,
+    // ))
     .data(DataLoader::new(
         loaders::PostIdLoader::new(),
         tokio::task::spawn,
@@ -78,10 +81,11 @@ pub fn build_schema(clients: ServiceClients) -> AppSchema {
         loaders::LikeCountLoader::new(),
         tokio::task::spawn,
     ))
-    .data(DataLoader::new(
-        loaders::FollowCountLoader::new(),
-        tokio::task::spawn,
-    ))
+    // FollowCountLoader temporarily disabled - user-service is deprecated
+    // .data(DataLoader::new(
+    //     loaders::FollowCountLoader::new(),
+    //     tokio::task::spawn,
+    // ))
     // ✅ P0-2: Security extensions
     .extension(ComplexityLimit::new(
         security_config.max_complexity,

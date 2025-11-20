@@ -13,8 +13,9 @@
 /// ```
 
 pub mod auth;
-pub mod users;
+// users module temporarily disabled - user-service is deprecated
+// pub mod users;
 pub mod models;
 
 pub use auth::*;
-pub use users::*;
+// pub use users::*; // Disabled - user-service is deprecated

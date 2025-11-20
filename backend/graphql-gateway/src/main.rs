@@ -158,7 +158,7 @@ async fn main() -> std::io::Result<()> {
     // Initialize service clients from configuration
     let clients = ServiceClients::new(
         &config.services.auth_service,
-        &config.services.user_service,
+        // user_service removed - service is deprecated
         &config.services.content_service,
         &config.services.feed_service,
     );
@@ -244,9 +244,10 @@ async fn main() -> std::io::Result<()> {
             .route("/api/v2/auth/login", web::post().to(rest_api::login))
             .route("/api/v2/auth/refresh", web::post().to(rest_api::refresh_token))
             .route("/api/v2/auth/logout", web::post().to(rest_api::logout))
-            // Users
-            .route("/api/v2/users/{id}", web::get().to(rest_api::get_user))
-            .route("/api/v2/users/{id}", web::put().to(rest_api::update_user))
+            // Users API temporarily disabled - user-service is deprecated
+            // Will be re-implemented using identity-service + social-service
+            // .route("/api/v2/users/{id}", web::get().to(rest_api::get_user))
+            // .route("/api/v2/users/{id}", web::put().to(rest_api::update_user))
     })
     .bind(&bind_addr)?
     .run()

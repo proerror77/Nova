@@ -26,9 +26,8 @@ pub mod proto {
         tonic::include_proto!("nova.identity_service.v2");
     }
 
-    pub mod user {
-        tonic::include_proto!("nova.user_service.v2");
-    }
+    // user module removed - user-service is deprecated
+    // User profile data now comes from identity-service
 
     pub mod content {
         tonic::include_proto!("nova.content_service.v2");
@@ -42,7 +41,7 @@ pub mod proto {
 use proto::auth::auth_service_client::AuthServiceClient;
 use proto::content::content_service_client::ContentServiceClient;
 use proto::feed::recommendation_service_client::RecommendationServiceClient;
-use proto::user::user_service_client::UserServiceClient;
+// UserServiceClient removed - user-service is deprecated
 
 /// Service client manager with pooled gRPC connections and circuit breaker protection
 ///
@@ -67,12 +66,12 @@ use proto::user::user_service_client::UserServiceClient;
 #[derive(Clone)]
 pub struct ServiceClients {
     auth_channel: Arc<Channel>,
-    user_channel: Arc<Channel>,
+    // user_channel removed - user-service is deprecated
     content_channel: Arc<Channel>,
     feed_channel: Arc<Channel>,
     // Circuit breakers (one per service)
     auth_cb: Arc<CircuitBreaker>,
-    user_cb: Arc<CircuitBreaker>,
+    // user_cb removed - user-service is deprecated
     content_cb: Arc<CircuitBreaker>,
     feed_cb: Arc<CircuitBreaker>,
 }
@@ -81,7 +80,7 @@ impl Default for ServiceClients {
     fn default() -> Self {
         Self::new(
             "http://auth-service.nova-backend.svc.cluster.local:9083",
-            "http://user-service.nova-backend.svc.cluster.local:9080",
+            // user-service removed - deprecated
             "http://content-service.nova-backend.svc.cluster.local:9081",
             "http://feed-service.nova-backend.svc.cluster.local:9084",
         )
@@ -93,7 +92,6 @@ impl ServiceClients {
     ///
     /// # Arguments:
     /// - `auth_endpoint`: Auth service URL (e.g., "http://auth-service:9083")
-    /// - `user_endpoint`: User service URL
     /// - `content_endpoint`: Content service URL
     /// - `feed_endpoint`: Feed/recommendation service URL
     ///
@@ -117,7 +115,6 @@ impl ServiceClients {
     /// hardcoded or validated at startup, so this is acceptable.
     pub fn new(
         auth_endpoint: &str,
-        user_endpoint: &str,
         content_endpoint: &str,
         feed_endpoint: &str,
     ) -> Self {
@@ -132,11 +129,11 @@ impl ServiceClients {
 
         Self {
             auth_channel: Arc::new(Self::create_channel(auth_endpoint)),
-            user_channel: Arc::new(Self::create_channel(user_endpoint)),
+            // user_channel removed - user-service is deprecated
             content_channel: Arc::new(Self::create_channel(content_endpoint)),
             feed_channel: Arc::new(Self::create_channel(feed_endpoint)),
             auth_cb: Arc::new(CircuitBreaker::new(cb_config.clone())),
-            user_cb: Arc::new(CircuitBreaker::new(cb_config.clone())),
+            // user_cb removed - user-service is deprecated
             content_cb: Arc::new(CircuitBreaker::new(cb_config.clone())),
             feed_cb: Arc::new(CircuitBreaker::new(cb_config)),
         }
@@ -222,43 +219,8 @@ impl ServiceClients {
             })
     }
 
-    /// Get user service client with circuit breaker protection
-    ///
-    /// # Circuit Breaker:
-    /// Use `call_user()` to wrap gRPC calls with circuit breaker protection.
-    pub fn user_client(&self) -> UserServiceClient<Channel> {
-        UserServiceClient::new((*self.user_channel).clone())
-    }
-
-    /// Execute user service call with circuit breaker protection
-    ///
-    /// # Example:
-    /// ```rust
-    /// let mut client = clients.user_client();
-    /// let result = clients.call_user(|| async move {
-    ///     client.get_user(request).await
-    /// }).await?;
-    /// ```
-    pub async fn call_user<F, Fut, T>(&self, f: F) -> Result<T, ServiceError>
-    where
-        F: FnOnce() -> Fut,
-        Fut: std::future::Future<Output = Result<tonic::Response<T>, Status>>,
-    {
-        self.user_cb
-            .call(f)
-            .await
-            .map(|response| response.into_inner())
-            .map_err(|e| match e {
-                resilience::circuit_breaker::CircuitBreakerError::Open => {
-                    ServiceError::Unavailable {
-                        service: "user-service".to_string(),
-                    }
-                }
-                resilience::circuit_breaker::CircuitBreakerError::CallFailed(msg) => {
-                    ServiceError::ConnectionError(msg)
-                }
-            })
-    }
+    // user_client() and call_user() removed - user-service is deprecated
+    // User profile data now comes from identity-service
 
     /// Get content service client with circuit breaker protection
     ///
@@ -356,7 +318,7 @@ impl ServiceClients {
     pub fn health_status(&self) -> Vec<(&'static str, CircuitState)> {
         vec![
             ("auth-service", self.auth_cb.state()),
-            ("user-service", self.user_cb.state()),
+            // user-service removed - deprecated
             ("content-service", self.content_cb.state()),
             ("feed-service", self.feed_cb.state()),
         ]
@@ -366,7 +328,7 @@ impl ServiceClients {
     pub fn get_circuit_breaker(&self, service: &str) -> Option<&CircuitBreaker> {
         match service {
             "auth" => Some(&self.auth_cb),
-            "user" => Some(&self.user_cb),
+            // "user" removed - user-service is deprecated
             "content" => Some(&self.content_cb),
             "feed" => Some(&self.feed_cb),
             _ => None,
@@ -414,7 +376,7 @@ mod tests {
 
         // Should be able to create clients without panicking
         let _auth = clients.auth_client();
-        let _user = clients.user_client();
+        // user_client() removed - user-service is deprecated
         let _content = clients.content_client();
         let _feed = clients.feed_client();
     }
@@ -434,7 +396,7 @@ mod tests {
     fn test_custom_endpoints() {
         let clients = ServiceClients::new(
             "http://custom-auth:8080",
-            "http://custom-user:8081",
+            // user endpoint removed - user-service is deprecated
             "http://custom-content:8082",
             "http://custom-feed:8083",
         );
@@ -448,7 +410,7 @@ mod tests {
     fn test_invalid_endpoint_panics() {
         let _ = ServiceClients::new(
             "not-a-url",
-            "http://user:8081",
+            // user endpoint removed - user-service is deprecated
             "http://content:8082",
             "http://feed:8083",
         );

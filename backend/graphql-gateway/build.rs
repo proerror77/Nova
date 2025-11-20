@@ -16,7 +16,7 @@ fn main() {
             &[
                 "../proto/services/common.proto",
                 "../proto/services/auth_service.proto",
-                "../proto/services/user_service.proto",
+                // user_service.proto removed - service is deprecated
                 "../proto/services/content_service.proto",
                 "../proto/services/feed_service.proto",
             ],

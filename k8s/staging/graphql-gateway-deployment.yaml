@@ -42,50 +42,51 @@ spec:
           type: RuntimeDefault
 
       # ✅ P0-5: Wait for Kafka cluster to be ready
-      initContainers:
-        - name: wait-for-kafka
-          image: busybox:1.35
-          securityContext:
-            runAsUser: 0
-            runAsNonRoot: false
-          command:
-            - sh
-            - -c
-            - |
-              echo "Waiting for Kafka cluster to be ready..."
-              for i in $(seq 1 300); do
-                if nc -z kafka-broker-0.kafka-headless.nova-staging.svc.cluster.local 9092 && \
-                   nc -z kafka-broker-1.kafka-headless.nova-staging.svc.cluster.local 9092 && \
-                   nc -z kafka-broker-2.kafka-headless.nova-staging.svc.cluster.local 9092; then
-                  echo "✓ Kafka cluster is ready"
-                  exit 0
-                fi
-                echo "Attempt $i/300 - Kafka not ready yet, retrying in 1s..."
-                sleep 1
-              done
-              echo "⚠ Warning: Kafka not ready after 5 minutes, continuing with startup..."
-              exit 0
-
-        - name: wait-for-redis
-          image: busybox:1.35
-          securityContext:
-            runAsUser: 0
-            runAsNonRoot: false
-          command:
-            - sh
-            - -c
-            - |
-              echo "Waiting for Redis to be ready..."
-              for i in $(seq 1 60); do
-                if nc -z redis.nova-media.svc.cluster.local 6379; then
-                  echo "✓ Redis is ready"
-                  exit 0
-                fi
-                echo "Attempt $i/60 - Redis not ready yet, retrying in 1s..."
-                sleep 1
-              done
-              echo "✗ FATAL: Redis not ready after 1 minute"
-              exit 1
+      # NOTE: Init containers temporarily disabled for testing (Kafka/Redis not deployed yet)
+      # initContainers:
+      #   - name: wait-for-kafka
+      #     image: busybox:1.35
+      #     securityContext:
+      #       runAsUser: 0
+      #       runAsNonRoot: false
+      #     command:
+      #       - sh
+      #       - -c
+      #       - |
+      #         echo "Waiting for Kafka cluster to be ready..."
+      #         for i in $(seq 1 300); do
+      #           if nc -z kafka-broker-0.kafka-headless.nova-staging.svc.cluster.local 9092 && \
+      #              nc -z kafka-broker-1.kafka-headless.nova-staging.svc.cluster.local 9092 && \
+      #              nc -z kafka-broker-2.kafka-headless.nova-staging.svc.cluster.local 9092; then
+      #             echo "✓ Kafka cluster is ready"
+      #             exit 0
+      #           fi
+      #           echo "Attempt $i/300 - Kafka not ready yet, retrying in 1s..."
+      #           sleep 1
+      #         done
+      #         echo "⚠ Warning: Kafka not ready after 5 minutes, continuing with startup..."
+      #         exit 0
+      #
+      #   - name: wait-for-redis
+      #     image: busybox:1.35
+      #     securityContext:
+      #       runAsUser: 0
+      #       runAsNonRoot: false
+      #     command:
+      #       - sh
+      #       - -c
+      #       - |
+      #         echo "Waiting for Redis to be ready..."
+      #         for i in $(seq 1 60); do
+      #           if nc -z redis.nova-media.svc.cluster.local 6379; then
+      #             echo "✓ Redis is ready"
+      #             exit 0
+      #           fi
+      #           echo "Attempt $i/60 - Redis not ready yet, retrying in 1s..."
+      #           sleep 1
+      #         done
+      #         echo "✗ FATAL: Redis not ready after 1 minute"
+      #         exit 1
 
       affinity:
         podAntiAffinity:
@@ -122,7 +123,7 @@ spec:
 
       containers:
         - name: graphql-gateway
-          image: nova/graphql-gateway:v0.1.0  # Update with actual image
+          image: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/graphql-gateway:latest
           imagePullPolicy: Always
 
           securityContext:
@@ -153,6 +154,10 @@ spec:
               value: "0.0.0.0"
             - name: SERVER_PORT
               value: "8080"
+
+            # Service endpoints
+            - name: AUTH_SERVICE_URL
+              value: "http://identity-service.nova-staging.svc.cluster.local:50051"
 
             # Kafka configuration
             - name: KAFKA_BROKERS
@@ -192,25 +197,25 @@ spec:
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
-                  name: graphql-gateway-secrets
-                  key: database-url
+                  name: graphql-gateway-secret
+                  key: DATABASE_URL
 
             # JWT
             - name: JWT_SECRET
               valueFrom:
                 secretKeyRef:
-                  name: graphql-gateway-secrets
-                  key: jwt-secret
+                  name: graphql-gateway-secret
+                  key: JWT_SECRET
             - name: JWT_PRIVATE_KEY_PEM
               valueFrom:
                 secretKeyRef:
-                  name: graphql-gateway-secrets
-                  key: jwt-private-key-pem
+                  name: graphql-gateway-secret
+                  key: JWT_PRIVATE_KEY_PEM
             - name: JWT_PUBLIC_KEY_PEM
               valueFrom:
                 secretKeyRef:
-                  name: graphql-gateway-secrets
-                  key: jwt-public-key-pem
+                  name: graphql-gateway-secret
+                  key: JWT_PUBLIC_KEY_PEM
 
           resources:
             requests:
