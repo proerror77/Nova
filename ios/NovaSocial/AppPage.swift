@@ -8,5 +8,11 @@ enum AppPage {
     case notification
     case message
     case account
+    case alice
     case setting
+    case profileSetting
+    case accounts
+    case devices
+    case inviteFriends
+    case myChannels
 }
