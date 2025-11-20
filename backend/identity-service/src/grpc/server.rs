@@ -131,11 +131,11 @@ impl AuthService for IdentityServiceServer {
     ) -> std::result::Result<Response<LoginResponse>, Status> {
         let req = request.into_inner();
 
-        // Find user by email
-        let user = db::users::find_by_email(&self.db, &req.email)
+        // Find user by email or username (supports both for login)
+        let user = db::users::find_by_email_or_username(&self.db, &req.email)
             .await
             .map_err(to_status)?
-            .ok_or_else(|| Status::unauthenticated("Invalid email or password"))?;
+            .ok_or_else(|| Status::unauthenticated("Invalid username or password"))?;
 
         // Check if account is locked
         if let Some(locked_until) = user.locked_until {
@@ -157,7 +157,7 @@ impl AuthService for IdentityServiceServer {
                 .await
                 .map_err(to_status)?;
 
-            return Err(Status::unauthenticated("Invalid email or password"));
+            return Err(Status::unauthenticated("Invalid username or password"));
         }
 
         // Reset failed login attempts
