@@ -1,215 +1,130 @@
 import Foundation
 
 // MARK: - Search Service
-// Handles search operations via SearchService backend (API v2)
+// Handles search operations via SearchService backend
 
 class SearchService {
     private let client = APIClient.shared
 
-    // MARK: - Request/Response Models
+    // MARK: - Search
 
-    struct SearchRequest: Codable {
-        let query: String
-        let limit: Int?
-        let offset: Int?
-    }
-
-    struct SearchUsersResponse: Codable {
-        let users: [UserSearchResult]
-        let totalCount: Int?
-        let hasMore: Bool?
-
-        enum CodingKeys: String, CodingKey {
-            case users
-            case totalCount = "total_count"
-            case hasMore = "has_more"
-        }
-    }
-
-    struct SearchPostsResponse: Codable {
-        let posts: [PostSearchResult]
-        let totalCount: Int?
-        let hasMore: Bool?
-
-        enum CodingKeys: String, CodingKey {
-            case posts
-            case totalCount = "total_count"
-            case hasMore = "has_more"
-        }
-    }
-
-    struct UserSearchResult: Codable {
-        let id: String
-        let username: String
-        let displayName: String?
-        let avatarUrl: String?
-        let isVerified: Bool?
-        let followerCount: Int?
-
-        enum CodingKeys: String, CodingKey {
-            case id
-            case username
-            case displayName = "display_name"
-            case avatarUrl = "avatar_url"
-            case isVerified = "is_verified"
-            case followerCount = "follower_count"
-        }
-    }
-
-    struct PostSearchResult: Codable {
-        let id: String
-        let content: String
-        let creatorId: String
-        let createdAt: Int64
-        let likeCount: Int?
-        let commentCount: Int?
-
-        enum CodingKeys: String, CodingKey {
-            case id
-            case content
-            case creatorId = "creator_id"
-            case createdAt = "created_at"
-            case likeCount = "like_count"
-            case commentCount = "comment_count"
-        }
-    }
-
-    // MARK: - Search Methods
-
-    /// Search across all content types (v2 API)
-    /// GET /api/v2/search?q={query}&limit={limit}&offset={offset}
+    /// Search across all content types (users, posts, hashtags)
     func searchAll(query: String, filter: SearchFilter = .all, limit: Int = 20, offset: Int = 0) async throws -> [SearchResult] {
-        guard !query.isEmpty else {
-            return []
-        }
-
-        // Apply filter
-        switch filter {
-        case .all:
-            // Search users and posts separately and combine
-            let users = try await searchUsers(query: query, limit: limit / 2, offset: offset)
-            let posts = try await searchPosts(query: query, limit: limit / 2, offset: offset)
-            return users + posts
-
-        case .users:
-            return try await searchUsers(query: query, limit: limit, offset: offset)
-
-        case .posts:
-            return try await searchPosts(query: query, limit: limit, offset: offset)
-
-        case .hashtags:
-            return try await searchHashtags(query: query, limit: limit, offset: offset)
-        }
+        // TODO: Implement gRPC call to SearchService.SearchAll
+        // Example:
+        // let request = SearchAllRequest(
+        //     query: query,
+        //     filter: filter.rawValue,
+        //     limit: limit,
+        //     offset: offset
+        // )
+        // let response: SearchAllResponse = try await client.request(endpoint: "/search/all", body: request)
+        //
+        // // Map proto results to SearchResult enum
+        // var results: [SearchResult] = []
+        // results += response.users.map { .user(/* map proto User */) }
+        // results += response.posts.map { .post(/* map proto Post */) }
+        // results += response.hashtags.map { .hashtag(/* map proto Hashtag */) }
+        // return results
+        throw APIError.notFound
     }
 
-    /// Search for users only (v2 API)
-    /// GET /api/v2/search/users?q={query}&limit={limit}&offset={offset}
+    /// Search for users only
     func searchUsers(query: String, limit: Int = 20, offset: Int = 0) async throws -> [SearchResult] {
-        guard !query.isEmpty else {
-            return []
-        }
-
-        let endpoint = "\(APIConfig.Search.searchUsers)?q=\(query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query)&limit=\(limit)&offset=\(offset)"
-
-        let response: SearchUsersResponse = try await client.request(
-            endpoint: endpoint,
-            method: "GET"
-        )
-
-        return response.users.map { user in
-            .user(
-                id: user.id,
-                username: user.username,
-                displayName: user.displayName ?? user.username,
-                avatarUrl: user.avatarUrl,
-                isVerified: user.isVerified ?? false,
-                followerCount: user.followerCount ?? 0
-            )
-        }
+        // TODO: Implement gRPC call to SearchService.SearchUsers
+        // Example:
+        // let request = SearchUsersRequest(query: query, limit: limit, offset: offset)
+        // let response: SearchUsersResponse = try await client.request(endpoint: "/search/users", body: request)
+        // return response.users.map { user in
+        //     .user(
+        //         id: user.id,
+        //         username: user.username,
+        //         displayName: user.display_name,
+        //         avatarUrl: user.avatar_url,
+        //         isVerified: user.is_verified
+        //     )
+        // }
+        throw APIError.notFound
     }
 
-    /// Search for posts only (v2 API)
-    /// GET /api/v2/search/posts?q={query}&limit={limit}&offset={offset}
+    /// Search for posts only
     func searchPosts(query: String, limit: Int = 20, offset: Int = 0) async throws -> [SearchResult] {
-        guard !query.isEmpty else {
-            return []
-        }
-
-        let endpoint = "\(APIConfig.Search.searchPosts)?q=\(query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query)&limit=\(limit)&offset=\(offset)"
-
-        let response: SearchPostsResponse = try await client.request(
-            endpoint: endpoint,
-            method: "GET"
-        )
-
-        return response.posts.map { post in
-            .post(
-                id: post.id,
-                content: post.content,
-                author: post.creatorId,
-                createdAt: Date(timeIntervalSince1970: TimeInterval(post.createdAt)),
-                likeCount: post.likeCount ?? 0,
-                commentCount: post.commentCount ?? 0
-            )
-        }
+        // TODO: Implement gRPC call to SearchService.SearchPosts
+        // Example:
+        // let request = SearchPostsRequest(query: query, limit: limit, offset: offset)
+        // let response: SearchPostsResponse = try await client.request(endpoint: "/search/posts", body: request)
+        // return response.posts.map { post in
+        //     .post(
+        //         id: post.id,
+        //         content: post.content,
+        //         author: post.creator_id,
+        //         createdAt: Date(timeIntervalSince1970: TimeInterval(post.created_at)),
+        //         likeCount: post.like_count
+        //     )
+        // }
+        throw APIError.notFound
     }
 
     /// Search for hashtags only
     func searchHashtags(query: String, limit: Int = 20, offset: Int = 0) async throws -> [SearchResult] {
-        // TODO: Implement when backend supports hashtag search
-        // GET /api/v2/search/hashtags?q={query}
-        return []
+        // TODO: Implement gRPC call to SearchService.SearchHashtags
+        // Example:
+        // let request = SearchHashtagsRequest(query: query, limit: limit, offset: offset)
+        // let response: SearchHashtagsResponse = try await client.request(endpoint: "/search/hashtags", body: request)
+        // return response.hashtags.map { hashtag in
+        //     .hashtag(tag: hashtag.tag, postCount: hashtag.post_count)
+        // }
+        throw APIError.notFound
     }
 
     // MARK: - Suggestions
 
     /// Get search suggestions for autocomplete
     func getSuggestions(query: String, limit: Int = 10) async throws -> [SearchSuggestion] {
-        // TODO: Implement when backend supports search suggestions
-        // GET /api/v2/search/suggestions?q={query}&limit={limit}
-        return []
+        // TODO: Implement gRPC call to SearchService.GetSearchSuggestions
+        // Example:
+        // let request = GetSearchSuggestionsRequest(query: query, limit: limit)
+        // let response: GetSearchSuggestionsResponse = try await client.request(endpoint: "/search/suggestions", body: request)
+        // return response.suggestions.map { suggestion in
+        //     SearchSuggestion(
+        //         id: suggestion.id,
+        //         text: suggestion.text,
+        //         type: SearchSuggestionType(rawValue: suggestion.type) ?? .recent,
+        //         count: suggestion.count
+        //     )
+        // }
+        throw APIError.notFound
     }
 
     /// Get trending topics/hashtags
     func getTrendingTopics(limit: Int = 10) async throws -> [SearchResult] {
-        // TODO: Implement when backend supports trending topics
-        // GET /api/v2/search/trending?limit={limit}
-        return []
+        // TODO: Implement gRPC call to SearchService.GetTrendingTopics
+        // Example:
+        // let request = GetTrendingTopicsRequest(limit: limit)
+        // let response: GetTrendingTopicsResponse = try await client.request(endpoint: "/search/trending", body: request)
+        // return response.topics.map { topic in
+        //     .hashtag(tag: topic.tag, postCount: topic.post_count)
+        // }
+        throw APIError.notFound
     }
 
-    // MARK: - Recent Searches (Local Storage)
+    // MARK: - Recent Searches
 
-    private let recentSearchesKey = "recentSearches"
-    private let maxRecentSearches = 20
-
-    /// Get user's recent search history (from local storage)
+    /// Get user's recent search history
     func getRecentSearches(limit: Int = 10) async throws -> [String] {
-        let searches = UserDefaults.standard.stringArray(forKey: recentSearchesKey) ?? []
-        return Array(searches.prefix(limit))
+        // TODO: Implement local storage or backend call
+        // This might be stored locally in UserDefaults or fetched from backend
+        throw APIError.notFound
     }
 
-    /// Save a search query to history (local storage)
+    /// Save a search query to history
     func saveRecentSearch(_ query: String) {
-        guard !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            return
-        }
-
-        var searches = UserDefaults.standard.stringArray(forKey: recentSearchesKey) ?? []
-
-        // Remove duplicate if exists
-        searches.removeAll { $0 == query }
-
-        // Insert at beginning
-        searches.insert(query, at: 0)
-
-        // Keep only recent searches
-        searches = Array(searches.prefix(maxRecentSearches))
-
-        UserDefaults.standard.set(searches, forKey: recentSearchesKey)
+        // TODO: Implement local storage
+        // Save to UserDefaults or send to backend
     }
 
-    /// Clear recent search history (local storage)
+    /// Clear recent search history
     func clearRecentSearches() {
-        UserDefaults.standard.removeObject(forKey: recentSearchesKey)
+        // TODO: Implement local storage clear
     }
 }
