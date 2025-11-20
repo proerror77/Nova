@@ -8,8 +8,8 @@ use tonic::transport::Server;
 use tracing::info;
 
 mod config;
-mod error;
 mod domain;
+mod error;
 mod grpc;
 mod handlers;
 mod repositories;
@@ -17,7 +17,9 @@ mod repository;
 mod services;
 
 use config::Config;
-use grpc::server_v2::{social::social_service_server::SocialServiceServer, AppState, SocialServiceImpl};
+use grpc::server_v2::{
+    social::social_service_server::SocialServiceServer, AppState, SocialServiceImpl,
+};
 use services::CounterService;
 use transactional_outbox::SqlxOutboxRepository;
 
@@ -89,8 +91,8 @@ async fn main() -> Result<()> {
     info!("✅ Database migrations completed");
 
     // Initialize Redis connection
-    let redis_client = redis::Client::open(config.redis.url.as_str())
-        .context("Failed to create Redis client")?;
+    let redis_client =
+        redis::Client::open(config.redis.url.as_str()).context("Failed to create Redis client")?;
     let redis_conn = redis::aio::ConnectionManager::new(redis_client)
         .await
         .context("Failed to connect to Redis")?;
@@ -133,7 +135,9 @@ async fn main() -> Result<()> {
     .run();
 
     join_set.spawn(async move {
-        http_server.await.map_err(|e| anyhow::anyhow!("HTTP server error: {}", e))
+        http_server
+            .await
+            .map_err(|e| anyhow::anyhow!("HTTP server error: {}", e))
     });
     info!("✅ HTTP health check server started");
 

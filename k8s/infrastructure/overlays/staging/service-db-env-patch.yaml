@@ -12,7 +12,7 @@ spec:
           valueFrom:
             secretKeyRef:
               name: nova-db-credentials
-              key: DATABASE_URL
+              key: analytics-db-url
 
 ---
 apiVersion: apps/v1
@@ -29,7 +29,7 @@ spec:
           valueFrom:
             secretKeyRef:
               name: nova-db-credentials
-              key: DATABASE_URL
+              key: notification-db-url
 
 ---
 apiVersion: apps/v1
@@ -80,7 +80,7 @@ spec:
           valueFrom:
             secretKeyRef:
               name: nova-db-credentials
-              key: DATABASE_URL
+              key: search-db-url
 
 ---
 apiVersion: apps/v1
@@ -97,7 +97,7 @@ spec:
           valueFrom:
             secretKeyRef:
               name: nova-db-credentials
-              key: DATABASE_URL
+              key: realtime-chat-db-url
 
 ---
 apiVersion: apps/v1
@@ -114,4 +114,4 @@ spec:
           valueFrom:
             secretKeyRef:
               name: nova-db-credentials
-              key: DATABASE_URL
+              key: trust-safety-db-url

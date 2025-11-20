@@ -30,10 +30,7 @@ pub struct QueryRoot(content::ContentQuery, auth::AuthQuery);
 /// 3. Be owned types (not references) in the MergedObject tuple
 /// user::UserMutation temporarily disabled - user-service is deprecated
 #[derive(MergedObject, Default)]
-pub struct MutationRoot(
-    auth::AuthMutation,
-    content::ContentMutation,
-);
+pub struct MutationRoot(auth::AuthMutation, content::ContentMutation);
 
 /// GraphQL App Schema type with WebSocket subscriptions
 pub type AppSchema = Schema<QueryRoot, MutationRoot, subscription::SubscriptionRoot>;

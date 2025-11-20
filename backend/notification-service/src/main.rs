@@ -179,10 +179,7 @@ async fn main() -> io::Result<()> {
                 },
                 Err(e) => {
                     if is_production_env {
-                        tracing::error!(
-                            "Failed to build server TLS config in production: {}",
-                            e
-                        );
+                        tracing::error!("Failed to build server TLS config in production: {}", e);
                         return;
                     }
 

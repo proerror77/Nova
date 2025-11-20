@@ -21,7 +21,6 @@
 | Original (11 Services) | Current (14 Services) | Status |
 |------------------------|----------------------|--------|
 | auth-service | **identity-service** | ✅ Replaced |
-| user-service | user-service | ✅ Active |
 | content-service | content-service | ✅ Active |
 | feed-service (with graph) | **feed-service** (graph removed) | ✅ Refactored |
 | - | **graph-service** | ✅ NEW (extracted from feed/user) |
@@ -29,7 +28,7 @@
 | media-service | media-service | ✅ Active |
 | messaging-service | **realtime-chat-service** | ✅ Replaced |
 | search-service | search-service | ✅ Active |
-| streaming-service | *(merged into media-service)* | 🗑️ Archived |
+| streaming-service | streaming-service | ✅ Active (RTMP webhooks) |
 | notification-service | notification-service | ✅ Active |
 | cdn-service | *(merged into media-service)* | 🗑️ Archived |
 | events-service | *(functionality distributed)* | 🗑️ Archived |
@@ -78,7 +77,7 @@ backend/
 │   │   ├── auth-service.yaml          # 🗑️ OUTDATED (use identity-service)
 │   │   ├── messaging-service.yaml     # 🗑️ OUTDATED (use realtime-chat-service)
 │   │   ├── cdn-service.yaml           # 🗑️ OUTDATED (merged into media-service)
-│   │   ├── streaming-service.yaml     # 🗑️ OUTDATED (merged into media-service)
+│   │   ├── streaming-service.yaml     # ✅ streaming service (RTMP webhooks)
 │   │   ├── events-service.yaml        # 🗑️ OUTDATED (distributed)
 │   │   └── ... (other outdated manifests)
 │   └── overlays/
@@ -100,10 +99,9 @@ backend/
 │   ├── auth-service/                  # → identity-service
 │   ├── cdn-service/                   # → media-service
 │   ├── messaging-service/             # → realtime-chat-service
-│   ├── streaming-service/             # → media-service
 │   └── video-service/                 # → media-service
 │
-└── Active Services (14):
+└── Active Services (15):
     ├── analytics-service/             # ✅ NEW
     ├── content-service/               # ✅ Active
     ├── feed-service/                  # ✅ Refactored (graph removed)
@@ -111,13 +109,13 @@ backend/
     ├── graphql-gateway/               # ✅ API Gateway
     ├── identity-service/              # ✅ NEW (replaces auth)
     ├── media-service/                 # ✅ Consolidated (cdn+streaming+video)
+    ├── streaming-service/             # ✅ RTMP webhooks (live ingest auth)
     ├── notification-service/          # ✅ Active
     ├── ranking-service/               # ✅ NEW
     ├── realtime-chat-service/         # ✅ NEW (replaces messaging)
     ├── search-service/                # ✅ Active
     ├── social-service/                # ✅ NEW
     ├── trust-safety-service/          # ✅ NEW
-    └── user-service/                  # ✅ Active
 ```
 
 ---
@@ -260,7 +258,7 @@ GRAPHQL_GATEWAY_PORT=8000
 - auth-service.yaml → identity-service.yaml
 - messaging-service.yaml → realtime-chat-service.yaml
 - cdn-service.yaml (merged into media-service)
-- streaming-service.yaml (merged into media-service)
+- streaming-service.yaml (active)
 - events-service.yaml (distributed)
 
 **Create (new services):**
@@ -316,7 +314,6 @@ GRAPHQL_GATEWAY_PORT=8000
 | Service | HTTP Port | gRPC Port | Primary Responsibility | Database |
 |---------|-----------|-----------|------------------------|----------|
 | **identity-service** | 8081 | 9081 | Auth, JWT, OAuth, 2FA | PostgreSQL |
-| **user-service** | 8080 | 9080 | User profiles, settings | PostgreSQL |
 | **content-service** | 8082 | 9082 | Posts, comments, likes | PostgreSQL |
 | **feed-service** | 8084 | 9084 | Personalized feeds (v2) | PostgreSQL, ClickHouse |
 | **graph-service** | 8091 | 9091 | Social graph, relationships | Neo4j |

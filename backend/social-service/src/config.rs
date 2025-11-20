@@ -96,8 +96,7 @@ impl Config {
         };
 
         let redis = RedisConfig {
-            url: std::env::var("REDIS_URL")
-                .context("REDIS_URL environment variable not set")?,
+            url: std::env::var("REDIS_URL").context("REDIS_URL environment variable not set")?,
         };
 
         let grpc = GrpcConfig {

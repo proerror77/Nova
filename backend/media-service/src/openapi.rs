@@ -42,7 +42,7 @@ impl utoipa::Modify for SecurityAddon {
                     HttpBuilder::new()
                         .scheme(HttpAuthScheme::Bearer)
                         .bearer_format("JWT")
-                        .description(Some("JWT Bearer token from user-service"))
+                        .description(Some("JWT Bearer token"))
                         .build(),
                 ),
             )

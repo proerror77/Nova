@@ -7,12 +7,12 @@ resources:
   - namespace.yaml
   - configmap.yaml
   - identity-service.yaml
-  - user-service.yaml
   - content-service.yaml
   - feed-service.yaml
   - graph-service.yaml
   - ranking-service.yaml
   - media-service.yaml
+  - streaming-service.yaml
   - realtime-chat-service.yaml
   - search-service.yaml
   - notification-service.yaml

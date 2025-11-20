@@ -6,6 +6,7 @@ members = [
     "content-service",         # Posts & Comments
     "social-service",          # Feed, Follows, Likes (NEW - merged feed)
     "media-service",           # Unified Media handling
+    "streaming-service",       # RTMP webhooks / live ingest auth
     "notification-service",    # Messages & Notifications (communication-service deleted - empty shell)
     "search-service",         # Read-only Search Projection
     "analytics-service",      # Analytics & Event Bus (Kafka) - renamed from events-service
@@ -40,7 +41,7 @@ members = [
 # - feed-service (merged into social-service) [archived]
 # - messaging-service (split into realtime-chat-service + notification-service) [archived - Phase E]
 # - video-service (merged into media-service) [archived]
-# - streaming-service (merged into media-service) [archived]
+# - streaming-service (now active for RTMP webhooks)
 # - cdn-service (merged into media-service) [archived]
 
 [workspace.package]

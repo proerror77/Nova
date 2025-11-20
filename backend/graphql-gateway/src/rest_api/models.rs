@@ -1,7 +1,6 @@
 /// REST API request/response models
 ///
 /// These models match the iOS app's expected JSON structure
-
 use serde::{Deserialize, Serialize};
 
 // ============================================================================

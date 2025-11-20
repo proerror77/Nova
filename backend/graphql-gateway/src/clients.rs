@@ -113,11 +113,7 @@ impl ServiceClients {
     /// # Panics:
     /// Panics if any endpoint URL is malformed. In production, endpoints are
     /// hardcoded or validated at startup, so this is acceptable.
-    pub fn new(
-        auth_endpoint: &str,
-        content_endpoint: &str,
-        feed_endpoint: &str,
-    ) -> Self {
+    pub fn new(auth_endpoint: &str, content_endpoint: &str, feed_endpoint: &str) -> Self {
         // Circuit breaker configuration
         let cb_config = CircuitBreakerConfig {
             failure_threshold: 5,

@@ -10,7 +10,6 @@ set -eo pipefail
 # Service configuration: name:http_port pairs
 services=(
   "auth-service:8083"
-  "user-service:8080"
   "content-service:8081"
   "feed-service:8084"
   "media-service:8082"

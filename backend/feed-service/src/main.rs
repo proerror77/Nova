@@ -87,7 +87,7 @@ async fn main() -> io::Result<()> {
             std::process::exit(1);
         }
     };
-    
+
     let jwt_private_key = match std::env::var("JWT_PRIVATE_KEY_PEM") {
         Ok(key) => key,
         Err(_) => {
@@ -97,10 +97,9 @@ async fn main() -> io::Result<()> {
         }
     };
 
-    if let Err(e) = recommendation_service::security::jwt::initialize_keys(
-        &jwt_private_key,
-        &jwt_public_key,
-    ) {
+    if let Err(e) =
+        recommendation_service::security::jwt::initialize_keys(&jwt_private_key, &jwt_public_key)
+    {
         tracing::error!("Failed to initialize JWT keys: {}", e);
         eprintln!("ERROR: Failed to initialize JWT keys: {}", e);
         std::process::exit(1);
@@ -161,7 +160,11 @@ async fn main() -> io::Result<()> {
 
     // Initialize FeedHandlerState with gRPC clients
     let feed_handler_state = web::Data::new(FeedHandlerState {
-        content_client: Arc::new(recommendation_service::grpc::clients::ContentServiceClient::from_pool(grpc_pool.clone())),
+        content_client: Arc::new(
+            recommendation_service::grpc::clients::ContentServiceClient::from_pool(
+                grpc_pool.clone(),
+            ),
+        ),
         graph_client: Arc::new(recommendation_service::grpc::clients::GraphServiceClient {
             pool: grpc_pool.clone(),
             enabled: true,
@@ -345,7 +348,7 @@ async fn main() -> io::Result<()> {
             .service(
                 web::scope("/api/v2/feed")
                     .wrap(JwtAuthMiddleware)
-                    .service(get_feed)
+                    .service(get_feed),
             )
     })
     .bind(format!("0.0.0.0:{}", config.app.port))?

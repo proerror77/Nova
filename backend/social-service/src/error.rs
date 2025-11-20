@@ -34,9 +34,7 @@ impl From<ServiceError> for tonic::Status {
         match err {
             ServiceError::InvalidInput(msg) => tonic::Status::invalid_argument(msg),
             ServiceError::NotFound(msg) => tonic::Status::not_found(msg),
-            ServiceError::Database(e) => {
-                tonic::Status::internal(format!("Database error: {}", e))
-            }
+            ServiceError::Database(e) => tonic::Status::internal(format!("Database error: {}", e)),
             ServiceError::Redis(e) => tonic::Status::internal(format!("Redis error: {}", e)),
             ServiceError::Config(msg) => tonic::Status::internal(format!("Config error: {}", msg)),
             ServiceError::Grpc(status) => status,

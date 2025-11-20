@@ -110,12 +110,12 @@ use std::sync::Arc;
 use tonic::transport::Channel;
 
 pub use feature_store::feature_store_client::FeatureStoreClient;
-/// Client types for all services
-pub use nova::identity_service::auth_service_client::AuthServiceClient;
 pub use nova::content_service::content_service_client::ContentServiceClient;
 pub use nova::events_service::events_service_client::EventsServiceClient;
 pub use nova::feed_service::recommendation_service_client::RecommendationServiceClient;
 pub use nova::graph_service::graph_service_client::GraphServiceClient;
+/// Client types for all services
+pub use nova::identity_service::auth_service_client::AuthServiceClient;
 pub use nova::media_service::media_service_client::MediaServiceClient;
 pub use nova::notification_service::notification_service_client::NotificationServiceClient;
 pub use nova::ranking_service::ranking_service_client::RankingServiceClient;

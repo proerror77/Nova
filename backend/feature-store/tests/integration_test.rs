@@ -1,8 +1,6 @@
 // Integration tests for Feature Store service
 
-use feature_store::{
-    FeatureStore, FeatureValue, GetFeaturesRequest, SetFeatureRequest,
-};
+use feature_store::{FeatureStore, FeatureValue, GetFeaturesRequest, SetFeatureRequest};
 use tonic::Request;
 
 // TODO: Add integration tests once service implementation is complete

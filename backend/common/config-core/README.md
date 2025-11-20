@@ -106,18 +106,18 @@ export NOVA_OBSERVABILITY_LOGGING_LEVEL=debug
 #### `config/config.toml` - Base configuration
 
 ```toml
-app_name = "user-service"
+app_name = "content-service"
 app_version = "1.0.0"
 environment = "development"
 
 [http]
-port = 8080
+port = 8081
 max_body_size = 10485760 # 10MB
 
 [database]
 host = "localhost"
 port = 5432
-database = "nova_users"
+database = "nova_content"
 username = "nova"
 password = "changeme"
 ssl_mode = "require"

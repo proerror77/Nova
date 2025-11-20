@@ -31,12 +31,12 @@ services:
       - vod_data:/mnt/vod
     environment:
       # Webhook URLs (called by Nginx-RTMP on events)
-      - RTMP_AUTH_URL=http://user-service:8080/api/v1/streams/auth
-      - RTMP_DONE_URL=http://user-service:8080/api/v1/streams/done
+      - RTMP_AUTH_URL=http://streaming-service:8088/api/v1/streams/auth
+      - RTMP_DONE_URL=http://streaming-service:8088/api/v1/streams/done
     networks:
       - nova-network
     depends_on:
-      - user-service
+      - streaming-service
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/stat"]
       interval: 30s
@@ -167,6 +167,30 @@ services:
       - RUST_LOG=info
     networks:
       - nova-network
+
+  # ===========================================================================
+  # Streaming Service (RTMP Webhooks)
+  # ===========================================================================
+  streaming-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.template
+      args:
+        SERVICE_NAME: streaming-service
+    image: nova-streaming-service:latest
+    container_name: nova-streaming-service
+    environment:
+      HOST: 0.0.0.0
+      PORT: 8088
+      RTMP_SHARED_SECRET: ${RTMP_SHARED_SECRET:-changeme}
+      RUST_LOG: info
+    profiles:
+      - streaming
+    ports:
+      - "8088:8088"
+    networks:
+      - nova-network
+    restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy

@@ -1,5 +1,6 @@
 pub mod cache;
 pub mod config;
+pub mod consumers;
 pub mod db;
 pub mod error;
 pub mod grpc;
@@ -8,7 +9,6 @@ pub mod jobs;
 pub mod metrics;
 pub mod middleware;
 pub mod models;
-pub mod consumers;
 pub mod security;
 pub mod services;
 pub mod utils;

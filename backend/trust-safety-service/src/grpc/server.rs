@@ -78,11 +78,11 @@ impl TrustSafetyService for TrustSafetyServiceImpl {
                             nsfw_categories.push(format!("nsfw_image:{}", image_url));
                         }
                     }
-                Err(e) => {
-                    tracing::warn!("NSFW detection failed for {}: {}", image_url, e);
-                    // Continue with other checks
+                    Err(e) => {
+                        tracing::warn!("NSFW detection failed for {}: {}", image_url, e);
+                        // Continue with other checks
+                    }
                 }
-            }
             }
         }
 

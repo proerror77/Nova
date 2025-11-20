@@ -10,7 +10,6 @@ k8s/
 │   ├── namespace.yaml              # nova-backend namespace
 │   ├── configmap.yaml              # Shared configuration
 │   ├── auth-service.yaml           # Auth service deployment + service
-│   ├── user-service.yaml           # User service deployment + service
 │   ├── content-service.yaml        # Content service deployment + service
 │   ├── feed-service.yaml           # Feed service deployment + service
 │   ├── media-service.yaml          # Media service deployment + service
@@ -100,7 +99,6 @@ kubectl rollout status deployment -n nova-backend --timeout=5m
 | Service | HTTP Port | gRPC Port |
 |---------|-----------|-----------|
 | auth-service | 8083 | 9083 |
-| user-service | 8080 | 9080 |
 | content-service | 8081 | 9081 |
 | feed-service | 8084 | 9084 |
 | media-service | 8082 | 9082 |

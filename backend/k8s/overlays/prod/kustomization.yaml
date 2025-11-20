@@ -34,13 +34,13 @@ patches:
 images:
   - name: nova-auth-service
     newTag: v1.0.0
-  - name: nova-user-service
-    newTag: v1.0.0
   - name: nova-content-service
     newTag: v1.0.0
   - name: nova-feed-service
     newTag: v1.0.0
   - name: nova-media-service
+    newTag: v1.0.0
+  - name: nova-streaming-service
     newTag: v1.0.0
   - name: nova-messaging-service
     newTag: v1.0.0

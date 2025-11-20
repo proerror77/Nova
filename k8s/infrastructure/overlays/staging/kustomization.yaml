@@ -440,15 +440,12 @@ resources:
 - content-service-configmap.yaml
 - resource-optimization-info.configmap.yaml
 - nova-clickhouse-credentials.yaml
-- clickhouse-chi.yaml
-- clickhouse-service-clusterip.yaml
-- clickhouse-service-internal.yaml
 - seed-data-job.yaml
 - sqlx-migrate-job.yaml
 - postgres-multi-db-init.yaml
 - redis-cluster-statefulset.yaml
 - kafka-zookeeper-deployment.yaml
-- clickhouse-installation.yaml
+- clickhouse-statefulset.yaml
 - neo4j-statefulset.yaml
 - proto-management.yaml
 - ../../../microservices

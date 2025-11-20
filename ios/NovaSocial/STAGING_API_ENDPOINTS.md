@@ -2,7 +2,8 @@
 
 **环境**: AWS EKS Staging
 **更新时间**: 2025-11-17
-**LoadBalancer URL**: `http://abf1c7cfd91c44c8cb038c34cc857372-567097626.ap-northeast-1.elb.amazonaws.com`
+**LoadBalancer URL**: `http://a3326508b1e3c43239348cac7ce9ee03-1036729988.ap-northeast-1.elb.amazonaws.com`
+**Host Header**: `api.nova.local`（Ingress 通过主机名路由，建议请求时附带）
 
 ---
 
@@ -43,7 +44,7 @@ PUT  /api/v2/users/{id}
 **示例请求**:
 ```bash
 curl -X POST \
-  http://abf1c7cfd91c44c8cb038c34cc857372-567097626.ap-northeast-1.elb.amazonaws.com/api/v2/auth/login \
+  http://a3326508b1e3c43239348cac7ce9ee03-1036729988.ap-northeast-1.elb.amazonaws.com/api/v2/auth/login \
   -H "Content-Type: application/json" \
   -d '{"username":"test","password":"test123"}'
 ```
@@ -62,7 +63,7 @@ GET    /api/v2/posts/bookmarks
 **示例请求**:
 ```bash
 curl -X GET \
-  http://abf1c7cfd91c44c8cb038c34cc857372-567097626.ap-northeast-1.elb.amazonaws.com/api/v2/posts/author/user123 \
+  http://a3326508b1e3c43239348cac7ce9ee03-1036729988.ap-northeast-1.elb.amazonaws.com/api/v2/posts/author/user123 \
   -H "Authorization: Bearer YOUR_TOKEN"
 ```
 
@@ -79,7 +80,7 @@ GET  /api/v2/reels
 **示例请求**:
 ```bash
 curl -X POST \
-  http://abf1c7cfd91c44c8cb038c34cc857372-567097626.ap-northeast-1.elb.amazonaws.com/api/v2/uploads/start \
+  http://a3326508b1e3c43239348cac7ce9ee03-1036729988.ap-northeast-1.elb.amazonaws.com/api/v2/uploads/start \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"filename":"video.mp4","size":1024000}'
@@ -96,7 +97,7 @@ GET  /api/v2/search/posts?q={query}
 **示例请求**:
 ```bash
 curl -X GET \
-  "http://abf1c7cfd91c44c8cb038c34cc857372-567097626.ap-northeast-1.elb.amazonaws.com/api/v2/search?q=test" \
+  "http://a3326508b1e3c43239348cac7ce9ee03-1036729988.ap-northeast-1.elb.amazonaws.com/api/v2/search?q=test" \
   -H "Authorization: Bearer YOUR_TOKEN"
 ```
 
@@ -127,7 +128,7 @@ APIConfig.current = .staging
 
 ```swift
 case .staging:
-    return "http://abf1c7cfd91c44c8cb038c34cc857372-567097626.ap-northeast-1.elb.amazonaws.com"
+    return "http://a3326508b1e3c43239348cac7ce9ee03-1036729988.ap-northeast-1.elb.amazonaws.com"
 ```
 
 ### 3. API 端点示例
@@ -160,7 +161,7 @@ APIConfig.Media.reels        // /api/v2/reels
 
 ```bash
 # Identity Service
-curl http://abf1c7cfd91c44c8cb038c34cc857372-567097626.ap-northeast-1.elb.amazonaws.com/health
+curl http://a3326508b1e3c43239348cac7ce9ee03-1036729988.ap-northeast-1.elb.amazonaws.com/health
 
 # 其他服务健康检查（需要配置 ingress 路由）
 # /api/v2/content/health
@@ -235,7 +236,7 @@ GET  /api/v2/relationships/following
 ```swift
 // 检查 APIConfig.swift 中的 baseURL
 print(APIConfig.current.baseURL)
-// 应该输出: http://abf1c7cfd91c44c8cb038c34cc857372-567097626.ap-northeast-1.elb.amazonaws.com
+// 应该输出: http://a3326508b1e3c43239348cac7ce9ee03-1036729988.ap-northeast-1.elb.amazonaws.com
 ```
 
 ### 401 Unauthorized

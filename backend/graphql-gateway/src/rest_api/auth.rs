@@ -4,17 +4,16 @@
 /// POST /api/v2/auth/login - Login user
 /// POST /api/v2/auth/refresh - Refresh access token
 /// POST /api/v2/auth/logout - Logout user
-
 use actix_web::{web, HttpResponse, Result};
 use tracing::{error, info};
 
+use super::models::{
+    AuthResponse, ErrorResponse, LoginRequest, RefreshTokenRequest, RegisterRequest, UserProfile,
+};
 use crate::clients::{
     proto::auth::{LoginRequest as GrpcLoginRequest, RegisterRequest as GrpcRegisterRequest},
     // GetUserProfileRequest removed - user-service is deprecated
     ServiceClients,
-};
-use super::models::{
-    AuthResponse, ErrorResponse, LoginRequest, RefreshTokenRequest, RegisterRequest, UserProfile,
 };
 
 /// POST /api/v2/auth/register
@@ -166,24 +165,15 @@ pub async fn login(
             );
 
             let error_response = match status.code() {
-                tonic::Code::Unauthenticated => {
-                    HttpResponse::Unauthorized().json(ErrorResponse::with_message(
-                        "Unauthorized",
-                        "Invalid username or password",
-                    ))
-                }
-                tonic::Code::NotFound => {
-                    HttpResponse::NotFound().json(ErrorResponse::with_message(
-                        "User not found",
-                        "No user with this username",
-                    ))
-                }
-                tonic::Code::PermissionDenied => {
-                    HttpResponse::Forbidden().json(ErrorResponse::with_message(
-                        "Account locked",
-                        "Account is temporarily locked",
-                    ))
-                }
+                tonic::Code::Unauthenticated => HttpResponse::Unauthorized().json(
+                    ErrorResponse::with_message("Unauthorized", "Invalid username or password"),
+                ),
+                tonic::Code::NotFound => HttpResponse::NotFound().json(
+                    ErrorResponse::with_message("User not found", "No user with this username"),
+                ),
+                tonic::Code::PermissionDenied => HttpResponse::Forbidden().json(
+                    ErrorResponse::with_message("Account locked", "Account is temporarily locked"),
+                ),
                 _ => HttpResponse::InternalServerError().json(ErrorResponse::with_message(
                     "Internal server error",
                     status.message(),
@@ -214,8 +204,8 @@ pub async fn refresh_token(
             let auth_response = response.into_inner();
 
             // Extract user_id from the new JWT token
-            let user_id = crypto_core::jwt::get_user_id_from_token(&auth_response.token)
-                .map_err(|e| {
+            let user_id =
+                crypto_core::jwt::get_user_id_from_token(&auth_response.token).map_err(|e| {
                     error!(error = %e, "Failed to extract user_id from token");
                     actix_web::error::ErrorInternalServerError("Invalid token")
                 })?;
@@ -224,8 +214,8 @@ pub async fn refresh_token(
             // Full profile can be fetched separately if needed via GET /api/v2/users/{id}
             let profile = UserProfile {
                 id: user_id.to_string(),
-                username: String::new(), // Not available in refresh token
-                email: String::new(),    // Not available in refresh token
+                username: String::new(),     // Not available in refresh token
+                email: String::new(),        // Not available in refresh token
                 display_name: String::new(), // Not available in refresh token
                 bio: None,
                 avatar_url: None,
@@ -254,12 +244,9 @@ pub async fn refresh_token(
             error!(error = %status, "Token refresh failed");
 
             let error_response = match status.code() {
-                tonic::Code::Unauthenticated => {
-                    HttpResponse::Unauthorized().json(ErrorResponse::with_message(
-                        "Unauthorized",
-                        "Invalid or expired refresh token",
-                    ))
-                }
+                tonic::Code::Unauthenticated => HttpResponse::Unauthorized().json(
+                    ErrorResponse::with_message("Unauthorized", "Invalid or expired refresh token"),
+                ),
                 _ => HttpResponse::InternalServerError().json(ErrorResponse::with_message(
                     "Internal server error",
                     status.message(),
@@ -273,9 +260,7 @@ pub async fn refresh_token(
 
 /// POST /api/v2/auth/logout
 /// Invalidate user session
-pub async fn logout(
-    _clients: web::Data<ServiceClients>,
-) -> Result<HttpResponse> {
+pub async fn logout(_clients: web::Data<ServiceClients>) -> Result<HttpResponse> {
     info!("POST /api/v2/auth/logout");
 
     // For now, just return success

@@ -22,8 +22,8 @@ COPY Cargo.toml ./
 
 # Copy all services and libs (workspace build)
 COPY messaging-service ./messaging-service
-COPY user-service ./user-service
 COPY search-service ./search-service
+COPY streaming-service ./streaming-service
 COPY libs ./libs
 
 # Build messaging-service

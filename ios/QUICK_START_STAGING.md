@@ -64,8 +64,10 @@ xcrun simctl launch booted com.nova.FigmaDesignApp
 
 ```swift
 print("Current API Base URL: \(APIConfig.current.baseURL)")
-// 应该输出: http://abf1c7cfd91c44c8cb038c34cc857372-567097626.ap-northeast-1.elb.amazonaws.com
+// 应该输出: http://a3326508b1e3c43239348cac7ce9ee03-1036729988.ap-northeast-1.elb.amazonaws.com
 ```
+
+> 提示：Ingress 按主机名路由，手动请求时请带上 `Host: api.nova.local`（App 与测试已自动设置）。
 
 ### 2. 测试健康检查
 
@@ -134,7 +136,7 @@ DELETE /api/v2/notifications/{id}      - 删除通知
 **检查**:
 ```bash
 # 1. 验证 LoadBalancer 是否可访问
-curl -I http://abf1c7cfd91c44c8cb038c34cc857372-567097626.ap-northeast-1.elb.amazonaws.com/health
+curl -I -H "Host: api.nova.local" http://a3326508b1e3c43239348cac7ce9ee03-1036729988.ap-northeast-1.elb.amazonaws.com/health
 
 # 2. 检查服务状态
 kubectl get pods -n nova-staging -l 'app in (identity-service,content-service)'
@@ -226,11 +228,12 @@ kubectl logs -f -n nova-staging -l app=identity-service
 
 ```bash
 # 从本地测试
-curl http://abf1c7cfd91c44c8cb038c34cc857372-567097626.ap-northeast-1.elb.amazonaws.com/health
+curl -H "Host: api.nova.local" http://a3326508b1e3c43239348cac7ce9ee03-1036729988.ap-northeast-1.elb.amazonaws.com/health
 
 # 测试认证端点
 curl -X POST \
-  http://abf1c7cfd91c44c8cb038c34cc857372-567097626.ap-northeast-1.elb.amazonaws.com/api/v2/auth/login \
+  http://a3326508b1e3c43239348cac7ce9ee03-1036729988.ap-northeast-1.elb.amazonaws.com/api/v2/auth/login \
+  -H "Host: api.nova.local" \
   -H "Content-Type: application/json" \
   -d '{"username":"test","password":"test123"}'
 ```

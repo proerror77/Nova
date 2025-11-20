@@ -1,8 +1,8 @@
 use actix_web::{web, App, HttpServer};
+use analytics_service::grpc::nova::events_service::v2::events_service_server::EventsServiceServer;
 use analytics_service::services::{OutboxConfig, OutboxPublisher};
 use anyhow::{Context, Result};
 use db_pool::{create_pool as create_pg_pool, DbConfig as DbPoolConfig};
-use analytics_service::grpc::nova::events_service::v2::events_service_server::EventsServiceServer;
 use std::sync::Arc;
 use tonic::transport::Server as GrpcServer;
 use tonic_health::server::health_reporter;

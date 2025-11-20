@@ -7,7 +7,9 @@ import Foundation
 class APIClient {
     static let shared = APIClient()
 
-    private let baseURL = APIConfig.current.baseURL
+    private var baseURL: String {
+        APIConfig.current.baseURL
+    }
 
     private let session: URLSession
     private var authToken: String?
@@ -41,6 +43,7 @@ class APIClient {
         body: Encodable? = nil
     ) async throws -> T {
         guard let url = URL(string: "\(baseURL)\(endpoint)") else {
+            print("❌ Invalid URL: \(baseURL)\(endpoint)")
             throw APIError.invalidURL
         }
 
@@ -60,15 +63,51 @@ class APIClient {
         if let body = body {
             do {
                 request.httpBody = try JSONEncoder().encode(body)
+
+                // 🔍 Debug logging
+                #if DEBUG
+                print("📤 === API REQUEST ===")
+                print("📤 URL: \(url.absoluteString)")
+                print("📤 Method: \(method)")
+                print("📤 Headers: \(request.allHTTPHeaderFields ?? [:])")
+                if let bodyString = String(data: request.httpBody!, encoding: .utf8) {
+                    print("📤 Body: \(bodyString)")
+                }
+                print("📤 ===================")
+                #endif
             } catch {
+                print("❌ JSON Encoding Error: \(error)")
                 throw APIError.decodingError(error)
             }
+        } else {
+            #if DEBUG
+            print("📤 === API REQUEST ===")
+            print("📤 URL: \(url.absoluteString)")
+            print("📤 Method: \(method)")
+            print("📤 Headers: \(request.allHTTPHeaderFields ?? [:])")
+            print("📤 Body: (none)")
+            print("📤 ===================")
+            #endif
         }
 
         do {
             let (data, response) = try await session.data(for: request)
 
+            // 🔍 Debug logging
+            #if DEBUG
+            print("📥 === API RESPONSE ===")
+            if let httpResponse = response as? HTTPURLResponse {
+                print("📥 Status: \(httpResponse.statusCode)")
+                print("📥 Headers: \(httpResponse.allHeaderFields)")
+            }
+            if let responseString = String(data: data, encoding: .utf8) {
+                print("📥 Body: \(responseString)")
+            }
+            print("📥 ===================")
+            #endif
+
             guard let httpResponse = response as? HTTPURLResponse else {
+                print("❌ Invalid response type")
                 throw APIError.invalidResponse
             }
 
@@ -78,19 +117,33 @@ class APIClient {
                     let decoder = JSONDecoder()
                     return try decoder.decode(T.self, from: data)
                 } catch {
+                    print("❌ JSON Decoding Error: \(error)")
                     throw APIError.decodingError(error)
                 }
             case 401:
+                print("❌ 401 Unauthorized")
                 throw APIError.unauthorized
             case 404:
+                print("❌ 404 Not Found")
                 throw APIError.notFound
             default:
                 let message = String(data: data, encoding: .utf8) ?? "Unknown error"
+                print("❌ Server Error \(httpResponse.statusCode): \(message)")
                 throw APIError.serverError(statusCode: httpResponse.statusCode, message: message)
             }
         } catch let error as APIError {
+            print("❌ APIError: \(error)")
             throw error
+        } catch let urlError as URLError {
+            print("❌ URLError: \(urlError)")
+            print("❌ URLError Code: \(urlError.code.rawValue)")
+            print("❌ URLError Description: \(urlError.localizedDescription)")
+            if let failingURL = urlError.failureURLString {
+                print("❌ Failing URL: \(failingURL)")
+            }
+            throw APIError.networkError(urlError)
         } catch {
+            print("❌ Unknown Error: \(error)")
             throw APIError.networkError(error)
         }
     }

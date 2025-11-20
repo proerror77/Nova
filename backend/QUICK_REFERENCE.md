@@ -3,7 +3,6 @@
 ## 服务端口一览表
 
 ```
-8080  → user-service      (用户资料、关系、Feed 代理)
 8081  → content-service   (发布、评论、故事)
 8082  → media-service     (上传、视频、Reels)
 8083  → auth-service
@@ -283,7 +282,7 @@ redis-cli FLUSHALL
   2. 检查Kafka Consumer lag: kafka-consumer-groups --describe --group nova-cdc-consumer-v1
 
 快速修复:
-  1. 重启CDC Consumer: 重启user-service
+  1. 重启CDC Consumer: 重启相關 CDC 消費者
   2. 触发全量重新同步(如有实现): curl -X POST /api/v1/admin/resync-clickhouse
 ```
 
@@ -328,30 +327,30 @@ cd ~/Documents/nova
 docker-compose up -d
 
 # 3. 检查服务健康
-curl http://localhost:8080/api/v1/health
 curl http://localhost:8081/api/v1/health
 curl http://localhost:8085/api/v1/health
 
 # 4. 运行Rust服务(开发模式)
-cd backend/user-service
+# 示例：任一服務
+cd backend/content-service
 cargo watch -x run
 ```
 
 ### 构建与部署
 ```bash
 # 构建Docker镜像
-docker build -t nova-user-service:latest -f Dockerfile .
+docker build -t nova-content-service:latest -f Dockerfile.template --build-arg SERVICE_NAME=content-service .
 
 # 本地运行镜像
-docker run -it --rm -p 8080:8080 nova-user-service:latest
+docker run -it --rm -p 8081:8081 nova-content-service:latest
 
 # 推送到仓库
-docker tag nova-user-service:latest myregistry/nova-user-service:latest
-docker push myregistry/nova-user-service:latest
+docker tag nova-content-service:latest myregistry/nova-content-service:latest
+docker push myregistry/nova-content-service:latest
 
 # Kubernetes部署
-kubectl apply -f k8s/user-service-deployment.yaml
-kubectl rollout status deployment/user-service
+kubectl apply -f k8s/content-service-deployment.yaml
+kubectl rollout status deployment/content-service
 ```
 
 ### 测试
