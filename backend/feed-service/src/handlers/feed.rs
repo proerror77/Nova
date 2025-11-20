@@ -10,6 +10,7 @@ use crate::grpc::clients::{ContentServiceClient, GraphServiceClient};
 use crate::middleware::jwt_auth::UserId;
 use crate::models::FeedResponse;
 use grpc_clients::nova::graph_service::v2::GetFollowingRequest;
+use grpc_clients::nova::content_service::v2::GetPostsByAuthorRequest;
 
 #[derive(Debug, Deserialize)]
 pub struct FeedQueryParams {
@@ -112,10 +113,41 @@ pub async fn get_feed(
         }));
     }
 
-    // For simplicity in this implementation, we'll return pagination-ready response
-    // In production, would fetch actual post IDs from followed users and batch load
-    let posts: Vec<Uuid> = vec![]; // Placeholder: actual implementation would fetch posts
+    // Fetch posts from each followed user and aggregate them
+    // Note: In production, would use ranking/recommendation service for ordering
+    let mut all_posts: Vec<Uuid> = vec![];
+
+    for user_id in followed_user_ids.iter() {
+        match state
+            .content_client
+            .get_posts_by_author(GetPostsByAuthorRequest {
+                author_id: user_id.clone(),
+                status: "".to_string(), // Empty string means all statuses
+                limit: limit as i32,
+                offset: offset as i32,
+            })
+            .await
+        {
+            Ok(resp) => {
+                for post in resp.posts {
+                    if let Ok(post_id) = Uuid::parse_str(&post.id) {
+                        all_posts.push(post_id);
+                    }
+                }
+            }
+            Err(e) => {
+                debug!("Failed to fetch posts from user {}: {}", user_id, e);
+                // Continue fetching other users' posts on partial failure
+            }
+        }
+    }
+
+    // Apply pagination on aggregated posts
+    let start = offset;
+    let end = (offset + limit as usize).min(all_posts.len());
+    let posts: Vec<Uuid> = all_posts[start..end].to_vec();
     let posts_count = posts.len();
+    let total_count = all_posts.len();
 
     let cursor = FeedQueryParams::encode_cursor(offset + limit as usize);
 
