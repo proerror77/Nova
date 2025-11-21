@@ -2,6 +2,7 @@
 ///
 /// GET /api/v2/feed - Get personalized feed for current user
 use actix_web::{web, HttpRequest, HttpResponse, Result};
+use awc::Client;
 use tracing::{error, info};
 
 use super::models::{ErrorResponse, FeedPost, GetFeedResponse};
@@ -17,7 +18,7 @@ use crate::clients::ServiceClients;
 ///   - algorithm: Algorithm variant - "ch", "v2", "hybrid" (default: "v2")
 pub async fn get_feed(
     _req: HttpRequest,
-    clients: web::Data<ServiceClients>,
+    _clients: web::Data<ServiceClients>,
     query: web::Query<FeedQueryParams>,
 ) -> Result<HttpResponse> {
     let user_id = query.user_id.clone();
@@ -33,81 +34,52 @@ pub async fn get_feed(
         "GET /api/v2/feed"
     );
 
-    // Call feed-service via gRPC
-    let mut feed_client = clients.feed_client();
-
-    let grpc_request = tonic::Request::new(ProtoGetFeedRequest {
-        user_id: user_id.clone(),
-        limit: limit as u32,
-        cursor,
-        algorithm,
-    });
-
-    match feed_client.get_feed(grpc_request).await {
-        Ok(response) => {
-            let grpc_response = response.into_inner();
-            let post_count = grpc_response.posts.len();
-            let next_cursor = grpc_response.next_cursor;
-            let has_more = grpc_response.has_more;
-
-            // Convert gRPC FeedPost to REST FeedPost
-            let posts = grpc_response
-                .posts
-                .into_iter()
-                .map(|post| FeedPost {
-                    id: post.id,
-                    user_id: post.user_id,
-                    content: post.content,
-                    created_at: post.created_at,
-                    ranking_score: post.ranking_score,
-                    like_count: post.like_count,
-                    comment_count: post.comment_count,
-                    share_count: post.share_count,
-                })
-                .collect();
-
-            info!(
-                user_id = %user_id,
-                post_count = post_count,
-                "Feed retrieved successfully"
-            );
-
-            Ok(HttpResponse::Ok().json(GetFeedResponse {
-                posts,
-                next_cursor: if next_cursor.is_empty() {
-                    None
-                } else {
-                    Some(next_cursor)
-                },
-                has_more,
-            }))
-        }
-        Err(status) => {
-            error!(
-                user_id = %user_id,
-                error = %status,
-                "Failed to get feed from feed-service"
-            );
-
-            let error_response = match status.code() {
-                tonic::Code::NotFound => {
-                    HttpResponse::NotFound().json(ErrorResponse::new("User not found"))
-                }
-                tonic::Code::Unauthenticated => {
-                    HttpResponse::Unauthorized().json(ErrorResponse::new("Unauthorized"))
-                }
-                tonic::Code::InvalidArgument => HttpResponse::BadRequest().json(
-                    ErrorResponse::with_message("Invalid request", status.message()),
-                ),
-                _ => HttpResponse::InternalServerError().json(ErrorResponse::with_message(
-                    "Internal server error",
-                    status.message(),
-                )),
-            };
-
-            Ok(error_response)
-        }
+    // HTTP fallback: forward to feed-service REST endpoint to bypass gRPC/TLS issues
+    let mut url = format!(
+        "http://feed-service:8084/api/v2/feed?user_id={}&limit={}",
+        user_id, limit
+    );
+    if !cursor.is_empty() {
+        url.push_str(&format!("&cursor={}", cursor));
     }
+    if !algorithm.is_empty() {
+        url.push_str(&format!("&algorithm={}", algorithm));
+    }
+
+    let client = Client::new();
+    let mut req_builder = client.get(url);
+    if let Some(auth) = _req.headers().get("Authorization") {
+        req_builder = req_builder.insert_header(("Authorization", auth.clone()));
+    }
+
+    let mut resp = match req_builder.send().await {
+        Ok(r) => r,
+        Err(e) => {
+            error!(user_id=%user_id, error=%e, "HTTP call to feed-service failed");
+            return Ok(HttpResponse::BadGateway().json(ErrorResponse::with_message(
+                "Upstream error",
+                "feed-service unreachable",
+            )));
+        }
+    };
+
+    let status = resp.status();
+    let body = match resp.body().await {
+        Ok(b) => b,
+        Err(e) => {
+            error!(user_id=%user_id, error=%e, "Failed to read response from feed-service");
+            return Ok(HttpResponse::BadGateway().json(ErrorResponse::with_message(
+                "Upstream error",
+                "Failed to read feed response",
+            )));
+        }
+    };
+
+    let mut builder = HttpResponse::build(status);
+    if let Some(ct) = resp.headers().get("Content-Type") {
+        builder.insert_header(("Content-Type", ct.clone()));
+    }
+    Ok(builder.body(body))
 }
 
 #[derive(Debug, serde::Deserialize)]

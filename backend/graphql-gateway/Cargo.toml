@@ -23,6 +23,7 @@ async-graphql-actix-web = "7.0"
 # Web framework
 actix-web = { workspace = true }
 actix-cors = "0.7"
+awc = "3.4"
 
 # gRPC clients (to call backend services)
 tonic = { workspace = true }
