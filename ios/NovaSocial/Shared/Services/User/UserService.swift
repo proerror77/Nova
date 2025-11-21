@@ -10,9 +10,30 @@ class UserService {
 
     /// Get user profile by ID
     func getUser(userId: String) async throws -> UserProfile {
-        // Use IdentityService to get user data via HTTP API
-        let identityService = IdentityService()
-        return try await identityService.getUser(userId: userId)
+        // TODO: Implement gRPC call to UserService.GetUser
+        // Example:
+        // let request = GetUserRequest(user_id: userId)
+        // let response: GetUserResponse = try await client.request(endpoint: "/user/get", body: request)
+        // return UserProfile(
+        //     id: response.user.id,
+        //     username: response.user.username,
+        //     email: response.user.email,
+        //     displayName: response.user.display_name,
+        //     bio: response.user.bio,
+        //     avatarUrl: response.user.avatar_url,
+        //     coverUrl: response.user.cover_url,
+        //     website: response.user.website,
+        //     location: response.user.location,
+        //     isVerified: response.user.is_verified,
+        //     isPrivate: response.user.is_private,
+        //     followerCount: response.user.follower_count,
+        //     followingCount: response.user.following_count,
+        //     postCount: response.user.post_count,
+        //     createdAt: response.user.created_at,
+        //     updatedAt: response.user.updated_at,
+        //     deletedAt: response.user.deleted_at
+        // )
+        throw APIError.notFound
     }
 
     /// Update user profile
@@ -25,17 +46,20 @@ class UserService {
         website: String? = nil,
         location: String? = nil
     ) async throws -> UserProfile {
-        // Use IdentityService to update user profile via HTTP API
-        let identityService = IdentityService()
-        let updates = UserProfileUpdate(
-            displayName: displayName,
-            bio: bio,
-            avatarUrl: avatarUrl,
-            coverUrl: coverUrl,
-            website: website,
-            location: location
-        )
-        return try await identityService.updateUser(userId: userId, updates: updates)
+        // TODO: Implement gRPC call to UserService.UpdateProfile
+        // Example:
+        // let request = UpdateProfileRequest(
+        //     user_id: userId,
+        //     display_name: displayName,
+        //     bio: bio,
+        //     avatar_url: avatarUrl,
+        //     cover_url: coverUrl,
+        //     website: website,
+        //     location: location
+        // )
+        // let response: UpdateProfileResponse = try await client.request(endpoint: "/user/update", body: request)
+        // return /* map proto User to UserProfile */
+        throw APIError.notFound
     }
 
     // MARK: - Settings

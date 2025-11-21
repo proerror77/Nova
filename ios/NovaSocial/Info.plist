@@ -46,7 +46,7 @@
         <string>UIInterfaceOrientationPortrait</string>
     </array>
     <key>NSCameraUsageDescription</key>
-    <string>We need access to your camera to take photos for your posts.</string>
+    <string>We need access to your camera to take photos and scan QR codes.</string>
     <key>NSPhotoLibraryUsageDescription</key>
     <string>We need access to your photo library to select photos for your posts.</string>
     <key>NSLocationWhenInUseUsageDescription</key>

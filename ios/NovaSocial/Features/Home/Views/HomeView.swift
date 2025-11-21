@@ -3,12 +3,12 @@ import SwiftUI
 struct HomeView: View {
     @Binding var currentPage: AppPage
     @Environment(\.dismiss) var dismiss
-    @StateObject private var viewModel = HomeViewModel()
     @State private var showReportView = false
     @State private var showThankYouView = false
     @State private var showNewPost = false
     @State private var showSearch = false
     @State private var showNotification = false
+    @State private var showPhotoOptions = false
 
     var body: some View {
         ZStack {
@@ -24,6 +24,11 @@ struct HomeView: View {
                     .transition(.identity)
             } else {
                 homeContent
+            }
+
+            // MARK: - 照片选项弹窗
+            if showPhotoOptions {
+                photoOptionsModal
             }
         }
         .animation(.none, value: showNotification)
@@ -73,56 +78,14 @@ struct HomeView: View {
                 // MARK: - 可滚动内容区
                 ScrollView {
                     VStack(spacing: 20) {
-                        // MARK: - 动态 Feed 内容
-                        if viewModel.isLoading && viewModel.posts.isEmpty {
-                            // 加载中状态
-                            VStack(spacing: 16) {
-                                ForEach(0..<3, id: \.self) { _ in
-                                    PostCardSkeleton()
-                                }
-                            }
-                        } else if let errorMessage = viewModel.errorMessage {
-                            // 错误状态
-                            VStack(spacing: 12) {
-                                Image(systemName: "exclamationmark.triangle")
-                                    .font(.system(size: 48))
-                                    .foregroundColor(.red.opacity(0.6))
-                                Text(errorMessage)
-                                    .font(.system(size: 14))
-                                    .foregroundColor(.gray)
-                                    .multilineTextAlignment(.center)
-                                Button("重试") {
-                                    Task {
-                                        await viewModel.loadFeed()
-                                    }
-                                }
-                                .font(.system(size: 14, weight: .medium))
-                                .foregroundColor(Color(red: 0.82, green: 0.11, blue: 0.26))
-                            }
-                            .padding(.top, 60)
-                        } else if viewModel.posts.isEmpty {
-                            // 空状态
-                            VStack(spacing: 12) {
-                                Image(systemName: "doc.text")
-                                    .font(.system(size: 48))
-                                    .foregroundColor(.gray.opacity(0.5))
-                                Text("还没有帖子")
-                                    .font(.system(size: 16))
-                                    .foregroundColor(.gray)
-                            }
-                            .padding(.top, 60)
-                        } else {
-                            // 显示真实帖子数据
-                            ForEach(viewModel.posts) { post in
-                                PostCardItem(post: post, showReportView: $showReportView)
-                            }
+                        // MARK: - 评论卡片 1
+                        CommentCardItem(imageAssetName: "post-image", showReportView: $showReportView)
 
-                            // 加载更多指示器
-                            if viewModel.isLoadingMore {
-                                ProgressView()
-                                    .padding()
-                            }
-                        }
+                        // MARK: - 评论卡片 2
+                        CommentCardItem(imageAssetName: "post-image-2", showReportView: $showReportView)
+
+                        // MARK: - 评论卡片 3 (特殊版本)
+                        CommentCardItem(hasExtraField: true, imageAssetName: "post-image-3", showReportView: $showReportView)
 
                         // MARK: - 标题部分
                         VStack(spacing: 8) {
@@ -256,7 +219,7 @@ struct HomeView: View {
                     }
 
                     // New Post
-                    NewPostButtonComponent(showNewPost: $showNewPost)
+                    NewPostButtonComponent(showNewPost: $showPhotoOptions)
 
                     // Alice
                     VStack(spacing: -12) {
@@ -268,6 +231,9 @@ struct HomeView: View {
                             .font(.system(size: 9))
                     }
                     .frame(maxWidth: .infinity)
+                    .onTapGesture {
+                        currentPage = .alice
+                    }
 
                     // Account
                     VStack(spacing: 4) {
@@ -291,165 +257,111 @@ struct HomeView: View {
                 .offset(y: 35)
                 }
             }
-            .onAppear {
-                // 首次加载 feed 数据
-                if viewModel.posts.isEmpty && !viewModel.isLoading {
-                    Task {
-                        await viewModel.loadFeed()
+        }
+    }
+
+    // MARK: - 照片选项弹窗
+    private var photoOptionsModal: some View {
+        ZStack {
+            // 半透明背景遮罩
+            Color.black.opacity(0.4)
+                .ignoresSafeArea()
+                .onTapGesture {
+                    showPhotoOptions = false
+                }
+
+            // 弹窗内容
+            VStack {
+                Spacer()
+
+                ZStack() {
+                    Rectangle()
+                        .foregroundColor(.clear)
+                        .frame(width: 375, height: 270)
+                        .background(.white)
+                        .cornerRadius(11)
+                        .offset(x: 0, y: 0)
+                    Rectangle()
+                        .foregroundColor(.clear)
+                        .frame(width: 56, height: 7)
+                        .background(Color(red: 0.82, green: 0.11, blue: 0.26))
+                        .cornerRadius(3.50)
+                        .offset(x: -0.50, y: -120.50)
+
+                    // Choose Photo
+                    Button(action: {
+                        // 选择照片操作
+                        showPhotoOptions = false
+                    }) {
+                        Text("Choose Photo")
+                            .font(Font.custom("Helvetica Neue", size: 18).weight(.medium))
+                            .foregroundColor(Color(red: 0.18, green: 0.18, blue: 0.18))
                     }
-                }
-            }
-            .refreshable {
-                // 下拉刷新
-                await viewModel.refreshFeed()
-            }
-        }
-    }
-}
+                    .offset(x: 0, y: -79)
 
-// MARK: - 帖子卡片组件
-struct PostCardItem: View {
-    let post: Post
-    @Binding var showReportView: Bool
+                    // Take Photo
+                    Button(action: {
+                        // 拍照操作
+                        showPhotoOptions = false
+                    }) {
+                        Text("Take Photo")
+                            .font(Font.custom("Helvetica Neue", size: 18).weight(.medium))
+                            .foregroundColor(Color(red: 0.18, green: 0.18, blue: 0.18))
+                    }
+                    .offset(x: 0.50, y: -21)
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            // MARK: - 用户信息头
-            HStack(spacing: 10) {
-                Circle()
-                    .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
-                    .frame(width: 40, height: 40)
+                    // Generate image
+                    Button(action: {
+                        // 生成图片操作
+                        showPhotoOptions = false
+                    }) {
+                        Text("Generate image")
+                            .font(Font.custom("Helvetica Neue", size: 18).weight(.medium))
+                            .foregroundColor(Color(red: 0.18, green: 0.18, blue: 0.18))
+                    }
+                    .offset(x: 0, y: 37)
 
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("User \(post.creatorId.prefix(8))")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(.black)
+                    // Cancel
+                    Button(action: {
+                        showPhotoOptions = false
+                    }) {
+                        Text("Cancel")
+                            .font(Font.custom("Helvetica Neue", size: 18).weight(.medium))
+                            .lineSpacing(20)
+                            .foregroundColor(.black)
+                    }
+                    .offset(x: -0.50, y: 105)
 
-                    Text(timeAgo(from: post.createdAt))
-                        .font(.system(size: 11))
-                        .foregroundColor(Color(red: 0.32, green: 0.32, blue: 0.32))
-                }
-
-                Spacer()
-
-                Button(action: { showReportView = true }) {
-                    Image(systemName: "ellipsis")
-                        .foregroundColor(.black)
-                        .font(.system(size: 14))
-                }
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
-
-            // MARK: - 内容
-            Text(post.content)
-                .font(.system(size: 14))
-                .foregroundColor(.black)
-                .padding(.horizontal, 12)
-                .padding(.bottom, 12)
-                .lineLimit(10)
-
-            // MARK: - 交互按钮
-            HStack(spacing: 16) {
-                HStack(spacing: 6) {
-                    Image(systemName: "arrowtriangle.up.fill")
-                        .font(.system(size: 10))
-                        .foregroundColor(.black)
-                    Text("0")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundColor(.black)
-                }
-
-                HStack(spacing: 6) {
-                    Image(systemName: "arrowtriangle.down.fill")
-                        .font(.system(size: 10))
-                        .foregroundColor(.black)
-                    Text("0")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundColor(.black)
-                }
-
-                HStack(spacing: 6) {
-                    Image(systemName: "bubble.right")
-                        .font(.system(size: 10))
-                        .foregroundColor(.black)
-                    Text("0")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundColor(.black)
-                }
-
-                HStack(spacing: 6) {
-                    Image(systemName: "square.and.arrow.up")
-                        .font(.system(size: 10))
-                        .foregroundColor(.black)
-                    Text("Share")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundColor(.black)
-                }
-
-                Spacer()
-
-                Image(systemName: "bookmark")
-                    .font(.system(size: 12))
-                    .foregroundColor(.black)
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-        }
-        .background(Color.white)
-        .cornerRadius(12)
-    }
-
-    private func timeAgo(from timestamp: Int64) -> String {
-        let date = Date(timeIntervalSince1970: TimeInterval(timestamp))
-        let seconds = Date().timeIntervalSince(date)
-
-        if seconds < 60 {
-            return "刚刚"
-        } else if seconds < 3600 {
-            return "\(Int(seconds / 60))分钟前"
-        } else if seconds < 86400 {
-            return "\(Int(seconds / 3600))小时前"
-        } else {
-            return "\(Int(seconds / 86400))天前"
-        }
-    }
-}
-
-// MARK: - 加载骨架屏
-struct PostCardSkeleton: View {
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 10) {
-                Circle()
-                    .fill(Color.gray.opacity(0.3))
-                    .frame(width: 40, height: 40)
-
-                VStack(alignment: .leading, spacing: 4) {
+                    // 分隔线
                     Rectangle()
-                        .fill(Color.gray.opacity(0.3))
-                        .frame(width: 100, height: 12)
+                        .foregroundColor(.clear)
+                        .frame(width: 375, height: 0)
+                        .overlay(
+                            Rectangle()
+                                .stroke(Color(red: 0.93, green: 0.93, blue: 0.93), lineWidth: 3)
+                        )
+                        .offset(x: 0, y: 75)
                     Rectangle()
-                        .fill(Color.gray.opacity(0.3))
-                        .frame(width: 60, height: 10)
-                }
-            }
-
-            Rectangle()
-                .fill(Color.gray.opacity(0.3))
-                .frame(height: 60)
-
-            HStack(spacing: 16) {
-                ForEach(0..<4, id: \.self) { _ in
+                        .foregroundColor(.clear)
+                        .frame(width: 375, height: 0)
+                        .overlay(
+                            Rectangle()
+                                .stroke(Color(red: 0.77, green: 0.77, blue: 0.77), lineWidth: 0.20)
+                        )
+                        .offset(x: 0, y: -50)
                     Rectangle()
-                        .fill(Color.gray.opacity(0.3))
-                        .frame(width: 40, height: 20)
+                        .foregroundColor(.clear)
+                        .frame(width: 375, height: 0)
+                        .overlay(
+                            Rectangle()
+                                .stroke(Color(red: 0.77, green: 0.77, blue: 0.77), lineWidth: 0.20)
+                        )
+                        .offset(x: 0, y: 8)
                 }
+                .frame(width: 375, height: 270)
+                .padding(.bottom, 50)
             }
         }
-        .padding(12)
-        .background(Color.white)
-        .cornerRadius(12)
     }
 }
 
