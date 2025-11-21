@@ -14,11 +14,9 @@
 		28DB49853F12862488ED815C /* SearchModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09440F16B1285584BC291E21 /* SearchModels.swift */; };
 		29C1101849EFBA03D41D8D53 /* ProfileView.swift.backup in Resources */ = {isa = PBXBuildFile; fileRef = 23217D4428E93D1A447D9CD0 /* ProfileView.swift.backup */; };
 		30D1CB05B4B8E0DF2394DA20 /* MediaService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B53881EFE11477A9FE157D2 /* MediaService.swift */; };
-		31CB494331A5F8808DEDC733 /* STAGING_API_ENDPOINTS.md in Resources */ = {isa = PBXBuildFile; fileRef = D56F8F9727D189B411C81341 /* STAGING_API_ENDPOINTS.md */; };
 		33A5FB652C0009D96FB844A5 /* CommunicationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4665602C144B266807588223 /* CommunicationService.swift */; };
 		3DB7A7D8B8AABE2D2B5E9F30 /* ProfileSettingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA030D4D06E717B5C40967BE /* ProfileSettingView.swift */; };
 		3F9AF5D38B3BE095A987F3B4 /* NotificationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E15BEB981BECF002DACF86E /* NotificationView.swift */; };
-		4241DC02681C22A1CA1BE53D /* StagingE2ETests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9CD2E1D22FC944EDED3211E /* StagingE2ETests.swift */; };
 		45D7CF62B70956001C70B101 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA1551A659F460A621C63645 /* HomeView.swift */; };
 		4A09C7CE82196707BAB194FB /* SocialService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0DC01C12BC58AA2D98CDC03F /* SocialService.swift */; };
 		5BFEC787522ED006544C8E92 /* IdentityService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E726662A13B99E2BE8109CE4 /* IdentityService.swift */; };
@@ -61,16 +59,6 @@
 		FFBE6F87D8D9D1645B5A0913 /* APIConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = E41CFF50904A2F54FD5621BF /* APIConfig.swift */; };
 /* End PBXBuildFile section */
 
-/* Begin PBXContainerItemProxy section */
-		6EC9D9E252BB90230DE028F8 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = 5E408F8D0DDC235DCAE790E7 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = ACADFBFE15FADF5A1AF04334;
-			remoteInfo = FigmaDesignApp;
-		};
-/* End PBXContainerItemProxy section */
-
 /* Begin PBXFileReference section */
 		09440F16B1285584BC291E21 /* SearchModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchModels.swift; sourceTree = "<group>"; };
 		0CEC6778F7F6BAFBBBF847B9 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -108,7 +96,6 @@
 		B0393038DC4D72E8421D1B35 /* App.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App.swift; sourceTree = "<group>"; };
 		B4B2243943DAE524DAA9499B /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
 		B9C4CFAF123EE4E11450EE6E /* API_INTEGRATION_README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = API_INTEGRATION_README.md; sourceTree = "<group>"; };
-		BDC91356A3E4DD73608CF4D7 /* FigmaDesignAppTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = FigmaDesignAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		BE91F4052F01FE38EBE1170A /* SearchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchView.swift; sourceTree = "<group>"; };
 		C932A10966CC60CB5210880E /* ICONS_MAPPING.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = ICONS_MAPPING.md; sourceTree = "<group>"; };
 		CA030D4D06E717B5C40967BE /* ProfileSettingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileSettingView.swift; sourceTree = "<group>"; };
@@ -117,9 +104,7 @@
 		CD6D59BF9871981B7FBA115D /* SimpleCarouselView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SimpleCarouselView.swift; sourceTree = "<group>"; };
 		CEB8BD0C8A93BBE1E9670B07 /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
 		D3EAA5060C5B9890ED58A464 /* SearchService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchService.swift; sourceTree = "<group>"; };
-		D56F8F9727D189B411C81341 /* STAGING_API_ENDPOINTS.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = STAGING_API_ENDPOINTS.md; sourceTree = "<group>"; };
 		D61BB9ACC8B85E84B02B21DC /* AliceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AliceView.swift; sourceTree = "<group>"; };
-		D9CD2E1D22FC944EDED3211E /* StagingE2ETests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StagingE2ETests.swift; sourceTree = "<group>"; };
 		DB6BA9F5A2B38332ACB7A915 /* UserProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserProfileView.swift; sourceTree = "<group>"; };
 		DB74F32C6BC54E9B7DE38BDD /* CarouselView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarouselView.swift; sourceTree = "<group>"; };
 		DDA5192B35945D0638208E85 /* DesignTokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignTokens.swift; sourceTree = "<group>"; };
@@ -226,14 +211,6 @@
 				6E13DC989B6E2ECA5F3CCD28 /* Settings */,
 			);
 			path = Features;
-			sourceTree = "<group>";
-		};
-		39CA375BAE7ECBF4E0FA4D3E /* Tests */ = {
-			isa = PBXGroup;
-			children = (
-				D9CD2E1D22FC944EDED3211E /* StagingE2ETests.swift */,
-			);
-			path = Tests;
 			sourceTree = "<group>";
 		};
 		3C49A4E1BCFEFAAE467FDA26 /* Views */ = {
@@ -365,7 +342,6 @@
 			isa = PBXGroup;
 			children = (
 				1D3041E7FCC0ACD7F53D08BA /* FigmaDesignApp.app */,
-				BDC91356A3E4DD73608CF4D7 /* FigmaDesignAppTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -416,7 +392,6 @@
 				817F6537589781480741FFB5 /* AppPage.swift */,
 				0CEC6778F7F6BAFBBBF847B9 /* Assets.xcassets */,
 				C932A10966CC60CB5210880E /* ICONS_MAPPING.md */,
-				D56F8F9727D189B411C81341 /* STAGING_API_ENDPOINTS.md */,
 				30188A2E994C571943EC7EDF /* Features */,
 				565E49CEA7D25E6D91A52C2B /* Shared */,
 			);
@@ -478,7 +453,6 @@
 				30188A2E994C571943EC7EDF /* Features */,
 				83156329836565A2778B94AC /* NovaSocial */,
 				565E49CEA7D25E6D91A52C2B /* Shared */,
-				39CA375BAE7ECBF4E0FA4D3E /* Tests */,
 				7C3FDB1C3B7BCF5AF8E3D483 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -612,27 +586,16 @@
 			path = Views;
 			sourceTree = "<group>";
 		};
+		"TEMP_0A8860A1-6899-444E-909B-634D463A8851" /* Media */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = Media;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		4B0EAE62796AF1581464E331 /* FigmaDesignAppTests */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = 9619CA605345D12EB51F70AD /* Build configuration list for PBXNativeTarget "FigmaDesignAppTests" */;
-			buildPhases = (
-				B57C409477036CFBB4913BDA /* Sources */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-				4B05BB4FFD5CE96A26B4297E /* PBXTargetDependency */,
-			);
-			name = FigmaDesignAppTests;
-			packageProductDependencies = (
-			);
-			productName = FigmaDesignAppTests;
-			productReference = BDC91356A3E4DD73608CF4D7 /* FigmaDesignAppTests.xctest */;
-			productType = "com.apple.product-type.bundle.unit-test";
-		};
 		ACADFBFE15FADF5A1AF04334 /* FigmaDesignApp */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = F5808A3E8D4D395DBE49C1D7 /* Build configuration list for PBXNativeTarget "FigmaDesignApp" */;
@@ -660,9 +623,6 @@
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
-					4B0EAE62796AF1581464E331 = {
-						DevelopmentTeam = "";
-					};
 					ACADFBFE15FADF5A1AF04334 = {
 						ProvisioningStyle = Manual;
 					};
@@ -683,7 +643,6 @@
 			projectRoot = "";
 			targets = (
 				ACADFBFE15FADF5A1AF04334 /* FigmaDesignApp */,
-				4B0EAE62796AF1581464E331 /* FigmaDesignAppTests */,
 			);
 		};
 /* End PBXProject section */
@@ -697,7 +656,6 @@
 				8F09936DEAE3749EBCFAB662 /* Assets.xcassets in Resources */,
 				DA25034A61BE32AED01A9B16 /* ICONS_MAPPING.md in Resources */,
 				29C1101849EFBA03D41D8D53 /* ProfileView.swift.backup in Resources */,
-				31CB494331A5F8808DEDC733 /* STAGING_API_ENDPOINTS.md in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -757,23 +715,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		B57C409477036CFBB4913BDA /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				4241DC02681C22A1CA1BE53D /* StagingE2ETests.swift in Sources */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 /* End PBXSourcesBuildPhase section */
-
-/* Begin PBXTargetDependency section */
-		4B05BB4FFD5CE96A26B4297E /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = ACADFBFE15FADF5A1AF04334 /* FigmaDesignApp */;
-			targetProxy = 6EC9D9E252BB90230DE028F8 /* PBXContainerItemProxy */;
-		};
-/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		447C4692A7535B7D745B4C8A /* Release */ = {
@@ -793,26 +735,6 @@
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 5.9;
 				TARGETED_DEVICE_FAMILY = 1;
-			};
-			name = Release;
-		};
-		4D8F6A4762E9AA27E9E6BB4F /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				BUNDLE_LOADER = "$(TEST_HOST)";
-				CODE_SIGNING_ALLOWED = NO;
-				CODE_SIGNING_REQUIRED = NO;
-				DEVELOPMENT_TEAM = "";
-				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-					"@loader_path/Frameworks",
-				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.bruce.figmadesignappTests;
-				SDKROOT = iphoneos;
-				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/FigmaDesignApp.app/FigmaDesignApp";
 			};
 			name = Release;
 		};
@@ -893,26 +815,6 @@
 			};
 			name = Release;
 		};
-		C7E98EF61DE35E0A2893AB65 /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				BUNDLE_LOADER = "$(TEST_HOST)";
-				CODE_SIGNING_ALLOWED = NO;
-				CODE_SIGNING_REQUIRED = NO;
-				DEVELOPMENT_TEAM = "";
-				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-					"@loader_path/Frameworks",
-				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.bruce.figmadesignappTests;
-				SDKROOT = iphoneos;
-				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/FigmaDesignApp.app/FigmaDesignApp";
-			};
-			name = Debug;
-		};
 		F31A58D129DFDFC4A85E6C4D /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -985,15 +887,6 @@
 			buildConfigurations = (
 				F31A58D129DFDFC4A85E6C4D /* Debug */,
 				915DCC20492ADAF2DAD48195 /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Debug;
-		};
-		9619CA605345D12EB51F70AD /* Build configuration list for PBXNativeTarget "FigmaDesignAppTests" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				C7E98EF61DE35E0A2893AB65 /* Debug */,
-				4D8F6A4762E9AA27E9E6BB4F /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
