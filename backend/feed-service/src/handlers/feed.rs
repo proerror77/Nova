@@ -2,15 +2,14 @@ use actix_web::{get, web, HttpMessage, HttpRequest, HttpResponse};
 use base64::{engine::general_purpose, Engine as _};
 use serde::Deserialize;
 use std::sync::Arc;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 use uuid::Uuid;
 
 use crate::error::{AppError, Result};
-use crate::grpc::clients::{ContentServiceClient, GraphServiceClient};
+use crate::grpc::clients::RankingServiceClient;
 use crate::middleware::jwt_auth::UserId;
 use crate::models::FeedResponse;
-use grpc_clients::nova::graph_service::v2::GetFollowingRequest;
-use grpc_clients::nova::content_service::v2::GetPostsByAuthorRequest;
+use grpc_clients::nova::ranking_service::v1::RankFeedRequest;
 
 #[derive(Debug, Deserialize)]
 pub struct FeedQueryParams {
@@ -52,8 +51,7 @@ impl FeedQueryParams {
 }
 
 pub struct FeedHandlerState {
-    pub content_client: Arc<ContentServiceClient>,
-    pub graph_client: Arc<GraphServiceClient>,
+    pub ranking_client: Arc<RankingServiceClient<tonic::transport::Channel>>,
 }
 
 #[get("")]
@@ -82,95 +80,50 @@ pub async fn get_feed(
         user_id, query.algo, limit, offset
     );
 
-    // Step 1: Get user's following list via graph-service gRPC
-    let following_resp = state
-        .graph_client
-        .pool
-        .graph()
-        .get_following(GetFollowingRequest {
-            user_id: user_id.to_string(),
-            limit: 1000,
-            offset: 0,
-        })
-        .await
-        .map_err(|e| AppError::Internal(format!("Failed to fetch following list: {}", e)))?
-        .into_inner();
+    // Delegate recall + ranking to ranking-service
+    let mut ranking_client = (*state.ranking_client).clone();
+    let ranking_req = RankFeedRequest {
+        user_id: user_id.to_string(),
+        limit: limit as i32,
+        recall_config: None,
+    };
 
-    // Step 2: Get posts from followed users via batch gRPC call
-    let followed_user_ids: Vec<String> = following_resp
-        .user_ids
-        .into_iter()
-        .take(100) // Limit to prevent huge batch requests
-        .collect();
+    let resp = match ranking_client.rank_feed(ranking_req).await {
+        Ok(r) => r.into_inner(),
+        Err(err) => {
+            warn!(
+                "Ranking-service unavailable for user {}: {}. Returning empty feed.",
+                user_id, err
+            );
+            return Ok(HttpResponse::Ok().json(FeedResponse {
+                posts: vec![],
+                cursor: None,
+                has_more: false,
+                total_count: 0,
+            }));
+        }
+    };
 
-    if followed_user_ids.is_empty() {
-        // User doesn't follow anyone, return empty feed
-        return Ok(HttpResponse::Ok().json(FeedResponse {
-            posts: vec![],
-            cursor: None,
-            has_more: false,
-            total_count: 0,
-        }));
-    }
-
-    // Fetch posts from followed users and respect pagination (offset/cursor)
-    // Note: For now we do a simple round-robin scan; ranking-service can be plugged in later.
     let mut posts: Vec<Uuid> = Vec::new();
-    let mut skipped = offset; // apply cursor across aggregated stream
-    let mut remaining = limit as usize;
-
-    for user_id in followed_user_ids.iter() {
-        if remaining == 0 {
-            break;
-        }
-
-        match state
-            .content_client
-            .get_posts_by_author(GetPostsByAuthorRequest {
-                author_id: user_id.clone(),
-                status: "published".to_string(),
-                limit: remaining as i32, // bound fetch to what's still needed
-                offset: 0,
-            })
-            .await
-        {
-            Ok(resp) => {
-                for post in resp.posts {
-                    if remaining == 0 {
-                        break;
-                    }
-                    if skipped > 0 {
-                        skipped -= 1;
-                        continue;
-                    }
-                    if let Ok(post_id) = Uuid::parse_str(&post.id) {
-                        posts.push(post_id);
-                        remaining -= 1;
-                    }
-                }
-            }
-            Err(e) => {
-                debug!("Failed to fetch posts from user {}: {}", user_id, e);
-                // Continue fetching other users' posts on partial failure
-            }
+    for ranked in resp.posts.iter().skip(offset).take(limit as usize) {
+        if let Ok(id) = Uuid::parse_str(&ranked.post_id) {
+            posts.push(id);
         }
     }
 
-    let posts_count = posts.len();
-    let total_count = offset + posts_count; // best-effort; exact total would need a count query
-    let has_more = remaining == 0;
-
+    let total_count = resp.posts.len();
+    let has_more = (offset as usize + posts.len()) < total_count;
     let cursor = if has_more {
-        Some(FeedQueryParams::encode_cursor(offset + posts_count))
+        Some(FeedQueryParams::encode_cursor(offset + posts.len()))
     } else {
         None
     };
 
     info!(
-        "Feed generated for user: {} (followers: {}, posts: {})",
+        "Feed generated via ranking-service for user: {} (posts: {}, total_candidates: {})",
         user_id,
-        followed_user_ids.len(),
-        posts_count
+        posts.len(),
+        total_count
     );
 
     Ok(HttpResponse::Ok().json(FeedResponse {
