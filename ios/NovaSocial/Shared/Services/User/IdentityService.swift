@@ -68,8 +68,7 @@ class IdentityService {
         let response: AuthResponse = try await client.request(
             endpoint: APIConfig.Auth.refresh,
             method: "POST",
-            body: request,
-            allowRetry: false // 避免 401 刷新递归
+            body: request
         )
 
         // Update token

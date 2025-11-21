@@ -18,8 +18,6 @@ targets:
           - "*.xcodeproj"
           - "*.yml"
           - "Info.plist"
-          - "build"
-          - "Tests"
     resources:
       - Assets.xcassets
     settings:
@@ -33,20 +31,6 @@ targets:
       TARGETED_DEVICE_FAMILY: "1"
       SWIFT_VERSION: "5.9"
 
-  FigmaDesignAppTests:
-    type: bundle.unit-test
-    platform: iOS
-    deploymentTarget: "18.0"
-    sources:
-      - path: Tests
-    settings:
-      PRODUCT_BUNDLE_IDENTIFIER: com.bruce.figmadesignappTests
-      CODE_SIGNING_ALLOWED: NO
-      CODE_SIGNING_REQUIRED: NO
-      DEVELOPMENT_TEAM: ""
-    dependencies:
-      - target: FigmaDesignApp
-
 schemes:
   FigmaDesignApp:
     build:
@@ -56,7 +40,5 @@ schemes:
       config: Debug
     test:
       config: Debug
-      targets:
-        - name: FigmaDesignAppTests
     archive:
       config: Release

@@ -3,6 +3,7 @@ import SwiftUI
 struct ChatView: View {
     @Binding var showChat: Bool
     @State private var messageText = ""
+    @State private var showUserProfile = false
 
     var body: some View {
         ZStack {
@@ -22,15 +23,26 @@ struct ChatView: View {
                             .foregroundColor(.black)
                     }
 
-                    // 头像
-                    Circle()
-                        .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
-                        .frame(width: 50, height: 50)
+                    // 头像和用户名 - 可点击跳转到用户资料
+                    HStack(spacing: 13) {
+                        // 头像
+                        Circle()
+                            .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
+                            .frame(width: 50, height: 50)
 
-                    // 用户名
-                    Text("Eli")
-                        .font(Font.custom("Helvetica Neue", size: 20).weight(.medium))
-                        .foregroundColor(.black)
+                        // 用户名
+                        Text("Eli")
+                            .font(Font.custom("Helvetica Neue", size: 20).weight(.medium))
+                            .foregroundColor(.black)
+                    }
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        var transaction = Transaction()
+                        transaction.disablesAnimations = true
+                        withTransaction(transaction) {
+                            showUserProfile = true
+                        }
+                    }
 
                     Spacer()
                 }
@@ -161,6 +173,12 @@ struct ChatView: View {
                     .background(Color.white)
                 }
             }
+        }
+        .fullScreenCover(isPresented: $showUserProfile) {
+            UserProfileView(showUserProfile: $showUserProfile)
+        }
+        .transaction { transaction in
+            transaction.disablesAnimations = true
         }
     }
 }
