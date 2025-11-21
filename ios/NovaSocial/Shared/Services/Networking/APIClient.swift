@@ -47,7 +47,8 @@ class APIClient {
     func request<T: Decodable>(
         endpoint: String,
         method: String = "POST",
-        body: Encodable? = nil
+        body: Encodable? = nil,
+        allowRetry: Bool = true
     ) async throws -> T {
         guard let url = URL(string: "\(baseURL)\(endpoint)") else {
             print("❌ Invalid URL: \(baseURL)\(endpoint)")
@@ -129,6 +130,18 @@ class APIClient {
                 }
             case 401:
                 print("❌ 401 Unauthorized")
+                // 尝试刷新 token 一次，然后重试原请求
+                if allowRetry {
+                    let refreshed = await AuthenticationManager.shared.refreshSessionIfPossible()
+                    if refreshed {
+                        return try await request(
+                            endpoint: endpoint,
+                            method: method,
+                            body: body,
+                            allowRetry: false
+                        )
+                    }
+                }
                 throw APIError.unauthorized
             case 404:
                 print("❌ 404 Not Found")

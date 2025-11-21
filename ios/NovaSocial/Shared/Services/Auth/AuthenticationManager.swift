@@ -12,12 +12,14 @@ class AuthenticationManager: ObservableObject {
     @Published var isAuthenticated = false
     @Published var currentUser: UserProfile?
     @Published var authToken: String?
+    @Published var refreshToken: String?
 
     private let identityService = IdentityService()
     private let userDefaults = UserDefaults.standard
 
     // UserDefaults keys
     private let tokenKey = "auth_token"
+    private let refreshTokenKey = "refresh_token"
     private let userIdKey = "user_id"
 
     private init() {
@@ -29,8 +31,10 @@ class AuthenticationManager: ObservableObject {
     /// Load saved authentication from UserDefaults
     func loadSavedAuth() {
         if let token = userDefaults.string(forKey: tokenKey),
+           let refresh = userDefaults.string(forKey: refreshTokenKey),
            let userId = userDefaults.string(forKey: userIdKey) {
             self.authToken = token
+            self.refreshToken = refresh
             APIClient.shared.setAuthToken(token)
             self.isAuthenticated = true
 
@@ -63,7 +67,7 @@ class AuthenticationManager: ObservableObject {
         )
 
         // Save authentication
-        await saveAuth(token: response.token, user: response.user)
+        await saveAuth(token: response.token, refreshToken: response.refreshToken, user: response.user)
 
         return response.user
     }
@@ -78,7 +82,7 @@ class AuthenticationManager: ObservableObject {
         )
 
         // Save authentication
-        await saveAuth(token: response.token, user: response.user)
+        await saveAuth(token: response.token, refreshToken: response.refreshToken, user: response.user)
 
         return response.user
     }
@@ -92,6 +96,7 @@ class AuthenticationManager: ObservableObject {
 
         // Clear local state
         self.authToken = nil
+        self.refreshToken = nil
         self.currentUser = nil
         self.isAuthenticated = false
 
@@ -100,6 +105,7 @@ class AuthenticationManager: ObservableObject {
 
         // Clear UserDefaults
         userDefaults.removeObject(forKey: tokenKey)
+        userDefaults.removeObject(forKey: refreshTokenKey)
         userDefaults.removeObject(forKey: userIdKey)
     }
 
@@ -121,8 +127,9 @@ class AuthenticationManager: ObservableObject {
 
     // MARK: - Private Helpers
 
-    private func saveAuth(token: String, user: UserProfile) async {
+    private func saveAuth(token: String, refreshToken: String?, user: UserProfile) async {
         self.authToken = token
+        self.refreshToken = refreshToken
         self.currentUser = user
         self.isAuthenticated = true
 
@@ -131,6 +138,26 @@ class AuthenticationManager: ObservableObject {
 
         // Save to UserDefaults
         userDefaults.set(token, forKey: tokenKey)
+        if let refreshToken {
+            userDefaults.set(refreshToken, forKey: refreshTokenKey)
+        }
         userDefaults.set(user.id, forKey: userIdKey)
+    }
+
+    /// Attempt to refresh session if refresh token exists.
+    /// Returns true if refresh succeeded.
+    func refreshSessionIfPossible() async -> Bool {
+        guard let refresh = refreshToken else {
+            return false
+        }
+        do {
+            let response = try await identityService.refreshToken(refreshToken: refresh)
+            await saveAuth(token: response.token, refreshToken: response.refreshToken, user: response.user)
+            return true
+        } catch {
+            // 清理失效 token，要求重新登录
+            await logout()
+            return false
+        }
     }
 }
