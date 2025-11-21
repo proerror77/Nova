@@ -249,10 +249,34 @@ async fn main() -> std::io::Result<()> {
             .route("/api/v2/auth/logout", web::post().to(rest_api::logout))
             // Feed API
             .route("/api/v2/feed", web::get().to(rest_api::get_feed))
-        // Users API temporarily disabled - user-service is deprecated
-        // Will be re-implemented using identity-service + social-service
-        // .route("/api/v2/users/{id}", web::get().to(rest_api::get_user))
-        // .route("/api/v2/users/{id}", web::put().to(rest_api::update_user))
+            // ✅ User Profile API
+            .route("/api/v2/users/{id}", web::get().to(rest_api::get_profile))
+            .route("/api/v2/users/{id}", web::put().to(rest_api::update_profile))
+            .route("/api/v2/users/avatar", web::post().to(rest_api::upload_avatar))
+            // ✅ Alice AI Assistant API
+            .route("/api/v2/alice/status", web::get().to(rest_api::get_status))
+            .route("/api/v2/alice/chat", web::post().to(rest_api::send_message))
+            .route("/api/v2/alice/voice", web::post().to(rest_api::voice_mode))
+            // ✅ Channels API
+            .route("/api/v2/channels", web::get().to(rest_api::get_all_channels))
+            .route("/api/v2/channels/{id}", web::get().to(rest_api::get_channel_details))
+            .route("/api/v2/users/{id}/channels", web::get().to(rest_api::get_user_channels))
+            .route("/api/v2/channels/subscribe", web::post().to(rest_api::subscribe_channel))
+            .route("/api/v2/channels/unsubscribe", web::delete().to(rest_api::unsubscribe_channel))
+            // ✅ Social Graph API (Friends, Search, Devices, etc.)
+            .route("/api/v2/search/users", web::get().to(rest_api::search_users))
+            .route("/api/v2/friends/recommendations", web::get().to(rest_api::get_recommendations))
+            .route("/api/v2/friends/add", web::post().to(rest_api::add_friend))
+            .route("/api/v2/friends/remove", web::delete().to(rest_api::remove_friend))
+            .route("/api/v2/friends/list", web::get().to(rest_api::get_friends_list))
+            // ✅ Device Management API
+            .route("/api/v2/devices", web::get().to(rest_api::get_devices))
+            .route("/api/v2/devices/logout", web::post().to(rest_api::logout_device))
+            .route("/api/v2/devices/current", web::get().to(rest_api::get_current_device))
+            // ✅ Invitations API
+            .route("/api/v2/invitations/generate", web::post().to(rest_api::generate_invite_code))
+            // ✅ Chat & Group API
+            .route("/api/v2/chat/groups/create", web::post().to(rest_api::create_group_chat))
     })
     .bind(&bind_addr)?
     .run()

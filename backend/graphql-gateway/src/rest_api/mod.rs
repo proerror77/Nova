@@ -11,12 +11,20 @@
 ///     ↓
 /// gRPC Client → Microservice
 /// ```
+pub mod alice;
 pub mod auth;
+pub mod channels;
 pub mod feed;
+pub mod models;
+pub mod social;
+pub mod user_profile;
 // users module requires user-service gRPC - will be re-implemented when user-service v2 is available
 // pub mod users;
-pub mod models;
 
+pub use alice::*;
 pub use auth::*;
+pub use channels::*;
 pub use feed::*;
+pub use social::*;
+pub use user_profile::*;
 // pub use users::*;
