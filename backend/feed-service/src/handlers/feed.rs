@@ -6,7 +6,7 @@ use tracing::{debug, info, warn};
 use uuid::Uuid;
 
 use crate::error::{AppError, Result};
-use crate::grpc::clients::RankingServiceClient;
+use grpc_clients::RankingServiceClient;
 use crate::middleware::jwt_auth::UserId;
 use crate::models::FeedResponse;
 use grpc_clients::nova::ranking_service::v1::RankFeedRequest;
