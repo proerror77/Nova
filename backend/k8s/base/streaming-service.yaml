@@ -23,8 +23,26 @@ spec:
               value: "0.0.0.0"
             - name: PORT
               value: "8088"
+            - name: REDIS_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: global-config
+                  key: REDIS_URL
             - name: RTMP_SHARED_SECRET
-              value: "changeme"
+              valueFrom:
+                secretKeyRef:
+                  name: streaming-service-secret
+                  key: rtmp_shared_secret
+            - name: RTMP_ALLOWED_KEYS
+              valueFrom:
+                secretKeyRef:
+                  name: streaming-service-secret
+                  key: rtmp_allowed_keys
+            - name: ADMIN_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: streaming-service-secret
+                  key: admin_token
             - name: RUST_LOG
               value: info
           ports:
@@ -56,3 +74,16 @@ spec:
     - name: http
       port: 8088
       targetPort: 8088
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: streaming-service-secret
+type: Opaque
+stringData:
+  # Set a strong, random shared secret for RTMP auth (required)
+  rtmp_shared_secret: changeme
+  # Optional: comma-separated allowlist of keys (e.g., "foo,bar")
+  rtmp_allowed_keys: ""
+  # Admin token for managing stream keys
+  admin_token: ""

@@ -1,13 +1,12 @@
 /// Feed API endpoints
 ///
 /// GET /api/v2/feed - Get personalized feed for current user
-
 use actix_web::{web, HttpRequest, HttpResponse, Result};
 use tracing::{error, info};
 
-use crate::clients::ServiceClients;
-use crate::clients::proto::feed::GetFeedRequest as ProtoGetFeedRequest;
 use super::models::{ErrorResponse, FeedPost, GetFeedResponse};
+use crate::clients::proto::feed::GetFeedRequest as ProtoGetFeedRequest;
+use crate::clients::ServiceClients;
 
 /// GET /api/v2/feed
 /// Returns personalized feed for the authenticated user
@@ -97,18 +96,13 @@ pub async fn get_feed(
                 tonic::Code::Unauthenticated => {
                     HttpResponse::Unauthorized().json(ErrorResponse::new("Unauthorized"))
                 }
-                tonic::Code::InvalidArgument => {
-                    HttpResponse::BadRequest().json(ErrorResponse::with_message(
-                        "Invalid request",
-                        status.message(),
-                    ))
-                }
-                _ => {
-                    HttpResponse::InternalServerError().json(ErrorResponse::with_message(
-                        "Internal server error",
-                        status.message(),
-                    ))
-                }
+                tonic::Code::InvalidArgument => HttpResponse::BadRequest().json(
+                    ErrorResponse::with_message("Invalid request", status.message()),
+                ),
+                _ => HttpResponse::InternalServerError().json(ErrorResponse::with_message(
+                    "Internal server error",
+                    status.message(),
+                )),
             };
 
             Ok(error_response)

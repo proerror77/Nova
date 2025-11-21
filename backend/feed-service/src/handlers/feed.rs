@@ -113,25 +113,39 @@ pub async fn get_feed(
         }));
     }
 
-    // Fetch posts from each followed user and aggregate them
-    // Note: In production, would use ranking/recommendation service for ordering
-    let mut all_posts: Vec<Uuid> = vec![];
+    // Fetch posts from followed users and respect pagination (offset/cursor)
+    // Note: For now we do a simple round-robin scan; ranking-service can be plugged in later.
+    let mut posts: Vec<Uuid> = Vec::new();
+    let mut skipped = offset; // apply cursor across aggregated stream
+    let mut remaining = limit as usize;
 
     for user_id in followed_user_ids.iter() {
+        if remaining == 0 {
+            break;
+        }
+
         match state
             .content_client
             .get_posts_by_author(GetPostsByAuthorRequest {
                 author_id: user_id.clone(),
-                status: "".to_string(), // Empty string means all statuses
-                limit: limit as i32,
-                offset: offset as i32,
+                status: "published".to_string(),
+                limit: remaining as i32, // bound fetch to what's still needed
+                offset: 0,
             })
             .await
         {
             Ok(resp) => {
                 for post in resp.posts {
+                    if remaining == 0 {
+                        break;
+                    }
+                    if skipped > 0 {
+                        skipped -= 1;
+                        continue;
+                    }
                     if let Ok(post_id) = Uuid::parse_str(&post.id) {
-                        all_posts.push(post_id);
+                        posts.push(post_id);
+                        remaining -= 1;
                     }
                 }
             }
@@ -142,14 +156,15 @@ pub async fn get_feed(
         }
     }
 
-    // Apply pagination on aggregated posts
-    let start = offset;
-    let end = (offset + limit as usize).min(all_posts.len());
-    let posts: Vec<Uuid> = all_posts[start..end].to_vec();
     let posts_count = posts.len();
-    let total_count = all_posts.len();
+    let total_count = offset + posts_count; // best-effort; exact total would need a count query
+    let has_more = remaining == 0;
 
-    let cursor = FeedQueryParams::encode_cursor(offset + limit as usize);
+    let cursor = if has_more {
+        Some(FeedQueryParams::encode_cursor(offset + posts_count))
+    } else {
+        None
+    };
 
     info!(
         "Feed generated for user: {} (followers: {}, posts: {})",
@@ -160,9 +175,9 @@ pub async fn get_feed(
 
     Ok(HttpResponse::Ok().json(FeedResponse {
         posts,
-        cursor: Some(cursor),
-        has_more: posts_count == limit as usize,
-        total_count: posts_count,
+        cursor,
+        has_more,
+        total_count,
     }))
 }
 
