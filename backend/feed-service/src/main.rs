@@ -154,23 +154,15 @@ async fn main() -> io::Result<()> {
     tracing::info!("RankingService gRPC client initialized from pool");
 
     let rec_handler_state = web::Data::new(RecommendationHandlerState {
-        ranking_client,
+        ranking_client: ranking_client.clone(),
         db_pool: db_pool.get_ref().clone(),
     });
 
-    // Initialize FeedHandlerState with gRPC clients
+    // Initialize FeedHandlerState with RankingService client
     let feed_handler_state = web::Data::new(FeedHandlerState {
-        content_client: Arc::new(
-            recommendation_service::grpc::clients::ContentServiceClient::from_pool(
-                grpc_pool.clone(),
-            ),
-        ),
-        graph_client: Arc::new(recommendation_service::grpc::clients::GraphServiceClient {
-            pool: grpc_pool.clone(),
-            enabled: true,
-        }),
+        ranking_client,
     });
-    tracing::info!("FeedHandlerState initialized with content and graph gRPC clients");
+    tracing::info!("FeedHandlerState initialized with ranking gRPC client");
 
     // Kafka consumer removed - recommendation events now handled by ranking-service
     info!("Feed-service simplified - ranking delegated to ranking-service");
@@ -229,27 +221,36 @@ async fn main() -> io::Result<()> {
             .set_serving::<recommendation_service::grpc::recommendation_service_server::RecommendationServiceServer<recommendation_service::grpc::RecommendationServiceImpl>>()
             .await;
 
-        // ✅ P0: Load mTLS configuration
+        // ✅ P0: Load mTLS configuration (fail-fast in staging/prod)
+        let app_env = std::env::var("APP_ENV").unwrap_or_else(|_| "development".to_string());
         let tls_config = match grpc_tls::GrpcServerTlsConfig::from_env() {
             Ok(config) => {
-                tracing::info!("mTLS enabled - service-to-service authentication active");
+                tracing::info!(
+                    "mTLS enabled - service-to-service authentication active (env={})",
+                    app_env
+                );
                 Some(config)
             }
             Err(e) => {
-                tracing::warn!(
-                    "mTLS disabled - TLS config not found: {}. Using development mode for testing only.",
-                    e
+                let is_prod_like = matches!(
+                    app_env.to_ascii_lowercase().as_str(),
+                    "production" | "prod" | "staging"
                 );
-                if cfg!(debug_assertions) {
-                    tracing::info!("Development mode: Starting without TLS (NOT FOR PRODUCTION)");
-                    None
-                } else {
+                if is_prod_like {
                     tracing::error!(
-                        "Production requires mTLS - GRPC_SERVER_CERT_PATH must be set: {}",
+                        "APP_ENV={} requires mTLS - missing/invalid TLS config: {}. \
+                         Failing fast to avoid plaintext in prod/staging.",
+                        app_env,
                         e
                     );
-                    return;
+                    std::process::exit(1);
                 }
+                tracing::warn!(
+                    "mTLS disabled - TLS config not found: {}. Using development mode for testing only (APP_ENV={}).",
+                    e,
+                    app_env
+                );
+                None
             }
         };
 
