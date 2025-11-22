@@ -29,6 +29,7 @@ actix-multipart = "0.4"
 tonic = { workspace = true }
 prost = { workspace = true }
 pbjson-types = "0.7"  # For google.protobuf.Timestamp support
+rustls = { version = "0.23", features = ["ring"] }  # TLS crypto provider
 
 # Tracing
 tracing = { workspace = true }

@@ -124,6 +124,11 @@ async fn playground_handler() -> actix_web::HttpResponse {
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
+    // Initialize rustls crypto provider (required for rustls 0.23+)
+    rustls::crypto::ring::default_provider()
+        .install_default()
+        .expect("Failed to install rustls crypto provider");
+
     // Initialize structured logging with JSON format for production-grade observability
     // Includes: timestamp, level, target, thread IDs, line numbers, and structured fields
     tracing_subscriber::registry()
