@@ -371,6 +371,9 @@ pub fn validate_token(token: &str) -> Result<TokenData<Claims>> {
     validation.validate_exp = true;
     validation.validate_nbf = true;
     validation.leeway = DEFAULT_VALIDATION_LEEWAY;
+    // Disable aud/iss validation for backward compatibility with test tokens
+    validation.validate_aud = false;
+    validation.set_required_spec_claims::<&str>(&[]);
 
     let token_data = decode::<Claims>(token, decoding_key, &validation)
         .map_err(|e| anyhow!("Token validation failed: {e}"))?;

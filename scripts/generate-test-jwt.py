@@ -13,6 +13,7 @@ def generate_jwt(user_id: str, private_key_pem: str, expiry_hours: int = 24) -> 
     """Generate a JWT token for testing."""
 
     import time
+    import uuid
     now_ts = int(time.time())
     payload = {
         "sub": user_id,
@@ -20,7 +21,11 @@ def generate_jwt(user_id: str, private_key_pem: str, expiry_hours: int = 24) -> 
         "aud": "nova-api",
         "iat": now_ts,
         "exp": now_ts + (expiry_hours * 3600),
-        "user_id": user_id,
+        "nbf": now_ts,
+        "token_type": "access",
+        "email": "test@example.com",
+        "username": "testuser",
+        "jti": str(uuid.uuid4()),
     }
 
     token = jwt.encode(
