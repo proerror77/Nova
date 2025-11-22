@@ -14,12 +14,36 @@ use graph::*;
 
 pub struct GraphServiceImpl {
     repo: Arc<GraphRepository>,
+    /// Optional write token; if None => writes are disabled (read-only mode).
+    write_token: Option<String>,
 }
 
 impl GraphServiceImpl {
-    pub fn new(repo: GraphRepository) -> Self {
+    pub fn new(repo: GraphRepository, write_token: Option<String>) -> Self {
         Self {
             repo: Arc::new(repo),
+            write_token,
+        }
+    }
+
+    fn authorize_write<T>(&self, req: &Request<T>) -> Result<(), Status> {
+        match &self.write_token {
+            Some(expected) => {
+                let token = req
+                    .metadata()
+                    .get("x-internal-token")
+                    .and_then(|v| v.to_str().ok());
+                if token == Some(expected.as_str()) {
+                    Ok(())
+                } else {
+                    Err(Status::permission_denied(
+                        "write operations require valid internal token",
+                    ))
+                }
+            }
+            None => Err(Status::permission_denied(
+                "graph-service write APIs disabled (no INTERNAL_GRAPH_WRITE_TOKEN)",
+            )),
         }
     }
 }
@@ -30,6 +54,7 @@ impl GraphService for GraphServiceImpl {
         &self,
         request: Request<CreateFollowRequest>,
     ) -> Result<Response<CreateFollowResponse>, Status> {
+        self.authorize_write(&request)?;
         let req = request.into_inner();
 
         let follower_id = Uuid::parse_str(&req.follower_id)
@@ -57,6 +82,7 @@ impl GraphService for GraphServiceImpl {
         &self,
         request: Request<DeleteFollowRequest>,
     ) -> Result<Response<DeleteFollowResponse>, Status> {
+        self.authorize_write(&request)?;
         let req = request.into_inner();
 
         let follower_id = Uuid::parse_str(&req.follower_id)
@@ -84,6 +110,7 @@ impl GraphService for GraphServiceImpl {
         &self,
         request: Request<CreateMuteRequest>,
     ) -> Result<Response<CreateMuteResponse>, Status> {
+        self.authorize_write(&request)?;
         let req = request.into_inner();
 
         let muter_id = Uuid::parse_str(&req.muter_id)
@@ -111,6 +138,7 @@ impl GraphService for GraphServiceImpl {
         &self,
         request: Request<DeleteMuteRequest>,
     ) -> Result<Response<DeleteMuteResponse>, Status> {
+        self.authorize_write(&request)?;
         let req = request.into_inner();
 
         let muter_id = Uuid::parse_str(&req.muter_id)
@@ -138,6 +166,7 @@ impl GraphService for GraphServiceImpl {
         &self,
         request: Request<CreateBlockRequest>,
     ) -> Result<Response<CreateBlockResponse>, Status> {
+        self.authorize_write(&request)?;
         let req = request.into_inner();
 
         let blocker_id = Uuid::parse_str(&req.blocker_id)
@@ -165,6 +194,7 @@ impl GraphService for GraphServiceImpl {
         &self,
         request: Request<DeleteBlockRequest>,
     ) -> Result<Response<DeleteBlockResponse>, Status> {
+        self.authorize_write(&request)?;
         let req = request.into_inner();
 
         let blocker_id = Uuid::parse_str(&req.blocker_id)

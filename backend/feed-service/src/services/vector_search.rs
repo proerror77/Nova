@@ -125,8 +125,8 @@ impl VectorSearchService {
     pub async fn search_similar_by_post(
         &self,
         post_id: Uuid,
-        limit: usize,
-        min_similarity: f32,
+        _limit: usize,
+        _min_similarity: f32,
     ) -> Result<Vec<VectorSearchResult>> {
         debug!("Searching similar posts for post_id: {}", post_id);
 

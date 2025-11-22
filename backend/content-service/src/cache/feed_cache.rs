@@ -1,3 +1,4 @@
+use chrono::{DateTime, Utc};
 use redis::{aio::ConnectionManager, AsyncCommands};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -20,6 +21,8 @@ pub struct FeedCache {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CachedFeed {
     pub post_ids: Vec<Uuid>,
+    #[serde(default)]
+    pub snapshot_ts: Option<DateTime<Utc>>,
 }
 
 impl FeedCache {
@@ -32,6 +35,10 @@ impl FeedCache {
 
     fn feed_key(user_id: Uuid) -> String {
         format!("feed:v1:{}", user_id)
+    }
+
+    fn snapshot_key(user_id: Uuid) -> String {
+        format!("feed:snapshot:{}", user_id)
     }
 
     fn seen_key(user_id: Uuid) -> String {
@@ -77,7 +84,10 @@ impl FeedCache {
             .unwrap_or(self.default_ttl);
 
         let total_posts = post_ids.len();
-        let cached_feed = CachedFeed { post_ids };
+        let cached_feed = CachedFeed {
+            post_ids,
+            snapshot_ts: Some(Utc::now()),
+        };
 
         let data = serde_json::to_string(&cached_feed).map_err(|e| {
             error!("Failed to serialize feed for cache: {}", e);
@@ -105,6 +115,50 @@ impl FeedCache {
         FEED_CACHE_WRITE_TOTAL.with_label_values(&["success"]).inc();
 
         Ok(())
+    }
+
+    /// Persist a durable-ish snapshot (no TTL) for ClickHouse-down fallback.
+    pub async fn write_snapshot(&self, user_id: Uuid, post_ids: Vec<Uuid>) -> Result<()> {
+        let key = Self::snapshot_key(user_id);
+        let cached_feed = CachedFeed {
+            post_ids,
+            snapshot_ts: Some(Utc::now()),
+        };
+        let data = serde_json::to_string(&cached_feed).map_err(|e| {
+            error!("Failed to serialize snapshot feed: {}", e);
+            AppError::Internal(format!("Snapshot serialization error: {}", e))
+        })?;
+
+        let mut conn = self.redis.lock().await;
+        conn.set::<_, _, ()>(&key, data).await.map_err(|e| {
+            warn!("Failed to write snapshot feed: {}", e);
+            AppError::CacheError(e.to_string())
+        })?;
+
+        debug!("Snapshot feed WRITE for user {}", user_id);
+        Ok(())
+    }
+
+    /// Read last_good_snapshot for a user (no TTL).
+    pub async fn read_snapshot(&self, user_id: Uuid) -> Result<Option<CachedFeed>> {
+        let key = Self::snapshot_key(user_id);
+        let mut conn = self.redis.lock().await;
+        match conn.get::<_, Option<String>>(&key).await {
+            Ok(Some(data)) => {
+                debug!("Snapshot feed HIT for user {}", user_id);
+                serde_json::from_str::<CachedFeed>(&data)
+                    .map(Some)
+                    .map_err(|e| {
+                        error!("Failed to deserialize snapshot feed: {}", e);
+                        AppError::Internal(format!("Snapshot deserialization error: {}", e))
+                    })
+            }
+            Ok(None) => Ok(None),
+            Err(e) => {
+                warn!("Redis read error for snapshot feed: {}", e);
+                Err(AppError::CacheError(e.to_string()))
+            }
+        }
     }
 
     pub async fn invalidate_feed(&self, user_id: Uuid) -> Result<()> {

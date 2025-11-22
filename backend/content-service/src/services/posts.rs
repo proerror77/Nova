@@ -7,7 +7,7 @@ use crate::kafka::events::{
 use crate::models::Post;
 use sqlx::PgPool;
 use std::sync::Arc;
-use transactional_outbox::{publish_event, SqlxOutboxRepository};
+use transactional_outbox::SqlxOutboxRepository;
 use uuid::Uuid;
 
 pub struct PostService {

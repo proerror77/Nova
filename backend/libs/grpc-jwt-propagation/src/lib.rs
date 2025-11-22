@@ -81,13 +81,13 @@
 
 mod claims;
 mod client;
-mod server;
 mod extensions;
+mod server;
 
 pub use claims::JwtClaims;
 pub use client::JwtClientInterceptor;
-pub use server::JwtServerInterceptor;
 pub use extensions::JwtClaimsExt;
+pub use server::JwtServerInterceptor;
 
 // Re-export tonic Status for convenience
 pub use tonic::Status;

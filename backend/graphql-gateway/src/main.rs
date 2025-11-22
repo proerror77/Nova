@@ -1,3 +1,7 @@
+use crate::rest_api::social_likes::{
+    check_liked, create_comment, create_like, create_share, delete_comment, delete_comment_v2,
+    delete_like, get_comments, get_likes, get_share_count,
+};
 use actix_web::{middleware::Logger, web, App, HttpServer};
 use async_graphql_actix_web::{GraphQLRequest, GraphQLResponse, GraphQLSubscription};
 use std::env;
@@ -14,6 +18,7 @@ mod schema;
 mod security; // ✅ P0-2: GraphQL security extensions
 
 use clients::ServiceClients;
+use grpc_clients::config::GrpcConfig;
 use middleware::{JwtMiddleware, RateLimitConfig, RateLimitMiddleware};
 use schema::build_schema;
 
@@ -155,15 +160,23 @@ async fn main() -> std::io::Result<()> {
         "JWT configuration loaded successfully"
     );
 
-    // Initialize service clients from configuration
-    let clients = ServiceClients::new(
-        &config.services.auth_service,
-        // user_service removed - service is deprecated
-        &config.services.content_service,
-        &config.services.feed_service,
-    );
+    // Initialize gRPC client config (TLS/mTLS + timeouts)
+    let grpc_cfg = GrpcConfig::from_env().map_err(|e| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!("Failed to load gRPC config: {}", e),
+        )
+    })?;
 
-    info!("Service clients initialized");
+    // Initialize service clients from shared gRPC config (honors TLS + tier)
+    let clients = ServiceClients::from_grpc_config(&grpc_cfg).map_err(|e| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!("Failed to initialize service clients: {}", e),
+        )
+    })?;
+
+    info!("Service clients initialized from gRPC config (TLS/tier aware)");
 
     // Initialize JWT keys for crypto-core (RS256 only)
     // SECURITY: Must use RS256 asymmetric encryption, never HS256
@@ -247,36 +260,109 @@ async fn main() -> std::io::Result<()> {
                 web::post().to(rest_api::refresh_token),
             )
             .route("/api/v2/auth/logout", web::post().to(rest_api::logout))
+            .service(rest_api::get_conversations)
+            .service(rest_api::get_messages)
+            .service(rest_api::create_conversation)
+            .service(rest_api::send_chat_message)
             // Feed API
             .route("/api/v2/feed", web::get().to(rest_api::get_feed))
+            .route(
+                "/api/v2/feed/user/{user_id}",
+                web::get().to(rest_api::get_feed_by_user),
+            )
+            .route(
+                "/api/v2/feed/explore",
+                web::get().to(rest_api::get_explore_feed),
+            )
+            .route(
+                "/api/v2/feed/trending",
+                web::get().to(rest_api::get_trending_feed),
+            )
             // ✅ User Profile API
             .route("/api/v2/users/{id}", web::get().to(rest_api::get_profile))
-            .route("/api/v2/users/{id}", web::put().to(rest_api::update_profile))
-            .route("/api/v2/users/avatar", web::post().to(rest_api::upload_avatar))
+            .route(
+                "/api/v2/users/{id}",
+                web::put().to(rest_api::update_profile),
+            )
+            .route(
+                "/api/v2/users/avatar",
+                web::post().to(rest_api::upload_avatar),
+            )
+            .service(rest_api::upload_media)
             // ✅ Alice AI Assistant API
             .route("/api/v2/alice/status", web::get().to(rest_api::get_status))
             .route("/api/v2/alice/chat", web::post().to(rest_api::send_message))
             .route("/api/v2/alice/voice", web::post().to(rest_api::voice_mode))
             // ✅ Channels API
-            .route("/api/v2/channels", web::get().to(rest_api::get_all_channels))
-            .route("/api/v2/channels/{id}", web::get().to(rest_api::get_channel_details))
-            .route("/api/v2/users/{id}/channels", web::get().to(rest_api::get_user_channels))
-            .route("/api/v2/channels/subscribe", web::post().to(rest_api::subscribe_channel))
-            .route("/api/v2/channels/unsubscribe", web::delete().to(rest_api::unsubscribe_channel))
+            .route(
+                "/api/v2/channels",
+                web::get().to(rest_api::get_all_channels),
+            )
+            .route(
+                "/api/v2/channels/{id}",
+                web::get().to(rest_api::get_channel_details),
+            )
+            .route(
+                "/api/v2/users/{id}/channels",
+                web::get().to(rest_api::get_user_channels),
+            )
+            .route(
+                "/api/v2/channels/subscribe",
+                web::post().to(rest_api::subscribe_channel),
+            )
+            .route(
+                "/api/v2/channels/unsubscribe",
+                web::delete().to(rest_api::unsubscribe_channel),
+            )
             // ✅ Social Graph API (Friends, Search, Devices, etc.)
-            .route("/api/v2/search/users", web::get().to(rest_api::search_users))
-            .route("/api/v2/friends/recommendations", web::get().to(rest_api::get_recommendations))
+            .route(
+                "/api/v2/search/users",
+                web::get().to(rest_api::search_users),
+            )
+            .route(
+                "/api/v2/friends/recommendations",
+                web::get().to(rest_api::get_recommendations),
+            )
             .route("/api/v2/friends/add", web::post().to(rest_api::add_friend))
-            .route("/api/v2/friends/remove", web::delete().to(rest_api::remove_friend))
-            .route("/api/v2/friends/list", web::get().to(rest_api::get_friends_list))
+            .route(
+                "/api/v2/friends/remove",
+                web::delete().to(rest_api::remove_friend),
+            )
+            .route(
+                "/api/v2/friends/list",
+                web::get().to(rest_api::get_friends_list),
+            )
+            // ✅ Social interactions
+            .service(create_like)
+            .service(delete_like)
+            .service(get_likes)
+            .service(check_liked)
+            .service(create_comment)
+            .service(delete_comment)
+            .service(delete_comment_v2)
+            .service(get_comments)
+            .service(create_share)
+            .service(get_share_count)
             // ✅ Device Management API
             .route("/api/v2/devices", web::get().to(rest_api::get_devices))
-            .route("/api/v2/devices/logout", web::post().to(rest_api::logout_device))
-            .route("/api/v2/devices/current", web::get().to(rest_api::get_current_device))
+            .route(
+                "/api/v2/devices/logout",
+                web::post().to(rest_api::logout_device),
+            )
+            .route(
+                "/api/v2/devices/current",
+                web::get().to(rest_api::get_current_device),
+            )
             // ✅ Invitations API
-            .route("/api/v2/invitations/generate", web::post().to(rest_api::generate_invite_code))
+            .route(
+                "/api/v2/invitations/generate",
+                web::post().to(rest_api::generate_invite_code),
+            )
             // ✅ Chat & Group API
-            .route("/api/v2/chat/groups/create", web::post().to(rest_api::create_group_chat))
+            .route(
+                "/api/v2/chat/groups/create",
+                web::post().to(rest_api::create_group_chat),
+            )
     })
     .bind(&bind_addr)?
     .run()

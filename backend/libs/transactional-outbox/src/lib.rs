@@ -143,6 +143,7 @@ use uuid::Uuid;
 
 mod error;
 pub mod macros;
+pub mod metrics;
 
 pub use error::{OutboxError, OutboxResult};
 
@@ -248,6 +249,9 @@ pub trait OutboxRepository: Send + Sync {
     ///
     /// Returns error if database update fails.
     async fn mark_failed(&self, event_id: Uuid, error: &str) -> OutboxResult<()>;
+
+    /// Compute pending count and oldest pending age (seconds). Should return age=0 if none pending.
+    async fn pending_stats(&self) -> OutboxResult<(i64, i64)>;
 }
 
 /// SQLx-based implementation of OutboxRepository using PostgreSQL.
@@ -266,6 +270,65 @@ impl SqlxOutboxRepository {
     /// * `pool` - PostgreSQL connection pool
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
+    }
+
+    /// Return pending count and oldest pending age (seconds). If no pending, age = 0.
+    pub async fn pending_stats(&self) -> OutboxResult<(i64, i64)> {
+        let rec = sqlx::query(
+            r#"
+            SELECT
+                COUNT(*)::BIGINT AS pending,
+                EXTRACT(EPOCH FROM (NOW() - MIN(created_at)))::BIGINT AS age_seconds
+            FROM outbox_events
+            WHERE published_at IS NULL
+            "#,
+        )
+        .fetch_one(&self.pool)
+        .await
+        .context("Failed to compute pending stats")?;
+
+        let pending: i64 = rec.try_get("pending").unwrap_or(0);
+        let age: i64 = rec.try_get("age_seconds").unwrap_or(0);
+        Ok((pending, age))
+    }
+
+    /// Replay events created since the given timestamp by resetting published_at and retry counters.
+    pub async fn replay_since(&self, ts: DateTime<Utc>) -> OutboxResult<u64> {
+        let res = sqlx::query(
+            r#"
+            UPDATE outbox_events
+            SET published_at = NULL,
+                retry_count = 0,
+                last_error = NULL
+            WHERE created_at >= $1
+            "#,
+        )
+        .bind(ts)
+        .execute(&self.pool)
+        .await
+        .context("Failed to replay events since timestamp")?;
+
+        Ok(res.rows_affected())
+    }
+
+    /// Replay events by ID range (inclusive) for operational backfill.
+    pub async fn replay_range(&self, from_id: Uuid, to_id: Uuid) -> OutboxResult<u64> {
+        let res = sqlx::query(
+            r#"
+            UPDATE outbox_events
+            SET published_at = NULL,
+                retry_count = 0,
+                last_error = NULL
+            WHERE id BETWEEN $1 AND $2
+            "#,
+        )
+        .bind(from_id)
+        .bind(to_id)
+        .execute(&self.pool)
+        .await
+        .context("Failed to replay events by id range")?;
+
+        Ok(res.rows_affected())
     }
 }
 
@@ -416,6 +479,10 @@ impl OutboxRepository for SqlxOutboxRepository {
         );
 
         Ok(())
+    }
+
+    async fn pending_stats(&self) -> OutboxResult<(i64, i64)> {
+        SqlxOutboxRepository::pending_stats(self).await
     }
 }
 
@@ -579,6 +646,7 @@ pub struct OutboxProcessor<R: OutboxRepository, P: OutboxPublisher> {
     batch_size: i32,
     poll_interval: Duration,
     max_retries: i32,
+    metrics: Option<crate::metrics::OutboxMetrics>,
 }
 
 impl<R: OutboxRepository, P: OutboxPublisher> OutboxProcessor<R, P> {
@@ -604,6 +672,26 @@ impl<R: OutboxRepository, P: OutboxPublisher> OutboxProcessor<R, P> {
             batch_size,
             poll_interval,
             max_retries,
+            metrics: None,
+        }
+    }
+
+    /// Create a processor that also updates Prometheus metrics each polling cycle.
+    pub fn new_with_metrics(
+        repository: Arc<R>,
+        publisher: Arc<P>,
+        metrics: crate::metrics::OutboxMetrics,
+        batch_size: i32,
+        poll_interval: Duration,
+        max_retries: i32,
+    ) -> Self {
+        Self {
+            repository,
+            publisher,
+            batch_size,
+            poll_interval,
+            max_retries,
+            metrics: Some(metrics),
         }
     }
 
@@ -638,6 +726,13 @@ impl<R: OutboxRepository, P: OutboxPublisher> OutboxProcessor<R, P> {
                 }
                 Err(e) => {
                     error!(error = ?e, "Outbox processor error");
+                }
+            }
+
+            if let Some(metrics) = &self.metrics {
+                if let Ok((pending, age)) = self.repository.pending_stats().await {
+                    metrics.pending.set(pending as i64);
+                    metrics.oldest_pending_age_seconds.set(age as i64);
                 }
             }
 
@@ -688,11 +783,14 @@ impl<R: OutboxRepository, P: OutboxPublisher> OutboxProcessor<R, P> {
                             error = ?e,
                             "Failed to mark event as published (event was delivered to Kafka)"
                         );
-                        // Event was delivered to Kafka but marking failed
-                        // This could lead to duplicate delivery on retry
-                        // Consider implementing idempotent consumers
+                    // Event was delivered to Kafka but marking failed
+                    // This could lead to duplicate delivery on retry
+                    // Consider implementing idempotent consumers
                     } else {
                         published_count += 1;
+                        if let Some(metrics) = &self.metrics {
+                            metrics.published.inc();
+                        }
                     }
                 }
                 Err(e) => {

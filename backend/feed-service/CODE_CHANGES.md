@@ -86,7 +86,7 @@
 ```rust
   #[derive(Debug, Clone, Serialize, Deserialize)]
   pub struct GrpcConfig {
-      pub user_service_url: String,
+    pub social_service_url: String,
 +     pub ranking_service_url: String,
       #[serde(default = "default_grpc_timeout_secs")]
       pub timeout_secs: u64,
@@ -97,8 +97,8 @@
           Ok(Config {
               // ...existing config...
               grpc: GrpcConfig {
-                  user_service_url: std::env::var("USER_SERVICE_GRPC_URL")
-                      .unwrap_or_else(|_| "http://127.0.0.1:50051".to_string()),
+                social_service_url: std::env::var("SOCIAL_SERVICE_GRPC_URL")
+                    .unwrap_or_else(|_| "http://social-service:9006".to_string()),
 +                 ranking_service_url: std::env::var("RANKING_SERVICE_GRPC_URL")
 +                     .unwrap_or_else(|_| "http://127.0.0.1:9088".to_string()),
                   // ...
@@ -473,4 +473,3 @@ cargo machete backend/feed-service
 4. **Deployment**: Roll out to staging environment
 5. **Monitor**: Track fallback activations and latency
 6. **Phase E**: Remove deprecated ML code after validation
-

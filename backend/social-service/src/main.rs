@@ -1,4 +1,4 @@
-use actix_web::{web, App, HttpServer};
+use actix_web::{web, App, HttpResponse, HttpServer, Responder};
 use anyhow::{Context, Result};
 use sqlx::postgres::PgPoolOptions;
 use std::sync::Arc;
@@ -6,6 +6,10 @@ use std::time::Duration;
 use tokio::task::JoinSet;
 use tonic::transport::Server;
 use tracing::info;
+use uuid::Uuid;
+
+use chrono::{DateTime, Utc};
+use grpc_clients::{config::GrpcConfig as GrpcClientConfig, GrpcClientPool};
 
 mod config;
 mod domain;
@@ -15,6 +19,7 @@ mod handlers;
 mod repositories;
 mod repository;
 mod services;
+mod workers;
 
 use config::Config;
 use grpc::server_v2::{
@@ -22,6 +27,7 @@ use grpc::server_v2::{
 };
 use services::CounterService;
 use transactional_outbox::SqlxOutboxRepository;
+use workers::{graph_sync::GraphSyncConsumer, outbox_worker};
 
 async fn shutdown_signal() {
     #[cfg(unix)]
@@ -42,6 +48,58 @@ async fn shutdown_signal() {
         tokio::signal::ctrl_c()
             .await
             .expect("Failed to install Ctrl+C handler");
+    }
+}
+
+async fn outbox_stats(repo: web::Data<Arc<SqlxOutboxRepository>>) -> impl Responder {
+    match repo.pending_stats().await {
+        Ok((count, age)) => HttpResponse::Ok().json(serde_json::json!({
+            "pending_count": count,
+            "oldest_pending_age_seconds": age,
+        })),
+        Err(e) => HttpResponse::InternalServerError().body(format!("error: {}", e)),
+    }
+}
+
+#[derive(serde::Deserialize)]
+struct ReplaySinceQuery {
+    /// RFC3339 timestamp
+    ts: String,
+}
+
+async fn outbox_replay_since(
+    repo: web::Data<Arc<SqlxOutboxRepository>>,
+    query: web::Query<ReplaySinceQuery>,
+) -> impl Responder {
+    match DateTime::parse_from_rfc3339(&query.ts).map(|dt| dt.with_timezone(&Utc)) {
+        Ok(ts) => match repo.replay_since(ts).await {
+            Ok(affected) => HttpResponse::Ok().json(serde_json::json!({
+                "replayed": affected,
+                "since": query.ts,
+            })),
+            Err(e) => HttpResponse::InternalServerError().body(format!("error: {}", e)),
+        },
+        Err(e) => HttpResponse::BadRequest().body(format!("invalid ts: {}", e)),
+    }
+}
+
+#[derive(serde::Deserialize)]
+struct ReplayRangeQuery {
+    from_id: Uuid,
+    to_id: Uuid,
+}
+
+async fn outbox_replay_range(
+    repo: web::Data<Arc<SqlxOutboxRepository>>,
+    query: web::Query<ReplayRangeQuery>,
+) -> impl Responder {
+    match repo.replay_range(query.from_id, query.to_id).await {
+        Ok(affected) => HttpResponse::Ok().json(serde_json::json!({
+            "replayed": affected,
+            "from_id": query.from_id,
+            "to_id": query.to_id,
+        })),
+        Err(e) => HttpResponse::InternalServerError().body(format!("error: {}", e)),
     }
 }
 
@@ -124,11 +182,33 @@ async fn main() -> Result<()> {
 
     let mut join_set = JoinSet::new();
 
+    let outbox_admin_enabled = std::env::var("SOCIAL_OUTBOX_ADMIN_ENABLED")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(true);
+
     // Spawn HTTP server task
+    let http_outbox_repo = app_state.outbox_repo.clone();
     let http_server = HttpServer::new(move || {
-        App::new()
+        let mut app = App::new()
             .route("/health", web::get().to(|| async { "OK" }))
-            .route("/ready", web::get().to(|| async { "READY" }))
+            .route("/ready", web::get().to(|| async { "READY" }));
+
+        if outbox_admin_enabled {
+            let repo_data = http_outbox_repo.clone();
+            app = app
+                .app_data(web::Data::new(repo_data))
+                .route("/admin/outbox/stats", web::get().to(outbox_stats))
+                .route(
+                    "/admin/outbox/replay_since",
+                    web::post().to(outbox_replay_since),
+                )
+                .route(
+                    "/admin/outbox/replay_range",
+                    web::post().to(outbox_replay_range),
+                );
+        }
+
+        app
     })
     .bind(&http_addr)
     .context("Failed to bind HTTP server")?
@@ -142,7 +222,7 @@ async fn main() -> Result<()> {
     info!("✅ HTTP health check server started");
 
     // Spawn gRPC server task
-    let grpc_service = SocialServiceImpl::new(app_state);
+    let grpc_service = SocialServiceImpl::new(app_state.clone());
     let grpc_config = config.grpc.clone();
 
     join_set.spawn(async move {
@@ -190,8 +270,30 @@ async fn main() -> Result<()> {
     });
     info!("✅ gRPC server started");
 
-    // TODO: Spawn outbox worker task (for future implementation)
-    // join_set.spawn(outbox_worker::run(pg_pool.clone(), kafka_producer));
+    // Start outbox worker (drains outbox -> Kafka/Noop with metrics)
+    let outbox_repo_for_worker = app_state.outbox_repo.clone();
+    join_set.spawn(outbox_worker::run(pg_pool.clone(), outbox_repo_for_worker));
+
+    // Optionally start graph-sync consumer if write token is provided
+    if let Ok(write_token) = std::env::var("INTERNAL_GRAPH_WRITE_TOKEN") {
+        let grpc_cfg = GrpcClientConfig::from_env().map_err(|e| {
+            anyhow::anyhow!("Failed to load gRPC client config for graph-sync: {}", e)
+        })?;
+        let grpc_pool = Arc::new(GrpcClientPool::new(&grpc_cfg).await.map_err(|e| {
+            anyhow::anyhow!("Failed to create gRPC client pool for graph-sync: {}", e)
+        })?);
+        let graph_client = grpc_pool.graph();
+        let repo = app_state.outbox_repo.clone();
+        join_set.spawn(async move {
+            GraphSyncConsumer::new(repo, graph_client, write_token)
+                .run()
+                .await;
+            Ok(())
+        });
+        info!("✅ Graph-sync consumer started (edge upsert to graph-service)");
+    } else {
+        info!("Graph-sync consumer disabled: INTERNAL_GRAPH_WRITE_TOKEN not set");
+    }
 
     info!("✅ All services started successfully");
     info!("🎉 social-service is running");

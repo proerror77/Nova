@@ -27,6 +27,9 @@ pub struct Config {
     /// Neo4j connection configuration, flattened from NEO4J_* env vars
     #[serde(flatten)]
     pub neo4j: Neo4jConfig,
+    /// Internal token required for write operations; if absent, writes are disabled.
+    #[serde(default)]
+    pub internal_write_token: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
@@ -62,6 +65,7 @@ impl Config {
         let uri = env::var("NEO4J_URI").unwrap_or_else(|_| "bolt://neo4j:7687".to_string());
         let user = env::var("NEO4J_USER").unwrap_or_else(|_| "neo4j".to_string());
         let password = env::var("NEO4J_PASSWORD").unwrap_or_else(|_| "CHANGE_ME".to_string());
+        let internal_write_token = env::var("INTERNAL_GRAPH_WRITE_TOKEN").ok();
 
         Ok(Self {
             server: ServerConfig { grpc_port },
@@ -70,6 +74,7 @@ impl Config {
                 user,
                 password,
             },
+            internal_write_token,
         })
     }
 }

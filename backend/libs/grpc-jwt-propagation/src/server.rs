@@ -69,14 +69,14 @@ impl JwtServerInterceptor {
     /// - Token signature is invalid
     /// - Token is expired
     /// - Token structure is malformed
-    fn extract_and_validate_jwt(metadata: &tonic::metadata::MetadataMap) -> Result<JwtClaims, Status> {
+    fn extract_and_validate_jwt(
+        metadata: &tonic::metadata::MetadataMap,
+    ) -> Result<JwtClaims, Status> {
         // 1. Extract authorization header
-        let auth_header = metadata
-            .get("authorization")
-            .ok_or_else(|| {
-                warn!("Missing authorization header");
-                Status::unauthenticated("Missing authorization header")
-            })?;
+        let auth_header = metadata.get("authorization").ok_or_else(|| {
+            warn!("Missing authorization header");
+            Status::unauthenticated("Missing authorization header")
+        })?;
 
         // 2. Convert to string
         let auth_str = auth_header.to_str().map_err(|e| {
@@ -178,20 +178,14 @@ mod tests {
 
         // Generate a valid token
         let user_id = uuid::Uuid::new_v4();
-        let token = crypto_core::jwt::generate_access_token(
-            user_id,
-            "test@example.com",
-            "testuser",
-        )
-        .expect("Failed to generate token");
+        let token =
+            crypto_core::jwt::generate_access_token(user_id, "test@example.com", "testuser")
+                .expect("Failed to generate token");
 
         // Create metadata with Bearer token
         let mut metadata = MetadataMap::new();
         let auth_value = format!("Bearer {}", token);
-        metadata.insert(
-            "authorization",
-            auth_value.parse().unwrap(),
-        );
+        metadata.insert("authorization", auth_value.parse().unwrap());
 
         let result = JwtServerInterceptor::extract_and_validate_jwt(&metadata);
 
@@ -208,22 +202,16 @@ mod tests {
         init_test_keys();
 
         let user_id = uuid::Uuid::new_v4();
-        let token = crypto_core::jwt::generate_access_token(
-            user_id,
-            "test@example.com",
-            "testuser",
-        )
-        .expect("Failed to generate token");
+        let token =
+            crypto_core::jwt::generate_access_token(user_id, "test@example.com", "testuser")
+                .expect("Failed to generate token");
 
         // Tamper with token
         let tampered = token.replace("a", "b");
 
         let mut metadata = MetadataMap::new();
         let auth_value = format!("Bearer {}", tampered);
-        metadata.insert(
-            "authorization",
-            auth_value.parse().unwrap(),
-        );
+        metadata.insert("authorization", auth_value.parse().unwrap());
 
         let result = JwtServerInterceptor::extract_and_validate_jwt(&metadata);
 
@@ -237,19 +225,15 @@ mod tests {
         init_test_keys();
 
         let user_id = uuid::Uuid::new_v4();
-        let token = crypto_core::jwt::generate_access_token(
-            user_id,
-            "test@example.com",
-            "testuser",
-        )
-        .expect("Failed to generate token");
+        let token =
+            crypto_core::jwt::generate_access_token(user_id, "test@example.com", "testuser")
+                .expect("Failed to generate token");
 
         let mut request = Request::new(());
         let auth_value = format!("Bearer {}", token);
-        request.metadata_mut().insert(
-            "authorization",
-            auth_value.parse().unwrap(),
-        );
+        request
+            .metadata_mut()
+            .insert("authorization", auth_value.parse().unwrap());
 
         let mut interceptor = JwtServerInterceptor;
         let result = interceptor.call(request);

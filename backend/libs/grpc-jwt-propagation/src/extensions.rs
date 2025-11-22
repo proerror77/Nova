@@ -134,13 +134,9 @@ pub trait JwtClaimsExt {
 
 impl<T> JwtClaimsExt for Request<T> {
     fn jwt_claims(&self) -> Result<&JwtClaims, Status> {
-        self.extensions()
-            .get::<JwtClaims>()
-            .ok_or_else(|| {
-                Status::unauthenticated(
-                    "No JWT claims found. Ensure JwtServerInterceptor is attached."
-                )
-            })
+        self.extensions().get::<JwtClaims>().ok_or_else(|| {
+            Status::unauthenticated("No JWT claims found. Ensure JwtServerInterceptor is attached.")
+        })
     }
 
     fn require_ownership(&self, resource_owner_id: &Uuid) -> Result<&JwtClaims, Status> {
@@ -148,7 +144,7 @@ impl<T> JwtClaimsExt for Request<T> {
 
         if !claims.is_owner(resource_owner_id) {
             return Err(Status::permission_denied(
-                "You do not have permission to access this resource"
+                "You do not have permission to access this resource",
             ));
         }
 
@@ -160,7 +156,7 @@ impl<T> JwtClaimsExt for Request<T> {
 
         if !claims.is_access_token() {
             return Err(Status::permission_denied(
-                "Access token required (refresh tokens not allowed)"
+                "Access token required (refresh tokens not allowed)",
             ));
         }
 

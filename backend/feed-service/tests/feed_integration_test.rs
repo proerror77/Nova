@@ -15,15 +15,6 @@
 
 mod common;
 
-/// Test structure for feed response
-#[derive(Debug, serde::Deserialize)]
-struct FeedResponse {
-    posts: Vec<String>,
-    cursor: Option<String>,
-    has_more: bool,
-    total_count: usize,
-}
-
 #[actix_web::test]
 async fn test_feed_endpoint_returns_actual_posts() {
     // Expected behavior: Feed endpoint should aggregate posts from followed users
@@ -79,7 +70,10 @@ async fn test_feed_pagination_logic() {
 
     // Pagination is implemented via streaming approach:
     // 1. Use skipped counter to skip initial posts
-    assert!(source.contains("skipped"), "Should use skipped counter for offset");
+    assert!(
+        source.contains("skipped"),
+        "Should use skipped counter for offset"
+    );
 
     // 2. Use remaining counter to limit results
     assert!(

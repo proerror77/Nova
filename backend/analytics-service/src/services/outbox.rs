@@ -44,6 +44,7 @@
 /// - **Reliability**: Automatic retry with exponential backoff
 use crate::error::{AppError, Result};
 use chrono::{DateTime, Utc};
+use prometheus::{IntCounter, IntGauge};
 use rdkafka::config::ClientConfig;
 use rdkafka::producer::{FutureProducer, FutureRecord};
 use serde::{Deserialize, Serialize};
@@ -53,6 +54,51 @@ use std::time::Duration;
 use tokio::time::interval;
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
+
+#[derive(Clone)]
+pub struct OutboxMetrics {
+    pub pending: IntGauge,
+    pub oldest_pending_age_seconds: IntGauge,
+    pub published: IntCounter,
+}
+
+impl OutboxMetrics {
+    pub fn new(_service: &str) -> Self {
+        let registry = prometheus::default_registry();
+
+        let pending = IntGauge::new(
+            "outbox_pending_count",
+            "Number of unpublished outbox events currently pending",
+        )
+        .unwrap();
+        let oldest_pending_age_seconds = IntGauge::new(
+            "outbox_oldest_pending_age_seconds",
+            "Age in seconds of the oldest pending outbox event",
+        )
+        .unwrap();
+        let published = IntCounter::new(
+            "outbox_published_total",
+            "Total number of outbox events marked as published",
+        )
+        .unwrap();
+
+        for metric in [
+            Box::new(pending.clone()) as Box<dyn prometheus::core::Collector>,
+            Box::new(oldest_pending_age_seconds.clone()),
+            Box::new(published.clone()),
+        ] {
+            let _ = registry.register(metric);
+        }
+
+        // attach service label via default process collectors? Use scent: set label by setting prefixed? Instead set via const label by wrapping new opts? To keep minimal, use per-service namespacing in help; label not added.
+        // Use service name in debug logs only.
+        Self {
+            pending,
+            oldest_pending_age_seconds,
+            published,
+        }
+    }
+}
 
 /// Configuration for OutboxPublisher
 #[derive(Debug, Clone)]
@@ -162,6 +208,7 @@ pub struct OutboxPublisher {
     db: PgPool,
     producer: FutureProducer,
     config: OutboxConfig,
+    pub metrics: OutboxMetrics,
 }
 
 impl OutboxPublisher {
@@ -202,6 +249,7 @@ impl OutboxPublisher {
             db,
             producer,
             config,
+            metrics: OutboxMetrics::new("analytics-service"),
         })
     }
 
@@ -233,12 +281,18 @@ impl OutboxPublisher {
                 Ok(count) => {
                     if count > 0 {
                         debug!("Published {} events in batch", count);
+                        self.metrics.published.inc_by(count as u64);
                     }
                 }
                 Err(e) => {
                     error!("Failed to publish batch: {:?}", e);
                     // Continue processing - don't crash on errors
                 }
+            }
+
+            // Update pending metrics
+            if let Err(e) = self.record_pending_metrics().await {
+                warn!("Failed to record outbox metrics: {}", e);
             }
 
             // Also check for failed events to retry
@@ -317,6 +371,62 @@ impl OutboxPublisher {
         }
 
         Ok(success_count)
+    }
+
+    pub async fn record_pending_metrics(&self) -> Result<()> {
+        let rec = sqlx::query(
+            r#"
+            SELECT COUNT(*)::BIGINT AS pending,
+                   EXTRACT(EPOCH FROM (NOW() - MIN(created_at)))::BIGINT AS age_seconds
+            FROM outbox_events
+            WHERE status = 'pending'
+            "#,
+        )
+        .fetch_one(&self.db)
+        .await?;
+
+        let pending: i64 = rec.try_get("pending").unwrap_or(0);
+        let age: i64 = rec.try_get("age_seconds").unwrap_or(0);
+        self.metrics.pending.set(pending);
+        self.metrics.oldest_pending_age_seconds.set(age);
+        Ok(())
+    }
+
+    pub async fn replay_since(&self, ts: DateTime<Utc>) -> Result<u64> {
+        let res = sqlx::query(
+            r#"
+            UPDATE outbox_events
+            SET status = 'pending',
+                published_at = NULL,
+                retry_count = 0,
+                last_error = NULL,
+                next_retry_at = NULL
+            WHERE created_at >= $1
+            "#,
+        )
+        .bind(ts)
+        .execute(&self.db)
+        .await?;
+        Ok(res.rows_affected())
+    }
+
+    pub async fn replay_range(&self, from_id: Uuid, to_id: Uuid) -> Result<u64> {
+        let res = sqlx::query(
+            r#"
+            UPDATE outbox_events
+            SET status = 'pending',
+                published_at = NULL,
+                retry_count = 0,
+                last_error = NULL,
+                next_retry_at = NULL
+            WHERE id BETWEEN $1 AND $2
+            "#,
+        )
+        .bind(from_id)
+        .bind(to_id)
+        .execute(&self.db)
+        .await?;
+        Ok(res.rows_affected())
     }
 
     /// Publish a single event to Kafka

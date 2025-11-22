@@ -11,6 +11,7 @@ use sqlx::postgres::PgPool;
 
 pub mod bookmark_repo;
 pub mod ch_client;
+pub mod channel_repo;
 pub mod feed_schema;
 pub mod post_repo;
 

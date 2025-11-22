@@ -9,8 +9,8 @@ use crate::error::{AppError, Result};
 use crate::grpc::clients::{ContentServiceClient, GraphServiceClient};
 use crate::middleware::jwt_auth::UserId;
 use crate::models::FeedResponse;
+use grpc_clients::nova::content_service::v2::{ContentStatus, GetUserPostsRequest};
 use grpc_clients::nova::graph_service::v2::GetFollowingRequest;
-use grpc_clients::nova::content_service::v2::GetPostsByAuthorRequest;
 
 #[derive(Debug, Deserialize)]
 pub struct FeedQueryParams {
@@ -126,11 +126,11 @@ pub async fn get_feed(
 
         match state
             .content_client
-            .get_posts_by_author(GetPostsByAuthorRequest {
-                author_id: user_id.clone(),
-                status: "published".to_string(),
+            .get_user_posts(GetUserPostsRequest {
+                user_id: user_id.clone(),
                 limit: remaining as i32, // bound fetch to what's still needed
                 offset: 0,
+                status: ContentStatus::Published as i32,
             })
             .await
         {

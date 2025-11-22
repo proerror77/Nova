@@ -3,13 +3,13 @@
 /// HTTP endpoints for personalized recommendations
 use actix_web::{get, post, web, HttpMessage, HttpRequest, HttpResponse};
 use serde::{Deserialize, Serialize};
-use sqlx::Row;
 use std::sync::Arc;
 use tracing::{debug, error, warn};
 use uuid::Uuid;
 
 use crate::error::{AppError, Result};
 use crate::middleware::jwt_auth::UserId;
+use grpc_clients::nova::content_service::ListRecentPostsRequest;
 use grpc_clients::nova::ranking_service::v1::{RankFeedRequest, RecallConfig};
 use grpc_clients::RankingServiceClient;
 
@@ -76,7 +76,6 @@ pub struct RankingResponse {
 /// Handler state for recommendation service
 pub struct RecommendationHandlerState {
     pub ranking_client: Arc<RankingServiceClient<tonic::transport::Channel>>,
-    pub db_pool: sqlx::PgPool,
 }
 
 /// GET /api/v2/recommendations
@@ -136,7 +135,7 @@ pub async fn get_recommendations(
             );
 
             // Fallback: Simple chronological ordering
-            match fetch_chronological_feed(&state.db_pool, user_id, limit).await {
+            match fetch_chronological_feed(user_id, limit).await {
                 Ok(posts) => {
                     let count = posts.len();
                     Ok(HttpResponse::Ok().json(RecommendationResponse { posts, count }))
@@ -154,33 +153,32 @@ pub async fn get_recommendations(
 }
 
 /// Fallback: Fetch chronological feed when ranking service is down
-async fn fetch_chronological_feed(
-    db_pool: &sqlx::PgPool,
-    user_id: Uuid,
-    limit: usize,
-) -> Result<Vec<Uuid>> {
-    let limit = limit as i64;
+async fn fetch_chronological_feed(user_id: Uuid, limit: usize) -> Result<Vec<Uuid>> {
+    // Degraded fallback: rely on content-service recency and exclude self posts
+    let cfg = grpc_clients::config::GrpcConfig::from_env()
+        .map_err(|e| AppError::Internal(format!("load gRPC config failed: {}", e)))?;
+    let channel = cfg
+        .make_endpoint(&cfg.content_service.url)
+        .map_err(|e| AppError::Internal(format!("content endpoint build failed: {}", e)))?
+        .connect_lazy();
+    let mut client =
+        grpc_clients::nova::content_service::content_service_client::ContentServiceClient::new(
+            channel,
+        );
 
-    // Get posts from followed users, ordered by recency
-    let rows = sqlx::query(
-        "SELECT DISTINCT p.id
-         FROM posts p
-         JOIN follows f ON f.followee_id = p.user_id
-         WHERE f.follower_id = $1
-           AND p.status = 'published'
-           AND p.soft_delete IS NULL
-         ORDER BY p.created_at DESC
-         LIMIT $2",
-    )
-    .bind(user_id)
-    .bind(limit)
-    .fetch_all(db_pool)
-    .await
-    .map_err(|e| AppError::Internal(format!("Database error: {}", e)))?;
+    let resp = client
+        .list_recent_posts(ListRecentPostsRequest {
+            limit: limit as i32,
+            exclude_user_id: user_id.to_string(),
+        })
+        .await
+        .map_err(|e| AppError::Internal(format!("list_recent_posts fallback failed: {}", e)))?
+        .into_inner();
 
-    let posts: Vec<Uuid> = rows
+    let posts = resp
+        .post_ids
         .into_iter()
-        .filter_map(|row| row.try_get::<Uuid, _>("id").ok())
+        .filter_map(|id| Uuid::parse_str(&id).ok())
         .collect();
 
     Ok(posts)

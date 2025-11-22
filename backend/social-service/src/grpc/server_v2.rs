@@ -1,17 +1,22 @@
-use sqlx::PgPool;
 use std::sync::Arc;
+
+use chrono::{DateTime, Utc};
+use pbjson_types::{Empty, Timestamp};
+use sqlx::PgPool;
 use tonic::{Request, Response, Status};
 use transactional_outbox::{OutboxError, SqlxOutboxRepository};
 use uuid::Uuid;
 
-use crate::services::CounterService;
+use crate::domain::models::{Comment as CommentModel, Like as LikeModel, Share as ShareModel};
+use crate::repository::{CommentRepository, LikeRepository, ShareRepository};
+use crate::services::{CounterService, FollowService};
+use transactional_outbox::{OutboxEvent, OutboxRepository};
 
-// Error conversion helper function
 fn outbox_error_to_status(err: OutboxError) -> Status {
     Status::internal(format!("Outbox error: {}", err))
 }
 
-// Generated protobuf code (from proto/social.proto)
+// Generated protobuf code (from backend/proto/services_v2/social_service.proto)
 pub mod social {
     tonic::include_proto!("nova.social_service.v2");
 }
@@ -41,13 +46,6 @@ impl AppState {
     }
 }
 
-/// Implementation of SocialService gRPC service with Transactional Outbox pattern
-///
-/// Key design decisions:
-/// 1. **Atomicity**: Business logic + outbox event in same PostgreSQL transaction
-/// 2. **Cache-Aside**: Update Redis AFTER successful commit (best-effort)
-/// 3. **Idempotency**: ON CONFLICT DO NOTHING for like operations
-/// 4. **Event Publishing**: Use transactional-outbox publish_event! macro
 pub struct SocialServiceImpl {
     state: Arc<AppState>,
 }
@@ -56,617 +54,510 @@ impl SocialServiceImpl {
     pub fn new(state: Arc<AppState>) -> Self {
         Self { state }
     }
+
+    fn like_repo(&self) -> LikeRepository {
+        LikeRepository::new(self.state.pg_pool.clone())
+    }
+
+    fn follow_service(&self) -> FollowService {
+        FollowService::new(self.state.pg_pool.clone())
+    }
+
+    fn comment_repo(&self) -> CommentRepository {
+        CommentRepository::new(self.state.pg_pool.clone())
+    }
+
+    fn share_repo(&self) -> ShareRepository {
+        ShareRepository::new(self.state.pg_pool.clone())
+    }
 }
 
 #[tonic::async_trait]
 impl SocialService for SocialServiceImpl {
-    // ========== Like Operations ==========
+    // ========= Relationships (stubs) =========
+    async fn follow_user(
+        &self,
+        request: Request<FollowUserRequest>,
+    ) -> Result<Response<Empty>, Status> {
+        let req = request.into_inner();
+        let follower_id = parse_uuid(&req.follower_id, "follower_id")?;
+        let followee_id = parse_uuid(&req.followee_id, "followee_id")?;
 
-    /// Create a like (idempotent: returns success if already liked)
+        let created = self
+            .follow_service()
+            .create_follow(follower_id, followee_id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to create follow: {}", e)))?;
+
+        if created {
+            publish_outbox_follow(&self.state, follower_id, followee_id, true).await?;
+        }
+
+        Ok(Response::new(Empty {}))
+    }
+
+    async fn unfollow_user(
+        &self,
+        request: Request<UnfollowUserRequest>,
+    ) -> Result<Response<Empty>, Status> {
+        let req = request.into_inner();
+        let follower_id = parse_uuid(&req.follower_id, "follower_id")?;
+        let followee_id = parse_uuid(&req.followee_id, "followee_id")?;
+
+        let deleted = self
+            .follow_service()
+            .delete_follow(follower_id, followee_id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to delete follow: {}", e)))?;
+
+        if deleted {
+            publish_outbox_follow(&self.state, follower_id, followee_id, false).await?;
+        }
+
+        Ok(Response::new(Empty {}))
+    }
+
+    async fn block_user(
+        &self,
+        _request: Request<BlockUserRequest>,
+    ) -> Result<Response<Empty>, Status> {
+        Err(Status::unimplemented("block_user not implemented"))
+    }
+
+    async fn unblock_user(
+        &self,
+        _request: Request<UnblockUserRequest>,
+    ) -> Result<Response<Empty>, Status> {
+        Err(Status::unimplemented("unblock_user not implemented"))
+    }
+
+    async fn get_followers(
+        &self,
+        request: Request<GetFollowersRequest>,
+    ) -> Result<Response<GetFollowersResponse>, Status> {
+        let req = request.into_inner();
+        let user_id = parse_uuid(&req.user_id, "user_id")?;
+        let limit = sanitize_limit(req.limit, 1, 200, 50) as i64;
+        let offset = req.offset.max(0) as i64;
+
+        let (followers, total) = self
+            .follow_service()
+            .get_followers(user_id, limit, offset)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to get followers: {}", e)))?;
+
+        Ok(Response::new(GetFollowersResponse {
+            user_ids: followers.into_iter().map(|id| id.to_string()).collect(),
+            total: total as i32,
+        }))
+    }
+
+    async fn get_following(
+        &self,
+        request: Request<GetFollowingRequest>,
+    ) -> Result<Response<GetFollowingResponse>, Status> {
+        let req = request.into_inner();
+        let user_id = parse_uuid(&req.user_id, "user_id")?;
+        let limit = sanitize_limit(req.limit, 1, 200, 50) as i64;
+        let offset = req.offset.max(0) as i64;
+
+        let (following, total) = self
+            .follow_service()
+            .get_following(user_id, limit, offset)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to get following: {}", e)))?;
+
+        Ok(Response::new(GetFollowingResponse {
+            user_ids: following.into_iter().map(|id| id.to_string()).collect(),
+            total: total as i32,
+        }))
+    }
+
+    async fn get_relationship(
+        &self,
+        request: Request<GetRelationshipRequest>,
+    ) -> Result<Response<GetRelationshipResponse>, Status> {
+        let req = request.into_inner();
+        let user_id = parse_uuid(&req.user_id, "user_id")?;
+        let other_user_id = parse_uuid(&req.other_user_id, "other_user_id")?;
+
+        let rel = self
+            .follow_service()
+            .get_relationship(user_id, other_user_id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to get relationship: {}", e)))?;
+
+        let relationship = if let Some((id, created_at)) = rel {
+            Relationship {
+                id: id.to_string(),
+                follower_id: user_id.to_string(),
+                followee_id: other_user_id.to_string(),
+                r#type: RelationshipType::RelationshipTypeFollow as i32,
+                status: RelationshipStatus::RelationshipStatusActive as i32,
+                created_at: to_ts(created_at),
+                updated_at: to_ts(created_at),
+            }
+        } else {
+            Relationship {
+                id: String::new(),
+                follower_id: user_id.to_string(),
+                followee_id: other_user_id.to_string(),
+                r#type: RelationshipType::RelationshipTypeUnspecified as i32,
+                status: RelationshipStatus::RelationshipStatusUnspecified as i32,
+                created_at: None,
+                updated_at: None,
+            }
+        };
+
+        Ok(Response::new(GetRelationshipResponse {
+            relationship: Some(relationship),
+        }))
+    }
+
+    // ========= Likes =========
     async fn create_like(
         &self,
         request: Request<CreateLikeRequest>,
     ) -> Result<Response<CreateLikeResponse>, Status> {
         let req = request.into_inner();
+        let user_id = parse_uuid(&req.user_id, "user_id")?;
+        let post_id = parse_uuid(&req.post_id, "post_id")?;
 
-        let user_id = Uuid::parse_str(&req.user_id)
-            .map_err(|_| Status::invalid_argument("Invalid user_id"))?;
-        let post_id = Uuid::parse_str(&req.post_id)
-            .map_err(|_| Status::invalid_argument("Invalid post_id"))?;
+        let like_repo = self.like_repo();
+        like_repo
+            .create_like(user_id, post_id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to create like: {}", e)))?;
 
-        // Start transaction
-        let mut tx = self
+        let like_count = match self
             .state
-            .pg_pool
-            .begin()
+            .counter_service
+            .increment_like_count(post_id)
             .await
-            .map_err(|e| Status::internal(format!("Failed to start transaction: {}", e)))?;
-
-        // 1. Insert like (idempotent: ON CONFLICT DO NOTHING)
-        let like_id = Uuid::new_v4();
-        let result = sqlx::query_as::<_, (Uuid,)>(
-            "INSERT INTO likes (id, user_id, post_id, created_at)
-             VALUES ($1, $2, $3, NOW())
-             ON CONFLICT (user_id, post_id) DO NOTHING
-             RETURNING id",
-        )
-        .bind(like_id)
-        .bind(user_id)
-        .bind(post_id)
-        .fetch_optional(&mut *tx)
-        .await
-        .map_err(|e| Status::internal(format!("Failed to insert like: {}", e)))?;
-
-        let was_created = result.is_some();
-        let final_like_id = result.map(|(id,)| id).unwrap_or(like_id);
-
-        // 2. Publish event via transactional-outbox (only if new like)
-        if was_created {
-            use transactional_outbox::{OutboxEvent, OutboxRepository};
-
-            let event_payload = serde_json::json!({
-                "like_id": final_like_id.to_string(),
-                "user_id": user_id.to_string(),
-                "post_id": post_id.to_string(),
-                "created_at": chrono::Utc::now().to_rfc3339(),
-            });
-
-            let event = OutboxEvent {
-                id: Uuid::new_v4(),
-                aggregate_type: "like".to_string(),
-                aggregate_id: final_like_id,
-                event_type: "social.like.created".to_string(),
-                payload: event_payload,
-                metadata: None,
-                created_at: chrono::Utc::now(),
-                published_at: None,
-                retry_count: 0,
-                last_error: None,
-            };
-
-            self.state
-                .outbox_repo
-                .insert(&mut tx, &event)
+        {
+            Ok(v) => v,
+            Err(_) => self
+                .state
+                .counter_service
+                .get_like_count(post_id)
                 .await
-                .map_err(outbox_error_to_status)?;
-        }
-
-        // 3. Commit transaction (atomic: like + outbox event)
-        tx.commit()
-            .await
-            .map_err(|e| Status::internal(format!("Failed to commit transaction: {}", e)))?;
-
-        // 4. Update Redis counter (after successful commit, best-effort)
-        let new_count = if was_created {
-            let counter_svc = self.state.counter_service.clone();
-            counter_svc
-                .increment_like_count(post_id)
-                .await
-                .unwrap_or_else(|e| {
-                    tracing::warn!(
-                        post_id=%post_id,
-                        error=%e,
-                        "Failed to increment Redis counter (data is in DB)"
-                    );
-                    0
-                })
-        } else {
-            // Get current count if like already existed
-            let counter_svc = self.state.counter_service.clone();
-            counter_svc.get_like_count(post_id).await.unwrap_or(0)
+                .unwrap_or(0),
         };
 
         Ok(Response::new(CreateLikeResponse {
             success: true,
-            like_id: final_like_id.to_string(),
-            new_like_count: new_count,
+            like_count,
         }))
     }
 
-    /// Delete a like
     async fn delete_like(
         &self,
         request: Request<DeleteLikeRequest>,
     ) -> Result<Response<DeleteLikeResponse>, Status> {
         let req = request.into_inner();
+        let user_id = parse_uuid(&req.user_id, "user_id")?;
+        let post_id = parse_uuid(&req.post_id, "post_id")?;
 
-        let user_id = Uuid::parse_str(&req.user_id)
-            .map_err(|_| Status::invalid_argument("Invalid user_id"))?;
-        let post_id = Uuid::parse_str(&req.post_id)
-            .map_err(|_| Status::invalid_argument("Invalid post_id"))?;
+        let like_repo = self.like_repo();
+        like_repo
+            .delete_like(user_id, post_id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to delete like: {}", e)))?;
 
-        // Start transaction
-        let mut tx = self
+        let like_count = match self
             .state
-            .pg_pool
-            .begin()
+            .counter_service
+            .decrement_like_count(post_id)
             .await
-            .map_err(|e| Status::internal(format!("Failed to start transaction: {}", e)))?;
-
-        // 1. Delete like
-        let result = sqlx::query_as::<_, (Uuid,)>(
-            "DELETE FROM likes
-             WHERE user_id = $1 AND post_id = $2
-             RETURNING id",
-        )
-        .bind(user_id)
-        .bind(post_id)
-        .fetch_optional(&mut *tx)
-        .await
-        .map_err(|e| Status::internal(format!("Failed to delete like: {}", e)))?;
-
-        let was_deleted = result.is_some();
-
-        // 2. Publish event (only if like existed)
-        if was_deleted {
-            use transactional_outbox::{OutboxEvent, OutboxRepository};
-
-            let event_payload = serde_json::json!({
-                "user_id": user_id.to_string(),
-                "post_id": post_id.to_string(),
-                "deleted_at": chrono::Utc::now().to_rfc3339(),
-            });
-
-            let event = OutboxEvent {
-                id: Uuid::new_v4(),
-                aggregate_type: "like".to_string(),
-                aggregate_id: post_id,
-                event_type: "social.like.deleted".to_string(),
-                payload: event_payload,
-                metadata: None,
-                created_at: chrono::Utc::now(),
-                published_at: None,
-                retry_count: 0,
-                last_error: None,
-            };
-
-            self.state
-                .outbox_repo
-                .insert(&mut tx, &event)
+        {
+            Ok(v) => v,
+            Err(_) => self
+                .state
+                .counter_service
+                .get_like_count(post_id)
                 .await
-                .map_err(outbox_error_to_status)?;
-        }
-
-        // 3. Commit transaction
-        tx.commit()
-            .await
-            .map_err(|e| Status::internal(format!("Failed to commit transaction: {}", e)))?;
-
-        // 4. Update Redis counter
-        let new_count = if was_deleted {
-            let counter_svc = self.state.counter_service.clone();
-            counter_svc
-                .decrement_like_count(post_id)
-                .await
-                .unwrap_or_else(|e| {
-                    tracing::warn!(
-                        post_id=%post_id,
-                        error=%e,
-                        "Failed to decrement Redis counter"
-                    );
-                    0
-                })
-        } else {
-            let counter_svc = self.state.counter_service.clone();
-            counter_svc.get_like_count(post_id).await.unwrap_or(0)
+                .unwrap_or(0),
         };
 
         Ok(Response::new(DeleteLikeResponse {
             success: true,
-            new_like_count: new_count,
+            like_count,
         }))
     }
 
-    /// Get like status for a user on a post
-    async fn get_like_status(
+    async fn get_likes(
         &self,
-        request: Request<GetLikeStatusRequest>,
-    ) -> Result<Response<GetLikeStatusResponse>, Status> {
+        request: Request<GetLikesRequest>,
+    ) -> Result<Response<GetLikesResponse>, Status> {
         let req = request.into_inner();
+        let post_id = parse_uuid(&req.post_id, "post_id")?;
+        let limit = sanitize_limit(req.limit, 1, 100, 50);
+        let offset = req.offset.max(0);
 
-        let user_id = Uuid::parse_str(&req.user_id)
-            .map_err(|_| Status::invalid_argument("Invalid user_id"))?;
-        let post_id = Uuid::parse_str(&req.post_id)
-            .map_err(|_| Status::invalid_argument("Invalid post_id"))?;
+        let like_repo = self.like_repo();
+        let likes = like_repo
+            .get_post_likes(post_id, limit, offset)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to get likes: {}", e)))?;
 
-        // Query like status from database
-        let result = sqlx::query_as::<_, (chrono::NaiveDateTime,)>(
-            "SELECT created_at FROM likes WHERE user_id = $1 AND post_id = $2",
-        )
-        .bind(user_id)
-        .bind(post_id)
-        .fetch_optional(&self.state.pg_pool)
-        .await
-        .map_err(|e| Status::internal(format!("Failed to fetch like status: {}", e)))?;
-
-        let (is_liked, liked_at) = match result {
-            Some((created_at,)) => (
-                true,
-                Some(prost_types::Timestamp {
-                    seconds: created_at.and_utc().timestamp(),
-                    nanos: created_at.and_utc().timestamp_subsec_nanos() as i32,
-                }),
-            ),
-            None => (false, None),
+        let total = match self.state.counter_service.get_like_count(post_id).await {
+            Ok(count) => count as i32,
+            Err(_) => like_repo.get_like_count(post_id).await.unwrap_or(0) as i32,
         };
 
-        Ok(Response::new(GetLikeStatusResponse { is_liked, liked_at }))
+        Ok(Response::new(GetLikesResponse {
+            likes: likes.into_iter().map(to_proto_like).collect(),
+            total,
+        }))
     }
 
-    /// Get like count for a post
-    async fn get_like_count(
+    async fn check_user_liked(
         &self,
-        request: Request<GetLikeCountRequest>,
-    ) -> Result<Response<GetLikeCountResponse>, Status> {
+        request: Request<CheckUserLikedRequest>,
+    ) -> Result<Response<CheckUserLikedResponse>, Status> {
         let req = request.into_inner();
+        let user_id = parse_uuid(&req.user_id, "user_id")?;
+        let post_id = parse_uuid(&req.post_id, "post_id")?;
 
-        let post_id = Uuid::parse_str(&req.post_id)
-            .map_err(|_| Status::invalid_argument("Invalid post_id"))?;
+        let liked = self
+            .like_repo()
+            .check_user_liked(user_id, post_id)
+            .await
+            .unwrap_or(false);
 
-        // Try Redis first, fallback to PostgreSQL
-        let counter_svc = self.state.counter_service.clone();
-        let count = match counter_svc.get_like_count(post_id).await {
-            Ok(count) => count,
-            Err(_) => {
-                // Redis miss, query PostgreSQL
-                sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM likes WHERE post_id = $1")
-                    .bind(post_id)
-                    .fetch_one(&self.state.pg_pool)
-                    .await
-                    .map_err(|e| Status::internal(format!("Failed to count likes: {}", e)))?
+        Ok(Response::new(CheckUserLikedResponse { liked }))
+    }
+
+    // ========= Comments =========
+    async fn create_comment(
+        &self,
+        request: Request<CreateCommentRequest>,
+    ) -> Result<Response<CreateCommentResponse>, Status> {
+        let req = request.into_inner();
+        let user_id = parse_uuid(&req.user_id, "user_id")?;
+        let post_id = parse_uuid(&req.post_id, "post_id")?;
+        let parent_comment_id = if req.parent_comment_id.is_empty() {
+            None
+        } else {
+            Some(parse_uuid(&req.parent_comment_id, "parent_comment_id")?)
+        };
+
+        let comment = self
+            .comment_repo()
+            .create_comment(post_id, user_id, req.content, parent_comment_id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to create comment: {}", e)))?;
+
+        let _ = self
+            .state
+            .counter_service
+            .increment_comment_count(post_id)
+            .await;
+
+        Ok(Response::new(CreateCommentResponse {
+            comment: Some(to_proto_comment(comment)),
+        }))
+    }
+
+    async fn delete_comment(
+        &self,
+        request: Request<DeleteCommentRequest>,
+    ) -> Result<Response<DeleteCommentResponse>, Status> {
+        let req = request.into_inner();
+        let comment_id = parse_uuid(&req.comment_id, "comment_id")?;
+        let user_id = parse_uuid(&req.user_id, "user_id")?;
+
+        let repo = self.comment_repo();
+        let deleted = repo
+            .delete_comment(comment_id, user_id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to delete comment: {}", e)))?;
+
+        if deleted {
+            if let Ok(Some(comment)) = repo.get_comment(comment_id).await {
+                let _ = self
+                    .state
+                    .counter_service
+                    .decrement_comment_count(comment.post_id)
+                    .await;
             }
-        };
+        }
 
-        Ok(Response::new(GetLikeCountResponse { like_count: count }))
+        Ok(Response::new(DeleteCommentResponse { success: deleted }))
     }
 
-    /// Get list of users who liked a post (paginated)
-    async fn get_likers(
+    async fn get_comments(
         &self,
-        request: Request<GetLikersRequest>,
-    ) -> Result<Response<GetLikersResponse>, Status> {
+        request: Request<GetCommentsRequest>,
+    ) -> Result<Response<GetCommentsResponse>, Status> {
         let req = request.into_inner();
+        let post_id = parse_uuid(&req.post_id, "post_id")?;
+        let limit = sanitize_limit(req.limit, 1, 100, 50);
+        let offset = req.offset.max(0);
 
-        let post_id = Uuid::parse_str(&req.post_id)
-            .map_err(|_| Status::invalid_argument("Invalid post_id"))?;
+        let repo = self.comment_repo();
+        let comments = repo
+            .get_comments(post_id, limit, offset, "created_at", "desc")
+            .await
+            .map_err(|e| Status::internal(format!("Failed to get comments: {}", e)))?;
 
-        let limit = if req.limit > 0 && req.limit <= 100 {
-            req.limit
-        } else {
-            20
+        let total = match self.state.counter_service.get_comment_count(post_id).await {
+            Ok(count) => count as i32,
+            Err(_) => repo.get_comment_count(post_id).await.unwrap_or(0) as i32,
         };
 
-        // For simplicity, use offset-based pagination
-        // TODO: Implement cursor-based pagination for better scalability
-        let offset = if req.cursor.is_empty() {
-            0
-        } else {
-            req.cursor
-                .parse::<i64>()
-                .map_err(|_| Status::invalid_argument("Invalid cursor"))?
-        };
-
-        let likers = sqlx::query_as::<_, (Uuid, chrono::NaiveDateTime)>(
-            "SELECT user_id, created_at FROM likes
-             WHERE post_id = $1
-             ORDER BY created_at DESC
-             LIMIT $2 OFFSET $3",
-        )
-        .bind(post_id)
-        .bind(limit as i64)
-        .bind(offset)
-        .fetch_all(&self.state.pg_pool)
-        .await
-        .map_err(|e| Status::internal(format!("Failed to fetch likers: {}", e)))?;
-
-        let has_more = likers.len() == limit as usize;
-        let next_cursor = if has_more {
-            (offset + limit as i64).to_string()
-        } else {
-            String::new()
-        };
-
-        let proto_likers: Vec<Liker> = likers
-            .into_iter()
-            .map(|(user_id, created_at)| Liker {
-                user_id: user_id.to_string(),
-                liked_at: Some(prost_types::Timestamp {
-                    seconds: created_at.and_utc().timestamp(),
-                    nanos: created_at.and_utc().timestamp_subsec_nanos() as i32,
-                }),
-            })
-            .collect();
-
-        Ok(Response::new(GetLikersResponse {
-            likers: proto_likers,
-            next_cursor,
-            has_more,
+        Ok(Response::new(GetCommentsResponse {
+            comments: comments.into_iter().map(to_proto_comment).collect(),
+            total,
         }))
     }
 
-    // ========== Share Operations ==========
-
-    /// Create a share
+    // ========= Shares =========
     async fn create_share(
         &self,
         request: Request<CreateShareRequest>,
     ) -> Result<Response<CreateShareResponse>, Status> {
         let req = request.into_inner();
+        let user_id = parse_uuid(&req.user_id, "user_id")?;
+        let post_id = parse_uuid(&req.post_id, "post_id")?;
 
-        let user_id = Uuid::parse_str(&req.user_id)
-            .map_err(|_| Status::invalid_argument("Invalid user_id"))?;
-        let post_id = Uuid::parse_str(&req.post_id)
-            .map_err(|_| Status::invalid_argument("Invalid post_id"))?;
+        self.share_repo()
+            .create_share(user_id, post_id, "repost".to_string())
+            .await
+            .map_err(|e| Status::internal(format!("Failed to create share: {}", e)))?;
 
-        let share_type_str = match req.share_type {
-            1 => "REPOST",
-            2 => "STORY",
-            3 => "DM",
-            4 => "EXTERNAL",
-            _ => return Err(Status::invalid_argument("Invalid share_type")),
-        };
-
-        let target_user_id = if !req.target_user_id.is_empty() {
-            Some(
-                Uuid::parse_str(&req.target_user_id)
-                    .map_err(|_| Status::invalid_argument("Invalid target_user_id"))?,
-            )
-        } else {
-            None
-        };
-
-        // Start transaction
-        let mut tx = self
+        let _ = self
             .state
-            .pg_pool
-            .begin()
-            .await
-            .map_err(|e| Status::internal(format!("Failed to start transaction: {}", e)))?;
-
-        // 1. Insert share
-        let share_id = Uuid::new_v4();
-        sqlx::query(
-            "INSERT INTO shares (id, user_id, post_id, share_type, target_user_id, created_at)
-             VALUES ($1, $2, $3, $4, $5, NOW())",
-        )
-        .bind(share_id)
-        .bind(user_id)
-        .bind(post_id)
-        .bind(share_type_str)
-        .bind(target_user_id)
-        .execute(&mut *tx)
-        .await
-        .map_err(|e| Status::internal(format!("Failed to insert share: {}", e)))?;
-
-        // 2. Publish event
-        use transactional_outbox::{OutboxEvent, OutboxRepository};
-
-        let event_payload = serde_json::json!({
-            "share_id": share_id.to_string(),
-            "user_id": user_id.to_string(),
-            "post_id": post_id.to_string(),
-            "share_type": share_type_str,
-            "target_user_id": target_user_id.map(|id| id.to_string()),
-            "created_at": chrono::Utc::now().to_rfc3339(),
-        });
-
-        let event = OutboxEvent {
-            id: Uuid::new_v4(),
-            aggregate_type: "share".to_string(),
-            aggregate_id: share_id,
-            event_type: "social.share.created".to_string(),
-            payload: event_payload,
-            metadata: None,
-            created_at: chrono::Utc::now(),
-            published_at: None,
-            retry_count: 0,
-            last_error: None,
-        };
-
-        self.state
-            .outbox_repo
-            .insert(&mut tx, &event)
-            .await
-            .map_err(outbox_error_to_status)?;
-
-        // 3. Commit transaction
-        tx.commit()
-            .await
-            .map_err(|e| Status::internal(format!("Failed to commit transaction: {}", e)))?;
-
-        // 4. Update Redis counter
-        let counter_svc = self.state.counter_service.clone();
-        let new_count = counter_svc
+            .counter_service
             .increment_share_count(post_id)
-            .await
-            .unwrap_or_else(|e| {
-                tracing::warn!(
-                    post_id=%post_id,
-                    error=%e,
-                    "Failed to increment share counter"
-                );
-                0
-            });
+            .await;
 
-        Ok(Response::new(CreateShareResponse {
-            success: true,
-            share_id: share_id.to_string(),
-            new_share_count: new_count,
-        }))
+        Ok(Response::new(CreateShareResponse { success: true }))
     }
 
-    /// Get share count for a post
     async fn get_share_count(
         &self,
         request: Request<GetShareCountRequest>,
     ) -> Result<Response<GetShareCountResponse>, Status> {
         let req = request.into_inner();
+        let post_id = parse_uuid(&req.post_id, "post_id")?;
 
-        let post_id = Uuid::parse_str(&req.post_id)
-            .map_err(|_| Status::invalid_argument("Invalid post_id"))?;
-
-        // Try Redis first, fallback to PostgreSQL
-        let counter_svc = self.state.counter_service.clone();
-        let count = match counter_svc.get_share_count(post_id).await {
-            Ok(count) => count,
-            Err(_) => {
-                sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM shares WHERE post_id = $1")
-                    .bind(post_id)
-                    .fetch_one(&self.state.pg_pool)
-                    .await
-                    .map_err(|e| Status::internal(format!("Failed to count shares: {}", e)))?
-            }
+        let count = match self.state.counter_service.get_share_count(post_id).await {
+            Ok(c) => c,
+            Err(_) => self
+                .share_repo()
+                .get_share_count(post_id)
+                .await
+                .unwrap_or(0),
         };
 
-        Ok(Response::new(GetShareCountResponse { share_count: count }))
+        Ok(Response::new(GetShareCountResponse { count }))
     }
 
-    /// Get list of shares for a post
-    async fn get_shares(
+    // ========= Feed (stubs) =========
+    async fn get_user_feed(
         &self,
-        request: Request<GetSharesRequest>,
-    ) -> Result<Response<GetSharesResponse>, Status> {
-        let req = request.into_inner();
-
-        let post_id = Uuid::parse_str(&req.post_id)
-            .map_err(|_| Status::invalid_argument("Invalid post_id"))?;
-
-        let limit = if req.limit > 0 && req.limit <= 100 {
-            req.limit
-        } else {
-            20
-        };
-
-        let offset = if req.cursor.is_empty() {
-            0
-        } else {
-            req.cursor
-                .parse::<i64>()
-                .map_err(|_| Status::invalid_argument("Invalid cursor"))?
-        };
-
-        let shares = sqlx::query_as::<_, (Uuid, Uuid, String, chrono::NaiveDateTime)>(
-            "SELECT id, user_id, share_type, created_at FROM shares
-             WHERE post_id = $1
-             ORDER BY created_at DESC
-             LIMIT $2 OFFSET $3",
-        )
-        .bind(post_id)
-        .bind(limit as i64)
-        .bind(offset)
-        .fetch_all(&self.state.pg_pool)
-        .await
-        .map_err(|e| Status::internal(format!("Failed to fetch shares: {}", e)))?;
-
-        let has_more = shares.len() == limit as usize;
-        let next_cursor = if has_more {
-            (offset + limit as i64).to_string()
-        } else {
-            String::new()
-        };
-
-        let proto_shares: Vec<Share> = shares
-            .into_iter()
-            .map(|(id, user_id, share_type, created_at)| Share {
-                share_id: id.to_string(),
-                user_id: user_id.to_string(),
-                share_type: match share_type.as_str() {
-                    "REPOST" => 1,
-                    "STORY" => 2,
-                    "DM" => 3,
-                    "EXTERNAL" => 4,
-                    _ => 0,
-                },
-                shared_at: Some(prost_types::Timestamp {
-                    seconds: created_at.and_utc().timestamp(),
-                    nanos: created_at.and_utc().timestamp_subsec_nanos() as i32,
-                }),
-            })
-            .collect();
-
-        Ok(Response::new(GetSharesResponse {
-            shares: proto_shares,
-            next_cursor,
-            has_more,
-        }))
+        _request: Request<GetUserFeedRequest>,
+    ) -> Result<Response<GetUserFeedResponse>, Status> {
+        Err(Status::unimplemented("get_user_feed not implemented"))
     }
 
-    // ========== Comment Operations (Stubs) ==========
-
-    async fn create_comment(
+    async fn get_explore_feed(
         &self,
-        _request: Request<CreateCommentRequest>,
-    ) -> Result<Response<CreateCommentResponse>, Status> {
-        // TODO: Implement with same transactional-outbox pattern
-        Err(Status::unimplemented(
-            "Comment operations not yet implemented",
-        ))
-    }
-
-    async fn update_comment(
-        &self,
-        _request: Request<UpdateCommentRequest>,
-    ) -> Result<Response<UpdateCommentResponse>, Status> {
-        Err(Status::unimplemented(
-            "Comment operations not yet implemented",
-        ))
-    }
-
-    async fn delete_comment(
-        &self,
-        _request: Request<DeleteCommentRequest>,
-    ) -> Result<Response<DeleteCommentResponse>, Status> {
-        Err(Status::unimplemented(
-            "Comment operations not yet implemented",
-        ))
-    }
-
-    async fn get_comment(
-        &self,
-        _request: Request<GetCommentRequest>,
-    ) -> Result<Response<GetCommentResponse>, Status> {
-        Err(Status::unimplemented(
-            "Comment operations not yet implemented",
-        ))
-    }
-
-    async fn list_comments(
-        &self,
-        _request: Request<ListCommentsRequest>,
-    ) -> Result<Response<ListCommentsResponse>, Status> {
-        Err(Status::unimplemented(
-            "Comment operations not yet implemented",
-        ))
-    }
-
-    async fn get_comment_count(
-        &self,
-        _request: Request<GetCommentCountRequest>,
-    ) -> Result<Response<GetCommentCountResponse>, Status> {
-        Err(Status::unimplemented(
-            "Comment operations not yet implemented",
-        ))
-    }
-
-    // ========== Batch Operations ==========
-
-    async fn batch_get_like_status(
-        &self,
-        _request: Request<BatchGetLikeStatusRequest>,
-    ) -> Result<Response<BatchGetLikeStatusResponse>, Status> {
-        // TODO: Implement with Redis MGET optimization
-        Err(Status::unimplemented(
-            "Batch operations not yet implemented",
-        ))
-    }
-
-    async fn batch_get_counts(
-        &self,
-        _request: Request<BatchGetCountsRequest>,
-    ) -> Result<Response<BatchGetCountsResponse>, Status> {
-        // TODO: Implement with Redis MGET optimization
-        Err(Status::unimplemented(
-            "Batch operations not yet implemented",
-        ))
+        _request: Request<GetExploreFeedRequest>,
+    ) -> Result<Response<GetExploreFeedResponse>, Status> {
+        Err(Status::unimplemented("get_explore_feed not implemented"))
     }
 }
+
+fn parse_uuid(value: &str, field: &str) -> Result<Uuid, Status> {
+    Uuid::parse_str(value).map_err(|_| Status::invalid_argument(format!("Invalid {}", field)))
+}
+
+fn sanitize_limit(value: i32, min: i32, max: i32, default: i32) -> i32 {
+    if value < min {
+        default
+    } else if value > max {
+        max
+    } else {
+        value
+    }
+}
+
+async fn publish_outbox_follow(
+    state: &Arc<AppState>,
+    follower_id: Uuid,
+    followee_id: Uuid,
+    created: bool,
+) -> Result<(), Status> {
+    let mut tx = state
+        .pg_pool
+        .begin()
+        .await
+        .map_err(|e| Status::internal(format!("Failed to open tx for outbox: {}", e)))?;
+
+    let event = OutboxEvent {
+        id: Uuid::new_v4(),
+        aggregate_type: "follow".to_string(),
+        aggregate_id: follower_id,
+        event_type: if created {
+            "social.follow.created"
+        } else {
+            "social.follow.deleted"
+        }
+        .to_string(),
+        payload: serde_json::json!({
+            "follower_id": follower_id.to_string(),
+            "followee_id": followee_id.to_string()
+        }),
+        metadata: None,
+        created_at: chrono::Utc::now(),
+        published_at: None,
+        retry_count: 0,
+        last_error: None,
+    };
+
+    state
+        .outbox_repo
+        .insert(&mut tx, &event)
+        .await
+        .map_err(outbox_error_to_status)?;
+
+    tx.commit()
+        .await
+        .map_err(|e| Status::internal(format!("Failed to commit follow outbox: {}", e)))?;
+    Ok(())
+}
+
+fn to_ts(dt: DateTime<Utc>) -> Option<Timestamp> {
+    Some(Timestamp {
+        seconds: dt.timestamp(),
+        nanos: dt.timestamp_subsec_nanos() as i32,
+    })
+}
+
+fn to_proto_like(like: LikeModel) -> Like {
+    Like {
+        id: like.id.to_string(),
+        user_id: like.user_id.to_string(),
+        post_id: like.post_id.to_string(),
+        created_at: to_ts(like.created_at),
+    }
+}
+
+fn to_proto_comment(comment: CommentModel) -> Comment {
+    Comment {
+        id: comment.id.to_string(),
+        user_id: comment.user_id.to_string(),
+        post_id: comment.post_id.to_string(),
+        content: comment.content,
+        parent_comment_id: comment
+            .parent_comment_id
+            .map(|id| id.to_string())
+            .unwrap_or_default(),
+        created_at: to_ts(comment.created_at),
+    }
+}
+
+#[allow(dead_code)]
+fn _to_proto_share(_share: ShareModel) {}

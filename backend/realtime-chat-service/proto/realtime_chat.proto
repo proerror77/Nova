@@ -4,6 +4,15 @@ package nova.realtime_chat.v1;
 
 // RealtimeChat Service - WebSocket messaging and E2EE
 service RealtimeChatService {
+  // Create a 1:1 or group conversation
+  rpc CreateConversation(CreateConversationRequest) returns (Conversation);
+
+  // List conversations for a user
+  rpc ListConversations(ListConversationsRequest) returns (ListConversationsResponse);
+
+  // List messages in a conversation
+  rpc GetMessages(GetMessagesRequest) returns (GetMessagesResponse);
+
   // Send a message (text, media, location, etc.)
   rpc SendMessage(SendMessageRequest) returns (SendMessageResponse);
 
@@ -29,6 +38,35 @@ service RealtimeChatService {
   rpc StartCall(StartCallRequest) returns (StartCallResponse);
   rpc EndCall(EndCallRequest) returns (EndCallResponse);
   rpc UpdateCallStatus(UpdateCallStatusRequest) returns (UpdateCallStatusResponse);
+}
+
+message CreateConversationRequest {
+  string name = 1;
+  ConversationType conversation_type = 2;
+  repeated string participant_ids = 3;
+}
+
+message ListConversationsRequest {
+  string user_id = 1;
+  int32 limit = 2;
+  string cursor = 3;
+}
+
+message ListConversationsResponse {
+  repeated Conversation conversations = 1;
+  string next_cursor = 2;
+  bool has_more = 3;
+}
+
+message GetMessagesRequest {
+  string conversation_id = 1;
+  int32 limit = 2;
+  string before_message_id = 3;
+}
+
+message GetMessagesResponse {
+  repeated Message messages = 1;
+  bool has_more = 2;
 }
 
 // Message Types

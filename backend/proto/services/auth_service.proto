@@ -261,6 +261,94 @@ message RefreshTokenResponse {
   int64 expires_in = 2;       // Seconds until new access_token expires
 }
 
+// ============================================================================ 
+// Invitations (lightweight invite code for sign-up)
+// ============================================================================
+message GenerateInviteRequest {
+  string issuer_user_id = 1;
+  optional string target_email = 2;
+  optional string target_phone = 3;
+  optional int64 expires_at = 4; // unix seconds
+}
+
+message GenerateInviteResponse {
+  string code = 1;
+  string invite_url = 2;
+  int64 expires_at = 3;
+}
+
+message RedeemInviteRequest {
+  string code = 1;
+  string new_user_id = 2;
+}
+
+message RedeemInviteResponse {
+  bool success = 1;
+}
+
+// ============================================================================ 
+// Devices (session-associated devices)
+// ============================================================================
+message Device {
+  string id = 1;
+  string name = 2;
+  string device_type = 3;
+  string os = 4;
+  int64 last_active = 5;
+  bool is_current = 6;
+}
+
+message ListDevicesRequest {
+  string user_id = 1;
+  int32 limit = 2;
+  int32 offset = 3;
+}
+
+message ListDevicesResponse {
+  repeated Device devices = 1;
+  int32 total = 2;
+}
+
+message LogoutDeviceRequest {
+  string user_id = 1;
+  string device_id = 2;
+  bool all = 3;
+}
+
+message LogoutDeviceResponse {
+  bool success = 1;
+}
+
+message GetCurrentDeviceRequest {
+  string user_id = 1;
+  optional string device_id = 2;
+}
+
+message GetCurrentDeviceResponse {
+  optional Device device = 1;
+}
+
+// ============================================================================ 
+// User channel subscriptions (stored with profile)
+// ============================================================================
+message ListUserChannelsRequest {
+  string user_id = 1;
+}
+
+message ListUserChannelsResponse {
+  repeated string channel_ids = 1;
+}
+
+message UpdateUserChannelsRequest {
+  string user_id = 1;
+  repeated string subscribe_ids = 2;
+  repeated string unsubscribe_ids = 3;
+}
+
+message UpdateUserChannelsResponse {
+  repeated string channel_ids = 1;
+}
+
 // ============================================================================
 // Auth Service Definition
 // ============================================================================
@@ -317,4 +405,17 @@ service AuthService {
   // Manage user public keys for end-to-end encryption
   rpc UpsertUserPublicKey(UpsertUserPublicKeyRequest) returns (UpsertUserPublicKeyResponse);
   rpc GetUserPublicKey(GetUserPublicKeyRequest) returns (GetUserPublicKeyResponse);
+
+  // Invitations
+  rpc GenerateInvite(GenerateInviteRequest) returns (GenerateInviteResponse);
+  rpc RedeemInvite(RedeemInviteRequest) returns (RedeemInviteResponse);
+
+  // Devices
+  rpc ListDevices(ListDevicesRequest) returns (ListDevicesResponse);
+  rpc LogoutDevice(LogoutDeviceRequest) returns (LogoutDeviceResponse);
+  rpc GetCurrentDevice(GetCurrentDeviceRequest) returns (GetCurrentDeviceResponse);
+
+  // User channel subscriptions
+  rpc ListUserChannels(ListUserChannelsRequest) returns (ListUserChannelsResponse);
+  rpc UpdateUserChannels(UpdateUserChannelsRequest) returns (UpdateUserChannelsResponse);
 }

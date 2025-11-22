@@ -5,11 +5,14 @@ use redis::aio::ConnectionManager;
 use redis::AsyncCommands;
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
+use tonic::transport::Channel;
 use tracing::{debug, error, warn};
 use uuid::Uuid;
 
 use crate::db::trending_repo::{ContentType, EventType, TimeWindow, TrendingItem, TrendingRepo};
 use crate::error::{AppError, Result};
+use crate::grpc::nova::content_service::content_service_client::ContentServiceClient;
+use crate::grpc::nova::content_service::GetPostsByIdsRequest;
 
 const TRENDING_CACHE_TTL: u64 = 300; // 5 minutes
 
@@ -70,6 +73,7 @@ pub struct TrendingService {
     repo: TrendingRepo,
     pool: PgPool,
     redis: Option<ConnectionManager>,
+    content_client: ContentServiceClient<Channel>,
 }
 
 impl TrendingService {
@@ -78,7 +82,18 @@ impl TrendingService {
             repo: TrendingRepo::new(pool.clone()),
             pool,
             redis,
+            content_client: Self::build_content_client(),
         }
+    }
+
+    fn build_content_client() -> ContentServiceClient<tonic::transport::Channel> {
+        let cfg = grpc_clients::config::GrpcConfig::from_env()
+            .expect("Failed to load gRPC config for content client");
+        let content_channel = cfg
+            .make_endpoint(&cfg.content_service.url)
+            .expect("valid content-service endpoint")
+            .connect_lazy();
+        ContentServiceClient::new(content_channel)
     }
 
     /// Get trending content
@@ -187,6 +202,14 @@ impl TrendingService {
     ) -> Result<Vec<TrendingItemWithMetadata>> {
         let mut enriched = Vec::new();
 
+        // Batch fetch posts metadata via content-service (avoid direct DB)
+        let post_ids: Vec<Uuid> = items
+            .iter()
+            .filter(|it| it.content_type == "post")
+            .map(|it| it.content_id)
+            .collect();
+        let post_meta = self.fetch_posts_metadata(&post_ids).await?;
+
         for item in items {
             let mut meta = TrendingItemWithMetadata::from(item.clone());
 
@@ -203,12 +226,10 @@ impl TrendingService {
                     }
                 }
                 "post" => {
-                    if let Ok(Some((content, creator_id, username))) =
-                        self.get_post_metadata(item.content_id).await
-                    {
-                        meta.title = Some(content);
-                        meta.creator_id = Some(creator_id);
-                        meta.creator_username = Some(username);
+                    if let Some((content, creator_id)) = post_meta.get(&item.content_id) {
+                        meta.title = Some(content.clone());
+                        meta.creator_id = Some(creator_id.clone());
+                        // creator_username intentionally omitted to avoid extra calls
                     }
                 }
                 "stream" => {
@@ -228,6 +249,36 @@ impl TrendingService {
         }
 
         Ok(enriched)
+    }
+
+    async fn fetch_posts_metadata(
+        &self,
+        post_ids: &[Uuid],
+    ) -> Result<std::collections::HashMap<Uuid, (String, String)>> {
+        if post_ids.is_empty() {
+            return Ok(std::collections::HashMap::new());
+        }
+
+        let request = GetPostsByIdsRequest {
+            post_ids: post_ids.iter().map(|id| id.to_string()).collect(),
+        };
+
+        let mut client = self.content_client.clone();
+        let response = client
+            .get_posts_by_ids(request)
+            .await
+            .map_err(|e| {
+                AppError::Internal(format!("content-service get_posts_by_ids failed: {}", e))
+            })?
+            .into_inner();
+
+        let mut map = std::collections::HashMap::with_capacity(response.posts.len());
+        for post in response.posts {
+            if let Ok(id) = Uuid::parse_str(&post.id) {
+                map.insert(id, (post.content, post.author_id));
+            }
+        }
+        Ok(map)
     }
 
     /// Get video metadata
@@ -254,27 +305,6 @@ impl TrendingService {
         Ok(result.map(|(title, user_id, username, thumbnail)| {
             (title, user_id.to_string(), username, thumbnail)
         }))
-    }
-
-    /// Get post metadata
-    async fn get_post_metadata(&self, post_id: Uuid) -> Result<Option<(String, String, String)>> {
-        let result = sqlx::query_as::<_, (String, Uuid, String)>(
-            r#"
-            SELECT p.content, p.user_id, u.username
-            FROM posts p
-            JOIN users u ON p.user_id = u.id
-            WHERE p.id = $1 AND p.deleted_at IS NULL
-            "#,
-        )
-        .bind(post_id)
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(|e| {
-            error!("Failed to fetch post metadata: {}", e);
-            AppError::Database(e.to_string())
-        })?;
-
-        Ok(result.map(|(content, user_id, username)| (content, user_id.to_string(), username)))
     }
 
     /// Get stream metadata
@@ -343,7 +373,7 @@ impl TrendingService {
             AppError::Internal("Serialization failed".to_string())
         })?;
 
-        conn.set_ex(key, json, TRENDING_CACHE_TTL)
+        conn.set_ex::<_, _, ()>(key, json, TRENDING_CACHE_TTL)
             .await
             .map_err(|e| {
                 error!("Redis SET failed: {}", e);

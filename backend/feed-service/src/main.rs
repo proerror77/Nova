@@ -153,10 +153,7 @@ async fn main() -> io::Result<()> {
     let ranking_client = Arc::new(grpc_pool.ranking());
     tracing::info!("RankingService gRPC client initialized from pool");
 
-    let rec_handler_state = web::Data::new(RecommendationHandlerState {
-        ranking_client,
-        db_pool: db_pool.get_ref().clone(),
-    });
+    let rec_handler_state = web::Data::new(RecommendationHandlerState { ranking_client });
 
     // Initialize FeedHandlerState with gRPC clients
     let feed_handler_state = web::Data::new(FeedHandlerState {

@@ -117,9 +117,7 @@ impl JwtClientInterceptor {
     ///     Ok(JwtClientInterceptor::from_header(auth.clone()))
     /// }
     /// ```
-    pub fn extract_from_metadata(
-        metadata: &MetadataMap,
-    ) -> Result<&AsciiMetadataValue, Status> {
+    pub fn extract_from_metadata(metadata: &MetadataMap) -> Result<&AsciiMetadataValue, Status> {
         metadata
             .get("authorization")
             .ok_or_else(|| Status::unauthenticated("Missing authorization header"))
@@ -179,10 +177,7 @@ mod tests {
     #[test]
     fn test_extract_from_metadata_success() {
         let mut metadata = MetadataMap::new();
-        metadata.insert(
-            "authorization",
-            "Bearer test-token".parse().unwrap(),
-        );
+        metadata.insert("authorization", "Bearer test-token".parse().unwrap());
 
         let result = JwtClientInterceptor::extract_from_metadata(&metadata);
         assert!(result.is_ok());

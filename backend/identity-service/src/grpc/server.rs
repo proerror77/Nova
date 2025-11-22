@@ -12,12 +12,14 @@ use crate::db;
 use crate::error::IdentityError;
 use crate::security::{generate_token_pair, hash_password, validate_token, verify_password};
 use crate::services::{EmailService, KafkaEventProducer, TwoFaService};
-use chrono::Utc;
+use chrono::{TimeZone, Utc};
 use redis_utils::SharedConnectionManager;
 use sqlx::PgPool;
 use tonic::{Request, Response, Status};
 use tracing::{error, info, warn};
 use uuid::Uuid;
+
+use std::collections::HashSet;
 
 // Import generated protobuf types
 pub mod nova {
@@ -207,6 +209,76 @@ impl AuthService for IdentityServiceServer {
             token: tokens.access_token,
             expires_in: tokens.expires_in,
         }))
+    }
+
+    /// Generate invite code for onboarding
+    async fn generate_invite(
+        &self,
+        request: Request<GenerateInviteRequest>,
+    ) -> std::result::Result<Response<GenerateInviteResponse>, Status> {
+        let req = request.into_inner();
+        let issuer_id = Uuid::parse_str(&req.issuer_user_id)
+            .map_err(|_| Status::invalid_argument("Invalid issuer_user_id"))?;
+
+        // Ensure issuer exists
+        db::users::find_by_id(&self.db, issuer_id)
+            .await
+            .map_err(to_status)?
+            .ok_or_else(|| Status::not_found("Issuer not found"))?;
+
+        let expires_at = req
+            .expires_at
+            .and_then(|ts| Utc.timestamp_opt(ts, 0).single());
+
+        let invite = db::invitations::create_invite(
+            &self.db,
+            issuer_id,
+            req.target_email,
+            req.target_phone,
+            expires_at,
+        )
+        .await
+        .map_err(to_status)?;
+
+        let base_url = std::env::var("INVITE_BASE_URL")
+            .unwrap_or_else(|_| "https://nova.app/invite".to_string());
+        let invite_url = format!("{}/{}", base_url.trim_end_matches('/'), invite.code);
+
+        Ok(Response::new(GenerateInviteResponse {
+            code: invite.code,
+            invite_url,
+            expires_at: invite.expires_at.timestamp(),
+        }))
+    }
+
+    /// Redeem invite code (idempotent)
+    async fn redeem_invite(
+        &self,
+        request: Request<RedeemInviteRequest>,
+    ) -> std::result::Result<Response<RedeemInviteResponse>, Status> {
+        let req = request.into_inner();
+        let new_user_id = Uuid::parse_str(&req.new_user_id)
+            .map_err(|_| Status::invalid_argument("Invalid new_user_id"))?;
+
+        let invite = db::invitations::get_invite(&self.db, &req.code)
+            .await
+            .map_err(to_status)?
+            .ok_or_else(|| Status::not_found("Invite not found"))?;
+
+        if invite.redeemed_at.is_some() {
+            return Ok(Response::new(RedeemInviteResponse { success: false }));
+        }
+
+        if invite.expires_at < Utc::now() {
+            return Err(Status::failed_precondition("Invite expired"));
+        }
+
+        // Mark as redeemed
+        let redeemed = db::invitations::redeem_invite(&self.db, &req.code, new_user_id)
+            .await
+            .map_err(to_status)?;
+
+        Ok(Response::new(RedeemInviteResponse { success: redeemed }))
     }
 
     /// Get user by ID
@@ -501,6 +573,160 @@ impl AuthService for IdentityServiceServer {
             found: public_key.is_some(),
             public_key,
             error: None,
+        }))
+    }
+
+    /// List active devices for a user (sessions)
+    async fn list_devices(
+        &self,
+        request: Request<ListDevicesRequest>,
+    ) -> std::result::Result<Response<ListDevicesResponse>, Status> {
+        let req = request.into_inner();
+        let user_id = Uuid::parse_str(&req.user_id)
+            .map_err(|_| Status::invalid_argument("Invalid user ID format"))?;
+
+        let limit = req.limit.clamp(1, 100) as i64;
+        let offset = req.offset.max(0) as i64;
+
+        let (devices, total) = db::devices::list_devices(&self.db, user_id, limit, offset)
+            .await
+            .map_err(to_status)?;
+
+        let mut proto_devices: Vec<Device> = devices
+            .into_iter()
+            .enumerate()
+            .map(|(idx, d)| Device {
+                id: d.device_id,
+                name: d.device_name.unwrap_or_else(|| "unknown".into()),
+                device_type: d.device_type.unwrap_or_else(|| "unknown".into()),
+                os: d
+                    .os_name
+                    .map(|os| {
+                        if let Some(ver) = d.os_version.clone() {
+                            format!("{} {}", os, ver)
+                        } else {
+                            os
+                        }
+                    })
+                    .unwrap_or_else(|| "unknown".into()),
+                last_active: d.last_activity_at.timestamp(),
+                is_current: idx == 0,
+            })
+            .collect();
+
+        // If a device exists, ensure the most recent marks as current
+        if let Some(first) = proto_devices.first_mut() {
+            first.is_current = true;
+        }
+
+        Ok(Response::new(ListDevicesResponse {
+            devices: proto_devices,
+            total: total as i32,
+        }))
+    }
+
+    /// Logout device(s) by revoking sessions
+    async fn logout_device(
+        &self,
+        request: Request<LogoutDeviceRequest>,
+    ) -> std::result::Result<Response<LogoutDeviceResponse>, Status> {
+        let req = request.into_inner();
+        let user_id = Uuid::parse_str(&req.user_id)
+            .map_err(|_| Status::invalid_argument("Invalid user ID format"))?;
+
+        let device_id = if req.device_id.is_empty() {
+            None
+        } else {
+            Some(req.device_id.as_str())
+        };
+
+        let affected = db::devices::logout_device(&self.db, user_id, device_id, req.all)
+            .await
+            .map_err(to_status)?;
+
+        Ok(Response::new(LogoutDeviceResponse {
+            success: affected > 0,
+        }))
+    }
+
+    /// Get current device (most recent session)
+    async fn get_current_device(
+        &self,
+        request: Request<GetCurrentDeviceRequest>,
+    ) -> std::result::Result<Response<GetCurrentDeviceResponse>, Status> {
+        let req = request.into_inner();
+        let user_id = Uuid::parse_str(&req.user_id)
+            .map_err(|_| Status::invalid_argument("Invalid user ID format"))?;
+
+        let device = db::devices::get_current_device(&self.db, user_id, req.device_id.as_deref())
+            .await
+            .map_err(to_status)?;
+
+        let proto_device = device.map(|d| Device {
+            id: d.device_id,
+            name: d.device_name.unwrap_or_else(|| "unknown".into()),
+            device_type: d.device_type.unwrap_or_else(|| "unknown".into()),
+            os: d
+                .os_name
+                .map(|os| {
+                    if let Some(ver) = d.os_version {
+                        format!("{} {}", os, ver)
+                    } else {
+                        os
+                    }
+                })
+                .unwrap_or_else(|| "unknown".into()),
+            last_active: d.last_activity_at.timestamp(),
+            is_current: true,
+        });
+
+        Ok(Response::new(GetCurrentDeviceResponse {
+            device: proto_device,
+        }))
+    }
+
+    /// List user channel subscriptions
+    async fn list_user_channels(
+        &self,
+        request: Request<ListUserChannelsRequest>,
+    ) -> std::result::Result<Response<ListUserChannelsResponse>, Status> {
+        let req = request.into_inner();
+        let user_id = Uuid::parse_str(&req.user_id)
+            .map_err(|_| Status::invalid_argument("Invalid user ID format"))?;
+
+        let channels = db::user_channels::list_user_channels(&self.db, user_id)
+            .await
+            .map_err(to_status)?;
+
+        Ok(Response::new(ListUserChannelsResponse {
+            channel_ids: channels,
+        }))
+    }
+
+    /// Update user channel subscriptions
+    async fn update_user_channels(
+        &self,
+        request: Request<UpdateUserChannelsRequest>,
+    ) -> std::result::Result<Response<UpdateUserChannelsResponse>, Status> {
+        let req = request.into_inner();
+        let user_id = Uuid::parse_str(&req.user_id)
+            .map_err(|_| Status::invalid_argument("Invalid user ID format"))?;
+
+        // dedupe to avoid churn
+        let subscribe: HashSet<String> = req.subscribe_ids.into_iter().collect();
+        let unsubscribe: HashSet<String> = req.unsubscribe_ids.into_iter().collect();
+
+        let channels = db::user_channels::update_user_channels(
+            &self.db,
+            user_id,
+            &subscribe.into_iter().collect::<Vec<_>>(),
+            &unsubscribe.into_iter().collect::<Vec<_>>(),
+        )
+        .await
+        .map_err(to_status)?;
+
+        Ok(Response::new(UpdateUserChannelsResponse {
+            channel_ids: channels,
         }))
     }
 }

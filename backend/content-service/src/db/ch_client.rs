@@ -148,7 +148,7 @@ impl ClickHouseClient {
     pub async fn health_check(&self) -> Result<()> {
         #[derive(clickhouse::Row, serde::Deserialize)]
         struct HealthCheck {
-            result: u32,
+            _result: u32,
         }
 
         let q = "SELECT toUInt32(1) AS result";

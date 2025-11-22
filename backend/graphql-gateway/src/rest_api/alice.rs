@@ -5,7 +5,7 @@
 /// POST /api/v2/alice/voice - Activate voice mode
 use actix_web::{web, HttpResponse, Result};
 use serde::{Deserialize, Serialize};
-use tracing::{error, info};
+use tracing::info;
 
 use crate::clients::ServiceClients;
 
@@ -31,9 +31,7 @@ pub struct AliceStatusResponse {
 
 /// GET /api/v2/alice/status
 /// Get Alice service status
-pub async fn get_status(
-    _clients: web::Data<ServiceClients>,
-) -> Result<HttpResponse> {
+pub async fn get_status(_clients: web::Data<ServiceClients>) -> Result<HttpResponse> {
     info!("GET /api/v2/alice/status");
 
     // For now, return mock response
@@ -68,9 +66,7 @@ pub async fn send_message(
 
 /// POST /api/v2/alice/voice
 /// Activate voice mode
-pub async fn voice_mode(
-    _clients: web::Data<ServiceClients>,
-) -> Result<HttpResponse> {
+pub async fn voice_mode(_clients: web::Data<ServiceClients>) -> Result<HttpResponse> {
     info!("POST /api/v2/alice/voice");
 
     // For now, return success

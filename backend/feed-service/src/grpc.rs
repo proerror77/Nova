@@ -8,11 +8,32 @@
 //! - Feed ranking algorithms
 
 pub mod clients;
-pub mod nova;
+pub mod nova {
+    pub mod content_service {
+        pub mod v2 {
+            tonic::include_proto!("nova.content_service.v2");
+        }
+        pub use v2::*;
+    }
 
-pub use clients::{ContentServiceClient, UserServiceClient};
+    pub mod graph_service {
+        pub mod v2 {
+            tonic::include_proto!("nova.graph_service.v2");
+        }
+        pub use v2::*;
+    }
 
-use crate::cache::{CachedFeed, CachedFeedPost, FeedCache};
+    pub mod feed_service {
+        pub mod v2 {
+            tonic::include_proto!("nova.feed_service.v2");
+        }
+        pub use v2::*;
+    }
+}
+
+pub use clients::ContentServiceClient;
+
+use crate::cache::{CachedFeed, FeedCache};
 use chrono::Utc;
 use grpc_metrics::layer::RequestGuard;
 use sqlx::PgPool;
@@ -39,7 +60,7 @@ pub use proto::feed_service::v2::{
 /// RecommendationService gRPC server implementation
 #[derive(Clone)]
 pub struct RecommendationServiceImpl {
-    pool: PgPool,
+    _pool: PgPool,
     cache: Arc<FeedCache>,
 }
 
@@ -51,14 +72,14 @@ impl RecommendationServiceImpl {
             std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://localhost:6379".to_string());
         let cache = FeedCache::new(&redis_url, Default::default()).await?;
         Ok(Self {
-            pool,
+            _pool: pool,
             cache: Arc::new(cache),
         })
     }
 
     /// Create a new RecommendationService with explicit cache
     pub fn with_cache(pool: PgPool, cache: Arc<FeedCache>) -> Self {
-        Self { pool, cache }
+        Self { _pool: pool, cache }
     }
 }
 
@@ -71,7 +92,7 @@ impl recommendation_service_server::RecommendationService for RecommendationServ
     ///
     /// **Caching Strategy**:
     /// 1. Check Redis cache for user's feed (L1 cache)
-    /// 2. If cache miss: call ContentService and UserService for data
+    /// 2. If cache miss: call ContentService and SocialService for data
     /// 3. Build ranking from followed users' posts
     /// 4. Store result in Redis with TTL
     /// 5. Return personalized feed
@@ -228,7 +249,7 @@ impl recommendation_service_server::RecommendationService for RecommendationServ
     ///
     /// **gRPC Call Flow**:
     /// 1. ContentService.GetPostsByAuthor() - get popular creators' posts
-    /// 2. UserService.GetUserFollowing() - check who user already follows
+    /// 2. SocialService.GetUserFollowing() - check who user already follows
     /// 3. Filter out already-followed creators
     async fn get_recommended_creators(
         &self,

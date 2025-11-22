@@ -7,6 +7,7 @@
 //! - ✅ P0: Circuit breaker protection for all gRPC clients
 //! - Proper error types
 
+use grpc_clients::config::GrpcConfig;
 use resilience::circuit_breaker::{CircuitBreaker, CircuitBreakerConfig, CircuitState};
 use std::sync::Arc;
 use std::time::Duration;
@@ -36,11 +37,30 @@ pub mod proto {
     pub mod feed {
         tonic::include_proto!("nova.feed_service.v2");
     }
+
+    pub mod social {
+        tonic::include_proto!("nova.social_service.v2");
+    }
+
+    pub mod chat {
+        tonic::include_proto!("nova.realtime_chat.v1");
+    }
+
+    pub mod media {
+        tonic::include_proto!("nova.media.v1");
+    }
+
+    pub mod search {
+        tonic::include_proto!("nova.search.v1");
+    }
 }
 
 use proto::auth::auth_service_client::AuthServiceClient;
+use proto::chat::realtime_chat_service_client::RealtimeChatServiceClient;
 use proto::content::content_service_client::ContentServiceClient;
 use proto::feed::recommendation_service_client::RecommendationServiceClient;
+use proto::media::media_service_client::MediaServiceClient;
+use proto::social::social_service_client::SocialServiceClient;
 // UserServiceClient removed - user-service is deprecated
 
 /// Service client manager with pooled gRPC connections and circuit breaker protection
@@ -69,11 +89,19 @@ pub struct ServiceClients {
     // user_channel removed - user-service is deprecated
     content_channel: Arc<Channel>,
     feed_channel: Arc<Channel>,
+    social_channel: Arc<Channel>,
+    chat_channel: Arc<Channel>,
+    media_channel: Arc<Channel>,
+    search_channel: Arc<Channel>,
     // Circuit breakers (one per service)
     auth_cb: Arc<CircuitBreaker>,
     // user_cb removed - user-service is deprecated
     content_cb: Arc<CircuitBreaker>,
     feed_cb: Arc<CircuitBreaker>,
+    social_cb: Arc<CircuitBreaker>,
+    chat_cb: Arc<CircuitBreaker>,
+    media_cb: Arc<CircuitBreaker>,
+    search_cb: Arc<CircuitBreaker>,
 }
 
 impl Default for ServiceClients {
@@ -83,17 +111,66 @@ impl Default for ServiceClients {
             // user-service removed - deprecated
             "http://content-service.nova-staging.svc.cluster.local:9081",
             "http://feed-service.nova-staging.svc.cluster.local:9084",
+            "http://social-service.nova-staging.svc.cluster.local:9082",
+            "http://realtime-chat-service.nova-staging.svc.cluster.local:9085",
+            "http://media-service.nova-staging.svc.cluster.local:9086",
+            "http://search-service.nova-staging.svc.cluster.local:9087",
         )
     }
 }
 
 impl ServiceClients {
+    /// Build clients using the shared gRPC config (includes TLS/mTLS + timeouts).
+    pub fn from_grpc_config(cfg: &GrpcConfig) -> Result<Self, ServiceError> {
+        Ok(Self {
+            auth_channel: Arc::new(Self::create_channel_from_endpoint(
+                cfg.make_endpoint(&cfg.identity_service.url)
+                    .map_err(|e| ServiceError::ConnectionError(e.to_string()))?,
+            )),
+            // user-service deprecated
+            content_channel: Arc::new(Self::create_channel_from_endpoint(
+                cfg.make_endpoint(&cfg.content_service.url)
+                    .map_err(|e| ServiceError::ConnectionError(e.to_string()))?,
+            )),
+            feed_channel: Arc::new(Self::create_channel_from_endpoint(
+                cfg.make_endpoint(&cfg.feed_service.url)
+                    .map_err(|e| ServiceError::ConnectionError(e.to_string()))?,
+            )),
+            social_channel: Arc::new(Self::create_channel_from_endpoint(
+                cfg.make_endpoint(&cfg.social_service.url)
+                    .map_err(|e| ServiceError::ConnectionError(e.to_string()))?,
+            )),
+            chat_channel: Arc::new(Self::create_channel_from_endpoint(
+                cfg.make_endpoint(&cfg.chat_service.url)
+                    .map_err(|e| ServiceError::ConnectionError(e.to_string()))?,
+            )),
+            media_channel: Arc::new(Self::create_channel_from_endpoint(
+                cfg.make_endpoint(&cfg.media_service.url)
+                    .map_err(|e| ServiceError::ConnectionError(e.to_string()))?,
+            )),
+            search_channel: Arc::new(Self::create_channel_from_endpoint(
+                cfg.make_endpoint(&cfg.search_service.url)
+                    .map_err(|e| ServiceError::ConnectionError(e.to_string()))?,
+            )),
+            auth_cb: Arc::new(CircuitBreaker::new(Self::default_cb_config())),
+            content_cb: Arc::new(CircuitBreaker::new(Self::default_cb_config())),
+            feed_cb: Arc::new(CircuitBreaker::new(Self::default_cb_config())),
+            social_cb: Arc::new(CircuitBreaker::new(Self::default_cb_config())),
+            chat_cb: Arc::new(CircuitBreaker::new(Self::default_cb_config())),
+            media_cb: Arc::new(CircuitBreaker::new(Self::default_cb_config())),
+            search_cb: Arc::new(CircuitBreaker::new(Self::default_cb_config())),
+        })
+    }
+
     /// Create a new ServiceClients instance with custom endpoints and circuit breakers
     ///
     /// # Arguments:
     /// - `auth_endpoint`: Auth service URL (e.g., "http://auth-service:9083")
     /// - `content_endpoint`: Content service URL
     /// - `feed_endpoint`: Feed/recommendation service URL
+    /// - `social_endpoint`: Social service URL
+    /// - `chat_endpoint`: Realtime chat service URL
+    /// - `media_endpoint`: Media service URL
     ///
     /// # Configuration:
     /// **Channel-level**:
@@ -113,25 +190,45 @@ impl ServiceClients {
     /// # Panics:
     /// Panics if any endpoint URL is malformed. In production, endpoints are
     /// hardcoded or validated at startup, so this is acceptable.
-    pub fn new(auth_endpoint: &str, content_endpoint: &str, feed_endpoint: &str) -> Self {
+    pub fn new(
+        auth_endpoint: &str,
+        content_endpoint: &str,
+        feed_endpoint: &str,
+        social_endpoint: &str,
+        chat_endpoint: &str,
+        media_endpoint: &str,
+        search_endpoint: &str,
+    ) -> Self {
         // Circuit breaker configuration
-        let cb_config = CircuitBreakerConfig {
-            failure_threshold: 5,
-            success_threshold: 2,
-            timeout: Duration::from_secs(60),
-            error_rate_threshold: 0.5, // 50%
-            window_size: 100,
-        };
+        let cb_config = Self::default_cb_config();
 
         Self {
             auth_channel: Arc::new(Self::create_channel(auth_endpoint)),
             // user_channel removed - user-service is deprecated
             content_channel: Arc::new(Self::create_channel(content_endpoint)),
             feed_channel: Arc::new(Self::create_channel(feed_endpoint)),
+            social_channel: Arc::new(Self::create_channel(social_endpoint)),
+            chat_channel: Arc::new(Self::create_channel(chat_endpoint)),
+            media_channel: Arc::new(Self::create_channel(media_endpoint)),
+            search_channel: Arc::new(Self::create_channel(search_endpoint)),
             auth_cb: Arc::new(CircuitBreaker::new(cb_config.clone())),
             // user_cb removed - user-service is deprecated
             content_cb: Arc::new(CircuitBreaker::new(cb_config.clone())),
-            feed_cb: Arc::new(CircuitBreaker::new(cb_config)),
+            feed_cb: Arc::new(CircuitBreaker::new(cb_config.clone())),
+            social_cb: Arc::new(CircuitBreaker::new(cb_config.clone())),
+            chat_cb: Arc::new(CircuitBreaker::new(cb_config.clone())),
+            media_cb: Arc::new(CircuitBreaker::new(cb_config.clone())),
+            search_cb: Arc::new(CircuitBreaker::new(cb_config)),
+        }
+    }
+
+    fn default_cb_config() -> CircuitBreakerConfig {
+        CircuitBreakerConfig {
+            failure_threshold: 5,
+            success_threshold: 2,
+            timeout: Duration::from_secs(60),
+            error_rate_threshold: 0.5,
+            window_size: 100,
         }
     }
 
@@ -164,6 +261,10 @@ impl ServiceClients {
             .keep_alive_timeout(Duration::from_secs(20))
             .keep_alive_while_idle(true)
             .connect_lazy()
+    }
+
+    fn create_channel_from_endpoint(endpoint: Endpoint) -> Channel {
+        endpoint.connect_lazy()
     }
 
     /// Get auth service client with circuit breaker protection
@@ -303,6 +404,116 @@ impl ServiceClients {
         self.recommendation_client()
     }
 
+    /// Get social service client with circuit breaker protection
+    ///
+    /// # Circuit Breaker:
+    /// Use `call_social()` to wrap gRPC calls with circuit breaker protection.
+    pub fn social_client(&self) -> SocialServiceClient<Channel> {
+        SocialServiceClient::new((*self.social_channel).clone())
+    }
+
+    /// Execute social service call with circuit breaker protection
+    ///
+    /// # Example:
+    /// ```rust
+    /// let mut client = clients.social_client();
+    /// let result = clients.call_social(|| async move {
+    ///     client.follow_user(request).await
+    /// }).await?;
+    /// ```
+    pub async fn call_social<F, Fut, T>(&self, f: F) -> Result<T, ServiceError>
+    where
+        F: FnOnce() -> Fut,
+        Fut: std::future::Future<Output = Result<tonic::Response<T>, Status>>,
+    {
+        self.social_cb
+            .call(f)
+            .await
+            .map(|response| response.into_inner())
+            .map_err(|e| match e {
+                resilience::circuit_breaker::CircuitBreakerError::Open => {
+                    ServiceError::Unavailable {
+                        service: "social-service".to_string(),
+                    }
+                }
+                resilience::circuit_breaker::CircuitBreakerError::CallFailed(msg) => {
+                    ServiceError::ConnectionError(msg)
+                }
+            })
+    }
+
+    /// Get realtime chat service client with circuit breaker protection
+    ///
+    /// # Circuit Breaker:
+    /// Use `call_chat()` to wrap gRPC calls with circuit breaker protection.
+    pub fn chat_client(&self) -> RealtimeChatServiceClient<Channel> {
+        RealtimeChatServiceClient::new((*self.chat_channel).clone())
+    }
+
+    pub fn media_client(&self) -> MediaServiceClient<Channel> {
+        MediaServiceClient::new((*self.media_channel).clone())
+    }
+
+    pub fn search_client(
+        &self,
+    ) -> proto::search::search_service_client::SearchServiceClient<Channel> {
+        proto::search::search_service_client::SearchServiceClient::new(
+            (*self.search_channel).clone(),
+        )
+    }
+
+    /// Execute chat service call with circuit breaker protection
+    ///
+    /// # Example:
+    /// ```rust
+    /// let mut client = clients.chat_client();
+    /// let result = clients.call_chat(|| async move {
+    ///     client.send_message(request).await
+    /// }).await?;
+    /// ```
+    pub async fn call_chat<F, Fut, T>(&self, f: F) -> Result<T, ServiceError>
+    where
+        F: FnOnce() -> Fut,
+        Fut: std::future::Future<Output = Result<tonic::Response<T>, Status>>,
+    {
+        self.chat_cb
+            .call(f)
+            .await
+            .map(|response| response.into_inner())
+            .map_err(|e| match e {
+                resilience::circuit_breaker::CircuitBreakerError::Open => {
+                    ServiceError::Unavailable {
+                        service: "realtime-chat-service".to_string(),
+                    }
+                }
+                resilience::circuit_breaker::CircuitBreakerError::CallFailed(msg) => {
+                    ServiceError::ConnectionError(msg)
+                }
+            })
+    }
+
+    /// Execute search service call with circuit breaker protection
+    pub async fn call_search<F, Fut, T>(&self, f: F) -> Result<T, ServiceError>
+    where
+        F: FnOnce() -> Fut,
+        Fut: std::future::Future<Output = Result<tonic::Response<T>, Status>>,
+    {
+        self.search_cb
+            .call(f)
+            .await
+            .map(|response| response.into_inner())
+            .map_err(|e| match e {
+                resilience::circuit_breaker::CircuitBreakerError::Open => {
+                    ServiceError::Unavailable {
+                        service: "search-service".to_string(),
+                    }
+                }
+                resilience::circuit_breaker::CircuitBreakerError::CallFailed(msg) => {
+                    ServiceError::ConnectionError(msg)
+                }
+            })
+    }
+
     /// Get circuit breaker health status for monitoring
     ///
     /// Returns a list of (service_name, circuit_state) tuples for all services.
@@ -321,6 +532,9 @@ impl ServiceClients {
             // user-service removed - deprecated
             ("content-service", self.content_cb.state()),
             ("feed-service", self.feed_cb.state()),
+            ("social-service", self.social_cb.state()),
+            ("realtime-chat-service", self.chat_cb.state()),
+            ("media-service", self.media_cb.state()),
         ]
     }
 
@@ -331,6 +545,9 @@ impl ServiceClients {
             // "user" removed - user-service is deprecated
             "content" => Some(&self.content_cb),
             "feed" => Some(&self.feed_cb),
+            "social" => Some(&self.social_cb),
+            "chat" | "realtime-chat" => Some(&self.chat_cb),
+            "media" => Some(&self.media_cb),
             _ => None,
         }
     }
@@ -379,6 +596,10 @@ mod tests {
         // user_client() removed - user-service is deprecated
         let _content = clients.content_client();
         let _feed = clients.feed_client();
+        let _social = clients.social_client();
+        let _chat = clients.chat_client();
+        let _media = clients.media_client();
+        let _search = clients.search_client();
     }
 
     #[test]
@@ -399,10 +620,16 @@ mod tests {
             // user endpoint removed - user-service is deprecated
             "http://custom-content:8082",
             "http://custom-feed:8083",
+            "http://custom-social:8084",
+            "http://custom-chat:8085",
+            "http://custom-media:8086",
+            "http://custom-search:8087",
         );
 
         // Should create without panicking
         let _auth = clients.auth_client();
+        let _social = clients.social_client();
+        let _chat = clients.chat_client();
     }
 
     #[test]
@@ -413,6 +640,9 @@ mod tests {
             // user endpoint removed - user-service is deprecated
             "http://content:8082",
             "http://feed:8083",
+            "http://social:8084",
+            "http://chat:8085",
+            "http://media:8086",
         );
     }
 }

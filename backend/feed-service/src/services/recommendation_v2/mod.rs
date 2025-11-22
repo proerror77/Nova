@@ -30,6 +30,10 @@ pub use onnx_serving::{LatencyStats, ONNXModelServer};
 
 use crate::error::Result;
 use chrono::{DateTime, Utc};
+use grpc_clients::nova::content_service::content_service_client::ContentServiceClient;
+use grpc_clients::nova::content_service::{
+    ContentStatus, GetUserPostsRequest, ListRecentPostsRequest, ListTrendingPostsRequest,
+};
 use sqlx::{PgPool, Row};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -61,7 +65,7 @@ impl RecommendationServiceV2 {
     pub async fn new(
         config: RecommendationConfig,
         db_pool: PgPool,
-        auth_client: Arc<grpc_clients::AuthClient>,
+        _auth_client: Arc<grpc_clients::AuthClient>,
     ) -> Result<Self> {
         let (cf_model, cb_model) = Self::load_models_from_config(&config)?;
         let hybrid_ranker =
@@ -367,16 +371,13 @@ impl RecommendationServiceV2 {
             *weights.entry(post_id).or_insert(0.0) += 2.0;
         }
 
-        let own_posts = sqlx::query(
-            "SELECT id FROM posts WHERE user_id = $1 AND soft_delete IS NULL ORDER BY created_at DESC LIMIT $2",
-        )
-        .bind(user_id)
-        .bind(fetch_limit)
-        .fetch_all(&self.db_pool)
-        .await?;
+        let own_posts = self
+            .fetch_user_posts(user_id, fetch_limit as i32)
+            .await?
+            .into_iter()
+            .collect::<Vec<Uuid>>();
 
-        for row in own_posts {
-            let post_id: Uuid = row.try_get("id")?;
+        for post_id in own_posts {
             seen_posts.insert(post_id);
         }
 
@@ -460,45 +461,33 @@ impl RecommendationServiceV2 {
         exclude_user: Option<Uuid>,
         limit: usize,
     ) -> Result<Vec<Uuid>> {
-        let limit = std::cmp::max(limit, MIN_CANDIDATE_POOL) as i64;
-
-        let rows = if let Some(user_id) = exclude_user {
-            sqlx::query(
-                "SELECT p.id
-                 FROM posts p
-                 JOIN post_metadata pm ON pm.post_id = p.id
-                 WHERE p.status = 'published'
-                   AND p.soft_delete IS NULL
-                   AND p.user_id <> $1
-                 ORDER BY (pm.like_count * 3 + pm.comment_count * 2 + pm.view_count) DESC,
-                          p.created_at DESC
-                 LIMIT $2",
-            )
-            .bind(user_id)
-            .bind(limit)
-            .fetch_all(&self.db_pool)
-            .await?
-        } else {
-            sqlx::query(
-                "SELECT p.id
-                 FROM posts p
-                 JOIN post_metadata pm ON pm.post_id = p.id
-                 WHERE p.status = 'published' AND p.soft_delete IS NULL
-                 ORDER BY (pm.like_count * 3 + pm.comment_count * 2 + pm.view_count) DESC,
-                          p.created_at DESC
-                 LIMIT $1",
-            )
-            .bind(limit)
-            .fetch_all(&self.db_pool)
-            .await?
+        let limit = std::cmp::max(limit, MIN_CANDIDATE_POOL) as i32;
+        let cfg = grpc_clients::config::GrpcConfig::from_env().map_err(|e| {
+            crate::error::AppError::Internal(format!("load gRPC config failed: {}", e))
+        })?;
+        let channel = cfg
+            .make_endpoint(&cfg.content_service.url)
+            .map_err(|e| {
+                crate::error::AppError::Internal(format!("content endpoint build failed: {}", e))
+            })?
+            .connect_lazy();
+        let mut client = ContentServiceClient::new(channel);
+        let request = ListTrendingPostsRequest {
+            limit,
+            exclude_user_id: exclude_user.map(|u| u.to_string()).unwrap_or_default(),
         };
-
-        let mut posts = Vec::new();
-        for row in rows {
-            let post_id: Uuid = row.try_get("id")?;
-            posts.push(post_id);
-        }
-
+        let response = client
+            .list_trending_posts(request)
+            .await
+            .map_err(|e| {
+                crate::error::AppError::Internal(format!("list_trending_posts failed: {}", e))
+            })?
+            .into_inner();
+        let posts = response
+            .post_ids
+            .into_iter()
+            .filter_map(|id| Uuid::parse_str(&id).ok())
+            .collect();
         Ok(posts)
     }
 
@@ -507,40 +496,64 @@ impl RecommendationServiceV2 {
         exclude_user: Option<Uuid>,
         limit: usize,
     ) -> Result<Vec<Uuid>> {
-        let limit = std::cmp::max(limit, MIN_CANDIDATE_POOL) as i64;
-
-        let rows = if let Some(user_id) = exclude_user {
-            sqlx::query(
-                "SELECT id
-                 FROM posts
-                 WHERE status = 'published'
-                   AND soft_delete IS NULL
-                   AND user_id <> $1
-                 ORDER BY created_at DESC
-                 LIMIT $2",
-            )
-            .bind(user_id)
-            .bind(limit)
-            .fetch_all(&self.db_pool)
-            .await?
-        } else {
-            sqlx::query(
-                "SELECT id
-                 FROM posts
-                 WHERE status = 'published' AND soft_delete IS NULL
-                 ORDER BY created_at DESC
-                 LIMIT $1",
-            )
-            .bind(limit)
-            .fetch_all(&self.db_pool)
-            .await?
+        let limit = std::cmp::max(limit, MIN_CANDIDATE_POOL) as i32;
+        let cfg = grpc_clients::config::GrpcConfig::from_env().map_err(|e| {
+            crate::error::AppError::Internal(format!("load gRPC config failed: {}", e))
+        })?;
+        let channel = cfg
+            .make_endpoint(&cfg.content_service.url)
+            .map_err(|e| {
+                crate::error::AppError::Internal(format!("content endpoint build failed: {}", e))
+            })?
+            .connect_lazy();
+        let mut client = ContentServiceClient::new(channel);
+        let request = ListRecentPostsRequest {
+            limit,
+            exclude_user_id: exclude_user.map(|u| u.to_string()).unwrap_or_default(),
         };
+        let response = client
+            .list_recent_posts(request)
+            .await
+            .map_err(|e| {
+                crate::error::AppError::Internal(format!("list_recent_posts failed: {}", e))
+            })?
+            .into_inner();
+        let posts = response
+            .post_ids
+            .into_iter()
+            .filter_map(|id| Uuid::parse_str(&id).ok())
+            .collect();
+        Ok(posts)
+    }
 
-        let mut posts = Vec::new();
-        for row in rows {
-            let post_id: Uuid = row.try_get("id")?;
-            posts.push(post_id);
-        }
+    async fn fetch_user_posts(&self, user_id: Uuid, limit: i32) -> Result<Vec<Uuid>> {
+        let cfg = grpc_clients::config::GrpcConfig::from_env().map_err(|e| {
+            crate::error::AppError::Internal(format!("load gRPC config failed: {}", e))
+        })?;
+        let channel = cfg
+            .make_endpoint(&cfg.content_service.url)
+            .map_err(|e| {
+                crate::error::AppError::Internal(format!("content endpoint build failed: {}", e))
+            })?
+            .connect_lazy();
+        let mut client = ContentServiceClient::new(channel);
+
+        let response = client
+            .get_user_posts(GetUserPostsRequest {
+                user_id: user_id.to_string(),
+                limit,
+                offset: 0,
+                status: ContentStatus::Published as i32,
+            })
+            .await
+            .map_err(|e| crate::error::AppError::Internal(format!("get_user_posts failed: {}", e)))?
+            .into_inner();
+
+        let posts = response
+            .posts
+            .into_iter()
+            .filter_map(|p| Uuid::parse_str(&p.id).ok())
+            .collect();
 
         Ok(posts)
     }
@@ -572,6 +585,8 @@ pub struct UserContext {
 
 #[cfg(test)]
 mod tests {
+    #![allow(unused_imports)]
+
     use super::*;
 
     #[tokio::test]

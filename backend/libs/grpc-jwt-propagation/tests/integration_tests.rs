@@ -3,7 +3,7 @@
 //! These tests verify the complete flow:
 //! Client -> JWT injection -> Server -> JWT validation -> Handler access
 
-use grpc_jwt_propagation::{JwtClientInterceptor, JwtClaimsExt, JwtServerInterceptor};
+use grpc_jwt_propagation::{JwtClaimsExt, JwtClientInterceptor, JwtServerInterceptor};
 use tonic::service::Interceptor;
 use tonic::{Request, Response, Status};
 use uuid::Uuid;
@@ -22,9 +22,7 @@ fn init_test_keys() {
 }
 
 /// Simulate a gRPC request flowing through client and server interceptors
-fn simulate_grpc_flow(
-    jwt_token: &str,
-) -> Result<Request<()>, Status> {
+fn simulate_grpc_flow(jwt_token: &str) -> Result<Request<()>, Status> {
     // CLIENT SIDE: Create request with JWT interceptor
     let mut client_interceptor = JwtClientInterceptor::new(jwt_token);
     let request = Request::new(());
@@ -46,12 +44,8 @@ fn test_end_to_end_jwt_flow() {
 
     // Generate a valid token
     let user_id = Uuid::new_v4();
-    let token = crypto_core::jwt::generate_access_token(
-        user_id,
-        "test@example.com",
-        "testuser",
-    )
-    .expect("Failed to generate token");
+    let token = crypto_core::jwt::generate_access_token(user_id, "test@example.com", "testuser")
+        .expect("Failed to generate token");
 
     // Simulate request flow
     let request = simulate_grpc_flow(&token).expect("Flow should succeed");
@@ -82,12 +76,8 @@ fn test_end_to_end_tampered_token() {
 
     // Generate valid token then tamper with it
     let user_id = Uuid::new_v4();
-    let token = crypto_core::jwt::generate_access_token(
-        user_id,
-        "test@example.com",
-        "testuser",
-    )
-    .expect("Failed to generate token");
+    let token = crypto_core::jwt::generate_access_token(user_id, "test@example.com", "testuser")
+        .expect("Failed to generate token");
 
     let tampered = token.replace("a", "b");
     let result = simulate_grpc_flow(&tampered);
@@ -102,12 +92,8 @@ fn test_ownership_check_success() {
     init_test_keys();
 
     let user_id = Uuid::new_v4();
-    let token = crypto_core::jwt::generate_access_token(
-        user_id,
-        "test@example.com",
-        "testuser",
-    )
-    .expect("Failed to generate token");
+    let token = crypto_core::jwt::generate_access_token(user_id, "test@example.com", "testuser")
+        .expect("Failed to generate token");
 
     let request = simulate_grpc_flow(&token).expect("Flow should succeed");
 
@@ -121,12 +107,8 @@ fn test_ownership_check_failure() {
     init_test_keys();
 
     let user_id = Uuid::new_v4();
-    let token = crypto_core::jwt::generate_access_token(
-        user_id,
-        "test@example.com",
-        "testuser",
-    )
-    .expect("Failed to generate token");
+    let token = crypto_core::jwt::generate_access_token(user_id, "test@example.com", "testuser")
+        .expect("Failed to generate token");
 
     let request = simulate_grpc_flow(&token).expect("Flow should succeed");
 
@@ -144,12 +126,8 @@ fn test_access_token_validation() {
     init_test_keys();
 
     let user_id = Uuid::new_v4();
-    let token = crypto_core::jwt::generate_access_token(
-        user_id,
-        "test@example.com",
-        "testuser",
-    )
-    .expect("Failed to generate token");
+    let token = crypto_core::jwt::generate_access_token(user_id, "test@example.com", "testuser")
+        .expect("Failed to generate token");
 
     let request = simulate_grpc_flow(&token).expect("Flow should succeed");
 
@@ -163,12 +141,9 @@ fn test_refresh_token_rejected_for_api_access() {
     init_test_keys();
 
     let user_id = Uuid::new_v4();
-    let refresh_token = crypto_core::jwt::generate_refresh_token(
-        user_id,
-        "test@example.com",
-        "testuser",
-    )
-    .expect("Failed to generate refresh token");
+    let refresh_token =
+        crypto_core::jwt::generate_refresh_token(user_id, "test@example.com", "testuser")
+            .expect("Failed to generate refresh token");
 
     let request = simulate_grpc_flow(&refresh_token).expect("Flow should succeed");
 
@@ -190,7 +165,7 @@ async fn mock_delete_post_handler(
     // Authorization: only owner can delete
     if !claims.is_owner(&post_owner_id) {
         return Err(Status::permission_denied(
-            "You can only delete your own posts"
+            "You can only delete your own posts",
         ));
     }
 
@@ -203,12 +178,8 @@ async fn test_authorization_pattern_owner_deletes_own_post() {
     init_test_keys();
 
     let user_id = Uuid::new_v4();
-    let token = crypto_core::jwt::generate_access_token(
-        user_id,
-        "test@example.com",
-        "testuser",
-    )
-    .expect("Failed to generate token");
+    let token = crypto_core::jwt::generate_access_token(user_id, "test@example.com", "testuser")
+        .expect("Failed to generate token");
 
     let request = simulate_grpc_flow(&token).expect("Flow should succeed");
 
@@ -222,12 +193,8 @@ async fn test_authorization_pattern_user_cannot_delete_others_post() {
     init_test_keys();
 
     let user_id = Uuid::new_v4();
-    let token = crypto_core::jwt::generate_access_token(
-        user_id,
-        "test@example.com",
-        "testuser",
-    )
-    .expect("Failed to generate token");
+    let token = crypto_core::jwt::generate_access_token(user_id, "test@example.com", "testuser")
+        .expect("Failed to generate token");
 
     let request = simulate_grpc_flow(&token).expect("Flow should succeed");
 
@@ -238,7 +205,9 @@ async fn test_authorization_pattern_user_cannot_delete_others_post() {
     assert!(result.is_err());
     let status = result.unwrap_err();
     assert_eq!(status.code(), tonic::Code::PermissionDenied);
-    assert!(status.message().contains("You can only delete your own posts"));
+    assert!(status
+        .message()
+        .contains("You can only delete your own posts"));
 }
 
 /// Test that multiple requests can use the same interceptor (cloneable)
@@ -247,12 +216,8 @@ fn test_client_interceptor_reusable() {
     init_test_keys();
 
     let user_id = Uuid::new_v4();
-    let token = crypto_core::jwt::generate_access_token(
-        user_id,
-        "test@example.com",
-        "testuser",
-    )
-    .expect("Failed to generate token");
+    let token = crypto_core::jwt::generate_access_token(user_id, "test@example.com", "testuser")
+        .expect("Failed to generate token");
 
     let interceptor = JwtClientInterceptor::new(token);
 

@@ -8,38 +8,40 @@ use transactional_outbox::{
 };
 
 fn build_publisher() -> CombinedPublisher {
-    let use_kafka = std::env::var("SOCIAL_OUTBOX_USE_KAFKA")
-        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-        .unwrap_or(false);
+    let brokers = std::env::var("KAFKA_BROKERS").unwrap_or_default();
+    let topic_prefix = std::env::var("KAFKA_TOPIC_PREFIX").unwrap_or_else(|_| "nova".into());
+    let allow_kafka = std::env::var("SOCIAL_OUTBOX_USE_KAFKA")
+        .map(|v| v != "0" && !v.eq_ignore_ascii_case("false"))
+        .unwrap_or(true);
 
-    if use_kafka {
-        let brokers = std::env::var("KAFKA_BROKERS").unwrap_or_default();
-        let topic_prefix = std::env::var("KAFKA_TOPIC_PREFIX").unwrap_or_else(|_| "nova".into());
-        if brokers.is_empty() {
-            warn!("SOCIAL_OUTBOX_USE_KAFKA=1 but KAFKA_BROKERS not set, falling back to noop publisher");
-        } else {
-            match rdkafka::ClientConfig::new()
-                .set("bootstrap.servers", brokers.clone())
-                .set("enable.idempotence", "true")
-                .set("acks", "all")
-                .set("max.in.flight.requests.per.connection", "5")
-                .set("retries", "10")
-                .create()
-            {
-                Ok(producer) => {
-                    info!("Using KafkaOutboxPublisher for social-service outbox");
-                    let publisher = KafkaOutboxPublisher::new(producer, topic_prefix);
-                    return CombinedPublisher {
-                        inner: PublisherKind::Kafka(publisher),
-                    };
-                }
-                Err(e) => {
-                    warn!(
-                        "Failed to create Kafka producer for outbox ({}), falling back to noop: {}",
-                        brokers, e
-                    );
-                }
+    if allow_kafka && !brokers.is_empty() {
+        match rdkafka::ClientConfig::new()
+            .set("bootstrap.servers", brokers.clone())
+            .set("enable.idempotence", "true")
+            .set("acks", "all")
+            .set("max.in.flight.requests.per.connection", "5")
+            .set("retries", "10")
+            .create()
+        {
+            Ok(producer) => {
+                info!("Using KafkaOutboxPublisher for social-service outbox");
+                let publisher = KafkaOutboxPublisher::new(producer, topic_prefix);
+                return CombinedPublisher {
+                    inner: PublisherKind::Kafka(publisher),
+                };
             }
+            Err(e) => {
+                warn!(
+                    "Failed to create Kafka producer for outbox ({}), falling back to noop: {}",
+                    brokers, e
+                );
+            }
+        }
+    } else {
+        if !allow_kafka {
+            info!("SOCIAL_OUTBOX_USE_KAFKA disabled, using noop publisher");
+        } else {
+            warn!("KAFKA_BROKERS not set; using noop outbox publisher");
         }
     }
 

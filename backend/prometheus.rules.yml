@@ -463,6 +463,42 @@ groups:
           description: "Lag increase: {{ $value | humanize }} messages"
           action: "Critical queue processing issue - check consumer logs and database health immediately"
 
+      # =====================
+      # Outbox Alerts (social-service, analytics-service, others using transactional-outbox)
+      # =====================
+      - alert: OutboxPendingBacklog
+        expr: sum by (service) (outbox_pending_count) > 200
+        for: 5m
+        labels:
+          severity: warning
+          component: outbox
+        annotations:
+          summary: "Outbox pending backlog >200 events"
+          description: "Service {{ $labels.service }} has {{ $value }} unpublished outbox events for >5m"
+          action: "Check DB connectivity, downstream broker, and outbox worker health"
+
+      - alert: OutboxOldestPendingHigh
+        expr: sum by (service) (outbox_oldest_pending_age_seconds) > 600
+        for: 5m
+        labels:
+          severity: critical
+          component: outbox
+        annotations:
+          summary: "Oldest outbox event pending >10m"
+          description: "Service {{ $labels.service }} has pending events older than 10 minutes ({{ $value }}s)"
+          action: "Verify credentials/config (DATABASE_URL, KAFKA_BROKERS); use replay API/CLI if needed"
+
+      - alert: OutboxPublishingStalled
+        expr: rate(outbox_published_total[10m]) < 1
+        for: 10m
+        labels:
+          severity: warning
+          component: outbox
+        annotations:
+          summary: "Outbox publishing stalled (<1 event / 10m)"
+          description: "Publishing rate is {{ $value }} over 10m"
+          action: "Inspect worker logs, pending_count, broker availability; restart worker if necessary"
+
 # Runbook Reference:
 # - WebSocket Issues: See backend/docs/WEBSOCKET_TROUBLESHOOTING.md
 # - Message Delivery: See backend/docs/MESSAGE_DELIVERY_SLA.md

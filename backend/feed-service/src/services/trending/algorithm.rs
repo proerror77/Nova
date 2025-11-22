@@ -115,7 +115,7 @@ impl TrendingAlgorithm {
 }
 
 #[cfg(test)]
-#[cfg(all(test, feature = "legacy_internal_tests"))]
+#[cfg(test)]
 mod tests {
     use super::*;
 

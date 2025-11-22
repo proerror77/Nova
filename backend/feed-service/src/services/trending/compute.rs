@@ -11,21 +11,21 @@ use crate::error::Result;
 /// Trending compute service for background jobs
 pub struct TrendingComputeService {
     repo: TrendingRepo,
-    algorithm: TrendingAlgorithm,
+    _algorithm: TrendingAlgorithm,
 }
 
 impl TrendingComputeService {
     pub fn new(pool: PgPool) -> Self {
         Self {
             repo: TrendingRepo::new(pool),
-            algorithm: TrendingAlgorithm::default(),
+            _algorithm: TrendingAlgorithm::default(),
         }
     }
 
     pub fn with_algorithm(pool: PgPool, algorithm: TrendingAlgorithm) -> Self {
         Self {
             repo: TrendingRepo::new(pool),
-            algorithm,
+            _algorithm: algorithm,
         }
     }
 

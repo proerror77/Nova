@@ -33,7 +33,7 @@ impl From<crate::clients::proto::content::Post> for Post {
 
         Post {
             id: post.id,
-            creator_id: post.creator_id,
+            creator_id: post.author_id,
             content: post.content,
             created_at,
             updated_at,
@@ -165,11 +165,11 @@ impl ContentMutation {
 
         let mut client = clients.content_client();
 
-        // Get creator_id from context (would normally come from JWT token)
-        let creator_id = ctx.data::<String>().ok().cloned().unwrap_or_default();
+        // Get author_id from context (would normally come from JWT token)
+        let author_id = ctx.data::<String>().ok().cloned().unwrap_or_default();
 
         let request = tonic::Request::new(crate::clients::proto::content::CreatePostRequest {
-            creator_id,
+            author_id,
             content,
         });
 
@@ -232,8 +232,8 @@ async fn delete_post_impl(ctx: &Context<'_>, id: String) -> Result<bool, String>
         .ok_or("Post not found".to_string())?;
 
     // Step 2: Check authorization - user must be post owner
-    let creator_uuid = uuid::Uuid::parse_str(&post.creator_id)
-        .map_err(|_| "Invalid post creator ID format".to_string())?;
+    let creator_uuid = uuid::Uuid::parse_str(&post.author_id)
+        .map_err(|_| "Invalid post author ID format".to_string())?;
 
     check_user_authorization(ctx, creator_uuid, "delete").map_err(|e| e.to_string())?;
 
@@ -244,7 +244,7 @@ async fn delete_post_impl(ctx: &Context<'_>, id: String) -> Result<bool, String>
             let mut client = clients_clone.content_client();
             let del_req = tonic::Request::new(crate::clients::proto::content::DeletePostRequest {
                 post_id: id,
-                deleted_by_id: current_user_id.to_string(),
+                user_id: current_user_id.to_string(),
             });
             client.delete_post(del_req).await
         })

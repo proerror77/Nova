@@ -205,6 +205,8 @@ impl FeedRankingService {
             self.cache
                 .write_feed_cache(user_id, all_posts.clone(), None)
                 .await?;
+            // Also persist a snapshot without TTL for CH-down fallback
+            let _ = self.cache.write_snapshot(user_id, all_posts.clone()).await;
         } else {
             self.cache.invalidate_feed(user_id).await?;
         }
@@ -233,6 +235,27 @@ impl FeedRankingService {
         );
 
         let start = Instant::now();
+
+        // First try last_good_snapshot (no TTL) to keep serving stale-but-valid feed
+        if let Ok(Some(snapshot)) = self.cache.read_snapshot(user_id).await {
+            let total_count = snapshot.post_ids.len();
+            if total_count > 0 && offset < total_count {
+                let end = (offset + limit).min(total_count);
+                let page = snapshot.post_ids[offset..end].to_vec();
+                let has_more = end < total_count;
+
+                FEED_CACHE_EVENTS.with_label_values(&["snapshot"]).inc();
+                let elapsed = start.elapsed().as_secs_f64();
+                FEED_REQUEST_DURATION_SECONDS
+                    .with_label_values(&["snapshot"])
+                    .observe(elapsed);
+                FEED_REQUEST_TOTAL.with_label_values(&["snapshot"]).inc();
+                FEED_CANDIDATE_COUNT
+                    .with_label_values(&["snapshot"])
+                    .observe(total_count as f64);
+                return Ok((page, has_more, total_count));
+            }
+        }
 
         match self.cache.read_feed_cache(user_id).await? {
             Some(cached) => {

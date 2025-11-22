@@ -28,6 +28,7 @@ tracing = { workspace = true }
 # Utilities
 uuid = { workspace = true }
 chrono = { workspace = true }
+prometheus = { workspace = true }
 
 # Background task scheduling
 async-trait = { workspace = true }

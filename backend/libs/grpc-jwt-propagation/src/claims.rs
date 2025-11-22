@@ -48,9 +48,7 @@ impl JwtClaims {
     /// ## Errors
     ///
     /// Returns error if `sub` field is not a valid UUID
-    pub fn from_validated_claims(
-        claims: &crypto_core::jwt::Claims,
-    ) -> Result<Self, anyhow::Error> {
+    pub fn from_validated_claims(claims: &crypto_core::jwt::Claims) -> Result<Self, anyhow::Error> {
         let user_id = Uuid::parse_str(&claims.sub)
             .map_err(|e| anyhow::anyhow!("Invalid user ID in JWT: {}", e))?;
 
@@ -123,8 +121,8 @@ mod tests {
             jti: Some(Uuid::new_v4().to_string()),
         };
 
-        let jwt_claims = JwtClaims::from_validated_claims(&crypto_claims)
-            .expect("Should convert successfully");
+        let jwt_claims =
+            JwtClaims::from_validated_claims(&crypto_claims).expect("Should convert successfully");
 
         assert_eq!(jwt_claims.user_id, user_id);
         assert_eq!(jwt_claims.email, "test@example.com");

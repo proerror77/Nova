@@ -51,46 +51,88 @@ pub enum TlsConfig {
     },
 }
 
+/// Dependency criticality tier for client connections.
+///
+/// Tier0 = hard dependency (fail fast on startup);
+/// Tier1 = soft-critical (start but mark degraded and log warnings);
+/// Tier2 = optional (best-effort).
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum DependencyTier {
+    Tier0,
+    Tier1,
+    Tier2,
+}
+
+impl DependencyTier {
+    fn from_env(var: &str, default: DependencyTier) -> DependencyTier {
+        match env::var(var)
+            .ok()
+            .as_deref()
+            .map(str::to_ascii_lowercase)
+            .as_deref()
+        {
+            Some("0") | Some("tier0") | Some("hard") => DependencyTier::Tier0,
+            Some("1") | Some("tier1") | Some("soft") | Some("soft-critical") => {
+                DependencyTier::Tier1
+            }
+            Some("2") | Some("tier2") | Some("optional") => DependencyTier::Tier2,
+            _ => default,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ServiceEndpoint {
+    pub url: String,
+    #[serde(default = "default_tier")]
+    pub tier: DependencyTier,
+}
+
+const fn default_tier() -> DependencyTier {
+    DependencyTier::Tier1
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GrpcConfig {
     /// Identity Service endpoint (renamed from auth-service)
-    pub identity_service_url: String,
-
-    /// User Service endpoint
-    pub user_service_url: String,
+    pub identity_service: ServiceEndpoint,
 
     /// Content Service endpoint
-    pub content_service_url: String,
+    pub content_service: ServiceEndpoint,
 
     /// Feed Service endpoint
-    pub feed_service_url: String,
+    pub feed_service: ServiceEndpoint,
 
     /// Search Service endpoint
-    pub search_service_url: String,
+    pub search_service: ServiceEndpoint,
 
     /// Media Service endpoint
-    pub media_service_url: String,
+    pub media_service: ServiceEndpoint,
 
     /// Notification Service endpoint
-    pub notification_service_url: String,
+    pub notification_service: ServiceEndpoint,
 
     /// Analytics Service endpoint (renamed from events-service)
-    pub analytics_service_url: String,
+    pub analytics_service: ServiceEndpoint,
 
     /// Graph Service endpoint
-    pub graph_service_url: String,
+    pub graph_service: ServiceEndpoint,
 
     /// Social Service endpoint
-    pub social_service_url: String,
+    pub social_service: ServiceEndpoint,
+
+    /// Realtime Chat Service endpoint
+    pub chat_service: ServiceEndpoint,
 
     /// Ranking Service endpoint
-    pub ranking_service_url: String,
+    pub ranking_service: ServiceEndpoint,
 
     /// Feature Store endpoint
-    pub feature_store_url: String,
+    pub feature_store: ServiceEndpoint,
 
     /// Trust & Safety Service endpoint
-    pub trust_safety_service_url: String,
+    pub trust_safety_service: ServiceEndpoint,
 
     /// gRPC connection timeout in seconds
     pub connection_timeout_secs: u64,
@@ -127,33 +169,75 @@ impl GrpcConfig {
         let env = Environment::from_env();
         let tls = Self::load_tls_config(env)?;
 
+        let default_tier0 = DependencyTier::Tier0;
+        let default_tier1 = DependencyTier::Tier1;
+
         let config = Self {
-            identity_service_url: env::var("GRPC_IDENTITY_SERVICE_URL")
-                .unwrap_or_else(|_| "http://identity-service:9080".to_string()),
-            user_service_url: env::var("GRPC_USER_SERVICE_URL")
-                .unwrap_or_else(|_| "http://user-service:9080".to_string()),
-            content_service_url: env::var("GRPC_CONTENT_SERVICE_URL")
-                .unwrap_or_else(|_| "http://content-service:9080".to_string()),
-            feed_service_url: env::var("GRPC_FEED_SERVICE_URL")
-                .unwrap_or_else(|_| "http://feed-service:9080".to_string()),
-            search_service_url: env::var("GRPC_SEARCH_SERVICE_URL")
-                .unwrap_or_else(|_| "http://search-service:9080".to_string()),
-            media_service_url: env::var("GRPC_MEDIA_SERVICE_URL")
-                .unwrap_or_else(|_| "http://media-service:9080".to_string()),
-            notification_service_url: env::var("GRPC_NOTIFICATION_SERVICE_URL")
-                .unwrap_or_else(|_| "http://notification-service:9080".to_string()),
-            analytics_service_url: env::var("GRPC_ANALYTICS_SERVICE_URL")
-                .unwrap_or_else(|_| "http://analytics-service:9080".to_string()),
-            graph_service_url: env::var("GRPC_GRAPH_SERVICE_URL")
-                .unwrap_or_else(|_| "http://graph-service:9080".to_string()),
-            social_service_url: env::var("GRPC_SOCIAL_SERVICE_URL")
-                .unwrap_or_else(|_| "http://social-service:9006".to_string()),
-            ranking_service_url: env::var("GRPC_RANKING_SERVICE_URL")
-                .unwrap_or_else(|_| "http://ranking-service:9088".to_string()),
-            feature_store_url: env::var("GRPC_FEATURE_STORE_URL")
-                .unwrap_or_else(|_| "http://feature-store:9089".to_string()),
-            trust_safety_service_url: env::var("GRPC_TRUST_SAFETY_SERVICE_URL")
-                .unwrap_or_else(|_| "http://trust-safety-service:9091".to_string()),
+            identity_service: ServiceEndpoint {
+                url: env::var("GRPC_IDENTITY_SERVICE_URL")
+                    .unwrap_or_else(|_| "http://identity-service:9080".to_string()),
+                tier: DependencyTier::from_env("GRPC_IDENTITY_SERVICE_TIER", default_tier0),
+            },
+            content_service: ServiceEndpoint {
+                url: env::var("GRPC_CONTENT_SERVICE_URL")
+                    .unwrap_or_else(|_| "http://content-service:9080".to_string()),
+                tier: DependencyTier::from_env("GRPC_CONTENT_SERVICE_TIER", default_tier0),
+            },
+            feed_service: ServiceEndpoint {
+                url: env::var("GRPC_FEED_SERVICE_URL")
+                    .unwrap_or_else(|_| "http://feed-service:9080".to_string()),
+                tier: DependencyTier::from_env("GRPC_FEED_SERVICE_TIER", default_tier1),
+            },
+            search_service: ServiceEndpoint {
+                url: env::var("GRPC_SEARCH_SERVICE_URL")
+                    .unwrap_or_else(|_| "http://search-service:9080".to_string()),
+                tier: DependencyTier::from_env("GRPC_SEARCH_SERVICE_TIER", default_tier1),
+            },
+            media_service: ServiceEndpoint {
+                url: env::var("GRPC_MEDIA_SERVICE_URL")
+                    .unwrap_or_else(|_| "http://media-service:9080".to_string()),
+                tier: DependencyTier::from_env("GRPC_MEDIA_SERVICE_TIER", default_tier1),
+            },
+            notification_service: ServiceEndpoint {
+                url: env::var("GRPC_NOTIFICATION_SERVICE_URL")
+                    .unwrap_or_else(|_| "http://notification-service:9080".to_string()),
+                tier: DependencyTier::from_env("GRPC_NOTIFICATION_SERVICE_TIER", default_tier1),
+            },
+            analytics_service: ServiceEndpoint {
+                url: env::var("GRPC_ANALYTICS_SERVICE_URL")
+                    .unwrap_or_else(|_| "http://analytics-service:9080".to_string()),
+                tier: DependencyTier::from_env("GRPC_ANALYTICS_SERVICE_TIER", default_tier1),
+            },
+            graph_service: ServiceEndpoint {
+                url: env::var("GRPC_GRAPH_SERVICE_URL")
+                    .unwrap_or_else(|_| "http://graph-service:9080".to_string()),
+                tier: DependencyTier::from_env("GRPC_GRAPH_SERVICE_TIER", default_tier1),
+            },
+            social_service: ServiceEndpoint {
+                url: env::var("GRPC_SOCIAL_SERVICE_URL")
+                    .unwrap_or_else(|_| "http://social-service:9006".to_string()),
+                tier: DependencyTier::from_env("GRPC_SOCIAL_SERVICE_TIER", default_tier0),
+            },
+            chat_service: ServiceEndpoint {
+                url: env::var("GRPC_CHAT_SERVICE_URL")
+                    .unwrap_or_else(|_| "http://realtime-chat-service:9085".to_string()),
+                tier: DependencyTier::from_env("GRPC_CHAT_SERVICE_TIER", default_tier1),
+            },
+            ranking_service: ServiceEndpoint {
+                url: env::var("GRPC_RANKING_SERVICE_URL")
+                    .unwrap_or_else(|_| "http://ranking-service:9088".to_string()),
+                tier: DependencyTier::from_env("GRPC_RANKING_SERVICE_TIER", default_tier0),
+            },
+            feature_store: ServiceEndpoint {
+                url: env::var("GRPC_FEATURE_STORE_URL")
+                    .unwrap_or_else(|_| "http://feature-store:9089".to_string()),
+                tier: DependencyTier::from_env("GRPC_FEATURE_STORE_TIER", default_tier1),
+            },
+            trust_safety_service: ServiceEndpoint {
+                url: env::var("GRPC_TRUST_SAFETY_SERVICE_URL")
+                    .unwrap_or_else(|_| "http://trust-safety-service:9091".to_string()),
+                tier: DependencyTier::from_env("GRPC_TRUST_SAFETY_SERVICE_TIER", default_tier1),
+            },
             connection_timeout_secs: env::var("GRPC_CONNECTION_TIMEOUT_SECS")
                 .ok()
                 .and_then(|s| s.parse().ok())
@@ -337,19 +421,58 @@ impl GrpcConfig {
     /// Configuration for development/testing
     pub fn development() -> Self {
         Self {
-            identity_service_url: "http://localhost:9080".to_string(),
-            user_service_url: "http://localhost:9081".to_string(),
-            content_service_url: "http://localhost:9083".to_string(),
-            feed_service_url: "http://localhost:9084".to_string(),
-            search_service_url: "http://localhost:9085".to_string(),
-            media_service_url: "http://localhost:9086".to_string(),
-            notification_service_url: "http://localhost:9087".to_string(),
-            analytics_service_url: "http://localhost:9090".to_string(),
-            graph_service_url: "http://localhost:50051".to_string(),
-            social_service_url: "http://localhost:9006".to_string(),
-            ranking_service_url: "http://localhost:9088".to_string(),
-            feature_store_url: "http://localhost:9089".to_string(),
-            trust_safety_service_url: "http://localhost:9091".to_string(),
+            identity_service: ServiceEndpoint {
+                url: "http://localhost:9080".to_string(),
+                tier: DependencyTier::Tier0,
+            },
+            content_service: ServiceEndpoint {
+                url: "http://localhost:9083".to_string(),
+                tier: DependencyTier::Tier0,
+            },
+            feed_service: ServiceEndpoint {
+                url: "http://localhost:9084".to_string(),
+                tier: DependencyTier::Tier1,
+            },
+            search_service: ServiceEndpoint {
+                url: "http://localhost:9085".to_string(),
+                tier: DependencyTier::Tier1,
+            },
+            media_service: ServiceEndpoint {
+                url: "http://localhost:9086".to_string(),
+                tier: DependencyTier::Tier1,
+            },
+            notification_service: ServiceEndpoint {
+                url: "http://localhost:9087".to_string(),
+                tier: DependencyTier::Tier1,
+            },
+            analytics_service: ServiceEndpoint {
+                url: "http://localhost:9090".to_string(),
+                tier: DependencyTier::Tier1,
+            },
+            graph_service: ServiceEndpoint {
+                url: "http://localhost:50051".to_string(),
+                tier: DependencyTier::Tier1,
+            },
+            social_service: ServiceEndpoint {
+                url: "http://localhost:9006".to_string(),
+                tier: DependencyTier::Tier0,
+            },
+            chat_service: ServiceEndpoint {
+                url: "http://localhost:9085".to_string(),
+                tier: DependencyTier::Tier1,
+            },
+            ranking_service: ServiceEndpoint {
+                url: "http://localhost:9088".to_string(),
+                tier: DependencyTier::Tier0,
+            },
+            feature_store: ServiceEndpoint {
+                url: "http://localhost:9089".to_string(),
+                tier: DependencyTier::Tier1,
+            },
+            trust_safety_service: ServiceEndpoint {
+                url: "http://localhost:9091".to_string(),
+                tier: DependencyTier::Tier1,
+            },
             connection_timeout_secs: 10,
             request_timeout_secs: 30,
             max_concurrent_streams: 1000,

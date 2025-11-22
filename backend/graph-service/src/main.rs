@@ -55,7 +55,7 @@ async fn main() -> Result<()> {
     info!("Neo4j health check passed");
 
     // Create gRPC service
-    let graph_service = GraphServiceImpl::new(repo);
+    let graph_service = GraphServiceImpl::new(repo, config.internal_write_token.clone());
 
     // Setup health reporting
     let (mut health_reporter, health_service) = health_reporter();

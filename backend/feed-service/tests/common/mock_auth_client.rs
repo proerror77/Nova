@@ -2,7 +2,6 @@
 //!
 //! Provides a mock implementation of AuthClient that doesn't require real gRPC connections.
 //! Used for testing batch API and feed cleaner logic in isolation.
-
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use uuid::Uuid;
@@ -53,5 +52,25 @@ impl MockAuthClient {
     /// Get number of batch API calls (for N+1 test verification)
     pub fn get_batch_call_count(&self) -> usize {
         *self.batch_call_count.lock().unwrap()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn mock_auth_client_tracks_usage() {
+        let alice = Uuid::new_v4();
+        let client = MockAuthClient::new(vec![(alice, "alice".into())]);
+        let res = client.get_users_by_ids(&[alice]).await.unwrap();
+        assert_eq!(res.get(&alice).cloned(), Some("alice".into()));
+        assert_eq!(client.get_batch_call_count(), 1);
+
+        // empty variant returns empty map
+        let empty = MockAuthClient::empty();
+        let res = empty.get_users_by_ids(&[Uuid::new_v4()]).await.unwrap();
+        assert!(res.is_empty());
+        assert_eq!(empty.get_batch_call_count(), 1);
     }
 }

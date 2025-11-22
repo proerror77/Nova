@@ -9,7 +9,6 @@ fn main() {
     let services = vec![
         ("auth_service", format!("{}/auth_service.proto", base)),
         ("user_service", format!("{}/user_service.proto", base)),
-        ("content_service", format!("{}/content_service.proto", base)),
         ("feed_service", format!("{}/feed_service.proto", base)),
         ("search_service", format!("{}/search_service.proto", base)),
         ("media_service", format!("{}/media_service.proto", base)),
@@ -28,6 +27,18 @@ fn main() {
             .compile_protos(&[proto_path.as_str()], &[base])
             .unwrap_or_else(|e| panic!("Failed to compile {}: {}", service_name, e));
     }
+
+    // v2 content-service proto lives in services_v2
+    tonic_build::configure()
+        .build_server(true)
+        .build_client(true)
+        .compile_well_known_types(true)
+        .extern_path(".google.protobuf", "::prost_types")
+        .compile_protos(
+            &["../../proto/services_v2/content_service.proto"],
+            &["../../proto/services_v2"],
+        )
+        .unwrap_or_else(|e| panic!("Failed to compile content_service v2: {}", e));
 
     // Compile social-service proto (from local proto directory)
     // Note: compile_well_known_types is needed for google.protobuf.Timestamp
@@ -62,6 +73,7 @@ fn main() {
 
     println!("cargo:rerun-if-changed=../../proto/services/");
     println!("cargo:rerun-if-changed=../../proto/services/common.proto");
+    println!("cargo:rerun-if-changed=../../proto/services_v2/");
     println!("cargo:rerun-if-changed=proto/social.proto");
     println!("cargo:rerun-if-changed=proto/ranking.proto");
     println!("cargo:rerun-if-changed=proto/feature_store.proto");

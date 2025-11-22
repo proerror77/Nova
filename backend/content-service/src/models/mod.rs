@@ -175,3 +175,18 @@ pub struct BookmarkResponse {
     pub post_id: String,
     pub bookmarked_at: String,
 }
+
+// ============================================
+// Channels
+// ============================================
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct Channel {
+    pub id: Uuid,
+    pub name: String,
+    pub description: Option<String>,
+    pub category: Option<String>,
+    pub subscriber_count: i64,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}

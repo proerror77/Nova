@@ -40,48 +40,49 @@ struct APIConfig {
     // MARK: - Endpoints
 
     struct Graph {
-        static let followers = "/api/v1/graph/followers"
-        static let following = "/api/v1/graph/following"
-        static let follow = "/api/v1/graph/follow"
-        static let unfollow = "/api/v1/graph/unfollow"
-        static let isFollowing = "/api/v1/graph/is-following"
+        static let followers = "/api/v2/graph/followers"
+        static let following = "/api/v2/graph/following"
+        static let follow = "/api/v2/graph/follow"
+        static let unfollow = "/api/v2/graph/unfollow"
+        static let isFollowing = "/api/v2/graph/is-following"
     }
 
     struct Social {
-        static let createLike = "/api/v1/social/like"
-        static let deleteLike = "/api/v1/social/unlike"
-        static let getLikes = "/api/v1/social/likes"
-        static let checkLiked = "/api/v1/social/check-liked"
-        static let createComment = "/api/v1/social/comment"
-        static let deleteComment = "/api/v1/social/comment/delete"
-        static let getComments = "/api/v1/social/comments"
-        static let createShare = "/api/v1/social/share"
-        static let getShareCount = "/api/v1/social/shares/count"
-        static let batchGetStats = "/api/v1/social/stats/batch"
+        static let createLike = "/api/v2/social/like"
+        static let deleteLike = "/api/v2/social/unlike"
+        static let getLikes = "/api/v2/social/likes"
+        static let checkLiked = "/api/v2/social/check-liked"
+        static let createComment = "/api/v2/social/comment"
+        static let deleteComment = "/api/v2/social/comment/delete"
+        static let getComments = "/api/v2/social/comments"
+        static let createShare = "/api/v2/social/share"
+        static let getShareCount = "/api/v2/social/shares/count"
+        static let batchGetStats = "/api/v2/social/stats/batch"
     }
 
     struct Content {
-        static let getPost = "/api/v1/content/post"
-        static let createPost = "/api/v1/content/post/create"
-        static let updatePost = "/api/v1/content/post/update"
-        static let deletePost = "/api/v1/content/post/delete"
-        static let postsByAuthor = "/api/v1/content/posts/author"
-        static let bookmarks = "/api/v1/content/bookmarks"
+        static let getPost = "/api/v2/content/post"
+        static let createPost = "/api/v2/content/post/create"
+        static let updatePost = "/api/v2/content/post/update"
+        static let deletePost = "/api/v2/content/post/delete"
+        static let postsByAuthor = "/api/v2/content/posts/author"
+        static let bookmarks = "/api/v2/content/bookmarks"
     }
 
     struct Media {
-        static let uploadStart = "/api/v1/media/upload/start"
-        static let uploadProgress = "/api/v1/media/upload/progress"
-        static let uploadComplete = "/api/v1/media/upload/complete"
-        static let reels = "/api/v1/media/reels"
-        static let videos = "/api/v1/media/videos"
+        // 單次上傳端點：後端提供 /api/v2/media/upload
+        static let uploadStart = "/api/v2/media/upload"
+        static let uploadProgress = "/api/v2/media/upload"
+        static let uploadComplete = "/api/v2/media/upload"
+        static let reels = "/api/v2/media/reels"
+        static let videos = "/api/v2/media/videos"
     }
 
     struct Auth {
-        static let login = "/api/v1/auth/login"
-        static let register = "/api/v1/auth/register"
-        static let refresh = "/api/v1/auth/refresh"
-        static let logout = "/api/v1/auth/logout"
+        static let login = "/api/v2/auth/login"
+        static let register = "/api/v2/auth/register"
+        static let refresh = "/api/v2/auth/refresh"
+        static let logout = "/api/v2/auth/logout"
         static let getUser = "/api/v2/users"  // GET /api/v2/users/{id}
         static let updateUser = "/api/v2/users"  // PUT /api/v2/users/{id}
     }

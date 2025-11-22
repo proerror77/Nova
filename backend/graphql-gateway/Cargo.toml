@@ -23,10 +23,12 @@ async-graphql-actix-web = "7.0"
 # Web framework
 actix-web = { workspace = true }
 actix-cors = "0.7"
+actix-multipart = "0.4"
 
 # gRPC clients (to call backend services)
 tonic = { workspace = true }
 prost = { workspace = true }
+pbjson-types = "0.7"  # For google.protobuf.Timestamp support
 
 # Tracing
 tracing = { workspace = true }
@@ -70,6 +72,9 @@ lru = "0.12"  # LRU cache for per-IP rate limiters
 # Resilience (timeout, circuit breaker)
 resilience = { path = "../libs/resilience" }  # ✅ P0: Timeout protection & circuit breakers
 tower = { workspace = true }  # ✅ P0: Tower middleware for gRPC clients
+
+# gRPC client config with TLS/mTLS and dependency tiers
+grpc-clients = { path = "../libs/grpc-clients" }
 
 # Kafka
 rdkafka = { version = "0.36", features = ["cmake-build"] }  # ✅ P0-5: For subscription event streaming

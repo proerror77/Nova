@@ -1,12 +1,15 @@
+use actix_web::HttpResponse;
 use actix_web::{web, App, HttpServer};
 use analytics_service::grpc::nova::events_service::v2::events_service_server::EventsServiceServer;
 use analytics_service::services::{OutboxConfig, OutboxPublisher};
 use anyhow::{Context, Result};
+use chrono::{DateTime, Utc};
 use db_pool::{create_pool as create_pg_pool, DbConfig as DbPoolConfig};
 use std::sync::Arc;
 use tonic::transport::Server as GrpcServer;
 use tonic_health::server::health_reporter;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+use uuid::Uuid;
 
 #[actix_web::main]
 async fn main() -> Result<()> {
@@ -48,32 +51,42 @@ async fn main() -> Result<()> {
     // Create AppState for gRPC service
     let app_state = Arc::new(analytics_service::grpc::AppState::new(db_pool.clone()));
 
-    // Start OutboxPublisher in background
-    let outbox_config = OutboxConfig::from_env();
-    tracing::info!(
-        "Starting OutboxPublisher (brokers: {}, batch_size: {})",
-        outbox_config.kafka_brokers,
-        outbox_config.batch_size
-    );
+    // Start OutboxPublisher in background (feature flag enabled by default)
+    let outbox_enabled = std::env::var("OUTBOX_PUBLISHER_ENABLED")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(true);
+    let mut outbox_publisher: Option<Arc<OutboxPublisher>> = None;
 
-    let publisher = match OutboxPublisher::new(db_pool.clone(), outbox_config) {
-        Ok(p) => Arc::new(p),
-        Err(e) => {
-            tracing::error!("Failed to create OutboxPublisher: {:?}", e);
-            tracing::warn!("Events service will run without Kafka publishing");
-            // Continue without publisher - events will be saved to outbox but not published
-            return Ok(());
-        }
-    };
+    if outbox_enabled {
+        let outbox_config = OutboxConfig::from_env();
+        tracing::info!(
+            "Starting OutboxPublisher (brokers: {}, batch_size: {})",
+            outbox_config.kafka_brokers,
+            outbox_config.batch_size
+        );
 
-    // Spawn OutboxPublisher background task
-    let publisher_clone = Arc::clone(&publisher);
-    tokio::spawn(async move {
-        tracing::info!("OutboxPublisher task started");
-        if let Err(e) = publisher_clone.start().await {
-            tracing::error!("OutboxPublisher failed: {:?}", e);
+        match OutboxPublisher::new(db_pool.clone(), outbox_config) {
+            Ok(p) => {
+                let publisher = Arc::new(p);
+                let publisher_clone = publisher.clone();
+                tokio::spawn(async move {
+                    tracing::info!("OutboxPublisher task started");
+                    if let Err(e) = publisher_clone.start().await {
+                        tracing::error!("OutboxPublisher failed: {:?}", e);
+                    }
+                });
+                outbox_publisher = Some(publisher);
+            }
+            Err(e) => {
+                tracing::error!("Failed to create OutboxPublisher: {:?}", e);
+                tracing::warn!(
+                    "Events service will run without Kafka publishing (outbox disabled)"
+                );
+            }
         }
-    });
+    } else {
+        tracing::warn!("OUTBOX_PUBLISHER_ENABLED=false - skipping outbox worker start");
+    }
 
     // Compute HTTP and gRPC ports
     let http_port: u16 = std::env::var("PORT")
@@ -166,13 +179,84 @@ async fn main() -> Result<()> {
         }
     });
 
+    // Admin helpers for outbox operations
+    async fn outbox_stats(publisher: web::Data<Arc<OutboxPublisher>>) -> HttpResponse {
+        match publisher.record_pending_metrics().await {
+            Ok(_) => HttpResponse::Ok().json(serde_json::json!({
+                "pending_count": publisher.metrics.pending.get(),
+                "oldest_pending_age_seconds": publisher.metrics.oldest_pending_age_seconds.get(),
+                "published_total": publisher.metrics.published.get(),
+            })),
+            Err(e) => HttpResponse::InternalServerError().body(format!("error: {}", e)),
+        }
+    }
+
+    #[derive(serde::Deserialize)]
+    struct ReplaySinceQuery {
+        ts: String,
+    }
+
+    async fn outbox_replay_since(
+        publisher: web::Data<Arc<OutboxPublisher>>,
+        query: web::Query<ReplaySinceQuery>,
+    ) -> HttpResponse {
+        match DateTime::parse_from_rfc3339(&query.ts).map(|dt| dt.with_timezone(&Utc)) {
+            Ok(ts) => match publisher.replay_since(ts).await {
+                Ok(count) => HttpResponse::Ok().json(serde_json::json!({
+                    "replayed": count,
+                    "since": query.ts,
+                })),
+                Err(e) => HttpResponse::InternalServerError().body(format!("error: {}", e)),
+            },
+            Err(e) => HttpResponse::BadRequest().body(format!("invalid ts: {}", e)),
+        }
+    }
+
+    #[derive(serde::Deserialize)]
+    struct ReplayRangeQuery {
+        from_id: Uuid,
+        to_id: Uuid,
+    }
+
+    async fn outbox_replay_range(
+        publisher: web::Data<Arc<OutboxPublisher>>,
+        query: web::Query<ReplayRangeQuery>,
+    ) -> HttpResponse {
+        match publisher.replay_range(query.from_id, query.to_id).await {
+            Ok(count) => HttpResponse::Ok().json(serde_json::json!({
+                "replayed": count,
+                "from_id": query.from_id,
+                "to_id": query.to_id,
+            })),
+            Err(e) => HttpResponse::InternalServerError().body(format!("error: {}", e)),
+        }
+    }
+
     // Start HTTP server
     tracing::info!("Starting HTTP server on 0.0.0.0:{}", http_port);
 
+    let admin_outbox = outbox_publisher.clone();
+
     HttpServer::new(move || {
-        App::new()
+        let mut app = App::new()
             .route("/health", web::get().to(|| async { "OK" }))
-            .route("/ready", web::get().to(|| async { "READY" }))
+            .route("/ready", web::get().to(|| async { "READY" }));
+
+        if let Some(publisher) = admin_outbox.clone() {
+            app = app
+                .app_data(web::Data::new(publisher))
+                .route("/admin/outbox/stats", web::get().to(outbox_stats))
+                .route(
+                    "/admin/outbox/replay_since",
+                    web::post().to(outbox_replay_since),
+                )
+                .route(
+                    "/admin/outbox/replay_range",
+                    web::post().to(outbox_replay_range),
+                );
+        }
+
+        app
     })
     .bind(("0.0.0.0", http_port))
     .context("Failed to bind HTTP server")?

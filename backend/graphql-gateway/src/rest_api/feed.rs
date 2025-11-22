@@ -1,12 +1,13 @@
 /// Feed API endpoints
 ///
 /// GET /api/v2/feed - Get personalized feed for current user
-use actix_web::{web, HttpRequest, HttpResponse, Result};
+use actix_web::{web, HttpMessage, HttpRequest, HttpResponse, Result};
 use tracing::{error, info};
 
 use super::models::{ErrorResponse, FeedPost, GetFeedResponse};
 use crate::clients::proto::feed::GetFeedRequest as ProtoGetFeedRequest;
 use crate::clients::ServiceClients;
+use crate::middleware::jwt::AuthenticatedUser;
 
 /// GET /api/v2/feed
 /// Returns personalized feed for the authenticated user
@@ -16,11 +17,15 @@ use crate::clients::ServiceClients;
 ///   - cursor: Pagination cursor for next page (optional)
 ///   - algorithm: Algorithm variant - "ch", "v2", "hybrid" (default: "v2")
 pub async fn get_feed(
-    _req: HttpRequest,
+    req: HttpRequest,
     clients: web::Data<ServiceClients>,
     query: web::Query<FeedQueryParams>,
 ) -> Result<HttpResponse> {
-    let user_id = query.user_id.clone();
+    let user_id = match req.extensions().get::<AuthenticatedUser>().copied() {
+        Some(AuthenticatedUser(id)) => id.to_string(),
+        None => return Ok(HttpResponse::Unauthorized().finish()),
+    };
+
     let limit = query.limit.unwrap_or(20).min(100);
     let cursor = query.cursor.clone().unwrap_or_default();
     let algorithm = query.algorithm.clone().unwrap_or_else(|| "v2".to_string());
@@ -110,9 +115,156 @@ pub async fn get_feed(
     }
 }
 
+/// GET /api/v2/feed/user/{user_id}
+pub async fn get_feed_by_user(
+    req: HttpRequest,
+    path: web::Path<String>,
+    clients: web::Data<ServiceClients>,
+    query: web::Query<FeedQueryParams>,
+) -> Result<HttpResponse> {
+    if req
+        .extensions()
+        .get::<AuthenticatedUser>()
+        .copied()
+        .is_none()
+    {
+        return Ok(HttpResponse::Unauthorized().finish());
+    }
+    let mut feed_client = clients.feed_client();
+    let grpc_request = tonic::Request::new(ProtoGetFeedRequest {
+        user_id: path.into_inner(),
+        limit: query.limit.unwrap_or(20).min(100),
+        cursor: query.cursor.clone().unwrap_or_default(),
+        algorithm: query.algorithm.clone().unwrap_or_else(|| "v2".to_string()),
+    });
+
+    match feed_client.get_feed(grpc_request).await {
+        Ok(resp) => {
+            let inner = resp.into_inner();
+            Ok(HttpResponse::Ok().json(GetFeedResponse {
+                posts: inner
+                    .posts
+                    .into_iter()
+                    .map(|p| FeedPost {
+                        id: p.id,
+                        user_id: p.user_id,
+                        content: p.content,
+                        created_at: p.created_at,
+                        ranking_score: p.ranking_score,
+                        like_count: p.like_count,
+                        comment_count: p.comment_count,
+                        share_count: p.share_count,
+                    })
+                    .collect(),
+                next_cursor: if inner.next_cursor.is_empty() {
+                    None
+                } else {
+                    Some(inner.next_cursor)
+                },
+                has_more: inner.has_more,
+            }))
+        }
+        Err(e) => Ok(HttpResponse::ServiceUnavailable().body(e.to_string())),
+    }
+}
+
+/// GET /api/v2/feed/explore
+pub async fn get_explore_feed(
+    req: HttpRequest,
+    clients: web::Data<ServiceClients>,
+    query: web::Query<FeedQueryParams>,
+) -> Result<HttpResponse> {
+    let user_id = match req.extensions().get::<AuthenticatedUser>().copied() {
+        Some(AuthenticatedUser(id)) => id.to_string(),
+        None => return Ok(HttpResponse::Unauthorized().finish()),
+    };
+    // reuse feed-service; for now same as get_feed but with algorithm override
+    let mut feed_client = clients.feed_client();
+    let grpc_request = tonic::Request::new(ProtoGetFeedRequest {
+        user_id,
+        limit: query.limit.unwrap_or(20).min(100),
+        cursor: query.cursor.clone().unwrap_or_default(),
+        algorithm: "explore".to_string(),
+    });
+    match feed_client.get_feed(grpc_request).await {
+        Ok(resp) => {
+            let inner = resp.into_inner();
+            Ok(HttpResponse::Ok().json(GetFeedResponse {
+                posts: inner
+                    .posts
+                    .into_iter()
+                    .map(|p| FeedPost {
+                        id: p.id,
+                        user_id: p.user_id,
+                        content: p.content,
+                        created_at: p.created_at,
+                        ranking_score: p.ranking_score,
+                        like_count: p.like_count,
+                        comment_count: p.comment_count,
+                        share_count: p.share_count,
+                    })
+                    .collect(),
+                next_cursor: if inner.next_cursor.is_empty() {
+                    None
+                } else {
+                    Some(inner.next_cursor)
+                },
+                has_more: inner.has_more,
+            }))
+        }
+        Err(e) => Ok(HttpResponse::ServiceUnavailable().body(e.to_string())),
+    }
+}
+
+/// GET /api/v2/feed/trending
+pub async fn get_trending_feed(
+    req: HttpRequest,
+    clients: web::Data<ServiceClients>,
+    query: web::Query<FeedQueryParams>,
+) -> Result<HttpResponse> {
+    let user_id = match req.extensions().get::<AuthenticatedUser>().copied() {
+        Some(AuthenticatedUser(id)) => id.to_string(),
+        None => return Ok(HttpResponse::Unauthorized().finish()),
+    };
+    let mut feed_client = clients.feed_client();
+    let grpc_request = tonic::Request::new(ProtoGetFeedRequest {
+        user_id,
+        limit: query.limit.unwrap_or(20).min(100),
+        cursor: query.cursor.clone().unwrap_or_default(),
+        algorithm: "trending".to_string(),
+    });
+    match feed_client.get_feed(grpc_request).await {
+        Ok(resp) => {
+            let inner = resp.into_inner();
+            Ok(HttpResponse::Ok().json(GetFeedResponse {
+                posts: inner
+                    .posts
+                    .into_iter()
+                    .map(|p| FeedPost {
+                        id: p.id,
+                        user_id: p.user_id,
+                        content: p.content,
+                        created_at: p.created_at,
+                        ranking_score: p.ranking_score,
+                        like_count: p.like_count,
+                        comment_count: p.comment_count,
+                        share_count: p.share_count,
+                    })
+                    .collect(),
+                next_cursor: if inner.next_cursor.is_empty() {
+                    None
+                } else {
+                    Some(inner.next_cursor)
+                },
+                has_more: inner.has_more,
+            }))
+        }
+        Err(e) => Ok(HttpResponse::ServiceUnavailable().body(e.to_string())),
+    }
+}
+
 #[derive(Debug, serde::Deserialize)]
 pub struct FeedQueryParams {
-    pub user_id: String,
     pub limit: Option<u32>,
     pub cursor: Option<String>,
     pub algorithm: Option<String>,

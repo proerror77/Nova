@@ -1,13 +1,9 @@
 use grpc_clients::nova::content_service::v2::{
-    GetPostsByAuthorRequest, GetPostsByAuthorResponse, GetPostsByIdsRequest, GetPostsByIdsResponse,
-};
-use grpc_clients::nova::user_service::v2::{
-    GetUserFollowingRequest, GetUserFollowingResponse, GetUserProfilesByIdsRequest,
-    GetUserProfilesByIdsResponse,
+    GetPostsByIdsRequest, GetPostsByIdsResponse, GetUserPostsRequest, GetUserPostsResponse,
 };
 /// gRPC clients for calling other services (centralized)
 ///
-/// Feed Service orchestrates data from UserService, ContentService, and GraphService
+/// Feed Service orchestrates data from SocialService (profiles/relations), ContentService, and GraphService
 /// to generate personalized feeds without direct database queries.
 use grpc_clients::{config::GrpcConfig, GrpcClientPool};
 use std::sync::Arc;
@@ -36,18 +32,6 @@ impl ContentServiceClient {
         Self { pool }
     }
 
-    /// Get posts by author
-    pub async fn get_posts_by_author(
-        &self,
-        request: GetPostsByAuthorRequest,
-    ) -> Result<GetPostsByAuthorResponse, Status> {
-        let mut client = self.pool.content();
-        client
-            .get_posts_by_author(request)
-            .await
-            .map(|resp| resp.into_inner())
-    }
-
     /// Get posts by IDs (batch operation to prevent N+1)
     pub async fn get_posts_by_ids(
         &self,
@@ -59,50 +43,15 @@ impl ContentServiceClient {
             .await
             .map(|resp| resp.into_inner())
     }
-}
 
-/// User Service gRPC Client
-/// Provides access to user profiles and relationships
-#[derive(Clone)]
-pub struct UserServiceClient {
-    pool: Arc<GrpcClientPool>,
-}
-
-impl UserServiceClient {
-    /// Create new UserServiceClient
-    pub async fn new(_addr: String) -> Result<Self, Box<dyn std::error::Error>> {
-        let cfg = GrpcConfig::from_env()?;
-        let pool = GrpcClientPool::new(&cfg).await?;
-        Ok(Self {
-            pool: Arc::new(pool),
-        })
-    }
-
-    /// Create UserServiceClient from existing pool
-    pub fn from_pool(pool: Arc<GrpcClientPool>) -> Self {
-        Self { pool }
-    }
-
-    /// Get users this user is following
-    pub async fn get_user_following(
+    /// Get posts for a specific user (pagination)
+    pub async fn get_user_posts(
         &self,
-        request: GetUserFollowingRequest,
-    ) -> Result<GetUserFollowingResponse, Status> {
-        let mut client = self.pool.user();
+        request: GetUserPostsRequest,
+    ) -> Result<GetUserPostsResponse, Status> {
+        let mut client = self.pool.content();
         client
-            .get_user_following(request)
-            .await
-            .map(|resp| resp.into_inner())
-    }
-
-    /// Get multiple user profiles by IDs (batch operation)
-    pub async fn get_user_profiles_by_ids(
-        &self,
-        request: GetUserProfilesByIdsRequest,
-    ) -> Result<GetUserProfilesByIdsResponse, Status> {
-        let mut client = self.pool.user();
-        client
-            .get_user_profiles_by_ids(request)
+            .get_user_posts(request)
             .await
             .map(|resp| resp.into_inner())
     }
@@ -121,9 +70,7 @@ impl GraphServiceClient {
     pub async fn new() -> Result<Self, Box<dyn std::error::Error>> {
         let cfg = GrpcConfig::from_env()?;
         let pool = GrpcClientPool::new(&cfg).await?;
-
-        // Check if graph-service is accessible (simple connectivity check)
-        let enabled = true; // Assume enabled, will fail gracefully if not
+        let enabled = true;
 
         Ok(Self {
             pool: Arc::new(pool),

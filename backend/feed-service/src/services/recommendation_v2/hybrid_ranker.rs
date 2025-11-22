@@ -137,7 +137,7 @@ impl HybridRanker {
     /// Score candidates using collaborative filtering
     async fn score_collaborative(
         &self,
-        user_id: Uuid,
+        _user_id: Uuid,
         candidates: &[Uuid],
         context: Option<&UserContext>,
     ) -> Result<HashMap<Uuid, f64>> {
@@ -275,7 +275,7 @@ impl HybridRanker {
     }
 
     /// Compute max similarity between candidate and already selected posts
-    fn compute_max_similarity(&self, candidate: Uuid, selected: &[RankedPost]) -> f64 {
+    fn compute_max_similarity(&self, _candidate: Uuid, _selected: &[RankedPost]) -> f64 {
         // TODO: Use actual similarity from item-item matrix
         // For now, return low similarity (no diversity penalty)
         0.1
