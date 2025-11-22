@@ -362,11 +362,18 @@ async fn main() -> io::Result<()> {
     tracing::info!("Connected to database via db-pool crate");
 
     // Ensure database schema is up to date before wiring runtime components
-    if let Err(e) = sqlx::migrate!("./migrations").run(&db_pool).await {
+    let skip_migrations = std::env::var("SKIP_MIGRATIONS")
+        .map(|v| v == "true" || v == "1")
+        .unwrap_or(false);
+
+    if skip_migrations {
+        tracing::warn!("Skipping database migrations (SKIP_MIGRATIONS=true)");
+    } else if let Err(e) = sqlx::migrate!("./migrations").run(&db_pool).await {
         tracing::error!("Database migrations failed: {:#}", e);
         return Err(io::Error::other("Failed to run database migrations"));
+    } else {
+        tracing::info!("Database migrations completed successfully");
     }
-    tracing::info!("Database migrations completed successfully");
 
     // Initialize Kafka producer with idempotent configuration (required for transactional outbox)
     let kafka_producer: rdkafka::producer::FutureProducer = rdkafka::ClientConfig::new()
