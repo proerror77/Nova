@@ -77,6 +77,7 @@ where
         // Skip auth for health check, metrics, and public auth endpoints
         let public_paths = [
             "/health",
+            "/health/circuit-breakers",
             "/metrics",
             "/api/v2/auth/register",
             "/api/v2/auth/login",
