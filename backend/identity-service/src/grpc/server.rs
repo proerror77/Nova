@@ -281,6 +281,66 @@ impl AuthService for IdentityServiceServer {
         Ok(Response::new(RedeemInviteResponse { success: redeemed }))
     }
 
+    /// List invitations created by a user
+    async fn list_invitations(
+        &self,
+        request: Request<ListInvitationsRequest>,
+    ) -> std::result::Result<Response<ListInvitationsResponse>, Status> {
+        let req = request.into_inner();
+        let user_id = Uuid::parse_str(&req.user_id)
+            .map_err(|_| Status::invalid_argument("Invalid user_id"))?;
+
+        let limit = req.limit.unwrap_or(50).clamp(1, 100) as i64;
+        let offset = req.offset.unwrap_or(0).max(0) as i64;
+
+        let (invites, total) =
+            db::invitations::list_user_invitations(&self.db, user_id, limit, offset)
+                .await
+                .map_err(to_status)?;
+
+        let base_url = std::env::var("INVITE_BASE_URL")
+            .unwrap_or_else(|_| "https://nova.app/invite".to_string());
+
+        let invitation_infos: Vec<InvitationInfo> = invites
+            .into_iter()
+            .map(|inv| InvitationInfo {
+                code: inv.code.clone(),
+                invite_url: format!("{}/{}", base_url.trim_end_matches('/'), inv.code),
+                created_at: inv.created_at.timestamp(),
+                expires_at: inv.expires_at.timestamp(),
+                is_redeemed: inv.redeemed_at.is_some(),
+                redeemed_by_user_id: inv.redeemed_by.map(|id| id.to_string()),
+                redeemed_at: inv.redeemed_at.map(|dt| dt.timestamp()),
+            })
+            .collect();
+
+        Ok(Response::new(ListInvitationsResponse {
+            invitations: invitation_infos,
+            total: total as i32,
+        }))
+    }
+
+    /// Get invitation statistics for a user
+    async fn get_invitation_stats(
+        &self,
+        request: Request<GetInvitationStatsRequest>,
+    ) -> std::result::Result<Response<GetInvitationStatsResponse>, Status> {
+        let req = request.into_inner();
+        let user_id = Uuid::parse_str(&req.user_id)
+            .map_err(|_| Status::invalid_argument("Invalid user_id"))?;
+
+        let stats = db::invitations::get_invitation_stats(&self.db, user_id)
+            .await
+            .map_err(to_status)?;
+
+        Ok(Response::new(GetInvitationStatsResponse {
+            total_generated: stats.total_generated,
+            total_redeemed: stats.total_redeemed,
+            total_pending: stats.total_pending,
+            total_expired: stats.total_expired,
+        }))
+    }
+
     /// Get user by ID
     async fn get_user(
         &self,

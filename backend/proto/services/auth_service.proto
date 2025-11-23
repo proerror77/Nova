@@ -286,7 +286,39 @@ message RedeemInviteResponse {
   bool success = 1;
 }
 
-// ============================================================================ 
+message ListInvitationsRequest {
+  string user_id = 1;
+  optional int32 limit = 2;
+  optional int32 offset = 3;
+}
+
+message InvitationInfo {
+  string code = 1;
+  string invite_url = 2;
+  int64 created_at = 3;
+  int64 expires_at = 4;
+  bool is_redeemed = 5;
+  optional string redeemed_by_user_id = 6;
+  optional int64 redeemed_at = 7;
+}
+
+message ListInvitationsResponse {
+  repeated InvitationInfo invitations = 1;
+  int32 total = 2;
+}
+
+message GetInvitationStatsRequest {
+  string user_id = 1;
+}
+
+message GetInvitationStatsResponse {
+  int32 total_generated = 1;
+  int32 total_redeemed = 2;
+  int32 total_pending = 3;
+  int32 total_expired = 4;
+}
+
+// ============================================================================
 // Devices (session-associated devices)
 // ============================================================================
 message Device {
@@ -409,6 +441,8 @@ service AuthService {
   // Invitations
   rpc GenerateInvite(GenerateInviteRequest) returns (GenerateInviteResponse);
   rpc RedeemInvite(RedeemInviteRequest) returns (RedeemInviteResponse);
+  rpc ListInvitations(ListInvitationsRequest) returns (ListInvitationsResponse);
+  rpc GetInvitationStats(GetInvitationStatsRequest) returns (GetInvitationStatsResponse);
 
   // Devices
   rpc ListDevices(ListDevicesRequest) returns (ListDevicesResponse);

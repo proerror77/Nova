@@ -103,3 +103,79 @@ pub async fn get_invite(pool: &PgPool, code: &str) -> Result<Option<InviteCode>>
 
     Ok(invite)
 }
+
+/// List invitations created by a user
+pub async fn list_user_invitations(
+    pool: &PgPool,
+    user_id: Uuid,
+    limit: i64,
+    offset: i64,
+) -> Result<(Vec<InviteCode>, i64)> {
+    let invites = sqlx::query_as::<_, InviteCode>(
+        r#"
+        SELECT id, code, issuer_user_id, target_email, target_phone,
+               expires_at, redeemed_by, redeemed_at, created_at
+        FROM invite_codes
+        WHERE issuer_user_id = $1
+        ORDER BY created_at DESC
+        LIMIT $2 OFFSET $3
+        "#,
+    )
+    .bind(user_id)
+    .bind(limit)
+    .bind(offset)
+    .fetch_all(pool)
+    .await
+    .map_err(|e| IdentityError::Database(e.to_string()))?;
+
+    let total = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM invite_codes WHERE issuer_user_id = $1",
+    )
+    .bind(user_id)
+    .fetch_one(pool)
+    .await
+    .map_err(|e| IdentityError::Database(e.to_string()))?;
+
+    Ok((invites, total))
+}
+
+/// Get invitation statistics for a user
+pub async fn get_invitation_stats(pool: &PgPool, user_id: Uuid) -> Result<InvitationStats> {
+    let stats = sqlx::query_as::<_, InvitationStatsRow>(
+        r#"
+        SELECT
+            COUNT(*) as total_generated,
+            COUNT(CASE WHEN redeemed_at IS NOT NULL THEN 1 END) as total_redeemed,
+            COUNT(CASE WHEN redeemed_at IS NULL AND expires_at > NOW() THEN 1 END) as total_pending,
+            COUNT(CASE WHEN redeemed_at IS NULL AND expires_at <= NOW() THEN 1 END) as total_expired
+        FROM invite_codes
+        WHERE issuer_user_id = $1
+        "#,
+    )
+    .bind(user_id)
+    .fetch_one(pool)
+    .await
+    .map_err(|e| IdentityError::Database(e.to_string()))?;
+
+    Ok(InvitationStats {
+        total_generated: stats.total_generated as i32,
+        total_redeemed: stats.total_redeemed as i32,
+        total_pending: stats.total_pending as i32,
+        total_expired: stats.total_expired as i32,
+    })
+}
+
+#[derive(Debug, sqlx::FromRow)]
+struct InvitationStatsRow {
+    total_generated: i64,
+    total_redeemed: i64,
+    total_pending: i64,
+    total_expired: i64,
+}
+
+pub struct InvitationStats {
+    pub total_generated: i32,
+    pub total_redeemed: i32,
+    pub total_pending: i32,
+    pub total_expired: i32,
+}
