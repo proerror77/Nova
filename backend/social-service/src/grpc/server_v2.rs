@@ -192,8 +192,8 @@ impl SocialService for SocialServiceImpl {
                 id: id.to_string(),
                 follower_id: user_id.to_string(),
                 followee_id: other_user_id.to_string(),
-                r#type: RelationshipType::RelationshipTypeFollow as i32,
-                status: RelationshipStatus::RelationshipStatusActive as i32,
+                r#type: RelationshipType::Follow as i32,
+                status: RelationshipStatus::Active as i32,
                 created_at: to_ts(created_at),
                 updated_at: to_ts(created_at),
             }
@@ -202,8 +202,8 @@ impl SocialService for SocialServiceImpl {
                 id: String::new(),
                 follower_id: user_id.to_string(),
                 followee_id: other_user_id.to_string(),
-                r#type: RelationshipType::RelationshipTypeUnspecified as i32,
-                status: RelationshipStatus::RelationshipStatusUnspecified as i32,
+                r#type: RelationshipType::Unspecified as i32,
+                status: RelationshipStatus::Unspecified as i32,
                 created_at: None,
                 updated_at: None,
             }
