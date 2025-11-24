@@ -53,7 +53,7 @@ reqwest.workspace = true
 urlencoding.workspace = true
 clickhouse.workspace = true
 utoipa.workspace = true
-utoipa-swagger-ui = { version = "5", features = ["actix-web"] }
+utoipa-swagger-ui = { version = "9", features = ["actix-web"] }
 
 # Resilience (P0-5)
 resilience = { path = "../libs/resilience" }

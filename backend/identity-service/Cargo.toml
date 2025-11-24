@@ -92,7 +92,7 @@ transactional-outbox = { path = "../libs/transactional-outbox" }
 
 # API documentation (optional - for future HTTP endpoints)
 utoipa = { version = "4", features = ["chrono", "uuid"], optional = true }
-utoipa-swagger-ui = { version = "5", features = ["actix-web"], optional = true }
+utoipa-swagger-ui = { version = "9", features = ["actix-web"], optional = true }
 
 [build-dependencies]
 tonic-build = "0.12"
