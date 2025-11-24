@@ -49,6 +49,7 @@ resilience = { path = "../libs/resilience" }
 
 # TLS/mTLS (P0-1)
 grpc-tls = { path = "../libs/grpc-tls" }
+rustls = { workspace = true, features = ["aws_lc_rs"] }
 
 # Shared libraries
 error-types = { path = "../libs/error-types" }
