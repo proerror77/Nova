@@ -121,7 +121,7 @@ dashmap = "6.1"
 envy = "0.4"
 
 # Events
-rdkafka = { version = "0.36", features = ["cmake-build"] }
+rdkafka = { version = "0.38", features = ["cmake-build"] }
 
 # Testing
 serial_test = "3.0"

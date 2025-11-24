@@ -78,7 +78,7 @@ tower = { workspace = true }  # ✅ P0: Tower middleware for gRPC clients
 grpc-clients = { path = "../libs/grpc-clients" }
 
 # Kafka
-rdkafka = { version = "0.36", features = ["cmake-build"] }  # ✅ P0-5: For subscription event streaming
+rdkafka = { version = "0.38", features = ["cmake-build"] }  # ✅ P0-5: For subscription event streaming
 
 # Metrics
 prometheus = { workspace = true }  # ✅ Quick Win #5: Cache performance metrics
