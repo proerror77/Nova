@@ -3,6 +3,9 @@ import SwiftUI
 // MARK: - Login View
 
 struct LoginView: View {
+    // MARK: - Bindings
+    @Binding var currentPage: AppPage
+
     // MARK: - State
     @State private var isLoginMode = true
     @State private var username = ""
@@ -142,6 +145,16 @@ struct LoginView: View {
                             )
                         }
                         .offset(x: 0, y: 213)
+
+                        // Skip to Home (临时开发用)
+                        Button(action: {
+                            currentPage = .home
+                        }) {
+                            Text("Skip")
+                                .font(Font.custom("Helvetica Neue", size: 14).weight(.light))
+                                .foregroundColor(Color(red: 0.77, green: 0.77, blue: 0.77))
+                        }
+                        .offset(x: 0, y: 270)
 
                         // Error Message
                         if let errorMessage = errorMessage {
@@ -283,7 +296,10 @@ struct LoginView: View {
                 username: email,
                 password: password
             )
-            // Success - AuthenticationManager will update isAuthenticated
+            // Success - Navigate to home page
+            await MainActor.run {
+                currentPage = .home
+            }
         } catch {
             errorMessage = "Login failed: \(error.localizedDescription)"
         }
@@ -304,7 +320,10 @@ struct LoginView: View {
                 password: password,
                 displayName: displayName.isEmpty ? username : displayName
             )
-            // Success - AuthenticationManager will update isAuthenticated
+            // Success - Navigate to home page
+            await MainActor.run {
+                currentPage = .home
+            }
         } catch {
             errorMessage = "Registration failed: \(error.localizedDescription)"
         }
@@ -366,5 +385,5 @@ struct LoginView: View {
 // MARK: - Preview
 
 #Preview {
-    LoginView()
+    LoginView(currentPage: .constant(.login))
 }

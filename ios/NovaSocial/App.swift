@@ -2,13 +2,19 @@ import SwiftUI
 
 @main
 struct FigmaDesignAppApp: App {
-    @State private var currentPage: AppPage = .home
+    @State private var currentPage: AppPage = .splash
 
     var body: some Scene {
         WindowGroup {
             ZStack {
                 // 根据状态即时切换页面（无过渡动画）
                 switch currentPage {
+                case .splash:
+                    SplashScreenView(currentPage: $currentPage)
+                        .transition(.identity)
+                case .login:
+                    LoginView(currentPage: $currentPage)
+                        .transition(.identity)
                 case .home:
                     HomeView(currentPage: $currentPage)
                         .transition(.identity)

@@ -8,10 +8,14 @@ struct ProfileView: View {
     @State private var showSetting = false
     @State private var selectedPhotoItem: PhotosPickerItem?
     @State private var showPhotoOptions = false
+    @State private var showPhotoPicker = false
+    @State private var selectedPostPhotoItem: PhotosPickerItem?
+    @State private var showCamera = false
+    @State private var showGenerateImage = false
 
     var body: some View {
         ZStack {
-            Color.white
+            DesignTokens.background
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
@@ -205,7 +209,7 @@ struct ProfileView: View {
                             }) {
                                 Text("Posts")
                                     .font(.system(size: 16, weight: .bold))
-                                    .foregroundColor(profileData.selectedTab == .posts ? Color(red: 0.82, green: 0.11, blue: 0.26) : .black)
+                                    .foregroundColor(profileData.selectedTab == .posts ? Color(red: 0.82, green: 0.11, blue: 0.26) : DesignTokens.text)
                             }
 
                             Button(action: {
@@ -216,7 +220,7 @@ struct ProfileView: View {
                             }) {
                                 Text("Saved")
                                     .font(.system(size: 16, weight: .bold))
-                                    .foregroundColor(profileData.selectedTab == .saved ? Color(red: 0.82, green: 0.11, blue: 0.26) : .black)
+                                    .foregroundColor(profileData.selectedTab == .saved ? Color(red: 0.82, green: 0.11, blue: 0.26) : DesignTokens.text)
                             }
 
                             Button(action: {
@@ -227,7 +231,7 @@ struct ProfileView: View {
                             }) {
                                 Text("Liked")
                                     .font(.system(size: 16, weight: .bold))
-                                    .foregroundColor(profileData.selectedTab == .liked ? Color(red: 0.82, green: 0.11, blue: 0.26) : .black)
+                                    .foregroundColor(profileData.selectedTab == .liked ? Color(red: 0.82, green: 0.11, blue: 0.26) : DesignTokens.text)
                             }
                         }
 
@@ -240,16 +244,16 @@ struct ProfileView: View {
                         }) {
                             Image(systemName: "magnifyingglass")
                                 .font(.system(size: 20))
-                                .foregroundColor(.black)
+                                .foregroundColor(DesignTokens.text)
                         }
                         .padding(.trailing, 20)
                     }
                     .padding(.vertical, 16)
-                    .background(.white)
+                    .background(DesignTokens.card)
 
                     // 分隔线
                     Rectangle()
-                        .fill(Color(red: 0.74, green: 0.74, blue: 0.74))
+                        .fill(DesignTokens.border)
                         .frame(height: 0.5)
                 }
 
@@ -281,7 +285,7 @@ struct ProfileView: View {
                     Color.clear
                         .frame(height: 100)
                 }
-                .background(Color(red: 0.96, green: 0.96, blue: 0.96))
+                .background(DesignTokens.background)
             }
             .overlay(alignment: .bottom) {
                 // MARK: - 底部导航栏
@@ -294,7 +298,7 @@ struct ProfileView: View {
                             .frame(width: 32, height: 22)
                         Text("Home")
                             .font(.system(size: 9))
-                            .foregroundColor(.black)
+                            .foregroundColor(DesignTokens.text)
                     }
                     .frame(maxWidth: .infinity)
                     .onTapGesture {
@@ -309,7 +313,7 @@ struct ProfileView: View {
                             .frame(width: 22, height: 22)
                         Text("Message")
                             .font(.system(size: 9))
-                            .foregroundColor(.black)
+                            .foregroundColor(DesignTokens.text)
                     }
                     .frame(maxWidth: .infinity)
                     .onTapGesture {
@@ -346,8 +350,8 @@ struct ProfileView: View {
                 }
                 .frame(height: 60)
                 .padding(.bottom, 20)
-                .background(Color.white)
-                .border(Color(red: 0.74, green: 0.74, blue: 0.74), width: 0.5)
+                .background(DesignTokens.card)
+                .border(DesignTokens.border, width: 0.5)
             }
 
             // MARK: - 照片选项弹窗
@@ -370,6 +374,14 @@ struct ProfileView: View {
         }
         .sheet(isPresented: $showNewPost) {
             NewPostView(showNewPost: $showNewPost)
+        }
+        .photosPicker(isPresented: $showPhotoPicker, selection: $selectedPostPhotoItem, matching: .images)
+        .fullScreenCover(isPresented: $showCamera) {
+            CameraPicker(isPresented: $showCamera)
+                .ignoresSafeArea()
+        }
+        .fullScreenCover(isPresented: $showGenerateImage) {
+            GenerateImage01View(showGenerateImage: $showGenerateImage)
         }
     }
 
@@ -403,8 +415,8 @@ struct ProfileView: View {
 
                     // Choose Photo
                     Button(action: {
-                        // 选择照片操作
                         showPhotoOptions = false
+                        showPhotoPicker = true
                     }) {
                         Text("Choose Photo")
                             .font(Font.custom("Helvetica Neue", size: 18).weight(.medium))
@@ -414,8 +426,8 @@ struct ProfileView: View {
 
                     // Take Photo
                     Button(action: {
-                        // 拍照操作
                         showPhotoOptions = false
+                        showCamera = true
                     }) {
                         Text("Take Photo")
                             .font(Font.custom("Helvetica Neue", size: 18).weight(.medium))
@@ -425,8 +437,8 @@ struct ProfileView: View {
 
                     // Generate image
                     Button(action: {
-                        // 生成图片操作
                         showPhotoOptions = false
+                        showGenerateImage = true
                     }) {
                         Text("Generate image")
                             .font(Font.custom("Helvetica Neue", size: 18).weight(.medium))

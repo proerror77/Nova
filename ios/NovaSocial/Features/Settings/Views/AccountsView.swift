@@ -5,7 +5,7 @@ struct AccountsView: View {
 
     var body: some View {
         ZStack {
-            Color.white
+            DesignTokens.background
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
@@ -16,14 +16,14 @@ struct AccountsView: View {
                     }) {
                         Image(systemName: "chevron.left")
                             .font(.system(size: 20))
-                            .foregroundColor(.black)
+                            .foregroundColor(DesignTokens.text)
                     }
 
                     Spacer()
 
                     Text("Accounts")
                         .font(.system(size: 24, weight: .medium))
-                        .foregroundColor(.black)
+                        .foregroundColor(DesignTokens.text)
 
                     Spacer()
 
@@ -33,11 +33,11 @@ struct AccountsView: View {
                 }
                 .frame(height: DesignTokens.topBarHeight)
                 .padding(.horizontal, 20)
-                .background(Color.white)
+                .background(DesignTokens.card)
 
                 // 分隔线
                 Rectangle()
-                    .fill(Color(red: 0.74, green: 0.74, blue: 0.74))
+                    .fill(DesignTokens.border)
                     .frame(height: 0.5)
 
                 ScrollView {
@@ -49,18 +49,18 @@ struct AccountsView: View {
                             HStack {
                                 Text("Create alias account")
                                     .font(.system(size: 18, weight: .medium))
-                                    .foregroundColor(Color(red: 0.82, green: 0.13, blue: 0.25))
+                                    .foregroundColor(DesignTokens.accent)
 
                                 Spacer()
                             }
                             .padding(.horizontal, 20)
                             .padding(.vertical, 16)
                         }
-                        .background(Color.white)
+                        .background(DesignTokens.card)
                         .cornerRadius(6)
                         .overlay(
                             RoundedRectangle(cornerRadius: 6)
-                                .stroke(Color(red: 0.68, green: 0.68, blue: 0.68), lineWidth: 0.5)
+                                .stroke(DesignTokens.border, lineWidth: 0.5)
                         )
                         .padding(.horizontal, 12)
                         .padding(.top, 20)
@@ -68,7 +68,7 @@ struct AccountsView: View {
                         // MARK: - 说明文字
                         Text("Alias account is an anonymous account.\nOne person can have one alias.")
                             .font(.system(size: 12))
-                            .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
+                            .foregroundColor(DesignTokens.text)
                             .multilineTextAlignment(.center)
                             .padding(.horizontal, 20)
 
@@ -80,11 +80,11 @@ struct AccountsView: View {
                                 // 头像
                                 ZStack {
                                     Circle()
-                                        .fill(Color.white)
+                                        .fill(DesignTokens.card)
                                         .frame(width: 56, height: 56)
 
                                     Circle()
-                                        .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
+                                        .fill(DesignTokens.placeholder)
                                         .frame(width: 54, height: 54)
                                 }
 
@@ -92,11 +92,11 @@ struct AccountsView: View {
                                 VStack(alignment: .leading, spacing: 5) {
                                     Text("Account_one")
                                         .font(.system(size: 19, weight: .medium))
-                                        .foregroundColor(.black)
+                                        .foregroundColor(DesignTokens.text)
 
                                     Text("Primary account")
                                         .font(.system(size: 15))
-                                        .foregroundColor(Color(red: 0.54, green: 0.54, blue: 0.54))
+                                        .foregroundColor(DesignTokens.textLight)
                                 }
 
                                 Spacer()
@@ -104,16 +104,16 @@ struct AccountsView: View {
                                 // 右箭头
                                 Image(systemName: "chevron.right")
                                     .font(.system(size: 14))
-                                    .foregroundColor(.gray)
+                                    .foregroundColor(DesignTokens.textLight)
                             }
                             .padding(.horizontal, 20)
                             .padding(.vertical, 16)
                         }
-                        .background(Color.white)
+                        .background(DesignTokens.card)
                         .cornerRadius(6)
                         .overlay(
                             RoundedRectangle(cornerRadius: 6)
-                                .stroke(Color(red: 0.68, green: 0.68, blue: 0.68), lineWidth: 0.5)
+                                .stroke(DesignTokens.border, lineWidth: 0.5)
                         )
                         .padding(.horizontal, 12)
                         .padding(.top, 10)

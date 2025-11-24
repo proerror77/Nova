@@ -5,7 +5,7 @@ struct DevicesView: View {
 
     var body: some View {
         ZStack {
-            Color.white
+            DesignTokens.background
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
@@ -16,14 +16,14 @@ struct DevicesView: View {
                     }) {
                         Image(systemName: "chevron.left")
                             .font(.system(size: 20))
-                            .foregroundColor(.black)
+                            .foregroundColor(DesignTokens.text)
                     }
 
                     Spacer()
 
                     Text("Devices")
                         .font(.system(size: 24, weight: .medium))
-                        .foregroundColor(.black)
+                        .foregroundColor(DesignTokens.text)
 
                     Spacer()
 
@@ -33,11 +33,11 @@ struct DevicesView: View {
                 }
                 .frame(height: DesignTokens.topBarHeight)
                 .padding(.horizontal, 20)
-                .background(Color.white)
+                .background(DesignTokens.card)
 
                 // 分隔线
                 Rectangle()
-                    .fill(Color(red: 0.74, green: 0.74, blue: 0.74))
+                    .fill(DesignTokens.border)
                     .frame(height: 0.5)
 
                 ScrollView {
@@ -80,23 +80,23 @@ struct DeviceCard: View {
                 // 设备图标
                 ZStack {
                     RoundedRectangle(cornerRadius: 8)
-                        .stroke(Color(red: 0.82, green: 0.11, blue: 0.26), lineWidth: 2)
+                        .stroke(DesignTokens.accent, lineWidth: 2)
                         .frame(width: 50, height: 50)
 
                     Image(systemName: icon)
                         .font(.system(size: 24))
-                        .foregroundColor(Color(red: 0.82, green: 0.11, blue: 0.26))
+                        .foregroundColor(DesignTokens.accent)
                 }
 
                 // 设备信息
                 VStack(alignment: .leading, spacing: 2) {
                     Text(deviceName)
                         .font(.system(size: 16, weight: .medium))
-                        .foregroundColor(.black)
+                        .foregroundColor(DesignTokens.text)
 
                     Text(lastActive)
                         .font(.system(size: 12))
-                        .foregroundColor(Color(red: 0.54, green: 0.54, blue: 0.54))
+                        .foregroundColor(DesignTokens.textLight)
                 }
 
                 Spacer()
@@ -104,16 +104,16 @@ struct DeviceCard: View {
                 // 右箭头
                 Image(systemName: "chevron.right")
                     .font(.system(size: 14))
-                    .foregroundColor(.gray)
+                    .foregroundColor(DesignTokens.textLight)
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 20)
         }
-        .background(Color.white)
+        .background(DesignTokens.card)
         .cornerRadius(6)
         .overlay(
             RoundedRectangle(cornerRadius: 6)
-                .stroke(Color(red: 0.68, green: 0.68, blue: 0.68), lineWidth: 0.5)
+                .stroke(DesignTokens.border, lineWidth: 0.5)
         )
     }
 }

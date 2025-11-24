@@ -1,4 +1,5 @@
 import SwiftUI
+import PhotosUI
 
 struct HomeView: View {
     @Binding var currentPage: AppPage
@@ -9,6 +10,10 @@ struct HomeView: View {
     @State private var showSearch = false
     @State private var showNotification = false
     @State private var showPhotoOptions = false
+    @State private var showPhotoPicker = false
+    @State private var selectedPhotoItem: PhotosPickerItem?
+    @State private var showCamera = false
+    @State private var showGenerateImage = false
 
     var body: some View {
         ZStack {
@@ -38,12 +43,20 @@ struct HomeView: View {
         .sheet(isPresented: $showReportView) {
             ReportModal(isPresented: $showReportView, showThankYouView: $showThankYouView)
         }
+        .photosPicker(isPresented: $showPhotoPicker, selection: $selectedPhotoItem, matching: .images)
+        .fullScreenCover(isPresented: $showCamera) {
+            CameraPicker(isPresented: $showCamera)
+                .ignoresSafeArea()
+        }
+        .fullScreenCover(isPresented: $showGenerateImage) {
+            GenerateImage01View(showGenerateImage: $showGenerateImage)
+        }
     }
 
     var homeContent: some View {
         ZStack {
-            // 背景色
-            Color(red: 0.97, green: 0.96, blue: 0.96)
+            // 背景色 - 动态跟随主题
+            DesignTokens.background
                 .ignoresSafeArea()
 
             NavigationStack {
@@ -71,9 +84,10 @@ struct HomeView: View {
                 }
                 .frame(height: DesignTokens.topBarHeight)
                 .padding(.horizontal, 16)
-                .background(Color.white)
+                .background(DesignTokens.card)
 
                 Divider()
+                    .background(DesignTokens.divider)
 
                 // MARK: - 可滚动内容区
                 ScrollView {
@@ -91,12 +105,13 @@ struct HomeView: View {
                         VStack(spacing: 8) {
                             Text("Hottest Banker in H.K.")
                                 .font(.system(size: 22, weight: .bold))
-                                .foregroundColor(Color(red: 0.25, green: 0.25, blue: 0.25))
+                                .foregroundColor(DesignTokens.text)
 
                             Text("Corporate Poll")
                                 .font(.system(size: 16, weight: .medium))
-                                .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.54))
+                                .foregroundColor(DesignTokens.textLight)
                         }
+                        .frame(maxWidth: .infinity)
 
                         // MARK: - 轮播卡片容器 (水平滚动)
                         ScrollView(.horizontal, showsIndicators: false) {
@@ -163,7 +178,7 @@ struct HomeView: View {
 
                             ForEach(0..<4, id: \.self) { _ in
                                 Circle()
-                                    .fill(Color(red: 0.73, green: 0.73, blue: 0.73))
+                                    .fill(DesignTokens.textLight.opacity(0.5))
                                     .frame(width: 6, height: 6)
                             }
                         }
@@ -183,6 +198,8 @@ struct HomeView: View {
                     }
                     .padding(.vertical, 16)
                     .padding(.horizontal)
+                    .frame(maxWidth: .infinity)
+                    .background(DesignTokens.background)
                 }
                 .padding(.bottom, -43)
                 .safeAreaInset(edge: .bottom) {
@@ -211,7 +228,7 @@ struct HomeView: View {
                             .frame(width: 22, height: 22)
                         Text("Message")
                             .font(.system(size: 9))
-                            .foregroundColor(.black)
+                            .foregroundColor(DesignTokens.text)
                     }
                     .frame(maxWidth: .infinity)
                     .onTapGesture {
@@ -243,7 +260,7 @@ struct HomeView: View {
                             .frame(width: 24, height: 24)
                         Text("Account")
                             .font(.system(size: 9))
-                            .foregroundColor(.black)
+                            .foregroundColor(DesignTokens.text)
                     }
                     .frame(maxWidth: .infinity)
                     .onTapGesture {
@@ -252,8 +269,8 @@ struct HomeView: View {
                 }
                 .frame(height: 60)
                 .padding(.bottom, 20)
-                .background(Color.white)
-                .border(Color(red: 0.74, green: 0.74, blue: 0.74), width: 0.5)
+                .background(DesignTokens.card)
+                .border(DesignTokens.border, width: 0.5)
                 .offset(y: 35)
                 }
             }
@@ -290,8 +307,8 @@ struct HomeView: View {
 
                     // Choose Photo
                     Button(action: {
-                        // 选择照片操作
                         showPhotoOptions = false
+                        showPhotoPicker = true
                     }) {
                         Text("Choose Photo")
                             .font(Font.custom("Helvetica Neue", size: 18).weight(.medium))
@@ -301,8 +318,8 @@ struct HomeView: View {
 
                     // Take Photo
                     Button(action: {
-                        // 拍照操作
                         showPhotoOptions = false
+                        showCamera = true
                     }) {
                         Text("Take Photo")
                             .font(Font.custom("Helvetica Neue", size: 18).weight(.medium))
@@ -312,8 +329,8 @@ struct HomeView: View {
 
                     // Generate image
                     Button(action: {
-                        // 生成图片操作
                         showPhotoOptions = false
+                        showGenerateImage = true
                     }) {
                         Text("Generate image")
                             .font(Font.custom("Helvetica Neue", size: 18).weight(.medium))
@@ -396,22 +413,22 @@ struct CarouselCardItem: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(name)
                         .font(.system(size: 16, weight: .bold))
-                        .foregroundColor(Color(red: 0.25, green: 0.25, blue: 0.25))
+                        .foregroundColor(DesignTokens.text)
 
                     Text(company)
                         .font(.system(size: 12, weight: .medium))
-                        .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.54))
+                        .foregroundColor(DesignTokens.textLight)
                 }
 
                 Spacer()
 
                 Text(votes)
                     .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.54))
+                    .foregroundColor(DesignTokens.textLight)
             }
         }
         .padding()
-        .background(Color.white)
+        .background(DesignTokens.card)
         .cornerRadius(12)
         .frame(width: 310)
     }
@@ -429,18 +446,18 @@ struct CommentCardItem: View {
             HStack(spacing: 10) {
                 // 头像
                 Circle()
-                    .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
+                    .fill(DesignTokens.placeholder)
                     .frame(width: 40, height: 40)
 
                 // 用户信息
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Simone Carter")
                         .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(.black)
+                        .foregroundColor(DesignTokens.text)
 
                     Text("1d")
                         .font(.system(size: 11))
-                        .foregroundColor(Color(red: 0.32, green: 0.32, blue: 0.32))
+                        .foregroundColor(DesignTokens.textLight)
                 }
 
                 Spacer()
@@ -450,7 +467,7 @@ struct CommentCardItem: View {
                     showReportView = true
                 }) {
                     Image(systemName: "ellipsis")
-                        .foregroundColor(.black)
+                        .foregroundColor(DesignTokens.text)
                         .font(.system(size: 14))
                         .contentShape(Rectangle())
                 }
@@ -487,11 +504,11 @@ struct CommentCardItem: View {
             HStack(spacing: 4) {
                 Text("kyleegigstead Cyborg dreams...")
                     .font(.system(size: 13))
-                    .foregroundColor(.black)
+                    .foregroundColor(DesignTokens.text)
 
                 Text("up")
                     .font(.system(size: 11))
-                    .foregroundColor(Color(red: 0.45, green: 0.44, blue: 0.44))
+                    .foregroundColor(DesignTokens.textLight)
 
                 Spacer()
             }
@@ -503,49 +520,49 @@ struct CommentCardItem: View {
                 HStack(spacing: 6) {
                     Image(systemName: "arrowtriangle.up.fill")
                         .font(.system(size: 10))
-                        .foregroundColor(.black)
+                        .foregroundColor(DesignTokens.text)
                     Text("0")
                         .font(.system(size: 12, weight: .bold))
-                        .foregroundColor(.black)
+                        .foregroundColor(DesignTokens.text)
                 }
 
                 HStack(spacing: 6) {
                     Image(systemName: "arrowtriangle.down.fill")
                         .font(.system(size: 10))
-                        .foregroundColor(.black)
+                        .foregroundColor(DesignTokens.text)
                     Text("0")
                         .font(.system(size: 12, weight: .bold))
-                        .foregroundColor(.black)
+                        .foregroundColor(DesignTokens.text)
                 }
 
                 HStack(spacing: 6) {
                     Image(systemName: "bubble.right")
                         .font(.system(size: 10))
-                        .foregroundColor(.black)
+                        .foregroundColor(DesignTokens.text)
                     Text("0")
                         .font(.system(size: 12, weight: .bold))
-                        .foregroundColor(.black)
+                        .foregroundColor(DesignTokens.text)
                 }
 
                 HStack(spacing: 6) {
                     Image(systemName: "square.and.arrow.up")
                         .font(.system(size: 10))
-                        .foregroundColor(.black)
+                        .foregroundColor(DesignTokens.text)
                     Text("Share")
                         .font(.system(size: 12, weight: .bold))
-                        .foregroundColor(.black)
+                        .foregroundColor(DesignTokens.text)
                 }
 
                 Spacer()
 
                 Image(systemName: "bookmark")
                     .font(.system(size: 12))
-                    .foregroundColor(.black)
+                    .foregroundColor(DesignTokens.text)
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
         }
-        .background(Color.white)
+        .background(DesignTokens.card)
         .cornerRadius(12)
     }
 }

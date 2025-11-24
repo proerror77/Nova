@@ -1,4 +1,5 @@
 import SwiftUI
+import PhotosUI
 
 struct MessageView: View {
     @Binding var currentPage: AppPage
@@ -7,6 +8,10 @@ struct MessageView: View {
     @State private var showPhotoOptions = false
     @State private var showAddOptionsMenu = false
     @State private var showQRScanner = false
+    @State private var showPhotoPicker = false
+    @State private var selectedPhotoItem: PhotosPickerItem?
+    @State private var showCamera = false
+    @State private var showGenerateImage = false
 
     var body: some View {
         ZStack {
@@ -36,13 +41,21 @@ struct MessageView: View {
         .sheet(isPresented: $showQRScanner) {
             QRCodeScannerView(isPresented: $showQRScanner)
         }
+        .photosPicker(isPresented: $showPhotoPicker, selection: $selectedPhotoItem, matching: .images)
+        .fullScreenCover(isPresented: $showCamera) {
+            CameraPicker(isPresented: $showCamera)
+                .ignoresSafeArea()
+        }
+        .fullScreenCover(isPresented: $showGenerateImage) {
+            GenerateImage01View(showGenerateImage: $showGenerateImage)
+        }
     }
 
     // MARK: - 消息页面内容
     private var messageContent: some View {
         ZStack {
             // MARK: - 背景色
-            Color(red: 0.97, green: 0.96, blue: 0.96)
+            DesignTokens.background
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
@@ -52,7 +65,7 @@ struct MessageView: View {
 
                     Text("Message")
                         .font(Font.custom("Helvetica Neue", size: 24).weight(.medium))
-                        .foregroundColor(.black)
+                        .foregroundColor(DesignTokens.text)
 
                     Spacer()
 
@@ -62,33 +75,33 @@ struct MessageView: View {
                     }) {
                         Image(systemName: "plus.circle")
                             .font(.system(size: 24, weight: .regular))
-                            .foregroundColor(.black)
+                            .foregroundColor(DesignTokens.text)
                     }
                 }
                 .frame(height: DesignTokens.topBarHeight)
                 .padding(.horizontal, 16)
-                .background(Color.white)
+                .background(DesignTokens.card)
 
                 // MARK: - 顶部分割线
                 Divider()
                     .frame(height: 0.5)
-                    .background(Color(red: 0.74, green: 0.74, blue: 0.74))
+                    .background(DesignTokens.border)
 
                 // MARK: - 搜索框
                 HStack(spacing: 10) {
                     Image(systemName: "magnifyingglass")
                         .font(.system(size: 15))
-                        .foregroundColor(Color(red: 0.69, green: 0.68, blue: 0.68))
+                        .foregroundColor(DesignTokens.textLight)
 
                     Text("Search")
                         .font(Font.custom("Helvetica Neue", size: 15))
-                        .foregroundColor(Color(red: 0.69, green: 0.68, blue: 0.68))
+                        .foregroundColor(DesignTokens.textLight)
 
                     Spacer()
                 }
                 .padding(EdgeInsets(top: 6, leading: 12, bottom: 6, trailing: 12))
                 .frame(height: 32)
-                .background(Color(red: 0.89, green: 0.88, blue: 0.87))
+                .background(DesignTokens.placeholder.opacity(0.2))
                 .cornerRadius(32)
                 .padding(EdgeInsets(top: 12, leading: 18, bottom: 16, trailing: 18))
 
@@ -104,7 +117,7 @@ struct MessageView: View {
                             if index < 8 {
                                 Divider()
                                     .frame(height: 0.25)
-                                    .background(Color(red: 0.74, green: 0.74, blue: 0.74))
+                                    .background(DesignTokens.border)
                             }
                         }
                     }
@@ -121,7 +134,7 @@ struct MessageView: View {
                             .frame(width: 32, height: 22)
                         Text("Home")
                             .font(.system(size: 9, weight: .medium))
-                            .foregroundColor(.black)
+                            .foregroundColor(DesignTokens.text)
                     }
                      .frame(maxWidth: .infinity)
                      .onTapGesture {
@@ -171,8 +184,8 @@ struct MessageView: View {
                 }
                 .frame(height: 60)
                 .padding(.bottom, 20)
-                .background(Color.white)
-                .border(Color(red: 0.74, green: 0.74, blue: 0.74), width: 0.5)
+                .background(DesignTokens.card)
+                .border(DesignTokens.border, width: 0.5)
                 .offset(y: 35)
             }
         }
@@ -208,8 +221,8 @@ struct MessageView: View {
 
                     // Choose Photo
                     Button(action: {
-                        // 选择照片操作
                         showPhotoOptions = false
+                        showPhotoPicker = true
                     }) {
                         Text("Choose Photo")
                             .font(Font.custom("Helvetica Neue", size: 18).weight(.medium))
@@ -219,8 +232,8 @@ struct MessageView: View {
 
                     // Take Photo
                     Button(action: {
-                        // 拍照操作
                         showPhotoOptions = false
+                        showCamera = true
                     }) {
                         Text("Take Photo")
                             .font(Font.custom("Helvetica Neue", size: 18).weight(.medium))
@@ -230,8 +243,8 @@ struct MessageView: View {
 
                     // Generate image
                     Button(action: {
-                        // 生成图片操作
                         showPhotoOptions = false
+                        showGenerateImage = true
                     }) {
                         Text("Generate image")
                             .font(Font.custom("Helvetica Neue", size: 18).weight(.medium))
@@ -300,7 +313,7 @@ struct MessageView: View {
                     ZStack {
                         // 白色背景
                         Rectangle()
-                            .foregroundColor(.white)
+                            .foregroundColor(DesignTokens.card)
                             .frame(width: 180, height: 151)
                             .cornerRadius(8)
                             .shadow(color: Color.black.opacity(0.15), radius: 10, x: 0, y: 4)
@@ -318,7 +331,7 @@ struct MessageView: View {
                                         .frame(width: 28, height: 28)
                                     Text("Add Friends")
                                         .font(Font.custom("Helvetica Neue", size: 14))
-                                        .foregroundColor(.black)
+                                        .foregroundColor(DesignTokens.text)
                                         .frame(maxWidth: .infinity, alignment: .leading)
                                 }
                                 .padding(.horizontal, 16)
@@ -328,7 +341,7 @@ struct MessageView: View {
 
                             Divider()
                                 .frame(height: 0.20)
-                                .background(Color(red: 0.77, green: 0.77, blue: 0.77))
+                                .background(DesignTokens.border)
                                 .padding(.horizontal, 16)
 
                             // Start Group Chat
@@ -343,7 +356,7 @@ struct MessageView: View {
                                         .frame(width: 28, height: 28)
                                     Text("Start Group Chat")
                                         .font(Font.custom("Helvetica Neue", size: 14))
-                                        .foregroundColor(.black)
+                                        .foregroundColor(DesignTokens.text)
                                         .frame(maxWidth: .infinity, alignment: .leading)
                                 }
                                 .padding(.horizontal, 16)
@@ -353,7 +366,7 @@ struct MessageView: View {
 
                             Divider()
                                 .frame(height: 0.20)
-                                .background(Color(red: 0.77, green: 0.77, blue: 0.77))
+                                .background(DesignTokens.border)
                                 .padding(.horizontal, 16)
 
                             // Scan QR Code
@@ -368,7 +381,7 @@ struct MessageView: View {
                                         .frame(width: 28, height: 28)
                                     Text("Scan QR Code")
                                         .font(Font.custom("Helvetica Neue", size: 14))
-                                        .foregroundColor(.black)
+                                        .foregroundColor(DesignTokens.text)
                                         .frame(maxWidth: .infinity, alignment: .leading)
                                 }
                                 .padding(.horizontal, 16)
@@ -396,18 +409,18 @@ struct MessageListItem: View {
         HStack(spacing: 12) {
             // 头像
             Circle()
-                .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
+                .fill(DesignTokens.placeholder)
                 .frame(width: 63, height: 63)
 
             // 消息内容
             VStack(alignment: .leading, spacing: 5) {
                 Text(name)
                     .font(Font.custom("Helvetica Neue", size: 19).weight(.bold))
-                    .foregroundColor(.black)
+                    .foregroundColor(DesignTokens.text)
 
                 Text("Hello, how are you bro~")
                     .font(Font.custom("Helvetica Neue", size: 15))
-                    .foregroundColor(Color(red: 0.54, green: 0.54, blue: 0.54))
+                    .foregroundColor(DesignTokens.textLight)
             }
 
             Spacer()
@@ -416,7 +429,7 @@ struct MessageListItem: View {
             VStack(alignment: .trailing, spacing: 6) {
                 Text("09:41 PM")
                     .font(Font.custom("Helvetica Neue", size: 13))
-                    .foregroundColor(Color(red: 0.65, green: 0.65, blue: 0.65))
+                    .foregroundColor(DesignTokens.textLight)
 
                 ZStack {
                     Circle()
@@ -431,7 +444,7 @@ struct MessageListItem: View {
         }
         .padding(EdgeInsets(top: 13, leading: 18, bottom: 13, trailing: 18))
         .frame(height: 80)
-        .background(Color(red: 0.97, green: 0.96, blue: 0.96))
+        .background(DesignTokens.card)
     }
 }
 

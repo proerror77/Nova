@@ -6,7 +6,7 @@ struct InviteFriendsView: View {
 
     var body: some View {
         ZStack {
-            Color.white
+            DesignTokens.background
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
@@ -17,14 +17,14 @@ struct InviteFriendsView: View {
                     }) {
                         Image(systemName: "chevron.left")
                             .font(.system(size: 20))
-                            .foregroundColor(.black)
+                            .foregroundColor(DesignTokens.text)
                     }
 
                     Spacer()
 
                     Text("Invite Friends")
                         .font(.system(size: 24, weight: .medium))
-                        .foregroundColor(.black)
+                        .foregroundColor(DesignTokens.text)
 
                     Spacer()
 
@@ -34,11 +34,11 @@ struct InviteFriendsView: View {
                 }
                 .frame(height: DesignTokens.topBarHeight)
                 .padding(.horizontal, 20)
-                .background(Color.white)
+                .background(DesignTokens.card)
 
                 // 分隔线
                 Rectangle()
-                    .fill(Color(red: 0.74, green: 0.74, blue: 0.74))
+                    .fill(DesignTokens.border)
                     .frame(height: 0.5)
 
                 VStack(spacing: 20) {
@@ -46,16 +46,16 @@ struct InviteFriendsView: View {
                     HStack {
                         Image(systemName: "magnifyingglass")
                             .font(.system(size: 16))
-                            .foregroundColor(Color(red: 0.69, green: 0.68, blue: 0.68))
+                            .foregroundColor(DesignTokens.textLight)
 
                         TextField("Search people on Icered", text: $searchText)
                             .font(.system(size: 15))
-                            .foregroundColor(.black)
+                            .foregroundColor(DesignTokens.text)
                     }
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)
                     .frame(height: 32)
-                    .background(Color(red: 0.89, green: 0.88, blue: 0.87))
+                    .background(DesignTokens.placeholder.opacity(0.2))
                     .cornerRadius(32)
                     .padding(.horizontal, 12)
                     .padding(.top, 20)
@@ -67,11 +67,11 @@ struct InviteFriendsView: View {
                         HStack(spacing: 24) {
                             Image(systemName: "square.and.arrow.up")
                                 .font(.system(size: 16))
-                                .foregroundColor(Color(red: 0.82, green: 0.11, blue: 0.26))
+                                .foregroundColor(DesignTokens.accent)
 
                             Text("Share invitation link")
                                 .font(.system(size: 15))
-                                .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
+                                .foregroundColor(DesignTokens.text)
 
                             Spacer()
                         }
@@ -79,18 +79,18 @@ struct InviteFriendsView: View {
                         .padding(.vertical, 7)
                         .frame(height: 35)
                     }
-                    .background(Color.white)
+                    .background(DesignTokens.card)
                     .cornerRadius(23)
                     .overlay(
                         RoundedRectangle(cornerRadius: 23)
-                            .stroke(Color(red: 0.75, green: 0.75, blue: 0.75), lineWidth: 0.5)
+                            .stroke(DesignTokens.border, lineWidth: 0.5)
                     )
                     .padding(.horizontal, 12)
 
                     // MARK: - 剩余邀请次数
                     Text("You have 3 invitations left.")
                         .font(.system(size: 12))
-                        .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
+                        .foregroundColor(DesignTokens.text)
                         .padding(.top, 5)
                 }
 

@@ -15,7 +15,7 @@ struct ProfileSettingView: View {
 
     var body: some View {
         ZStack {
-            Color.white
+            DesignTokens.background
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
@@ -26,14 +26,14 @@ struct ProfileSettingView: View {
                     }) {
                         Image(systemName: "chevron.left")
                             .font(.system(size: 20))
-                            .foregroundColor(.black)
+                            .foregroundColor(DesignTokens.text)
                     }
 
                     Spacer()
 
                     Text("Profile Setting")
                         .font(.system(size: 24, weight: .medium))
-                        .foregroundColor(.black)
+                        .foregroundColor(DesignTokens.text)
 
                     Spacer()
 
@@ -42,16 +42,16 @@ struct ProfileSettingView: View {
                     }) {
                         Text("Save")
                             .font(.system(size: 18, weight: .medium))
-                            .foregroundColor(Color(red: 0.58, green: 0.58, blue: 0.58))
+                            .foregroundColor(DesignTokens.textLight)
                     }
                 }
                 .frame(height: DesignTokens.topBarHeight)
                 .padding(.horizontal, 20)
-                .background(Color.white)
+                .background(DesignTokens.card)
 
                 // 分隔线
                 Rectangle()
-                    .fill(Color(red: 0.74, green: 0.74, blue: 0.74))
+                    .fill(DesignTokens.border)
                     .frame(height: 0.5)
 
                 ScrollView {
@@ -59,11 +59,11 @@ struct ProfileSettingView: View {
                         // MARK: - 头像
                         ZStack {
                             Circle()
-                                .fill(Color.white)
+                                .fill(DesignTokens.card)
                                 .frame(width: 124, height: 124)
 
                             Circle()
-                                .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
+                                .fill(DesignTokens.placeholder)
                                 .frame(width: 120, height: 120)
 
                             PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
@@ -81,66 +81,66 @@ struct ProfileSettingView: View {
                                 HStack {
                                     Text("First name")
                                         .font(.system(size: 15))
-                                        .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
+                                        .foregroundColor(DesignTokens.text)
                                         .frame(width: 100, alignment: .leading)
 
                                     TextField("", text: $firstName)
                                         .font(.system(size: 15))
-                                        .foregroundColor(.black)
+                                        .foregroundColor(DesignTokens.text)
                                 }
                                 .padding(.horizontal, 20)
                                 .padding(.vertical, 12)
 
                                 Rectangle()
-                                    .fill(Color(red: 0.91, green: 0.91, blue: 0.91))
+                                    .fill(DesignTokens.border)
                                     .frame(height: 0.5)
 
                                 HStack {
                                     Text("Last name")
                                         .font(.system(size: 15))
-                                        .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
+                                        .foregroundColor(DesignTokens.text)
                                         .frame(width: 100, alignment: .leading)
 
                                     TextField("", text: $lastName)
                                         .font(.system(size: 15))
-                                        .foregroundColor(.black)
+                                        .foregroundColor(DesignTokens.text)
                                 }
                                 .padding(.horizontal, 20)
                                 .padding(.vertical, 12)
                             }
-                            .background(Color(red: 0.85, green: 0.85, blue: 0.85))
+                            .background(DesignTokens.placeholder.opacity(0.2))
                             .cornerRadius(6)
 
                             // Username
                             HStack {
                                 Text("Username")
                                     .font(.system(size: 15))
-                                    .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
+                                    .foregroundColor(DesignTokens.text)
                                     .frame(width: 100, alignment: .leading)
 
                                 TextField("", text: $username)
                                     .font(.system(size: 15))
-                                    .foregroundColor(.black)
+                                    .foregroundColor(DesignTokens.text)
                             }
                             .padding(.horizontal, 20)
                             .padding(.vertical, 12)
-                            .background(Color(red: 0.85, green: 0.85, blue: 0.85))
+                            .background(DesignTokens.placeholder.opacity(0.2))
                             .cornerRadius(6)
 
                             // Date of Birth
                             HStack {
                                 Text("Date of Birth")
                                     .font(.system(size: 15))
-                                    .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
+                                    .foregroundColor(DesignTokens.text)
                                     .frame(width: 100, alignment: .leading)
 
                                 TextField("", text: $dateOfBirth)
                                     .font(.system(size: 15))
-                                    .foregroundColor(.black)
+                                    .foregroundColor(DesignTokens.text)
                             }
                             .padding(.horizontal, 20)
                             .padding(.vertical, 12)
-                            .background(Color(red: 0.85, green: 0.85, blue: 0.85))
+                            .background(DesignTokens.placeholder.opacity(0.2))
                             .cornerRadius(6)
 
                             // Gender
@@ -150,23 +150,23 @@ struct ProfileSettingView: View {
                                 HStack {
                                     Text("Gender")
                                         .font(.system(size: 15))
-                                        .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
+                                        .foregroundColor(DesignTokens.text)
                                         .frame(width: 100, alignment: .leading)
 
                                     Text(gender)
                                         .font(.system(size: 15))
-                                        .foregroundColor(.black)
+                                        .foregroundColor(DesignTokens.text)
 
                                     Spacer()
 
                                     Image(systemName: "chevron.right")
                                         .font(.system(size: 12))
-                                        .foregroundColor(.gray)
+                                        .foregroundColor(DesignTokens.textLight)
                                 }
                                 .padding(.horizontal, 20)
                                 .padding(.vertical, 12)
                             }
-                            .background(Color(red: 0.85, green: 0.85, blue: 0.85))
+                            .background(DesignTokens.placeholder.opacity(0.2))
                             .cornerRadius(6)
 
                             // Location
@@ -176,23 +176,23 @@ struct ProfileSettingView: View {
                                 HStack {
                                     Text("Location")
                                         .font(.system(size: 15))
-                                        .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
+                                        .foregroundColor(DesignTokens.text)
                                         .frame(width: 100, alignment: .leading)
 
                                     Text(location)
                                         .font(.system(size: 15))
-                                        .foregroundColor(.black)
+                                        .foregroundColor(DesignTokens.text)
 
                                     Spacer()
 
                                     Image(systemName: "chevron.right")
                                         .font(.system(size: 12))
-                                        .foregroundColor(.gray)
+                                        .foregroundColor(DesignTokens.textLight)
                                 }
                                 .padding(.horizontal, 20)
                                 .padding(.vertical, 12)
                             }
-                            .background(Color(red: 0.85, green: 0.85, blue: 0.85))
+                            .background(DesignTokens.placeholder.opacity(0.2))
                             .cornerRadius(6)
                         }
                         .padding(.horizontal, 12)

@@ -1,13 +1,18 @@
 import SwiftUI
+import PhotosUI
 
 struct AliceView: View {
     @Binding var currentPage: AppPage
     @State private var showPhotoOptions = false
+    @State private var showPhotoPicker = false
+    @State private var selectedPhotoItem: PhotosPickerItem?
+    @State private var showCamera = false
+    @State private var showGenerateImage = false
 
     var body: some View {
         ZStack {
             // 背景色
-            Color(red: 0.97, green: 0.97, blue: 0.97)
+            DesignTokens.background
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
@@ -17,18 +22,18 @@ struct AliceView: View {
                         Spacer()
                         Text("alice 5.1 Fast")
                             .font(Font.custom("Helvetica Neue", size: 20))
-                            .foregroundColor(.black)
+                            .foregroundColor(DesignTokens.text)
                         Image(systemName: "chevron.down")
                             .font(.system(size: 14))
-                            .foregroundColor(.black)
+                            .foregroundColor(DesignTokens.text)
                         Spacer()
                     }
                     .padding(.vertical, 16)
-                    .background(Color.white)
+                    .background(DesignTokens.card)
 
                     Divider()
                         .frame(height: 1)
-                        .background(Color(red: 0.90, green: 0.90, blue: 0.90))
+                        .background(DesignTokens.divider)
                 }
 
                 Spacer()
@@ -54,18 +59,18 @@ struct AliceView: View {
                             HStack(spacing: 8) {
                                 Image(systemName: "circle")
                                     .font(.system(size: 20, weight: .thin))
-                                    .foregroundColor(.black)
+                                    .foregroundColor(DesignTokens.text)
                                 Text("Get Superalice")
                                     .font(Font.custom("Helvetica Neue", size: 16))
-                                    .foregroundColor(.black)
+                                    .foregroundColor(DesignTokens.text)
                             }
                             .frame(maxWidth: .infinity)
                             .frame(height: 48)
-                            .background(Color.white)
+                            .background(DesignTokens.card)
                             .cornerRadius(24)
                             .overlay(
                                 RoundedRectangle(cornerRadius: 24)
-                                    .stroke(Color(red: 0.85, green: 0.85, blue: 0.85), lineWidth: 1)
+                                    .stroke(DesignTokens.border, lineWidth: 1)
                             )
                         }
 
@@ -75,14 +80,14 @@ struct AliceView: View {
                         }) {
                             Text("Voice Mode")
                                 .font(Font.custom("Helvetica Neue", size: 16))
-                                .foregroundColor(.black)
+                                .foregroundColor(DesignTokens.text)
                                 .frame(maxWidth: .infinity)
                                 .frame(height: 48)
-                                .background(Color.white)
+                                .background(DesignTokens.card)
                                 .cornerRadius(24)
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 24)
-                                        .stroke(Color(red: 0.85, green: 0.85, blue: 0.85), lineWidth: 1)
+                                        .stroke(DesignTokens.border, lineWidth: 1)
                                 )
                         }
                     }
@@ -96,7 +101,7 @@ struct AliceView: View {
                         }) {
                             Image(systemName: "plus")
                                 .font(.system(size: 20))
-                                .foregroundColor(Color(red: 0.60, green: 0.60, blue: 0.60))
+                                .foregroundColor(DesignTokens.textLight)
                         }
                         .frame(width: 44, height: 44)
 
@@ -104,16 +109,16 @@ struct AliceView: View {
                         HStack {
                             Text("Ask any questions")
                                 .font(Font.custom("Helvetica Neue", size: 16))
-                                .foregroundColor(Color(red: 0.60, green: 0.60, blue: 0.60))
+                                .foregroundColor(DesignTokens.placeholder)
                             Spacer()
                         }
                         .frame(height: 48)
                         .padding(.horizontal, 16)
-                        .background(Color.white)
+                        .background(DesignTokens.card)
                         .cornerRadius(24)
                         .overlay(
                             RoundedRectangle(cornerRadius: 24)
-                                .stroke(Color(red: 0.85, green: 0.85, blue: 0.85), lineWidth: 1)
+                                .stroke(DesignTokens.border, lineWidth: 1)
                         )
 
                         // 发送按钮
@@ -144,7 +149,7 @@ struct AliceView: View {
                             .frame(width: 32, height: 22)
                         Text("Home")
                             .font(.system(size: 9))
-                            .foregroundColor(.black)
+                            .foregroundColor(DesignTokens.text)
                     }
                     .frame(maxWidth: .infinity)
                     .onTapGesture {
@@ -159,7 +164,7 @@ struct AliceView: View {
                             .frame(width: 22, height: 22)
                         Text("Message")
                             .font(.system(size: 9))
-                            .foregroundColor(.black)
+                            .foregroundColor(DesignTokens.text)
                     }
                     .frame(maxWidth: .infinity)
                     .onTapGesture {
@@ -194,8 +199,8 @@ struct AliceView: View {
                 }
                 .frame(height: 60)
                 .padding(.bottom, 20)
-                .background(Color.white)
-                .border(Color(red: 0.74, green: 0.74, blue: 0.74), width: 0.5)
+                .background(DesignTokens.card)
+                .border(DesignTokens.border, width: 0.5)
                 .offset(y: 35)
             }
 
@@ -203,6 +208,14 @@ struct AliceView: View {
             if showPhotoOptions {
                 photoOptionsModal
             }
+        }
+        .photosPicker(isPresented: $showPhotoPicker, selection: $selectedPhotoItem, matching: .images)
+        .fullScreenCover(isPresented: $showCamera) {
+            CameraPicker(isPresented: $showCamera)
+                .ignoresSafeArea()
+        }
+        .fullScreenCover(isPresented: $showGenerateImage) {
+            GenerateImage01View(showGenerateImage: $showGenerateImage)
         }
     }
 
@@ -237,6 +250,7 @@ struct AliceView: View {
                     // Choose Photo
                     Button(action: {
                         showPhotoOptions = false
+                        showPhotoPicker = true
                     }) {
                         Text("Choose Photo")
                             .font(Font.custom("Helvetica Neue", size: 18).weight(.medium))
@@ -247,6 +261,7 @@ struct AliceView: View {
                     // Take Photo
                     Button(action: {
                         showPhotoOptions = false
+                        showCamera = true
                     }) {
                         Text("Take Photo")
                             .font(Font.custom("Helvetica Neue", size: 18).weight(.medium))
@@ -257,6 +272,7 @@ struct AliceView: View {
                     // Generate image
                     Button(action: {
                         showPhotoOptions = false
+                        showGenerateImage = true
                     }) {
                         Text("Generate image")
                             .font(Font.custom("Helvetica Neue", size: 18).weight(.medium))

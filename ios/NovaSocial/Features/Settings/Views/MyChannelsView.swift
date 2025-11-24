@@ -6,7 +6,7 @@ struct MyChannelsView: View {
 
     var body: some View {
         ZStack {
-            Color(red: 0.97, green: 0.97, blue: 0.97)
+            DesignTokens.background
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
@@ -17,14 +17,14 @@ struct MyChannelsView: View {
                     }) {
                         Image(systemName: "chevron.left")
                             .font(.system(size: 20))
-                            .foregroundColor(.black)
+                            .foregroundColor(DesignTokens.text)
                     }
 
                     Spacer()
 
                     Text("My Channels")
                         .font(.system(size: 24, weight: .medium))
-                        .foregroundColor(.black)
+                        .foregroundColor(DesignTokens.text)
 
                     Spacer()
 
@@ -34,11 +34,11 @@ struct MyChannelsView: View {
                 }
                 .frame(height: DesignTokens.topBarHeight)
                 .padding(.horizontal, 20)
-                .background(Color.white)
+                .background(DesignTokens.card)
 
                 // 分隔线
                 Rectangle()
-                    .fill(Color(red: 0.74, green: 0.74, blue: 0.74))
+                    .fill(DesignTokens.border)
                     .frame(height: 0.5)
 
                 ScrollView {
@@ -126,7 +126,7 @@ struct ChannelCategory: View {
             // 分类标题
             Text(title)
                 .font(.system(size: 16, weight: .bold))
-                .foregroundColor(.black)
+                .foregroundColor(DesignTokens.text)
                 .padding(.leading, 4)
 
             // 频道标签网格
@@ -164,21 +164,21 @@ struct SelectableChannelTag: View {
                 // Plus 图标
                 Image(systemName: "plus")
                     .font(.system(size: 11, weight: .medium))
-                    .foregroundColor(isSelected ? Color(red: 0.82, green: 0.13, blue: 0.25) : Color(red: 0.38, green: 0.37, blue: 0.37))
+                    .foregroundColor(isSelected ? DesignTokens.accent : DesignTokens.text)
 
                 Text(name)
                     .font(.system(size: 12))
-                    .foregroundColor(isSelected ? Color(red: 0.82, green: 0.13, blue: 0.25) : Color(red: 0.38, green: 0.37, blue: 0.37))
+                    .foregroundColor(isSelected ? DesignTokens.accent : DesignTokens.text)
             }
             .padding(.horizontal, 55)
             .padding(.vertical, 4)
             .frame(height: 30)
         }
-        .background(isSelected ? Color(red: 1, green: 0.78, blue: 0.78) : Color.white)
+        .background(isSelected ? DesignTokens.accentLightColor : DesignTokens.card)
         .cornerRadius(6)
         .overlay(
             RoundedRectangle(cornerRadius: 6)
-                .stroke(isSelected ? Color(red: 0.82, green: 0.13, blue: 0.25) : Color(red: 0.68, green: 0.68, blue: 0.68), lineWidth: 0.5)
+                .stroke(isSelected ? DesignTokens.accent : DesignTokens.border, lineWidth: 0.5)
         )
     }
 }
