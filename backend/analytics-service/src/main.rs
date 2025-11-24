@@ -22,6 +22,11 @@ async fn main() -> Result<()> {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
+    // Initialize rustls crypto provider (required for Rustls 0.23+)
+    rustls::crypto::aws_lc_rs::default_provider()
+        .install_default()
+        .expect("Failed to install rustls crypto provider");
+
     tracing::info!("Starting analytics-service");
 
     // Initialize database (standardized pool)
