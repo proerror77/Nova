@@ -131,7 +131,7 @@ testcontainers = "0.17"
 prometheus = "0.13"
 
 # Rate limiting
-governor = "0.6"
+governor = "0.10"
 
 # Tower middleware (for gRPC)
 tower = "0.4"

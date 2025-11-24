@@ -64,7 +64,7 @@ rand = "0.8"
 sha2 = "0.10"
 
 # Rate limiting
-governor = "0.6"
+governor = "0.10"
 
 # Validation
 validator = { version = "0.18", features = ["derive"] }
