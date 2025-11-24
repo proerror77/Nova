@@ -1,30 +1,28 @@
 -- ============================================================================
--- Migration: Deprecate Old Messaging Schema (Phase E)
--- Purpose: Remove old messaging tables before realtime-chat-service migration
+-- Migration: Deprecate Old Messaging Schema (Phase E) - SAFE VERSION
+-- Purpose: Mark old messaging tables as deprecated before realtime-chat-service migration
 -- Context: messaging-service split into realtime-chat-service + notification-service
+-- Safety: Uses expand-contract pattern to avoid data loss
 -- ============================================================================
 
--- WARNING: This will DROP messaging tables. Backup first if data exists.
+-- ⚠️ EXPAND PHASE: Mark tables as deprecated without dropping
+-- Tables will be dropped in a future migration after data migration is confirmed
 
--- ============ Drop old messaging tables ============
--- These will be replaced by realtime-chat-service's improved schema
-DROP TABLE IF EXISTS messages CASCADE;
-DROP TABLE IF EXISTS conversation_members CASCADE;
-DROP TABLE IF EXISTS conversations CASCADE;
+-- Add deprecation notices via comments
+COMMENT ON TABLE messages IS '⚠️ DEPRECATED: Use realtime-chat-service schema. Will be dropped after data migration.';
+COMMENT ON TABLE conversation_members IS '⚠️ DEPRECATED: Use realtime-chat-service schema. Will be dropped after data migration.';
+COMMENT ON TABLE conversations IS '⚠️ DEPRECATED: Use realtime-chat-service schema. Will be dropped after data migration.';
 
--- ============ Drop related triggers ============
-DROP TRIGGER IF EXISTS trigger_update_conversation_timestamp ON messages;
-
--- ============ Drop related functions ============
-DROP FUNCTION IF EXISTS update_conversation_timestamp() CASCADE;
-DROP FUNCTION IF EXISTS get_unread_count(UUID, UUID) CASCADE;
+-- Disable triggers to prevent accidental writes
+ALTER TABLE messages DISABLE TRIGGER ALL;
+ALTER TABLE conversation_members DISABLE TRIGGER ALL;
+ALTER TABLE conversations DISABLE TRIGGER ALL;
 
 -- ============================================================================
 -- Next steps:
--- realtime-chat-service will create new tables with:
--- - ENUM types for conversation_type and privacy_mode
--- - Improved schema with privacy_mode support
--- - Additional tables: message_attachments, message_reactions, location_sharing, etc.
+-- 1. Verify realtime-chat-service has migrated all data
+-- 2. Confirm no services are using these deprecated tables
+-- 3. Apply migration 998_down.sql to actually drop tables
 --
 -- Apply realtime-chat migrations:
 --   cd backend/realtime-chat-service

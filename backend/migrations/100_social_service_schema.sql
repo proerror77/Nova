@@ -4,18 +4,9 @@
 -- Purpose: Full social interaction schema with counters, triggers, and constraints
 -- ============================================================================
 
--- ============ MIGRATION: Drop old schema if exists ============
--- WARNING: This is a complete rebuild. Use with caution in production.
-DROP TABLE IF EXISTS comment_likes CASCADE;
-DROP TABLE IF EXISTS processed_events CASCADE;
-DROP TABLE IF EXISTS post_counters CASCADE;
-DROP TABLE IF EXISTS comments CASCADE;
-DROP TABLE IF EXISTS shares CASCADE;
-DROP TABLE IF EXISTS likes CASCADE;
-
--- Drop old triggers and functions
-DROP TRIGGER IF EXISTS update_comments_updated_at ON comments;
--- Note: update_updated_at_column() function is shared across multiple tables, not dropping
+-- ============ MIGRATION: Safe schema creation ============
+-- Uses IF NOT EXISTS to avoid dropping existing tables
+-- If tables exist with conflicting schemas, use migration 999b to drop them first
 
 -- ============ LIKES TABLE ============
 CREATE TABLE IF NOT EXISTS likes (

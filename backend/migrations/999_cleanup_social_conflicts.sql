@@ -1,37 +1,32 @@
 -- ============================================================================
--- Migration: Cleanup Social Schema Conflicts (Phase B)
--- Purpose: Remove old social tables before applying social-service schema
--- Safety: Only run in development with no production data
+-- Migration: Cleanup Social Schema Conflicts (Phase B) - SAFE VERSION
+-- Purpose: Mark old social tables as deprecated before applying social-service schema
+-- Safety: Uses expand-contract pattern to avoid data loss
 -- ============================================================================
 
--- WARNING: This migration will DROP tables. Backup first if data exists.
--- To backup: pg_dump -U postgres nova > backup_$(date +%Y%m%d).sql
+-- ⚠️ EXPAND PHASE: Mark tables as deprecated without dropping
+-- Tables will be dropped in a future migration after migration is confirmed
 
--- ============ Step 1: Drop old social tables ============
-DROP TABLE IF EXISTS post_shares CASCADE;
-DROP TABLE IF EXISTS social_metadata CASCADE;
-DROP TABLE IF EXISTS bookmarks CASCADE;
-DROP TABLE IF EXISTS bookmark_collections CASCADE;
+-- Add deprecation notices via comments
+COMMENT ON TABLE post_shares IS '⚠️ DEPRECATED: Use social-service schema (shares table). Will be dropped after migration.';
+COMMENT ON TABLE social_metadata IS '⚠️ DEPRECATED: Use social-service schema (post_counters table). Will be dropped after migration.';
+COMMENT ON TABLE bookmarks IS '⚠️ DEPRECATED: Feature removed. Will be dropped after confirmation.';
+COMMENT ON TABLE bookmark_collections IS '⚠️ DEPRECATED: Feature removed. Will be dropped after confirmation.';
 
--- ============ Step 2: Drop related triggers ============
-DROP TRIGGER IF EXISTS trg_update_post_share_count ON post_shares;
-DROP TRIGGER IF EXISTS trg_update_post_bookmark_count ON bookmarks;
-DROP TRIGGER IF EXISTS trg_update_bookmark_collections_updated_at ON bookmark_collections;
+-- Disable triggers to prevent accidental writes
+ALTER TABLE post_shares DISABLE TRIGGER ALL;
+ALTER TABLE social_metadata DISABLE TRIGGER ALL;
+ALTER TABLE bookmarks DISABLE TRIGGER ALL;
+ALTER TABLE bookmark_collections DISABLE TRIGGER ALL;
 
--- ============ Step 3: Drop related functions ============
-DROP FUNCTION IF EXISTS update_post_share_count() CASCADE;
-DROP FUNCTION IF EXISTS update_post_bookmark_count() CASCADE;
-DROP FUNCTION IF EXISTS update_bookmark_collections_updated_at() CASCADE;
-
--- ============ Step 4: Remove orphaned columns in posts table ============
-ALTER TABLE posts DROP COLUMN IF EXISTS share_count;
-ALTER TABLE posts DROP COLUMN IF EXISTS bookmark_count;
+-- Mark columns as deprecated (do not drop yet)
+COMMENT ON COLUMN posts.share_count IS '⚠️ DEPRECATED: Use social-service post_counters table';
+COMMENT ON COLUMN posts.bookmark_count IS '⚠️ DEPRECATED: Feature removed';
 
 -- ============================================================================
 -- Next steps:
--- 1. Run: sqlx migrate run (applies this cleanup)
--- 2. Copy social-service schema:
---    cp backend/social-service/migrations/002_create_social_tables.sql \
---       backend/migrations/100_social_service_schema.sql
--- 3. Run: sqlx migrate run (applies new social schema)
+-- 1. Verify social-service schema is deployed (migration 100)
+-- 2. Migrate data from old tables to new schema
+-- 3. Confirm no services are using deprecated tables/columns
+-- 4. Apply migration 999_down.sql to actually drop tables
 -- ============================================================================
