@@ -150,8 +150,7 @@ impl ElasticsearchClient {
                     "user_id": { "type": "keyword" },
                     "title": {
                         "type": "text",
-                        "analyzer": "content_analyzer",
-                        "boost": 2.0
+                        "analyzer": "content_analyzer"
                     },
                     "content": {
                         "type": "text",
@@ -238,13 +237,11 @@ impl ElasticsearchClient {
                         "type": "text",
                         "fields": {
                             "keyword": { "type": "keyword" }
-                        },
-                        "boost": 2.0
+                        }
                     },
                     "display_name": {
                         "type": "text",
-                        "analyzer": "english",
-                        "boost": 1.5
+                        "analyzer": "english"
                     },
                     "bio": {
                         "type": "text",
