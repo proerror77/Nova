@@ -30,6 +30,9 @@ data:
     SELECT 'CREATE DATABASE nova_trust_safety' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'nova_trust_safety')\gexec
     SELECT 'CREATE DATABASE nova_realtime_chat' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'nova_realtime_chat')\gexec
 
+    -- Future: dedicated social-service database (nova_social)
+    SELECT 'CREATE DATABASE nova_social' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'nova_social')\gexec
+
   # 第二步：创建服务用户和权限
   02-create-service-users.sql: |
     -- 为每个微服务创建独立用户（使用最小权限原则）
@@ -107,6 +110,12 @@ data:
         GRANT ALL PRIVILEGES ON DATABASE nova_feature_store TO nova_feature_store_svc;
       END IF;
 
+      -- social-service 用户（預留：獨立 nova_social 資料庫）
+      IF NOT EXISTS (SELECT FROM pg_user WHERE usename = 'nova_social_svc') THEN
+        CREATE USER nova_social_svc WITH ENCRYPTED PASSWORD 'nova_social_staging_pwd';
+        GRANT ALL PRIVILEGES ON DATABASE nova_social TO nova_social_svc;
+      END IF;
+
       -- identity-service 用户
       IF NOT EXISTS (SELECT FROM pg_user WHERE usename = 'nova_identity_svc') THEN
         CREATE USER nova_identity_svc WITH ENCRYPTED PASSWORD 'nova_identity_staging_pwd';
@@ -175,6 +184,11 @@ data:
     CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
     \c nova_feature_store
+    CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+    CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+    -- social-service 專用資料庫擴展
+    \c nova_social
     CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
     CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 

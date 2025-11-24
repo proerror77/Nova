@@ -14,6 +14,10 @@ path = "src/main.rs"
 name = "migrate_follows_to_neo4j"
 path = "migrations/migrate_follows_to_neo4j.rs"
 
+[[bin]]
+name = "neo4j-migrate"
+path = "src/bin/neo4j-migrate.rs"
+
 [lib]
 name = "graph_service"
 path = "src/lib.rs"

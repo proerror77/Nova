@@ -1,0 +1,48 @@
+name: Reusable Kubernetes Setup
+
+# Reusable workflow for kubeconfig + kubectl installation
+# Consolidates common pattern used in deployment workflows
+
+on:
+  workflow_call:
+    inputs:
+      kubectl-version:
+        description: 'kubectl version (default: latest)'
+        required: false
+        type: string
+        default: 'latest'
+    secrets:
+      kubeconfig-b64:
+        description: 'Base64-encoded kubeconfig (from secrets.STAGING_KUBE_CONFIG or PROD_KUBE_CONFIG)'
+        required: true
+
+jobs:
+  setup:
+    name: Configure Kubernetes
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+
+    steps:
+      - name: Create kubeconfig directory
+        run: mkdir -p ~/.kube
+
+      - name: Decode and write kubeconfig
+        env:
+          KUBECONFIG_B64: ${{ secrets.kubeconfig-b64 }}
+        run: |
+          echo "$KUBECONFIG_B64" | base64 --decode > ~/.kube/config
+          chmod 600 ~/.kube/config
+          echo "✅ Kubeconfig configured"
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: ${{ inputs.kubectl-version }}
+
+      - name: Verify kubectl connection
+        run: |
+          echo "🔍 Verifying cluster connection..."
+          kubectl version --client
+          kubectl cluster-info
+          echo "✅ Successfully connected to cluster"

@@ -1,0 +1,25 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: feed-service
+spec:
+  template:
+    spec:
+      containers:
+        - name: feed-service
+          env:
+            - name: GRPC_TLS_ENABLED
+              value: "true"
+            # soften non-critical deps to avoid startup fail when peers未就緒
+            - name: GRPC_SEARCH_SERVICE_TIER
+              value: "1"
+            - name: GRPC_RANKING_SERVICE_TIER
+              value: "1"
+            - name: GRPC_SOCIAL_SERVICE_TIER
+              value: "1"
+            # content-service 對 feed-service 來說非硬依賴，在啟動時降級為 Tier1 避免 CrashLoop
+            - name: GRPC_CONTENT_SERVICE_TIER
+              value: "1"
+            # identity-service 在啟動時可能尚未就緒，降級以避免 CrashLoop
+            - name: GRPC_IDENTITY_SERVICE_TIER
+              value: "1"

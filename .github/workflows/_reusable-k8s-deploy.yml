@@ -1,0 +1,143 @@
+name: Reusable Kubernetes Deployment
+
+# Reusable workflow for deploying services to Kubernetes
+# Consolidates deployment pattern used across multiple workflows
+
+on:
+  workflow_call:
+    inputs:
+      service-name:
+        description: 'Service name to deploy'
+        required: true
+        type: string
+      image-tag:
+        description: 'Container image tag'
+        required: true
+        type: string
+      namespace:
+        description: 'Kubernetes namespace (nova-staging, nova-dev, nova-prod)'
+        required: true
+        type: string
+      aws-region:
+        description: 'AWS Region'
+        required: false
+        type: string
+        default: 'ap-northeast-1'
+      registry-alias:
+        description: 'ECR registry alias'
+        required: false
+        type: string
+        default: 'nova'
+      rollout-timeout:
+        description: 'Rollout timeout (e.g., 5m, 10m)'
+        required: false
+        type: string
+        default: '5m'
+      health-check:
+        description: 'Perform health check after deployment'
+        required: false
+        type: boolean
+        default: true
+    secrets:
+      aws-account-id:
+        description: 'AWS Account ID'
+        required: true
+      kubeconfig-b64:
+        description: 'Base64-encoded kubeconfig'
+        required: true
+
+jobs:
+  deploy:
+    name: Deploy ${{ inputs.service-name }}
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.aws-account-id }}:role/github-actions-role
+          aws-region: ${{ inputs.aws-region }}
+          audience: sts.amazonaws.com
+          role-session-name: gha-deploy-${{ github.run_id }}-${{ inputs.service-name }}
+          role-skip-session-tagging: true
+
+      - name: Configure kubeconfig
+        env:
+          KUBECONFIG_B64: ${{ secrets.kubeconfig-b64 }}
+        run: |
+          mkdir -p ~/.kube
+          echo "$KUBECONFIG_B64" | base64 --decode > ~/.kube/config
+          chmod 600 ~/.kube/config
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: 'latest'
+
+      - name: Deploy to Kubernetes
+        run: |
+          SERVICE_NAME="${{ inputs.service-name }}"
+          IMAGE="${{ secrets.aws-account-id }}.dkr.ecr.${{ inputs.aws-region }}.amazonaws.com/${{ inputs.registry-alias }}/${SERVICE_NAME}:${{ inputs.image-tag }}"
+          NAMESPACE="${{ inputs.namespace }}"
+
+          echo "🚀 Deploying $SERVICE_NAME to $NAMESPACE"
+          echo "📦 Image: $IMAGE"
+
+          # Check if deployment exists
+          if kubectl get deployment "$SERVICE_NAME" -n $NAMESPACE &>/dev/null; then
+            echo "📦 Updating existing deployment"
+            kubectl set image deployment/"$SERVICE_NAME" \
+              "$SERVICE_NAME=$IMAGE" \
+              -n $NAMESPACE
+
+            echo "⏳ Waiting for rollout (timeout: ${{ inputs.rollout-timeout }})..."
+            kubectl rollout status deployment/"$SERVICE_NAME" -n $NAMESPACE --timeout=${{ inputs.rollout-timeout }}
+
+            echo "✅ $SERVICE_NAME deployed successfully!"
+            kubectl get pods -n $NAMESPACE -l app="$SERVICE_NAME" -o wide
+          else
+            echo "❌ Deployment $SERVICE_NAME not found in $NAMESPACE"
+            echo "Available deployments:"
+            kubectl get deployments -n $NAMESPACE
+            exit 1
+          fi
+
+      - name: Health check
+        if: inputs.health-check
+        run: |
+          SERVICE_NAME="${{ inputs.service-name }}"
+          NAMESPACE="${{ inputs.namespace }}"
+
+          echo "🏥 Health check for $SERVICE_NAME"
+
+          # Get pod status
+          kubectl get pods -n $NAMESPACE -l app="$SERVICE_NAME" -o wide
+
+          # Check for ready pods
+          READY_PODS=$(kubectl get pods -n $NAMESPACE -l app="$SERVICE_NAME" -o jsonpath='{.items[*].status.conditions[?(@.type=="Ready")].status}' | grep -o "True" | wc -l)
+
+          if [ "$READY_PODS" -gt 0 ]; then
+            echo "✅ $READY_PODS pod(s) ready"
+          else
+            echo "⚠️  No ready pods found"
+            kubectl describe pods -n $NAMESPACE -l app="$SERVICE_NAME" | tail -50
+            exit 1
+          fi
+
+      - name: Deployment summary
+        if: always()
+        run: |
+          echo "════════════════════════════════════════════════════"
+          echo "📊 Deployment Summary"
+          echo "════════════════════════════════════════════════════"
+          echo "Service: ${{ inputs.service-name }}"
+          echo "Image Tag: ${{ inputs.image-tag }}"
+          echo "Namespace: ${{ inputs.namespace }}"
+          echo "Status: ${{ job.status }}"
+          echo "════════════════════════════════════════════════════"

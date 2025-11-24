@@ -13,9 +13,14 @@ on:
 concurrency:
   group: ecr-build-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
+
+# Default minimal permissions
+permissions:
+  contents: read
+
 env:
-  AWS_REGION: ap-northeast-1
-  ECR_REGISTRY: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com
+  AWS_REGION: ${{ vars.AWS_REGION || 'ap-northeast-1' }}
+  ECR_REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ vars.AWS_REGION || 'ap-northeast-1' }}.amazonaws.com
   REGISTRY_ALIAS: nova
 
 jobs:
@@ -43,7 +48,7 @@ jobs:
           - search-service
           - graphql-gateway
           - notification-service
-      max-parallel: 2
+      max-parallel: 6  # 提升並行度以加快構建速度 (GitHub 免費版有 20 並發)
 
     steps:
       - name: Checkout repository
@@ -63,7 +68,7 @@ jobs:
         if: github.event_name != 'pull_request'
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::025434362120:role/github-actions-role
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/github-actions-role
           aws-region: ${{ env.AWS_REGION }}
           audience: sts.amazonaws.com
           role-session-name: gha-ecr-${{ github.run_id }}
@@ -130,8 +135,7 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::025434362120:role/github-actions-role
-          source-account-id: '025434362120'
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/github-actions-role
           aws-region: ${{ env.AWS_REGION }}
           audience: sts.amazonaws.com
           role-session-name: gha-ecr-verify-${{ github.run_id }}
@@ -140,7 +144,7 @@ jobs:
       - name: Verify all images in ECR
         run: |
           echo "Verifying all service images in ECR..."
-          for service in auth-service content-service feed-service media-service messaging-service search-service streaming-service graphql-gateway notification-service events-service cdn-service; do
+          for service in analytics-service identity-service content-service feed-service media-service graph-service social-service ranking-service realtime-chat-service trust-safety-service search-service graphql-gateway notification-service; do
             IMAGE="${{ env.ECR_REGISTRY }}/${{ env.REGISTRY_ALIAS }}/$service:${{ github.ref_name }}-${{ github.sha }}"
             if aws ecr describe-images --repository-name "${{ env.REGISTRY_ALIAS }}/$service" --region ${{ env.AWS_REGION }} --query "imageDetails[?contains(imageTags, '${{ github.ref_name }}-${{ github.sha }}')]" | grep -q "."; then
               echo "OK: $service image found in ECR"

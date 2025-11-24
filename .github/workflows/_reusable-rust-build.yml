@@ -1,0 +1,79 @@
+name: Reusable Rust Build
+
+# Reusable workflow for Rust compilation with optimized caching
+# Consolidates Rust toolchain setup + caching pattern
+
+on:
+  workflow_call:
+    inputs:
+      working-directory:
+        description: 'Working directory for Rust project (default: backend)'
+        required: false
+        type: string
+        default: 'backend'
+      cache-key-suffix:
+        description: 'Suffix for cache key (default: default)'
+        required: false
+        type: string
+        default: 'default'
+      cargo-command:
+        description: 'Cargo command to run (default: build --release)'
+        required: false
+        type: string
+        default: 'build --release'
+      rust-toolchain:
+        description: 'Rust toolchain version (default: stable)'
+        required: false
+        type: string
+        default: 'stable'
+    outputs:
+      build-status:
+        description: 'Build result (success/failure)'
+        value: ${{ jobs.build.outputs.status }}
+
+jobs:
+  build:
+    name: Rust Build
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+    outputs:
+      status: ${{ steps.build.outputs.status }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: ${{ inputs.rust-toolchain }}
+          components: rustfmt, clippy
+
+      - name: Setup Rust Cache (Optimized)
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ${{ inputs.working-directory }}
+          shared-key: nova-${{ inputs.cache-key-suffix }}
+          cache-on-failure: true
+          cache-targets: true
+          cache-all-crates: true
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - name: Run cargo command
+        id: build
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          echo "🦀 Running: cargo ${{ inputs.cargo-command }}"
+          cargo ${{ inputs.cargo-command }}
+          echo "status=success" >> "$GITHUB_OUTPUT"
+          echo "✅ Rust build completed successfully"
+
+      - name: Upload build artifacts
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rust-build-${{ inputs.cache-key-suffix }}
+          path: |
+            ${{ inputs.working-directory }}/target/release
+          retention-days: 1

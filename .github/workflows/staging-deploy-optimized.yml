@@ -15,9 +15,14 @@ on:
 concurrency:
   group: staging-deploy-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
+
+# Default minimal permissions
+permissions:
+  contents: read
+
 env:
-  AWS_REGION: ap-northeast-1
-  REGISTRY: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com
+  AWS_REGION: ${{ vars.AWS_REGION || 'ap-northeast-1' }}
+  REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ vars.AWS_REGION || 'ap-northeast-1' }}.amazonaws.com
   REGISTRY_ALIAS: nova
   KUSTOMIZE_PATH: k8s/infrastructure/overlays/staging
 
@@ -38,7 +43,7 @@ jobs:
         continue-on-error: true
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::025434362120:role/github-actions-role
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/github-actions-role
           aws-region: ${{ env.AWS_REGION }}
           audience: sts.amazonaws.com
           role-session-name: gha-verify-${{ github.run_id }}
@@ -92,7 +97,7 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::025434362120:role/github-actions-role
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/github-actions-role
           aws-region: ${{ env.AWS_REGION }}
           audience: sts.amazonaws.com
           role-session-name: gha-build-${{ github.run_id }}-${{ matrix.service }}
@@ -153,7 +158,7 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::025434362120:role/github-actions-role
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/github-actions-role
           aws-region: ${{ env.AWS_REGION }}
           audience: sts.amazonaws.com
           role-session-name: gha-deploy-${{ github.run_id }}-${{ matrix.service }}
@@ -238,7 +243,7 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::025434362120:role/github-actions-role
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/github-actions-role
           aws-region: ${{ env.AWS_REGION }}
           audience: sts.amazonaws.com
           role-session-name: gha-smoke-${{ github.run_id }}
@@ -288,22 +293,50 @@ jobs:
           echo ""
           echo "✅ Smoke test completed"
 
-  # 优化: 失败通知
+  # 失败通知 - 飛書
   notify-on-failure:
     name: Notify on Failure
     needs: [verify-aws, build-and-push, deploy-staging, smoke-test]
     if: failure()
-    runs-on: ubuntu-22.04
+    uses: ./.github/workflows/_reusable-feishu-notify.yml
+    with:
+      title: "Staging 部署失敗"
+      status: "failure"
+      workflow-name: "Staging Deploy (Optimized)"
+      message: |
+        **環境**: nova-staging
+        **提交**: ${{ github.sha }}
+        **分支**: ${{ github.ref_name }}
+        **觸發者**: ${{ github.actor }}
 
-    steps:
-      - name: Create GitHub issue on failure
-        run: |
-          echo "⚠️  Deployment failed!"
-          echo "Check logs: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          # TODO: 集成 Slack webhook
-          # curl -X POST ${{ secrets.SLACK_WEBHOOK }} \
-          #   -H 'Content-Type: application/json' \
-          #   -d '{"text":"❌ Staging deploy failed: ${{ github.sha }}"}'
+        **失敗階段**:
+        - Build: ${{ needs.build-and-push.result }}
+        - Deploy: ${{ needs.deploy-staging.result }}
+        - Smoke Test: ${{ needs.smoke-test.result }}
+
+        請檢查日誌並修復問題。
+    secrets:
+      feishu-webhook: ${{ secrets.FEISHU_WEBHOOK }}
+
+  # 成功通知 - 飛書
+  notify-on-success:
+    name: Notify on Success
+    needs: [verify-aws, build-and-push, deploy-staging, smoke-test]
+    if: success()
+    uses: ./.github/workflows/_reusable-feishu-notify.yml
+    with:
+      title: "Staging 部署成功"
+      status: "success"
+      workflow-name: "Staging Deploy (Optimized)"
+      message: |
+        **環境**: nova-staging
+        **提交**: ${{ github.sha }}
+        **分支**: ${{ github.ref_name }}
+        **部署服務**: 13 個微服務
+
+        ✅ 所有服務已成功部署並通過健康檢查
+    secrets:
+      feishu-webhook: ${{ secrets.FEISHU_WEBHOOK }}
 
   summary:
     name: Deployment Summary

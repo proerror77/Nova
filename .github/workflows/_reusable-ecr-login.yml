@@ -1,0 +1,54 @@
+name: Reusable ECR Login
+
+# Reusable workflow for AWS authentication + ECR login
+# Consolidates common pattern used in 13+ workflows
+
+on:
+  workflow_call:
+    inputs:
+      aws-region:
+        description: 'AWS Region (defaults to ap-northeast-1)'
+        required: false
+        type: string
+        default: 'ap-northeast-1'
+      role-session-name:
+        description: 'AWS IAM role session name'
+        required: true
+        type: string
+    secrets:
+      aws-account-id:
+        description: 'AWS Account ID (from secrets.AWS_ACCOUNT_ID)'
+        required: true
+    outputs:
+      ecr-registry:
+        description: 'ECR registry URL'
+        value: ${{ jobs.auth.outputs.ecr-registry }}
+
+jobs:
+  auth:
+    name: AWS + ECR Authentication
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      ecr-registry: ${{ steps.output.outputs.ecr-registry }}
+
+    steps:
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.aws-account-id }}:role/github-actions-role
+          aws-region: ${{ inputs.aws-region }}
+          audience: sts.amazonaws.com
+          role-session-name: ${{ inputs.role-session-name }}
+          role-skip-session-tagging: true
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set output
+        id: output
+        run: |
+          echo "ecr-registry=${{ secrets.aws-account-id }}.dkr.ecr.${{ inputs.aws-region }}.amazonaws.com" >> "$GITHUB_OUTPUT"
+          echo "✅ Authenticated to ECR: ${{ secrets.aws-account-id }}.dkr.ecr.${{ inputs.aws-region }}.amazonaws.com"

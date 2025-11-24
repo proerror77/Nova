@@ -83,8 +83,8 @@ struct APIConfig {
         static let register = "/api/v2/auth/register"
         static let refresh = "/api/v2/auth/refresh"
         static let logout = "/api/v2/auth/logout"
-        static let getUser = "/api/v2/users"  // GET /api/v2/users/{id}
-        static let updateUser = "/api/v2/users"  // PUT /api/v2/users/{id}
+        /// 單一用戶資料（包含 {id}）
+        static func user(_ id: String) -> String { "/api/v2/users/\(id)" }
     }
 
     // MARK: - Alice AI Assistant API
@@ -96,9 +96,11 @@ struct APIConfig {
 
     // MARK: - User Profile Settings API
     struct Profile {
-        static let updateProfile = "/api/v2/users"  // PUT /api/v2/users/{id} 更新用戶資料
+        /// PUT /api/v2/users/{id} 更新用戶資料
+        static func updateProfile(_ id: String) -> String { "/api/v2/users/\(id)" }
         static let uploadAvatar = "/api/v2/users/avatar"  // POST 上傳頭像
-        static let getProfile = "/api/v2/users"  // GET /api/v2/users/{id} 獲取用戶資料
+        /// GET /api/v2/users/{id} 獲取用戶資料
+        static func getProfile(_ id: String) -> String { "/api/v2/users/\(id)" }
     }
 
     // MARK: - Friends & Social Graph API
@@ -113,10 +115,12 @@ struct APIConfig {
     // MARK: - Channels API
     struct Channels {
         static let getAllChannels = "/api/v2/channels"  // GET 獲取所有頻道列表
-        static let getUserChannels = "/api/v2/users/channels"  // GET /api/v2/users/{id}/channels 獲取用戶訂閱的頻道
+        /// GET /api/v2/users/{id}/channels 獲取用戶訂閱的頻道
+        static func getUserChannels(_ userId: String) -> String { "/api/v2/users/\(userId)/channels" }
         static let subscribeChannel = "/api/v2/channels/subscribe"  // POST 訂閱頻道
         static let unsubscribeChannel = "/api/v2/channels/unsubscribe"  // DELETE 取消訂閱頻道
-        static let getChannelDetails = "/api/v2/channels"  // GET /api/v2/channels/{id} 獲取頻道詳情
+        /// GET /api/v2/channels/{id} 獲取頻道詳情
+        static func getChannelDetails(_ channelId: String) -> String { "/api/v2/channels/\(channelId)" }
     }
 
     // MARK: - Account Management API
@@ -147,7 +151,10 @@ struct APIConfig {
         static let getConversations = "/api/v2/chat/conversations"  // GET 獲取對話列表
         static let sendMessage = "/api/v2/chat/messages"  // POST 發送消息
         static let getMessages = "/api/v2/chat/messages"  // GET 獲取消息歷史
-        static let getGroupDetails = "/api/v2/chat/groups"  // GET /api/v2/chat/groups/{id} 獲取群組詳情
+        /// GET /api/v2/chat/conversations/{id} 獲取群組詳情
+        static func getConversation(_ id: String) -> String { "/api/v2/chat/conversations/\(id)" }
+        /// 未實作的群組成員相關端點預留，避免誤調 404
+        static let getGroupDetails = "/api/v2/chat/groups"  // TODO: 後端尚未提供
         static let addGroupMembers = "/api/v2/chat/groups/members/add"  // POST 添加群組成員
         static let removeGroupMembers = "/api/v2/chat/groups/members/remove"  // DELETE 移除群組成員
     }

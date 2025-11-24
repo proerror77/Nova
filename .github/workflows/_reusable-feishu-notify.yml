@@ -1,0 +1,188 @@
+name: Reusable Feishu Notification
+
+# Reusable workflow for sending notifications to Feishu (Lark)
+# Supports rich card messages with status indicators
+
+on:
+  workflow_call:
+    inputs:
+      title:
+        description: 'Notification title'
+        required: true
+        type: string
+      status:
+        description: 'Status (success, failure, warning, info)'
+        required: true
+        type: string
+      message:
+        description: 'Notification message body'
+        required: true
+        type: string
+      workflow-name:
+        description: 'Workflow name'
+        required: false
+        type: string
+        default: ${{ github.workflow }}
+      details:
+        description: 'Additional details (JSON format)'
+        required: false
+        type: string
+        default: ''
+    secrets:
+      feishu-webhook:
+        description: 'Feishu webhook URL'
+        required: true
+
+jobs:
+  notify:
+    name: Send Feishu Notification
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+
+    steps:
+      - name: Prepare notification content
+        id: prepare
+        run: |
+          # Determine color and emoji based on status
+          case "${{ inputs.status }}" in
+            success)
+              COLOR="green"
+              EMOJI="✅"
+              STATUS_TEXT="成功"
+              ;;
+            failure)
+              COLOR="red"
+              EMOJI="❌"
+              STATUS_TEXT="失敗"
+              ;;
+            warning)
+              COLOR="orange"
+              EMOJI="⚠️"
+              STATUS_TEXT="警告"
+              ;;
+            info)
+              COLOR="blue"
+              EMOJI="ℹ️"
+              STATUS_TEXT="資訊"
+              ;;
+            *)
+              COLOR="grey"
+              EMOJI="📢"
+              STATUS_TEXT="${{ inputs.status }}"
+              ;;
+          esac
+
+          echo "color=$COLOR" >> "$GITHUB_OUTPUT"
+          echo "emoji=$EMOJI" >> "$GITHUB_OUTPUT"
+          echo "status_text=$STATUS_TEXT" >> "$GITHUB_OUTPUT"
+
+      - name: Send to Feishu
+        env:
+          FEISHU_WEBHOOK: ${{ secrets.feishu-webhook }}
+        run: |
+          # Build Feishu card message
+          cat > /tmp/feishu_message.json << EOF
+          {
+            "msg_type": "interactive",
+            "card": {
+              "header": {
+                "title": {
+                  "content": "${{ steps.prepare.outputs.emoji }} ${{ inputs.title }}",
+                  "tag": "plain_text"
+                },
+                "template": "${{ steps.prepare.outputs.color }}"
+              },
+              "elements": [
+                {
+                  "tag": "div",
+                  "fields": [
+                    {
+                      "is_short": true,
+                      "text": {
+                        "tag": "lark_md",
+                        "content": "**狀態**\n${{ steps.prepare.outputs.status_text }}"
+                      }
+                    },
+                    {
+                      "is_short": true,
+                      "text": {
+                        "tag": "lark_md",
+                        "content": "**工作流**\n${{ inputs.workflow-name }}"
+                      }
+                    },
+                    {
+                      "is_short": true,
+                      "text": {
+                        "tag": "lark_md",
+                        "content": "**分支**\n${{ github.ref_name }}"
+                      }
+                    },
+                    {
+                      "is_short": true,
+                      "text": {
+                        "tag": "lark_md",
+                        "content": "**提交**\n\`${{ github.sha }}\`"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "tag": "hr"
+                },
+                {
+                  "tag": "div",
+                  "text": {
+                    "tag": "lark_md",
+                    "content": "${{ inputs.message }}"
+                  }
+                },
+                {
+                  "tag": "action",
+                  "actions": [
+                    {
+                      "tag": "button",
+                      "text": {
+                        "tag": "plain_text",
+                        "content": "查看詳情"
+                      },
+                      "type": "primary",
+                      "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+          EOF
+
+          # Add additional details if provided
+          if [ -n "${{ inputs.details }}" ]; then
+            echo "Adding additional details..."
+            # Details should be pre-formatted JSON
+          fi
+
+          # Send to Feishu
+          HTTP_CODE=$(curl -X POST "$FEISHU_WEBHOOK" \
+            -H 'Content-Type: application/json' \
+            -d @/tmp/feishu_message.json \
+            -w '%{http_code}' \
+            -o /tmp/feishu_response.json \
+            -s)
+
+          if [ "$HTTP_CODE" = "200" ]; then
+            echo "✅ 飛書通知發送成功"
+            cat /tmp/feishu_response.json
+          else
+            echo "⚠️ 飛書通知發送失敗 (HTTP $HTTP_CODE)"
+            cat /tmp/feishu_response.json
+            exit 1
+          fi
+
+      - name: Upload response
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: feishu-notification-response
+          path: /tmp/feishu_response.json
+          retention-days: 7

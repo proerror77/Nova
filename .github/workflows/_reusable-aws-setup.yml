@@ -13,11 +13,6 @@ on:
         description: IAM role session name
         required: true
         type: string
-    secrets:
-      AWS_ACCESS_KEY_ID:
-        required: false
-      AWS_SECRET_ACCESS_KEY:
-        required: false
 
 jobs:
   aws-setup:
@@ -29,7 +24,7 @@ jobs:
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::025434362120:role/github-actions-role
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/github-actions-role
           aws-region: ${{ inputs.aws-region }}
           audience: sts.amazonaws.com
           role-session-name: ${{ inputs.role-session-name }}

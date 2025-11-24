@@ -15,3 +15,9 @@ spec:
             configMapKeyRef:
               name: nova-config
               key: KAFKA_BROKERS
+        # content-service 對 feed-service 非硬依賴，降級為 Tier1 避免啟動時 CrashLoop
+        - name: GRPC_CONTENT_SERVICE_TIER
+          value: "1"
+        # identity-service 在啟動時可能尚未就緒，降級 tier 避免 CrashLoop
+        - name: GRPC_IDENTITY_SERVICE_TIER
+          value: "1"

@@ -12,6 +12,15 @@ resources:
   - ../../base/
   - external-secret.yaml
 
+# Env patches for staging (TLS + dependency tiers)
+patchesStrategicMerge:
+  - content-service/env-patch.yaml
+  - feed-service/env-patch.yaml
+  - analytics-service/env-patch.yaml
+  - content-service/env-patch.yaml
+  - feed-service/env-patch.yaml
+  - analytics-service/env-patch.yaml
+
 # Common labels for all resources in staging environment
 labels:
   - includeSelectors: true

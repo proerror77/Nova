@@ -1,0 +1,267 @@
+name: Dependency Review
+
+# Automatically review dependencies in pull requests
+# Detects vulnerable, malicious, or non-compliant dependencies
+# Blocks PRs with high/critical severity issues
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - 'backend/**/Cargo.toml'
+      - 'backend/**/Cargo.lock'
+      - 'ios/**/Package.swift'
+      - 'ios/**/Package.resolved'
+      - '.github/workflows/dependency-review.yml'
+
+# Prevent concurrent reviews for the same PR
+concurrency:
+  group: dependency-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  # ============================================================================
+  # Dependency Review - GitHub Native
+  # ============================================================================
+  dependency-review:
+    name: Review Dependencies
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Dependency Review
+        uses: actions/dependency-review-action@v4
+        with:
+          # Block on critical/high vulnerabilities
+          fail-on-severity: high
+
+          # Allow these licenses (permissive open source)
+          allow-licenses: >
+            MIT,
+            Apache-2.0,
+            BSD-2-Clause,
+            BSD-3-Clause,
+            ISC,
+            0BSD,
+            Unlicense,
+            CC0-1.0
+
+          # Deny these licenses (copyleft/proprietary)
+          deny-licenses: >
+            GPL-2.0,
+            GPL-3.0,
+            LGPL-2.0,
+            LGPL-2.1,
+            LGPL-3.0,
+            AGPL-3.0,
+            SSPL-1.0,
+            Commons-Clause
+
+          # Comment on PR with findings
+          comment-summary-in-pr: always
+
+          # Export results
+          vulnerability-check: true
+          license-check: true
+
+  # ============================================================================
+  # Rust Cargo Audit (deeper Rust-specific checks)
+  # ============================================================================
+  cargo-audit:
+    name: Cargo Audit (Rust)
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
+
+      - name: Run cargo audit
+        working-directory: backend
+        run: |
+          echo "🔍 Running cargo audit..."
+          cargo audit --json > /tmp/cargo-audit.json || true
+
+          # Parse results
+          VULNERABILITIES=$(jq '.vulnerabilities.count' /tmp/cargo-audit.json 2>/dev/null || echo "0")
+          WARNINGS=$(jq '.warnings | length' /tmp/cargo-audit.json 2>/dev/null || echo "0")
+
+          echo "vulnerabilities=$VULNERABILITIES" >> "$GITHUB_OUTPUT"
+          echo "warnings=$WARNINGS" >> "$GITHUB_OUTPUT"
+
+          if [ "$VULNERABILITIES" -gt 0 ]; then
+            echo "❌ Found $VULNERABILITIES vulnerabilities"
+            jq -r '.vulnerabilities.list[] | "- \(.advisory.id): \(.advisory.title) (affects \(.package.name) \(.package.version))"' /tmp/cargo-audit.json
+            exit 1
+          else
+            echo "✅ No vulnerabilities found"
+          fi
+
+          if [ "$WARNINGS" -gt 0 ]; then
+            echo "⚠️  Found $WARNINGS warnings"
+            jq -r '.warnings[] | "- \(.kind): \(.message)"' /tmp/cargo-audit.json
+          fi
+
+      - name: Upload audit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cargo-audit-report
+          path: /tmp/cargo-audit.json
+          retention-days: 30
+
+  # ============================================================================
+  # Supply Chain Security - SBOM Generation
+  # ============================================================================
+  sbom-check:
+    name: Supply Chain Check
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+
+      - name: Install cargo-sbom
+        run: cargo install cargo-sbom --locked
+
+      - name: Generate SBOM (Rust)
+        working-directory: backend
+        run: |
+          echo "📦 Generating SBOM for Rust workspace..."
+          cargo sbom --output-format spdx_json_2_3 > /tmp/rust-sbom.spdx.json
+
+          # Count dependencies
+          DEPS=$(jq '.packages | length' /tmp/rust-sbom.spdx.json)
+          echo "✅ Generated SBOM with $DEPS packages"
+
+      - name: Upload SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-rust
+          path: /tmp/rust-sbom.spdx.json
+          retention-days: 90
+
+  # ============================================================================
+  # License Compliance Check
+  # ============================================================================
+  license-check:
+    name: License Compliance
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+
+      - name: Install cargo-license
+        run: cargo install cargo-license --locked
+
+      - name: Check Rust licenses
+        working-directory: backend
+        run: |
+          echo "📋 Checking Rust dependency licenses..."
+          cargo license --json > /tmp/licenses.json
+
+          # Check for forbidden licenses
+          FORBIDDEN="GPL-2.0|GPL-3.0|AGPL-3.0|LGPL-2.0|LGPL-2.1|LGPL-3.0|SSPL-1.0|Commons-Clause"
+
+          if grep -E "$FORBIDDEN" /tmp/licenses.json; then
+            echo "❌ Found forbidden licenses!"
+            exit 1
+          else
+            echo "✅ All licenses are compliant"
+          fi
+
+          # Summary
+          echo ""
+          echo "📊 License Summary:"
+          jq -r '.[] | "\(.name): \(.license)"' /tmp/licenses.json | sort -u | head -20
+
+      - name: Upload license report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: license-report
+          path: /tmp/licenses.json
+          retention-days: 30
+
+  # ============================================================================
+  # Summary
+  # ============================================================================
+  summary:
+    name: Dependency Review Summary
+    needs: [dependency-review, cargo-audit, sbom-check, license-check]
+    if: always()
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Print summary
+        run: |
+          echo "════════════════════════════════════════════════════"
+          echo "🔒 DEPENDENCY REVIEW COMPLETED"
+          echo "════════════════════════════════════════════════════"
+          echo ""
+          echo "📊 Status:"
+          echo "  Dependency Review: ${{ needs.dependency-review.result }}"
+          echo "  Cargo Audit: ${{ needs.cargo-audit.result }}"
+          echo "  SBOM Generation: ${{ needs.sbom-check.result }}"
+          echo "  License Check: ${{ needs.license-check.result }}"
+          echo ""
+          echo "🎯 Checks Performed:"
+          echo "  ✅ Vulnerability detection (GitHub + cargo-audit)"
+          echo "  ✅ License compliance (allow/deny lists)"
+          echo "  ✅ Supply chain SBOM generation"
+          echo "  ✅ Forbidden license detection"
+          echo ""
+          echo "🛡️  Severity Thresholds:"
+          echo "  - CRITICAL/HIGH: ❌ BLOCKED"
+          echo "  - MEDIUM/LOW: ⚠️  WARNING"
+          echo ""
+          echo "📝 Allowed Licenses:"
+          echo "  MIT, Apache-2.0, BSD-*, ISC, Unlicense, CC0-1.0"
+          echo ""
+          echo "🚫 Forbidden Licenses:"
+          echo "  GPL-*, LGPL-*, AGPL-*, SSPL-*, Commons-Clause"
+          echo "════════════════════════════════════════════════════"
+
+      - name: Check final status
+        run: |
+          if [ "${{ needs.dependency-review.result }}" != "success" ] || \
+             [ "${{ needs.cargo-audit.result }}" != "success" ] || \
+             [ "${{ needs.license-check.result }}" != "success" ]; then
+            echo "❌ Dependency review found issues - please review the logs above"
+            exit 1
+          fi
+          echo "✅ All dependency checks passed"

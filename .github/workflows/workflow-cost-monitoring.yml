@@ -1,0 +1,384 @@
+name: Workflow Cost Monitoring
+
+# Track GitHub Actions usage and costs
+# Generate weekly reports on runner minutes and cost trends
+# Alert on excessive usage
+
+on:
+  schedule:
+    # Run weekly on Monday at 00:00 UTC
+    - cron: '0 0 * * 1'
+  workflow_dispatch:
+    inputs:
+      report-days:
+        description: 'Number of days to analyze'
+        required: false
+        type: choice
+        options:
+          - '7'
+          - '14'
+          - '30'
+        default: '7'
+
+permissions:
+  contents: read
+  actions: read
+  issues: write
+
+env:
+  ALERT_THRESHOLD_MINUTES: 10000  # Alert if weekly usage > 10k minutes
+  COST_PER_MINUTE_LINUX: 0.008    # $0.008 per minute for Linux runners
+
+jobs:
+  # ============================================================================
+  # Analyze Workflow Usage
+  # ============================================================================
+  analyze-usage:
+    name: Analyze Workflow Usage
+    runs-on: ubuntu-22.04
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      total-minutes: ${{ steps.calculate.outputs.total-minutes }}
+      estimated-cost: ${{ steps.calculate.outputs.estimated-cost }}
+      alert-needed: ${{ steps.calculate.outputs.alert-needed }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Fetch workflow runs data
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          DAYS=${{ inputs.report-days || '7' }}
+          SINCE_DATE=$(date -u -d "$DAYS days ago" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -v-${DAYS}d +%Y-%m-%dT%H:%M:%SZ)
+
+          echo "📊 Fetching workflow runs since $SINCE_DATE..."
+
+          # Get all workflow runs in the last N days
+          gh api \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "/repos/${{ github.repository }}/actions/runs?created=>=$SINCE_DATE&per_page=100" \
+            > /tmp/workflow_runs.json
+
+          echo "✅ Fetched $(jq '.workflow_runs | length' /tmp/workflow_runs.json) workflow runs"
+
+      - name: Calculate usage and costs
+        id: calculate
+        run: |
+          echo "💰 Calculating costs..."
+
+          # Extract relevant data
+          jq -r '.workflow_runs[] |
+            select(.status == "completed") |
+            {
+              name: .name,
+              conclusion: .conclusion,
+              duration_minutes: ((.updated_at | fromdateiso8601) - (.created_at | fromdateiso8601)) / 60,
+              run_number: .run_number,
+              event: .event,
+              created_at: .created_at
+            }' /tmp/workflow_runs.json > /tmp/workflow_analysis.jsonl
+
+          # Calculate total minutes
+          TOTAL_MINUTES=$(jq -s 'map(.duration_minutes) | add | floor' /tmp/workflow_analysis.jsonl)
+          echo "total-minutes=$TOTAL_MINUTES" >> "$GITHUB_OUTPUT"
+
+          # Estimate cost (Linux runners: $0.008/min)
+          ESTIMATED_COST=$(echo "$TOTAL_MINUTES * ${{ env.COST_PER_MINUTE_LINUX }}" | bc)
+          echo "estimated-cost=$ESTIMATED_COST" >> "$GITHUB_OUTPUT"
+
+          # Check if alert needed
+          if [ "$TOTAL_MINUTES" -gt "${{ env.ALERT_THRESHOLD_MINUTES }}" ]; then
+            echo "alert-needed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "alert-needed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          echo "📊 Total minutes: $TOTAL_MINUTES"
+          echo "💰 Estimated cost: \$$ESTIMATED_COST"
+
+      - name: Generate workflow breakdown
+        run: |
+          echo "📋 Generating workflow breakdown..."
+
+          # Top 10 workflows by total duration
+          jq -s '
+            group_by(.name) |
+            map({
+              workflow: .[0].name,
+              runs: length,
+              total_minutes: (map(.duration_minutes) | add | floor),
+              avg_minutes: ((map(.duration_minutes) | add) / length | floor),
+              failures: (map(select(.conclusion != "success")) | length)
+            }) |
+            sort_by(.total_minutes) |
+            reverse |
+            .[:10]
+          ' /tmp/workflow_analysis.jsonl > /tmp/workflow_breakdown.json
+
+          echo "✅ Top workflows by usage:"
+          jq -r '.[] | "\(.workflow): \(.total_minutes) min (\(.runs) runs, \(.failures) failures)"' /tmp/workflow_breakdown.json
+
+      - name: Generate cost trend analysis
+        run: |
+          echo "📈 Analyzing cost trends..."
+
+          # Group by day
+          jq -s '
+            group_by(.created_at[:10]) |
+            map({
+              date: .[0].created_at[:10],
+              minutes: (map(.duration_minutes) | add | floor),
+              runs: length
+            }) |
+            sort_by(.date)
+          ' /tmp/workflow_analysis.jsonl > /tmp/daily_usage.json
+
+          echo "✅ Daily usage trend:"
+          jq -r '.[] | "\(.date): \(.minutes) min (\(.runs) runs)"' /tmp/daily_usage.json
+
+      - name: Upload analysis data
+        uses: actions/upload-artifact@v4
+        with:
+          name: workflow-cost-analysis
+          path: |
+            /tmp/workflow_runs.json
+            /tmp/workflow_analysis.jsonl
+            /tmp/workflow_breakdown.json
+            /tmp/daily_usage.json
+          retention-days: 90
+
+  # ============================================================================
+  # Generate Report
+  # ============================================================================
+  generate-report:
+    name: Generate Cost Report
+    needs: analyze-usage
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+
+    steps:
+      - name: Download analysis data
+        uses: actions/download-artifact@v4
+        with:
+          name: workflow-cost-analysis
+          path: /tmp
+
+      - name: Generate markdown report
+        run: |
+          DAYS=${{ inputs.report-days || '7' }}
+          TOTAL_MIN=${{ needs.analyze-usage.outputs.total-minutes }}
+          COST=${{ needs.analyze-usage.outputs.estimated-cost }}
+
+          cat > /tmp/cost_report.md << EOF
+          # 📊 GitHub Actions Cost Report
+
+          **Report Period**: Last $DAYS days
+          **Generated**: $(date -u +"%Y-%m-%d %H:%M UTC")
+
+          ---
+
+          ## 💰 Cost Summary
+
+          | Metric | Value |
+          |--------|-------|
+          | Total Runner Minutes | **$TOTAL_MIN min** |
+          | Estimated Cost | **\$$COST** |
+          | Average Daily Cost | **\$$(echo "$COST / $DAYS" | bc -l | xargs printf "%.2f")** |
+          | Cost per Run | **\$$(jq -s 'length' /tmp/workflow_analysis.jsonl | xargs -I {} echo "scale=3; $COST / {}" | bc)** |
+
+          ---
+
+          ## 🏆 Top Workflows by Cost
+
+          | Workflow | Runs | Total Minutes | Est. Cost | Avg Duration | Failures |
+          |----------|------|---------------|-----------|--------------|----------|
+          EOF
+
+          # Add top workflows
+          jq -r '.[] |
+            "| \(.workflow) | \(.runs) | \(.total_minutes) min | $\((.total_minutes * ${{ env.COST_PER_MINUTE_LINUX }}) | tonumber | . * 100 | floor / 100) | \(.avg_minutes) min | \(.failures) |"
+          ' /tmp/workflow_breakdown.json >> /tmp/cost_report.md
+
+          cat >> /tmp/cost_report.md << EOF
+
+          ---
+
+          ## 📈 Daily Usage Trend
+
+          | Date | Minutes | Runs | Est. Cost |
+          |------|---------|------|-----------|
+          EOF
+
+          # Add daily trend
+          jq -r '.[] |
+            "| \(.date) | \(.minutes) min | \(.runs) | $\((.minutes * ${{ env.COST_PER_MINUTE_LINUX }}) | tonumber | . * 100 | floor / 100) |"
+          ' /tmp/daily_usage.json >> /tmp/cost_report.md
+
+          cat >> /tmp/cost_report.md << EOF
+
+          ---
+
+          ## 💡 Optimization Recommendations
+
+          ### High-Impact Optimizations
+          EOF
+
+          # Add recommendations based on analysis
+          TOP_WORKFLOW=$(jq -r '.[0].workflow' /tmp/workflow_breakdown.json)
+          TOP_MINUTES=$(jq -r '.[0].total_minutes' /tmp/workflow_breakdown.json)
+
+          cat >> /tmp/cost_report.md << EOF
+
+          1. **Optimize "$TOP_WORKFLOW"** - consuming $TOP_MINUTES minutes ($((TOP_MINUTES * 100 / TOTAL_MIN))% of total)
+             - Review parallel job configuration
+             - Check for unnecessary workflow triggers
+             - Optimize caching strategies
+
+          2. **Review failed workflows** - retry failures waste runner minutes
+             - Implement better error handling
+             - Add pre-validation steps
+
+          3. **Cache optimization**
+             - Verify Rust cache hit rates
+             - Check Docker layer caching
+             - Review dependency caching strategies
+
+          ### Cost Thresholds
+
+          - ⚠️ **Warning**: Weekly usage > 8,000 minutes (\$64)
+          - 🚨 **Alert**: Weekly usage > ${{ env.ALERT_THRESHOLD_MINUTES }} minutes (\$${{ env.ALERT_THRESHOLD_MINUTES * 0.008 }})
+
+          ---
+
+          ## 📝 Actions Taken
+
+          EOF
+
+          if [ "${{ needs.analyze-usage.outputs.alert-needed }}" = "true" ]; then
+            echo "- 🚨 **ALERT**: Usage exceeded threshold ($TOTAL_MIN > ${{ env.ALERT_THRESHOLD_MINUTES }} minutes)" >> /tmp/cost_report.md
+            echo "- 📧 Notified DevOps team for review" >> /tmp/cost_report.md
+          else
+            echo "- ✅ Usage within acceptable limits" >> /tmp/cost_report.md
+          fi
+
+          cat >> /tmp/cost_report.md << EOF
+
+          ---
+
+          **Report generated by**: GitHub Actions Cost Monitoring Workflow
+          **Next report**: Next Monday 00:00 UTC
+          EOF
+
+          echo "✅ Report generated at /tmp/cost_report.md"
+          cat /tmp/cost_report.md
+
+      - name: Upload report
+        uses: actions/upload-artifact@v4
+        with:
+          name: workflow-cost-report
+          path: /tmp/cost_report.md
+          retention-days: 365
+
+  # ============================================================================
+  # Create Alert (if needed)
+  # ============================================================================
+  create-alert:
+    name: Create Cost Alert
+    needs: [analyze-usage, generate-report]
+    if: needs.analyze-usage.outputs.alert-needed == 'true'
+    runs-on: ubuntu-22.04
+    permissions:
+      issues: write
+
+    steps:
+      - name: Download report
+        uses: actions/download-artifact@v4
+        with:
+          name: workflow-cost-report
+          path: /tmp
+
+      - name: Create GitHub issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TOTAL_MIN=${{ needs.analyze-usage.outputs.total-minutes }}
+          COST=${{ needs.analyze-usage.outputs.estimated-cost }}
+
+          # Create issue with report
+          gh issue create \
+            --repo ${{ github.repository }} \
+            --title "🚨 GitHub Actions Cost Alert: \$$COST (Week of $(date +%Y-%m-%d))" \
+            --label "cost-alert,devops,high-priority" \
+            --body-file /tmp/cost_report.md
+
+          echo "✅ Created cost alert issue"
+
+  # ============================================================================
+  # Feishu Notification - Cost Alert
+  # ============================================================================
+  notify-cost-alert:
+    name: Notify Cost Alert
+    needs: [analyze-usage, generate-report]
+    if: needs.analyze-usage.outputs.alert-needed == 'true'
+    uses: ./.github/workflows/_reusable-feishu-notify.yml
+    with:
+      title: "💰 GitHub Actions 成本警報"
+      status: "warning"
+      workflow-name: "Workflow Cost Monitoring"
+      message: |
+        **本週使用量超過閾值**
+
+        **使用情況**:
+        - 總分鐘數: ${{ needs.analyze-usage.outputs.total-minutes }} 分鐘
+        - 預估成本: $${{ needs.analyze-usage.outputs.estimated-cost }}
+        - 閾值: 50,000 分鐘
+
+        **高消耗 Workflows**:
+        請查看詳細報告中的 Top 10 workflows
+
+        **建議行動**:
+        - 檢查是否有異常的 workflow 執行
+        - 優化長時間運行的 jobs
+        - 考慮調整並行度配置
+
+        詳細報告已上傳為 artifact：workflow-cost-report
+    secrets:
+      feishu-webhook: ${{ secrets.FEISHU_WEBHOOK }}
+
+  # ============================================================================
+  # Summary
+  # ============================================================================
+  summary:
+    name: Cost Monitoring Summary
+    needs: [analyze-usage, generate-report]
+    if: always()
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Print summary
+        run: |
+          echo "════════════════════════════════════════════════════"
+          echo "💰 WORKFLOW COST MONITORING COMPLETED"
+          echo "════════════════════════════════════════════════════"
+          echo ""
+          echo "📊 Usage Summary:"
+          echo "  Total Minutes: ${{ needs.analyze-usage.outputs.total-minutes }}"
+          echo "  Estimated Cost: \$${{ needs.analyze-usage.outputs.estimated-cost }}"
+          echo "  Alert Needed: ${{ needs.analyze-usage.outputs.alert-needed }}"
+          echo ""
+          echo "📁 Artifacts:"
+          echo "  - workflow-cost-analysis (raw data)"
+          echo "  - workflow-cost-report (markdown report)"
+          echo ""
+          echo "🔍 View report:"
+          echo "  gh run view ${{ github.run_id }} --log"
+          echo "  gh run download ${{ github.run_id }}"
+          echo ""
+          echo "📅 Next scheduled run: Next Monday 00:00 UTC"
+          echo "════════════════════════════════════════════════════"

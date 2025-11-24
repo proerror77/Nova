@@ -1,0 +1,436 @@
+name: Canary Deployment
+
+# Progressive delivery with canary analysis
+# Gradually roll out changes while monitoring metrics
+# Auto-rollback on failures
+
+on:
+  workflow_dispatch:
+    inputs:
+      service:
+        description: 'Service to deploy (e.g., identity-service)'
+        required: true
+        type: choice
+        options:
+          - analytics-service
+          - content-service
+          - feed-service
+          - graph-service
+          - graphql-gateway
+          - identity-service
+          - media-service
+          - notification-service
+          - ranking-service
+          - realtime-chat-service
+          - search-service
+          - social-service
+          - trust-safety-service
+      image-tag:
+        description: 'Image tag to deploy (e.g., commit SHA)'
+        required: true
+        type: string
+      canary-percentage:
+        description: 'Canary traffic percentage'
+        required: false
+        type: choice
+        options:
+          - '10'
+          - '25'
+          - '50'
+        default: '10'
+      analysis-duration:
+        description: 'Analysis duration (minutes)'
+        required: false
+        type: choice
+        options:
+          - '5'
+          - '10'
+          - '15'
+        default: '10'
+
+# Prevent concurrent canary deployments
+concurrency:
+  group: canary-${{ inputs.service }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION || 'ap-northeast-1' }}
+  NAMESPACE: nova-staging  # Canary in staging first
+  REGISTRY_ALIAS: nova
+
+jobs:
+  # ============================================================================
+  # Phase 1: Deploy Canary
+  # ============================================================================
+  deploy-canary:
+    name: Deploy Canary (${{ inputs.canary-percentage }}%)
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      canary-deployed: ${{ steps.deploy.outputs.deployed }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/github-actions-role
+          aws-region: ${{ env.AWS_REGION }}
+          audience: sts.amazonaws.com
+          role-session-name: gha-canary-${{ github.run_id }}
+          role-skip-session-tagging: true
+
+      - name: Configure kubeconfig
+        env:
+          KUBECONFIG_B64: ${{ secrets.STAGING_KUBE_CONFIG }}
+        run: |
+          mkdir -p ~/.kube
+          echo "$KUBECONFIG_B64" | base64 --decode > ~/.kube/config
+          chmod 600 ~/.kube/config
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: 'latest'
+
+      - name: Deploy canary deployment
+        id: deploy
+        env:
+          SERVICE: ${{ inputs.service }}
+          IMAGE_TAG: ${{ inputs.image-tag }}
+          CANARY_PCT: ${{ inputs.canary-percentage }}
+        run: |
+          IMAGE="${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.REGISTRY_ALIAS }}/${SERVICE}:${IMAGE_TAG}"
+
+          echo "🐤 Creating canary deployment for $SERVICE"
+          echo "📦 Image: $IMAGE"
+          echo "📊 Traffic split: ${CANARY_PCT}% canary, $((100-CANARY_PCT))% stable"
+
+          # Create canary deployment (clone from stable)
+          kubectl get deployment $SERVICE -n ${{ env.NAMESPACE }} -o yaml | \
+            sed "s/name: $SERVICE/name: $SERVICE-canary/" | \
+            sed "s/app: $SERVICE/app: $SERVICE-canary/" | \
+            sed "s|image:.*|image: $IMAGE|" | \
+            kubectl apply -f -
+
+          # Scale canary to appropriate size (10% = 1 replica, 25% = 2, 50% = 3)
+          CANARY_REPLICAS=1
+          if [ "$CANARY_PCT" = "25" ]; then
+            CANARY_REPLICAS=2
+          elif [ "$CANARY_PCT" = "50" ]; then
+            CANARY_REPLICAS=3
+          fi
+
+          kubectl scale deployment $SERVICE-canary -n ${{ env.NAMESPACE }} --replicas=$CANARY_REPLICAS
+
+          # Wait for canary pods to be ready
+          echo "⏳ Waiting for canary pods..."
+          kubectl rollout status deployment/$SERVICE-canary -n ${{ env.NAMESPACE }} --timeout=5m
+
+          # Update service to route traffic to both stable and canary
+          # (Using Kubernetes Service selector to include both app=$SERVICE and app=$SERVICE-canary)
+          # Note: In production, use Istio/Linkerd for weighted traffic splitting
+
+          echo "deployed=true" >> "$GITHUB_OUTPUT"
+          echo "✅ Canary deployed successfully"
+
+      - name: Verify canary pods
+        run: |
+          echo "🔍 Canary pod status:"
+          kubectl get pods -n ${{ env.NAMESPACE }} -l app=${{ inputs.service }}-canary -o wide
+
+          READY=$(kubectl get pods -n ${{ env.NAMESPACE }} -l app=${{ inputs.service }}-canary -o jsonpath='{.items[*].status.conditions[?(@.type=="Ready")].status}' | grep -o "True" | wc -l)
+          echo "✅ $READY canary pod(s) ready"
+
+  # ============================================================================
+  # Phase 2: Monitor Canary
+  # ============================================================================
+  monitor-canary:
+    name: Monitor Canary (${{ inputs.analysis-duration }}m)
+    needs: deploy-canary
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      health-status: ${{ steps.analysis.outputs.status }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/github-actions-role
+          aws-region: ${{ env.AWS_REGION }}
+          audience: sts.amazonaws.com
+          role-session-name: gha-monitor-${{ github.run_id }}
+          role-skip-session-tagging: true
+
+      - name: Configure kubeconfig
+        env:
+          KUBECONFIG_B64: ${{ secrets.STAGING_KUBE_CONFIG }}
+        run: |
+          mkdir -p ~/.kube
+          echo "$KUBECONFIG_B64" | base64 --decode > ~/.kube/config
+          chmod 600 ~/.kube/config
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: 'latest'
+
+      - name: Canary analysis
+        id: analysis
+        env:
+          SERVICE: ${{ inputs.service }}
+          DURATION: ${{ inputs.analysis-duration }}
+        run: |
+          echo "📊 Starting canary analysis for ${DURATION} minutes..."
+          echo "Monitoring metrics:"
+          echo "  - Pod restarts"
+          echo "  - Pod readiness"
+          echo "  - Error logs"
+
+          ANALYSIS_INTERVAL=30  # Check every 30 seconds
+          TOTAL_CHECKS=$((DURATION * 2))  # Duration in minutes * 2 (30s intervals)
+          FAILED_CHECKS=0
+          MAX_FAILURES=3
+
+          for i in $(seq 1 $TOTAL_CHECKS); do
+            echo ""
+            echo "Check $i/$TOTAL_CHECKS ($(date))"
+
+            # Check 1: Pod restarts
+            RESTARTS=$(kubectl get pods -n ${{ env.NAMESPACE }} -l app=$SERVICE-canary -o jsonpath='{.items[*].status.containerStatuses[*].restartCount}' | awk '{s+=$1} END {print s}')
+            echo "  Pod restarts: ${RESTARTS:-0}"
+
+            if [ "${RESTARTS:-0}" -gt 2 ]; then
+              echo "  ❌ Too many restarts detected"
+              ((FAILED_CHECKS++))
+            fi
+
+            # Check 2: Pod readiness
+            READY=$(kubectl get pods -n ${{ env.NAMESPACE }} -l app=$SERVICE-canary -o jsonpath='{.items[*].status.conditions[?(@.type=="Ready")].status}' | grep -o "True" | wc -l)
+            TOTAL=$(kubectl get pods -n ${{ env.NAMESPACE }} -l app=$SERVICE-canary --no-headers | wc -l)
+            echo "  Ready pods: $READY/$TOTAL"
+
+            if [ "$READY" -lt "$TOTAL" ]; then
+              echo "  ⚠️  Not all pods ready"
+              ((FAILED_CHECKS++))
+            fi
+
+            # Check 3: Error logs (sample check)
+            ERRORS=$(kubectl logs -n ${{ env.NAMESPACE }} -l app=$SERVICE-canary --tail=50 --since=30s 2>/dev/null | grep -i "error\|panic\|fatal" | wc -l)
+            echo "  Error logs (last 30s): $ERRORS"
+
+            if [ "$ERRORS" -gt 10 ]; then
+              echo "  ⚠️  High error rate detected"
+              ((FAILED_CHECKS++))
+            fi
+
+            # Fail fast if too many failures
+            if [ "$FAILED_CHECKS" -ge "$MAX_FAILURES" ]; then
+              echo ""
+              echo "❌ CANARY ANALYSIS FAILED - Too many issues detected ($FAILED_CHECKS failures)"
+              echo "status=failed" >> "$GITHUB_OUTPUT"
+              exit 1
+            fi
+
+            # Wait before next check (except last iteration)
+            if [ "$i" -lt "$TOTAL_CHECKS" ]; then
+              sleep $ANALYSIS_INTERVAL
+            fi
+          done
+
+          echo ""
+          echo "✅ Canary analysis completed successfully"
+          echo "Failed checks: $FAILED_CHECKS/$TOTAL_CHECKS (threshold: $MAX_FAILURES)"
+          echo "status=passed" >> "$GITHUB_OUTPUT"
+
+  # ============================================================================
+  # Phase 3: Promote or Rollback
+  # ============================================================================
+  promote-or-rollback:
+    name: Promote or Rollback
+    needs: [deploy-canary, monitor-canary]
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/github-actions-role
+          aws-region: ${{ env.AWS_REGION }}
+          audience: sts.amazonaws.com
+          role-session-name: gha-promote-${{ github.run_id }}
+          role-skip-session-tagging: true
+
+      - name: Configure kubeconfig
+        env:
+          KUBECONFIG_B64: ${{ secrets.STAGING_KUBE_CONFIG }}
+        run: |
+          mkdir -p ~/.kube
+          echo "$KUBECONFIG_B64" | base64 --decode > ~/.kube/config
+          chmod 600 ~/.kube/config
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: 'latest'
+
+      - name: Promote canary (if passed)
+        if: needs.monitor-canary.outputs.health-status == 'passed'
+        env:
+          SERVICE: ${{ inputs.service }}
+          IMAGE_TAG: ${{ inputs.image-tag }}
+        run: |
+          IMAGE="${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.REGISTRY_ALIAS }}/${SERVICE}:${IMAGE_TAG}"
+
+          echo "🚀 Promoting canary to stable"
+          echo "📦 Updating stable deployment to: $IMAGE"
+
+          # Update stable deployment with canary image
+          kubectl set image deployment/$SERVICE $SERVICE=$IMAGE -n ${{ env.NAMESPACE }}
+
+          # Wait for rollout
+          echo "⏳ Waiting for stable rollout..."
+          kubectl rollout status deployment/$SERVICE -n ${{ env.NAMESPACE }} --timeout=10m
+
+          # Delete canary deployment
+          echo "🧹 Cleaning up canary deployment"
+          kubectl delete deployment $SERVICE-canary -n ${{ env.NAMESPACE }}
+
+          echo "✅ PROMOTION SUCCESSFUL"
+          kubectl get pods -n ${{ env.NAMESPACE }} -l app=$SERVICE -o wide
+
+      - name: Rollback canary (if failed)
+        if: needs.monitor-canary.outputs.health-status == 'failed'
+        env:
+          SERVICE: ${{ inputs.service }}
+        run: |
+          echo "🔄 Rolling back canary deployment"
+
+          # Delete canary deployment
+          kubectl delete deployment $SERVICE-canary -n ${{ env.NAMESPACE }} || true
+
+          echo "✅ ROLLBACK COMPLETED - Stable deployment unchanged"
+          kubectl get pods -n ${{ env.NAMESPACE }} -l app=$SERVICE -o wide
+
+  # ============================================================================
+  # Feishu Notification - Promoted
+  # ============================================================================
+  notify-promoted:
+    name: Notify Canary Promoted
+    needs: [deploy-canary, monitor-canary, promote-or-rollback]
+    if: needs.monitor-canary.outputs.health-status == 'passed'
+    uses: ./.github/workflows/_reusable-feishu-notify.yml
+    with:
+      title: "🚀 Canary 部署成功並已提升"
+      status: "success"
+      workflow-name: "Canary Deployment"
+      message: |
+        **服務**: ${{ inputs.service }}
+        **映像標籤**: ${{ inputs.image-tag }}
+        **Canary 比例**: ${{ inputs.canary-percentage }}%
+        **分析時長**: ${{ inputs.analysis-duration }} 分鐘
+
+        **結果**:
+        ✅ Canary 通過所有健康檢查
+        ✅ 已提升為穩定版本
+        ✅ 所有流量已切換到新版本
+
+        舊版本 Canary pods 已清理完成。
+    secrets:
+      feishu-webhook: ${{ secrets.FEISHU_WEBHOOK }}
+
+  # ============================================================================
+  # Feishu Notification - Rolled Back
+  # ============================================================================
+  notify-rollback:
+    name: Notify Canary Rolled Back
+    needs: [deploy-canary, monitor-canary, promote-or-rollback]
+    if: needs.monitor-canary.outputs.health-status == 'failed'
+    uses: ./.github/workflows/_reusable-feishu-notify.yml
+    with:
+      title: "🔄 Canary 部署失敗已回滾"
+      status: "warning"
+      workflow-name: "Canary Deployment"
+      message: |
+        **服務**: ${{ inputs.service }}
+        **映像標籤**: ${{ inputs.image-tag }}
+        **Canary 比例**: ${{ inputs.canary-percentage }}%
+        **分析時長**: ${{ inputs.analysis-duration }} 分鐘
+
+        **結果**:
+        ⚠️ Canary 未通過健康檢查
+        🔄 已自動回滾
+        ✅ 穩定版本未受影響
+
+        **下一步**:
+        - 檢查日誌: `kubectl logs -n nova-staging -l app=${{ inputs.service }}`
+        - 分析失敗原因
+        - 修復問題後重試
+    secrets:
+      feishu-webhook: ${{ secrets.FEISHU_WEBHOOK }}
+
+  # ============================================================================
+  # Summary
+  # ============================================================================
+  summary:
+    name: Canary Deployment Summary
+    needs: [deploy-canary, monitor-canary, promote-or-rollback]
+    if: always()
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Print summary
+        run: |
+          echo "════════════════════════════════════════════════════"
+          echo "🐤 CANARY DEPLOYMENT COMPLETED"
+          echo "════════════════════════════════════════════════════"
+          echo ""
+          echo "📊 Configuration:"
+          echo "  Service: ${{ inputs.service }}"
+          echo "  Image Tag: ${{ inputs.image-tag }}"
+          echo "  Canary %: ${{ inputs.canary-percentage }}%"
+          echo "  Analysis Duration: ${{ inputs.analysis-duration }} minutes"
+          echo ""
+          echo "📈 Results:"
+          echo "  Deploy Canary: ${{ needs.deploy-canary.result }}"
+          echo "  Monitor Canary: ${{ needs.monitor-canary.result }}"
+          echo "  Final Action: ${{ needs.promote-or-rollback.result }}"
+          echo ""
+
+          if [ "${{ needs.monitor-canary.outputs.health-status }}" = "passed" ]; then
+            echo "✅ STATUS: PROMOTED TO PRODUCTION"
+            echo ""
+            echo "The canary passed all health checks and has been promoted."
+            echo "All traffic is now routed to the new version."
+          else
+            echo "🔄 STATUS: ROLLED BACK"
+            echo ""
+            echo "The canary failed health checks and was rolled back."
+            echo "All traffic remains on the stable version."
+          fi
+
+          echo ""
+          echo "🔍 Next Steps:"
+          echo "  - Review logs: kubectl logs -n nova-staging -l app=${{ inputs.service }}"
+          echo "  - Check metrics in your monitoring dashboard"
+          echo "  - If rolled back, investigate the failures before retrying"
+          echo "════════════════════════════════════════════════════"

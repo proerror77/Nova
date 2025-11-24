@@ -6,7 +6,7 @@ on:
 env:
   AWS_REGION: ap-northeast-1
   CLUSTER_NAME: nova-staging
-  ROLE_TO_ASSUME: arn:aws:iam::025434362120:role/github-actions-role
+  ROLE_TO_ASSUME: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/github-actions-role
 
 concurrency:
   group: install-clickhouse-operator

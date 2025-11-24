@@ -8,6 +8,9 @@ spec:
       containers:
       - name: content-service
         env:
+        # 強制開啟 gRPC TLS（staging 視為 ProductionLike，避免啟動檢查失敗）
+        - name: GRPC_TLS_ENABLED
+          value: "true"
         - name: KAFKA_BROKERS
           valueFrom:
             configMapKeyRef:

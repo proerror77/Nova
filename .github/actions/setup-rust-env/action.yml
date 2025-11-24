@@ -22,20 +22,18 @@ runs:
         sudo apt-get install -y protobuf-compiler
         protoc --version
 
-    - name: Cache Cargo dependencies
-      uses: actions/cache@v4
+    # ✅ OPTIMIZED: Use Swatinem/rust-cache for better performance
+    - name: Setup Rust Cache (Optimized)
+      uses: Swatinem/rust-cache@v2
       with:
-        path: |
-          ~/.cargo/bin/
-          ~/.cargo/registry/index/
-          ~/.cargo/registry/cache/
-          ~/.cargo/git/db/
-          backend/target/
-        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}-${{ inputs.cache-key-suffix }}
-        restore-keys: |
-          ${{ runner.os }}-cargo-${{ inputs.cache-key-suffix }}-
-          ${{ runner.os }}-cargo-
+        workspaces: backend
+        shared-key: nova-backend-${{ inputs.cache-key-suffix }}
+        cache-on-failure: true
+        cache-targets: true
+        cache-all-crates: true
+        save-if: ${{ github.ref == 'refs/heads/main' }}
 
+    # Keep tool caching separate for faster restoration
     - name: Cache Cargo tools
       uses: actions/cache@v4
       with:

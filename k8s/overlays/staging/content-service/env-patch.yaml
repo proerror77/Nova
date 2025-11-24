@@ -1,0 +1,16 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: content-service
+spec:
+  template:
+    spec:
+      containers:
+        - name: content-service
+          env:
+            - name: GRPC_TLS_ENABLED
+              value: "true"
+            - name: GRPC_SOCIAL_SERVICE_TIER
+              value: "1"
+            - name: GRPC_RANKING_SERVICE_TIER
+              value: "1"

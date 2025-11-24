@@ -26,9 +26,13 @@ concurrency:
   group: security-scan-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Default minimal permissions
+permissions:
+  contents: read
+
 env:
-  AWS_REGION: ap-northeast-1
-  ECR_REGISTRY: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com
+  AWS_REGION: ${{ vars.AWS_REGION || 'ap-northeast-1' }}
+  ECR_REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ vars.AWS_REGION || 'ap-northeast-1' }}.amazonaws.com
   REGISTRY_ALIAS: nova
 
 jobs:
@@ -142,18 +146,28 @@ jobs:
     runs-on: ubuntu-latest
     needs: [sast-scan, dependency-scan]
     if: github.event_name == 'push'
+    permissions:
+      id-token: write
+      contents: read
+      security-events: write
 
     strategy:
       matrix:
         service:
-          - auth-service
+          # Active V2 / current services with Dockerfiles
+          - analytics-service
+          - identity-service
           - content-service
           - feed-service
           - media-service
-          - messaging-service
+          - graph-service
+          - social-service
+          - ranking-service
+          - realtime-chat-service
+          - trust-safety-service
           - search-service
-          - streaming-service
           - graphql-gateway
+          - notification-service
 
     steps:
       - name: Checkout code
@@ -162,12 +176,14 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Configure AWS credentials
+      - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/github-actions-role
           aws-region: ${{ env.AWS_REGION }}
+          audience: sts.amazonaws.com
+          role-session-name: gha-security-scan-${{ github.run_id }}
+          role-skip-session-tagging: true
 
       - name: Login to ECR
         uses: aws-actions/amazon-ecr-login@v2
@@ -202,7 +218,7 @@ jobs:
           severity: HIGH
 
       - name: Upload Trivy results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@v2
+        uses: github/codeql-action/upload-sarif@v3
         if: always()
         with:
           sarif_file: trivy-${{ matrix.service }}-results.sarif
@@ -219,9 +235,10 @@ jobs:
     strategy:
       matrix:
         service:
-          - auth-service
-          - content-service
-          - feed-service
+          # Sample services for SBOM generation (reduce matrix size for faster builds)
+          - analytics-service
+          - identity-service
+          - graphql-gateway
 
     steps:
       - name: Checkout code
@@ -242,7 +259,7 @@ jobs:
             > sbom-${{ matrix.service }}-cyclonedx.json
 
       - name: Upload SBOMs
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: sbom-${{ matrix.service }}
           path: sbom-${{ matrix.service }}-*.json
@@ -262,9 +279,10 @@ jobs:
     strategy:
       matrix:
         service:
-          - auth-service
-          - content-service
-          - feed-service
+          # Sample services for signing (reduce matrix size for faster builds)
+          - analytics-service
+          - identity-service
+          - graphql-gateway
 
     steps:
       - name: Checkout code
@@ -275,12 +293,14 @@ jobs:
         with:
           cosign-release: 'v2.2.0'
 
-      - name: Configure AWS credentials
+      - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/github-actions-role
           aws-region: ${{ env.AWS_REGION }}
+          audience: sts.amazonaws.com
+          role-session-name: gha-security-scan-${{ github.run_id }}
+          role-skip-session-tagging: true
 
       - name: Login to ECR
         uses: aws-actions/amazon-ecr-login@v2
