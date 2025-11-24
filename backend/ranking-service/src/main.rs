@@ -1,13 +1,20 @@
+use anyhow::{anyhow, Context, Result};
 use ranking_service::{
     grpc::{ranking_proto::ranking_service_server::RankingServiceServer, RankingServiceImpl},
     Config, DiversityLayer, RankingLayer, RecallLayer,
 };
 use tonic::transport::Server;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // rustls 0.23 requires selecting a CryptoProvider at runtime
+    if let Err(err) = rustls::crypto::aws_lc_rs::default_provider().install_default() {
+        eprintln!("Failed to install rustls crypto provider: {:?}", err);
+        return Err(anyhow!("Unable to install TLS crypto provider: {:?}", err).into());
+    }
+
     // Initialize tracing
     tracing_subscriber::registry()
         .with(fmt::layer())
@@ -47,7 +54,47 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     info!("gRPC server listening on {}", addr);
 
-    Server::builder()
+    // Load TLS configuration
+    let tls_required = matches!(
+        std::env::var("APP_ENV")
+            .unwrap_or_else(|_| "development".to_string())
+            .to_ascii_lowercase()
+            .as_str(),
+        "production" | "staging"
+    );
+
+    let tls_config = match grpc_tls::GrpcServerTlsConfig::from_env() {
+        Ok(cfg) => {
+            info!("gRPC TLS configuration loaded for ranking-service");
+            Some(cfg)
+        }
+        Err(err) => {
+            if tls_required {
+                return Err(anyhow!(
+                    "TLS is required in production/staging but failed to load: {err}"
+                )
+                .into());
+            }
+            warn!(
+                error=%err,
+                "TLS configuration missing - starting without TLS (development only)"
+            );
+            None
+        }
+    };
+
+    // Build server with optional TLS
+    let mut server_builder = Server::builder();
+    if let Some(cfg) = tls_config {
+        let server_tls = cfg
+            .build_server_tls()
+            .context("Failed to build server TLS config")?;
+        server_builder = server_builder
+            .tls_config(server_tls)
+            .context("Failed to configure gRPC TLS")?;
+    }
+
+    server_builder
         .add_service(RankingServiceServer::new(ranking_service))
         .serve(addr)
         .await

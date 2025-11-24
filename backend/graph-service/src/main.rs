@@ -3,18 +3,24 @@ mod domain;
 mod grpc;
 mod repository;
 
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use config::Config;
 use grpc::server::graph::graph_service_server::GraphServiceServer;
 use grpc::GraphServiceImpl;
 use repository::GraphRepository;
 use tonic::transport::Server;
 use tonic_health::server::health_reporter;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    // rustls 0.23 requires selecting a CryptoProvider at runtime
+    if let Err(err) = rustls::crypto::aws_lc_rs::default_provider().install_default() {
+        eprintln!("Failed to install rustls crypto provider: {:?}", err);
+        return Err(anyhow!("Unable to install TLS crypto provider: {:?}", err));
+    }
+
     // Initialize tracing
     tracing_subscriber::registry()
         .with(
@@ -70,8 +76,47 @@ async fn main() -> Result<()> {
 
     info!("Starting gRPC server on {}", addr);
 
+    // Load TLS configuration
+    let tls_required = matches!(
+        std::env::var("APP_ENV")
+            .unwrap_or_else(|_| "development".to_string())
+            .to_ascii_lowercase()
+            .as_str(),
+        "production" | "staging"
+    );
+
+    let tls_config = match grpc_tls::GrpcServerTlsConfig::from_env() {
+        Ok(cfg) => {
+            info!("gRPC TLS configuration loaded for graph-service");
+            Some(cfg)
+        }
+        Err(err) => {
+            if tls_required {
+                return Err(anyhow!(
+                    "TLS is required in production/staging but failed to load: {err}"
+                ));
+            }
+            warn!(
+                error=%err,
+                "TLS configuration missing - starting without TLS (development only)"
+            );
+            None
+        }
+    };
+
+    // Build server with optional TLS
+    let mut server_builder = Server::builder();
+    if let Some(cfg) = tls_config {
+        let server_tls = cfg
+            .build_server_tls()
+            .context("Failed to build server TLS config")?;
+        server_builder = server_builder
+            .tls_config(server_tls)
+            .context("Failed to configure gRPC TLS")?;
+    }
+
     // Start gRPC server
-    Server::builder()
+    server_builder
         .add_service(health_service)
         .add_service(GraphServiceServer::new(graph_service))
         .serve(addr)

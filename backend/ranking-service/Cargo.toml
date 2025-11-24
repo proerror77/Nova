@@ -40,6 +40,9 @@ prost.workspace = true
 tonic-health.workspace = true
 tower.workspace = true
 
+# TLS
+rustls = { version = "0.23", default-features = false, features = ["aws_lc_rs", "logging", "std", "tls12"] }
+
 # Shared libraries
 resilience = { path = "../libs/resilience" }
 grpc-tls = { path = "../libs/grpc-tls" }
