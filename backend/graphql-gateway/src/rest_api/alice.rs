@@ -34,15 +34,15 @@ pub struct AliceStatusResponse {
 pub async fn get_status(_clients: web::Data<ServiceClients>) -> Result<HttpResponse> {
     info!("GET /api/v2/alice/status");
 
-    // For now, return mock response
-    // TODO: Implement actual Alice service status check when alice-service is available
-    let response = AliceStatusResponse {
-        status: "operational".to_string(),
-        version: "5.1".to_string(),
-        available: true,
-    };
-
-    Ok(HttpResponse::Ok().json(response))
+    // Alice 尚未接通，明確返回 503 並標註為 mock
+    Ok(HttpResponse::ServiceUnavailable()
+        .insert_header(("X-Nova-Mock", "true"))
+        .json(serde_json::json!({
+            "status": "unavailable",
+            "version": "mock",
+            "available": false,
+            "message": "Alice service not integrated yet"
+        })))
 }
 
 /// POST /api/v2/alice/chat
@@ -53,15 +53,13 @@ pub async fn send_message(
 ) -> Result<HttpResponse> {
     info!(message = %req.message, "POST /api/v2/alice/chat");
 
-    // For now, return mock response
-    // TODO: Implement actual message forwarding to alice-service when available
-    let response = AliceChatResponse {
-        id: uuid::Uuid::new_v4().to_string(),
-        message: format!("Echo: {}", req.message),
-        timestamp: chrono::Utc::now().timestamp(),
-    };
-
-    Ok(HttpResponse::Ok().json(response))
+    Ok(HttpResponse::ServiceUnavailable()
+        .insert_header(("X-Nova-Mock", "true"))
+        .json(serde_json::json!({
+            "status": "unavailable",
+            "message": "Alice service not integrated yet",
+            "echo": req.message,
+        })))
 }
 
 /// POST /api/v2/alice/voice
@@ -69,10 +67,10 @@ pub async fn send_message(
 pub async fn voice_mode(_clients: web::Data<ServiceClients>) -> Result<HttpResponse> {
     info!("POST /api/v2/alice/voice");
 
-    // For now, return success
-    // TODO: Implement actual voice mode setup when alice-service is available
-    Ok(HttpResponse::Ok().json(serde_json::json!({
-        "status": "voice_mode_activated",
-        "session_id": uuid::Uuid::new_v4().to_string(),
-    })))
+    Ok(HttpResponse::ServiceUnavailable()
+        .insert_header(("X-Nova-Mock", "true"))
+        .json(serde_json::json!({
+            "status": "unavailable",
+            "message": "Alice voice mode not integrated yet",
+        })))
 }

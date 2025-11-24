@@ -1,0 +1,32 @@
+# Lightweight deployment using Debian slim (from local cache)
+FROM public.ecr.aws/debian/debian:bookworm-slim
+
+# Install minimal runtime dependencies
+RUN apt-get update && \
+    apt-get install -y \
+    ca-certificates \
+    curl \
+    libssl3 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy pre-built binary
+COPY .docker-bin/graphql-gateway /app/graphql-gateway
+RUN chmod +x /app/graphql-gateway
+
+# Create non-root user
+RUN useradd -m -u 1000 appuser && \
+    chown -R appuser:appuser /app
+
+USER appuser
+
+# Expose HTTP port
+EXPOSE 8080
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+    CMD curl -f http://localhost:8080/health || exit 1
+
+# Run the binary
+CMD ["/app/graphql-gateway"]

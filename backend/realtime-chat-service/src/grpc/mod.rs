@@ -114,9 +114,51 @@ impl RealtimeChatService for RealtimeChatServiceImpl {
         &self,
         request: Request<SendMessageRequest>,
     ) -> Result<Response<SendMessageResponse>, Status> {
-        let _req = request.into_inner();
-        // TODO: Implement send_message logic
-        Err(Status::unimplemented("send_message not yet implemented"))
+        let req = request.into_inner();
+
+        let conversation_id = Uuid::parse_str(&req.conversation_id)
+            .map_err(|_| Status::invalid_argument("invalid conversation id"))?;
+        let sender_id = Uuid::parse_str(&req.sender_id)
+            .map_err(|_| Status::invalid_argument("invalid sender id"))?;
+
+        // Authorization: sender must be a member
+        let is_member = ConversationService::is_member(&self.state.db, conversation_id, sender_id)
+            .await
+            .map_err(|e| Status::internal(format!("membership check failed: {e}")))?;
+
+        if !is_member {
+            return Err(Status::permission_denied(
+                "not a member of this conversation",
+            ));
+        }
+
+        // Basic payload selection: prefer content, fallback to media_url
+        let body = if !req.content.is_empty() {
+            req.content
+        } else if !req.media_url.is_empty() {
+            req.media_url
+        } else {
+            return Err(Status::invalid_argument(
+                "content or media_url must be provided",
+            ));
+        };
+
+        let content_bytes = body.as_bytes();
+        let message_id = crate::services::message_service::MessageService::send_message(
+            &self.state.db,
+            &self.state.encryption,
+            conversation_id,
+            sender_id,
+            content_bytes,
+        )
+        .await
+        .map_err(|e| Status::internal(format!("failed to send message: {e}")))?;
+
+        Ok(Response::new(SendMessageResponse {
+            message_id: message_id.to_string(),
+            timestamp: chrono::Utc::now().timestamp(),
+            status: "sent".to_string(),
+        }))
     }
 
     async fn get_conversation(
@@ -126,6 +168,20 @@ impl RealtimeChatService for RealtimeChatServiceImpl {
         let req = request.into_inner();
         let conversation_id = Uuid::parse_str(&req.conversation_id)
             .map_err(|_| Status::invalid_argument("invalid conversation id"))?;
+
+        let user_id = Uuid::parse_str(&req.user_id)
+            .map_err(|_| Status::invalid_argument("invalid user id"))?;
+
+        // Authorization: requester must be a member
+        let is_member = ConversationService::is_member(&self.state.db, conversation_id, user_id)
+            .await
+            .map_err(|e| Status::internal(format!("membership check failed: {e}")))?;
+
+        if !is_member {
+            return Err(Status::permission_denied(
+                "not a member of this conversation",
+            ));
+        }
 
         let meta_row = sqlx::query(
             "SELECT id, conversation_type, name, created_at, updated_at FROM conversations WHERE id = $1",
@@ -280,6 +336,20 @@ impl RealtimeChatService for RealtimeChatServiceImpl {
         let conversation_id = Uuid::parse_str(&req.conversation_id)
             .map_err(|_| Status::invalid_argument("invalid conversation id"))?;
         let limit = req.limit.clamp(1, 100) as usize;
+
+        let user_id = Uuid::parse_str(&req.user_id)
+            .map_err(|_| Status::invalid_argument("invalid user id"))?;
+
+        // Authorization: requester must be a member
+        let is_member = ConversationService::is_member(&self.state.db, conversation_id, user_id)
+            .await
+            .map_err(|e| Status::internal(format!("membership check failed: {e}")))?;
+
+        if !is_member {
+            return Err(Status::permission_denied(
+                "not a member of this conversation",
+            ));
+        }
 
         let before_ts = if req.before_message_id.is_empty() {
             None

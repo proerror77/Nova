@@ -17,7 +17,7 @@ use tracing::{error, info};
 
 use crate::clients::proto::auth::{
     auth_service_client::AuthServiceClient, GenerateInviteRequest, GetCurrentDeviceRequest,
-    ListDevicesRequest, LogoutDeviceRequest,
+    GetInvitationStatsRequest, ListDevicesRequest, ListInvitationsRequest, LogoutDeviceRequest,
 };
 use crate::clients::proto::chat::{ConversationType, CreateConversationRequest};
 use crate::clients::proto::social::{
@@ -514,6 +514,88 @@ pub async fn generate_invite_code(
         Ok(resp) => Ok(HttpResponse::Ok().json(resp)),
         Err(e) => {
             error!("generate_invite failed: {}", e);
+            Ok(HttpResponse::ServiceUnavailable().finish())
+        }
+    }
+}
+
+/// GET /api/v2/invitations
+/// List user's invitations
+pub async fn list_invitations(
+    http_req: HttpRequest,
+    clients: web::Data<ServiceClients>,
+) -> Result<HttpResponse> {
+    if http_req
+        .extensions()
+        .get::<AuthenticatedUser>()
+        .copied()
+        .is_none()
+    {
+        return Ok(HttpResponse::Unauthorized().finish());
+    }
+    info!("GET /api/v2/invitations");
+
+    let user_id = http_req
+        .extensions()
+        .get::<AuthenticatedUser>()
+        .copied()
+        .map(|u| u.0)
+        .unwrap();
+
+    let mut auth_client: AuthServiceClient<_> = clients.auth_client();
+    let req = ListInvitationsRequest {
+        user_id: user_id.to_string(),
+        limit: Some(50),
+        offset: None,
+    };
+
+    match clients
+        .call_auth(|| async move { auth_client.list_invitations(req).await })
+        .await
+    {
+        Ok(resp) => Ok(HttpResponse::Ok().json(resp)),
+        Err(e) => {
+            error!("list_invitations failed: {}", e);
+            Ok(HttpResponse::ServiceUnavailable().finish())
+        }
+    }
+}
+
+/// GET /api/v2/invitations/stats
+/// Get invitation statistics
+pub async fn get_invitation_stats(
+    http_req: HttpRequest,
+    clients: web::Data<ServiceClients>,
+) -> Result<HttpResponse> {
+    if http_req
+        .extensions()
+        .get::<AuthenticatedUser>()
+        .copied()
+        .is_none()
+    {
+        return Ok(HttpResponse::Unauthorized().finish());
+    }
+    info!("GET /api/v2/invitations/stats");
+
+    let user_id = http_req
+        .extensions()
+        .get::<AuthenticatedUser>()
+        .copied()
+        .map(|u| u.0)
+        .unwrap();
+
+    let mut auth_client: AuthServiceClient<_> = clients.auth_client();
+    let req = GetInvitationStatsRequest {
+        user_id: user_id.to_string(),
+    };
+
+    match clients
+        .call_auth(|| async move { auth_client.get_invitation_stats(req).await })
+        .await
+    {
+        Ok(resp) => Ok(HttpResponse::Ok().json(resp)),
+        Err(e) => {
+            error!("get_invitation_stats failed: {}", e);
             Ok(HttpResponse::ServiceUnavailable().finish())
         }
     }

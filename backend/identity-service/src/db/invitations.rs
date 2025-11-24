@@ -128,13 +128,12 @@ pub async fn list_user_invitations(
     .await
     .map_err(|e| IdentityError::Database(e.to_string()))?;
 
-    let total = sqlx::query_scalar::<_, i64>(
-        "SELECT COUNT(*) FROM invite_codes WHERE issuer_user_id = $1",
-    )
-    .bind(user_id)
-    .fetch_one(pool)
-    .await
-    .map_err(|e| IdentityError::Database(e.to_string()))?;
+    let total =
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM invite_codes WHERE issuer_user_id = $1")
+            .bind(user_id)
+            .fetch_one(pool)
+            .await
+            .map_err(|e| IdentityError::Database(e.to_string()))?;
 
     Ok((invites, total))
 }

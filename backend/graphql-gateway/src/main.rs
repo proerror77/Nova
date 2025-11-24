@@ -363,10 +363,22 @@ async fn main() -> std::io::Result<()> {
                 "/api/v2/invitations/generate",
                 web::post().to(rest_api::generate_invite_code),
             )
+            .route(
+                "/api/v2/invitations",
+                web::get().to(rest_api::list_invitations),
+            )
+            .route(
+                "/api/v2/invitations/stats",
+                web::get().to(rest_api::get_invitation_stats),
+            )
             // ✅ Chat & Group API
             .route(
                 "/api/v2/chat/groups/create",
                 web::post().to(rest_api::create_group_chat),
+            )
+            .route(
+                "/api/v2/chat/conversations/{id}",
+                web::get().to(rest_api::get_conversation_by_id),
             )
     })
     .bind(&bind_addr)?

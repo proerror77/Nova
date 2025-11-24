@@ -1,0 +1,57 @@
+# Multi-architecture build with native compilation
+# Builds x86_64 and ARM64 binaries inside their respective platform containers
+
+# Stage 1: Build binary natively for each platform
+FROM --platform=$BUILDPLATFORM public.ecr.aws/docker/library/rust:1.83-slim AS builder
+
+# Install build dependencies
+RUN apt-get update && \
+    apt-get install -y \
+    pkg-config \
+    libssl-dev \
+    protobuf-compiler \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /workspace
+
+# Copy workspace files
+COPY Cargo.toml Cargo.lock ./
+COPY libs/crypto-core ./libs/crypto-core
+COPY graphql-gateway ./graphql-gateway
+COPY realtime-chat-service/proto ./realtime-chat-service/proto
+
+# Build the binary for the target platform
+RUN cargo build --release -p graphql-gateway
+
+# Stage 2: Runtime image
+FROM public.ecr.aws/debian/debian:bookworm-slim
+
+# Install minimal runtime dependencies
+RUN apt-get update && \
+    apt-get install -y \
+    ca-certificates \
+    curl \
+    libssl3 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy compiled binary from builder
+COPY --from=builder /workspace/target/release/graphql-gateway /app/graphql-gateway
+RUN chmod +x /app/graphql-gateway
+
+# Create non-root user
+RUN useradd -m -u 1000 appuser && \
+    chown -R appuser:appuser /app
+
+USER appuser
+
+# Expose HTTP port
+EXPOSE 8080
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+    CMD curl -f http://localhost:8080/health || exit 1
+
+# Run the binary
+CMD ["/app/graphql-gateway"]

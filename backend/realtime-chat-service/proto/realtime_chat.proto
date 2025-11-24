@@ -62,6 +62,7 @@ message GetMessagesRequest {
   string conversation_id = 1;
   int32 limit = 2;
   string before_message_id = 3;
+  string user_id = 4;
 }
 
 message GetMessagesResponse {
@@ -79,6 +80,7 @@ message SendMessageRequest {
   string encrypted_content = 6;  // E2EE encrypted payload
   string ephemeral_public_key = 7;  // E2EE ephemeral key
   string reply_to_message_id = 8;
+  string sender_id = 9; // UUID of sender (for membership + auth)
 }
 
 message SendMessageResponse {
@@ -89,6 +91,7 @@ message SendMessageResponse {
 
 message GetConversationRequest {
   string conversation_id = 1;
+  string user_id = 2;
 }
 
 message GetConversationResponse {
