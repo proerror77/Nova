@@ -1,4 +1,4 @@
-use crate::repository::GraphRepository;
+use crate::repository::{GraphRepository, GraphRepositoryTrait};
 use std::sync::Arc;
 use tonic::{Request, Response, Status};
 use tracing::{error, info};
@@ -13,17 +13,26 @@ use graph::graph_service_server::GraphService;
 use graph::*;
 
 pub struct GraphServiceImpl {
-    repo: Arc<GraphRepository>,
+    repo: Arc<dyn GraphRepositoryTrait + Send + Sync>,
     /// Optional write token; if None => writes are disabled (read-only mode).
     write_token: Option<String>,
 }
 
 impl GraphServiceImpl {
+    /// Create GraphServiceImpl with legacy Neo4j-only repository
     pub fn new(repo: GraphRepository, write_token: Option<String>) -> Self {
         Self {
             repo: Arc::new(repo),
             write_token,
         }
+    }
+
+    /// Create GraphServiceImpl with any repository implementing GraphRepositoryTrait
+    pub fn new_with_trait(
+        repo: Arc<dyn GraphRepositoryTrait + Send + Sync>,
+        write_token: Option<String>,
+    ) -> Self {
+        Self { repo, write_token }
     }
 
     fn authorize_write<T>(&self, req: &Request<T>) -> Result<(), Status> {

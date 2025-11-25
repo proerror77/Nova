@@ -1,3 +1,4 @@
+use super::GraphRepositoryTrait;
 use crate::domain::edge::GraphStats;
 use anyhow::{Context, Result};
 use neo4rs::{query, Graph};
@@ -589,5 +590,79 @@ mod tests {
         // Cleanup
         repo.delete_follow(follower, followee1).await.ok();
         repo.delete_follow(follower, followee2).await.ok();
+    }
+}
+
+// Implement GraphRepositoryTrait for GraphRepository
+#[async_trait::async_trait]
+impl GraphRepositoryTrait for GraphRepository {
+    async fn create_follow(&self, follower_id: Uuid, followee_id: Uuid) -> Result<()> {
+        Self::create_follow(self, follower_id, followee_id).await
+    }
+
+    async fn delete_follow(&self, follower_id: Uuid, followee_id: Uuid) -> Result<()> {
+        Self::delete_follow(self, follower_id, followee_id).await
+    }
+
+    async fn create_mute(&self, muter_id: Uuid, mutee_id: Uuid) -> Result<()> {
+        Self::create_mute(self, muter_id, mutee_id).await
+    }
+
+    async fn delete_mute(&self, muter_id: Uuid, mutee_id: Uuid) -> Result<()> {
+        Self::delete_mute(self, muter_id, mutee_id).await
+    }
+
+    async fn create_block(&self, blocker_id: Uuid, blocked_id: Uuid) -> Result<()> {
+        Self::create_block(self, blocker_id, blocked_id).await
+    }
+
+    async fn delete_block(&self, blocker_id: Uuid, blocked_id: Uuid) -> Result<()> {
+        Self::delete_block(self, blocker_id, blocked_id).await
+    }
+
+    async fn get_followers(
+        &self,
+        user_id: Uuid,
+        limit: i32,
+        offset: i32,
+    ) -> Result<(Vec<Uuid>, i32, bool)> {
+        Self::get_followers(self, user_id, limit, offset).await
+    }
+
+    async fn get_following(
+        &self,
+        user_id: Uuid,
+        limit: i32,
+        offset: i32,
+    ) -> Result<(Vec<Uuid>, i32, bool)> {
+        Self::get_following(self, user_id, limit, offset).await
+    }
+
+    async fn is_following(&self, follower_id: Uuid, followee_id: Uuid) -> Result<bool> {
+        Self::is_following(self, follower_id, followee_id).await
+    }
+
+    async fn is_muted(&self, muter_id: Uuid, mutee_id: Uuid) -> Result<bool> {
+        Self::is_muted(self, muter_id, mutee_id).await
+    }
+
+    async fn is_blocked(&self, blocker_id: Uuid, blocked_id: Uuid) -> Result<bool> {
+        Self::is_blocked(self, blocker_id, blocked_id).await
+    }
+
+    async fn batch_check_following(
+        &self,
+        follower_id: Uuid,
+        followee_ids: Vec<Uuid>,
+    ) -> Result<std::collections::HashMap<String, bool>> {
+        Self::batch_check_following(self, follower_id, followee_ids).await
+    }
+
+    async fn health_check(&self) -> Result<()> {
+        let is_healthy = Self::health_check(self).await?;
+        if !is_healthy {
+            anyhow::bail!("Neo4j health check failed");
+        }
+        Ok(())
     }
 }

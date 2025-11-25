@@ -1,5 +1,4 @@
 use anyhow::{Context, Result};
-use chrono::{DateTime, Utc};
 use sqlx::PgPool;
 use tracing::debug;
 use uuid::Uuid;
@@ -60,20 +59,6 @@ impl PostgresGraphRepository {
 
     /// Create mute relationship
     pub async fn create_mute(&self, muter_id: Uuid, mutee_id: Uuid) -> Result<()> {
-        // Check if mutes table exists first
-        let table_exists: bool = sqlx::query_scalar(
-            "SELECT EXISTS (
-                SELECT FROM information_schema.tables
-                WHERE table_schema = 'public' AND table_name = 'mutes'
-            )"
-        )
-        .fetch_one(&self.pool)
-        .await?;
-
-        if !table_exists {
-            return Err(anyhow::anyhow!("Mutes table does not exist"));
-        }
-
         sqlx::query(
             r#"
             INSERT INTO mutes (muter_id, muted_id, created_at)
@@ -85,7 +70,7 @@ impl PostgresGraphRepository {
         .bind(mutee_id)
         .execute(&self.pool)
         .await
-        .context("Failed to create mute in PostgreSQL")?;
+        .context("Failed to create mute in PostgreSQL - ensure mutes table exists")?;
 
         debug!("Created MUTES in PostgreSQL: {} -> {}", muter_id, mutee_id);
         Ok(())
@@ -108,19 +93,6 @@ impl PostgresGraphRepository {
 
     /// Create block relationship
     pub async fn create_block(&self, blocker_id: Uuid, blocked_id: Uuid) -> Result<()> {
-        let table_exists: bool = sqlx::query_scalar(
-            "SELECT EXISTS (
-                SELECT FROM information_schema.tables
-                WHERE table_schema = 'public' AND table_name = 'blocks'
-            )"
-        )
-        .fetch_one(&self.pool)
-        .await?;
-
-        if !table_exists {
-            return Err(anyhow::anyhow!("Blocks table does not exist"));
-        }
-
         sqlx::query(
             r#"
             INSERT INTO blocks (blocker_id, blocked_id, created_at)
@@ -132,7 +104,7 @@ impl PostgresGraphRepository {
         .bind(blocked_id)
         .execute(&self.pool)
         .await
-        .context("Failed to create block in PostgreSQL")?;
+        .context("Failed to create block in PostgreSQL - ensure blocks table exists")?;
 
         debug!("Created BLOCKS in PostgreSQL: {} -> {}", blocker_id, blocked_id);
         Ok(())

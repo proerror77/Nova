@@ -7,7 +7,9 @@ use anyhow::{anyhow, Context, Result};
 use config::Config;
 use grpc::server::graph::graph_service_server::GraphServiceServer;
 use grpc::GraphServiceImpl;
-use repository::GraphRepository;
+use repository::{DualWriteRepository, GraphRepository, PostgresGraphRepository};
+use sqlx::PgPool;
+use std::sync::Arc;
 use tonic::transport::Server;
 use tonic_health::server::health_reporter;
 use tracing::{error, info, warn};
@@ -37,33 +39,102 @@ async fn main() -> Result<()> {
     let config = Config::from_env().context("Failed to load configuration")?;
 
     info!(
-        "Configuration loaded: gRPC port = {}, Neo4j URI = {}",
-        config.server.grpc_port, config.neo4j.uri
+        "Configuration loaded: gRPC port = {}, Neo4j URI = {}, Dual-write = {}",
+        config.server.grpc_port, config.neo4j.uri, config.enable_dual_write
     );
 
-    // Initialize Neo4j repository
-    let repo = GraphRepository::new(
-        &config.neo4j.uri,
-        &config.neo4j.user,
-        &config.neo4j.password,
-    )
-    .await
-    .context("Failed to initialize Neo4j repository")?;
+    if config.enable_dual_write {
+        info!("🔄 Dual-write mode ENABLED (PostgreSQL + Neo4j)");
 
-    info!("Connected to Neo4j successfully");
+        // Initialize PostgreSQL pool
+        let pg_pool = PgPool::connect(&config.database_url)
+            .await
+            .context("Failed to connect to PostgreSQL")?;
 
-    // Verify Neo4j connection
-    if let Err(e) = repo.health_check().await {
-        error!("Neo4j health check failed: {}", e);
-        return Err(e);
+        info!("✅ Connected to PostgreSQL successfully");
+
+        // Initialize Neo4j repository
+        let neo4j_repo = GraphRepository::new(
+            &config.neo4j.uri,
+            &config.neo4j.user,
+            &config.neo4j.password,
+        )
+        .await
+        .context("Failed to initialize Neo4j repository")?;
+
+        info!("✅ Connected to Neo4j successfully");
+
+        // Create PostgreSQL repository
+        let postgres_repo = PostgresGraphRepository::new(pg_pool);
+
+        // Create dual-write repository (non-strict mode: Neo4j failures don't break writes)
+        let dual_repo = DualWriteRepository::new(
+            postgres_repo,
+            Arc::new(neo4j_repo),
+            false, // strict_mode = false (continue on Neo4j errors)
+        );
+
+        // Verify health
+        let (pg_healthy, neo4j_healthy) = dual_repo.health_check().await?;
+        info!("Health check: PostgreSQL = {}, Neo4j = {}", pg_healthy, neo4j_healthy);
+
+        if !pg_healthy {
+            error!("PostgreSQL health check failed - aborting");
+            return Err(anyhow!("PostgreSQL is not healthy"));
+        }
+
+        if !neo4j_healthy {
+            warn!("Neo4j health check failed - will fallback to PostgreSQL");
+        }
+
+        // Create gRPC service with dual-write repository
+        let graph_service = GraphServiceImpl::new_with_trait(
+            Arc::new(dual_repo),
+            config.internal_write_token.clone(),
+        );
+
+        info!("🚀 Graph service initialized with dual-write");
+
+        // Setup and start server (rest of the code continues below)
+        start_grpc_server(graph_service, &config).await?;
+    } else {
+        info!("⚠️  Dual-write mode DISABLED - Neo4j only (legacy mode)");
+
+        // Initialize Neo4j repository only (legacy mode)
+        let repo = GraphRepository::new(
+            &config.neo4j.uri,
+            &config.neo4j.user,
+            &config.neo4j.password,
+        )
+        .await
+        .context("Failed to initialize Neo4j repository")?;
+
+        info!("Connected to Neo4j successfully");
+
+        // Verify Neo4j connection
+        if let Err(e) = repo.health_check().await {
+            error!("Neo4j health check failed: {}", e);
+            return Err(e);
+        }
+
+        info!("Neo4j health check passed");
+
+        // Create gRPC service (legacy mode)
+        let graph_service = GraphServiceImpl::new(repo, config.internal_write_token.clone());
+
+        // Setup and start server
+        start_grpc_server(graph_service, &config).await?;
     }
 
-    info!("Neo4j health check passed");
+    Ok(())
+}
 
-    // Create gRPC service
-    let graph_service = GraphServiceImpl::new(repo, config.internal_write_token.clone());
+async fn start_grpc_server(
+    graph_service: GraphServiceImpl,
+    config: &Config,
+) -> Result<()> {
 
-    // Setup health reporting
+// Setup health reporting
     let (mut health_reporter, health_service) = health_reporter();
     health_reporter
         .set_serving::<GraphServiceServer<GraphServiceImpl>>()

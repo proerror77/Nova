@@ -1,5 +1,6 @@
 use super::graph_repository::GraphRepository;
 use super::postgres_repository::PostgresGraphRepository;
+use super::GraphRepositoryTrait;
 use crate::domain::edge::GraphStats;
 use anyhow::{Context, Result};
 use std::sync::Arc;
@@ -35,164 +36,120 @@ impl DualWriteRepository {
         Ok((pg_healthy, neo4j_healthy))
     }
 
-    /// Create follow with dual-write
-    pub async fn create_follow(&self, follower_id: Uuid, followee_id: Uuid) -> Result<()> {
+    /// Helper: Execute dual-write with automatic rollback on Neo4j failure (strict mode only)
+    async fn execute_dual_write<PgFut, Neo4jFut, RollbackFut>(
+        &self,
+        operation: &str,
+        edge_desc: String,
+        pg_write: PgFut,
+        neo4j_write: Neo4jFut,
+        pg_rollback: Option<RollbackFut>,
+    ) -> Result<()>
+    where
+        PgFut: std::future::Future<Output = Result<()>>,
+        Neo4jFut: std::future::Future<Output = Result<()>>,
+        RollbackFut: std::future::Future<Output = Result<()>>,
+    {
         // Step 1: Write to PostgreSQL (source of truth) - MUST succeed
-        self.postgres
-            .create_follow(follower_id, followee_id)
-            .await
-            .context("Failed to write follow to PostgreSQL")?;
+        pg_write.await.context("PostgreSQL write failed")?;
 
-        // Step 2: Write to Neo4j (optimization) - log error but don't fail
-        if let Err(e) = self.neo4j.create_follow(follower_id, followee_id).await {
-            error!(
-                "Neo4j write failed for FOLLOWS ({} -> {}): {}",
-                follower_id, followee_id, e
-            );
-
-            // Increment failure metric
-            metrics::counter!("neo4j.write.failure", "operation" => "create_follow").increment(1);
+        // Step 2: Write to Neo4j (best effort)
+        if let Err(e) = neo4j_write.await {
+            error!("Neo4j {} failed for {}: {}", operation, edge_desc, e);
+            tracing::warn!("neo4j_write_failure{{operation=\"{}\"}}",operation);
 
             if self.strict_mode {
-                // In strict mode, rollback PostgreSQL write
-                warn!("Strict mode: rolling back PostgreSQL follow due to Neo4j failure");
-                self.postgres
-                    .delete_follow(follower_id, followee_id)
-                    .await
-                    .ok(); // Best effort rollback
+                warn!("Strict mode: attempting rollback due to Neo4j failure");
+                if let Some(rollback) = pg_rollback {
+                    if let Err(rollback_err) = rollback.await {
+                        error!(
+                            "CRITICAL: Neo4j {} failed AND PostgreSQL rollback failed. Data inconsistency: {}. Rollback error: {}",
+                            operation, edge_desc, rollback_err
+                        );
+                    }
+                }
                 return Err(e);
             } else {
-                // In non-strict mode, continue despite Neo4j failure
                 warn!(
-                    "Non-strict mode: PostgreSQL write succeeded but Neo4j failed (data drift possible)"
+                    "Non-strict mode: PostgreSQL {} succeeded but Neo4j failed (data drift possible for {})",
+                    operation, edge_desc
                 );
             }
-        } else {
-            metrics::counter!("neo4j.write.success", "operation" => "create_follow").increment(1);
         }
 
         Ok(())
+    }
+
+    /// Create follow with dual-write
+    pub async fn create_follow(&self, follower_id: Uuid, followee_id: Uuid) -> Result<()> {
+        self.execute_dual_write(
+            "create_follow",
+            format!("FOLLOWS {} -> {}", follower_id, followee_id),
+            self.postgres.create_follow(follower_id, followee_id),
+            self.neo4j.create_follow(follower_id, followee_id),
+            Some(self.postgres.delete_follow(follower_id, followee_id)),
+        )
+        .await
     }
 
     /// Delete follow with dual-write
     pub async fn delete_follow(&self, follower_id: Uuid, followee_id: Uuid) -> Result<()> {
-        // PostgreSQL first (source of truth)
-        self.postgres
-            .delete_follow(follower_id, followee_id)
-            .await
-            .context("Failed to delete follow from PostgreSQL")?;
-
-        // Neo4j second (best effort)
-        if let Err(e) = self.neo4j.delete_follow(follower_id, followee_id).await {
-            error!(
-                "Neo4j delete failed for FOLLOWS ({} -> {}): {}",
-                follower_id, followee_id, e
-            );
-            metrics::counter!("neo4j.write.failure", "operation" => "delete_follow").increment(1);
-
-            if self.strict_mode {
-                return Err(e);
-            }
-        } else {
-            metrics::counter!("neo4j.write.success", "operation" => "delete_follow").increment(1);
-        }
-
-        Ok(())
+        self.execute_dual_write::<_, _, std::future::Ready<Result<()>>>(
+            "delete_follow",
+            format!("FOLLOWS {} -> {}", follower_id, followee_id),
+            self.postgres.delete_follow(follower_id, followee_id),
+            self.neo4j.delete_follow(follower_id, followee_id),
+            None, // No rollback for delete operations
+        )
+        .await
     }
 
     /// Create mute with dual-write
     pub async fn create_mute(&self, muter_id: Uuid, mutee_id: Uuid) -> Result<()> {
-        self.postgres
-            .create_mute(muter_id, mutee_id)
-            .await
-            .context("Failed to write mute to PostgreSQL")?;
-
-        if let Err(e) = self.neo4j.create_mute(muter_id, mutee_id).await {
-            error!("Neo4j write failed for MUTES ({} -> {}): {}", muter_id, mutee_id, e);
-            metrics::counter!("neo4j.write.failure", "operation" => "create_mute").increment(1);
-
-            if self.strict_mode {
-                self.postgres.delete_mute(muter_id, mutee_id).await.ok();
-                return Err(e);
-            }
-        } else {
-            metrics::counter!("neo4j.write.success", "operation" => "create_mute").increment(1);
-        }
-
-        Ok(())
+        self.execute_dual_write(
+            "create_mute",
+            format!("MUTES {} -> {}", muter_id, mutee_id),
+            self.postgres.create_mute(muter_id, mutee_id),
+            self.neo4j.create_mute(muter_id, mutee_id),
+            Some(self.postgres.delete_mute(muter_id, mutee_id)),
+        )
+        .await
     }
 
     /// Delete mute with dual-write
     pub async fn delete_mute(&self, muter_id: Uuid, mutee_id: Uuid) -> Result<()> {
-        self.postgres
-            .delete_mute(muter_id, mutee_id)
-            .await
-            .context("Failed to delete mute from PostgreSQL")?;
-
-        if let Err(e) = self.neo4j.delete_mute(muter_id, mutee_id).await {
-            error!("Neo4j delete failed for MUTES ({} -> {}): {}", muter_id, mutee_id, e);
-            metrics::counter!("neo4j.write.failure", "operation" => "delete_mute").increment(1);
-
-            if self.strict_mode {
-                return Err(e);
-            }
-        } else {
-            metrics::counter!("neo4j.write.success", "operation" => "delete_mute").increment(1);
-        }
-
-        Ok(())
+        self.execute_dual_write::<_, _, std::future::Ready<Result<()>>>(
+            "delete_mute",
+            format!("MUTES {} -> {}", muter_id, mutee_id),
+            self.postgres.delete_mute(muter_id, mutee_id),
+            self.neo4j.delete_mute(muter_id, mutee_id),
+            None, // No rollback for delete operations
+        )
+        .await
     }
 
     /// Create block with dual-write
     pub async fn create_block(&self, blocker_id: Uuid, blocked_id: Uuid) -> Result<()> {
-        self.postgres
-            .create_block(blocker_id, blocked_id)
-            .await
-            .context("Failed to write block to PostgreSQL")?;
-
-        if let Err(e) = self.neo4j.create_block(blocker_id, blocked_id).await {
-            error!(
-                "Neo4j write failed for BLOCKS ({} -> {}): {}",
-                blocker_id, blocked_id, e
-            );
-            metrics::counter!("neo4j.write.failure", "operation" => "create_block").increment(1);
-
-            if self.strict_mode {
-                self.postgres
-                    .delete_block(blocker_id, blocked_id)
-                    .await
-                    .ok();
-                return Err(e);
-            }
-        } else {
-            metrics::counter!("neo4j.write.success", "operation" => "create_block").increment(1);
-        }
-
-        Ok(())
+        self.execute_dual_write(
+            "create_block",
+            format!("BLOCKS {} -> {}", blocker_id, blocked_id),
+            self.postgres.create_block(blocker_id, blocked_id),
+            self.neo4j.create_block(blocker_id, blocked_id),
+            Some(self.postgres.delete_block(blocker_id, blocked_id)),
+        )
+        .await
     }
 
     /// Delete block with dual-write
     pub async fn delete_block(&self, blocker_id: Uuid, blocked_id: Uuid) -> Result<()> {
-        self.postgres
-            .delete_block(blocker_id, blocked_id)
-            .await
-            .context("Failed to delete block from PostgreSQL")?;
-
-        if let Err(e) = self.neo4j.delete_block(blocker_id, blocked_id).await {
-            error!(
-                "Neo4j delete failed for BLOCKS ({} -> {}): {}",
-                blocker_id, blocked_id, e
-            );
-            metrics::counter!("neo4j.write.failure", "operation" => "delete_block").increment(1);
-
-            if self.strict_mode {
-                return Err(e);
-            }
-        } else {
-            metrics::counter!("neo4j.write.success", "operation" => "delete_block").increment(1);
-        }
-
-        Ok(())
+        self.execute_dual_write::<_, _, std::future::Ready<Result<()>>>(
+            "delete_block",
+            format!("BLOCKS {} -> {}", blocker_id, blocked_id),
+            self.postgres.delete_block(blocker_id, blocked_id),
+            self.neo4j.delete_block(blocker_id, blocked_id),
+            None, // No rollback for delete operations
+        )
+        .await
     }
 
     /// Get followers (Neo4j first, PostgreSQL fallback)
@@ -207,20 +164,15 @@ impl DualWriteRepository {
         match self.neo4j.get_followers(user_id, limit, offset).await {
             Ok(result) => {
                 let duration = start.elapsed();
-                metrics::histogram!("neo4j.query.duration", "operation" => "get_followers")
-                    .record(duration.as_millis() as f64);
-                metrics::counter!("neo4j.query.success", "operation" => "get_followers")
-                    .increment(1);
+                tracing::debug!("neo4j_query_success{{operation=\"get_followers\",duration_ms={}}}", duration.as_millis());
                 Ok(result)
             }
             Err(e) => {
                 error!("Neo4j get_followers failed, falling back to PostgreSQL: {}", e);
-                metrics::counter!("neo4j.query.failure", "operation" => "get_followers")
-                    .increment(1);
+                tracing::warn!("neo4j_query_failure{{operation=\"get_followers\"}}");
 
                 let result = self.postgres.get_followers(user_id, limit, offset).await?;
-                metrics::counter!("postgres.query.fallback", "operation" => "get_followers")
-                    .increment(1);
+                tracing::warn!("postgres_query_fallback{{operation=\"get_followers\"}}");
                 Ok(result)
             }
         }
@@ -238,20 +190,15 @@ impl DualWriteRepository {
         match self.neo4j.get_following(user_id, limit, offset).await {
             Ok(result) => {
                 let duration = start.elapsed();
-                metrics::histogram!("neo4j.query.duration", "operation" => "get_following")
-                    .record(duration.as_millis() as f64);
-                metrics::counter!("neo4j.query.success", "operation" => "get_following")
-                    .increment(1);
+                tracing::debug!("neo4j_query_success{{operation=\"get_following\",duration_ms={}}}", duration.as_millis());
                 Ok(result)
             }
             Err(e) => {
                 error!("Neo4j get_following failed, falling back to PostgreSQL: {}", e);
-                metrics::counter!("neo4j.query.failure", "operation" => "get_following")
-                    .increment(1);
+                tracing::warn!("neo4j_query_failure{{operation=\"get_following\"}}");
 
                 let result = self.postgres.get_following(user_id, limit, offset).await?;
-                metrics::counter!("postgres.query.fallback", "operation" => "get_following")
-                    .increment(1);
+                tracing::warn!("postgres_query_fallback{{operation=\"get_following\"}}");
                 Ok(result)
             }
         }
@@ -261,18 +208,15 @@ impl DualWriteRepository {
     pub async fn is_following(&self, follower_id: Uuid, followee_id: Uuid) -> Result<bool> {
         match self.neo4j.is_following(follower_id, followee_id).await {
             Ok(result) => {
-                metrics::counter!("neo4j.query.success", "operation" => "is_following")
-                    .increment(1);
+                tracing::debug!("neo4j_query_success{{operation=\"is_following\"}}");
                 Ok(result)
             }
             Err(e) => {
                 error!("Neo4j is_following failed, falling back to PostgreSQL: {}", e);
-                metrics::counter!("neo4j.query.failure", "operation" => "is_following")
-                    .increment(1);
+                tracing::warn!("neo4j_query_failure{{operation=\"is_following\"}}");
 
                 let result = self.postgres.is_following(follower_id, followee_id).await?;
-                metrics::counter!("postgres.query.fallback", "operation" => "is_following")
-                    .increment(1);
+                tracing::warn!("postgres_query_fallback{{operation=\"is_following\"}}");
                 Ok(result)
             }
         }
@@ -302,6 +246,83 @@ impl DualWriteRepository {
     /// Get graph stats (Neo4j only - complex query)
     pub async fn get_graph_stats(&self, user_id: Uuid) -> Result<GraphStats> {
         self.neo4j.get_graph_stats(user_id).await
+    }
+}
+
+// Implement GraphRepositoryTrait for DualWriteRepository
+#[async_trait::async_trait]
+impl GraphRepositoryTrait for DualWriteRepository {
+    async fn create_follow(&self, follower_id: Uuid, followee_id: Uuid) -> Result<()> {
+        Self::create_follow(self, follower_id, followee_id).await
+    }
+
+    async fn delete_follow(&self, follower_id: Uuid, followee_id: Uuid) -> Result<()> {
+        Self::delete_follow(self, follower_id, followee_id).await
+    }
+
+    async fn create_mute(&self, muter_id: Uuid, mutee_id: Uuid) -> Result<()> {
+        Self::create_mute(self, muter_id, mutee_id).await
+    }
+
+    async fn delete_mute(&self, muter_id: Uuid, mutee_id: Uuid) -> Result<()> {
+        Self::delete_mute(self, muter_id, mutee_id).await
+    }
+
+    async fn create_block(&self, blocker_id: Uuid, blocked_id: Uuid) -> Result<()> {
+        Self::create_block(self, blocker_id, blocked_id).await
+    }
+
+    async fn delete_block(&self, blocker_id: Uuid, blocked_id: Uuid) -> Result<()> {
+        Self::delete_block(self, blocker_id, blocked_id).await
+    }
+
+    async fn get_followers(
+        &self,
+        user_id: Uuid,
+        limit: i32,
+        offset: i32,
+    ) -> Result<(Vec<Uuid>, i32, bool)> {
+        Self::get_followers(self, user_id, limit, offset).await
+    }
+
+    async fn get_following(
+        &self,
+        user_id: Uuid,
+        limit: i32,
+        offset: i32,
+    ) -> Result<(Vec<Uuid>, i32, bool)> {
+        Self::get_following(self, user_id, limit, offset).await
+    }
+
+    async fn is_following(&self, follower_id: Uuid, followee_id: Uuid) -> Result<bool> {
+        Self::is_following(self, follower_id, followee_id).await
+    }
+
+    async fn is_muted(&self, muter_id: Uuid, mutee_id: Uuid) -> Result<bool> {
+        Self::is_muted(self, muter_id, mutee_id).await
+    }
+
+    async fn is_blocked(&self, blocker_id: Uuid, blocked_id: Uuid) -> Result<bool> {
+        Self::is_blocked(self, blocker_id, blocked_id).await
+    }
+
+    async fn batch_check_following(
+        &self,
+        follower_id: Uuid,
+        followee_ids: Vec<Uuid>,
+    ) -> Result<std::collections::HashMap<String, bool>> {
+        Self::batch_check_following(self, follower_id, followee_ids).await
+    }
+
+    async fn health_check(&self) -> Result<()> {
+        let (pg_healthy, neo4j_healthy) = Self::health_check(self).await?;
+        if !pg_healthy {
+            anyhow::bail!("PostgreSQL health check failed");
+        }
+        if !neo4j_healthy {
+            warn!("Neo4j health check failed (will fallback to PostgreSQL)");
+        }
+        Ok(())
     }
 }
 

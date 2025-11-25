@@ -71,15 +71,16 @@ get_environment() {
 get_credentials() {
     log_info "Fetching database credentials from Kubernetes..."
 
-    # PostgreSQL credentials
-    export DATABASE_URL=$(kubectl get secret -n "$NAMESPACE" postgres-credentials \
-        -o jsonpath='{.data.database-url}' | base64 --decode)
+    # Get credentials from graph-service-secret
+    export DATABASE_URL=$(kubectl get secret -n "$NAMESPACE" graph-service-secret \
+        -o jsonpath='{.data.DATABASE_URL}' | base64 --decode)
 
     # Neo4j credentials
     export NEO4J_URI="bolt://neo4j:7687"
-    export NEO4J_USER="neo4j"
-    export NEO4J_PASSWORD=$(kubectl get secret -n "$NAMESPACE" neo4j-auth \
-        -o jsonpath='{.data.NEO4J_AUTH}' | base64 --decode | cut -d'/' -f2)
+    export NEO4J_USER=$(kubectl get secret -n "$NAMESPACE" graph-service-secret \
+        -o jsonpath='{.data.NEO4J_USER}' | base64 --decode)
+    export NEO4J_PASSWORD=$(kubectl get secret -n "$NAMESPACE" graph-service-secret \
+        -o jsonpath='{.data.NEO4J_PASSWORD}' | base64 --decode)
 
     if [ -z "$DATABASE_URL" ] || [ -z "$NEO4J_PASSWORD" ]; then
         log_error "Failed to fetch credentials"

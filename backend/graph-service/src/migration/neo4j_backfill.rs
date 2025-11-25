@@ -64,43 +64,27 @@ impl Neo4jBackfill {
         info!("Found {} active users to migrate", total_users);
 
         let mut migrated = 0u64;
-        let batch_size = 1000;
 
-        for (i, chunk) in users.chunks(batch_size).enumerate() {
-            let mut batch_query = String::from("UNWIND $batch AS user\n");
-            batch_query.push_str("MERGE (u:User {id: user.id})\n");
-            batch_query.push_str("SET u.username = user.username, u.created_at = user.created_at\n");
-            batch_query.push_str("RETURN count(u) as migrated");
+        for (i, (id, username, created_at)) in users.iter().enumerate() {
+            let cypher = r#"
+                MERGE (u:User {id: $id})
+                SET u.username = $username, u.created_at = $created_at
+            "#;
 
-            let batch_data: Vec<serde_json::Value> = chunk
-                .iter()
-                .map(|(id, username, created_at)| {
-                    serde_json::json!({
-                        "id": id.to_string(),
-                        "username": username,
-                        "created_at": created_at.timestamp()
-                    })
-                })
-                .collect();
-
-            match self
-                .neo4j_graph
-                .run(query(&batch_query).param("batch", batch_data))
+            self.neo4j_graph
+                .run(
+                    query(cypher)
+                        .param("id", id.to_string())
+                        .param("username", username.clone())
+                        .param("created_at", created_at.timestamp()),
+                )
                 .await
-            {
-                Ok(_) => {
-                    migrated += chunk.len() as u64;
-                    info!(
-                        "Migrated user batch {}/{} ({} users)",
-                        i + 1,
-                        (total_users + batch_size - 1) / batch_size,
-                        migrated
-                    );
-                }
-                Err(e) => {
-                    error!("Failed to migrate user batch {}: {}", i + 1, e);
-                    return Err(e.into());
-                }
+                .context(format!("Failed to migrate user {}", id))?;
+
+            migrated += 1;
+
+            if (i + 1) % 100 == 0 {
+                info!("Migrated {} / {} users", i + 1, total_users);
             }
         }
 
@@ -123,45 +107,28 @@ impl Neo4jBackfill {
         info!("Found {} follow relationships to migrate", total_follows);
 
         let mut migrated = 0u64;
-        let batch_size = 1000;
 
-        for (i, chunk) in follows.chunks(batch_size).enumerate() {
-            let mut batch_query = String::from("UNWIND $batch AS follow\n");
-            batch_query.push_str("MATCH (a:User {id: follow.follower})\n");
-            batch_query.push_str("MATCH (b:User {id: follow.followee})\n");
-            batch_query.push_str("MERGE (a)-[r:FOLLOWS]->(b)\n");
-            batch_query.push_str("SET r.created_at = follow.created_at\n");
-            batch_query.push_str("RETURN count(r) as migrated");
+        for (i, (follower_id, following_id, created_at)) in follows.iter().enumerate() {
+            let cypher = r#"
+                MATCH (a:User {id: $follower}), (b:User {id: $followee})
+                MERGE (a)-[r:FOLLOWS]->(b)
+                SET r.created_at = $created_at
+            "#;
 
-            let batch_data: Vec<serde_json::Value> = chunk
-                .iter()
-                .map(|(follower_id, following_id, created_at)| {
-                    serde_json::json!({
-                        "follower": follower_id.to_string(),
-                        "followee": following_id.to_string(),
-                        "created_at": created_at.timestamp()
-                    })
-                })
-                .collect();
-
-            match self
-                .neo4j_graph
-                .run(query(&batch_query).param("batch", batch_data))
+            self.neo4j_graph
+                .run(
+                    query(cypher)
+                        .param("follower", follower_id.to_string())
+                        .param("followee", following_id.to_string())
+                        .param("created_at", created_at.timestamp()),
+                )
                 .await
-            {
-                Ok(_) => {
-                    migrated += chunk.len() as u64;
-                    info!(
-                        "Migrated follow batch {}/{} ({} relationships)",
-                        i + 1,
-                        (total_follows + batch_size - 1) / batch_size,
-                        migrated
-                    );
-                }
-                Err(e) => {
-                    error!("Failed to migrate follow batch {}: {}", i + 1, e);
-                    return Err(e.into());
-                }
+                .context(format!("Failed to migrate follow {} -> {}", follower_id, following_id))?;
+
+            migrated += 1;
+
+            if (i + 1) % 100 == 0 {
+                info!("Migrated {} / {} follow relationships", i + 1, total_follows);
             }
         }
 
@@ -199,45 +166,28 @@ impl Neo4jBackfill {
         info!("Found {} mute relationships to migrate", total_mutes);
 
         let mut migrated = 0u64;
-        let batch_size = 1000;
 
-        for (i, chunk) in mutes.chunks(batch_size).enumerate() {
-            let mut batch_query = String::from("UNWIND $batch AS mute\n");
-            batch_query.push_str("MATCH (a:User {id: mute.muter})\n");
-            batch_query.push_str("MATCH (b:User {id: mute.muted})\n");
-            batch_query.push_str("MERGE (a)-[r:MUTES]->(b)\n");
-            batch_query.push_str("SET r.created_at = mute.created_at\n");
-            batch_query.push_str("RETURN count(r) as migrated");
+        for (i, (muter_id, muted_id, created_at)) in mutes.iter().enumerate() {
+            let cypher = r#"
+                MATCH (a:User {id: $muter}), (b:User {id: $muted})
+                MERGE (a)-[r:MUTES]->(b)
+                SET r.created_at = $created_at
+            "#;
 
-            let batch_data: Vec<serde_json::Value> = chunk
-                .iter()
-                .map(|(muter_id, muted_id, created_at)| {
-                    serde_json::json!({
-                        "muter": muter_id.to_string(),
-                        "muted": muted_id.to_string(),
-                        "created_at": created_at.timestamp()
-                    })
-                })
-                .collect();
-
-            match self
-                .neo4j_graph
-                .run(query(&batch_query).param("batch", batch_data))
+            self.neo4j_graph
+                .run(
+                    query(cypher)
+                        .param("muter", muter_id.to_string())
+                        .param("muted", muted_id.to_string())
+                        .param("created_at", created_at.timestamp()),
+                )
                 .await
-            {
-                Ok(_) => {
-                    migrated += chunk.len() as u64;
-                    info!(
-                        "Migrated mute batch {}/{} ({} relationships)",
-                        i + 1,
-                        (total_mutes + batch_size - 1) / batch_size,
-                        migrated
-                    );
-                }
-                Err(e) => {
-                    error!("Failed to migrate mute batch {}: {}", i + 1, e);
-                    return Err(e.into());
-                }
+                .context(format!("Failed to migrate mute {} -> {}", muter_id, muted_id))?;
+
+            migrated += 1;
+
+            if (i + 1) % 100 == 0 {
+                info!("Migrated {} / {} mute relationships", i + 1, total_mutes);
             }
         }
 
@@ -275,45 +225,28 @@ impl Neo4jBackfill {
         info!("Found {} block relationships to migrate", total_blocks);
 
         let mut migrated = 0u64;
-        let batch_size = 1000;
 
-        for (i, chunk) in blocks.chunks(batch_size).enumerate() {
-            let mut batch_query = String::from("UNWIND $batch AS block\n");
-            batch_query.push_str("MATCH (a:User {id: block.blocker})\n");
-            batch_query.push_str("MATCH (b:User {id: block.blocked})\n");
-            batch_query.push_str("MERGE (a)-[r:BLOCKS]->(b)\n");
-            batch_query.push_str("SET r.created_at = block.created_at\n");
-            batch_query.push_str("RETURN count(r) as migrated");
+        for (i, (blocker_id, blocked_id, created_at)) in blocks.iter().enumerate() {
+            let cypher = r#"
+                MATCH (a:User {id: $blocker}), (b:User {id: $blocked})
+                MERGE (a)-[r:BLOCKS]->(b)
+                SET r.created_at = $created_at
+            "#;
 
-            let batch_data: Vec<serde_json::Value> = chunk
-                .iter()
-                .map(|(blocker_id, blocked_id, created_at)| {
-                    serde_json::json!({
-                        "blocker": blocker_id.to_string(),
-                        "blocked": blocked_id.to_string(),
-                        "created_at": created_at.timestamp()
-                    })
-                })
-                .collect();
-
-            match self
-                .neo4j_graph
-                .run(query(&batch_query).param("batch", batch_data))
+            self.neo4j_graph
+                .run(
+                    query(cypher)
+                        .param("blocker", blocker_id.to_string())
+                        .param("blocked", blocked_id.to_string())
+                        .param("created_at", created_at.timestamp()),
+                )
                 .await
-            {
-                Ok(_) => {
-                    migrated += chunk.len() as u64;
-                    info!(
-                        "Migrated block batch {}/{} ({} relationships)",
-                        i + 1,
-                        (total_blocks + batch_size - 1) / batch_size,
-                        migrated
-                    );
-                }
-                Err(e) => {
-                    error!("Failed to migrate block batch {}: {}", i + 1, e);
-                    return Err(e.into());
-                }
+                .context(format!("Failed to migrate block {} -> {}", blocker_id, blocked_id))?;
+
+            migrated += 1;
+
+            if (i + 1) % 100 == 0 {
+                info!("Migrated {} / {} block relationships", i + 1, total_blocks);
             }
         }
 
@@ -321,7 +254,7 @@ impl Neo4jBackfill {
     }
 
     /// Verify data consistency between PostgreSQL and Neo4j
-    async fn verify_consistency(&self, stats: &BackfillStats) -> Result<()> {
+    async fn verify_consistency(&self, _stats: &BackfillStats) -> Result<()> {
         info!("Verifying data consistency between PostgreSQL and Neo4j");
 
         // Verify user count
