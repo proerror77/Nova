@@ -291,6 +291,7 @@ patches:
 - path: service-db-env-patch.yaml
 - path: service-redis-env-patch.yaml
 - path: grpc-tls-env-patch.yaml
+- path: pgbouncer-userlist-patch.yaml
 
 # (migrated to strategic merge patches per service to avoid jsonpatch parent missing)
 
@@ -435,7 +436,9 @@ resources:
 - ../../base
 - postgres-pvc-gp3.yaml
 - clickhouse-pvc.yaml
-- sts-rotator.yaml
+# sts-rotator.yaml - DISABLED: aws sts get-session-token cannot be called with IRSA session credentials
+# S3 credentials are now managed by ExternalSecrets (nova-s3-credentials from nova/staging/nova-s3-config)
+# - sts-rotator.yaml
 - secrets-sync.yaml
 - content-service-configmap.yaml
 - resource-optimization-info.configmap.yaml

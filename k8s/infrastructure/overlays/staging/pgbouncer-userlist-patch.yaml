@@ -8,3 +8,9 @@ stringData:
   # NOTE: staging placeholder only. Real SCRAM hashes should be provisioned
   # out-of-band for production.
   admin-password: "changeme-staging-admin-password"
+  # Userlist with plaintext passwords - pgbouncer handles SCRAM internally
+  userlist.txt: |
+    ; PgBouncer userlist - staging (plaintext passwords)
+    "nova_user" "changeme-staging-admin-password"
+    "admin" "changeme-staging-admin-password"
+    "stats_user" "changeme-staging-admin-password"
