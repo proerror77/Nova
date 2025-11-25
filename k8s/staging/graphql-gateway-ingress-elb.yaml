@@ -1,80 +1,66 @@
----
+# GraphQL Gateway Ingress for AWS ELB (Staging)
+# This ingress exposes the GraphQL Gateway via NGINX Ingress Controller
+# without custom domain names - uses AWS ELB DNS directly
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: graphql-gateway-ingress
-  namespace: nova-gateway
+  namespace: nova-staging
   labels:
     app: nova-api
     component: ingress
   annotations:
-    # CORS configuration
-    nginx.ingress.kubernetes.io/enable-cors: "true"
-    nginx.ingress.kubernetes.io/cors-allow-origin: "*"
+    nginx.ingress.kubernetes.io/backend-protocol: HTTP
     nginx.ingress.kubernetes.io/cors-allow-credentials: "true"
-    nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, PUT, PATCH, DELETE, OPTIONS"
     nginx.ingress.kubernetes.io/cors-allow-headers: "DNT,X-CustomHeader,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Authorization"
+    nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+    nginx.ingress.kubernetes.io/cors-allow-origin: "*"
     nginx.ingress.kubernetes.io/cors-max-age: "3600"
-
-    # Rate limiting
-    nginx.ingress.kubernetes.io/limit-rps: "100"
+    nginx.ingress.kubernetes.io/enable-cors: "true"
     nginx.ingress.kubernetes.io/limit-burst-multiplier: "5"
-
-    # Proxy settings
+    nginx.ingress.kubernetes.io/limit-rps: "100"
     nginx.ingress.kubernetes.io/proxy-body-size: "100m"
     nginx.ingress.kubernetes.io/proxy-connect-timeout: "60"
     nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "60"
-
-    # WebSocket support
-    nginx.ingress.kubernetes.io/websocket-services: "graphql-gateway"
-
+    nginx.ingress.kubernetes.io/websocket-services: graphql-gateway
 spec:
   ingressClassName: nginx
   rules:
   - http:
       paths:
-      # GraphQL endpoint
-      - path: /graphql
-        pathType: Prefix
-        backend:
+      - backend:
           service:
             name: graphql-gateway
             port:
               number: 8080
-
-      # GraphQL Playground (staging only)
-      - path: /playground
+        path: /graphql
         pathType: Prefix
-        backend:
+      - backend:
           service:
             name: graphql-gateway
             port:
               number: 8080
-
-      # Health check endpoint
-      - path: /health
+        path: /playground
+        pathType: Prefix
+      - backend:
+          service:
+            name: graphql-gateway
+            port:
+              number: 8080
+        path: /health
         pathType: Exact
-        backend:
+      - backend:
           service:
             name: graphql-gateway
             port:
               number: 8080
-
-      # WebSocket endpoint
-      - path: /ws
+        path: /api/v2
         pathType: Prefix
-        backend:
+      - backend:
           service:
             name: graphql-gateway
             port:
               number: 8080
-
-      # REST API v2 endpoints (authentication, user management)
-      - path: /api/v2
+        path: /ws
         pathType: Prefix
-        backend:
-          service:
-            name: graphql-gateway
-            port:
-              number: 8080

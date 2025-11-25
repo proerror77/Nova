@@ -11,7 +11,7 @@ metadata:
     description: "GraphQL Gateway with Kafka subscriptions, Redis caching, and rate limiting"
 
 spec:
-  replicas: 2  # Staging: 2 replicas for basic redundancy
+  replicas: 3  # Staging: 3 replicas for redundancy
   strategy:
     type: RollingUpdate
     rollingUpdate:
