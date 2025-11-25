@@ -1,0 +1,28 @@
+# GraphQL Gateway Service URL patches for staging
+# Fix: Configure correct service URLs for gRPC connections
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: graphql-gateway
+spec:
+  template:
+    spec:
+      containers:
+      - name: graphql-gateway
+        env:
+        # Search service uses port 50057 (gRPC) in staging
+        # The default config.rs uses port 50060 which doesn't exist
+        - name: SEARCH_SERVICE_URL
+          value: "http://search-service.nova-staging.svc.cluster.local:50057"
+        # Content service gRPC port
+        - name: CONTENT_SERVICE_URL
+          value: "http://content-service.nova-staging.svc.cluster.local:50051"
+        # Notification service gRPC port
+        - name: NOTIFICATION_SERVICE_URL
+          value: "http://notification-service.nova-staging.svc.cluster.local:50051"
+        # Feed service gRPC port
+        - name: FEED_SERVICE_URL
+          value: "http://feed-service.nova-staging.svc.cluster.local:50051"
+        # Media service gRPC port
+        - name: MEDIA_SERVICE_URL
+          value: "http://media-service.nova-staging.svc.cluster.local:50051"

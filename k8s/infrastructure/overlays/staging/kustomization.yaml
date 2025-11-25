@@ -255,19 +255,7 @@ patches:
     name: trust-safety-service
     namespace: nova-staging
     version: v1
-- patch: |-
-    - op: replace
-      path: /spec/ports
-      value:
-        - name: http
-          port: 8086
-          targetPort: 8086
-          protocol: TCP
-  target:
-    kind: Service
-    name: search-service
-    namespace: nova-staging
-    version: v1
+# search-service ports now defined in grpc-services.yaml (gRPC:50057, HTTP:8086)
 - path: configmap-patch.yaml
 - path: deployment-images-patch.yaml
 - path: postgres-deploy-patch.yaml
@@ -292,6 +280,7 @@ patches:
 - path: service-redis-env-patch.yaml
 - path: grpc-tls-env-patch.yaml
 - path: pgbouncer-userlist-patch.yaml
+- path: graphql-gateway-env-patch.yaml
 
 # (migrated to strategic merge patches per service to avoid jsonpatch parent missing)
 

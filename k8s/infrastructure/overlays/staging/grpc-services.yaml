@@ -63,8 +63,12 @@ spec:
     app: search-service
   ports:
   - name: grpc
-    port: 50051
-    targetPort: 50051
+    port: 50057
+    targetPort: 9081
+    protocol: TCP
+  - name: http
+    port: 8086
+    targetPort: 8081
     protocol: TCP
   - name: metrics
     port: 9090
