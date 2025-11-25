@@ -27,8 +27,32 @@
 
 use anyhow::{Context, Result};
 use std::fs;
+use std::sync::Once;
 use tonic::transport::{Certificate, ClientTlsConfig, Identity, ServerTlsConfig};
 use tracing::{info, warn};
+
+static CRYPTO_PROVIDER_INIT: Once = Once::new();
+
+/// Initialize the Rustls crypto provider.
+///
+/// This MUST be called before any TLS operations in Rustls 0.23+.
+/// Safe to call multiple times - only the first call has effect.
+///
+/// # Example
+/// ```rust,no_run
+/// grpc_tls::init_crypto_provider();
+/// // Now TLS operations are safe
+/// ```
+pub fn init_crypto_provider() {
+    CRYPTO_PROVIDER_INIT.call_once(|| {
+        if rustls::crypto::CryptoProvider::get_default().is_none() {
+            rustls::crypto::aws_lc_rs::default_provider()
+                .install_default()
+                .expect("Failed to install rustls crypto provider (aws-lc-rs)");
+            info!("Rustls crypto provider (aws-lc-rs) installed");
+        }
+    });
+}
 
 // Core modules
 pub mod cert_generation;
@@ -63,7 +87,12 @@ impl GrpcServerTlsConfig {
     /// - `GRPC_SERVER_KEY_PATH`: Path to server private key PEM file
     /// - `GRPC_CLIENT_CA_CERT_PATH`: Path to client CA cert for mTLS (optional)
     /// - `GRPC_REQUIRE_CLIENT_CERT`: Require client certs (default: false)
+    ///
+    /// **Note**: Automatically initializes Rustls crypto provider (aws-lc-rs).
     pub fn from_env() -> Result<Self> {
+        // Ensure crypto provider is initialized before any TLS operations
+        init_crypto_provider();
+
         let cert_path = std::env::var("GRPC_SERVER_CERT_PATH")
             .context("GRPC_SERVER_CERT_PATH not set - TLS required for production")?;
 
@@ -159,7 +188,12 @@ impl GrpcClientTlsConfig {
     /// - `GRPC_CLIENT_CERT_PATH`: Path to client cert for mTLS (optional)
     /// - `GRPC_CLIENT_KEY_PATH`: Path to client key for mTLS (optional)
     /// - `GRPC_SERVER_DOMAIN`: Server domain name (e.g., "auth-service")
+    ///
+    /// **Note**: Automatically initializes Rustls crypto provider (aws-lc-rs).
     pub fn from_env() -> Result<Self> {
+        // Ensure crypto provider is initialized before any TLS operations
+        init_crypto_provider();
+
         let ca_cert_path = std::env::var("GRPC_SERVER_CA_CERT_PATH")
             .context("GRPC_SERVER_CA_CERT_PATH not set - TLS required for production")?;
 

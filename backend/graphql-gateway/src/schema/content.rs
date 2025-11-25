@@ -112,7 +112,7 @@ impl ContentQuery {
         ctx: &Context<'_>,
         #[graphql(default = 10)] first: Option<i32>,
         after: Option<String>,
-        #[graphql(default = 10)] last: Option<i32>,
+        last: Option<i32>,
         before: Option<String>,
     ) -> GraphQLResult<Connection<Post>> {
         let args = PaginationArgs {
