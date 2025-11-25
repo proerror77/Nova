@@ -2,6 +2,7 @@ import SwiftUI
 
 /// 应用页面枚举
 enum AppPage {
+    case login
     case home
     case search
     case newPost

@@ -12,7 +12,7 @@ enum APIEnvironment {
         case .development:
             return "http://localhost:8080"  // GraphQL Gateway for local development
         case .staging:
-            return "https://staging-api.nova.social"
+            return "http://a3326508b1e3c43239348cac7ce9ee03-1036729988.ap-northeast-1.elb.amazonaws.com"  // AWS ELB staging endpoint
         case .production:
             return "https://api.nova.social"
         }
@@ -31,7 +31,7 @@ enum APIEnvironment {
 struct APIConfig {
     static var current: APIEnvironment = {
         #if DEBUG
-        return .development
+        return .staging  // Changed from .development for Feed API testing
         #else
         return .production
         #endif
@@ -85,6 +85,13 @@ struct APIConfig {
         static let logout = "/api/v2/auth/logout"
         /// 單一用戶資料（包含 {id}）
         static func user(_ id: String) -> String { "/api/v2/users/\(id)" }
+    }
+
+    // MARK: - Feed API
+    struct Feed {
+        /// GET /api/v2/feed - 獲取用戶 Feed
+        /// Query params: algo (ch|time), limit (1-100), cursor (pagination)
+        static let getFeed = "/api/v2/feed"
     }
 
     // MARK: - Alice AI Assistant API

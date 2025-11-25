@@ -102,7 +102,7 @@ class IdentityService {
         }
 
         let response: GetUserResponse = try await client.request(
-            endpoint: "\(APIConfig.Auth.getUser)/\(userId)",
+            endpoint: APIConfig.Profile.getProfile(userId),
             method: "GET"
         )
 
@@ -116,7 +116,7 @@ class IdentityService {
         }
 
         let response: UpdateUserResponse = try await client.request(
-            endpoint: "\(APIConfig.Auth.updateUser)/\(userId)",
+            endpoint: APIConfig.Profile.updateProfile(userId),
             method: "PUT",
             body: updates
         )
