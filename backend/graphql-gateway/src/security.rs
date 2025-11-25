@@ -338,10 +338,6 @@ impl Extension for RequestBudgetExtension {
         self.backend_calls
             .store(0, std::sync::atomic::Ordering::SeqCst);
 
-        // Store in context for resolvers to increment
-        ctx.data_unchecked::<Arc<std::sync::atomic::AtomicUsize>>()
-            .store(0, std::sync::atomic::Ordering::SeqCst);
-
         let response = next.run(ctx, operation_name).await;
 
         // Check if budget was exceeded
