@@ -64,6 +64,88 @@ impl ContentCache {
         self.delete(&Self::post_key(post_id)).await
     }
 
+    /// Batch get posts by IDs (avoids N+1 queries)
+    /// Returns a map of post_id -> Post for cache hits
+    pub async fn batch_get_posts(
+        &self,
+        post_ids: &[Uuid],
+    ) -> Result<std::collections::HashMap<Uuid, Post>> {
+        if post_ids.is_empty() {
+            return Ok(std::collections::HashMap::new());
+        }
+
+        let keys: Vec<String> = post_ids.iter().map(|id| Self::post_key(*id)).collect();
+        let mut conn = self.conn.lock().await;
+
+        // Use MGET for batch retrieval
+        let values: Vec<Option<String>> = redis::cmd("MGET")
+            .arg(&keys)
+            .query_async(&mut *conn)
+            .await
+            .map_err(|e| AppError::CacheError(format!("Failed to batch read from cache: {e}")))?;
+
+        let mut result = std::collections::HashMap::with_capacity(post_ids.len());
+        for (idx, value) in values.into_iter().enumerate() {
+            if let Some(raw) = value {
+                if let Ok(post) = serde_json::from_str::<Post>(&raw) {
+                    result.insert(post_ids[idx], post);
+                }
+            }
+        }
+
+        tracing::debug!(
+            "Batch cache lookup: {} hits out of {} requested",
+            result.len(),
+            post_ids.len()
+        );
+
+        Ok(result)
+    }
+
+    /// Batch cache multiple posts using pipeline
+    pub async fn batch_cache_posts(&self, posts: &[Post]) -> Result<()> {
+        if posts.is_empty() {
+            return Ok(());
+        }
+
+        let mut conn = self.conn.lock().await;
+        let mut pipeline = redis::pipe();
+
+        for post in posts {
+            let key = Self::post_key(post.id);
+            let payload = serde_json::to_string(post)
+                .map_err(|e| AppError::CacheError(format!("Failed to serialize post: {e}")))?;
+            pipeline.set_ex(&key, payload, self.ttl_seconds);
+        }
+
+        pipeline
+            .query_async::<_, ()>(&mut *conn)
+            .await
+            .map_err(|e| AppError::CacheError(format!("Failed to batch write to cache: {e}")))?;
+
+        tracing::debug!("Batch cached {} posts", posts.len());
+        Ok(())
+    }
+
+    /// Batch invalidate multiple posts
+    pub async fn batch_invalidate_posts(&self, post_ids: &[Uuid]) -> Result<()> {
+        if post_ids.is_empty() {
+            return Ok(());
+        }
+
+        let keys: Vec<String> = post_ids.iter().map(|id| Self::post_key(*id)).collect();
+        let mut conn = self.conn.lock().await;
+
+        redis::cmd("DEL")
+            .arg(&keys)
+            .query_async::<_, ()>(&mut *conn)
+            .await
+            .map_err(|e| AppError::CacheError(format!("Failed to batch delete from cache: {e}")))?;
+
+        tracing::debug!("Batch invalidated {} posts", post_ids.len());
+        Ok(())
+    }
+
     // Note: cache_comment, get_comment, invalidate_comment moved to social-service
 
     /// Cache an arbitrary JSON payload under a namespaced key
