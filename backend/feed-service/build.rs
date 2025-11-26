@@ -15,7 +15,11 @@ fn main() {
                 "../proto/services_v2/content_service.proto",
                 "../proto/services/graph_service.proto",
             ],
-            &["../proto/services/", "../proto/services_v2/"],
+            &[
+                "../proto/services/",
+                "../proto/services_v2/",
+                "../proto/third_party/",
+            ],
         )
         .expect("Failed to compile proto files for feed-service");
 }

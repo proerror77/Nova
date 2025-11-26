@@ -33,13 +33,14 @@ pub mod nova {
 
 pub use clients::ContentServiceClient;
 
-use crate::cache::{CachedFeed, FeedCache};
+use crate::cache::{CachedFeed, CachedFeedPost, FeedCache};
 use chrono::Utc;
+use grpc_clients::{config::GrpcConfig, GrpcClientPool};
 use grpc_metrics::layer::RequestGuard;
 use sqlx::PgPool;
 use std::sync::Arc;
 use tonic::{Request, Response, Status};
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info, warn};
 
 // Generated protobuf types and service traits
 pub mod proto {
@@ -62,6 +63,7 @@ pub use proto::feed_service::v2::{
 pub struct RecommendationServiceImpl {
     _pool: PgPool,
     cache: Arc<FeedCache>,
+    grpc_pool: Arc<GrpcClientPool>,
 }
 
 impl RecommendationServiceImpl {
@@ -71,15 +73,25 @@ impl RecommendationServiceImpl {
         let redis_url =
             std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://localhost:6379".to_string());
         let cache = FeedCache::new(&redis_url, Default::default()).await?;
+
+        // Initialize gRPC client pool for content-service
+        let grpc_cfg = GrpcConfig::from_env()?;
+        let grpc_pool = GrpcClientPool::new(&grpc_cfg).await?;
+
         Ok(Self {
             _pool: pool,
             cache: Arc::new(cache),
+            grpc_pool: Arc::new(grpc_pool),
         })
     }
 
-    /// Create a new RecommendationService with explicit cache
-    pub fn with_cache(pool: PgPool, cache: Arc<FeedCache>) -> Self {
-        Self { _pool: pool, cache }
+    /// Create a new RecommendationService with explicit cache and gRPC pool
+    pub fn with_cache(pool: PgPool, cache: Arc<FeedCache>, grpc_pool: Arc<GrpcClientPool>) -> Self {
+        Self {
+            _pool: pool,
+            cache,
+            grpc_pool,
+        }
     }
 }
 
@@ -157,16 +169,23 @@ impl recommendation_service_server::RecommendationService for RecommendationServ
         }
 
         // Step 2: Cache miss - fetch from ContentService
-        // For now, return a stub response with cache populated
-        let _limit = if req.limit == 0 {
+        let limit = if req.limit == 0 {
             20
         } else {
             req.limit as usize
         }
         .min(100)
         .max(1);
-        let posts = vec![]; // Placeholder: would fetch from ContentService
-        let has_more = false;
+
+        // Fetch recent posts from content-service
+        let posts = match self.fetch_posts_from_content_service(limit as i32, &user_id).await {
+            Ok(p) => p,
+            Err(e) => {
+                error!("Failed to fetch posts from content-service: {}", e);
+                vec![]
+            }
+        };
+        let has_more = posts.len() >= limit;
 
         // Step 3: Cache the result
         let cached_feed = CachedFeed {
@@ -318,6 +337,80 @@ impl recommendation_service_server::RecommendationService for RecommendationServ
 
         guard.complete("0");
         Ok(result)
+    }
+}
+
+impl RecommendationServiceImpl {
+    /// Fetch posts from content-service
+    ///
+    /// 1. Call ListRecentPosts to get post IDs
+    /// 2. Call GetPostsByIds to get full post details
+    /// 3. Convert to CachedPost format
+    async fn fetch_posts_from_content_service(
+        &self,
+        limit: i32,
+        _user_id: &str,
+    ) -> Result<Vec<CachedFeedPost>, Status> {
+        use grpc_clients::nova::content_service::v2::{GetPostsByIdsRequest, ListRecentPostsRequest};
+
+        // Step 1: Get recent post IDs from content-service
+        let mut content_client = self.grpc_pool.content();
+
+        let list_request = ListRecentPostsRequest {
+            limit,
+            exclude_user_id: String::new(), // Don't exclude any user for now
+        };
+
+        let list_response = content_client
+            .list_recent_posts(list_request)
+            .await
+            .map_err(|e| {
+                error!("list_recent_posts failed: {}", e);
+                Status::internal(format!("Failed to list recent posts: {}", e))
+            })?
+            .into_inner();
+
+        let post_ids = list_response.post_ids;
+        if post_ids.is_empty() {
+            debug!("No recent posts found");
+            return Ok(vec![]);
+        }
+
+        info!("Found {} recent post IDs", post_ids.len());
+
+        // Step 2: Get full post details
+        let get_request = GetPostsByIdsRequest {
+            post_ids: post_ids.clone(),
+        };
+
+        let get_response = content_client
+            .get_posts_by_ids(get_request)
+            .await
+            .map_err(|e| {
+                error!("get_posts_by_ids failed: {}", e);
+                Status::internal(format!("Failed to get posts by IDs: {}", e))
+            })?
+            .into_inner();
+
+        // Step 3: Convert to CachedFeedPost format
+        let posts: Vec<CachedFeedPost> = get_response
+            .posts
+            .into_iter()
+            .enumerate()
+            .map(|(idx, post)| CachedFeedPost {
+                id: post.id,
+                user_id: post.author_id,
+                content: post.content,
+                created_at: post.created_at,
+                ranking_score: 1.0 - (idx as f64 * 0.01), // Simple ranking by recency
+                like_count: 0,                            // TODO: Fetch from social-service
+                comment_count: 0,
+                share_count: 0,
+            })
+            .collect();
+
+        info!("Fetched {} posts from content-service", posts.len());
+        Ok(posts)
     }
 }
 

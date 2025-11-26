@@ -6,6 +6,7 @@ fn main() {
     // This centralizes client code generation for all services
 
     let base = "../../proto/services";
+    let third_party = "../../proto/third_party";
     let services = vec![
         ("auth_service", format!("{}/auth_service.proto", base)),
         ("user_service", format!("{}/user_service.proto", base)),
@@ -24,7 +25,7 @@ fn main() {
         tonic_build::configure()
             .build_server(false) // This is a client library, not a server
             .build_client(true) // Generate client code
-            .compile_protos(&[proto_path.as_str()], &[base])
+            .compile_protos(&[proto_path.as_str()], &[base, third_party])
             .unwrap_or_else(|e| panic!("Failed to compile {}: {}", service_name, e));
     }
 
@@ -36,7 +37,7 @@ fn main() {
         .extern_path(".google.protobuf", "::prost_types")
         .compile_protos(
             &["../../proto/services_v2/content_service.proto"],
-            &["../../proto/services_v2"],
+            &["../../proto/services_v2", third_party],
         )
         .unwrap_or_else(|e| panic!("Failed to compile content_service v2: {}", e));
 
