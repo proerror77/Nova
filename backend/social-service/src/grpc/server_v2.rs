@@ -7,8 +7,11 @@ use tonic::{Request, Response, Status};
 use transactional_outbox::{OutboxError, SqlxOutboxRepository};
 use uuid::Uuid;
 
-use crate::domain::models::{Comment as CommentModel, Like as LikeModel, Share as ShareModel};
-use crate::repository::{CommentRepository, LikeRepository, ShareRepository};
+use crate::domain::models::{
+    CandidatePreview as CandidatePreviewModel, CandidateWithRank, Comment as CommentModel,
+    Like as LikeModel, Poll as PollModel, PollCandidate as PollCandidateModel, Share as ShareModel,
+};
+use crate::repository::{CommentRepository, LikeRepository, PollRepository, ShareRepository};
 use crate::services::{CounterService, FollowService};
 use transactional_outbox::{OutboxEvent, OutboxRepository};
 
@@ -69,6 +72,10 @@ impl SocialServiceImpl {
 
     fn share_repo(&self) -> ShareRepository {
         ShareRepository::new(self.state.pg_pool.clone())
+    }
+
+    fn poll_repo(&self) -> PollRepository {
+        PollRepository::new(self.state.pg_pool.clone())
     }
 }
 
@@ -468,6 +475,173 @@ impl SocialService for SocialServiceImpl {
     ) -> Result<Response<GetExploreFeedResponse>, Status> {
         Err(Status::unimplemented("get_explore_feed not implemented"))
     }
+
+    // ========= Polls (投票榜单) =========
+    async fn get_trending_polls(
+        &self,
+        request: Request<GetTrendingPollsRequest>,
+    ) -> Result<Response<GetTrendingPollsResponse>, Status> {
+        let req = request.into_inner();
+        let limit = sanitize_limit(req.limit, 1, 50, 10);
+        let tags = if req.tags.is_empty() {
+            None
+        } else {
+            Some(req.tags)
+        };
+
+        let repo = self.poll_repo();
+        let polls = repo
+            .get_trending_polls(limit, tags)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to get trending polls: {}", e)))?;
+
+        // Get top candidates for each poll
+        let mut summaries = Vec::with_capacity(polls.len());
+        for poll in polls {
+            let top_candidates = repo
+                .get_top_candidates(poll.id, 3)
+                .await
+                .unwrap_or_default();
+            summaries.push(to_proto_poll_summary(poll, top_candidates));
+        }
+
+        Ok(Response::new(GetTrendingPollsResponse { polls: summaries }))
+    }
+
+    async fn get_poll(
+        &self,
+        request: Request<GetPollRequest>,
+    ) -> Result<Response<GetPollResponse>, Status> {
+        let req = request.into_inner();
+        let poll_id = parse_uuid(&req.poll_id, "poll_id")?;
+
+        let repo = self.poll_repo();
+        let poll = repo
+            .get_poll(poll_id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to get poll: {}", e)))?
+            .ok_or_else(|| Status::not_found("Poll not found"))?;
+
+        let candidates = if req.include_candidates {
+            let candidates = repo.get_poll_candidates(poll_id).await.unwrap_or_default();
+            let total_votes = poll.total_votes;
+            candidates
+                .into_iter()
+                .enumerate()
+                .map(|(idx, c)| to_proto_candidate_with_rank(c, (idx + 1) as i32, total_votes))
+                .collect()
+        } else {
+            vec![]
+        };
+
+        // TODO: Get user's voted candidate from request context
+        let my_voted_candidate_id = String::new();
+
+        Ok(Response::new(GetPollResponse {
+            poll: Some(to_proto_poll(poll)),
+            candidates,
+            my_voted_candidate_id,
+        }))
+    }
+
+    async fn get_poll_rankings(
+        &self,
+        request: Request<GetPollRankingsRequest>,
+    ) -> Result<Response<GetPollRankingsResponse>, Status> {
+        let req = request.into_inner();
+        let poll_id = parse_uuid(&req.poll_id, "poll_id")?;
+        let limit = sanitize_limit(req.limit, 1, 100, 20);
+        let offset = req.offset.max(0);
+
+        let repo = self.poll_repo();
+        let (rankings, total_candidates, total_votes) = repo
+            .get_rankings(poll_id, limit, offset)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to get rankings: {}", e)))?;
+
+        Ok(Response::new(GetPollRankingsResponse {
+            rankings: rankings.into_iter().map(to_proto_candidate_ranked).collect(),
+            total_candidates,
+            total_votes,
+        }))
+    }
+
+    async fn vote_on_poll(
+        &self,
+        request: Request<VoteOnPollRequest>,
+    ) -> Result<Response<VoteOnPollResponse>, Status> {
+        // Get user_id from request metadata (set by auth interceptor)
+        let user_id = request
+            .metadata()
+            .get("x-user-id")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|s| Uuid::parse_str(s).ok())
+            .ok_or_else(|| Status::unauthenticated("User ID required"))?;
+
+        let req = request.into_inner();
+        let poll_id = parse_uuid(&req.poll_id, "poll_id")?;
+        let candidate_id = parse_uuid(&req.candidate_id, "candidate_id")?;
+
+        let repo = self.poll_repo();
+
+        // Vote (triggers update counts automatically)
+        repo.vote(poll_id, candidate_id, user_id)
+            .await
+            .map_err(|e| {
+                if e.to_string().contains("already voted") {
+                    Status::already_exists("Already voted on this poll")
+                } else {
+                    Status::internal(format!("Failed to vote: {}", e))
+                }
+            })?;
+
+        // Get updated candidate and poll stats
+        let candidate = repo
+            .get_candidate(candidate_id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to get candidate: {}", e)))?
+            .ok_or_else(|| Status::not_found("Candidate not found"))?;
+
+        let poll = repo
+            .get_poll(poll_id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to get poll: {}", e)))?
+            .ok_or_else(|| Status::not_found("Poll not found"))?;
+
+        Ok(Response::new(VoteOnPollResponse {
+            success: true,
+            updated_candidate: Some(to_proto_candidate_with_rank(candidate, 0, poll.total_votes)),
+            total_votes: poll.total_votes,
+        }))
+    }
+
+    async fn check_poll_voted(
+        &self,
+        request: Request<CheckPollVotedRequest>,
+    ) -> Result<Response<CheckPollVotedResponse>, Status> {
+        // Get user_id from request metadata
+        let user_id = request
+            .metadata()
+            .get("x-user-id")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|s| Uuid::parse_str(s).ok())
+            .ok_or_else(|| Status::unauthenticated("User ID required"))?;
+
+        let req = request.into_inner();
+        let poll_id = parse_uuid(&req.poll_id, "poll_id")?;
+
+        let repo = self.poll_repo();
+        let vote = repo
+            .check_voted(poll_id, user_id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to check vote: {}", e)))?;
+
+        Ok(Response::new(CheckPollVotedResponse {
+            has_voted: vote.is_some(),
+            voted_candidate_id: vote.as_ref().map(|v| v.candidate_id.to_string()).unwrap_or_default(),
+            voted_at: vote.map(|v| to_ts(v.created_at)).flatten(),
+        }))
+    }
 }
 
 fn parse_uuid(value: &str, field: &str) -> Result<Uuid, Status> {
@@ -561,3 +735,80 @@ fn to_proto_comment(comment: CommentModel) -> Comment {
 
 #[allow(dead_code)]
 fn _to_proto_share(_share: ShareModel) {}
+
+// ========= Poll Proto Conversions =========
+
+fn to_proto_poll(poll: PollModel) -> Poll {
+    Poll {
+        id: poll.id.to_string(),
+        title: poll.title,
+        description: poll.description.unwrap_or_default(),
+        cover_image_url: poll.cover_image_url.unwrap_or_default(),
+        creator_id: poll.creator_id.to_string(),
+        poll_type: poll.poll_type,
+        status: poll.status,
+        total_votes: poll.total_votes,
+        candidate_count: poll.candidate_count,
+        tags: poll.tags,
+        created_at: to_ts(poll.created_at),
+        ends_at: poll.ends_at.and_then(to_ts),
+    }
+}
+
+fn to_proto_poll_summary(poll: PollModel, top_candidates: Vec<CandidatePreviewModel>) -> PollSummary {
+    PollSummary {
+        id: poll.id.to_string(),
+        title: poll.title,
+        cover_image_url: poll.cover_image_url.unwrap_or_default(),
+        poll_type: poll.poll_type,
+        status: poll.status,
+        total_votes: poll.total_votes,
+        candidate_count: poll.candidate_count,
+        top_candidates: top_candidates.into_iter().map(to_proto_candidate_preview).collect(),
+        tags: poll.tags,
+        ends_at: poll.ends_at.and_then(to_ts),
+    }
+}
+
+fn to_proto_candidate_preview(preview: CandidatePreviewModel) -> CandidatePreview {
+    CandidatePreview {
+        id: preview.id.to_string(),
+        name: preview.name,
+        avatar_url: preview.avatar_url.unwrap_or_default(),
+        rank: preview.rank,
+    }
+}
+
+fn to_proto_candidate_with_rank(candidate: PollCandidateModel, rank: i32, total_votes: i64) -> PollCandidate {
+    let vote_percentage = if total_votes > 0 {
+        (candidate.vote_count as f64 / total_votes as f64) * 100.0
+    } else {
+        0.0
+    };
+
+    PollCandidate {
+        id: candidate.id.to_string(),
+        name: candidate.name,
+        avatar_url: candidate.avatar_url.unwrap_or_default(),
+        description: candidate.description.unwrap_or_default(),
+        user_id: candidate.user_id.map(|id| id.to_string()).unwrap_or_default(),
+        vote_count: candidate.vote_count,
+        rank,
+        rank_change: 0,
+        vote_percentage,
+    }
+}
+
+fn to_proto_candidate_ranked(ranked: CandidateWithRank) -> PollCandidate {
+    PollCandidate {
+        id: ranked.id.to_string(),
+        name: ranked.name,
+        avatar_url: ranked.avatar_url.unwrap_or_default(),
+        description: ranked.description.unwrap_or_default(),
+        user_id: ranked.user_id.map(|id| id.to_string()).unwrap_or_default(),
+        vote_count: ranked.vote_count,
+        rank: ranked.rank,
+        rank_change: ranked.rank_change,
+        vote_percentage: ranked.vote_percentage,
+    }
+}

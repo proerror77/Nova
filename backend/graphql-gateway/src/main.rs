@@ -1,3 +1,7 @@
+use crate::rest_api::poll::{
+    add_candidate, check_voted, close_poll, create_poll, delete_poll, get_active_polls, get_poll,
+    get_rankings, get_trending_polls, remove_candidate, unvote, vote_on_poll,
+};
 use crate::rest_api::social_likes::{
     check_liked, create_comment, create_like, create_share, delete_comment, delete_comment_v2,
     delete_like, get_comments, get_likes, get_share_count,
@@ -380,6 +384,19 @@ async fn main() -> std::io::Result<()> {
                 "/api/v2/chat/conversations/{id}",
                 web::get().to(rest_api::get_conversation_by_id),
             )
+            // ✅ Poll API (投票榜单)
+            .service(get_trending_polls)
+            .service(get_active_polls)
+            .service(create_poll)
+            .service(get_poll)
+            .service(vote_on_poll)
+            .service(unvote)
+            .service(check_voted)
+            .service(get_rankings)
+            .service(add_candidate)
+            .service(remove_candidate)
+            .service(close_poll)
+            .service(delete_poll)
     })
     .bind(&bind_addr)?
     .run()
