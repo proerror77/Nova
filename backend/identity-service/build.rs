@@ -1,9 +1,7 @@
 fn main() {
     println!("cargo:rerun-if-changed=../proto/services/auth_service.proto");
     println!("cargo:rerun-if-changed=../proto/services/common.proto");
-    println!(
-        "cargo:rerun-if-changed=../proto/third_party/google/api/annotations.proto"
-    );
+    println!("cargo:rerun-if-changed=../proto/third_party/google/api/annotations.proto");
     println!("cargo:rerun-if-changed=../proto/third_party/google/api/http.proto");
 
     // Compile proto files for identity-service gRPC server

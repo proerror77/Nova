@@ -1,7 +1,5 @@
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    println!(
-        "cargo:rerun-if-changed=../proto/third_party/google/api/annotations.proto"
-    );
+    println!("cargo:rerun-if-changed=../proto/third_party/google/api/annotations.proto");
     println!("cargo:rerun-if-changed=../proto/third_party/google/api/http.proto");
 
     // Compile protobuf files

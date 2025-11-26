@@ -6,7 +6,6 @@
 //! - Proper error categorization
 //! - Timing information on all operations
 
-
 // RED: Test for JWT authentication success logging
 #[tokio::test]
 async fn test_jwt_auth_success_logging_contains_required_fields() {
