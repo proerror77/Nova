@@ -731,8 +731,8 @@ impl<R: OutboxRepository, P: OutboxPublisher> OutboxProcessor<R, P> {
 
             if let Some(metrics) = &self.metrics {
                 if let Ok((pending, age)) = self.repository.pending_stats().await {
-                    metrics.pending.set(pending as i64);
-                    metrics.oldest_pending_age_seconds.set(age as i64);
+                    metrics.pending.set(pending);
+                    metrics.oldest_pending_age_seconds.set(age);
                 }
             }
 
