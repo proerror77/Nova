@@ -73,8 +73,8 @@ use tokio::task::JoinHandle;
 use tracing::{debug, error, info, warn};
 
 mod error;
-mod helpers;
-mod stats;
+pub mod helpers;
+pub mod stats;
 
 pub use error::InvalidationError;
 pub use helpers::{build_cache_key, parse_cache_key};
