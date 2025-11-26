@@ -19,7 +19,7 @@ impl OutboxMetrics {
             )
             .const_label("service", service.to_string()),
         )
-        .unwrap();
+        .expect("valid metric opts for outbox_pending_count");
 
         let oldest_pending_age_seconds = IntGauge::with_opts(
             Opts::new(
@@ -28,7 +28,7 @@ impl OutboxMetrics {
             )
             .const_label("service", service.to_string()),
         )
-        .unwrap();
+        .expect("valid metric opts for outbox_oldest_pending_age_seconds");
 
         let published = IntCounter::with_opts(
             Opts::new(
@@ -37,7 +37,7 @@ impl OutboxMetrics {
             )
             .const_label("service", service.to_string()),
         )
-        .unwrap();
+        .expect("valid metric opts for outbox_published_total");
 
         for metric in [
             Box::new(pending.clone()) as Box<dyn prometheus::core::Collector>,
