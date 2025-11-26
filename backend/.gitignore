@@ -2,7 +2,7 @@
 target/
 **/*.rs.bk
 *.pdb
-Cargo.lock
+# Cargo.lock - Include for reproducible builds (Rust best practice for applications)
 
 # Environment variables
 .env
