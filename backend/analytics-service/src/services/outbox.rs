@@ -70,17 +70,17 @@ impl OutboxMetrics {
             "outbox_pending_count",
             "Number of unpublished outbox events currently pending",
         )
-        .unwrap();
+        .expect("valid metric for outbox_pending_count");
         let oldest_pending_age_seconds = IntGauge::new(
             "outbox_oldest_pending_age_seconds",
             "Age in seconds of the oldest pending outbox event",
         )
-        .unwrap();
+        .expect("valid metric for outbox_oldest_pending_age_seconds");
         let published = IntCounter::new(
             "outbox_published_total",
             "Total number of outbox events marked as published",
         )
-        .unwrap();
+        .expect("valid metric for outbox_published_total");
 
         for metric in [
             Box::new(pending.clone()) as Box<dyn prometheus::core::Collector>,
