@@ -452,6 +452,8 @@ mod tests {
                     like_count: 10,
                     comment_count: 2,
                     share_count: 1,
+                    media_urls: vec![],
+                    media_type: String::new(),
                 },
                 CachedFeedPost {
                     id: "post-2".to_string(),
@@ -462,6 +464,8 @@ mod tests {
                     like_count: 20,
                     comment_count: 5,
                     share_count: 3,
+                    media_urls: vec![],
+                    media_type: String::new(),
                 },
             ],
             cursor: Some("cursor-123".to_string()),

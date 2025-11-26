@@ -572,6 +572,8 @@ mod tests {
             like_count: 42,
             comment_count: 5,
             share_count: 2,
+            media_urls: vec![],
+            media_type: String::new(),
         };
 
         // Verify all proto fields are set correctly
@@ -598,6 +600,8 @@ mod tests {
                 like_count: 10,
                 comment_count: 2,
                 share_count: 1,
+                media_urls: vec![],
+                media_type: String::new(),
             },
             FeedPost {
                 id: "post-2".to_string(),
@@ -608,6 +612,8 @@ mod tests {
                 like_count: 20,
                 comment_count: 5,
                 share_count: 3,
+                media_urls: vec![],
+                media_type: String::new(),
             },
         ];
 
@@ -778,6 +784,8 @@ mod tests {
             like_count: 1000,
             comment_count: 250,
             share_count: 75,
+            media_urls: vec![],
+            media_type: String::new(),
         };
 
         // Measure construction time
@@ -792,6 +800,8 @@ mod tests {
                 like_count: post.like_count,
                 comment_count: post.comment_count,
                 share_count: post.share_count,
+                media_urls: vec![],
+                media_type: String::new(),
             };
         }
         let elapsed = start.elapsed();
@@ -874,6 +884,8 @@ mod tests {
                 like_count: 100 + i as u32,
                 comment_count: 10 + (i % 5) as u32,
                 share_count: (i % 3) as u32,
+                media_urls: vec![],
+                media_type: String::new(),
             })
             .collect();
 
@@ -935,6 +947,8 @@ mod tests {
                         like_count: 100,
                         comment_count: 10,
                         share_count: 5,
+                        media_urls: vec![],
+                        media_type: String::new(),
                     })
                     .collect(),
                 next_cursor: cursor.clone(),
