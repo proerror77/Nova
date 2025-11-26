@@ -76,7 +76,10 @@ async fn main() -> Result<()> {
 
         // Verify health
         let (pg_healthy, neo4j_healthy) = dual_repo.health_check().await?;
-        info!("Health check: PostgreSQL = {}, Neo4j = {}", pg_healthy, neo4j_healthy);
+        info!(
+            "Health check: PostgreSQL = {}, Neo4j = {}",
+            pg_healthy, neo4j_healthy
+        );
 
         if !pg_healthy {
             error!("PostgreSQL health check failed - aborting");
@@ -129,12 +132,8 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-async fn start_grpc_server(
-    graph_service: GraphServiceImpl,
-    config: &Config,
-) -> Result<()> {
-
-// Setup health reporting
+async fn start_grpc_server(graph_service: GraphServiceImpl, config: &Config) -> Result<()> {
+    // Setup health reporting
     let (mut health_reporter, health_service) = health_reporter();
     health_reporter
         .set_serving::<GraphServiceServer<GraphServiceImpl>>()

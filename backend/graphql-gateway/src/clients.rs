@@ -53,13 +53,23 @@ pub mod proto {
     pub mod search {
         tonic::include_proto!("nova.search.v1");
     }
+
+    pub mod notification {
+        tonic::include_proto!("nova.notification_service.v2");
+    }
+
+    pub mod graph {
+        tonic::include_proto!("nova.graph_service.v2");
+    }
 }
 
 use proto::auth::auth_service_client::AuthServiceClient;
 use proto::chat::realtime_chat_service_client::RealtimeChatServiceClient;
 use proto::content::content_service_client::ContentServiceClient;
 use proto::feed::recommendation_service_client::RecommendationServiceClient;
+use proto::graph::graph_service_client::GraphServiceClient;
 use proto::media::media_service_client::MediaServiceClient;
+use proto::notification::notification_service_client::NotificationServiceClient;
 use proto::social::social_service_client::SocialServiceClient;
 // UserServiceClient removed - user-service is deprecated
 
@@ -93,6 +103,8 @@ pub struct ServiceClients {
     chat_channel: Arc<Channel>,
     media_channel: Arc<Channel>,
     search_channel: Arc<Channel>,
+    notification_channel: Arc<Channel>,
+    graph_channel: Arc<Channel>,
     // Circuit breakers (one per service)
     auth_cb: Arc<CircuitBreaker>,
     // user_cb removed - user-service is deprecated
@@ -102,6 +114,8 @@ pub struct ServiceClients {
     chat_cb: Arc<CircuitBreaker>,
     media_cb: Arc<CircuitBreaker>,
     search_cb: Arc<CircuitBreaker>,
+    notification_cb: Arc<CircuitBreaker>,
+    graph_cb: Arc<CircuitBreaker>,
 }
 
 impl Default for ServiceClients {
@@ -115,6 +129,8 @@ impl Default for ServiceClients {
             "http://realtime-chat-service.nova-staging.svc.cluster.local:9085",
             "http://media-service.nova-staging.svc.cluster.local:9086",
             "http://search-service.nova-staging.svc.cluster.local:9087",
+            "http://notification-service.nova-staging.svc.cluster.local:50051",
+            "http://graph-service.nova-staging.svc.cluster.local:50051",
         )
     }
 }
@@ -152,6 +168,17 @@ impl ServiceClients {
                 cfg.make_endpoint(&cfg.search_service.url)
                     .map_err(|e| ServiceError::ConnectionError(e.to_string()))?,
             )),
+            // notification and graph services use default endpoints (not yet in GrpcConfig)
+            notification_channel: Arc::new(Self::create_channel(
+                &std::env::var("NOTIFICATION_SERVICE_URL").unwrap_or_else(|_| {
+                    "http://notification-service.nova-staging.svc.cluster.local:50051".to_string()
+                }),
+            )),
+            graph_channel: Arc::new(Self::create_channel(
+                &std::env::var("GRAPH_SERVICE_URL").unwrap_or_else(|_| {
+                    "http://graph-service.nova-staging.svc.cluster.local:50051".to_string()
+                }),
+            )),
             auth_cb: Arc::new(CircuitBreaker::new(Self::default_cb_config())),
             content_cb: Arc::new(CircuitBreaker::new(Self::default_cb_config())),
             feed_cb: Arc::new(CircuitBreaker::new(Self::default_cb_config())),
@@ -159,6 +186,8 @@ impl ServiceClients {
             chat_cb: Arc::new(CircuitBreaker::new(Self::default_cb_config())),
             media_cb: Arc::new(CircuitBreaker::new(Self::default_cb_config())),
             search_cb: Arc::new(CircuitBreaker::new(Self::default_cb_config())),
+            notification_cb: Arc::new(CircuitBreaker::new(Self::default_cb_config())),
+            graph_cb: Arc::new(CircuitBreaker::new(Self::default_cb_config())),
         })
     }
 
@@ -198,6 +227,8 @@ impl ServiceClients {
         chat_endpoint: &str,
         media_endpoint: &str,
         search_endpoint: &str,
+        notification_endpoint: &str,
+        graph_endpoint: &str,
     ) -> Self {
         // Circuit breaker configuration
         let cb_config = Self::default_cb_config();
@@ -211,6 +242,8 @@ impl ServiceClients {
             chat_channel: Arc::new(Self::create_channel(chat_endpoint)),
             media_channel: Arc::new(Self::create_channel(media_endpoint)),
             search_channel: Arc::new(Self::create_channel(search_endpoint)),
+            notification_channel: Arc::new(Self::create_channel(notification_endpoint)),
+            graph_channel: Arc::new(Self::create_channel(graph_endpoint)),
             auth_cb: Arc::new(CircuitBreaker::new(cb_config.clone())),
             // user_cb removed - user-service is deprecated
             content_cb: Arc::new(CircuitBreaker::new(cb_config.clone())),
@@ -218,7 +251,9 @@ impl ServiceClients {
             social_cb: Arc::new(CircuitBreaker::new(cb_config.clone())),
             chat_cb: Arc::new(CircuitBreaker::new(cb_config.clone())),
             media_cb: Arc::new(CircuitBreaker::new(cb_config.clone())),
-            search_cb: Arc::new(CircuitBreaker::new(cb_config)),
+            search_cb: Arc::new(CircuitBreaker::new(cb_config.clone())),
+            notification_cb: Arc::new(CircuitBreaker::new(cb_config.clone())),
+            graph_cb: Arc::new(CircuitBreaker::new(cb_config)),
         }
     }
 
@@ -514,6 +549,60 @@ impl ServiceClients {
             })
     }
 
+    /// Get notification service client
+    pub fn notification_client(&self) -> NotificationServiceClient<Channel> {
+        NotificationServiceClient::new((*self.notification_channel).clone())
+    }
+
+    /// Execute notification service call with circuit breaker protection
+    pub async fn call_notification<F, Fut, T>(&self, f: F) -> Result<T, ServiceError>
+    where
+        F: FnOnce() -> Fut,
+        Fut: std::future::Future<Output = Result<tonic::Response<T>, Status>>,
+    {
+        self.notification_cb
+            .call(f)
+            .await
+            .map(|response| response.into_inner())
+            .map_err(|e| match e {
+                resilience::circuit_breaker::CircuitBreakerError::Open => {
+                    ServiceError::Unavailable {
+                        service: "notification-service".to_string(),
+                    }
+                }
+                resilience::circuit_breaker::CircuitBreakerError::CallFailed(msg) => {
+                    ServiceError::ConnectionError(msg)
+                }
+            })
+    }
+
+    /// Get graph service client
+    pub fn graph_client(&self) -> GraphServiceClient<Channel> {
+        GraphServiceClient::new((*self.graph_channel).clone())
+    }
+
+    /// Execute graph service call with circuit breaker protection
+    pub async fn call_graph<F, Fut, T>(&self, f: F) -> Result<T, ServiceError>
+    where
+        F: FnOnce() -> Fut,
+        Fut: std::future::Future<Output = Result<tonic::Response<T>, Status>>,
+    {
+        self.graph_cb
+            .call(f)
+            .await
+            .map(|response| response.into_inner())
+            .map_err(|e| match e {
+                resilience::circuit_breaker::CircuitBreakerError::Open => {
+                    ServiceError::Unavailable {
+                        service: "graph-service".to_string(),
+                    }
+                }
+                resilience::circuit_breaker::CircuitBreakerError::CallFailed(msg) => {
+                    ServiceError::ConnectionError(msg)
+                }
+            })
+    }
+
     /// Get circuit breaker health status for monitoring
     ///
     /// Returns a list of (service_name, circuit_state) tuples for all services.
@@ -535,6 +624,8 @@ impl ServiceClients {
             ("social-service", self.social_cb.state()),
             ("realtime-chat-service", self.chat_cb.state()),
             ("media-service", self.media_cb.state()),
+            ("notification-service", self.notification_cb.state()),
+            ("graph-service", self.graph_cb.state()),
         ]
     }
 
@@ -548,6 +639,8 @@ impl ServiceClients {
             "social" => Some(&self.social_cb),
             "chat" | "realtime-chat" => Some(&self.chat_cb),
             "media" => Some(&self.media_cb),
+            "notification" => Some(&self.notification_cb),
+            "graph" => Some(&self.graph_cb),
             _ => None,
         }
     }
@@ -600,6 +693,8 @@ mod tests {
         let _chat = clients.chat_client();
         let _media = clients.media_client();
         let _search = clients.search_client();
+        let _notification = clients.notification_client();
+        let _graph = clients.graph_client();
     }
 
     #[test]
@@ -624,12 +719,16 @@ mod tests {
             "http://custom-chat:8085",
             "http://custom-media:8086",
             "http://custom-search:8087",
+            "http://custom-notification:8088",
+            "http://custom-graph:8089",
         );
 
         // Should create without panicking
         let _auth = clients.auth_client();
         let _social = clients.social_client();
         let _chat = clients.chat_client();
+        let _notification = clients.notification_client();
+        let _graph = clients.graph_client();
     }
 
     #[test]
@@ -643,6 +742,9 @@ mod tests {
             "http://social:8084",
             "http://chat:8085",
             "http://media:8086",
+            "http://search:8087",
+            "http://notification:8088",
+            "http://graph:8089",
         );
     }
 }

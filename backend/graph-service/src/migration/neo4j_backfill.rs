@@ -43,7 +43,10 @@ impl Neo4jBackfill {
 
         info!(
             "Neo4j backfill completed: {} users, {} follows, {} mutes, {} blocks",
-            stats.users_migrated, stats.follows_migrated, stats.mutes_migrated, stats.blocks_migrated
+            stats.users_migrated,
+            stats.follows_migrated,
+            stats.mutes_migrated,
+            stats.blocks_migrated
         );
 
         Ok(stats)
@@ -97,7 +100,7 @@ impl Neo4jBackfill {
 
         // Note: PostgreSQL uses 'following_id', we map to 'followee_id' for Neo4j
         let follows = sqlx::query_as::<_, (Uuid, Uuid, DateTime<Utc>)>(
-            "SELECT follower_id, following_id, created_at FROM follows ORDER BY created_at"
+            "SELECT follower_id, following_id, created_at FROM follows ORDER BY created_at",
         )
         .fetch_all(&self.pg_pool)
         .await
@@ -123,12 +126,19 @@ impl Neo4jBackfill {
                         .param("created_at", created_at.timestamp()),
                 )
                 .await
-                .context(format!("Failed to migrate follow {} -> {}", follower_id, following_id))?;
+                .context(format!(
+                    "Failed to migrate follow {} -> {}",
+                    follower_id, following_id
+                ))?;
 
             migrated += 1;
 
             if (i + 1) % 100 == 0 {
-                info!("Migrated {} / {} follow relationships", i + 1, total_follows);
+                info!(
+                    "Migrated {} / {} follow relationships",
+                    i + 1,
+                    total_follows
+                );
             }
         }
 
@@ -145,7 +155,7 @@ impl Neo4jBackfill {
                 SELECT FROM information_schema.tables
                 WHERE table_schema = 'public'
                 AND table_name = 'mutes'
-            )"
+            )",
         )
         .fetch_one(&self.pg_pool)
         .await?;
@@ -156,7 +166,7 @@ impl Neo4jBackfill {
         }
 
         let mutes = sqlx::query_as::<_, (Uuid, Uuid, DateTime<Utc>)>(
-            "SELECT muter_id, muted_id, created_at FROM mutes ORDER BY created_at"
+            "SELECT muter_id, muted_id, created_at FROM mutes ORDER BY created_at",
         )
         .fetch_all(&self.pg_pool)
         .await
@@ -182,7 +192,10 @@ impl Neo4jBackfill {
                         .param("created_at", created_at.timestamp()),
                 )
                 .await
-                .context(format!("Failed to migrate mute {} -> {}", muter_id, muted_id))?;
+                .context(format!(
+                    "Failed to migrate mute {} -> {}",
+                    muter_id, muted_id
+                ))?;
 
             migrated += 1;
 
@@ -204,7 +217,7 @@ impl Neo4jBackfill {
                 SELECT FROM information_schema.tables
                 WHERE table_schema = 'public'
                 AND table_name = 'blocks'
-            )"
+            )",
         )
         .fetch_one(&self.pg_pool)
         .await?;
@@ -215,7 +228,7 @@ impl Neo4jBackfill {
         }
 
         let blocks = sqlx::query_as::<_, (Uuid, Uuid, DateTime<Utc>)>(
-            "SELECT blocker_id, blocked_id, created_at FROM blocks ORDER BY created_at"
+            "SELECT blocker_id, blocked_id, created_at FROM blocks ORDER BY created_at",
         )
         .fetch_all(&self.pg_pool)
         .await
@@ -241,7 +254,10 @@ impl Neo4jBackfill {
                         .param("created_at", created_at.timestamp()),
                 )
                 .await
-                .context(format!("Failed to migrate block {} -> {}", blocker_id, blocked_id))?;
+                .context(format!(
+                    "Failed to migrate block {} -> {}",
+                    blocker_id, blocked_id
+                ))?;
 
             migrated += 1;
 
@@ -258,11 +274,10 @@ impl Neo4jBackfill {
         info!("Verifying data consistency between PostgreSQL and Neo4j");
 
         // Verify user count
-        let pg_user_count: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM users WHERE deleted_at IS NULL"
-        )
-        .fetch_one(&self.pg_pool)
-        .await?;
+        let pg_user_count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM users WHERE deleted_at IS NULL")
+                .fetch_one(&self.pg_pool)
+                .await?;
 
         let mut neo4j_result = self
             .neo4j_graph
@@ -321,18 +336,17 @@ impl Neo4jBackfill {
 
         // Sample verification: Check 10 random users
         let sample_users: Vec<(Uuid,)> = sqlx::query_as(
-            "SELECT id FROM users WHERE deleted_at IS NULL ORDER BY RANDOM() LIMIT 10"
+            "SELECT id FROM users WHERE deleted_at IS NULL ORDER BY RANDOM() LIMIT 10",
         )
         .fetch_all(&self.pg_pool)
         .await?;
 
         for (user_id,) in sample_users {
-            let pg_follower_count: i64 = sqlx::query_scalar(
-                "SELECT COUNT(*) FROM follows WHERE following_id = $1"
-            )
-            .bind(user_id)
-            .fetch_one(&self.pg_pool)
-            .await?;
+            let pg_follower_count: i64 =
+                sqlx::query_scalar("SELECT COUNT(*) FROM follows WHERE following_id = $1")
+                    .bind(user_id)
+                    .fetch_one(&self.pg_pool)
+                    .await?;
 
             let mut neo4j_result = self
                 .neo4j_graph
@@ -396,14 +410,12 @@ mod tests {
     #[ignore] // Run manually: cargo test --ignored
     async fn test_backfill() {
         // Requires running PostgreSQL and Neo4j
-        let database_url = std::env::var("DATABASE_URL")
-            .expect("DATABASE_URL must be set");
-        let neo4j_uri = std::env::var("NEO4J_URI")
-            .unwrap_or_else(|_| "bolt://localhost:7687".to_string());
-        let neo4j_user = std::env::var("NEO4J_USER")
-            .unwrap_or_else(|_| "neo4j".to_string());
-        let neo4j_password = std::env::var("NEO4J_PASSWORD")
-            .unwrap_or_else(|_| "password".to_string());
+        let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+        let neo4j_uri =
+            std::env::var("NEO4J_URI").unwrap_or_else(|_| "bolt://localhost:7687".to_string());
+        let neo4j_user = std::env::var("NEO4J_USER").unwrap_or_else(|_| "neo4j".to_string());
+        let neo4j_password =
+            std::env::var("NEO4J_PASSWORD").unwrap_or_else(|_| "password".to_string());
 
         let pg_pool = PgPool::connect(&database_url).await.unwrap();
         let neo4j_graph = Graph::new(&neo4j_uri, &neo4j_user, &neo4j_password)

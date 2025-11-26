@@ -38,22 +38,26 @@ impl PostgresGraphRepository {
         .await
         .context("Failed to create follow in PostgreSQL")?;
 
-        debug!("Created FOLLOWS in PostgreSQL: {} -> {}", follower_id, followee_id);
+        debug!(
+            "Created FOLLOWS in PostgreSQL: {} -> {}",
+            follower_id, followee_id
+        );
         Ok(())
     }
 
     /// Delete follow relationship
     pub async fn delete_follow(&self, follower_id: Uuid, followee_id: Uuid) -> Result<()> {
-        sqlx::query(
-            "DELETE FROM follows WHERE follower_id = $1 AND following_id = $2"
-        )
-        .bind(follower_id)
-        .bind(followee_id)
-        .execute(&self.pool)
-        .await
-        .context("Failed to delete follow in PostgreSQL")?;
+        sqlx::query("DELETE FROM follows WHERE follower_id = $1 AND following_id = $2")
+            .bind(follower_id)
+            .bind(followee_id)
+            .execute(&self.pool)
+            .await
+            .context("Failed to delete follow in PostgreSQL")?;
 
-        debug!("Deleted FOLLOWS in PostgreSQL: {} -> {}", follower_id, followee_id);
+        debug!(
+            "Deleted FOLLOWS in PostgreSQL: {} -> {}",
+            follower_id, followee_id
+        );
         Ok(())
     }
 
@@ -78,14 +82,12 @@ impl PostgresGraphRepository {
 
     /// Delete mute relationship
     pub async fn delete_mute(&self, muter_id: Uuid, mutee_id: Uuid) -> Result<()> {
-        sqlx::query(
-            "DELETE FROM mutes WHERE muter_id = $1 AND muted_id = $2"
-        )
-        .bind(muter_id)
-        .bind(mutee_id)
-        .execute(&self.pool)
-        .await
-        .context("Failed to delete mute in PostgreSQL")?;
+        sqlx::query("DELETE FROM mutes WHERE muter_id = $1 AND muted_id = $2")
+            .bind(muter_id)
+            .bind(mutee_id)
+            .execute(&self.pool)
+            .await
+            .context("Failed to delete mute in PostgreSQL")?;
 
         debug!("Deleted MUTES in PostgreSQL: {} -> {}", muter_id, mutee_id);
         Ok(())
@@ -106,22 +108,26 @@ impl PostgresGraphRepository {
         .await
         .context("Failed to create block in PostgreSQL - ensure blocks table exists")?;
 
-        debug!("Created BLOCKS in PostgreSQL: {} -> {}", blocker_id, blocked_id);
+        debug!(
+            "Created BLOCKS in PostgreSQL: {} -> {}",
+            blocker_id, blocked_id
+        );
         Ok(())
     }
 
     /// Delete block relationship
     pub async fn delete_block(&self, blocker_id: Uuid, blocked_id: Uuid) -> Result<()> {
-        sqlx::query(
-            "DELETE FROM blocks WHERE blocker_id = $1 AND blocked_id = $2"
-        )
-        .bind(blocker_id)
-        .bind(blocked_id)
-        .execute(&self.pool)
-        .await
-        .context("Failed to delete block in PostgreSQL")?;
+        sqlx::query("DELETE FROM blocks WHERE blocker_id = $1 AND blocked_id = $2")
+            .bind(blocker_id)
+            .bind(blocked_id)
+            .execute(&self.pool)
+            .await
+            .context("Failed to delete block in PostgreSQL")?;
 
-        debug!("Deleted BLOCKS in PostgreSQL: {} -> {}", blocker_id, blocked_id);
+        debug!(
+            "Deleted BLOCKS in PostgreSQL: {} -> {}",
+            blocker_id, blocked_id
+        );
         Ok(())
     }
 
@@ -135,19 +141,18 @@ impl PostgresGraphRepository {
         let effective_limit = limit.min(10000);
 
         // Get total count
-        let total_count: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM follows WHERE following_id = $1"
-        )
-        .bind(user_id)
-        .fetch_one(&self.pool)
-        .await?;
+        let total_count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM follows WHERE following_id = $1")
+                .bind(user_id)
+                .fetch_one(&self.pool)
+                .await?;
 
         // Get paginated followers
         let followers: Vec<(Uuid,)> = sqlx::query_as(
             "SELECT follower_id FROM follows
              WHERE following_id = $1
              ORDER BY created_at DESC
-             LIMIT $2 OFFSET $3"
+             LIMIT $2 OFFSET $3",
         )
         .bind(user_id)
         .bind(effective_limit as i64)
@@ -170,18 +175,17 @@ impl PostgresGraphRepository {
     ) -> Result<(Vec<Uuid>, i32, bool)> {
         let effective_limit = limit.min(10000);
 
-        let total_count: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM follows WHERE follower_id = $1"
-        )
-        .bind(user_id)
-        .fetch_one(&self.pool)
-        .await?;
+        let total_count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM follows WHERE follower_id = $1")
+                .bind(user_id)
+                .fetch_one(&self.pool)
+                .await?;
 
         let following: Vec<(Uuid,)> = sqlx::query_as(
             "SELECT following_id FROM follows
              WHERE follower_id = $1
              ORDER BY created_at DESC
-             LIMIT $2 OFFSET $3"
+             LIMIT $2 OFFSET $3",
         )
         .bind(user_id)
         .bind(effective_limit as i64)
@@ -198,7 +202,7 @@ impl PostgresGraphRepository {
     /// Check if following
     pub async fn is_following(&self, follower_id: Uuid, followee_id: Uuid) -> Result<bool> {
         let exists: bool = sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM follows WHERE follower_id = $1 AND following_id = $2)"
+            "SELECT EXISTS(SELECT 1 FROM follows WHERE follower_id = $1 AND following_id = $2)",
         )
         .bind(follower_id)
         .bind(followee_id)

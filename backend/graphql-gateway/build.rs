@@ -25,9 +25,16 @@ fn main() {
                 "../proto/services_v2/social_service.proto",
                 "../proto/services_v2/search_service.proto",
                 "../proto/services_v2/media_service.proto",
+                "../proto/services/notification_service.proto",
+                "../proto/services/graph_service.proto",
             ],
             // Put services_v2 before services to prefer v2 definitions when filenames overlap
-            &["../proto/services_v2/", "../proto/services/"],
+            // Include third_party for google/api/annotations.proto
+            &[
+                "../proto/services_v2/",
+                "../proto/services/",
+                "../proto/third_party/",
+            ],
         )
         .expect("Failed to compile main service protos");
 

@@ -68,6 +68,8 @@ pub async fn get_feed(
                     like_count: post.like_count,
                     comment_count: post.comment_count,
                     share_count: post.share_count,
+                    media_urls: post.media_urls,
+                    media_type: post.media_type,
                 })
                 .collect();
 
@@ -154,6 +156,8 @@ pub async fn get_feed_by_user(
                         like_count: p.like_count,
                         comment_count: p.comment_count,
                         share_count: p.share_count,
+                        media_urls: p.media_urls,
+                        media_type: p.media_type,
                     })
                     .collect(),
                 next_cursor: if inner.next_cursor.is_empty() {
@@ -202,6 +206,8 @@ pub async fn get_explore_feed(
                         like_count: p.like_count,
                         comment_count: p.comment_count,
                         share_count: p.share_count,
+                        media_urls: p.media_urls,
+                        media_type: p.media_type,
                     })
                     .collect(),
                 next_cursor: if inner.next_cursor.is_empty() {
@@ -249,6 +255,8 @@ pub async fn get_trending_feed(
                         like_count: p.like_count,
                         comment_count: p.comment_count,
                         share_count: p.share_count,
+                        media_urls: p.media_urls,
+                        media_type: p.media_type,
                     })
                     .collect(),
                 next_cursor: if inner.next_cursor.is_empty() {

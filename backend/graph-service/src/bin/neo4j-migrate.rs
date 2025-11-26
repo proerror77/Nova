@@ -20,17 +20,15 @@ async fn main() -> Result<()> {
     info!("🚀 Starting Neo4j Migration Tool");
 
     // Load environment variables
-    let database_url = std::env::var("DATABASE_URL")
-        .context("DATABASE_URL environment variable not set")?;
+    let database_url =
+        std::env::var("DATABASE_URL").context("DATABASE_URL environment variable not set")?;
 
-    let neo4j_uri = std::env::var("NEO4J_URI")
-        .unwrap_or_else(|_| "bolt://neo4j:7687".to_string());
+    let neo4j_uri = std::env::var("NEO4J_URI").unwrap_or_else(|_| "bolt://neo4j:7687".to_string());
 
-    let neo4j_user = std::env::var("NEO4J_USER")
-        .unwrap_or_else(|_| "neo4j".to_string());
+    let neo4j_user = std::env::var("NEO4J_USER").unwrap_or_else(|_| "neo4j".to_string());
 
-    let neo4j_password = std::env::var("NEO4J_PASSWORD")
-        .context("NEO4J_PASSWORD environment variable not set")?;
+    let neo4j_password =
+        std::env::var("NEO4J_PASSWORD").context("NEO4J_PASSWORD environment variable not set")?;
 
     info!("📊 Connecting to PostgreSQL: {}", database_url);
     let pg_pool = PgPool::connect(&database_url)
@@ -128,11 +126,10 @@ async fn main() -> Result<()> {
             info!("📊 Database Statistics");
 
             // PostgreSQL stats
-            let pg_users: i64 = sqlx::query_scalar(
-                "SELECT COUNT(*) FROM users WHERE deleted_at IS NULL"
-            )
-            .fetch_one(&pg_pool)
-            .await?;
+            let pg_users: i64 =
+                sqlx::query_scalar("SELECT COUNT(*) FROM users WHERE deleted_at IS NULL")
+                    .fetch_one(&pg_pool)
+                    .await?;
 
             let pg_follows: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM follows")
                 .fetch_one(&pg_pool)

@@ -21,7 +21,8 @@ fn default_neo4j_password() -> String {
 }
 
 fn default_database_url() -> String {
-    env::var("DATABASE_URL").unwrap_or_else(|_| "postgres://nova:nova123@postgres:5432/nova_graph".to_string())
+    env::var("DATABASE_URL")
+        .unwrap_or_else(|_| "postgres://nova:nova123@postgres:5432/nova_graph".to_string())
 }
 
 fn default_enable_dual_write() -> bool {

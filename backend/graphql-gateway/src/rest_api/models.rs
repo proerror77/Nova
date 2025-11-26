@@ -105,6 +105,8 @@ pub struct FeedPost {
     pub like_count: u32,
     pub comment_count: u32,
     pub share_count: u32,
+    pub media_urls: Vec<String>,
+    pub media_type: String,
 }
 
 #[derive(Debug, Serialize)]

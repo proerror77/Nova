@@ -150,6 +150,8 @@ impl recommendation_service_server::RecommendationService for RecommendationServ
                             like_count: post.like_count,
                             comment_count: post.comment_count,
                             share_count: post.share_count,
+                            media_urls: post.media_urls.clone(),
+                            media_type: post.media_type.clone(),
                         })
                         .collect(),
                     next_cursor: cached.cursor.unwrap_or_default(),
@@ -178,7 +180,10 @@ impl recommendation_service_server::RecommendationService for RecommendationServ
         .max(1);
 
         // Fetch recent posts from content-service
-        let posts = match self.fetch_posts_from_content_service(limit as i32, &user_id).await {
+        let posts = match self
+            .fetch_posts_from_content_service(limit as i32, &user_id)
+            .await
+        {
             Ok(p) => p,
             Err(e) => {
                 error!("Failed to fetch posts from content-service: {}", e);
@@ -219,6 +224,8 @@ impl recommendation_service_server::RecommendationService for RecommendationServ
                     like_count: post.like_count,
                     comment_count: post.comment_count,
                     share_count: post.share_count,
+                    media_urls: post.media_urls.clone(),
+                    media_type: post.media_type.clone(),
                 })
                 .collect(),
             next_cursor: "".to_string(),
@@ -351,7 +358,9 @@ impl RecommendationServiceImpl {
         limit: i32,
         _user_id: &str,
     ) -> Result<Vec<CachedFeedPost>, Status> {
-        use grpc_clients::nova::content_service::v2::{GetPostsByIdsRequest, ListRecentPostsRequest};
+        use grpc_clients::nova::content_service::v2::{
+            GetPostsByIdsRequest, ListRecentPostsRequest,
+        };
 
         // Step 1: Get recent post IDs from content-service
         let mut content_client = self.grpc_pool.content();
@@ -406,6 +415,8 @@ impl RecommendationServiceImpl {
                 like_count: 0,                            // TODO: Fetch from social-service
                 comment_count: 0,
                 share_count: 0,
+                media_urls: post.media_urls,
+                media_type: post.media_type,
             })
             .collect();
 

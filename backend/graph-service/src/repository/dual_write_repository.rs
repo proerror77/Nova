@@ -56,7 +56,7 @@ impl DualWriteRepository {
         // Step 2: Write to Neo4j (best effort)
         if let Err(e) = neo4j_write.await {
             error!("Neo4j {} failed for {}: {}", operation, edge_desc, e);
-            tracing::warn!("neo4j_write_failure{{operation=\"{}\"}}",operation);
+            tracing::warn!("neo4j_write_failure{{operation=\"{}\"}}", operation);
 
             if self.strict_mode {
                 warn!("Strict mode: attempting rollback due to Neo4j failure");
@@ -164,11 +164,17 @@ impl DualWriteRepository {
         match self.neo4j.get_followers(user_id, limit, offset).await {
             Ok(result) => {
                 let duration = start.elapsed();
-                tracing::debug!("neo4j_query_success{{operation=\"get_followers\",duration_ms={}}}", duration.as_millis());
+                tracing::debug!(
+                    "neo4j_query_success{{operation=\"get_followers\",duration_ms={}}}",
+                    duration.as_millis()
+                );
                 Ok(result)
             }
             Err(e) => {
-                error!("Neo4j get_followers failed, falling back to PostgreSQL: {}", e);
+                error!(
+                    "Neo4j get_followers failed, falling back to PostgreSQL: {}",
+                    e
+                );
                 tracing::warn!("neo4j_query_failure{{operation=\"get_followers\"}}");
 
                 let result = self.postgres.get_followers(user_id, limit, offset).await?;
@@ -190,11 +196,17 @@ impl DualWriteRepository {
         match self.neo4j.get_following(user_id, limit, offset).await {
             Ok(result) => {
                 let duration = start.elapsed();
-                tracing::debug!("neo4j_query_success{{operation=\"get_following\",duration_ms={}}}", duration.as_millis());
+                tracing::debug!(
+                    "neo4j_query_success{{operation=\"get_following\",duration_ms={}}}",
+                    duration.as_millis()
+                );
                 Ok(result)
             }
             Err(e) => {
-                error!("Neo4j get_following failed, falling back to PostgreSQL: {}", e);
+                error!(
+                    "Neo4j get_following failed, falling back to PostgreSQL: {}",
+                    e
+                );
                 tracing::warn!("neo4j_query_failure{{operation=\"get_following\"}}");
 
                 let result = self.postgres.get_following(user_id, limit, offset).await?;
@@ -212,7 +224,10 @@ impl DualWriteRepository {
                 Ok(result)
             }
             Err(e) => {
-                error!("Neo4j is_following failed, falling back to PostgreSQL: {}", e);
+                error!(
+                    "Neo4j is_following failed, falling back to PostgreSQL: {}",
+                    e
+                );
                 tracing::warn!("neo4j_query_failure{{operation=\"is_following\"}}");
 
                 let result = self.postgres.is_following(follower_id, followee_id).await?;
