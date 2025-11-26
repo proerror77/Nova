@@ -29,6 +29,10 @@ pub struct CdcConsumerConfig {
     pub clickhouse_url: String,
     /// ClickHouse database
     pub clickhouse_database: String,
+    /// ClickHouse user
+    pub clickhouse_user: String,
+    /// ClickHouse password
+    pub clickhouse_password: String,
 }
 
 impl CdcConsumerConfig {
@@ -50,6 +54,9 @@ impl CdcConsumerConfig {
                 .unwrap_or_else(|_| "http://clickhouse:8123".to_string()),
             clickhouse_database: std::env::var("CLICKHOUSE_DATABASE")
                 .unwrap_or_else(|_| "analytics".to_string()),
+            clickhouse_user: std::env::var("CLICKHOUSE_USER")
+                .unwrap_or_else(|_| "default".to_string()),
+            clickhouse_password: std::env::var("CLICKHOUSE_PASSWORD").unwrap_or_default(),
         }
     }
 }
@@ -97,10 +104,12 @@ impl CdcConsumer {
 
         info!("CDC consumer subscribed to topics: {:?}", config.topics);
 
-        // Create ClickHouse client
+        // Create ClickHouse client with authentication
         let ch_client = ClickHouseClient::default()
             .with_url(&config.clickhouse_url)
-            .with_database(&config.clickhouse_database);
+            .with_database(&config.clickhouse_database)
+            .with_user(&config.clickhouse_user)
+            .with_password(&config.clickhouse_password);
 
         Ok(Self {
             consumer,

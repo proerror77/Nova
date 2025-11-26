@@ -69,6 +69,17 @@ spec:
           value: 'http://clickhouse:8123'
         - name: CLICKHOUSE_DATABASE
           value: 'analytics'
+        # ClickHouse authentication from secret
+        - name: CLICKHOUSE_USER
+          valueFrom:
+            secretKeyRef:
+              name: nova-clickhouse-credentials
+              key: CLICKHOUSE_USER
+        - name: CLICKHOUSE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: nova-clickhouse-credentials
+              key: CLICKHOUSE_PASSWORD
         envFrom:
         - configMapRef:
             name: analytics-service-config
