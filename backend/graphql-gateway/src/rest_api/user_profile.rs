@@ -196,21 +196,15 @@ pub async fn upload_avatar(
     req: web::Json<AvatarUploadRequest>,
     clients: web::Data<ServiceClients>,
 ) -> Result<HttpResponse> {
-    if http_req
+    let Some(authed) = http_req
         .extensions()
         .get::<AuthenticatedUser>()
         .copied()
-        .is_none()
-    {
+    else {
         return Ok(HttpResponse::Unauthorized().finish());
-    }
+    };
 
-    let user_id = http_req
-        .extensions()
-        .get::<AuthenticatedUser>()
-        .copied()
-        .map(|u| u.0)
-        .unwrap();
+    let user_id = authed.0;
 
     // Legacy flow: URL already available
     if let Some(url) = &req.url {

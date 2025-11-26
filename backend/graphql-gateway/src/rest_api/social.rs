@@ -355,21 +355,14 @@ pub async fn get_devices(
     http_req: HttpRequest,
     clients: web::Data<ServiceClients>,
 ) -> Result<HttpResponse> {
-    if http_req
+    let Some(authed) = http_req
         .extensions()
         .get::<AuthenticatedUser>()
         .copied()
-        .is_none()
-    {
+    else {
         return Ok(HttpResponse::Unauthorized().finish());
-    }
+    };
     info!("GET /api/v2/devices");
-
-    let authed = http_req
-        .extensions()
-        .get::<AuthenticatedUser>()
-        .copied()
-        .unwrap();
 
     let mut auth_client: AuthServiceClient<_> = clients.auth_client();
     let req = ListDevicesRequest {
@@ -397,21 +390,14 @@ pub async fn logout_device(
     req: web::Json<serde_json::Value>,
     clients: web::Data<ServiceClients>,
 ) -> Result<HttpResponse> {
-    if http_req
+    let Some(authed) = http_req
         .extensions()
         .get::<AuthenticatedUser>()
         .copied()
-        .is_none()
-    {
+    else {
         return Ok(HttpResponse::Unauthorized().finish());
-    }
+    };
     info!("POST /api/v2/devices/logout");
-
-    let authed = http_req
-        .extensions()
-        .get::<AuthenticatedUser>()
-        .copied()
-        .unwrap();
 
     let device_id = req
         .get("device_id")
@@ -444,21 +430,14 @@ pub async fn get_current_device(
     http_req: HttpRequest,
     clients: web::Data<ServiceClients>,
 ) -> Result<HttpResponse> {
-    if http_req
+    let Some(authed) = http_req
         .extensions()
         .get::<AuthenticatedUser>()
         .copied()
-        .is_none()
-    {
+    else {
         return Ok(HttpResponse::Unauthorized().finish());
-    }
+    };
     info!("GET /api/v2/devices/current");
-
-    let authed = http_req
-        .extensions()
-        .get::<AuthenticatedUser>()
-        .copied()
-        .unwrap();
 
     let mut auth_client: AuthServiceClient<_> = clients.auth_client();
     let req = GetCurrentDeviceRequest {
@@ -484,22 +463,16 @@ pub async fn generate_invite_code(
     http_req: HttpRequest,
     clients: web::Data<ServiceClients>,
 ) -> Result<HttpResponse> {
-    if http_req
+    let Some(authed) = http_req
         .extensions()
         .get::<AuthenticatedUser>()
         .copied()
-        .is_none()
-    {
+    else {
         return Ok(HttpResponse::Unauthorized().finish());
-    }
+    };
     info!("POST /api/v2/invitations/generate");
 
-    let issuer = http_req
-        .extensions()
-        .get::<AuthenticatedUser>()
-        .copied()
-        .map(|u| u.0)
-        .unwrap();
+    let issuer = authed.0;
 
     let mut auth_client: AuthServiceClient<_> = clients.auth_client();
     let req = GenerateInviteRequest {
@@ -527,22 +500,16 @@ pub async fn list_invitations(
     http_req: HttpRequest,
     clients: web::Data<ServiceClients>,
 ) -> Result<HttpResponse> {
-    if http_req
+    let Some(authed) = http_req
         .extensions()
         .get::<AuthenticatedUser>()
         .copied()
-        .is_none()
-    {
+    else {
         return Ok(HttpResponse::Unauthorized().finish());
-    }
+    };
     info!("GET /api/v2/invitations");
 
-    let user_id = http_req
-        .extensions()
-        .get::<AuthenticatedUser>()
-        .copied()
-        .map(|u| u.0)
-        .unwrap();
+    let user_id = authed.0;
 
     let mut auth_client: AuthServiceClient<_> = clients.auth_client();
     let req = ListInvitationsRequest {
@@ -569,22 +536,16 @@ pub async fn get_invitation_stats(
     http_req: HttpRequest,
     clients: web::Data<ServiceClients>,
 ) -> Result<HttpResponse> {
-    if http_req
+    let Some(authed) = http_req
         .extensions()
         .get::<AuthenticatedUser>()
         .copied()
-        .is_none()
-    {
+    else {
         return Ok(HttpResponse::Unauthorized().finish());
-    }
+    };
     info!("GET /api/v2/invitations/stats");
 
-    let user_id = http_req
-        .extensions()
-        .get::<AuthenticatedUser>()
-        .copied()
-        .map(|u| u.0)
-        .unwrap();
+    let user_id = authed.0;
 
     let mut auth_client: AuthServiceClient<_> = clients.auth_client();
     let req = GetInvitationStatsRequest {

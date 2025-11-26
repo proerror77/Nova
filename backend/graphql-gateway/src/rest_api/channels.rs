@@ -115,7 +115,8 @@ pub async fn get_channel_details(
                     "error": "channel_not_found"
                 })));
             }
-            let c = inner.channel.unwrap();
+            // Safe: checked is_none() above at line 113
+            let c = inner.channel.expect("channel was just checked");
             Ok(HttpResponse::Ok().json(Channel {
                 id: c.id,
                 name: c.name,
