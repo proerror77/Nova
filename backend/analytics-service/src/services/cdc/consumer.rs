@@ -247,10 +247,11 @@ impl CdcConsumer {
         .ok_or_else(|| AnalyticsError::Validation("CDC message missing data field".to_string()))?;
 
         let follower_raw: String = Self::extract_field(data, "follower_id")?;
-        let followee_raw: String = Self::extract_field(data, "followee_id")?;
+        // PostgreSQL table uses "following_id", but ClickHouse expects "followee_id"
+        let following_raw: String = Self::extract_field(data, "following_id")?;
         let follower_id = Uuid::parse_str(&follower_raw)
             .map_err(|e| AnalyticsError::Validation(format!("Invalid follower UUID: {}", e)))?;
-        let followee_id = Uuid::parse_str(&followee_raw)
+        let followee_id = Uuid::parse_str(&following_raw)
             .map_err(|e| AnalyticsError::Validation(format!("Invalid followee UUID: {}", e)))?;
         let created_at_raw: String = Self::extract_field(data, "created_at")?;
         let created_at = Self::parse_datetime_best_effort(&created_at_raw)?;
