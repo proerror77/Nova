@@ -30,10 +30,26 @@ impl CdcOperation {
 }
 
 /// CDC message structure from Debezium
+///
+/// When `value.converter.schemas.enable = false`, Debezium sends the payload directly
+/// without a wrapper object. This struct handles both formats.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CdcMessage {
-    /// Payload contains the actual CDC data
-    pub payload: CdcPayload,
+#[serde(untagged)]
+pub enum CdcMessage {
+    /// Format with schema wrapper (value.converter.schemas.enable = true)
+    WithSchema { payload: CdcPayload },
+    /// Format without schema wrapper (value.converter.schemas.enable = false)
+    WithoutSchema(CdcPayload),
+}
+
+impl CdcMessage {
+    /// Get the payload regardless of message format
+    pub fn payload(&self) -> &CdcPayload {
+        match self {
+            CdcMessage::WithSchema { payload } => payload,
+            CdcMessage::WithoutSchema(payload) => payload,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -81,9 +97,10 @@ pub struct CdcSource {
 impl CdcMessage {
     /// Validate the CDC message structure
     pub fn validate(&self) -> Result<()> {
-        let op = &self.payload.op;
-        let before = &self.payload.before;
-        let after = &self.payload.after;
+        let payload = self.payload();
+        let op = &payload.op;
+        let before = &payload.before;
+        let after = &payload.after;
 
         match op {
             CdcOperation::Insert | CdcOperation::Read => {
@@ -112,14 +129,14 @@ impl CdcMessage {
 
         // Validate timestamp is reasonable (not in distant past/future)
         let now = Utc::now().timestamp_millis();
-        let ts_diff = (now - self.payload.ts_ms).abs();
+        let ts_diff = (now - payload.ts_ms).abs();
 
         // Allow 1 year tolerance (clock skew + data migration)
         const ONE_YEAR_MS: i64 = 365 * 24 * 60 * 60 * 1000;
         if ts_diff > ONE_YEAR_MS {
             return Err(AnalyticsError::Validation(format!(
                 "CDC timestamp {} is too far from current time {}",
-                self.payload.ts_ms, now
+                payload.ts_ms, now
             )));
         }
 
@@ -128,25 +145,26 @@ impl CdcMessage {
 
     /// Get the table name from the CDC message
     pub fn table(&self) -> &str {
-        &self.payload.source.table
+        &self.payload().source.table
     }
 
     /// Get the operation type
     pub fn operation(&self) -> &CdcOperation {
-        &self.payload.op
+        &self.payload().op
     }
 
     /// Get the timestamp as DateTime
     pub fn timestamp(&self) -> DateTime<Utc> {
-        DateTime::from_timestamp_millis(self.payload.ts_ms).unwrap_or_else(Utc::now)
+        DateTime::from_timestamp_millis(self.payload().ts_ms).unwrap_or_else(Utc::now)
     }
 
     /// Extract a field from the 'after' or 'before' payload
     pub fn get_field(&self, field_name: &str) -> Option<&Value> {
-        self.payload
+        let payload = self.payload();
+        payload
             .after
             .as_ref()
-            .or(self.payload.before.as_ref())
+            .or(payload.before.as_ref())
             .and_then(|v| v.get(field_name))
     }
 

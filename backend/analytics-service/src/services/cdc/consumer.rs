@@ -183,8 +183,8 @@ impl CdcConsumer {
     async fn insert_posts_cdc(&self, msg: &CdcMessage) -> Result<()> {
         let op = msg.operation();
         let data = match op {
-            CdcOperation::Delete => msg.payload.before.as_ref(),
-            _ => msg.payload.after.as_ref(),
+            CdcOperation::Delete => msg.payload().before.as_ref(),
+            _ => msg.payload().after.as_ref(),
         }
         .ok_or_else(|| AnalyticsError::Validation("CDC message missing data field".to_string()))?;
 
@@ -206,7 +206,7 @@ impl CdcConsumer {
         } else {
             0
         };
-        let cdc_timestamp = Self::ts_ms_u64(msg.payload.ts_ms)?;
+        let cdc_timestamp = Self::ts_ms_u64(msg.payload().ts_ms)?;
 
         let query = format!(
             "INSERT INTO posts_cdc (id, user_id, content, media_url, created_at, cdc_timestamp, is_deleted) VALUES ('{}', '{}', '{}', {}, '{}', {}, {})",
@@ -232,8 +232,8 @@ impl CdcConsumer {
     async fn insert_follows_cdc(&self, msg: &CdcMessage) -> Result<()> {
         let op = msg.operation();
         let data = match op {
-            CdcOperation::Delete => msg.payload.before.as_ref(),
-            _ => msg.payload.after.as_ref(),
+            CdcOperation::Delete => msg.payload().before.as_ref(),
+            _ => msg.payload().after.as_ref(),
         }
         .ok_or_else(|| AnalyticsError::Validation("CDC message missing data field".to_string()))?;
 
@@ -251,7 +251,7 @@ impl CdcConsumer {
         } else {
             0
         };
-        let cdc_timestamp = Self::ts_ms_u64(msg.payload.ts_ms)?;
+        let cdc_timestamp = Self::ts_ms_u64(msg.payload().ts_ms)?;
 
         let query = format!(
             "INSERT INTO follows_cdc (follower_id, followee_id, created_at, cdc_timestamp, is_deleted) VALUES ('{}', '{}', '{}', {}, {})",
@@ -278,8 +278,8 @@ impl CdcConsumer {
     async fn insert_comments_cdc(&self, msg: &CdcMessage) -> Result<()> {
         let op = msg.operation();
         let data = match op {
-            CdcOperation::Delete => msg.payload.before.as_ref(),
-            _ => msg.payload.after.as_ref(),
+            CdcOperation::Delete => msg.payload().before.as_ref(),
+            _ => msg.payload().after.as_ref(),
         }
         .ok_or_else(|| AnalyticsError::Validation("CDC message missing data field".to_string()))?;
 
@@ -301,7 +301,7 @@ impl CdcConsumer {
         } else {
             0
         };
-        let cdc_timestamp = Self::ts_ms_u64(msg.payload.ts_ms)?;
+        let cdc_timestamp = Self::ts_ms_u64(msg.payload().ts_ms)?;
 
         let query = format!(
             "INSERT INTO comments_cdc (id, post_id, user_id, content, created_at, cdc_timestamp, is_deleted) VALUES ('{}', '{}', '{}', '{}', '{}', {}, {})",
@@ -327,8 +327,8 @@ impl CdcConsumer {
     async fn insert_likes_cdc(&self, msg: &CdcMessage) -> Result<()> {
         let op = msg.operation();
         let data = match op {
-            CdcOperation::Delete => msg.payload.before.as_ref(),
-            _ => msg.payload.after.as_ref(),
+            CdcOperation::Delete => msg.payload().before.as_ref(),
+            _ => msg.payload().after.as_ref(),
         }
         .ok_or_else(|| AnalyticsError::Validation("CDC message missing data field".to_string()))?;
 
@@ -346,7 +346,7 @@ impl CdcConsumer {
         } else {
             0
         };
-        let cdc_timestamp = Self::ts_ms_u64(msg.payload.ts_ms)?;
+        let cdc_timestamp = Self::ts_ms_u64(msg.payload().ts_ms)?;
 
         let query = format!(
             "INSERT INTO likes_cdc (user_id, post_id, created_at, cdc_timestamp, is_deleted) VALUES ('{}', '{}', '{}', {}, {})",
