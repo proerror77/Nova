@@ -1,7 +1,7 @@
 use actix_web::HttpResponse;
 use actix_web::{web, App, HttpServer};
 use analytics_service::grpc::nova::events_service::v2::events_service_server::EventsServiceServer;
-use analytics_service::services::{OutboxConfig, OutboxPublisher};
+use analytics_service::services::{CdcConsumer, CdcConsumerConfig, OutboxConfig, OutboxPublisher};
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use db_pool::{create_pool as create_pg_pool, DbConfig as DbPoolConfig};
@@ -91,6 +91,37 @@ async fn main() -> Result<()> {
         }
     } else {
         tracing::warn!("OUTBOX_PUBLISHER_ENABLED=false - skipping outbox worker start");
+    }
+
+    // Start CDC Consumer in background (feature flag)
+    let cdc_enabled = std::env::var("CDC_CONSUMER_ENABLED")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false);
+
+    if cdc_enabled {
+        let cdc_config = CdcConsumerConfig::from_env();
+        tracing::info!(
+            "Starting CDC Consumer (brokers: {}, topics: {:?})",
+            cdc_config.brokers,
+            cdc_config.topics
+        );
+
+        match CdcConsumer::new(cdc_config) {
+            Ok(consumer) => {
+                tokio::spawn(async move {
+                    tracing::info!("CDC Consumer task started");
+                    if let Err(e) = consumer.run().await {
+                        tracing::error!("CDC Consumer failed: {:?}", e);
+                    }
+                });
+            }
+            Err(e) => {
+                tracing::error!("Failed to create CDC Consumer: {:?}", e);
+                tracing::warn!("Analytics service will run without CDC Consumer");
+            }
+        }
+    } else {
+        tracing::info!("CDC_CONSUMER_ENABLED=false - skipping CDC consumer start");
     }
 
     // Compute HTTP and gRPC ports

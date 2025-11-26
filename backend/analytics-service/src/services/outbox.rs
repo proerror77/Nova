@@ -242,7 +242,7 @@ impl OutboxPublisher {
             .create()
             .map_err(|e| {
                 error!("Failed to create Kafka producer: {}", e);
-                AppError::InternalError(format!("Kafka producer creation failed: {}", e))
+                AppError::Internal(format!("Kafka producer creation failed: {}", e))
             })?;
 
         Ok(Self {
@@ -332,7 +332,7 @@ impl OutboxPublisher {
         .await
         .map_err(|e| {
             error!("Failed to fetch pending outbox events: {}", e);
-            AppError::DatabaseError(e.to_string())
+            AppError::Database(e.to_string())
         })?;
 
         if events.is_empty() {
@@ -435,7 +435,7 @@ impl OutboxPublisher {
         let topic = match &event.kafka_topic {
             Some(t) => t.as_str(),
             None => self.get_default_topic(&event.event_type).ok_or_else(|| {
-                AppError::ValidationError(format!(
+                AppError::Validation(format!(
                     "No Kafka topic configured for event type: {}",
                     event.event_type
                 ))
@@ -457,7 +457,7 @@ impl OutboxPublisher {
 
         let payload_json = serde_json::to_string(&payload).map_err(|e| {
             error!("Failed to serialize event payload: {}", e);
-            AppError::InternalError(format!("JSON serialization failed: {}", e))
+            AppError::Internal(format!("JSON serialization failed: {}", e))
         })?;
 
         // Use aggregate_id as Kafka key for ordering guarantee
@@ -487,7 +487,7 @@ impl OutboxPublisher {
             .await
             .map_err(|(e, _)| {
                 error!("Kafka send failed for event {}: {}", event.id, e);
-                AppError::InternalError(format!("Kafka send failed: {}", e))
+                AppError::Internal(format!("Kafka send failed: {}", e))
             })?;
 
         debug!("Successfully published event {} to Kafka", event.id);
@@ -509,7 +509,7 @@ impl OutboxPublisher {
         .await
         .map_err(|e| {
             error!("Failed to mark event {} as published: {}", event_id, e);
-            AppError::DatabaseError(e.to_string())
+            AppError::Database(e.to_string())
         })?;
 
         Ok(())
@@ -537,7 +537,7 @@ impl OutboxPublisher {
         .await
         .map_err(|e| {
             error!("Failed to mark event {} as failed: {}", event_id, e);
-            AppError::DatabaseError(e.to_string())
+            AppError::Database(e.to_string())
         })?;
 
         Ok(())
@@ -566,7 +566,7 @@ impl OutboxPublisher {
         .await
         .map_err(|e| {
             error!("Failed to fetch failed events for retry: {}", e);
-            AppError::DatabaseError(e.to_string())
+            AppError::Database(e.to_string())
         })?;
 
         if events.is_empty() {
@@ -634,7 +634,7 @@ impl OutboxPublisher {
         .await
         .map_err(|e| {
             error!("Failed to reset event {} to pending: {}", event_id, e);
-            AppError::DatabaseError(e.to_string())
+            AppError::Database(e.to_string())
         })?;
 
         Ok(())

@@ -3,25 +3,34 @@ use actix_web::{HttpResponse, ResponseError};
 use serde::Serialize;
 use thiserror::Error;
 
-pub type Result<T> = std::result::Result<T, AppError>;
+pub type Result<T> = std::result::Result<T, AnalyticsError>;
 
 #[derive(Debug, Error)]
-pub enum AppError {
+pub enum AnalyticsError {
     #[error("Database error: {0}")]
-    DatabaseError(String),
+    Database(String),
 
     #[error("Not found: {0}")]
     NotFound(String),
 
     #[error("Validation error: {0}")]
-    ValidationError(String),
+    Validation(String),
 
-    #[error("Internal server error: {0}")]
-    InternalError(String),
+    #[error("Internal error: {0}")]
+    Internal(String),
+
+    #[error("Kafka error: {0}")]
+    Kafka(String),
+
+    #[error("ClickHouse error: {0}")]
+    ClickHouse(String),
 
     #[error("Redis error: {0}")]
     Redis(#[from] redis::RedisError),
 }
+
+// Backwards compatibility alias
+pub type AppError = AnalyticsError;
 
 #[derive(Serialize)]
 pub struct ErrorResponse {
@@ -29,11 +38,11 @@ pub struct ErrorResponse {
     pub code: u16,
 }
 
-impl ResponseError for AppError {
+impl ResponseError for AnalyticsError {
     fn error_response(&self) -> HttpResponse {
         let (code, message) = match self {
-            AppError::NotFound(msg) => (StatusCode::NOT_FOUND, msg.clone()),
-            AppError::ValidationError(msg) => (StatusCode::BAD_REQUEST, msg.clone()),
+            AnalyticsError::NotFound(msg) => (StatusCode::NOT_FOUND, msg.clone()),
+            AnalyticsError::Validation(msg) => (StatusCode::BAD_REQUEST, msg.clone()),
             _ => (StatusCode::INTERNAL_SERVER_ERROR, self.to_string()),
         };
 
@@ -45,15 +54,15 @@ impl ResponseError for AppError {
 
     fn status_code(&self) -> StatusCode {
         match self {
-            AppError::NotFound(_) => StatusCode::NOT_FOUND,
-            AppError::ValidationError(_) => StatusCode::BAD_REQUEST,
+            AnalyticsError::NotFound(_) => StatusCode::NOT_FOUND,
+            AnalyticsError::Validation(_) => StatusCode::BAD_REQUEST,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 }
 
-impl From<sqlx::Error> for AppError {
+impl From<sqlx::Error> for AnalyticsError {
     fn from(err: sqlx::Error) -> Self {
-        AppError::DatabaseError(err.to_string())
+        AnalyticsError::Database(err.to_string())
     }
 }

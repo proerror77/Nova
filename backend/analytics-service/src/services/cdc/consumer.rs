@@ -160,11 +160,10 @@ impl CdcConsumer {
             cdc_msg.operation()
         );
 
-        let _permit = self
-            .semaphore
-            .acquire()
-            .await
-            .map_err(|e| AnalyticsError::Internal(format!("Failed to acquire semaphore: {}", e)))?;
+        let _permit =
+            self.semaphore.acquire().await.map_err(|e| {
+                AnalyticsError::Internal(format!("Failed to acquire semaphore: {}", e))
+            })?;
 
         match cdc_msg.table() {
             "posts" => self.insert_posts_cdc(&cdc_msg).await?,
@@ -190,16 +189,22 @@ impl CdcConsumer {
 
         let id_raw: String = Self::extract_field(data, "id")?;
         let user_id_raw: String = Self::extract_field(data, "user_id")?;
-        let post_id = Uuid::parse_str(&id_raw)
-            .map_err(|e| AnalyticsError::Validation(format!("Invalid post UUID '{}': {}", id_raw, e)))?;
-        let author_id = Uuid::parse_str(&user_id_raw)
-            .map_err(|e| AnalyticsError::Validation(format!("Invalid user UUID '{}': {}", user_id_raw, e)))?;
+        let post_id = Uuid::parse_str(&id_raw).map_err(|e| {
+            AnalyticsError::Validation(format!("Invalid post UUID '{}': {}", id_raw, e))
+        })?;
+        let author_id = Uuid::parse_str(&user_id_raw).map_err(|e| {
+            AnalyticsError::Validation(format!("Invalid user UUID '{}': {}", user_id_raw, e))
+        })?;
         let content: String = Self::extract_field(data, "content").unwrap_or_default();
         let media_url: Option<String> = Self::extract_optional_field(data, "media_url");
         let created_at_raw: String = Self::extract_field(data, "created_at")?;
         let created_at = Self::parse_datetime_best_effort(&created_at_raw)?;
 
-        let is_deleted: u8 = if matches!(op, CdcOperation::Delete) { 1 } else { 0 };
+        let is_deleted: u8 = if matches!(op, CdcOperation::Delete) {
+            1
+        } else {
+            0
+        };
         let cdc_timestamp = Self::ts_ms_u64(msg.payload.ts_ms)?;
 
         let query = format!(
@@ -240,7 +245,11 @@ impl CdcConsumer {
         let created_at_raw: String = Self::extract_field(data, "created_at")?;
         let created_at = Self::parse_datetime_best_effort(&created_at_raw)?;
 
-        let is_deleted: u8 = if matches!(op, CdcOperation::Delete) { 1 } else { 0 };
+        let is_deleted: u8 = if matches!(op, CdcOperation::Delete) {
+            1
+        } else {
+            0
+        };
         let cdc_timestamp = Self::ts_ms_u64(msg.payload.ts_ms)?;
 
         let query = format!(
@@ -257,7 +266,10 @@ impl CdcConsumer {
             AnalyticsError::ClickHouse(e.to_string())
         })?;
 
-        debug!("Inserted follows CDC: follower={}, followee={}, op={:?}", follower_id, followee_id, op);
+        debug!(
+            "Inserted follows CDC: follower={}, followee={}, op={:?}",
+            follower_id, followee_id, op
+        );
         Ok(())
     }
 
@@ -283,7 +295,11 @@ impl CdcConsumer {
         let created_at_raw: String = Self::extract_field(data, "created_at")?;
         let created_at = Self::parse_datetime_best_effort(&created_at_raw)?;
 
-        let is_deleted: u8 = if matches!(op, CdcOperation::Delete) { 1 } else { 0 };
+        let is_deleted: u8 = if matches!(op, CdcOperation::Delete) {
+            1
+        } else {
+            0
+        };
         let cdc_timestamp = Self::ts_ms_u64(msg.payload.ts_ms)?;
 
         let query = format!(
@@ -324,7 +340,11 @@ impl CdcConsumer {
         let created_at_raw: String = Self::extract_field(data, "created_at")?;
         let created_at = Self::parse_datetime_best_effort(&created_at_raw)?;
 
-        let is_deleted: u8 = if matches!(op, CdcOperation::Delete) { 1 } else { 0 };
+        let is_deleted: u8 = if matches!(op, CdcOperation::Delete) {
+            1
+        } else {
+            0
+        };
         let cdc_timestamp = Self::ts_ms_u64(msg.payload.ts_ms)?;
 
         let query = format!(
@@ -341,7 +361,10 @@ impl CdcConsumer {
             AnalyticsError::ClickHouse(e.to_string())
         })?;
 
-        debug!("Inserted likes CDC: user={}, post={}, op={:?}", user_id, post_id, op);
+        debug!(
+            "Inserted likes CDC: user={}, post={}, op={:?}",
+            user_id, post_id, op
+        );
         Ok(())
     }
 

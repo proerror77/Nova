@@ -106,7 +106,7 @@ impl EventDeduplicator {
                 "Configured dedup TTL {} exceeds platform limits",
                 self.ttl_seconds
             );
-            AppError::ValidationError("Deduplication TTL exceeds usize::MAX".to_string())
+            AppError::Validation("Deduplication TTL exceeds usize::MAX".to_string())
         })?;
 
         let was_set: bool = conn

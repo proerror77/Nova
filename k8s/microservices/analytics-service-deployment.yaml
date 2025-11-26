@@ -56,6 +56,19 @@ spec:
           value: '8080'
         - name: PORT
           value: '8080'
+        # CDC Consumer configuration
+        - name: CDC_CONSUMER_ENABLED
+          value: 'true'
+        - name: KAFKA_BROKERS
+          value: 'kafka:9092'
+        - name: CDC_TOPICS
+          value: 'cdc.posts,cdc.follows,cdc.comments,cdc.likes'
+        - name: CDC_CONSUMER_GROUP
+          value: 'analytics-cdc-consumer-v1'
+        - name: CLICKHOUSE_URL
+          value: 'http://clickhouse:8123'
+        - name: CLICKHOUSE_DATABASE
+          value: 'analytics'
         envFrom:
         - configMapRef:
             name: analytics-service-config
