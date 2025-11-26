@@ -300,6 +300,7 @@ mod helpers {
     use super::*;
 
     /// Simulate capturing logs during a function execution
+    #[allow(dead_code)]
     pub fn capture_logs_during<F>(f: F) -> String
     where
         F: Fn(),

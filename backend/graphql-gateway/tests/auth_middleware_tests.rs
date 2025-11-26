@@ -1,4 +1,4 @@
-use actix_web::{test, web, App, HttpResponse};
+use actix_web::HttpResponse;
 use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
 use serde::{Deserialize, Serialize};
 
@@ -29,6 +29,7 @@ fn create_test_jwt(user_id: &str, expires_in_seconds: i64, secret: &str) -> Stri
     .unwrap()
 }
 
+#[allow(dead_code)]
 async fn test_handler() -> actix_web::Result<HttpResponse> {
     Ok(HttpResponse::Ok().body("success"))
 }

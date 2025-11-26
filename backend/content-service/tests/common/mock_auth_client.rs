@@ -26,6 +26,7 @@ impl MockAuthClient {
     }
 
     /// Create empty mock client
+    #[allow(dead_code)]
     pub fn empty() -> Self {
         Self::new(Vec::new())
     }

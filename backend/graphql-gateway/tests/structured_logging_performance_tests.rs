@@ -8,11 +8,10 @@
 //! - No PII in logs
 //! - Performance impact <2%
 
-use serde_json::Value;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use tracing::{error, info, warn};
-use tracing_subscriber::{fmt, layer::SubscriberExt, Registry};
+use tracing_subscriber::{layer::SubscriberExt, Registry};
 
 /// Capture log output for testing
 #[derive(Clone)]
@@ -31,6 +30,7 @@ impl LogCapture {
         self.logs.lock().unwrap().clone()
     }
 
+    #[allow(dead_code)]
     fn clear(&self) {
         self.logs.lock().unwrap().clear();
     }

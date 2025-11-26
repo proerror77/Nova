@@ -6,8 +6,6 @@
 //! - Proper error categorization
 //! - Timing information on all operations
 
-use actix_web::HttpResponse;
-use serde_json::Value;
 
 // RED: Test for JWT authentication success logging
 #[tokio::test]

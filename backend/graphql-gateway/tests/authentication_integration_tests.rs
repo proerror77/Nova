@@ -570,7 +570,7 @@ fn test_token_expiration_boundary() {
 
     // Test 1: Token with negative expiration (definitely expired)
     let expired_token = generate_token("user123", "user@example.com", secret, Duration::hours(-10));
-    let expired_result = decode_token(&expired_token, secret);
+    let _expired_result = decode_token(&expired_token, secret);
 
     // JWT libraries have leeway, so this might succeed. The important thing is:
     // - Valid tokens are accepted
