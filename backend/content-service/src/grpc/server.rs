@@ -141,7 +141,11 @@ impl ContentService for ContentServiceImpl {
         }
 
         // Step 1: Try batch cache lookup first
-        let cached_posts = self.cache.batch_get_posts(&post_ids).await.unwrap_or_default();
+        let cached_posts = self
+            .cache
+            .batch_get_posts(&post_ids)
+            .await
+            .unwrap_or_default();
 
         // Step 2: Identify cache misses
         let cache_misses: Vec<Uuid> = post_ids
