@@ -59,8 +59,8 @@ impl PostService {
 
         let post = sqlx::query_as::<_, Post>(
             r#"
-            SELECT id, user_id, caption, image_key, image_sizes, status, content_type,
-                   created_at, updated_at, soft_delete
+            SELECT id, user_id, content, caption, media_key, media_type, status,
+                   created_at, updated_at, deleted_at, soft_delete
             FROM posts
             WHERE id = $1 AND soft_delete IS NULL
             "#,
@@ -87,8 +87,8 @@ impl PostService {
     ) -> Result<Vec<Post>> {
         let posts = sqlx::query_as::<_, Post>(
             r#"
-            SELECT id, user_id, caption, image_key, image_sizes, status, content_type,
-                   created_at, updated_at, soft_delete
+            SELECT id, user_id, content, caption, media_key, media_type, status,
+                   created_at, updated_at, deleted_at, soft_delete
             FROM posts
             WHERE user_id = $1 AND soft_delete IS NULL
             ORDER BY created_at DESC
@@ -109,24 +109,24 @@ impl PostService {
         &self,
         user_id: Uuid,
         caption: Option<&str>,
-        image_key: &str,
-        content_type: &str,
+        media_key: &str,
+        media_type: &str,
     ) -> Result<Post> {
         // Start transaction for atomic post creation + event publishing
         let mut tx = self.pool.begin().await?;
 
         let post = sqlx::query_as::<_, Post>(
             r#"
-            INSERT INTO posts (user_id, caption, image_key, status, content_type)
+            INSERT INTO posts (user_id, caption, media_key, status, media_type)
             VALUES ($1, $2, $3, 'published', $4)
-            RETURNING id, user_id, caption, image_key, image_sizes, status, content_type,
-                      created_at, updated_at, soft_delete
+            RETURNING id, user_id, content, caption, media_key, media_type, status,
+                      created_at, updated_at, deleted_at, soft_delete
             "#,
         )
         .bind(user_id)
         .bind(caption)
-        .bind(image_key)
-        .bind(content_type)
+        .bind(media_key)
+        .bind(media_type)
         .fetch_one(&mut *tx)
         .await?;
 

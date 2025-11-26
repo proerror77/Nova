@@ -9,18 +9,20 @@ pub async fn create_post(
     pool: &PgPool,
     user_id: Uuid,
     caption: Option<&str>,
-    image_key: &str,
+    media_key: &str,
+    media_type: &str,
 ) -> Result<Post, sqlx::Error> {
     let post = sqlx::query_as::<_, Post>(
         r#"
-        INSERT INTO posts (user_id, caption, image_key, status, content_type)
-        VALUES ($1, $2, $3, 'pending', 'image')
-        RETURNING id, user_id, caption, image_key, image_sizes, status, content_type, created_at, updated_at, soft_delete
+        INSERT INTO posts (user_id, caption, media_key, media_type, status)
+        VALUES ($1, $2, $3, $4, 'pending')
+        RETURNING id, user_id, content, caption, media_key, media_type, status, created_at, updated_at, deleted_at, soft_delete
         "#,
     )
     .bind(user_id)
     .bind(caption)
-    .bind(image_key)
+    .bind(media_key)
+    .bind(media_type)
     .fetch_one(pool)
     .await?;
 
@@ -31,7 +33,7 @@ pub async fn create_post(
 pub async fn find_post_by_id(pool: &PgPool, post_id: Uuid) -> Result<Option<Post>, sqlx::Error> {
     let post = sqlx::query_as::<_, Post>(
         r#"
-        SELECT id, user_id, caption, image_key, image_sizes, status, content_type, created_at, updated_at, soft_delete
+        SELECT id, user_id, content, caption, media_key, media_type, status, created_at, updated_at, deleted_at, soft_delete
         FROM posts
         WHERE id = $1 AND soft_delete IS NULL
         "#,
@@ -53,7 +55,7 @@ pub async fn find_posts_by_user(
 ) -> Result<Vec<Post>, sqlx::Error> {
     let posts = sqlx::query_as::<_, Post>(
         r#"
-        SELECT id, user_id, caption, image_key, image_sizes, status, content_type, created_at, updated_at, soft_delete
+        SELECT id, user_id, content, caption, media_key, media_type, status, created_at, updated_at, deleted_at, soft_delete
         FROM posts
         WHERE user_id = $1 AND soft_delete IS NULL
         ORDER BY created_at DESC
@@ -126,20 +128,20 @@ pub async fn update_post_status(
     Ok(())
 }
 
-/// Update post image_key
-pub async fn update_post_image_key(
+/// Update post media_key
+pub async fn update_post_media_key(
     pool: &PgPool,
     post_id: Uuid,
-    image_key: &str,
+    media_key: &str,
 ) -> Result<(), sqlx::Error> {
     sqlx::query(
         r#"
         UPDATE posts
-        SET image_key = $1, updated_at = NOW()
+        SET media_key = $1, updated_at = NOW()
         WHERE id = $2
         "#,
     )
-    .bind(image_key)
+    .bind(media_key)
     .bind(post_id)
     .execute(pool)
     .await?;
@@ -147,26 +149,6 @@ pub async fn update_post_image_key(
     Ok(())
 }
 
-/// Update post image_sizes JSON field
-pub async fn update_post_image_sizes(
-    pool: &PgPool,
-    post_id: Uuid,
-    image_sizes: &serde_json::Value,
-) -> Result<(), sqlx::Error> {
-    sqlx::query(
-        r#"
-        UPDATE posts
-        SET image_sizes = $1, updated_at = NOW()
-        WHERE id = $2
-        "#,
-    )
-    .bind(image_sizes)
-    .bind(post_id)
-    .execute(pool)
-    .await?;
-
-    Ok(())
-}
 
 /// Soft delete a post by setting soft_delete timestamp
 pub async fn soft_delete_post(pool: &PgPool, post_id: Uuid) -> Result<(), sqlx::Error> {
@@ -201,8 +183,8 @@ pub async fn get_post_with_images(
     let row = sqlx::query(
         r#"
         SELECT
-            p.id, p.user_id, p.caption, p.image_key, p.image_sizes, p.status, p.content_type,
-            p.created_at, p.updated_at, p.soft_delete,
+            p.id, p.user_id, p.content, p.caption, p.media_key, p.media_type, p.status,
+            p.created_at, p.updated_at, p.deleted_at, p.soft_delete,
             COALESCE(pm.like_count, 0) as like_count,
             COALESCE(pm.comment_count, 0) as comment_count,
             COALESCE(pm.view_count, 0) as view_count,
@@ -223,13 +205,14 @@ pub async fn get_post_with_images(
         let post = Post {
             id: r.get("id"),
             user_id: r.get("user_id"),
+            content: r.get("content"),
             caption: r.get("caption"),
-            image_key: r.get("image_key"),
-            image_sizes: r.get("image_sizes"),
+            media_key: r.get("media_key"),
+            media_type: r.get("media_type"),
             status: r.get("status"),
-            content_type: r.get("content_type"),
             created_at: r.get("created_at"),
             updated_at: r.get("updated_at"),
+            deleted_at: r.get("deleted_at"),
             soft_delete: r.get("soft_delete"),
         };
 

@@ -22,7 +22,7 @@ pub async fn publish_post_created(
             "post_id": post.id.to_string(),
             "user_id": post.user_id.to_string(),
             "caption": post.caption,
-            "content_type": post.content_type,
+            "media_type": post.media_type,
             "status": post.status,
             "created_at": post.created_at,
         })

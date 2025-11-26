@@ -138,7 +138,7 @@ impl ContentService for ContentServiceImpl {
         }
 
         let posts = sqlx::query_as::<_, DbPost>(
-            "SELECT id, user_id, caption, image_key, image_sizes, status, content_type, created_at, updated_at, soft_delete \
+            "SELECT id, user_id, content, caption, media_key, media_type, status, created_at, updated_at, deleted_at, soft_delete \
              FROM posts WHERE id = ANY($1::uuid[]) AND soft_delete IS NULL",
         )
         .bind(&post_ids)
@@ -176,7 +176,7 @@ impl ContentService for ContentServiceImpl {
         let (posts, total): (Vec<DbPost>, i64) = if req.status == ContentStatus::Unspecified as i32
         {
             let posts = sqlx::query_as::<_, DbPost>(
-                "SELECT id, user_id, caption, image_key, image_sizes, status, content_type, created_at, updated_at, soft_delete \
+                "SELECT id, user_id, content, caption, media_key, media_type, status, created_at, updated_at, deleted_at, soft_delete \
                  FROM posts WHERE user_id = $1 AND soft_delete IS NULL ORDER BY created_at DESC LIMIT $2 OFFSET $3",
             )
             .bind(user_id)
@@ -205,7 +205,7 @@ impl ContentService for ContentServiceImpl {
             };
 
             let posts = sqlx::query_as::<_, DbPost>(
-                "SELECT id, user_id, caption, image_key, image_sizes, status, content_type, created_at, updated_at, soft_delete \
+                "SELECT id, user_id, content, caption, media_key, media_type, status, created_at, updated_at, deleted_at, soft_delete \
                  FROM posts WHERE user_id = $1 AND status = $2 AND soft_delete IS NULL ORDER BY created_at DESC LIMIT $3 OFFSET $4",
             )
             .bind(user_id)
@@ -334,7 +334,7 @@ impl ContentService for ContentServiceImpl {
             .push_bind(req.comments_enabled);
 
         builder.push(" WHERE id = ").push_bind(post_id);
-        builder.push(" AND soft_delete IS NULL RETURNING id, user_id, caption, image_key, image_sizes, status, content_type, created_at, updated_at, soft_delete");
+        builder.push(" AND soft_delete IS NULL RETURNING id, user_id, content, caption, media_key, media_type, status, created_at, updated_at, deleted_at, soft_delete");
 
         let post = builder
             .build_query_as::<DbPost>()

@@ -11,13 +11,14 @@ use uuid::Uuid;
 pub struct Post {
     pub id: Uuid,
     pub user_id: Uuid,
+    pub content: Option<String>,
     pub caption: Option<String>,
-    pub image_key: String,
-    pub image_sizes: Option<serde_json::Value>,
+    pub media_key: String,
+    pub media_type: String, // 'image', 'video', or 'text'
     pub status: String,
-    pub content_type: String, // 'image', 'video', or 'mixed'
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    pub deleted_at: Option<DateTime<Utc>>,
     pub soft_delete: Option<DateTime<Utc>>,
 }
 
