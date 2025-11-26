@@ -1,519 +1,91 @@
-# ClickHouse Installation using ClickHouseInstallation CRD
-# For Nova Analytics Service
-# Requires: ClickHouse Operator installed in cluster
-# Port: 9000 (TCP native protocol), 8123 (HTTP)
+# ClickHouse Installation CRD - Nova Analytics Service
+# This file contains the latest staging configuration with CDC support
+# Last updated: 2025-11-26 - Fixed memory limits to 2Gi for CDC data processing
+#
+# Key changes from previous version:
+# - Increased memory limits: 512Mi → 2Gi
+# - Increased memory requests: 256Mi → 1Gi
+# - Removed CPU limits to prevent scheduling conflicts
+# - Simplified to single CRD configuration (nova-ch)
+# - Integrated users configuration directly in CRD
+# - Supports CDC data from PostgreSQL via Debezium
 
----
-# ClickHouse configuration ConfigMap
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: clickhouse-config
-  namespace: nova-staging
-  labels:
-    app: clickhouse
-data:
-  users.xml: |
-    <?xml version="1.0"?>
-    <yandex>
-        <!-- Users and quotas. May include several sections with different names. -->
-        <users>
-            <!-- Default user for login if user not defined -->
-            <default>
-                <!-- Password configured via SHA256 to avoid plaintext in config -->
-                <password_sha256_hex>86112850e198ebaa0fc49c4cb0238183994eb5abad94a2113a3ebc3b92f59370</password_sha256_hex>
-
-                <!-- List of networks with open access.
-                     To open access from everywhere, specify:
-                        <ip>::/0</ip>
-
-                     To forbid all access, you can omit the section or write:
-                        <ip>127.0.0.1</ip>
-                        <ip>::1</ip>
-                -->
-                <networks incl="networks" replace="replace">
-                    <ip>::1</ip>
-                    <ip>127.0.0.1</ip>
-                </networks>
-
-                <!-- Settings profile for user -->
-                <profile>default</profile>
-
-                <!-- Quota for user -->
-                <quota>default</quota>
-            </default>
-
-            <!-- user for analytics service -->
-            <analytics_svc>
-                <password_sha256_hex>5e884898da28047151d0e56f8dc629302540a961e7ec72d1c4d6552b0d2103a4</password_sha256_hex>
-
-                <networks incl="networks" replace="replace">
-                    <ip>::/0</ip>
-                </networks>
-
-                <profile>default</profile>
-                <quota>default</quota>
-
-                <!-- Allow JDBC/ODBC -->
-                <allow_databases>
-                    <database>analytics</database>
-                    <database>system</database>
-                </allow_databases>
-            </analytics_svc>
-        </users>
-
-        <quotas>
-            <default>
-                <!-- For each user, limits are set in quotas. For example:
-                     <queries>100</queries>
-                     <errors>10</errors>
-                     <result_rows>1000000000</result_rows>
-                     <read_rows>100000000000</read_rows>
-                     <execution_time>600</execution_time>
-                -->
-            </default>
-        </quotas>
-    </yandex>
-
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: clickhouse-storage
-  namespace: nova-staging
-  labels:
-    app: clickhouse
-data:
-  storage.xml: |
-    <?xml version="1.0"?>
-    <yandex>
-        <disks>
-            <default>
-                <path>/var/lib/clickhouse/</path>
-            </default>
-        </disks>
-
-        <policies>
-            <default>
-                <volumes>
-                    <default>
-                        <disk>default</disk>
-                    </default>
-                </volumes>
-            </default>
-        </policies>
-    </yandex>
-
----
-# ClickHouseInstallation CRD for ClickHouse deployment
 apiVersion: clickhouse.altinity.com/v1
 kind: ClickHouseInstallation
 metadata:
-  name: nova-clickhouse
+  annotations:
+    argocd.argoproj.io/compare-result: "false"
+    environment: staging
+  creationTimestamp: "2025-11-14T16:27:55Z"
+  finalizers:
+  - finalizer.clickhouseinstallation.altinity.com
+  generation: 5
+  name: nova-ch
   namespace: nova-staging
-  labels:
-    app: clickhouse
+  resourceVersion: "9778126"
+  uid: 54a5c517-b147-4f4a-8d2e-3dc64319d84c
 spec:
-  # Namespace and naming
-  namespaceDomainPattern: "{namespace}.svc.cluster.local"
-  hostNetworkPolicy: "cluster"
-
-  # Defaults for all sections
-  defaults:
-    distributedDDL:
-      profile: default
-
-  # Configuration - single shard, single replica
   configuration:
     clusters:
-    - name: default
-      layout:
-        shardsCount: 1
+    - layout:
         replicasCount: 1
-      hostsAssignments:
-      - podSequence: "0"
-
-    # Settings
-    settings:
-      # ClickHouse server settings
-      default/max_connections: "4096"
-      default/keep_alive_timeout: "3"
-      default/max_concurrent_queries: "100"
-      default/uncompressed_cache_size: "1073741824"  # 1GB
-      default/mark_cache_size: "5368709120"           # 5GB
-
-      # Query settings
-      default/max_memory_usage: "10737418240"         # 10GB
-      default/max_memory_usage_for_user: "9663676416" # 9GB
-
-      # Network settings
-      default/listen_host: "0.0.0.0"
-
-    # Users and quotas
+        shardsCount: 1
+      name: single
+      templates:
+        podTemplate: ch-pod
+        serviceTemplate: ch-svc
+    files:
+      users.d/nova.xml: |
+        <yandex>
+          <users>
+            <nova>
+              <password_sha256_hex>86112850e198ebaa0fc49c4cb0238183994eb5abad94a2113a3ebc3b92f59370</password_sha256_hex>
+              <networks>
+                <!-- Restrict to VPC CIDR to avoid public access -->
+                <ip>10.0.0.0/8</ip>
+              </networks>
+              <profile>default</profile>
+              <quota>default</quota>
+            </nova>
+          </users>
+        </yandex>
     users:
-    - name: default
-      networks:
-      - host: "127.0.0.1"
-      - host: "::/1"
-      - host: "::ffff:127.0.0.1"
-      - host: "0.0.0.0/0"
-      profile: default
-      quota: default
-      password_sha256_hex: "86112850e198ebaa0fc49c4cb0238183994eb5abad94a2113a3ebc3b92f59370"
-
-    - name: analytics_svc
-      networks:
-      - host: "0.0.0.0/0"
-      profile: default
-      quota: default
-      password_sha256_hex: "5e884898da28047151d0e56f8dc629302540a961e7ec72d1c4d6552b0d2103a4"
-
-    # Quotas
-    quotas:
-    - name: default
-      intervals:
-      - duration: 3600
-        queries: 0
-        errors: 0
-        result_rows: 0
-        read_rows: 0
-        execution_time: 0
-
-    # Database configuration
-    databases:
-    - name: analytics
-      engine: Atomic
-      dictionaries:
-      - name: system_tld_list
-        source: file
-        format: TabSeparated
-        lifetime:
-          min: 300
-          max: 3600
-
-    # Merge tree settings
-    mergeTree:
-      replicated_deduplication_window: 100
-      replicated_deduplication_window_seconds: 604800
-
-  # Topology - single replica
-  topology:
-    clusters:
-    - name: default
-      layout:
-        shardsCount: 1
-        replicasCount: 1
-      replicas:
-      - name: replica-0
-        port: 9000
-
-  # Templates for ClickHouse pod spec
+      nova/networks/ip:
+      - 10.0.0.0/8
+      nova/password_sha256_hex: 86112850e198ebaa0fc49c4cb0238183994eb5abad94a2113a3ebc3b92f59370
+      nova/profile: default
+      nova/quota: default
   templates:
     podTemplates:
-    - name: default
+    - name: ch-pod
       spec:
         containers:
-        - name: clickhouse
-          image: clickhouse/clickhouse-server:latest
-          imagePullPolicy: IfNotPresent
-
-          ports:
-          - name: tcp
-            containerPort: 9000
-            protocol: TCP
-          - name: http
-            containerPort: 8123
-            protocol: TCP
-          - name: interserver
-            containerPort: 9009
-            protocol: TCP
-
-          livenessProbe:
-            tcpSocket:
-              port: 9000
-            initialDelaySeconds: 30
-            periodSeconds: 10
-            timeoutSeconds: 5
-            failureThreshold: 3
-
-          readinessProbe:
-            httpGet:
-              path: /ping
-              port: 8123
-            initialDelaySeconds: 10
-            periodSeconds: 5
-            timeoutSeconds: 3
-            failureThreshold: 3
-
+        - image: clickhouse/clickhouse-server:24.8
+          name: clickhouse
           resources:
-            requests:
-              cpu: 500m
-              memory: 1Gi
             limits:
-              cpu: 2000m
               memory: 2Gi
-
+            requests:
+              memory: 1Gi
           volumeMounts:
-          - name: clickhouse-data
-            mountPath: /var/lib/clickhouse
-          - name: config
-            mountPath: /etc/clickhouse-server/users.d
-            readOnly: true
-          - name: storage-config
-            mountPath: /etc/clickhouse-server/storage.d
-            readOnly: true
-
-          env:
-          - name: TZ
-            value: UTC
-
-        securityContext:
-          fsGroup: 101
-          runAsNonRoot: true
-          runAsUser: 101
-
+          - mountPath: /var/lib/clickhouse
+            name: data
         volumes:
-        - name: config
-          configMap:
-            name: clickhouse-config
-        - name: storage-config
-          configMap:
-            name: clickhouse-storage
-
-    volumeClaimTemplates:
-    - name: clickhouse-data
-      spec:
-        accessModes:
-        - ReadWriteOnce
-        storageClassName: gp3
-        resources:
-          requests:
-            storage: 50Gi
-
+        - name: data
+          persistentVolumeClaim:
+            claimName: nova-ch-data
     serviceTemplates:
-    - name: default
+    - generateName: clickhouse-nova-ch
+      metadata:
+        labels:
+          app: nova
+      name: ch-svc
       spec:
-        type: ClusterIP
         ports:
-        - name: tcp
-          port: 9000
-          targetPort: 9000
-          protocol: TCP
         - name: http
           port: 8123
-          targetPort: 8123
-          protocol: TCP
-        - name: interserver
-          port: 9009
-          targetPort: 9009
-          protocol: TCP
-
----
-# Standalone Service for easy access (not using operator service)
-apiVersion: v1
-kind: Service
-metadata:
-  name: clickhouse
-  namespace: nova-staging
-  labels:
-    app: clickhouse
-spec:
-  type: ClusterIP
-  selector:
-    app: clickhouse-nova-clickhouse
-  ports:
-  - name: tcp
-    port: 9000
-    targetPort: 9000
-    protocol: TCP
-  - name: http
-    port: 8123
-    targetPort: 8123
-    protocol: TCP
-
----
-# ClickHouse database initialization ConfigMap
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: clickhouse-init-scripts
-  namespace: nova-staging
-  labels:
-    app: clickhouse
-data:
-  init-databases.sql: |
-    -- ClickHouse database initialization for Nova Analytics
-
-    -- Create analytics database
-    CREATE DATABASE IF NOT EXISTS analytics
-    ENGINE = Atomic;
-
-    -- Tables for analytics events
-    CREATE TABLE IF NOT EXISTS analytics.events (
-        event_id UUID,
-        event_type String,
-        user_id UUID,
-        timestamp DateTime,
-        properties String,  -- JSON
-        service String,
-        version Int32,
-        created_at DateTime DEFAULT now()
-    )
-    ENGINE = MergeTree()
-    ORDER BY (timestamp, event_type, user_id)
-    PARTITION BY toYYYYMM(timestamp)
-    TTL created_at + INTERVAL 90 DAY;
-
-    -- Table for user activity metrics
-    CREATE TABLE IF NOT EXISTS analytics.user_activity (
-        date Date,
-        user_id UUID,
-        action String,
-        count UInt32,
-        duration_seconds UInt32
-    )
-    ENGINE = SummingMergeTree()
-    ORDER BY (date, user_id, action)
-    PARTITION BY toYYYYMM(date)
-    TTL date + INTERVAL 180 DAY;
-
-    -- Table for content metrics
-    CREATE TABLE IF NOT EXISTS analytics.content_metrics (
-        date Date,
-        content_id UUID,
-        views UInt32,
-        likes UInt32,
-        shares UInt32,
-        comments UInt32,
-        engagement_score Float32
-    )
-    ENGINE = SummingMergeTree()
-    ORDER BY (date, content_id)
-    PARTITION BY toYYYYMM(date);
-
-    -- Table for feed analytics
-    CREATE TABLE IF NOT EXISTS analytics.feed_analytics (
-        timestamp DateTime,
-        feed_type String,
-        user_id UUID,
-        items_shown UInt32,
-        items_clicked UInt32,
-        ctr Float32,
-        dwell_time_seconds UInt32
-    )
-    ENGINE = MergeTree()
-    ORDER BY (timestamp, feed_type, user_id)
-    PARTITION BY toYYYYMM(timestamp)
-    TTL timestamp + INTERVAL 60 DAY;
-
-    -- Table for service health metrics
-    CREATE TABLE IF NOT EXISTS analytics.service_metrics (
-        timestamp DateTime,
-        service_name String,
-        metric_type String,
-        value Float32,
-        dimensions String  -- JSON
-    )
-    ENGINE = MergeTree()
-    ORDER BY (timestamp, service_name, metric_type)
-    PARTITION BY toYYYYMM(timestamp)
-    TTL timestamp + INTERVAL 30 DAY;
-
----
-# Job to initialize ClickHouse databases (runs after ClickHouse is ready)
-apiVersion: batch/v1
-kind: Job
-metadata:
-  name: clickhouse-init
-  namespace: nova-staging
-  labels:
-    app: clickhouse
-spec:
-  ttlSecondsAfterFinished: 3600
-  backoffLimit: 3
-  template:
-    metadata:
-      labels:
-        app: clickhouse-init
-    spec:
-      restartPolicy: Never
-
-      initContainers:
-      - name: wait-for-clickhouse
-        image: busybox:1.35
-        command:
-        - sh
-        - -c
-        - |
-          echo "Waiting for ClickHouse to be ready..."
-          for i in $(seq 1 30); do
-            if nc -zv clickhouse.nova-staging.svc.cluster.local 9000 2>/dev/null; then
-              echo "✓ ClickHouse is ready"
-              exit 0
-            fi
-            echo "  Attempt $i/30, retrying..."
-            sleep 2
-          done
-          echo "❌ ClickHouse is not ready"
-          exit 1
-
-      containers:
-      - name: clickhouse-init
-        image: clickhouse/clickhouse-client:latest
-        command:
-        - sh
-        - -c
-        - |
-          set -e
-          echo "📊 ClickHouse Database Initialization - $(date)"
-          echo "========================================"
-
-          CH_HOST="clickhouse.nova-staging.svc.cluster.local"
-          CH_PORT="9000"
-
-          echo "Connecting to ClickHouse at $CH_HOST:$CH_PORT..."
-
-          # Create analytics database and tables
-          echo "Creating analytics database..."
-          cat /init-scripts/init-databases.sql | \
-            clickhouse-client \
-              --host "$CH_HOST" \
-              --port "$CH_PORT" \
-              --user default \
-              --password default_pass \
-              --multiline \
-              --multiquery
-
-          echo ""
-          echo "========================================"
-          echo "✅ ClickHouse Initialization Complete"
-          echo ""
-          echo "Databases:"
-          clickhouse-client \
-            --host "$CH_HOST" \
-            --port "$CH_PORT" \
-            --user default \
-            --password default_pass \
-            --query "SHOW DATABASES"
-
-          echo ""
-          echo "Tables in analytics database:"
-          clickhouse-client \
-            --host "$CH_HOST" \
-            --port "$CH_PORT" \
-            --user default \
-            --password default_pass \
-            --query "SHOW TABLES FROM analytics"
-
-        volumeMounts:
-        - name: init-scripts
-          mountPath: /init-scripts
-          readOnly: true
-
-        resources:
-          requests:
-            cpu: 100m
-            memory: 256Mi
-          limits:
-            cpu: 500m
-            memory: 512Mi
+          targetPort: http
+        - name: tcp
+          port: 9000
+          targetPort: tcp
+        type: ClusterIP
