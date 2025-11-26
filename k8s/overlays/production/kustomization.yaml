@@ -16,8 +16,6 @@ commonAnnotations:
 images:
   - name: auth-service
     newTag: main
-  - name: user-service
-    newTag: main
   - name: content-service
     newTag: main
   - name: feed-service
@@ -34,8 +32,6 @@ images:
 # Production 的高副本数
 replicas:
   - name: auth-service
-    count: 3
-  - name: user-service
     count: 3
   - name: content-service
     count: 3

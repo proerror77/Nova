@@ -33,9 +33,6 @@ images:
   - name: auth-service
     newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/auth-service
     newTag: latest
-  - name: user-service
-    newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/user-service
-    newTag: latest
   - name: content-service
     newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/content-service
     newTag: latest
@@ -58,8 +55,6 @@ images:
 # 副本数 (Staging: 1个副本用于资源优化)
 replicas:
   - name: auth-service
-    count: 1
-  - name: user-service
     count: 1
   - name: content-service
     count: 1

@@ -51,29 +51,3 @@ spec:
   gracePeriod: 30  # Allow graceful shutdown
   scheduler:
     cron: "0 3 * * 0"  # Sunday at 3 AM only
-
----
-# Minimal CPU Stress (30% only)
-apiVersion: chaos-mesh.org/v1alpha1
-kind: StressChaos
-metadata:
-  name: prod-cpu-stress-minimal
-  namespace: default
-  annotations:
-    chaos.description: "Minimal CPU stress (30%) to test rate limiting"
-    chaos.approved-by: "sre-team"
-spec:
-  mode: one
-  selector:
-    namespaces:
-      - default
-    labelSelectors:
-      app: user-service
-      chaos.mesh/safe: "true"
-  stressors:
-    cpu:
-      workers: 1
-      load: 30  # Only 30% load
-  duration: "1m"  # Very short
-  scheduler:
-    cron: "0 4 * * 1"  # Monday at 4 AM only

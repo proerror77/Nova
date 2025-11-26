@@ -30,11 +30,6 @@ images:
     newName: localhost:5000/nova/identity-service
     newTag: dev
   
-  # Tier 2: User Management
-  - name: user-service
-    newName: localhost:5000/nova/user-service
-    newTag: dev
-  
   # Tier 3: Content Platform
   - name: content-service
     newName: localhost:5000/nova/content-service
@@ -90,8 +85,6 @@ images:
 # Replica overrides for development (all services scaled to 1)
 replicas:
   - name: identity-service
-    count: 1
-  - name: user-service
     count: 1
   - name: content-service
     count: 1
