@@ -22,12 +22,12 @@ impl CacheMetricsInner {
                 Opts::new("nova_cache_hits_total", "Total cache hits"),
                 &["entity"],
             )
-            .unwrap(),
+            .expect("valid metric definition"),
             misses: CounterVec::new(
                 Opts::new("nova_cache_misses_total", "Total cache misses"),
                 &["entity"],
             )
-            .unwrap(),
+            .expect("valid metric definition"),
             negative_hits: CounterVec::new(
                 Opts::new(
                     "nova_cache_negative_hits_total",
@@ -35,12 +35,12 @@ impl CacheMetricsInner {
                 ),
                 &["entity"],
             )
-            .unwrap(),
+            .expect("valid metric definition"),
             writes: CounterVec::new(
                 Opts::new("nova_cache_writes_total", "Total cache writes"),
                 &["entity"],
             )
-            .unwrap(),
+            .expect("valid metric definition"),
             negative_writes: CounterVec::new(
                 Opts::new(
                     "nova_cache_negative_writes_total",
@@ -48,7 +48,7 @@ impl CacheMetricsInner {
                 ),
                 &["entity"],
             )
-            .unwrap(),
+            .expect("valid metric definition"),
             invalidations: CounterVec::new(
                 Opts::new(
                     "nova_cache_invalidations_total",
@@ -56,12 +56,12 @@ impl CacheMetricsInner {
                 ),
                 &["entity"],
             )
-            .unwrap(),
+            .expect("valid metric definition"),
             errors: CounterVec::new(
                 Opts::new("nova_cache_errors_total", "Total cache errors"),
                 &["entity", "error_type"],
             )
-            .unwrap(),
+            .expect("valid metric definition"),
         }
     }
 
