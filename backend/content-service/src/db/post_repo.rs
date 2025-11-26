@@ -209,6 +209,7 @@ pub async fn get_post_with_images(
             caption: r.get("caption"),
             media_key: r.get("media_key"),
             media_type: r.get("media_type"),
+            media_urls: r.try_get("media_urls").ok(),
             status: r.get("status"),
             created_at: r.get("created_at"),
             updated_at: r.get("updated_at"),
