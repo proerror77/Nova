@@ -1,0 +1,59 @@
+# GitHub Actions workflow to generate proto descriptor for Envoy
+name: Generate Proto Descriptor
+
+on:
+  push:
+    paths:
+      - 'backend/proto/**'
+    branches:
+      - main
+      - develop
+  pull_request:
+    paths:
+      - 'backend/proto/**'
+
+jobs:
+  generate-descriptor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Buf
+        uses: bufbuild/buf-setup-action@v1
+        with:
+          version: '1.28.1'
+
+      - name: Buf Lint
+        working-directory: backend/proto
+        run: buf lint
+
+      - name: Generate Descriptor
+        working-directory: backend/proto
+        run: |
+          buf dep update
+          mkdir -p gen/descriptor
+          buf build -o gen/descriptor/nova-api.pb
+
+      - name: Upload Descriptor Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: proto-descriptor
+          path: backend/proto/gen/descriptor/nova-api.pb
+          retention-days: 30
+
+      - name: Update ConfigMap (on main branch)
+        if: github.ref == 'refs/heads/main'
+        env:
+          KUBECONFIG_DATA: ${{ secrets.KUBECONFIG_STAGING }}
+        run: |
+          if [ -n "$KUBECONFIG_DATA" ]; then
+            echo "$KUBECONFIG_DATA" | base64 -d > /tmp/kubeconfig
+            export KUBECONFIG=/tmp/kubeconfig
+            kubectl create configmap proto-descriptor \
+              --from-file=nova-api.pb=backend/proto/gen/descriptor/nova-api.pb \
+              -n nova-staging \
+              --dry-run=client -o yaml | kubectl apply -f -
+            rm /tmp/kubeconfig
+          else
+            echo "KUBECONFIG_DATA not set, skipping ConfigMap update"
+          fi

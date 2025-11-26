@@ -2,6 +2,7 @@ syntax = "proto3";
 package nova.search.v1;
 
 import "google/protobuf/timestamp.proto";
+import "google/api/annotations.proto";
 
 // ============================================================================
 // Search Service - Full-Text Search & Discovery
@@ -23,16 +24,40 @@ import "google/protobuf/timestamp.proto";
 
 service SearchService {
   // ========== Search ==========
-  rpc SearchContent(SearchContentRequest) returns (SearchContentResponse);
-  rpc SearchUsers(SearchUsersRequest) returns (SearchUsersResponse);
-  rpc SearchHashtags(SearchHashtagsRequest) returns (SearchHashtagsResponse);
-  rpc SearchAll(SearchAllRequest) returns (SearchAllResponse);
+  rpc SearchContent(SearchContentRequest) returns (SearchContentResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/search/content"
+    };
+  }
+  rpc SearchUsers(SearchUsersRequest) returns (SearchUsersResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/search/users"
+    };
+  }
+  rpc SearchHashtags(SearchHashtagsRequest) returns (SearchHashtagsResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/search/hashtags"
+    };
+  }
+  rpc SearchAll(SearchAllRequest) returns (SearchAllResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/search"
+    };
+  }
 
   // ========== Suggestions ==========
-  rpc GetSearchSuggestions(GetSearchSuggestionsRequest) returns (GetSearchSuggestionsResponse);
-  rpc GetTrendingTopics(GetTrendingTopicsRequest) returns (GetTrendingTopicsResponse);
+  rpc GetSearchSuggestions(GetSearchSuggestionsRequest) returns (GetSearchSuggestionsResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/search/suggestions"
+    };
+  }
+  rpc GetTrendingTopics(GetTrendingTopicsRequest) returns (GetTrendingTopicsResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/search/trending"
+    };
+  }
 
-  // ========== Indexing (Internal - called by event handlers) ==========
+  // ========== Indexing (Internal - no HTTP binding) ==========
   rpc IndexContent(IndexContentRequest) returns (IndexContentResponse);
   rpc IndexUser(IndexUserRequest) returns (IndexUserResponse);
   rpc RemoveFromIndex(RemoveFromIndexRequest) returns (RemoveFromIndexResponse);

@@ -60,6 +60,11 @@ transactional-outbox = { path = "../libs/transactional-outbox" }
 grpc-metrics = { path = "../libs/grpc-metrics" }
 grpc-health = { path = "../libs/grpc-health" }
 grpc-tls = { path = "../libs/grpc-tls" }
+nova-cache = { path = "../libs/nova-cache" }
+redis-utils = { path = "../libs/redis-utils" }
+
+# Random for cache jitter
+rand = "0.8"
 
 [build-dependencies]
 tonic-build = "0.12"

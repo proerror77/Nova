@@ -16,66 +16,29 @@ class FeedService {
     ///   - cursor: Pagination cursor from previous response
     /// - Returns: FeedResponse containing post IDs and pagination info
     func getFeed(algo: FeedAlgorithm = .chronological, limit: Int = 20, cursor: String? = nil) async throws -> FeedResponse {
-        var urlComponents = URLComponents(string: "\(APIConfig.current.baseURL)\(APIConfig.Feed.getFeed)")
-
-        var queryItems: [URLQueryItem] = [
-            URLQueryItem(name: "algo", value: algo.rawValue),
-            URLQueryItem(name: "limit", value: String(min(max(limit, 1), 100)))
+        var queryParams: [String: String] = [
+            "algo": algo.rawValue,
+            "limit": String(min(max(limit, 1), 100))
         ]
 
         if let cursor = cursor {
-            queryItems.append(URLQueryItem(name: "cursor", value: cursor))
+            queryParams["cursor"] = cursor
         }
 
-        urlComponents?.queryItems = queryItems
-
-        guard let url = urlComponents?.url else {
-            throw APIError.invalidURL
-        }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "GET"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-
-        // Add auth token from client
-        if let token = UserDefaults.standard.string(forKey: "authToken") {
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        }
-
-        let config = URLSessionConfiguration.default
-        config.timeoutIntervalForRequest = APIConfig.current.timeout
-        let session = URLSession(configuration: config)
-
-        let (data, response) = try await session.data(for: request)
-
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw APIError.invalidResponse
-        }
-
-        switch httpResponse.statusCode {
-        case 200...299:
-            let decoder = JSONDecoder()
-            decoder.keyDecodingStrategy = .convertFromSnakeCase
-            return try decoder.decode(FeedResponse.self, from: data)
-        case 401:
-            throw APIError.unauthorized
-        case 404:
-            throw APIError.notFound
-        default:
-            let message = String(data: data, encoding: .utf8) ?? "Unknown error"
-            throw APIError.serverError(statusCode: httpResponse.statusCode, message: message)
-        }
+        // Use unified APIClient.get() for consistent error handling and auth
+        return try await client.get(endpoint: APIConfig.Feed.getFeed, queryParams: queryParams)
     }
 
     /// Fetch feed with full post details (combines feed + content service)
     func getFeedWithDetails(algo: FeedAlgorithm = .chronological, limit: Int = 20, cursor: String? = nil) async throws -> FeedWithDetailsResponse {
         let feedResponse = try await getFeed(algo: algo, limit: limit, cursor: cursor)
 
-        // TODO: Batch fetch post details from content-service
-        // For now, return feed response with empty post details
+        // Convert raw posts to FeedPost objects
+        let feedPosts = feedResponse.posts.map { FeedPost(from: $0) }
+
         return FeedWithDetailsResponse(
-            posts: [],  // Will be populated when content-service integration is complete
-            postIds: feedResponse.posts,
+            posts: feedPosts,
+            postIds: feedResponse.postIds,
             cursor: feedResponse.cursor,
             hasMore: feedResponse.hasMore,
             totalCount: feedResponse.totalCount
@@ -92,19 +55,39 @@ enum FeedAlgorithm: String {
 
 // MARK: - Response Models
 
-/// Response from feed-service /api/v2/feed endpoint
-struct FeedResponse: Codable {
-    let posts: [String]  // Array of post UUIDs
-    let cursor: String?
-    let hasMore: Bool
-    let totalCount: Int
+/// Raw post object from feed-service /api/v2/feed endpoint
+/// Matches backend response format exactly
+/// Note: Uses APIClient's convertFromSnakeCase for automatic key mapping
+struct FeedPostRaw: Codable {
+    let id: String
+    let userId: String
+    let content: String
+    let createdAt: Int64
+    let rankingScore: Double?
+    let likeCount: Int?
+    let commentCount: Int?
+    let shareCount: Int?
+    let mediaUrls: [String]?
+    let mediaType: String?
+}
 
-    enum CodingKeys: String, CodingKey {
-        case posts
-        case cursor
-        case hasMore = "has_more"
-        case totalCount = "total_count"
+/// Response from feed-service /api/v2/feed endpoint
+/// Backend returns full post objects, not just IDs
+/// Note: Uses APIClient's convertFromSnakeCase for automatic key mapping
+struct FeedResponse: Codable {
+    let posts: [FeedPostRaw]
+    let hasMore: Bool
+
+    /// Convenience accessor for post IDs
+    var postIds: [String] {
+        posts.map { $0.id }
     }
+
+    /// Placeholder for cursor-based pagination (backend doesn't return cursor yet)
+    var cursor: String? { nil }
+
+    /// Placeholder for total count
+    var totalCount: Int? { posts.count }
 }
 
 /// Extended feed response with full post details
@@ -113,10 +96,11 @@ struct FeedWithDetailsResponse {
     let postIds: [String]
     let cursor: String?
     let hasMore: Bool
-    let totalCount: Int
+    let totalCount: Int?
 }
 
-/// Feed post with full details
+/// Feed post with full details for UI display
+/// Note: Uses APIClient's convertFromSnakeCase for automatic key mapping
 struct FeedPost: Identifiable, Codable {
     let id: String
     let authorId: String
@@ -131,18 +115,62 @@ struct FeedPost: Identifiable, Codable {
     let isLiked: Bool
     let isBookmarked: Bool
 
-    enum CodingKeys: String, CodingKey {
-        case id
-        case authorId = "author_id"
-        case authorName = "author_name"
-        case authorAvatar = "author_avatar"
-        case content
-        case mediaUrls = "media_urls"
-        case createdAt = "created_at"
-        case likeCount = "like_count"
-        case commentCount = "comment_count"
-        case shareCount = "share_count"
-        case isLiked = "is_liked"
-        case isBookmarked = "is_bookmarked"
+    /// Create FeedPost from raw backend response
+    init(from raw: FeedPostRaw) {
+        self.id = raw.id
+        self.authorId = raw.userId
+        self.authorName = "User \(raw.userId.prefix(8))"  // Placeholder until user profile fetch
+        self.authorAvatar = nil
+        self.content = raw.content
+        self.mediaUrls = raw.mediaUrls ?? []
+        self.createdAt = Date(timeIntervalSince1970: Double(raw.createdAt))
+        self.likeCount = raw.likeCount ?? 0
+        self.commentCount = raw.commentCount ?? 0
+        self.shareCount = raw.shareCount ?? 0
+        self.isLiked = false
+        self.isBookmarked = false
+    }
+
+    // Keep existing init for Codable conformance
+    init(id: String, authorId: String, authorName: String, authorAvatar: String?,
+         content: String, mediaUrls: [String], createdAt: Date,
+         likeCount: Int, commentCount: Int, shareCount: Int,
+         isLiked: Bool, isBookmarked: Bool) {
+        self.id = id
+        self.authorId = authorId
+        self.authorName = authorName
+        self.authorAvatar = authorAvatar
+        self.content = content
+        self.mediaUrls = mediaUrls
+        self.createdAt = createdAt
+        self.likeCount = likeCount
+        self.commentCount = commentCount
+        self.shareCount = shareCount
+        self.isLiked = isLiked
+        self.isBookmarked = isBookmarked
+    }
+
+    /// Create a copy with optional field overrides (eliminates duplicate creation code)
+    func copying(
+        likeCount: Int? = nil,
+        commentCount: Int? = nil,
+        shareCount: Int? = nil,
+        isLiked: Bool? = nil,
+        isBookmarked: Bool? = nil
+    ) -> FeedPost {
+        FeedPost(
+            id: self.id,
+            authorId: self.authorId,
+            authorName: self.authorName,
+            authorAvatar: self.authorAvatar,
+            content: self.content,
+            mediaUrls: self.mediaUrls,
+            createdAt: self.createdAt,
+            likeCount: likeCount ?? self.likeCount,
+            commentCount: commentCount ?? self.commentCount,
+            shareCount: shareCount ?? self.shareCount,
+            isLiked: isLiked ?? self.isLiked,
+            isBookmarked: isBookmarked ?? self.isBookmarked
+        )
     }
 }

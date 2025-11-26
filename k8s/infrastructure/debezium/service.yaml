@@ -1,0 +1,22 @@
+##############################################################################
+# Kafka Connect Service
+# Exposes REST API for connector management
+##############################################################################
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka-connect
+  namespace: nova
+  labels:
+    app: kafka-connect
+    component: cdc
+spec:
+  type: ClusterIP
+  selector:
+    app: kafka-connect
+  ports:
+  - name: rest
+    port: 8083
+    targetPort: rest
+    protocol: TCP

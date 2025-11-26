@@ -3,6 +3,7 @@ syntax = "proto3";
 package nova.notification_service.v2;
 
 import "common.proto";
+import "google/api/annotations.proto";
 
 // ============================================================================
 // Notification Service gRPC API
@@ -274,41 +275,98 @@ message GetNotificationStatsResponse {
 
 service NotificationService {
   // Get user's notifications
-  rpc GetNotifications(GetNotificationsRequest) returns (GetNotificationsResponse);
+  rpc GetNotifications(GetNotificationsRequest) returns (GetNotificationsResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/notifications"
+    };
+  }
 
   // Get single notification by ID
-  rpc GetNotification(GetNotificationRequest) returns (GetNotificationResponse);
+  rpc GetNotification(GetNotificationRequest) returns (GetNotificationResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/notifications/{notification_id}"
+    };
+  }
 
   // Create a new notification
-  rpc CreateNotification(CreateNotificationRequest) returns (CreateNotificationResponse);
+  rpc CreateNotification(CreateNotificationRequest) returns (CreateNotificationResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/notifications"
+      body: "*"
+    };
+  }
 
   // Mark single notification as read
-  rpc MarkNotificationAsRead(MarkNotificationAsReadRequest) returns (MarkNotificationAsReadResponse);
+  rpc MarkNotificationAsRead(MarkNotificationAsReadRequest) returns (MarkNotificationAsReadResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/notifications/{notification_id}/read"
+    };
+  }
 
   // Mark all notifications as read
-  rpc MarkAllNotificationsAsRead(MarkAllNotificationsAsReadRequest) returns (MarkAllNotificationsAsReadResponse);
+  rpc MarkAllNotificationsAsRead(MarkAllNotificationsAsReadRequest) returns (MarkAllNotificationsAsReadResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/notifications/read-all"
+      body: "*"
+    };
+  }
 
   // Delete notification (soft delete)
-  rpc DeleteNotification(DeleteNotificationRequest) returns (DeleteNotificationResponse);
+  rpc DeleteNotification(DeleteNotificationRequest) returns (DeleteNotificationResponse) {
+    option (google.api.http) = {
+      delete: "/api/v2/notifications/{notification_id}"
+    };
+  }
 
   // Get user's notification preferences
-  rpc GetNotificationPreferences(GetNotificationPreferencesRequest) returns (GetNotificationPreferencesResponse);
+  rpc GetNotificationPreferences(GetNotificationPreferencesRequest) returns (GetNotificationPreferencesResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/notifications/preferences"
+    };
+  }
 
   // Update user's notification preferences
-  rpc UpdateNotificationPreferences(UpdateNotificationPreferencesRequest) returns (UpdateNotificationPreferencesResponse);
+  rpc UpdateNotificationPreferences(UpdateNotificationPreferencesRequest) returns (UpdateNotificationPreferencesResponse) {
+    option (google.api.http) = {
+      put: "/api/v2/notifications/preferences"
+      body: "*"
+    };
+  }
 
   // Register device for push notifications
-  rpc RegisterPushToken(RegisterPushTokenRequest) returns (RegisterPushTokenResponse);
+  rpc RegisterPushToken(RegisterPushTokenRequest) returns (RegisterPushTokenResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/notifications/push-token"
+      body: "*"
+    };
+  }
 
   // Unregister device from push notifications
-  rpc UnregisterPushToken(UnregisterPushTokenRequest) returns (UnregisterPushTokenResponse);
+  rpc UnregisterPushToken(UnregisterPushTokenRequest) returns (UnregisterPushTokenResponse) {
+    option (google.api.http) = {
+      delete: "/api/v2/notifications/push-token/{token}"
+    };
+  }
 
   // Get count of unread notifications
-  rpc GetUnreadCount(GetUnreadCountRequest) returns (GetUnreadCountResponse);
+  rpc GetUnreadCount(GetUnreadCountRequest) returns (GetUnreadCountResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/notifications/unread-count"
+    };
+  }
 
   // Create multiple notifications in batch
-  rpc BatchCreateNotifications(BatchCreateNotificationsRequest) returns (BatchCreateNotificationsResponse);
+  rpc BatchCreateNotifications(BatchCreateNotificationsRequest) returns (BatchCreateNotificationsResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/notifications/batch"
+      body: "*"
+    };
+  }
 
   // Get notification statistics
-  rpc GetNotificationStats(GetNotificationStatsRequest) returns (GetNotificationStatsResponse);
+  rpc GetNotificationStats(GetNotificationStatsRequest) returns (GetNotificationStatsResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/notifications/stats"
+    };
+  }
 }

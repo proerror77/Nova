@@ -1,0 +1,118 @@
+# Envoy gRPC-JSON Transcoder Deployment
+# Converts REST/JSON requests to gRPC calls automatically
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: envoy-transcoder
+  namespace: nova-staging
+  labels:
+    app: envoy-transcoder
+    component: api-gateway
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: envoy-transcoder
+  template:
+    metadata:
+      labels:
+        app: envoy-transcoder
+        component: api-gateway
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9901"
+        prometheus.io/path: "/stats/prometheus"
+    spec:
+      containers:
+        - name: envoy
+          image: envoyproxy/envoy:v1.28-latest
+          ports:
+            - containerPort: 8080
+              name: http
+              protocol: TCP
+            - containerPort: 9901
+              name: admin
+              protocol: TCP
+          volumeMounts:
+            - name: envoy-config
+              mountPath: /etc/envoy
+              readOnly: true
+            - name: proto-descriptor
+              mountPath: /etc/envoy/proto
+              readOnly: true
+            - name: grpc-mtls-certs
+              mountPath: /etc/envoy/certs
+              readOnly: true
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 9901
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /server_info
+              port: 9901
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          args:
+            - -c
+            - /etc/envoy/envoy.yaml
+            - --service-cluster
+            - envoy-transcoder
+            - --service-node
+            - envoy-transcoder-$(POD_NAME)
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+      volumes:
+        - name: envoy-config
+          configMap:
+            name: envoy-config
+        - name: proto-descriptor
+          configMap:
+            name: proto-descriptor
+        - name: grpc-mtls-certs
+          secret:
+            secretName: grpc-mtls-shared
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: envoy-transcoder
+  namespace: nova-staging
+  labels:
+    app: envoy-transcoder
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: 8080
+      protocol: TCP
+      name: http
+    - port: 9901
+      targetPort: 9901
+      protocol: TCP
+      name: admin
+  selector:
+    app: envoy-transcoder
+---
+# ConfigMap for proto descriptor (placeholder - will be populated by CI/CD)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: proto-descriptor
+  namespace: nova-staging
+binaryData:
+  # This will be populated with the actual descriptor binary
+  # Use: kubectl create configmap proto-descriptor --from-file=nova-api.pb=gen/descriptor/nova-api.pb -n nova-staging
+  nova-api.pb: ""

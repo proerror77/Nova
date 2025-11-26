@@ -1,0 +1,20 @@
+# Dockerfile for generating proto descriptor
+# Used in CI/CD pipeline to generate nova-api.pb for Envoy transcoder
+FROM bufbuild/buf:1.28.1 AS builder
+
+WORKDIR /proto
+
+# Copy proto files
+COPY buf.yaml buf.gen.yaml ./
+COPY services/ services/
+COPY services_v2/ services_v2/
+COPY common.proto ./
+
+# Update dependencies and generate descriptor
+RUN buf dep update && \
+    mkdir -p gen/descriptor && \
+    buf build -o gen/descriptor/nova-api.pb
+
+# Output stage - just the descriptor
+FROM scratch
+COPY --from=builder /proto/gen/descriptor/nova-api.pb /nova-api.pb

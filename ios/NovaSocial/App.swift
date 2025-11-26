@@ -2,7 +2,8 @@ import SwiftUI
 
 @main
 struct FigmaDesignAppApp: App {
-    @StateObject private var authManager = AuthenticationManager.shared
+    // ObservedObject for singleton - App doesn't own it, just observes it
+    @ObservedObject private var authManager = AuthenticationManager.shared
     @State private var currentPage: AppPage = .home
 
     var body: some Scene {

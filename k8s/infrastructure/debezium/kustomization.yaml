@@ -1,0 +1,32 @@
+##############################################################################
+# Debezium/Kafka Connect Kustomization
+#
+# Deployment:
+#   kubectl apply -k k8s/infrastructure/debezium/
+#
+# Post-deployment steps:
+# 1. Wait for kafka-connect pod to be ready
+# 2. Deploy connector via REST API:
+#    kubectl exec -n nova deploy/kafka-connect -- \
+#      curl -X POST http://localhost:8083/connectors \
+#      -H "Content-Type: application/json" \
+#      -d @/etc/debezium/config/postgres-connector.json
+##############################################################################
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: nova
+
+resources:
+- deployment.yaml
+- service.yaml
+- configmap.yaml
+# Note: secret.yaml is a template - create actual secret separately
+
+commonLabels:
+  app: kafka-connect
+  component: cdc
+
+commonAnnotations:
+  description: "Debezium CDC for PostgreSQL to Kafka"

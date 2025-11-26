@@ -3,6 +3,7 @@ import SwiftUI
 struct SettingsView: View {
     @Binding var currentPage: AppPage
     @State private var isDarkMode = false
+    @StateObject private var authManager = AuthenticationManager.shared
 
     var body: some View {
         ZStack {
@@ -133,7 +134,9 @@ struct SettingsView: View {
 
                         // MARK: - Sign Out
                         Button(action: {
-                            // TODO: 实现登出功能
+                            Task {
+                                await authManager.logout()
+                            }
                         }) {
                             HStack {
                                 Image(systemName: "rectangle.portrait.and.arrow.right")

@@ -13,6 +13,11 @@ struct LoginView: View {
     @State private var errorMessage: String?
     @State private var showPassword = false
 
+    // MARK: - Validation State
+    @State private var emailError: String?
+    @State private var passwordError: String?
+    @State private var usernameError: String?
+
     // Access global AuthenticationManager
     private let authManager = AuthenticationManager.shared
 
@@ -55,19 +60,7 @@ struct LoginView: View {
                             .padding(.horizontal, 40)
                             .offset(x: 0.50, y: -180)
 
-                        // EMAIL Label
-                        Text(isLoginMode ? "EMAIL" : "USERNAME")
-                            .font(Font.custom("Helvetica Neue", size: 12).weight(.light))
-                            .lineSpacing(20)
-                            .foregroundColor(.white)
-                            .offset(x: -139.50, y: -70)
-
-                        // PASSWORD Label
-                        Text("PASSWORD")
-                            .font(Font.custom("Helvetica Neue", size: 12).weight(.light))
-                            .lineSpacing(20)
-                            .foregroundColor(.white)
-                            .offset(x: -123.50, y: -1)
+                        // Labels removed - placeholder text provides field hints
 
                         // Forgot password
                         Text("Forgot password?")
@@ -156,68 +149,7 @@ struct LoginView: View {
 
                     Group {
                         // Email/Username Input Field
-                        ZStack(alignment: .leading) {
-                            Rectangle()
-                                .foregroundColor(.clear)
-                                .frame(width: 343, height: 49)
-                                .cornerRadius(6)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 6)
-                                        .inset(by: 0.20)
-                                        .stroke(.white, lineWidth: 0.20)
-                                )
-
-                            if isLoginMode {
-                                TextField("", text: $email)
-                                    .foregroundColor(.white)
-                                    .font(Font.custom("Helvetica Neue", size: 14))
-                                    .padding(.horizontal, 16)
-                                    .autocapitalization(.none)
-                                    .keyboardType(.emailAddress)
-                                    .autocorrectionDisabled()
-                            } else {
-                                TextField("", text: $username)
-                                    .foregroundColor(.white)
-                                    .font(Font.custom("Helvetica Neue", size: 14))
-                                    .padding(.horizontal, 16)
-                                    .autocapitalization(.none)
-                                    .autocorrectionDisabled()
-                            }
-                        }
-                        .offset(x: 0, y: -69.50)
-
-                        // Password Input Field
-                        ZStack(alignment: .leading) {
-                            Rectangle()
-                                .foregroundColor(.clear)
-                                .frame(width: 343, height: 49)
-                                .cornerRadius(6)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 6)
-                                        .inset(by: 0.20)
-                                        .stroke(.white, lineWidth: 0.20)
-                                )
-
-                            if showPassword {
-                                TextField("", text: $password)
-                                    .foregroundColor(.white)
-                                    .font(Font.custom("Helvetica Neue", size: 14))
-                                    .padding(.horizontal, 16)
-                                    .padding(.trailing, 60)
-                                    .autocapitalization(.none)
-                                    .autocorrectionDisabled()
-                            } else {
-                                SecureField("", text: $password)
-                                    .foregroundColor(.white)
-                                    .font(Font.custom("Helvetica Neue", size: 14))
-                                    .padding(.horizontal, 16)
-                                    .padding(.trailing, 60)
-                            }
-                        }
-                        .offset(x: 0, y: -0.50)
-
-                        // Additional field for registration: Email (when in register mode)
-                        if !isLoginMode {
+                        VStack(alignment: .leading, spacing: 4) {
                             ZStack(alignment: .leading) {
                                 Rectangle()
                                     .foregroundColor(.clear)
@@ -226,16 +158,122 @@ struct LoginView: View {
                                     .overlay(
                                         RoundedRectangle(cornerRadius: 6)
                                             .inset(by: 0.20)
-                                            .stroke(.white, lineWidth: 0.20)
+                                            .stroke(emailError != nil ? Color.red : .white, lineWidth: emailError != nil ? 1 : 0.20)
                                     )
 
-                                TextField("", text: $email)
-                                    .foregroundColor(.white)
-                                    .font(Font.custom("Helvetica Neue", size: 14))
-                                    .padding(.horizontal, 16)
-                                    .autocapitalization(.none)
-                                    .keyboardType(.emailAddress)
-                                    .autocorrectionDisabled()
+                                if isLoginMode {
+                                    TextField("", text: $email, prompt: Text("Enter your email").foregroundColor(Color.white.opacity(0.4)))
+                                        .foregroundColor(.white)
+                                        .font(Font.custom("Helvetica Neue", size: 14))
+                                        .padding(.horizontal, 16)
+                                        .autocapitalization(.none)
+                                        .keyboardType(.emailAddress)
+                                        .autocorrectionDisabled()
+                                        .onChange(of: email) { _, newValue in
+                                            validateEmailRealtime(newValue)
+                                        }
+                                } else {
+                                    TextField("", text: $username, prompt: Text("Choose a username").foregroundColor(Color.white.opacity(0.4)))
+                                        .foregroundColor(.white)
+                                        .font(Font.custom("Helvetica Neue", size: 14))
+                                        .padding(.horizontal, 16)
+                                        .autocapitalization(.none)
+                                        .autocorrectionDisabled()
+                                        .onChange(of: username) { _, newValue in
+                                            validateUsernameRealtime(newValue)
+                                        }
+                                }
+                            }
+
+                            // Inline error for email/username
+                            if let error = isLoginMode ? emailError : usernameError {
+                                Text(error)
+                                    .font(Font.custom("Helvetica Neue", size: 11))
+                                    .foregroundColor(Color(red: 1, green: 0.4, blue: 0.4))
+                                    .padding(.leading, 4)
+                            }
+                        }
+                        .offset(x: 0, y: -69.50)
+
+                        // Password Input Field
+                        VStack(alignment: .leading, spacing: 4) {
+                            ZStack(alignment: .leading) {
+                                Rectangle()
+                                    .foregroundColor(.clear)
+                                    .frame(width: 343, height: 49)
+                                    .cornerRadius(6)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 6)
+                                            .inset(by: 0.20)
+                                            .stroke(passwordError != nil ? Color.red : .white, lineWidth: passwordError != nil ? 1 : 0.20)
+                                    )
+
+                                if showPassword {
+                                    TextField("", text: $password, prompt: Text("Enter your password").foregroundColor(Color.white.opacity(0.4)))
+                                        .foregroundColor(.white)
+                                        .font(Font.custom("Helvetica Neue", size: 14))
+                                        .padding(.horizontal, 16)
+                                        .padding(.trailing, 60)
+                                        .autocapitalization(.none)
+                                        .autocorrectionDisabled()
+                                        .onChange(of: password) { _, newValue in
+                                            validatePasswordRealtime(newValue)
+                                        }
+                                } else {
+                                    SecureField("", text: $password, prompt: Text("Enter your password").foregroundColor(Color.white.opacity(0.4)))
+                                        .foregroundColor(.white)
+                                        .font(Font.custom("Helvetica Neue", size: 14))
+                                        .padding(.horizontal, 16)
+                                        .padding(.trailing, 60)
+                                        .onChange(of: password) { _, newValue in
+                                            validatePasswordRealtime(newValue)
+                                        }
+                                }
+                            }
+
+                            // Inline error for password
+                            if let error = passwordError {
+                                Text(error)
+                                    .font(Font.custom("Helvetica Neue", size: 11))
+                                    .foregroundColor(Color(red: 1, green: 0.4, blue: 0.4))
+                                    .padding(.leading, 4)
+                            }
+                        }
+                        .offset(x: 0, y: -0.50)
+
+                        // Additional field for registration: Email (when in register mode)
+                        if !isLoginMode {
+                            VStack(alignment: .leading, spacing: 4) {
+                                ZStack(alignment: .leading) {
+                                    Rectangle()
+                                        .foregroundColor(.clear)
+                                        .frame(width: 343, height: 49)
+                                        .cornerRadius(6)
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 6)
+                                                .inset(by: 0.20)
+                                                .stroke(emailError != nil ? Color.red : .white, lineWidth: emailError != nil ? 1 : 0.20)
+                                        )
+
+                                    TextField("", text: $email, prompt: Text("Enter your email").foregroundColor(Color.white.opacity(0.4)))
+                                        .foregroundColor(.white)
+                                        .font(Font.custom("Helvetica Neue", size: 14))
+                                        .padding(.horizontal, 16)
+                                        .autocapitalization(.none)
+                                        .keyboardType(.emailAddress)
+                                        .autocorrectionDisabled()
+                                        .onChange(of: email) { _, newValue in
+                                            validateEmailRealtime(newValue)
+                                        }
+                                }
+
+                                // Inline error for email in register mode
+                                if let error = emailError {
+                                    Text(error)
+                                        .font(Font.custom("Helvetica Neue", size: 11))
+                                        .foregroundColor(Color(red: 1, green: 0.4, blue: 0.4))
+                                        .padding(.leading, 4)
+                                }
                             }
                             .offset(x: 0, y: -138)
 
@@ -243,7 +281,7 @@ struct LoginView: View {
                                 .font(Font.custom("Helvetica Neue", size: 12).weight(.light))
                                 .lineSpacing(20)
                                 .foregroundColor(.white)
-                                .offset(x: -139.50, y: -138)
+                                .offset(x: -139.50, y: -155)
                         }
 
                         // Decorative lines
@@ -315,18 +353,28 @@ struct LoginView: View {
     private func toggleMode() {
         isLoginMode.toggle()
         errorMessage = nil
-        // Clear fields when switching modes
+        // Clear fields and validation errors when switching modes
         email = ""
         username = ""
         password = ""
         displayName = ""
+        emailError = nil
+        passwordError = nil
+        usernameError = nil
     }
 
     // MARK: - Validation
 
     private func validateLogin() -> Bool {
-        if email.isEmpty {
+        let trimmedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if trimmedEmail.isEmpty {
             errorMessage = "Please enter your email"
+            return false
+        }
+
+        if !isValidEmail(trimmedEmail) {
+            errorMessage = "Please enter a valid email address"
             return false
         }
 
@@ -339,27 +387,125 @@ struct LoginView: View {
     }
 
     private func validateRegister() -> Bool {
-        if username.isEmpty {
+        let trimmedUsername = username.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // Username validation
+        if trimmedUsername.isEmpty {
             errorMessage = "Please enter a username"
             return false
         }
 
-        if email.isEmpty {
+        if trimmedUsername.count < 3 {
+            errorMessage = "Username must be at least 3 characters"
+            return false
+        }
+
+        if trimmedUsername.count > 30 {
+            errorMessage = "Username must be less than 30 characters"
+            return false
+        }
+
+        if !isValidUsername(trimmedUsername) {
+            errorMessage = "Username can only contain letters, numbers, and underscores"
+            return false
+        }
+
+        // Email validation
+        if trimmedEmail.isEmpty {
             errorMessage = "Please enter an email"
             return false
         }
 
+        if !isValidEmail(trimmedEmail) {
+            errorMessage = "Please enter a valid email address"
+            return false
+        }
+
+        // Password validation
         if password.isEmpty {
             errorMessage = "Please enter a password"
             return false
         }
 
-        if password.count < 6 {
-            errorMessage = "Password must be at least 6 characters"
+        if password.count < 8 {
+            errorMessage = "Password must be at least 8 characters"
+            return false
+        }
+
+        if !hasPasswordStrength(password) {
+            errorMessage = "Password must contain at least one uppercase letter, one lowercase letter, and one number"
             return false
         }
 
         return true
+    }
+
+    // MARK: - Realtime Validation
+
+    private func validateEmailRealtime(_ value: String) {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            emailError = nil  // Don't show error for empty field until submit
+        } else if !isValidEmail(trimmed) {
+            emailError = "Invalid email format"
+        } else {
+            emailError = nil
+        }
+    }
+
+    private func validatePasswordRealtime(_ value: String) {
+        if value.isEmpty {
+            passwordError = nil  // Don't show error for empty field until submit
+        } else if !isLoginMode {
+            // Only check strength for registration
+            if value.count < 8 {
+                passwordError = "At least 8 characters required"
+            } else if !hasPasswordStrength(value) {
+                passwordError = "Need uppercase, lowercase, and number"
+            } else {
+                passwordError = nil
+            }
+        } else {
+            passwordError = nil
+        }
+    }
+
+    private func validateUsernameRealtime(_ value: String) {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            usernameError = nil  // Don't show error for empty field until submit
+        } else if trimmed.count < 3 {
+            usernameError = "At least 3 characters required"
+        } else if trimmed.count > 30 {
+            usernameError = "Maximum 30 characters"
+        } else if !isValidUsername(trimmed) {
+            usernameError = "Letters, numbers, underscores only"
+        } else {
+            usernameError = nil
+        }
+    }
+
+    // MARK: - Validation Helpers
+
+    private func isValidEmail(_ email: String) -> Bool {
+        // Basic email format validation using regex
+        let emailRegex = #"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$"#
+        return email.range(of: emailRegex, options: .regularExpression) != nil
+    }
+
+    private func isValidUsername(_ username: String) -> Bool {
+        // Username: alphanumeric and underscores only
+        let usernameRegex = #"^[A-Za-z0-9_]+$"#
+        return username.range(of: usernameRegex, options: .regularExpression) != nil
+    }
+
+    private func hasPasswordStrength(_ password: String) -> Bool {
+        // Check for at least one uppercase, one lowercase, and one digit
+        let hasUppercase = password.range(of: "[A-Z]", options: .regularExpression) != nil
+        let hasLowercase = password.range(of: "[a-z]", options: .regularExpression) != nil
+        let hasDigit = password.range(of: "[0-9]", options: .regularExpression) != nil
+        return hasUppercase && hasLowercase && hasDigit
     }
 }
 

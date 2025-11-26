@@ -1,0 +1,93 @@
+##############################################################################
+# Debezium PostgreSQL Connector Configuration
+# This ConfigMap contains the connector JSON that will be deployed via REST API
+##############################################################################
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: debezium-connector-config
+  namespace: nova
+  labels:
+    app: kafka-connect
+    component: cdc
+data:
+  # PostgreSQL CDC connector for nova_content (posts, comments, likes)
+  content-connector.json: |
+    {
+      "name": "nova-content-cdc",
+      "config": {
+        "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+        "tasks.max": "1",
+        "database.hostname": "postgres",
+        "database.port": "5432",
+        "database.user": "nova",
+        "database.password": "${file:/etc/debezium/secrets/postgres-password}",
+        "database.dbname": "nova_content",
+        "database.server.name": "nova-content",
+        "plugin.name": "pgoutput",
+        "publication.name": "content_cdc_publication",
+        "slot.name": "content_cdc_slot",
+        "table.include.list": "public.posts,public.comments,public.likes",
+        "topic.prefix": "nova-content",
+        "topic.creation.enable": "true",
+        "topic.creation.default.replication.factor": "1",
+        "topic.creation.default.partitions": "3",
+        "key.converter": "org.apache.kafka.connect.json.JsonConverter",
+        "key.converter.schemas.enable": "false",
+        "value.converter": "org.apache.kafka.connect.json.JsonConverter",
+        "value.converter.schemas.enable": "false",
+        "transforms": "route",
+        "transforms.route.type": "org.apache.kafka.connect.transforms.RegexRouter",
+        "transforms.route.regex": "nova-content\\.public\\.(.+)",
+        "transforms.route.replacement": "cdc.$1",
+        "snapshot.mode": "initial",
+        "decimal.handling.mode": "string",
+        "time.precision.mode": "connect",
+        "heartbeat.interval.ms": "10000",
+        "heartbeat.action.query": "INSERT INTO cdc_heartbeat (id, ts) VALUES (1, NOW()) ON CONFLICT (id) DO UPDATE SET ts = NOW()",
+        "errors.tolerance": "all",
+        "errors.log.enable": "true",
+        "errors.log.include.messages": "true"
+      }
+    }
+
+  # PostgreSQL CDC connector for nova_graph (follows)
+  graph-connector.json: |
+    {
+      "name": "nova-graph-cdc",
+      "config": {
+        "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+        "tasks.max": "1",
+        "database.hostname": "postgres",
+        "database.port": "5432",
+        "database.user": "nova",
+        "database.password": "${file:/etc/debezium/secrets/postgres-password}",
+        "database.dbname": "nova_graph",
+        "database.server.name": "nova-graph",
+        "plugin.name": "pgoutput",
+        "publication.name": "graph_cdc_publication",
+        "slot.name": "graph_cdc_slot",
+        "table.include.list": "public.follows",
+        "topic.prefix": "nova-graph",
+        "topic.creation.enable": "true",
+        "topic.creation.default.replication.factor": "1",
+        "topic.creation.default.partitions": "3",
+        "key.converter": "org.apache.kafka.connect.json.JsonConverter",
+        "key.converter.schemas.enable": "false",
+        "value.converter": "org.apache.kafka.connect.json.JsonConverter",
+        "value.converter.schemas.enable": "false",
+        "transforms": "route",
+        "transforms.route.type": "org.apache.kafka.connect.transforms.RegexRouter",
+        "transforms.route.regex": "nova-graph\\.public\\.(.+)",
+        "transforms.route.replacement": "cdc.$1",
+        "snapshot.mode": "initial",
+        "decimal.handling.mode": "string",
+        "time.precision.mode": "connect",
+        "heartbeat.interval.ms": "10000",
+        "heartbeat.action.query": "INSERT INTO cdc_heartbeat (id, ts) VALUES (1, NOW()) ON CONFLICT (id) DO UPDATE SET ts = NOW()",
+        "errors.tolerance": "all",
+        "errors.log.enable": "true",
+        "errors.log.include.messages": "true"
+      }
+    }

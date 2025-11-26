@@ -14,22 +14,59 @@ class AuthenticationManager: ObservableObject {
     @Published var authToken: String?
 
     private let identityService = IdentityService()
-    private let userDefaults = UserDefaults.standard
+    private let keychain = KeychainService.shared
 
-    // UserDefaults keys
-    private let tokenKey = "auth_token"
-    private let userIdKey = "user_id"
+    // Legacy UserDefaults for migration (will be removed in future)
+    private let userDefaults = UserDefaults.standard
+    private let legacyTokenKey = "auth_token"
+    private let legacyRefreshTokenKey = "refresh_token"
+    private let legacyUserIdKey = "user_id"
+
+    // Token refresh state - use task coalescence to prevent race conditions
+    // Note: Using nonisolated property access pattern for Swift 6 compatibility
+    private var refreshTask: Task<Bool, Never>?
 
     private init() {
+        migrateFromUserDefaults()
         loadSavedAuth()
+    }
+
+    // MARK: - Migration
+
+    /// Migrate tokens from UserDefaults to Keychain (one-time)
+    private func migrateFromUserDefaults() {
+        // Check if migration needed
+        if keychain.exists(.authToken) { return }
+
+        // Migrate auth token
+        if let token = userDefaults.string(forKey: legacyTokenKey) {
+            _ = keychain.save(token, for: .authToken)
+            userDefaults.removeObject(forKey: legacyTokenKey)
+        }
+
+        // Migrate refresh token
+        if let refreshToken = userDefaults.string(forKey: legacyRefreshTokenKey) {
+            _ = keychain.save(refreshToken, for: .refreshToken)
+            userDefaults.removeObject(forKey: legacyRefreshTokenKey)
+        }
+
+        // Migrate user ID
+        if let userId = userDefaults.string(forKey: legacyUserIdKey) {
+            _ = keychain.save(userId, for: .userId)
+            userDefaults.removeObject(forKey: legacyUserIdKey)
+        }
+
+        #if DEBUG
+        print("[Auth] Tokens migrated from UserDefaults to Keychain")
+        #endif
     }
 
     // MARK: - Authentication State
 
-    /// Load saved authentication from UserDefaults
+    /// Load saved authentication from Keychain
     func loadSavedAuth() {
-        if let token = userDefaults.string(forKey: tokenKey),
-           let userId = userDefaults.string(forKey: userIdKey) {
+        if let token = keychain.get(.authToken),
+           let userId = keychain.get(.userId) {
             self.authToken = token
             APIClient.shared.setAuthToken(token)
             self.isAuthenticated = true
@@ -46,7 +83,9 @@ class AuthenticationManager: ObservableObject {
         do {
             self.currentUser = try await identityService.getUser(userId: userId)
         } catch {
-            print("Failed to load user profile: \(error)")
+            #if DEBUG
+            print("[Auth] Failed to load user profile: \(error)")
+            #endif
             // Keep auth state but user will be nil
         }
     }
@@ -62,8 +101,8 @@ class AuthenticationManager: ObservableObject {
             displayName: displayName
         )
 
-        // Save authentication
-        await saveAuth(token: response.token, user: response.user)
+        // Save authentication with refresh token
+        await saveAuth(token: response.token, refreshToken: response.refreshToken, user: response.user)
 
         return response.user
     }
@@ -77,8 +116,8 @@ class AuthenticationManager: ObservableObject {
             password: password
         )
 
-        // Save authentication
-        await saveAuth(token: response.token, user: response.user)
+        // Save authentication with refresh token
+        await saveAuth(token: response.token, refreshToken: response.refreshToken, user: response.user)
 
         return response.user
     }
@@ -98,9 +137,8 @@ class AuthenticationManager: ObservableObject {
         // Clear APIClient token
         APIClient.shared.setAuthToken("")
 
-        // Clear UserDefaults
-        userDefaults.removeObject(forKey: tokenKey)
-        userDefaults.removeObject(forKey: userIdKey)
+        // Clear Keychain
+        keychain.clearAll()
     }
 
     // MARK: - Token Refresh
@@ -109,19 +147,79 @@ class AuthenticationManager: ObservableObject {
     func refreshToken(refreshToken: String) async throws {
         let response = try await identityService.refreshToken(refreshToken: refreshToken)
 
-        // Update token
+        // Update token in Keychain
         self.authToken = response.token
         APIClient.shared.setAuthToken(response.token)
-        userDefaults.set(response.token, forKey: tokenKey)
+        _ = keychain.save(response.token, for: .authToken)
+
+        // Update refresh token if provided
+        if let newRefreshToken = response.refreshToken {
+            _ = keychain.save(newRefreshToken, for: .refreshToken)
+        }
 
         // Update user
         self.currentUser = response.user
-        userDefaults.set(response.user.id, forKey: userIdKey)
+        _ = keychain.save(response.user.id, for: .userId)
+    }
+
+    /// Attempt to refresh token if expired (401 error)
+    /// Returns true if refresh was successful
+    /// Uses task coalescence to prevent multiple concurrent refresh attempts (race condition fix)
+    func attemptTokenRefresh() async -> Bool {
+        // If already refreshing, wait for the existing task (MainActor ensures thread safety)
+        if let existingTask = refreshTask {
+            return await existingTask.value
+        }
+
+        guard let storedRefreshToken = keychain.get(.refreshToken) else {
+            #if DEBUG
+            print("[Auth] No refresh token available")
+            #endif
+            return false
+        }
+
+        // Create and store the refresh task
+        let task = Task<Bool, Never> { [weak self] in
+            guard let self = self else { return false }
+
+            do {
+                try await self.refreshToken(refreshToken: storedRefreshToken)
+                #if DEBUG
+                print("[Auth] Token refreshed successfully")
+                #endif
+                return true
+            } catch {
+                #if DEBUG
+                print("[Auth] Token refresh failed: \(error)")
+                #endif
+                // Clear auth state on refresh failure
+                await self.logout()
+                return false
+            }
+        }
+
+        refreshTask = task
+
+        // Wait for result and clean up
+        let result = await task.value
+        refreshTask = nil
+
+        return result
+    }
+
+    /// Get stored refresh token
+    var storedRefreshToken: String? {
+        keychain.get(.refreshToken)
+    }
+
+    /// Get stored user ID
+    var storedUserId: String? {
+        keychain.get(.userId)
     }
 
     // MARK: - Private Helpers
 
-    private func saveAuth(token: String, user: UserProfile) async {
+    private func saveAuth(token: String, refreshToken: String?, user: UserProfile) async {
         self.authToken = token
         self.currentUser = user
         self.isAuthenticated = true
@@ -129,8 +227,11 @@ class AuthenticationManager: ObservableObject {
         // Set token in APIClient
         APIClient.shared.setAuthToken(token)
 
-        // Save to UserDefaults
-        userDefaults.set(token, forKey: tokenKey)
-        userDefaults.set(user.id, forKey: userIdKey)
+        // Save to Keychain (secure storage)
+        _ = keychain.save(token, for: .authToken)
+        _ = keychain.save(user.id, for: .userId)
+        if let refreshToken = refreshToken {
+            _ = keychain.save(refreshToken, for: .refreshToken)
+        }
     }
 }

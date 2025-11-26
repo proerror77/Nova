@@ -3,11 +3,18 @@ import PhotosUI
 
 struct ProfileView: View {
     @Binding var currentPage: AppPage
+    // Use ObservedObject for shared singleton (not StateObject which implies ownership)
+    @ObservedObject private var authManager = AuthenticationManager.shared
     @State private var profileData = ProfileData()
     @State private var showNewPost = false
     @State private var showSetting = false
     @State private var selectedPhotoItem: PhotosPickerItem?
     @State private var showPhotoOptions = false
+
+    // Computed property for user display
+    private var displayUser: UserProfile? {
+        authManager.currentUser ?? profileData.userProfile
+    }
 
     var body: some View {
         ZStack {
@@ -34,7 +41,7 @@ struct ProfileView: View {
                         HStack {
                             // 左侧：用户名 + 下拉箭头
                             HStack(spacing: 8) {
-                                Text("Bruce Li")
+                                Text(displayUser?.displayName ?? displayUser?.username ?? "User")
                                     .font(.system(size: 20, weight: .medium))
                                     .foregroundColor(.white)
 
@@ -112,19 +119,23 @@ struct ProfileView: View {
                             }
 
                             // 用户名
-                            Text("Bruce Li")
+                            Text(displayUser?.displayName ?? displayUser?.username ?? "User")
                                 .font(.system(size: 24, weight: .bold))
                                 .foregroundColor(.white)
 
                             // 位置
-                            Text("China")
-                                .font(.system(size: 14))
-                                .foregroundColor(.white)
+                            if let location = displayUser?.location, !location.isEmpty {
+                                Text(location)
+                                    .font(.system(size: 14))
+                                    .foregroundColor(.white)
+                            }
 
-                            // 职位
-                            Text("Illustrator / Junior Illustrator")
-                                .font(.system(size: 14, weight: .light))
-                                .foregroundColor(.white.opacity(0.9))
+                            // 简介/职位
+                            if let bio = displayUser?.bio, !bio.isEmpty {
+                                Text(bio)
+                                    .font(.system(size: 14, weight: .light))
+                                    .foregroundColor(.white.opacity(0.9))
+                            }
 
                             // MARK: - 统计数据
                             HStack(spacing: 0) {
@@ -133,7 +144,7 @@ struct ProfileView: View {
                                     Text("Following")
                                         .font(.system(size: 16))
                                         .foregroundColor(.white)
-                                    Text("592")
+                                    Text("\(displayUser?.safeFollowingCount ?? 0)")
                                         .font(.system(size: 16))
                                         .foregroundColor(.white)
                                 }
@@ -149,7 +160,7 @@ struct ProfileView: View {
                                     Text("Followers")
                                         .font(.system(size: 16))
                                         .foregroundColor(.white)
-                                    Text("1449")
+                                    Text("\(displayUser?.safeFollowerCount ?? 0)")
                                         .font(.system(size: 16))
                                         .foregroundColor(.white)
                                 }
@@ -160,12 +171,12 @@ struct ProfileView: View {
                                     .fill(.white)
                                     .frame(width: 1, height: 30)
 
-                                // Likes
+                                // Posts
                                 VStack(spacing: 4) {
-                                    Text("Likes")
+                                    Text("Posts")
                                         .font(.system(size: 16))
                                         .foregroundColor(.white)
-                                    Text("452")
+                                    Text("\(displayUser?.safePostCount ?? 0)")
                                         .font(.system(size: 16))
                                         .foregroundColor(.white)
                                 }
@@ -175,16 +186,18 @@ struct ProfileView: View {
                             .padding(.top, 10)
 
                             // MARK: - 认证徽章
-                            HStack(spacing: 8) {
-                                Image(systemName: "checkmark.seal.fill")
-                                    .font(.system(size: 20))
-                                    .foregroundColor(.blue)
+                            if displayUser?.safeIsVerified == true {
+                                HStack(spacing: 8) {
+                                    Image(systemName: "checkmark.seal.fill")
+                                        .font(.system(size: 20))
+                                        .foregroundColor(.blue)
 
-                                Text("Verified Icered Partner")
-                                    .font(.system(size: 16))
-                                    .foregroundColor(.white)
+                                    Text("Verified Icered Partner")
+                                        .font(.system(size: 16))
+                                        .foregroundColor(.white)
+                                }
+                                .padding(.top, 8)
                             }
-                            .padding(.top, 8)
                         }
                         .padding(.bottom, 40)
                     }
@@ -366,7 +379,10 @@ struct ProfileView: View {
             }
         }
         .task {
-            await profileData.loadUserProfile(userId: "current_user_id")
+            // Use current user from AuthenticationManager
+            if let userId = authManager.currentUser?.id {
+                await profileData.loadUserProfile(userId: userId)
+            }
         }
         .sheet(isPresented: $showNewPost) {
             NewPostView(showNewPost: $showNewPost)
@@ -500,6 +516,11 @@ struct PostGridCard: View {
         }
     }
 
+    private var displayUsername: String {
+        // Show first 8 characters of creator ID as placeholder
+        "User \(post.creatorId.prefix(8))"
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // 顶部用户信息
@@ -509,7 +530,7 @@ struct PostGridCard: View {
                     .frame(width: 24, height: 24)
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Simone Carter")
+                    Text(displayUsername)
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundColor(.black)
 
@@ -523,7 +544,7 @@ struct PostGridCard: View {
             .padding(.horizontal, 12)
             .padding(.top, 12)
 
-            // 图片占位符
+            // 图片占位符 - TODO: 当 Post 模型支持 mediaUrls 后加载真实图片
             Rectangle()
                 .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
                 .frame(height: 200)
@@ -531,8 +552,8 @@ struct PostGridCard: View {
                 .padding(.horizontal, 12)
                 .padding(.top, 8)
 
-            // 文字描述
-            Text("kyleegigstead Cyborg dreams...")
+            // 实际帖子内容
+            Text(post.content.isEmpty ? "No content" : post.content)
                 .font(.system(size: 13, weight: .medium))
                 .foregroundColor(.black)
                 .lineLimit(2)

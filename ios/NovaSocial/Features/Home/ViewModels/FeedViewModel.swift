@@ -17,8 +17,13 @@ class FeedViewModel: ObservableObject {
     // MARK: - Private Properties
 
     private let feedService = FeedService()
+    private let contentService = ContentService()
+    private let socialService = SocialService()
     private var currentCursor: String?
     private var currentAlgorithm: FeedAlgorithm = .chronological
+    private var currentUserId: String? {
+        KeychainService.shared.get(.userId)
+    }
 
     // MARK: - Public Methods
 
@@ -34,22 +39,42 @@ class FeedViewModel: ObservableObject {
         do {
             let response = try await feedService.getFeed(algo: algorithm, limit: 20, cursor: nil)
 
-            self.postIds = response.posts
+            // Feed API now returns full post objects directly
+            self.postIds = response.postIds
             self.currentCursor = response.cursor
             self.hasMore = response.hasMore
 
-            // For now, create mock posts from IDs until content-service integration
-            self.posts = response.posts.enumerated().map { index, postId in
-                createMockPost(id: postId, index: index)
-            }
+            // Convert raw posts to FeedPost objects directly (no separate content-service call needed)
+            self.posts = response.posts.map { FeedPost(from: $0) }
 
             self.error = nil
         } catch let apiError as APIError {
-            self.error = apiError.localizedDescription
-            print("Feed API Error: \(apiError)")
+            #if DEBUG
+            print("[Feed] API Error: \(apiError)")
+            #endif
+            // Handle unauthorized - attempt token refresh
+            if case .unauthorized = apiError {
+                let refreshed = await AuthenticationManager.shared.attemptTokenRefresh()
+                if refreshed {
+                    // Retry after token refresh
+                    isLoading = false
+                    await loadFeed(algorithm: algorithm)
+                    return
+                } else {
+                    self.error = "Session expired. Please login again."
+                    self.posts = []
+                    self.hasMore = false
+                }
+            } else {
+                self.error = apiError.localizedDescription
+                self.posts = []
+            }
         } catch {
             self.error = "Failed to load feed: \(error.localizedDescription)"
-            print("Feed Error: \(error)")
+            self.posts = []
+            #if DEBUG
+            print("[Feed] Error: \(error)")
+            #endif
         }
 
         isLoading = false
@@ -57,25 +82,26 @@ class FeedViewModel: ObservableObject {
 
     /// Load more posts (pagination)
     func loadMore() async {
-        guard !isLoadingMore, hasMore, let cursor = currentCursor else { return }
+        // Note: Backend doesn't support cursor pagination yet, so this is disabled
+        guard !isLoadingMore, hasMore else { return }
 
         isLoadingMore = true
 
         do {
-            let response = try await feedService.getFeed(algo: currentAlgorithm, limit: 20, cursor: cursor)
+            let response = try await feedService.getFeed(algo: currentAlgorithm, limit: 20, cursor: currentCursor)
 
-            self.postIds.append(contentsOf: response.posts)
+            self.postIds.append(contentsOf: response.postIds)
             self.currentCursor = response.cursor
             self.hasMore = response.hasMore
 
-            // Append mock posts
-            let newPosts = response.posts.enumerated().map { index, postId in
-                createMockPost(id: postId, index: self.posts.count + index)
-            }
+            // Convert raw posts to FeedPost objects directly
+            let newPosts = response.posts.map { FeedPost(from: $0) }
             self.posts.append(contentsOf: newPosts)
 
         } catch {
-            print("Load more error: \(error)")
+            #if DEBUG
+            print("[Feed] Load more error: \(error)")
+            #endif
         }
 
         isLoadingMore = false
@@ -92,33 +118,112 @@ class FeedViewModel: ObservableObject {
         await loadFeed(algorithm: algorithm)
     }
 
+    // MARK: - Social Actions
+
+    /// Toggle like on a post
+    func toggleLike(postId: String) async {
+        guard let index = posts.firstIndex(where: { $0.id == postId }),
+              let userId = currentUserId else { return }
+
+        let post = posts[index]
+        let wasLiked = post.isLiked
+
+        // Optimistic update
+        posts[index] = post.copying(
+            likeCount: wasLiked ? post.likeCount - 1 : post.likeCount + 1,
+            isLiked: !wasLiked
+        )
+
+        do {
+            if wasLiked {
+                try await socialService.deleteLike(postId: postId, userId: userId)
+            } else {
+                try await socialService.createLike(postId: postId, userId: userId)
+            }
+        } catch {
+            // Revert on failure
+            posts[index] = post
+            #if DEBUG
+            print("[Feed] Toggle like error: \(error)")
+            #endif
+        }
+    }
+
+    /// Share a post
+    func sharePost(postId: String) async {
+        guard let index = posts.firstIndex(where: { $0.id == postId }),
+              let userId = currentUserId else { return }
+
+        let post = posts[index]
+
+        do {
+            try await socialService.createShare(postId: postId, userId: userId)
+            // Update share count
+            posts[index] = post.copying(shareCount: post.shareCount + 1)
+        } catch {
+            #if DEBUG
+            print("[Feed] Share post error: \(error)")
+            #endif
+        }
+    }
+
+    /// Toggle bookmark on a post
+    func toggleBookmark(postId: String) {
+        guard let index = posts.firstIndex(where: { $0.id == postId }) else { return }
+
+        let post = posts[index]
+        // Local toggle only - backend bookmark API TBD
+        posts[index] = post.copying(isBookmarked: !post.isBookmarked)
+    }
+
     // MARK: - Private Methods
 
-    /// Create mock post from ID until content-service integration is complete
-    private func createMockPost(id: String, index: Int) -> FeedPost {
-        let authors = ["Simone Carter", "Alex Johnson", "Maria Garcia", "James Wilson", "Emma Davis"]
-        let contents = [
-            "Cyborg dreams under the moonlit sky 🌙",
-            "Just finished an amazing workout! 💪",
-            "The sunset today was breathtaking ✨",
-            "Working on something exciting! Stay tuned 🚀",
-            "Coffee and code - the perfect combination ☕"
-        ]
+    /// Fetch post details from content-service and social stats
+    private func fetchPostDetails(postIds: [String]) async -> [FeedPost] {
+        guard !postIds.isEmpty else { return [] }
 
-        return FeedPost(
-            id: id,
-            authorId: "user-\(index % 5)",
-            authorName: authors[index % authors.count],
-            authorAvatar: nil,
-            content: contents[index % contents.count],
-            mediaUrls: ["post-image", "post-image-2", "post-image-3"][index % 3...index % 3].map { $0 },
-            createdAt: Date().addingTimeInterval(-Double(index * 3600)),
-            likeCount: Int.random(in: 0...100),
-            commentCount: Int.random(in: 0...50),
-            shareCount: Int.random(in: 0...20),
-            isLiked: false,
-            isBookmarked: false
-        )
+        // Fetch content from content-service
+        let rawPosts: [Post]
+        do {
+            rawPosts = try await contentService.getPostsByIds(postIds)
+        } catch {
+            #if DEBUG
+            print("[Feed] Failed to fetch posts: \(error)")
+            #endif
+            return []
+        }
+
+        // Fetch social stats
+        let stats: [String: PostStats]
+        do {
+            stats = try await socialService.batchGetStats(postIds: postIds)
+        } catch {
+            #if DEBUG
+            print("[Feed] Failed to fetch stats: \(error)")
+            #endif
+            stats = [:]
+        }
+
+        // Convert to FeedPost with stats
+        return rawPosts.map { post in
+            let postStats = stats[post.id]
+            // Convert Unix timestamp (milliseconds) to Date
+            let createdDate = Date(timeIntervalSince1970: Double(post.createdAt) / 1000.0)
+            return FeedPost(
+                id: post.id,
+                authorId: post.creatorId,
+                authorName: "User \(post.creatorId.prefix(8))",  // TODO: Fetch user profile
+                authorAvatar: nil,
+                content: post.content,
+                mediaUrls: [],  // TODO: Fetch media from post
+                createdAt: createdDate,
+                likeCount: postStats?.likeCount ?? 0,
+                commentCount: postStats?.commentCount ?? 0,
+                shareCount: postStats?.shareCount ?? 0,
+                isLiked: postStats?.isLiked ?? false,
+                isBookmarked: false
+            )
+        }
     }
 }
 

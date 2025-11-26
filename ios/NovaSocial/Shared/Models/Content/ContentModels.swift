@@ -9,6 +9,11 @@ struct Post: Codable, Identifiable {
     let content: String
     let createdAt: Int64
     let updatedAt: Int64
+    let mediaUrls: [String]?
+    let mediaType: String?
+    let likeCount: Int?
+    let commentCount: Int?
+    let shareCount: Int?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -16,6 +21,16 @@ struct Post: Codable, Identifiable {
         case content
         case createdAt = "created_at"
         case updatedAt = "updated_at"
+        case mediaUrls = "media_urls"
+        case mediaType = "media_type"
+        case likeCount = "like_count"
+        case commentCount = "comment_count"
+        case shareCount = "share_count"
+    }
+
+    /// Convert timestamp to Date for display
+    var createdDate: Date {
+        Date(timeIntervalSince1970: Double(createdAt))
     }
 }
 

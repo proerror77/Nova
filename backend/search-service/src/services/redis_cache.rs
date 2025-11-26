@@ -114,15 +114,30 @@ impl RedisCache {
             .await
     }
 
+    /// Invalidate all keys matching a pattern using SCAN (non-blocking)
     pub async fn invalidate_pattern(&self, pattern: &str) -> Result<(), CacheError> {
         let mut conn = self.conn.clone();
-        let keys: Vec<String> = redis::cmd("KEYS")
-            .arg(pattern)
-            .query_async(&mut conn)
-            .await?;
+        let mut cursor: u64 = 0;
 
-        if !keys.is_empty() {
-            conn.del::<_, ()>(keys).await?;
+        loop {
+            // SCAN is non-blocking unlike KEYS which can block Redis
+            let (next_cursor, keys): (u64, Vec<String>) = redis::cmd("SCAN")
+                .arg(cursor)
+                .arg("MATCH")
+                .arg(pattern)
+                .arg("COUNT")
+                .arg(100)
+                .query_async(&mut conn)
+                .await?;
+
+            if !keys.is_empty() {
+                conn.del::<_, ()>(keys).await?;
+            }
+
+            cursor = next_cursor;
+            if cursor == 0 {
+                break;
+            }
         }
 
         Ok(())

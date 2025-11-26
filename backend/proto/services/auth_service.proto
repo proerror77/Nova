@@ -3,6 +3,7 @@ package nova.identity_service.v2;
 
 import "common.proto";
 import "google/protobuf/wrappers.proto";
+import "google/api/annotations.proto";
 
 // ============================================================================
 // Auth Service gRPC API
@@ -386,70 +387,164 @@ message UpdateUserChannelsResponse {
 // ============================================================================
 
 service AuthService {
-  // User Registration: Create new account with email, username, password
-  // Returns: Status::Ok with token + user_id + expires_in
-  //          Status::InvalidArgument if email invalid or password weak
-  //          Status::AlreadyExists if email already registered
-  rpc Register(RegisterRequest) returns (RegisterResponse);
+  // User Registration
+  rpc Register(RegisterRequest) returns (RegisterResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/auth/register"
+      body: "*"
+    };
+  }
 
-  // User Login: Authenticate with email and password
-  // Returns: Status::Ok with token + user_id + expires_in
-  //          Status::InvalidArgument if email invalid
-  //          Status::Unauthenticated if password wrong (attempts < 5)
-  //          Status::PermissionDenied if account locked after 5 failed attempts
-  rpc Login(LoginRequest) returns (LoginResponse);
+  // User Login
+  rpc Login(LoginRequest) returns (LoginResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/auth/login"
+      body: "*"
+    };
+  }
 
-  // Token Refresh: Exchange refresh_token for new access_token
-  // Returns: Status::Ok with new token + expires_in
-  //          Status::Unauthenticated if refresh_token expired or invalid
-  rpc Refresh(RefreshTokenRequest) returns (RefreshTokenResponse);
+  // Token Refresh
+  rpc Refresh(RefreshTokenRequest) returns (RefreshTokenResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/auth/refresh"
+      body: "*"
+    };
+  }
 
   // Get single user by ID
-  rpc GetUser(GetUserRequest) returns (GetUserResponse);
+  rpc GetUser(GetUserRequest) returns (GetUserResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/auth/users/{user_id}"
+    };
+  }
 
   // Get multiple users in a single batch request
-  rpc GetUsersByIds(GetUsersByIdsRequest) returns (GetUsersByIdsResponse);
+  rpc GetUsersByIds(GetUsersByIdsRequest) returns (GetUsersByIdsResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/auth/users/batch"
+      body: "*"
+    };
+  }
 
   // Verify JWT token validity
-  rpc VerifyToken(VerifyTokenRequest) returns (VerifyTokenResponse);
+  rpc VerifyToken(VerifyTokenRequest) returns (VerifyTokenResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/auth/verify"
+      body: "*"
+    };
+  }
 
   // Check if user exists
-  rpc CheckUserExists(CheckUserExistsRequest) returns (CheckUserExistsResponse);
+  rpc CheckUserExists(CheckUserExistsRequest) returns (CheckUserExistsResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/auth/users/{user_id}/exists"
+    };
+  }
 
   // Get user by email address
-  rpc GetUserByEmail(GetUserByEmailRequest) returns (GetUserByEmailResponse);
+  rpc GetUserByEmail(GetUserByEmailRequest) returns (GetUserByEmailResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/auth/users/by-email"
+    };
+  }
 
   // List users with pagination and search
-  rpc ListUsers(ListUsersRequest) returns (ListUsersResponse);
+  rpc ListUsers(ListUsersRequest) returns (ListUsersResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/auth/users"
+    };
+  }
 
   // Check if user has specific permission
-  rpc CheckPermission(CheckPermissionRequest) returns (CheckPermissionResponse);
+  rpc CheckPermission(CheckPermissionRequest) returns (CheckPermissionResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/auth/permissions/check"
+    };
+  }
 
   // Get all permissions for a user
-  rpc GetUserPermissions(GetUserPermissionsRequest) returns (GetUserPermissionsResponse);
+  rpc GetUserPermissions(GetUserPermissionsRequest) returns (GetUserPermissionsResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/auth/users/{user_id}/permissions"
+    };
+  }
 
-  // Record a failed login attempt (for rate limiting)
+  // Record a failed login attempt (internal)
   rpc RecordFailedLogin(RecordFailedLoginRequest) returns (RecordFailedLoginResponse);
 
-  // Update mutable user profile fields (single-writer semantics)
-  rpc UpdateUserProfile(UpdateUserProfileRequest) returns (UpdateUserProfileResponse);
+  // Update mutable user profile fields
+  rpc UpdateUserProfile(UpdateUserProfileRequest) returns (UpdateUserProfileResponse) {
+    option (google.api.http) = {
+      put: "/api/v2/auth/users/{user_id}/profile"
+      body: "*"
+    };
+  }
 
-  // Manage user public keys for end-to-end encryption
-  rpc UpsertUserPublicKey(UpsertUserPublicKeyRequest) returns (UpsertUserPublicKeyResponse);
-  rpc GetUserPublicKey(GetUserPublicKeyRequest) returns (GetUserPublicKeyResponse);
+  // Manage user public keys for E2E encryption
+  rpc UpsertUserPublicKey(UpsertUserPublicKeyRequest) returns (UpsertUserPublicKeyResponse) {
+    option (google.api.http) = {
+      put: "/api/v2/auth/users/{user_id}/public-key"
+      body: "*"
+    };
+  }
+  rpc GetUserPublicKey(GetUserPublicKeyRequest) returns (GetUserPublicKeyResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/auth/users/{user_id}/public-key"
+    };
+  }
 
   // Invitations
-  rpc GenerateInvite(GenerateInviteRequest) returns (GenerateInviteResponse);
-  rpc RedeemInvite(RedeemInviteRequest) returns (RedeemInviteResponse);
-  rpc ListInvitations(ListInvitationsRequest) returns (ListInvitationsResponse);
-  rpc GetInvitationStats(GetInvitationStatsRequest) returns (GetInvitationStatsResponse);
+  rpc GenerateInvite(GenerateInviteRequest) returns (GenerateInviteResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/auth/invites"
+      body: "*"
+    };
+  }
+  rpc RedeemInvite(RedeemInviteRequest) returns (RedeemInviteResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/auth/invites/redeem"
+      body: "*"
+    };
+  }
+  rpc ListInvitations(ListInvitationsRequest) returns (ListInvitationsResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/auth/invites"
+    };
+  }
+  rpc GetInvitationStats(GetInvitationStatsRequest) returns (GetInvitationStatsResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/auth/invites/stats"
+    };
+  }
 
   // Devices
-  rpc ListDevices(ListDevicesRequest) returns (ListDevicesResponse);
-  rpc LogoutDevice(LogoutDeviceRequest) returns (LogoutDeviceResponse);
-  rpc GetCurrentDevice(GetCurrentDeviceRequest) returns (GetCurrentDeviceResponse);
+  rpc ListDevices(ListDevicesRequest) returns (ListDevicesResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/auth/devices"
+    };
+  }
+  rpc LogoutDevice(LogoutDeviceRequest) returns (LogoutDeviceResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/auth/devices/logout"
+      body: "*"
+    };
+  }
+  rpc GetCurrentDevice(GetCurrentDeviceRequest) returns (GetCurrentDeviceResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/auth/devices/current"
+    };
+  }
 
   // User channel subscriptions
-  rpc ListUserChannels(ListUserChannelsRequest) returns (ListUserChannelsResponse);
-  rpc UpdateUserChannels(UpdateUserChannelsRequest) returns (UpdateUserChannelsResponse);
+  rpc ListUserChannels(ListUserChannelsRequest) returns (ListUserChannelsResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/auth/users/{user_id}/channels"
+    };
+  }
+  rpc UpdateUserChannels(UpdateUserChannelsRequest) returns (UpdateUserChannelsResponse) {
+    option (google.api.http) = {
+      put: "/api/v2/auth/users/{user_id}/channels"
+      body: "*"
+    };
+  }
 }

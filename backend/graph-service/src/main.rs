@@ -7,7 +7,11 @@ use anyhow::{anyhow, Context, Result};
 use config::Config;
 use grpc::server::graph::graph_service_server::GraphServiceServer;
 use grpc::GraphServiceImpl;
-use repository::{DualWriteRepository, GraphRepository, PostgresGraphRepository};
+use nova_cache::NovaCache;
+use redis_utils::RedisPool;
+use repository::{
+    CachedGraphRepository, DualWriteRepository, GraphRepository, PostgresGraphRepository,
+};
 use sqlx::PgPool;
 use std::sync::Arc;
 use tonic::transport::Server;
@@ -39,9 +43,26 @@ async fn main() -> Result<()> {
     let config = Config::from_env().context("Failed to load configuration")?;
 
     info!(
-        "Configuration loaded: gRPC port = {}, Neo4j URI = {}, Dual-write = {}",
-        config.server.grpc_port, config.neo4j.uri, config.enable_dual_write
+        "Configuration loaded: gRPC port = {}, Neo4j URI = {}, Dual-write = {}, Cache = {}",
+        config.server.grpc_port, config.neo4j.uri, config.enable_dual_write, config.redis.enabled
     );
+
+    // Initialize Redis connection for caching
+    let nova_cache = if config.redis.enabled {
+        match RedisPool::connect(&config.redis.url, None).await {
+            Ok(pool) => {
+                info!("✅ Connected to Redis for caching");
+                Some(NovaCache::new(pool.manager()))
+            }
+            Err(e) => {
+                warn!(error = %e, "Failed to connect to Redis - caching disabled");
+                None
+            }
+        }
+    } else {
+        info!("⚠️  Caching disabled by configuration");
+        None
+    };
 
     if config.enable_dual_write {
         info!("🔄 Dual-write mode ENABLED (PostgreSQL + Neo4j)");
@@ -90,13 +111,22 @@ async fn main() -> Result<()> {
             warn!("Neo4j health check failed - will fallback to PostgreSQL");
         }
 
-        // Create gRPC service with dual-write repository
-        let graph_service = GraphServiceImpl::new_with_trait(
-            Arc::new(dual_repo),
-            config.internal_write_token.clone(),
-        );
+        // Wrap with caching layer if Redis is available
+        let repo: Arc<dyn repository::GraphRepositoryTrait + Send + Sync> = match nova_cache.clone()
+        {
+            Some(cache) => {
+                info!("🚀 Graph service initialized with dual-write + caching");
+                Arc::new(CachedGraphRepository::new(Arc::new(dual_repo), cache, true))
+            }
+            None => {
+                info!("🚀 Graph service initialized with dual-write (no cache)");
+                Arc::new(dual_repo)
+            }
+        };
 
-        info!("🚀 Graph service initialized with dual-write");
+        // Create gRPC service
+        let graph_service =
+            GraphServiceImpl::new_with_trait(repo, config.internal_write_token.clone());
 
         // Setup and start server (rest of the code continues below)
         start_grpc_server(graph_service, &config).await?;
@@ -104,7 +134,7 @@ async fn main() -> Result<()> {
         info!("⚠️  Dual-write mode DISABLED - Neo4j only (legacy mode)");
 
         // Initialize Neo4j repository only (legacy mode)
-        let repo = GraphRepository::new(
+        let neo4j_repo = GraphRepository::new(
             &config.neo4j.uri,
             &config.neo4j.user,
             &config.neo4j.password,
@@ -115,15 +145,28 @@ async fn main() -> Result<()> {
         info!("Connected to Neo4j successfully");
 
         // Verify Neo4j connection
-        if let Err(e) = repo.health_check().await {
+        if let Err(e) = neo4j_repo.health_check().await {
             error!("Neo4j health check failed: {}", e);
             return Err(e);
         }
 
         info!("Neo4j health check passed");
 
-        // Create gRPC service (legacy mode)
-        let graph_service = GraphServiceImpl::new(repo, config.internal_write_token.clone());
+        // Wrap with caching layer if Redis is available
+        let graph_service = match nova_cache {
+            Some(cache) => {
+                info!("🚀 Graph service initialized with Neo4j + caching");
+                let cached_repo = CachedGraphRepository::new(Arc::new(neo4j_repo), cache, true);
+                GraphServiceImpl::new_with_trait(
+                    Arc::new(cached_repo),
+                    config.internal_write_token.clone(),
+                )
+            }
+            None => {
+                info!("🚀 Graph service initialized with Neo4j (no cache)");
+                GraphServiceImpl::new(neo4j_repo, config.internal_write_token.clone())
+            }
+        };
 
         // Setup and start server
         start_grpc_server(graph_service, &config).await?;

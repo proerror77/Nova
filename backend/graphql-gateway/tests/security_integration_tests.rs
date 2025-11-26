@@ -18,6 +18,7 @@ use std::collections::HashMap;
 // TEST UTILITIES & FIXTURES
 // ============================================================================
 
+#[allow(dead_code)]
 #[derive(Debug, Serialize, Deserialize, Clone)]
 struct Claims {
     sub: String, // user_id
@@ -26,6 +27,7 @@ struct Claims {
     email: String,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 struct TestContext {
     user_id: String,
@@ -33,6 +35,7 @@ struct TestContext {
     is_admin: bool,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 struct TestResource {
     id: String,
@@ -63,6 +66,7 @@ impl TestResource {
     }
 }
 
+#[allow(dead_code)]
 fn generate_token(user_id: &str, email: &str, is_admin: bool, secret: &str) -> String {
     let now = Utc::now();
     let claims = Claims {
@@ -85,7 +89,7 @@ fn generate_token(user_id: &str, email: &str, is_admin: bool, secret: &str) -> S
 
 #[test]
 fn test_idor_user_cannot_delete_others_posts() {
-    let user1 = TestContext {
+    let _user1 = TestContext {
         user_id: "user1".to_string(),
         email: "user1@example.com".to_string(),
         is_admin: false,

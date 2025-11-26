@@ -1,6 +1,8 @@
 syntax = "proto3";
 package nova.search_service.v2;
 
+import "google/api/annotations.proto";
+
 // ============================================================================
 // Search Service gRPC API
 //
@@ -242,32 +244,74 @@ message GetSearchAnalyticsResponse {
 
 service SearchService {
   // Full-text search across all content
-  rpc FullTextSearch(FullTextSearchRequest) returns (FullTextSearchResponse);
+  rpc FullTextSearch(FullTextSearchRequest) returns (FullTextSearchResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/search"
+    };
+  }
 
   // Search posts only
-  rpc SearchPosts(SearchPostsRequest) returns (SearchPostsResponse);
+  rpc SearchPosts(SearchPostsRequest) returns (SearchPostsResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/search/posts"
+    };
+  }
 
   // Search users only
-  rpc SearchUsers(SearchUsersRequest) returns (SearchUsersResponse);
+  rpc SearchUsers(SearchUsersRequest) returns (SearchUsersResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/search/users"
+    };
+  }
 
   // Search hashtags
-  rpc SearchHashtags(SearchHashtagsRequest) returns (SearchHashtagsResponse);
+  rpc SearchHashtags(SearchHashtagsRequest) returns (SearchHashtagsResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/search/hashtags"
+    };
+  }
 
   // Get all posts with specific hashtag
-  rpc GetPostsByHashtag(GetPostsByHashtagRequest) returns (GetPostsByHashtagResponse);
+  rpc GetPostsByHashtag(GetPostsByHashtagRequest) returns (GetPostsByHashtagResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/search/hashtags/{hashtag}/posts"
+    };
+  }
 
   // Get search suggestions for autocomplete
-  rpc GetSearchSuggestions(GetSearchSuggestionsRequest) returns (GetSearchSuggestionsResponse);
+  rpc GetSearchSuggestions(GetSearchSuggestionsRequest) returns (GetSearchSuggestionsResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/search/suggestions"
+    };
+  }
 
   // Advanced search with multiple filters
-  rpc AdvancedSearch(AdvancedSearchRequest) returns (AdvancedSearchResponse);
+  rpc AdvancedSearch(AdvancedSearchRequest) returns (AdvancedSearchResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/search/advanced"
+      body: "*"
+    };
+  }
 
   // Record search query for analytics
-  rpc RecordSearchQuery(RecordSearchQueryRequest) returns (RecordSearchQueryResponse);
+  rpc RecordSearchQuery(RecordSearchQueryRequest) returns (RecordSearchQueryResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/search/record"
+      body: "*"
+    };
+  }
 
   // Get trending search queries
-  rpc GetTrendingSearches(GetTrendingSearchesRequest) returns (GetTrendingSearchesResponse);
+  rpc GetTrendingSearches(GetTrendingSearchesRequest) returns (GetTrendingSearchesResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/search/trending"
+    };
+  }
 
   // Get analytics for specific search query
-  rpc GetSearchAnalytics(GetSearchAnalyticsRequest) returns (GetSearchAnalyticsResponse);
+  rpc GetSearchAnalytics(GetSearchAnalyticsRequest) returns (GetSearchAnalyticsResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/search/analytics"
+    };
+  }
 }

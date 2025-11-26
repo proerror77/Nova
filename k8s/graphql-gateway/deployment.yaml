@@ -26,7 +26,7 @@ data:
   AUTH_SERVICE_URL: "http://identity-service.nova-staging.svc.cluster.local:50051"
   USER_SERVICE_URL: "http://identity-service.nova-staging.svc.cluster.local:50051"
   CONTENT_SERVICE_URL: "http://content-service.nova-staging.svc.cluster.local:50051"
-  FEED_SERVICE_URL: "http://feed-service.nova-staging.svc.cluster.local:50051"
+  FEED_SERVICE_URL: "http://feed-service.nova-staging.svc.cluster.local:9084"
   MESSAGING_SERVICE_URL: "http://messaging-service.nova-staging.svc.cluster.local:50051"
   NOTIFICATION_SERVICE_URL: "http://notification-service.nova-staging.svc.cluster.local:50051"
   SEARCH_SERVICE_URL: "http://search-service.nova-staging.svc.cluster.local:50051"

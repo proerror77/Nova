@@ -18,26 +18,9 @@ mod content_service_grpc_tests {
     use std::str::FromStr;
     use tonic::Request;
 
-    // Include proto definitions to get generated client code
-    pub mod nova {
-        pub mod common {
-            pub mod v2 {
-                tonic::include_proto!("nova.common.v2");
-            }
-            pub use v2::*;
-        }
-        pub mod content_service {
-            pub mod v2 {
-                tonic::include_proto!("nova.content_service.v2");
-            }
-            pub use v2::*;
-        }
-        // Re-export content_service as content for backward compatibility
-        pub use content_service as content;
-    }
-
-    use nova::content::content_service_client::ContentServiceClient;
-    use nova::content::*;
+    // Use proto definitions from grpc-clients crate (centralized proto generation)
+    use grpc_clients::nova::content_service::v2::content_service_client::ContentServiceClient;
+    use grpc_clients::nova::content_service::v2::*;
 
     // Test helper structures
     #[derive(Clone, Debug)]

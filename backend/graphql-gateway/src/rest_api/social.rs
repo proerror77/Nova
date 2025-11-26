@@ -355,11 +355,7 @@ pub async fn get_devices(
     http_req: HttpRequest,
     clients: web::Data<ServiceClients>,
 ) -> Result<HttpResponse> {
-    let Some(authed) = http_req
-        .extensions()
-        .get::<AuthenticatedUser>()
-        .copied()
-    else {
+    let Some(authed) = http_req.extensions().get::<AuthenticatedUser>().copied() else {
         return Ok(HttpResponse::Unauthorized().finish());
     };
     info!("GET /api/v2/devices");
@@ -390,11 +386,7 @@ pub async fn logout_device(
     req: web::Json<serde_json::Value>,
     clients: web::Data<ServiceClients>,
 ) -> Result<HttpResponse> {
-    let Some(authed) = http_req
-        .extensions()
-        .get::<AuthenticatedUser>()
-        .copied()
-    else {
+    let Some(authed) = http_req.extensions().get::<AuthenticatedUser>().copied() else {
         return Ok(HttpResponse::Unauthorized().finish());
     };
     info!("POST /api/v2/devices/logout");
@@ -430,11 +422,7 @@ pub async fn get_current_device(
     http_req: HttpRequest,
     clients: web::Data<ServiceClients>,
 ) -> Result<HttpResponse> {
-    let Some(authed) = http_req
-        .extensions()
-        .get::<AuthenticatedUser>()
-        .copied()
-    else {
+    let Some(authed) = http_req.extensions().get::<AuthenticatedUser>().copied() else {
         return Ok(HttpResponse::Unauthorized().finish());
     };
     info!("GET /api/v2/devices/current");
@@ -463,11 +451,7 @@ pub async fn generate_invite_code(
     http_req: HttpRequest,
     clients: web::Data<ServiceClients>,
 ) -> Result<HttpResponse> {
-    let Some(authed) = http_req
-        .extensions()
-        .get::<AuthenticatedUser>()
-        .copied()
-    else {
+    let Some(authed) = http_req.extensions().get::<AuthenticatedUser>().copied() else {
         return Ok(HttpResponse::Unauthorized().finish());
     };
     info!("POST /api/v2/invitations/generate");
@@ -500,11 +484,7 @@ pub async fn list_invitations(
     http_req: HttpRequest,
     clients: web::Data<ServiceClients>,
 ) -> Result<HttpResponse> {
-    let Some(authed) = http_req
-        .extensions()
-        .get::<AuthenticatedUser>()
-        .copied()
-    else {
+    let Some(authed) = http_req.extensions().get::<AuthenticatedUser>().copied() else {
         return Ok(HttpResponse::Unauthorized().finish());
     };
     info!("GET /api/v2/invitations");
@@ -536,11 +516,7 @@ pub async fn get_invitation_stats(
     http_req: HttpRequest,
     clients: web::Data<ServiceClients>,
 ) -> Result<HttpResponse> {
-    let Some(authed) = http_req
-        .extensions()
-        .get::<AuthenticatedUser>()
-        .copied()
-    else {
+    let Some(authed) = http_req.extensions().get::<AuthenticatedUser>().copied() else {
         return Ok(HttpResponse::Unauthorized().finish());
     };
     info!("GET /api/v2/invitations/stats");

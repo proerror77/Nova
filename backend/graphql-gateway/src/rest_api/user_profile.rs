@@ -196,11 +196,7 @@ pub async fn upload_avatar(
     req: web::Json<AvatarUploadRequest>,
     clients: web::Data<ServiceClients>,
 ) -> Result<HttpResponse> {
-    let Some(authed) = http_req
-        .extensions()
-        .get::<AuthenticatedUser>()
-        .copied()
-    else {
+    let Some(authed) = http_req.extensions().get::<AuthenticatedUser>().copied() else {
         return Ok(HttpResponse::Unauthorized().finish());
     };
 

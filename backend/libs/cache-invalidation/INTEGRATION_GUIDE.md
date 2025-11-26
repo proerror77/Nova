@@ -372,35 +372,52 @@ impl CacheManager {
             }
             InvalidationAction::Pattern => {
                 if let Some(pattern) = &msg.pattern {
-                    // Get all matching keys from Redis
-                    let keys: Vec<String> = redis::cmd("KEYS")
-                        .arg(pattern)
-                        .query_async(&mut redis)
-                        .await
-                        .map_err(|e| {
-                            error!(error = ?e, pattern = %pattern, "Redis KEYS failed");
-                            e
-                        })?;
+                    // Use SCAN instead of KEYS to avoid blocking Redis
+                    let mut cursor: u64 = 0;
+                    let mut total_deleted = 0;
 
-                    if !keys.is_empty() {
-                        // Batch delete from Redis
-                        let _: () = redis::cmd("DEL")
-                            .arg(&keys)
+                    loop {
+                        let (next_cursor, keys): (u64, Vec<String>) = redis::cmd("SCAN")
+                            .arg(cursor)
+                            .arg("MATCH")
+                            .arg(pattern)
+                            .arg("COUNT")
+                            .arg(100)
                             .query_async(&mut redis)
                             .await
                             .map_err(|e| {
-                                error!(error = ?e, "Redis batch delete failed");
+                                error!(error = ?e, pattern = %pattern, "Redis SCAN failed");
                                 e
                             })?;
 
-                        // Delete from memory cache
-                        for key in &keys {
-                            memory.remove(key);
+                        if !keys.is_empty() {
+                            // Batch delete from Redis
+                            let _: () = redis::cmd("DEL")
+                                .arg(&keys)
+                                .query_async(&mut redis)
+                                .await
+                                .map_err(|e| {
+                                    error!(error = ?e, "Redis batch delete failed");
+                                    e
+                                })?;
+
+                            // Delete from memory cache
+                            for key in &keys {
+                                memory.remove(key);
+                            }
+                            total_deleted += keys.len();
                         }
 
+                        cursor = next_cursor;
+                        if cursor == 0 {
+                            break;
+                        }
+                    }
+
+                    if total_deleted > 0 {
                         info!(
                             pattern = %pattern,
-                            deleted_count = keys.len(),
+                            deleted_count = total_deleted,
                             "Pattern-based cache invalidation completed"
                         );
                     } else {

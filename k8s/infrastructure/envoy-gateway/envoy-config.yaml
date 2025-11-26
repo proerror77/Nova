@@ -1,0 +1,337 @@
+# Envoy gRPC-JSON Transcoder Configuration
+# Automatically converts REST/JSON requests to gRPC calls
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: envoy-config
+  namespace: nova-staging
+data:
+  envoy.yaml: |
+    admin:
+      address:
+        socket_address:
+          address: 0.0.0.0
+          port_value: 9901
+
+    static_resources:
+      listeners:
+        - name: listener_0
+          address:
+            socket_address:
+              address: 0.0.0.0
+              port_value: 8080
+          filter_chains:
+            - filters:
+                - name: envoy.filters.network.http_connection_manager
+                  typed_config:
+                    "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+                    stat_prefix: ingress_http
+                    codec_type: AUTO
+                    route_config:
+                      name: local_route
+                      virtual_hosts:
+                        - name: backend
+                          domains: ["*"]
+                          routes:
+                            # Content Service routes
+                            - match:
+                                prefix: "/api/v2/content/"
+                              route:
+                                cluster: content_service
+                                timeout: 30s
+                            # Search Service routes
+                            - match:
+                                path: "/api/v2/search"
+                              route:
+                                cluster: search_service
+                                timeout: 30s
+                            - match:
+                                prefix: "/api/v2/search/"
+                              route:
+                                cluster: search_service
+                                timeout: 30s
+                            # Identity/Auth Service routes
+                            - match:
+                                prefix: "/api/v2/auth/"
+                              route:
+                                cluster: identity_service
+                                timeout: 30s
+                            # Social Service routes
+                            - match:
+                                prefix: "/api/v2/social/"
+                              route:
+                                cluster: social_service
+                                timeout: 30s
+                            # Media Service routes (HTTP/1.1 proxy with path rewrite)
+                            - match:
+                                prefix: "/api/v2/media/"
+                              route:
+                                cluster: media_service
+                                timeout: 60s
+                                prefix_rewrite: "/api/v1/"
+                            # Health check
+                            - match:
+                                path: "/health"
+                              direct_response:
+                                status: 200
+                                body:
+                                  inline_string: '{"status":"healthy"}'
+                    http_filters:
+                      # gRPC-JSON Transcoder - converts REST to gRPC
+                      - name: envoy.filters.http.grpc_json_transcoder
+                        typed_config:
+                          "@type": type.googleapis.com/envoy.extensions.filters.http.grpc_json_transcoder.v3.GrpcJsonTranscoder
+                          proto_descriptor: /etc/envoy/proto/nova-api.pb
+                          services:
+                            - nova.content_service.v2.ContentService
+                            # media service uses HTTP/1.1 directly, not gRPC
+                            - nova.search_service.v2.SearchService
+                            - nova.social_service.v2.SocialService
+                            - nova.identity.v1.IdentityService
+                            - nova.communication.v1.CommunicationService
+                            - nova.user.v1.UserService
+                          print_options:
+                            add_whitespace: true
+                            always_print_primitive_fields: true
+                            always_print_enums_as_ints: false
+                            preserve_proto_field_names: false
+                          convert_grpc_status: true
+                          ignore_unknown_query_parameters: true
+                          match_incoming_request_route: true
+                      # JWT Authentication - temporarily disabled for testing
+                      # TODO: Re-enable with proper JWKS
+                      - name: envoy.filters.http.router
+                        typed_config:
+                          "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+
+      clusters:
+        - name: graph_service
+          type: STRICT_DNS
+          lb_policy: ROUND_ROBIN
+          typed_extension_protocol_options:
+            envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
+              "@type": type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
+              explicit_http_config:
+                http2_protocol_options: {}
+          transport_socket:
+            name: envoy.transport_sockets.tls
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext
+              common_tls_context:
+                tls_certificates:
+                  - certificate_chain:
+                      filename: /etc/envoy/certs/client.crt
+                    private_key:
+                      filename: /etc/envoy/certs/client.key
+                validation_context:
+                  trusted_ca:
+                    filename: /etc/envoy/certs/ca.crt
+          load_assignment:
+            cluster_name: graph_service
+            endpoints:
+              - lb_endpoints:
+                  - endpoint:
+                      address:
+                        socket_address:
+                          address: graph-service.nova-staging.svc.cluster.local
+                          port_value: 50051
+
+        - name: content_service
+          type: STRICT_DNS
+          lb_policy: ROUND_ROBIN
+          typed_extension_protocol_options:
+            envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
+              "@type": type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
+              explicit_http_config:
+                http2_protocol_options: {}
+          transport_socket:
+            name: envoy.transport_sockets.tls
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext
+              common_tls_context:
+                tls_certificates:
+                  - certificate_chain:
+                      filename: /etc/envoy/certs/client.crt
+                    private_key:
+                      filename: /etc/envoy/certs/client.key
+                validation_context:
+                  trusted_ca:
+                    filename: /etc/envoy/certs/ca.crt
+          load_assignment:
+            cluster_name: content_service
+            endpoints:
+              - lb_endpoints:
+                  - endpoint:
+                      address:
+                        socket_address:
+                          address: content-service.nova-staging.svc.cluster.local
+                          port_value: 9080
+
+        - name: feed_service
+          type: STRICT_DNS
+          lb_policy: ROUND_ROBIN
+          typed_extension_protocol_options:
+            envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
+              "@type": type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
+              explicit_http_config:
+                http2_protocol_options: {}
+          transport_socket:
+            name: envoy.transport_sockets.tls
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext
+              common_tls_context:
+                tls_certificates:
+                  - certificate_chain:
+                      filename: /etc/envoy/certs/client.crt
+                    private_key:
+                      filename: /etc/envoy/certs/client.key
+                validation_context:
+                  trusted_ca:
+                    filename: /etc/envoy/certs/ca.crt
+          load_assignment:
+            cluster_name: feed_service
+            endpoints:
+              - lb_endpoints:
+                  - endpoint:
+                      address:
+                        socket_address:
+                          address: feed-service.nova-staging.svc.cluster.local
+                          port_value: 50051
+
+        - name: notification_service
+          type: STRICT_DNS
+          lb_policy: ROUND_ROBIN
+          typed_extension_protocol_options:
+            envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
+              "@type": type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
+              explicit_http_config:
+                http2_protocol_options: {}
+          transport_socket:
+            name: envoy.transport_sockets.tls
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext
+              common_tls_context:
+                tls_certificates:
+                  - certificate_chain:
+                      filename: /etc/envoy/certs/client.crt
+                    private_key:
+                      filename: /etc/envoy/certs/client.key
+                validation_context:
+                  trusted_ca:
+                    filename: /etc/envoy/certs/ca.crt
+          load_assignment:
+            cluster_name: notification_service
+            endpoints:
+              - lb_endpoints:
+                  - endpoint:
+                      address:
+                        socket_address:
+                          address: notification-service.nova-staging.svc.cluster.local
+                          port_value: 50051
+
+        - name: search_service
+          type: STRICT_DNS
+          lb_policy: ROUND_ROBIN
+          typed_extension_protocol_options:
+            envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
+              "@type": type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
+              explicit_http_config:
+                http2_protocol_options: {}
+          transport_socket:
+            name: envoy.transport_sockets.tls
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext
+              common_tls_context:
+                tls_certificates:
+                  - certificate_chain:
+                      filename: /etc/envoy/certs/client.crt
+                    private_key:
+                      filename: /etc/envoy/certs/client.key
+                validation_context:
+                  trusted_ca:
+                    filename: /etc/envoy/certs/ca.crt
+          load_assignment:
+            cluster_name: search_service
+            endpoints:
+              - lb_endpoints:
+                  - endpoint:
+                      address:
+                        socket_address:
+                          address: search-service.nova-staging.svc.cluster.local
+                          port_value: 50057
+
+        - name: identity_service
+          type: STRICT_DNS
+          lb_policy: ROUND_ROBIN
+          typed_extension_protocol_options:
+            envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
+              "@type": type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
+              explicit_http_config:
+                http2_protocol_options: {}
+          transport_socket:
+            name: envoy.transport_sockets.tls
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext
+              common_tls_context:
+                tls_certificates:
+                  - certificate_chain:
+                      filename: /etc/envoy/certs/client.crt
+                    private_key:
+                      filename: /etc/envoy/certs/client.key
+                validation_context:
+                  trusted_ca:
+                    filename: /etc/envoy/certs/ca.crt
+          load_assignment:
+            cluster_name: identity_service
+            endpoints:
+              - lb_endpoints:
+                  - endpoint:
+                      address:
+                        socket_address:
+                          address: identity-service.nova-staging.svc.cluster.local
+                          port_value: 50051
+
+        - name: social_service
+          type: STRICT_DNS
+          lb_policy: ROUND_ROBIN
+          typed_extension_protocol_options:
+            envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
+              "@type": type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
+              explicit_http_config:
+                http2_protocol_options: {}
+          transport_socket:
+            name: envoy.transport_sockets.tls
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext
+              common_tls_context:
+                tls_certificates:
+                  - certificate_chain:
+                      filename: /etc/envoy/certs/client.crt
+                    private_key:
+                      filename: /etc/envoy/certs/client.key
+                validation_context:
+                  trusted_ca:
+                    filename: /etc/envoy/certs/ca.crt
+          load_assignment:
+            cluster_name: social_service
+            endpoints:
+              - lb_endpoints:
+                  - endpoint:
+                      address:
+                        socket_address:
+                          address: social-service.nova-staging.svc.cluster.local
+                          port_value: 50052
+
+        # Media Service - HTTP/1.1 proxy (not gRPC)
+        - name: media_service
+          type: STRICT_DNS
+          lb_policy: ROUND_ROBIN
+          load_assignment:
+            cluster_name: media_service
+            endpoints:
+              - lb_endpoints:
+                  - endpoint:
+                      address:
+                        socket_address:
+                          address: media-service.nova-staging.svc.cluster.local
+                          port_value: 8082

@@ -228,27 +228,45 @@ impl EventDeduplicator {
                 AppError::Redis(e)
             })?;
 
-        // Scan for all dedup keys
-        let keys: Vec<String> = run_with_timeout(
-            redis::cmd("KEYS")
-                .arg("events:dedup:*")
-                .query_async(&mut conn),
-        )
-        .await
-        .map_err(|e| {
-            error!("Failed to scan dedup keys: {}", e);
-            AppError::Redis(e)
-        })?;
+        let pattern = "events:dedup:*";
+        let mut cursor: u64 = 0;
+        let mut total_deleted = 0;
 
-        if !keys.is_empty() {
-            let deleted: usize = run_with_timeout(conn.del::<_, usize>(&keys))
-                .await
-                .map_err(|e| {
-                    error!("Failed to delete dedup keys: {}", e);
-                    AppError::Redis(e)
-                })?;
+        // Use SCAN instead of KEYS to avoid blocking Redis
+        loop {
+            let (next_cursor, keys): (u64, Vec<String>) = run_with_timeout(
+                redis::cmd("SCAN")
+                    .arg(cursor)
+                    .arg("MATCH")
+                    .arg(pattern)
+                    .arg("COUNT")
+                    .arg(100)
+                    .query_async(&mut conn),
+            )
+            .await
+            .map_err(|e| {
+                error!("Failed to scan dedup keys: {}", e);
+                AppError::Redis(e)
+            })?;
 
-            warn!("Cleared {} dedup keys", deleted);
+            if !keys.is_empty() {
+                let deleted: usize = run_with_timeout(conn.del::<_, usize>(&keys))
+                    .await
+                    .map_err(|e| {
+                        error!("Failed to delete dedup keys: {}", e);
+                        AppError::Redis(e)
+                    })?;
+                total_deleted += deleted;
+            }
+
+            cursor = next_cursor;
+            if cursor == 0 {
+                break;
+            }
+        }
+
+        if total_deleted > 0 {
+            warn!("Cleared {} dedup keys", total_deleted);
         }
 
         Ok(())

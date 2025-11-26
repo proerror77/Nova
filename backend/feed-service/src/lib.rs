@@ -16,6 +16,7 @@ pub mod utils;
 pub use cache::{CacheConfig, CachedFeedPost, FeedCache};
 pub use config::Config;
 pub use error::{AppError, Result};
+pub use jobs::cache_warmer;
 
 // Re-export trending service components (ML recommendation moved to ranking-service)
 // Keeping only services needed for feed assembly and caching

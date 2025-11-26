@@ -10,9 +10,20 @@ enum APIEnvironment {
     var baseURL: String {
         switch self {
         case .development:
-            return "http://localhost:8080"  // GraphQL Gateway for local development
+            // Local development server
+            return ProcessInfo.processInfo.environment["NOVA_DEV_URL"] ?? "http://localhost:8080"
         case .staging:
-            return "http://a3326508b1e3c43239348cac7ce9ee03-1036729988.ap-northeast-1.elb.amazonaws.com"  // AWS ELB staging endpoint
+            // Staging URL from environment or Info.plist
+            if let stagingURL = ProcessInfo.processInfo.environment["NOVA_STAGING_URL"], !stagingURL.isEmpty {
+                return stagingURL
+            }
+            if let stagingURL = Bundle.main.infoDictionary?["NOVA_STAGING_URL"] as? String,
+               !stagingURL.isEmpty,
+               !stagingURL.hasPrefix("$(") {  // Skip unresolved build variables
+                return stagingURL
+            }
+            // Fallback to staging API (AWS ELB)
+            return "http://a3326508b1e3c43239348cac7ce9ee03-1036729988.ap-northeast-1.elb.amazonaws.com"
         case .production:
             return "https://api.nova.social"
         }
@@ -25,6 +36,11 @@ enum APIEnvironment {
         case .staging, .production:
             return 30
         }
+    }
+
+    /// Resource timeout (for large uploads/downloads)
+    var resourceTimeout: TimeInterval {
+        300
     }
 }
 
@@ -61,10 +77,18 @@ struct APIConfig {
     }
 
     struct Content {
-        static let getPost = "/api/v2/content/post"
-        static let createPost = "/api/v2/content/post/create"
-        static let updatePost = "/api/v2/content/post/update"
-        static let deletePost = "/api/v2/content/post/delete"
+        /// GET /api/v2/content/{id} - Get post by ID
+        static func getPost(_ id: String) -> String { "/api/v2/content/\(id)" }
+        /// GET /api/v2/content/user/{user_id} - Get posts by user
+        static func postsByUser(_ userId: String) -> String { "/api/v2/content/user/\(userId)" }
+        /// POST /api/v2/content - Create new post
+        static let createPost = "/api/v2/content"
+        /// PUT /api/v2/content/{id} - Update post
+        static func updatePost(_ id: String) -> String { "/api/v2/content/\(id)" }
+        /// DELETE /api/v2/content/{id} - Delete post
+        static func deletePost(_ id: String) -> String { "/api/v2/content/\(id)" }
+        // Legacy endpoints (deprecated)
+        static let getPostLegacy = "/api/v2/content/post"
         static let postsByAuthor = "/api/v2/content/posts/author"
         static let bookmarks = "/api/v2/content/bookmarks"
     }
@@ -92,6 +116,28 @@ struct APIConfig {
         /// GET /api/v2/feed - 獲取用戶 Feed
         /// Query params: algo (ch|time), limit (1-100), cursor (pagination)
         static let getFeed = "/api/v2/feed"
+        /// GET /api/v2/feed/trending - 獲取熱門 Feed
+        static let getTrending = "/api/v2/feed/trending"
+    }
+
+    // MARK: - Poll API (投票榜單)
+    struct Poll {
+        /// GET /api/v2/polls/trending - 獲取熱門投票榜單
+        static let getTrendingPolls = "/api/v2/polls/trending"
+        /// GET /api/v2/polls/active - 獲取進行中的投票
+        static let getActivePolls = "/api/v2/polls/active"
+        /// POST /api/v2/polls - 創建投票
+        static let createPoll = "/api/v2/polls"
+        /// GET /api/v2/polls/{id} - 獲取投票詳情
+        static func getPoll(_ id: String) -> String { "/api/v2/polls/\(id)" }
+        /// POST /api/v2/polls/{id}/vote - 投票
+        static func vote(_ pollId: String) -> String { "/api/v2/polls/\(pollId)/vote" }
+        /// DELETE /api/v2/polls/{id}/vote - 取消投票
+        static func unvote(_ pollId: String) -> String { "/api/v2/polls/\(pollId)/vote" }
+        /// GET /api/v2/polls/{id}/voted - 檢查是否已投票
+        static func checkVoted(_ pollId: String) -> String { "/api/v2/polls/\(pollId)/voted" }
+        /// GET /api/v2/polls/{id}/rankings - 獲取排名
+        static func getRankings(_ pollId: String) -> String { "/api/v2/polls/\(pollId)/rankings" }
     }
 
     // MARK: - Alice AI Assistant API

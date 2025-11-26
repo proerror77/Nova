@@ -20,9 +20,9 @@ spec:
         # Notification service gRPC port
         - name: NOTIFICATION_SERVICE_URL
           value: "http://notification-service.nova-staging.svc.cluster.local:50051"
-        # Feed service gRPC port
+        # Feed service gRPC port (9084 is the actual gRPC port)
         - name: FEED_SERVICE_URL
-          value: "http://feed-service.nova-staging.svc.cluster.local:50051"
+          value: "http://feed-service.nova-staging.svc.cluster.local:9084"
         # Media service gRPC port
         - name: MEDIA_SERVICE_URL
           value: "http://media-service.nova-staging.svc.cluster.local:50051"

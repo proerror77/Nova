@@ -182,6 +182,40 @@ async fn main() -> io::Result<()> {
     });
     info!("✅ Feed cleaner background job started");
 
+    // Cache warmer background job - proactively warms caches for active users
+    if config.redis.cache_warmer_enabled {
+        match recommendation_service::FeedCache::new(
+            &config.redis.url,
+            recommendation_service::CacheConfig::default(),
+        )
+        .await
+        {
+            Ok(feed_cache) => {
+                let warmer_db = db_pool.get_ref().clone();
+                let warmer_cache = Arc::new(feed_cache);
+                let warmer_grpc = grpc_pool.clone();
+                let warmer_config =
+                    recommendation_service::jobs::cache_warmer::CacheWarmerConfig::default();
+
+                tokio::spawn(async move {
+                    recommendation_service::jobs::cache_warmer::start_cache_warmer(
+                        warmer_db,
+                        warmer_cache,
+                        warmer_grpc,
+                        warmer_config,
+                    )
+                    .await;
+                });
+                info!("✅ Cache warmer background job started");
+            }
+            Err(e) => {
+                tracing::warn!("Cache warmer disabled - failed to connect to Redis: {}", e);
+            }
+        }
+    } else {
+        info!("Cache warmer disabled by configuration");
+    }
+
     // Start gRPC server for RecommendationService in addition to HTTP server
     let grpc_port: u16 = std::env::var("GRPC_PORT")
         .unwrap_or_else(|_| "9084".to_string())

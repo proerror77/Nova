@@ -1,6 +1,17 @@
 use serde::Deserialize;
 use std::env;
 
+fn default_redis_url() -> String {
+    env::var("REDIS_URL").unwrap_or_else(|_| "redis://redis:6379".to_string())
+}
+
+fn default_cache_enabled() -> bool {
+    env::var("CACHE_ENABLED")
+        .ok()
+        .and_then(|v| v.parse::<bool>().ok())
+        .unwrap_or(true)
+}
+
 fn default_grpc_port() -> u16 {
     env::var("SERVER_GRPC_PORT")
         .ok()
@@ -39,6 +50,9 @@ pub struct Config {
     /// Neo4j connection configuration, flattened from NEO4J_* env vars
     #[serde(flatten)]
     pub neo4j: Neo4jConfig,
+    /// Redis configuration
+    #[serde(flatten)]
+    pub redis: RedisConfig,
     /// PostgreSQL connection string
     #[serde(rename = "DATABASE_URL", default = "default_database_url")]
     pub database_url: String,
@@ -48,6 +62,16 @@ pub struct Config {
     /// Internal token required for write operations; if absent, writes are disabled.
     #[serde(default)]
     pub internal_write_token: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct RedisConfig {
+    /// Redis connection URL
+    #[serde(rename = "REDIS_URL", default = "default_redis_url")]
+    pub url: String,
+    /// Enable caching (can be disabled for debugging)
+    #[serde(rename = "CACHE_ENABLED", default = "default_cache_enabled")]
+    pub enabled: bool,
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
@@ -96,12 +120,23 @@ impl Config {
 
         let internal_write_token = env::var("INTERNAL_GRAPH_WRITE_TOKEN").ok();
 
+        // Redis configuration
+        let redis_url = env::var("REDIS_URL").unwrap_or_else(|_| "redis://redis:6379".to_string());
+        let cache_enabled = env::var("CACHE_ENABLED")
+            .ok()
+            .and_then(|v| v.parse::<bool>().ok())
+            .unwrap_or(true);
+
         Ok(Self {
             server: ServerConfig { grpc_port },
             neo4j: Neo4jConfig {
                 uri,
                 user,
                 password,
+            },
+            redis: RedisConfig {
+                url: redis_url,
+                enabled: cache_enabled,
             },
             database_url,
             enable_dual_write,

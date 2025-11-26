@@ -93,3 +93,4 @@ tonic-build = "0.12"
 [dev-dependencies]
 serial_test = { workspace = true }
 tempfile = "3.10"  # For persisted queries tests
+regex = "1.10"  # For security logging tests (PII detection patterns)

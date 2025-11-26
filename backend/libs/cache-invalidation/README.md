@@ -259,28 +259,43 @@ async fn main() -> anyhow::Result<()> {
                 }
                 InvalidationAction::Pattern => {
                     if let Some(pattern) = &msg.pattern {
-                        // Get all matching keys
-                        let keys: Vec<String> = redis::cmd("KEYS")
-                            .arg(pattern)
-                            .query_async(&mut redis_conn.clone())
-                            .await?;
+                        // Use SCAN instead of KEYS to avoid blocking Redis
+                        let mut cursor: u64 = 0;
+                        let mut total_deleted = 0;
 
-                        // Delete from Redis
-                        if !keys.is_empty() {
-                            redis::cmd("DEL")
-                                .arg(&keys)
-                                .query_async::<_, ()>(&mut redis_conn.clone())
+                        loop {
+                            let (next_cursor, keys): (u64, Vec<String>) = redis::cmd("SCAN")
+                                .arg(cursor)
+                                .arg("MATCH")
+                                .arg(pattern)
+                                .arg("COUNT")
+                                .arg(100)
+                                .query_async(&mut redis_conn.clone())
                                 .await?;
-                        }
 
-                        // Delete from memory cache
-                        for key in &keys {
-                            memory_cache.remove(key);
+                            // Delete from Redis
+                            if !keys.is_empty() {
+                                redis::cmd("DEL")
+                                    .arg(&keys)
+                                    .query_async::<_, ()>(&mut redis_conn.clone())
+                                    .await?;
+
+                                // Delete from memory cache
+                                for key in &keys {
+                                    memory_cache.remove(key);
+                                }
+                                total_deleted += keys.len();
+                            }
+
+                            cursor = next_cursor;
+                            if cursor == 0 {
+                                break;
+                            }
                         }
 
                         tracing::info!(
                             pattern = %pattern,
-                            deleted_count = keys.len(),
+                            deleted_count = total_deleted,
                             "Pattern-based cache invalidation"
                         );
                     }

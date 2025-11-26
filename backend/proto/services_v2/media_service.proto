@@ -3,6 +3,7 @@ package nova.media.v1;
 
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/empty.proto";
+import "google/api/annotations.proto";
 
 // ============================================================================
 // Media Service - Unified Media Handling
@@ -23,27 +24,85 @@ import "google/protobuf/empty.proto";
 
 service MediaService {
   // ========== Upload ==========
-  rpc InitiateUpload(InitiateUploadRequest) returns (InitiateUploadResponse);
-  rpc CompleteUpload(CompleteUploadRequest) returns (CompleteUploadResponse);
-  rpc CancelUpload(CancelUploadRequest) returns (google.protobuf.Empty);
+  rpc InitiateUpload(InitiateUploadRequest) returns (InitiateUploadResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/media/upload/init"
+      body: "*"
+    };
+  }
+  rpc CompleteUpload(CompleteUploadRequest) returns (CompleteUploadResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/media/upload/{upload_id}/complete"
+      body: "*"
+    };
+  }
+  rpc CancelUpload(CancelUploadRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      delete: "/api/v2/media/upload/{upload_id}"
+    };
+  }
 
   // ========== Retrieval ==========
-  rpc GetMedia(GetMediaRequest) returns (GetMediaResponse);
-  rpc GetMediaByIds(GetMediaByIdsRequest) returns (GetMediaByIdsResponse);
-  rpc GetUserMedia(GetUserMediaRequest) returns (GetUserMediaResponse);
+  rpc GetMedia(GetMediaRequest) returns (GetMediaResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/media/{media_id}"
+    };
+  }
+  rpc GetMediaByIds(GetMediaByIdsRequest) returns (GetMediaByIdsResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/media/batch"
+      body: "*"
+    };
+  }
+  rpc GetUserMedia(GetUserMediaRequest) returns (GetUserMediaResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/media/user/{user_id}"
+    };
+  }
 
   // ========== Processing ==========
-  rpc GenerateThumbnail(GenerateThumbnailRequest) returns (GenerateThumbnailResponse);
-  rpc TranscodeVideo(TranscodeVideoRequest) returns (TranscodeVideoResponse);
-  rpc GetTranscodeStatus(GetTranscodeStatusRequest) returns (GetTranscodeStatusResponse);
+  rpc GenerateThumbnail(GenerateThumbnailRequest) returns (GenerateThumbnailResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/media/{media_id}/thumbnail"
+      body: "*"
+    };
+  }
+  rpc TranscodeVideo(TranscodeVideoRequest) returns (TranscodeVideoResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/media/{media_id}/transcode"
+      body: "*"
+    };
+  }
+  rpc GetTranscodeStatus(GetTranscodeStatusRequest) returns (GetTranscodeStatusResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/media/transcode/{job_id}/status"
+    };
+  }
 
   // ========== Streaming ==========
-  rpc GetStreamingUrl(GetStreamingUrlRequest) returns (GetStreamingUrlResponse);
-  rpc GetDownloadUrl(GetDownloadUrlRequest) returns (GetDownloadUrlResponse);
+  rpc GetStreamingUrl(GetStreamingUrlRequest) returns (GetStreamingUrlResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/media/{media_id}/stream"
+    };
+  }
+  rpc GetDownloadUrl(GetDownloadUrlRequest) returns (GetDownloadUrlResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/media/{media_id}/download"
+    };
+  }
 
   // ========== Deletion ==========
-  rpc DeleteMedia(DeleteMediaRequest) returns (google.protobuf.Empty);
-  rpc BulkDeleteMedia(BulkDeleteMediaRequest) returns (google.protobuf.Empty);
+  rpc DeleteMedia(DeleteMediaRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      delete: "/api/v2/media/{media_id}"
+    };
+  }
+  rpc BulkDeleteMedia(BulkDeleteMediaRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      post: "/api/v2/media/bulk-delete"
+      body: "*"
+    };
+  }
 }
 
 // ============================================================================

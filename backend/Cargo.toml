@@ -32,6 +32,7 @@ members = [
     "libs/idempotent-consumer",  # Idempotent Kafka consumer with PostgreSQL tracking
     "libs/cache-invalidation",   # Redis Pub/Sub cache invalidation for cross-service coherence
     "libs/grpc-health",          # gRPC health check for Kubernetes probes
+    "libs/nova-cache",           # Unified caching layer for all services
 ]
 
 # Note: Removed services (archived in archived-v1/ or deleted):

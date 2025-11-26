@@ -1,0 +1,142 @@
+##############################################################################
+# Kafka Connect (Debezium) Kubernetes Deployment
+# Version: 1.0
+# Purpose: CDC pipeline from PostgreSQL to Kafka
+#
+# Architecture:
+# - Single replica Kafka Connect worker
+# - Debezium PostgreSQL connector plugin
+# - Connects to existing Kafka cluster
+# - REST API on port 8083 for connector management
+##############################################################################
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kafka-connect
+  namespace: nova
+  labels:
+    app: kafka-connect
+    component: cdc
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kafka-connect
+  template:
+    metadata:
+      labels:
+        app: kafka-connect
+        component: cdc
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8083"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+      - name: kafka-connect
+        image: debezium/connect:2.4
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: rest
+          containerPort: 8083
+          protocol: TCP
+
+        env:
+        # Kafka Connect configuration
+        - name: BOOTSTRAP_SERVERS
+          value: "kafka:9092"
+        - name: GROUP_ID
+          value: "nova-cdc-connect"
+        - name: CONFIG_STORAGE_TOPIC
+          value: "connect-configs"
+        - name: OFFSET_STORAGE_TOPIC
+          value: "connect-offsets"
+        - name: STATUS_STORAGE_TOPIC
+          value: "connect-status"
+
+        # Replication factor (1 for single-node Kafka)
+        - name: CONFIG_STORAGE_REPLICATION_FACTOR
+          value: "1"
+        - name: OFFSET_STORAGE_REPLICATION_FACTOR
+          value: "1"
+        - name: STATUS_STORAGE_REPLICATION_FACTOR
+          value: "1"
+
+        # Converter configuration
+        - name: KEY_CONVERTER
+          value: "org.apache.kafka.connect.json.JsonConverter"
+        - name: VALUE_CONVERTER
+          value: "org.apache.kafka.connect.json.JsonConverter"
+        - name: KEY_CONVERTER_SCHEMAS_ENABLE
+          value: "false"
+        - name: VALUE_CONVERTER_SCHEMAS_ENABLE
+          value: "false"
+
+        # Logging
+        - name: LOG_LEVEL
+          value: "INFO"
+        - name: CONNECT_LOG4J_LOGGERS
+          value: "org.apache.kafka.connect=INFO,io.debezium=INFO"
+
+        # JMX for monitoring
+        - name: JMXHOST
+          value: "0.0.0.0"
+        - name: JMXPORT
+          value: "9999"
+
+        resources:
+          requests:
+            cpu: 250m
+            memory: 512Mi
+          limits:
+            cpu: 1000m
+            memory: 2Gi
+
+        livenessProbe:
+          httpGet:
+            path: /
+            port: rest
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+
+        readinessProbe:
+          httpGet:
+            path: /connectors
+            port: rest
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 3
+
+        startupProbe:
+          httpGet:
+            path: /
+            port: rest
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 30  # 5 minutes total
+
+        volumeMounts:
+        - name: connector-config
+          mountPath: /etc/debezium/config
+          readOnly: true
+        - name: secrets
+          mountPath: /etc/debezium/secrets
+          readOnly: true
+
+      volumes:
+      - name: connector-config
+        configMap:
+          name: debezium-connector-config
+      - name: secrets
+        secret:
+          secretName: debezium-secrets
+          optional: true
+
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 60

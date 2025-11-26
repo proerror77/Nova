@@ -88,7 +88,7 @@ spec:
           value: /etc/nova/certs/server.crt
         - name: GRPC_SERVER_KEY_PATH
           value: /etc/nova/certs/server.key
-        - name: GRPC_CLIENT_CA_CERT_PATH
+        - name: GRPC_CA_CERT_PATH
           value: /etc/nova/certs/ca.crt
         - name: GRPC_REQUIRE_CLIENT_CERT
           value: "true"

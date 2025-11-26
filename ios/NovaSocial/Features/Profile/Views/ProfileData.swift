@@ -16,7 +16,7 @@ class ProfileData {
 
     // MARK: - Services
 
-    private let userService = UserService()
+    private let identityService = IdentityService()
     private let graphService = GraphService()
     private let socialService = SocialService()
     private let contentService = ContentService()
@@ -43,8 +43,8 @@ class ProfileData {
         errorMessage = nil
 
         do {
-            // Fetch user profile from UserService
-            userProfile = try await userService.getUser(userId: userId)
+            // Fetch user profile from IdentityService
+            userProfile = try await identityService.getUser(userId: userId)
 
             // Load initial content based on selected tab
             await loadContent(for: selectedTab)
@@ -100,11 +100,16 @@ class ProfileData {
             // Upload image to MediaService
             let avatarUrl = try await mediaService.uploadImage(image: imageData, userId: userId)
 
-            // Update profile with new avatar URL
-            userProfile = try await userService.updateProfile(
-                userId: userId,
-                avatarUrl: avatarUrl
+            // Update profile with new avatar URL using IdentityService
+            let updates = UserProfileUpdate(
+                displayName: nil,
+                bio: nil,
+                avatarUrl: avatarUrl,
+                coverUrl: nil,
+                website: nil,
+                location: nil
             )
+            userProfile = try await identityService.updateUser(userId: userId, updates: updates)
         } catch {
             handleError(error)
         }
@@ -174,22 +179,7 @@ class ProfileData {
 
     private func handleError(_ error: Error) {
         if let apiError = error as? APIError {
-            switch apiError {
-            case .invalidURL:
-                errorMessage = "Invalid URL"
-            case .invalidResponse:
-                errorMessage = "Invalid server response"
-            case .networkError(let underlyingError):
-                errorMessage = "Network error: \(underlyingError.localizedDescription)"
-            case .decodingError(let underlyingError):
-                errorMessage = "Data parsing error: \(underlyingError.localizedDescription)"
-            case .serverError(let statusCode, let message):
-                errorMessage = "Server error (\(statusCode)): \(message)"
-            case .unauthorized:
-                errorMessage = "Unauthorized. Please log in again."
-            case .notFound:
-                errorMessage = "User not found"
-            }
+            errorMessage = apiError.userMessage
         } else {
             errorMessage = error.localizedDescription
         }

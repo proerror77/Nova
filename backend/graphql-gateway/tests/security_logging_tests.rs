@@ -283,7 +283,7 @@ fn test_correlation_id_format() {
 #[test]
 fn test_slow_query_logs_dont_expose_parameters() {
     // BAD: Exposes query parameters (potential PII)
-    let bad_log = r#"{"level":"WARN","query":"SELECT * FROM users WHERE email='victim@example.com'","duration_ms":5000}"#;
+    let _bad_log = r#"{"level":"WARN","query":"SELECT * FROM users WHERE email='victim@example.com'","duration_ms":5000}"#;
 
     // GOOD: Logs query structure without parameters
     let good_log = r#"{"level":"WARN","query_type":"SELECT","table":"users","duration_ms":5000}"#;

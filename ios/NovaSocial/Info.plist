@@ -36,11 +36,20 @@
     <string>We need access to your photo library to select photos for your posts.</string>
     <key>NSLocationWhenInUseUsageDescription</key>
     <string>We need access to your location to help you add location tags to your posts.</string>
+    <key>NOVA_STAGING_URL</key>
+    <string>$(NOVA_STAGING_URL)</string>
     <key>NSAppTransportSecurity</key>
     <dict>
         <key>NSExceptionDomains</key>
         <dict>
             <key>amazonaws.com</key>
+            <dict>
+                <key>NSIncludesSubdomains</key>
+                <true/>
+                <key>NSExceptionAllowsInsecureHTTPLoads</key>
+                <true/>
+            </dict>
+            <key>ap-northeast-1.elb.amazonaws.com</key>
             <dict>
                 <key>NSIncludesSubdomains</key>
                 <true/>

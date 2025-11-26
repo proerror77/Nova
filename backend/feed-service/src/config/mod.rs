@@ -10,6 +10,25 @@ pub struct Config {
     pub kafka: KafkaConfig,
     #[serde(default)]
     pub graph: GraphConfig,
+    #[serde(default)]
+    pub redis: RedisConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RedisConfig {
+    #[serde(default = "default_redis_url")]
+    pub url: String,
+    #[serde(default = "default_cache_warmer_enabled")]
+    pub cache_warmer_enabled: bool,
+}
+
+impl Default for RedisConfig {
+    fn default() -> Self {
+        Self {
+            url: default_redis_url(),
+            cache_warmer_enabled: default_cache_warmer_enabled(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -123,6 +142,13 @@ impl Config {
                 neo4j_password: std::env::var("NEO4J_PASSWORD")
                     .unwrap_or_else(|_| "password".to_string()),
             },
+            redis: RedisConfig {
+                url: std::env::var("REDIS_URL").unwrap_or_else(|_| default_redis_url()),
+                cache_warmer_enabled: std::env::var("CACHE_WARMER_ENABLED")
+                    .unwrap_or_else(|_| "true".to_string())
+                    .parse()
+                    .unwrap_or(true),
+            },
         })
     }
 }
@@ -141,4 +167,12 @@ fn default_kafka_group_id() -> String {
 
 fn default_neo4j_uri() -> String {
     "neo4j://localhost:7687".to_string()
+}
+
+fn default_redis_url() -> String {
+    "redis://localhost:6379".to_string()
+}
+
+fn default_cache_warmer_enabled() -> bool {
+    true
 }

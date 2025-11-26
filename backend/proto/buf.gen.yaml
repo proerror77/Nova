@@ -1,0 +1,38 @@
+# buf.gen.yaml - Code generation configuration
+version: v2
+managed:
+  enabled: true
+  override:
+    - file_option: go_package_prefix
+      value: github.com/nova/api/gen/go
+plugins:
+  # Generate Go protobuf code
+  - remote: buf.build/protocolbuffers/go
+    out: gen/go
+    opt: paths=source_relative
+
+  # Generate gRPC Go code
+  - remote: buf.build/grpc/go
+    out: gen/go
+    opt: paths=source_relative
+
+  # Generate gRPC-Gateway REST proxy
+  - remote: buf.build/grpc-ecosystem/gateway
+    out: gen/go
+    opt:
+      - paths=source_relative
+      - generate_unbound_methods=true
+
+  # Generate OpenAPI v2 (Swagger) spec
+  - remote: buf.build/grpc-ecosystem/openapiv2
+    out: gen/openapi
+    opt:
+      - allow_merge=true
+      - merge_file_name=nova-api
+
+  # Generate descriptor set for Envoy transcoder
+  - local: protoc-gen-descriptor
+    out: gen/descriptor
+    opt:
+      - include_imports
+      - include_source_info

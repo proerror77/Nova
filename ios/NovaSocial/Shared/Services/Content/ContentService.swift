@@ -43,23 +43,41 @@ class ContentService {
         return response.post
     }
 
+    /// Get single post by ID using GET /api/v2/content/{id}
     func getPost(postId: String) async throws -> Post? {
-        struct Request: Codable {
-            let post_id: String
+        do {
+            let post: Post = try await client.request(
+                endpoint: APIConfig.Content.getPost(postId),
+                method: "GET"
+            )
+            return post
+        } catch APIError.notFound {
+            return nil
         }
+    }
 
-        struct Response: Codable {
-            let post: Post?
-            let found: Bool
+    /// Batch fetch posts by IDs (parallel requests)
+    func getPostsByIds(_ ids: [String]) async throws -> [Post] {
+        guard !ids.isEmpty else { return [] }
+
+        return try await withThrowingTaskGroup(of: Post?.self) { group in
+            for id in ids {
+                group.addTask {
+                    try? await self.getPost(postId: id)
+                }
+            }
+
+            var posts: [Post] = []
+            for try await post in group {
+                if let post = post {
+                    posts.append(post)
+                }
+            }
+
+            // Sort by original ID order
+            let idOrder = Dictionary(uniqueKeysWithValues: ids.enumerated().map { ($1, $0) })
+            return posts.sorted { (idOrder[$0.id] ?? Int.max) < (idOrder[$1.id] ?? Int.max) }
         }
-
-        let request = Request(post_id: postId)
-        let response: Response = try await client.request(
-            endpoint: APIConfig.Content.getPost,
-            body: request
-        )
-
-        return response.found ? response.post : nil
     }
 
     // MARK: - Bookmarks

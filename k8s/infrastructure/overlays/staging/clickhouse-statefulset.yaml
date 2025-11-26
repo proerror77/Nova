@@ -1,9 +1,13 @@
+# ClickHouse Service pointing to ClickHouse Operator managed pods
+# Note: The actual ClickHouse pods are managed by ClickHouse Operator (chi-nova-ch)
+# This Service provides a stable DNS name for other services to connect to
 apiVersion: v1
 kind: Service
 metadata:
   name: clickhouse
   labels:
     app: clickhouse
+    managed-by: clickhouse-operator
 spec:
   type: ClusterIP
   ports:
@@ -16,76 +20,6 @@ spec:
       targetPort: 9000
       protocol: TCP
   selector:
-    app: clickhouse
----
-apiVersion: apps/v1
-kind: StatefulSet
-metadata:
-  name: clickhouse
-  labels:
-    app: clickhouse
-spec:
-  serviceName: clickhouse
-  replicas: 1
-  selector:
-    matchLabels:
-      app: clickhouse
-  template:
-    metadata:
-      labels:
-        app: clickhouse
-    spec:
-      securityContext:
-        fsGroup: 101
-      containers:
-        - name: clickhouse
-          image: clickhouse/clickhouse-server:24.8
-          imagePullPolicy: IfNotPresent
-          ports:
-            - name: http
-              containerPort: 8123
-              protocol: TCP
-            - name: native
-              containerPort: 9000
-              protocol: TCP
-          env:
-            - name: CLICKHOUSE_DB
-              valueFrom:
-                secretKeyRef:
-                  name: nova-clickhouse-credentials
-                  key: CLICKHOUSE_DATABASE
-            - name: CLICKHOUSE_USER
-              valueFrom:
-                secretKeyRef:
-                  name: nova-clickhouse-credentials
-                  key: CLICKHOUSE_USER
-            - name: CLICKHOUSE_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: nova-clickhouse-credentials
-                  key: CLICKHOUSE_PASSWORD
-            - name: CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT
-              value: "1"
-          volumeMounts:
-            - name: data
-              mountPath: /var/lib/clickhouse
-          livenessProbe:
-            httpGet:
-              path: /ping
-              port: 8123
-            initialDelaySeconds: 20
-            periodSeconds: 10
-            timeoutSeconds: 5
-            failureThreshold: 6
-          readinessProbe:
-            httpGet:
-              path: /ping
-              port: 8123
-            initialDelaySeconds: 10
-            periodSeconds: 10
-            timeoutSeconds: 3
-            failureThreshold: 6
-      volumes:
-        - name: data
-          persistentVolumeClaim:
-            claimName: nova-ch-data
+    # Select pods created by ClickHouse Operator
+    clickhouse.altinity.com/chi: nova-ch
+    clickhouse.altinity.com/ready: "yes"

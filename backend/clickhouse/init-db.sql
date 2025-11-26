@@ -49,7 +49,6 @@ ORDER BY id
 SETTINGS index_granularity = 8192;
 
 -- Likes CDC mirror (engagement analytics)
-CLEAR
 CREATE TABLE IF NOT EXISTS likes_cdc (
   user_id String,
   post_id String,

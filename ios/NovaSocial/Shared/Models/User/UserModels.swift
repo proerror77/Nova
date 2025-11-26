@@ -13,14 +13,21 @@ struct UserProfile: Codable, Identifiable {
     let coverUrl: String?
     let website: String?
     let location: String?
-    let isVerified: Bool
-    let isPrivate: Bool
-    let followerCount: Int
-    let followingCount: Int
-    let postCount: Int
-    let createdAt: Int64
-    let updatedAt: Int64
+    let isVerified: Bool?
+    let isPrivate: Bool?
+    let followerCount: Int?
+    let followingCount: Int?
+    let postCount: Int?
+    let createdAt: Int64?
+    let updatedAt: Int64?
     let deletedAt: Int64?
+
+    // Make fields that may be missing from API optional with defaults
+    var safeIsVerified: Bool { isVerified ?? false }
+    var safeIsPrivate: Bool { isPrivate ?? false }
+    var safeFollowerCount: Int { followerCount ?? 0 }
+    var safeFollowingCount: Int { followingCount ?? 0 }
+    var safePostCount: Int { postCount ?? 0 }
 
     enum CodingKeys: String, CodingKey {
         case id

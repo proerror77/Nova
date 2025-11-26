@@ -125,33 +125,51 @@ impl FeedCache {
     /// - User follows/unfollows someone
     /// - Followed user posts new content
     /// - User's interests change
+    ///
+    /// Uses SCAN instead of KEYS to avoid blocking Redis
     pub async fn invalidate_feed(&self, user_id: &str) -> Result<()> {
-        // Delete all algorithm variants for this user
+        // Delete all algorithm variants for this user using SCAN (non-blocking)
         let pattern = format!("feed:{}:*", user_id);
+        let mut cursor: u64 = 0;
+        let mut total_deleted = 0;
 
-        let keys: Vec<String> = redis::cmd("KEYS")
-            .arg(&pattern)
-            .query_async(&mut self.client.as_ref().clone())
-            .await
-            .map_err(|e| {
-                warn!("Redis KEYS failed for {}: {}", pattern, e);
-                AppError::Internal(format!("Redis error: {}", e))
-            })?;
-
-        if !keys.is_empty() {
-            redis::cmd("DEL")
-                .arg(&keys)
-                .query_async::<_, ()>(&mut self.client.as_ref().clone())
+        loop {
+            // SCAN is non-blocking unlike KEYS
+            let (next_cursor, keys): (u64, Vec<String>) = redis::cmd("SCAN")
+                .arg(cursor)
+                .arg("MATCH")
+                .arg(&pattern)
+                .arg("COUNT")
+                .arg(100)
+                .query_async(&mut self.client.as_ref().clone())
                 .await
                 .map_err(|e| {
-                    warn!("Redis DEL failed: {}", e);
+                    warn!("Redis SCAN failed for {}: {}", pattern, e);
                     AppError::Internal(format!("Redis error: {}", e))
                 })?;
 
+            if !keys.is_empty() {
+                redis::cmd("DEL")
+                    .arg(&keys)
+                    .query_async::<_, ()>(&mut self.client.as_ref().clone())
+                    .await
+                    .map_err(|e| {
+                        warn!("Redis DEL failed: {}", e);
+                        AppError::Internal(format!("Redis error: {}", e))
+                    })?;
+                total_deleted += keys.len();
+            }
+
+            cursor = next_cursor;
+            if cursor == 0 {
+                break;
+            }
+        }
+
+        if total_deleted > 0 {
             debug!(
                 "Invalidated {} feed caches for user {}",
-                keys.len(),
-                user_id
+                total_deleted, user_id
             );
         }
 
@@ -161,33 +179,50 @@ impl FeedCache {
     /// Batch invalidate feed caches for multiple users
     ///
     /// Useful for fan-out invalidations (e.g., new post from creator)
+    /// Uses SCAN instead of KEYS to avoid blocking Redis
     pub async fn batch_invalidate_feeds(&self, user_ids: &[&str]) -> Result<()> {
-        let mut all_keys = Vec::new();
+        let mut total_deleted = 0;
 
         for user_id in user_ids {
             let pattern = format!("feed:{}:*", user_id);
-            let keys: Vec<String> = redis::cmd("KEYS")
-                .arg(&pattern)
-                .query_async(&mut self.client.as_ref().clone())
-                .await
-                .map_err(|e| {
-                    warn!("Redis KEYS failed for {}: {}", pattern, e);
-                    AppError::Internal(format!("Redis error: {}", e))
-                })?;
-            all_keys.extend(keys);
+            let mut cursor: u64 = 0;
+
+            loop {
+                // SCAN is non-blocking unlike KEYS
+                let (next_cursor, keys): (u64, Vec<String>) = redis::cmd("SCAN")
+                    .arg(cursor)
+                    .arg("MATCH")
+                    .arg(&pattern)
+                    .arg("COUNT")
+                    .arg(100)
+                    .query_async(&mut self.client.as_ref().clone())
+                    .await
+                    .map_err(|e| {
+                        warn!("Redis SCAN failed for {}: {}", pattern, e);
+                        AppError::Internal(format!("Redis error: {}", e))
+                    })?;
+
+                if !keys.is_empty() {
+                    redis::cmd("DEL")
+                        .arg(&keys)
+                        .query_async::<_, ()>(&mut self.client.as_ref().clone())
+                        .await
+                        .map_err(|e| {
+                            warn!("Redis DEL failed: {}", e);
+                            AppError::Internal(format!("Redis error: {}", e))
+                        })?;
+                    total_deleted += keys.len();
+                }
+
+                cursor = next_cursor;
+                if cursor == 0 {
+                    break;
+                }
+            }
         }
 
-        if !all_keys.is_empty() {
-            redis::cmd("DEL")
-                .arg(&all_keys)
-                .query_async::<_, ()>(&mut self.client.as_ref().clone())
-                .await
-                .map_err(|e| {
-                    warn!("Redis DEL failed: {}", e);
-                    AppError::Internal(format!("Redis error: {}", e))
-                })?;
-
-            debug!("Invalidated {} total feed caches", all_keys.len());
+        if total_deleted > 0 {
+            debug!("Invalidated {} total feed caches", total_deleted);
         }
 
         Ok(())
