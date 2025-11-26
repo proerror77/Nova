@@ -15,7 +15,11 @@ impl PollRepository {
     }
 
     /// Get trending polls (active polls sorted by vote count)
-    pub async fn get_trending_polls(&self, limit: i32, tags: Option<Vec<String>>) -> Result<Vec<Poll>> {
+    pub async fn get_trending_polls(
+        &self,
+        limit: i32,
+        tags: Option<Vec<String>>,
+    ) -> Result<Vec<Poll>> {
         let polls = if let Some(tags) = tags {
             sqlx::query_as::<_, Poll>(
                 r#"
@@ -89,7 +93,11 @@ impl PollRepository {
     }
 
     /// Get top N candidates for preview
-    pub async fn get_top_candidates(&self, poll_id: Uuid, limit: i32) -> Result<Vec<CandidatePreview>> {
+    pub async fn get_top_candidates(
+        &self,
+        poll_id: Uuid,
+        limit: i32,
+    ) -> Result<Vec<CandidatePreview>> {
         let rows = sqlx::query_as::<_, (Uuid, String, Option<String>, i64)>(
             r#"
             SELECT id, name, avatar_url, vote_count
@@ -174,12 +182,7 @@ impl PollRepository {
     }
 
     /// Vote on a poll (one vote per user per poll)
-    pub async fn vote(
-        &self,
-        poll_id: Uuid,
-        candidate_id: Uuid,
-        user_id: Uuid,
-    ) -> Result<PollVote> {
+    pub async fn vote(&self, poll_id: Uuid, candidate_id: Uuid, user_id: Uuid) -> Result<PollVote> {
         // Check if user already voted
         let existing = sqlx::query_scalar::<_, bool>(
             r#"

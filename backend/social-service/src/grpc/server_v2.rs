@@ -560,7 +560,10 @@ impl SocialService for SocialServiceImpl {
             .map_err(|e| Status::internal(format!("Failed to get rankings: {}", e)))?;
 
         Ok(Response::new(GetPollRankingsResponse {
-            rankings: rankings.into_iter().map(to_proto_candidate_ranked).collect(),
+            rankings: rankings
+                .into_iter()
+                .map(to_proto_candidate_ranked)
+                .collect(),
             total_candidates,
             total_votes,
         }))
@@ -638,7 +641,10 @@ impl SocialService for SocialServiceImpl {
 
         Ok(Response::new(CheckPollVotedResponse {
             has_voted: vote.is_some(),
-            voted_candidate_id: vote.as_ref().map(|v| v.candidate_id.to_string()).unwrap_or_default(),
+            voted_candidate_id: vote
+                .as_ref()
+                .map(|v| v.candidate_id.to_string())
+                .unwrap_or_default(),
             voted_at: vote.map(|v| to_ts(v.created_at)).flatten(),
         }))
     }
@@ -755,7 +761,10 @@ fn to_proto_poll(poll: PollModel) -> Poll {
     }
 }
 
-fn to_proto_poll_summary(poll: PollModel, top_candidates: Vec<CandidatePreviewModel>) -> PollSummary {
+fn to_proto_poll_summary(
+    poll: PollModel,
+    top_candidates: Vec<CandidatePreviewModel>,
+) -> PollSummary {
     PollSummary {
         id: poll.id.to_string(),
         title: poll.title,
@@ -764,7 +773,10 @@ fn to_proto_poll_summary(poll: PollModel, top_candidates: Vec<CandidatePreviewMo
         status: poll.status,
         total_votes: poll.total_votes,
         candidate_count: poll.candidate_count,
-        top_candidates: top_candidates.into_iter().map(to_proto_candidate_preview).collect(),
+        top_candidates: top_candidates
+            .into_iter()
+            .map(to_proto_candidate_preview)
+            .collect(),
         tags: poll.tags,
         ends_at: poll.ends_at.and_then(to_ts),
     }
@@ -779,7 +791,11 @@ fn to_proto_candidate_preview(preview: CandidatePreviewModel) -> CandidatePrevie
     }
 }
 
-fn to_proto_candidate_with_rank(candidate: PollCandidateModel, rank: i32, total_votes: i64) -> PollCandidate {
+fn to_proto_candidate_with_rank(
+    candidate: PollCandidateModel,
+    rank: i32,
+    total_votes: i64,
+) -> PollCandidate {
     let vote_percentage = if total_votes > 0 {
         (candidate.vote_count as f64 / total_votes as f64) * 100.0
     } else {
@@ -791,7 +807,10 @@ fn to_proto_candidate_with_rank(candidate: PollCandidateModel, rank: i32, total_
         name: candidate.name,
         avatar_url: candidate.avatar_url.unwrap_or_default(),
         description: candidate.description.unwrap_or_default(),
-        user_id: candidate.user_id.map(|id| id.to_string()).unwrap_or_default(),
+        user_id: candidate
+            .user_id
+            .map(|id| id.to_string())
+            .unwrap_or_default(),
         vote_count: candidate.vote_count,
         rank,
         rank_change: 0,
