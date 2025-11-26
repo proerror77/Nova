@@ -3,36 +3,142 @@ package nova.social_service.v2;
 
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/empty.proto";
+import "google/api/annotations.proto";
 
 // Social Service - Relationships & Engagement
 service SocialService {
   // Relationships
-  rpc FollowUser(FollowUserRequest) returns (google.protobuf.Empty);
-  rpc UnfollowUser(UnfollowUserRequest) returns (google.protobuf.Empty);
-  rpc BlockUser(BlockUserRequest) returns (google.protobuf.Empty);
-  rpc UnblockUser(UnblockUserRequest) returns (google.protobuf.Empty);
-  rpc GetFollowers(GetFollowersRequest) returns (GetFollowersResponse);
-  rpc GetFollowing(GetFollowingRequest) returns (GetFollowingResponse);
-  rpc GetRelationship(GetRelationshipRequest) returns (GetRelationshipResponse);
+  rpc FollowUser(FollowUserRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      post: "/api/v2/social/follow"
+      body: "*"
+    };
+  }
+  rpc UnfollowUser(UnfollowUserRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      delete: "/api/v2/social/follow/{followee_id}"
+    };
+  }
+  rpc BlockUser(BlockUserRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      post: "/api/v2/social/block"
+      body: "*"
+    };
+  }
+  rpc UnblockUser(UnblockUserRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      delete: "/api/v2/social/block/{blockee_id}"
+    };
+  }
+  rpc GetFollowers(GetFollowersRequest) returns (GetFollowersResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/social/followers/{user_id}"
+    };
+  }
+  rpc GetFollowing(GetFollowingRequest) returns (GetFollowingResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/social/following/{user_id}"
+    };
+  }
+  rpc GetRelationship(GetRelationshipRequest) returns (GetRelationshipResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/social/relationship"
+    };
+  }
 
   // Likes
-  rpc CreateLike(CreateLikeRequest) returns (CreateLikeResponse);
-  rpc DeleteLike(DeleteLikeRequest) returns (DeleteLikeResponse);
-  rpc GetLikes(GetLikesRequest) returns (GetLikesResponse);
-  rpc CheckUserLiked(CheckUserLikedRequest) returns (CheckUserLikedResponse);
+  rpc CreateLike(CreateLikeRequest) returns (CreateLikeResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/social/likes"
+      body: "*"
+    };
+  }
+  rpc DeleteLike(DeleteLikeRequest) returns (DeleteLikeResponse) {
+    option (google.api.http) = {
+      delete: "/api/v2/social/likes/{post_id}"
+    };
+  }
+  rpc GetLikes(GetLikesRequest) returns (GetLikesResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/social/likes/{post_id}"
+    };
+  }
+  rpc CheckUserLiked(CheckUserLikedRequest) returns (CheckUserLikedResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/social/likes/{post_id}/check"
+    };
+  }
 
   // Comments
-  rpc CreateComment(CreateCommentRequest) returns (CreateCommentResponse);
-  rpc DeleteComment(DeleteCommentRequest) returns (DeleteCommentResponse);
-  rpc GetComments(GetCommentsRequest) returns (GetCommentsResponse);
+  rpc CreateComment(CreateCommentRequest) returns (CreateCommentResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/social/comments"
+      body: "*"
+    };
+  }
+  rpc DeleteComment(DeleteCommentRequest) returns (DeleteCommentResponse) {
+    option (google.api.http) = {
+      delete: "/api/v2/social/comments/{comment_id}"
+    };
+  }
+  rpc GetComments(GetCommentsRequest) returns (GetCommentsResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/social/comments/{post_id}"
+    };
+  }
 
   // Shares
-  rpc CreateShare(CreateShareRequest) returns (CreateShareResponse);
-  rpc GetShareCount(GetShareCountRequest) returns (GetShareCountResponse);
+  rpc CreateShare(CreateShareRequest) returns (CreateShareResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/social/shares"
+      body: "*"
+    };
+  }
+  rpc GetShareCount(GetShareCountRequest) returns (GetShareCountResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/social/shares/{post_id}/count"
+    };
+  }
 
   // Feed
-  rpc GetUserFeed(GetUserFeedRequest) returns (GetUserFeedResponse);
-  rpc GetExploreFeed(GetExploreFeedRequest) returns (GetExploreFeedResponse);
+  rpc GetUserFeed(GetUserFeedRequest) returns (GetUserFeedResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/social/feed/{user_id}"
+    };
+  }
+  rpc GetExploreFeed(GetExploreFeedRequest) returns (GetExploreFeedResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/social/explore"
+    };
+  }
+
+  // Polls (投票榜单)
+  rpc GetTrendingPolls(GetTrendingPollsRequest) returns (GetTrendingPollsResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/polls/trending"
+    };
+  }
+  rpc GetPoll(GetPollRequest) returns (GetPollResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/polls/{poll_id}"
+    };
+  }
+  rpc GetPollRankings(GetPollRankingsRequest) returns (GetPollRankingsResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/polls/{poll_id}/rankings"
+    };
+  }
+  rpc VoteOnPoll(VoteOnPollRequest) returns (VoteOnPollResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/polls/{poll_id}/vote"
+      body: "*"
+    };
+  }
+  rpc CheckPollVoted(CheckPollVotedRequest) returns (CheckPollVotedResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/polls/{poll_id}/voted"
+    };
+  }
 }
 
 // Relationships
@@ -133,4 +239,101 @@ message FeedItem {
   string author_id = 3;
   double relevance_score = 4;
   google.protobuf.Timestamp created_at = 5;
+}
+
+// Poll Messages
+message GetTrendingPollsRequest {
+  int32 limit = 1;
+  repeated string tags = 2;
+}
+message GetTrendingPollsResponse {
+  repeated PollSummary polls = 1;
+}
+
+message GetPollRequest {
+  string poll_id = 1;
+  bool include_candidates = 2;
+}
+message GetPollResponse {
+  Poll poll = 1;
+  repeated PollCandidate candidates = 2;
+  string my_voted_candidate_id = 3;
+}
+
+message GetPollRankingsRequest {
+  string poll_id = 1;
+  int32 limit = 2;
+  int32 offset = 3;
+}
+message GetPollRankingsResponse {
+  repeated PollCandidate rankings = 1;
+  int32 total_candidates = 2;
+  int64 total_votes = 3;
+}
+
+message VoteOnPollRequest {
+  string poll_id = 1;
+  string candidate_id = 2;
+}
+message VoteOnPollResponse {
+  bool success = 1;
+  PollCandidate updated_candidate = 2;
+  int64 total_votes = 3;
+}
+
+message CheckPollVotedRequest {
+  string poll_id = 1;
+}
+message CheckPollVotedResponse {
+  bool has_voted = 1;
+  string voted_candidate_id = 2;
+  google.protobuf.Timestamp voted_at = 3;
+}
+
+// Poll Models
+message Poll {
+  string id = 1;
+  string title = 2;
+  string description = 3;
+  string cover_image_url = 4;
+  string creator_id = 5;
+  string poll_type = 6;
+  string status = 7;
+  int64 total_votes = 8;
+  int32 candidate_count = 9;
+  repeated string tags = 10;
+  google.protobuf.Timestamp created_at = 11;
+  google.protobuf.Timestamp ends_at = 12;
+}
+
+message PollSummary {
+  string id = 1;
+  string title = 2;
+  string cover_image_url = 3;
+  string poll_type = 4;
+  string status = 5;
+  int64 total_votes = 6;
+  int32 candidate_count = 7;
+  repeated CandidatePreview top_candidates = 8;
+  repeated string tags = 9;
+  google.protobuf.Timestamp ends_at = 10;
+}
+
+message PollCandidate {
+  string id = 1;
+  string name = 2;
+  string avatar_url = 3;
+  string description = 4;
+  string user_id = 5;
+  int64 vote_count = 6;
+  int32 rank = 7;
+  int32 rank_change = 8;
+  double vote_percentage = 9;
+}
+
+message CandidatePreview {
+  string id = 1;
+  string name = 2;
+  string avatar_url = 3;
+  int32 rank = 4;
 }
