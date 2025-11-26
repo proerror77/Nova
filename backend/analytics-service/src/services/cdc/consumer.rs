@@ -60,6 +60,7 @@ impl CdcConsumerConfig {
 pub struct CdcConsumer {
     consumer: StreamConsumer,
     ch_client: ClickHouseClient,
+    #[allow(dead_code)]
     config: CdcConsumerConfig,
     semaphore: Arc<Semaphore>,
 }
