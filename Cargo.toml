@@ -1,7 +1,6 @@
 [workspace]
 members = [
     # Services
-    "backend/user-service",
     "backend/content-service",
     "backend/feed-service",
     "backend/media-service",
