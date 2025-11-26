@@ -17,6 +17,7 @@ use super::KafkaError;
 /// Kafka producer for publishing events
 pub struct KafkaProducer {
     producer: FutureProducer,
+    #[allow(dead_code)]
     broker_list: String,
 }
 

@@ -1,10 +1,15 @@
-/// Content API endpoints
-///
-/// GET /api/v2/content/{id} - Get a specific post
-/// GET /api/v2/content/user/{user_id} - Get posts by user
-/// POST /api/v2/content - Create a new post
-/// PUT /api/v2/content/{id} - Update a post
-/// DELETE /api/v2/content/{id} - Delete a post
+//! Content API endpoints
+//!
+//! GET /api/v2/content/{id} - Get a specific post
+//! GET /api/v2/content/user/{user_id} - Get posts by user
+//! POST /api/v2/content - Create a new post
+//! PUT /api/v2/content/{id} - Update a post
+//! DELETE /api/v2/content/{id} - Delete a post
+//!
+//! Response DTOs prepared for JSON serialization
+
+#![allow(dead_code)]
+
 use actix_web::{web, HttpMessage, HttpRequest, HttpResponse, Result};
 use serde::{Deserialize, Serialize};
 use tracing::{error, info};
@@ -87,7 +92,7 @@ pub async fn get_post(
 ) -> Result<HttpResponse> {
     let post_id = path.into_inner();
 
-    info!(post_id = %post_id, "GET /api/v2/content/{id}");
+    info!(post_id = %post_id, "GET /api/v2/content/{{id}}");
 
     let mut content_client = clients.content_client();
 
@@ -301,7 +306,7 @@ pub async fn update_post(
     info!(
         user_id = %user_id,
         post_id = %post_id,
-        "PUT /api/v2/content/{id}"
+        "PUT /api/v2/content/{{id}}"
     );
 
     let mut content_client = clients.content_client();
@@ -392,7 +397,7 @@ pub async fn delete_post(
     info!(
         user_id = %user_id,
         post_id = %post_id,
-        "DELETE /api/v2/content/{id}"
+        "DELETE /api/v2/content/{{id}}"
     );
 
     let mut content_client = clients.content_client();

@@ -1,8 +1,11 @@
-/// Notifications API endpoints
-///
-/// GET /api/v2/notifications - Get notifications for current user
-/// POST /api/v2/notifications/read/{id} - Mark notification as read
-/// POST /api/v2/notifications/read-all - Mark all notifications as read
+//! Notifications API endpoints
+//!
+//! GET /api/v2/notifications - Get notifications for current user
+//! POST /api/v2/notifications/read/{id} - Mark notification as read
+//! POST /api/v2/notifications/read-all - Mark all notifications as read
+
+#![allow(dead_code)]
+
 use actix_web::{web, HttpMessage, HttpRequest, HttpResponse, Result};
 use serde::{Deserialize, Serialize};
 use tracing::{error, info};
@@ -182,7 +185,7 @@ pub async fn mark_notification_read(
     info!(
         user_id = %user_id,
         notification_id = %notification_id,
-        "POST /api/v2/notifications/read/{id}"
+        "POST /api/v2/notifications/read/{{id}}"
     );
 
     let mut notification_client = clients.notification_client();

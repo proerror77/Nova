@@ -109,7 +109,7 @@ impl ContentQuery {
     /// backend service adds proper ListPostsRequest RPC support.
     async fn posts(
         &self,
-        ctx: &Context<'_>,
+        _ctx: &Context<'_>,
         #[graphql(default = 10)] first: Option<i32>,
         after: Option<String>,
         last: Option<i32>,

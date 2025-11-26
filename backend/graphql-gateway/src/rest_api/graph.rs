@@ -1,12 +1,15 @@
-/// Graph API endpoints
-///
-/// GET /api/v2/graph/following - Get users the current user is following
-/// GET /api/v2/graph/followers - Get users following the current user
-/// GET /api/v2/graph/following/{user_id} - Get users a specific user is following
-/// GET /api/v2/graph/followers/{user_id} - Get users following a specific user
-/// POST /api/v2/graph/follow - Follow a user
-/// DELETE /api/v2/graph/follow/{user_id} - Unfollow a user
-/// GET /api/v2/graph/is-following/{user_id} - Check if following a user
+//! Graph API endpoints
+//!
+//! GET /api/v2/graph/following - Get users the current user is following
+//! GET /api/v2/graph/followers - Get users following the current user
+//! GET /api/v2/graph/following/{user_id} - Get users a specific user is following
+//! GET /api/v2/graph/followers/{user_id} - Get users following a specific user
+//! POST /api/v2/graph/follow - Follow a user
+//! DELETE /api/v2/graph/follow/{user_id} - Unfollow a user
+//! GET /api/v2/graph/is-following/{user_id} - Check if following a user
+
+#![allow(dead_code)]
+
 use actix_web::{web, HttpMessage, HttpRequest, HttpResponse, Result};
 use serde::{Deserialize, Serialize};
 use tracing::{error, info};

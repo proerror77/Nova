@@ -1,6 +1,8 @@
 //! Relay Cursor-based Pagination Implementation
 //! Standard for efficient pagination of large result sets
 
+#![allow(dead_code)]
+
 use async_graphql::SimpleObject;
 use base64::{engine::general_purpose, Engine as _};
 use serde::{Deserialize, Serialize};

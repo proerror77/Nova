@@ -32,12 +32,10 @@ pub use alice::*;
 pub use auth::*;
 pub use channels::*;
 pub use chat::*;
-pub use content::*;
 pub use feed::*;
-pub use graph::*;
 pub use media::*;
-pub use notifications::*;
-pub use poll::*;
 pub use social::*;
 pub use user_profile::*;
+// Modules with internal-only exports (actix handlers registered directly):
+// content, graph, notifications, poll
 // pub use users::*;

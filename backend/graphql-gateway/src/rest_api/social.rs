@@ -1,13 +1,15 @@
-/// Social Graph API endpoints (Friends, Recommendations, Devices, etc.)
-///
-/// GET /api/v2/search/users - Search users
-/// GET /api/v2/friends/recommendations - Get friend recommendations
-/// POST /api/v2/friends/add - Add friend
-/// DELETE /api/v2/friends/remove - Remove friend
-/// GET /api/v2/friends/list - Get friends list
-/// GET /api/v2/devices - Get login devices
-/// POST /api/v2/devices/logout - Logout from device
-/// GET /api/v2/devices/current - Get current device
+//! Social Graph API endpoints (Friends, Recommendations, Devices, etc.)
+//!
+//! GET /api/v2/search/users - Search users
+//! GET /api/v2/friends/recommendations - Get friend recommendations
+//! POST /api/v2/friends/add - Add friend
+//! DELETE /api/v2/friends/remove - Remove friend
+//! GET /api/v2/friends/list - Get friends list
+//! GET /api/v2/devices - Get login devices
+//! POST /api/v2/devices/logout - Logout from device
+//! GET /api/v2/devices/current - Get current device
+
+#![allow(dead_code)]
 /// POST /api/v2/accounts/switch - Switch account
 /// POST /api/v2/invitations/generate - Generate invite code
 /// POST /api/v2/chat/groups/create - Create group chat

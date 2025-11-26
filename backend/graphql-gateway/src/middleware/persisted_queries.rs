@@ -1,5 +1,10 @@
-/// Persisted Queries Middleware for actix-web
-/// Validates GraphQL requests against persisted queries whitelist before execution
+//! Persisted Queries Middleware for actix-web
+//! Validates GraphQL requests against persisted queries whitelist before execution
+//!
+//! Persisted queries security feature prepared but not yet enabled in production
+
+#![allow(dead_code)]
+
 use actix_web::{
     dev::{forward_ready, Service, ServiceRequest, ServiceResponse, Transform},
     Error, HttpMessage,

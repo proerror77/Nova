@@ -43,7 +43,7 @@ pub async fn get_feed(
 
     let grpc_request = tonic::Request::new(ProtoGetFeedRequest {
         user_id: user_id.clone(),
-        limit: limit as u32,
+        limit,
         cursor,
         algorithm,
     });

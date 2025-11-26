@@ -184,23 +184,38 @@ impl SubscriptionCache {
         Ok(())
     }
 
-    /// Clear all cache with pattern
+    /// Clear all cache with pattern using SCAN (non-blocking)
+    /// SCAN avoids blocking Redis unlike KEYS which can freeze the server
     pub async fn invalidate_pattern(&self, pattern: &str) -> Result<i32> {
-        let keys: Vec<String> = redis::cmd("KEYS")
-            .arg(pattern)
-            .query_async(&mut self.redis.clone())
-            .await?;
+        let mut cursor: u64 = 0;
+        let mut total_deleted: i32 = 0;
 
-        if keys.is_empty() {
-            return Ok(0);
+        loop {
+            // SCAN is non-blocking unlike KEYS
+            let (next_cursor, keys): (u64, Vec<String>) = redis::cmd("SCAN")
+                .arg(cursor)
+                .arg("MATCH")
+                .arg(pattern)
+                .arg("COUNT")
+                .arg(100)
+                .query_async(&mut self.redis.clone())
+                .await?;
+
+            if !keys.is_empty() {
+                let deleted: i32 = redis::cmd("DEL")
+                    .arg(&keys)
+                    .query_async(&mut self.redis.clone())
+                    .await?;
+                total_deleted += deleted;
+            }
+
+            cursor = next_cursor;
+            if cursor == 0 {
+                break;
+            }
         }
 
-        let deleted: i32 = redis::cmd("DEL")
-            .arg(&keys)
-            .query_async(&mut self.redis.clone())
-            .await?;
-
-        Ok(deleted)
+        Ok(total_deleted)
     }
 
     /// Get cache statistics

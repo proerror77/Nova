@@ -7,6 +7,9 @@
 //! **P0-7**: Distributed Redis caching to reduce N+1 queries
 //! **Quick Win #5**: In-memory query response caching
 
+// Cache infrastructure is prepared but not yet integrated into main.rs
+#![allow(dead_code)]
+
 pub mod query_cache;
 pub mod redis_cache;
 

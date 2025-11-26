@@ -1,26 +1,34 @@
 //! GraphQL Query Complexity Analysis
-//! ✅ P0-5: Prevent expensive queries and DoS attacks
+//!
+//! P0-5: Prevent expensive queries and DoS attacks
 //!
 //! PATTERN: Calculate query complexity before execution
+//!
 //! - Each field has a base complexity cost
 //! - Arguments multiply complexity (e.g., first: 100)
 //! - Nested fields add multiplicatively
 //!
-//! EXAMPLE:
+//! # Example
+//!
+//! ```text
 //! {
-//!   posts(first: 100) {           # 100 items
-//!     id                          # 1 per post
-//!     comments(first: 50) {       # 50 per post = 5000 total
-//!       id                        # 1 per comment = 5000
+//!   posts(first: 100) {           // 100 items
+//!     id                          // 1 per post
+//!     comments(first: 50) {       // 50 per post = 5000 total
+//!       id                        // 1 per comment = 5000
 //!     }
 //!   }
 //! }
 //! Total: 100 + (100 * 1) + (100 * 50) + (100 * 50 * 1) = 10,500
+//! ```
+
+#![allow(dead_code)]
 
 use std::collections::HashMap;
 
 /// Query complexity calculator
 pub struct ComplexityAnalyzer {
+    #[allow(dead_code)]
     field_costs: HashMap<String, FieldComplexity>,
     max_query_complexity: u32,
 }
@@ -235,6 +243,7 @@ impl ComplexityAnalyzer {
     }
 
     /// Calculate complexity for a field with given multiplier
+    #[allow(dead_code)]
     fn field_complexity(&self, field_name: &str, parent_complexity: u32, multiplier: u32) -> u32 {
         if let Some(field_def) = self.field_costs.get(field_name) {
             let base = field_def.base_cost.saturating_mul(parent_complexity);

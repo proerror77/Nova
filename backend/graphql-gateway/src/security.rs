@@ -1,12 +1,15 @@
-/// GraphQL Security Module
-/// Based on Codex P0 recommendations for GraphQL security hardening
-///
-/// Implements:
-/// - Query complexity limits
-/// - Query depth limits
-/// - Persisted queries
-/// - Rate limiting per user
-/// - Field/alias limits
+//! GraphQL Security Module
+//! Based on Codex P0 recommendations for GraphQL security hardening
+//!
+//! Implements:
+//! - Query complexity limits
+//! - Query depth limits
+//! - Persisted queries
+//! - Rate limiting per user
+//! - Field/alias limits
+
+#![allow(dead_code)]
+
 use async_graphql::{
     extensions::{Extension, ExtensionContext, ExtensionFactory, NextExecute, NextParseQuery},
     parser::types::ExecutableDocument,
@@ -59,6 +62,7 @@ impl ComplexityAnalyzer {
         complexity
     }
 
+    #[allow(clippy::only_used_in_recursion)]
     fn calculate_selection_complexity(
         &self,
         selection: &async_graphql::parser::types::Selection,
@@ -128,6 +132,7 @@ impl ComplexityAnalyzer {
         max_depth
     }
 
+    #[allow(clippy::only_used_in_recursion)]
     fn calculate_selection_depth(
         &self,
         selection: &async_graphql::parser::types::Selection,

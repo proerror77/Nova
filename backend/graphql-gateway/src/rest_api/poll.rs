@@ -1,6 +1,9 @@
-use actix_web::{delete, get, post, web, HttpRequest, HttpResponse};
+// Poll endpoints are stub implementations pending social-service integration
+#![allow(unused_variables, dead_code)]
+
+use actix_web::{delete, get, post, web, HttpMessage, HttpRequest, HttpResponse};
 use serde::{Deserialize, Serialize};
-use tracing::{error, info};
+use tracing::info;
 
 use crate::clients::ServiceClients;
 use crate::middleware::jwt::AuthenticatedUser;
@@ -140,11 +143,11 @@ pub async fn create_poll(
 
     info!("Creating poll for user {}: {}", user_id, body.title);
 
-    // TODO: Call poll-service gRPC
+    // TODO: Call social-service gRPC (Poll functionality is integrated into social-service)
     // For now, return a mock response indicating the feature is not yet implemented
     HttpResponse::NotImplemented().json(serde_json::json!({
-        "error": "Poll service not yet deployed",
-        "message": "The poll-service backend is being set up. Please try again later."
+        "error": "Poll feature not yet deployed",
+        "message": "The poll feature in social-service is being set up. Please try again later."
     }))
 }
 
@@ -163,9 +166,9 @@ pub async fn get_poll(
 
     info!("Getting poll: {}", poll_id);
 
-    // TODO: Call poll-service gRPC
+    // TODO: Call social-service gRPC GetPoll
     HttpResponse::NotImplemented().json(serde_json::json!({
-        "error": "Poll service not yet deployed"
+        "error": "Poll feature not yet deployed"
     }))
 }
 
@@ -194,9 +197,9 @@ pub async fn vote_on_poll(
         user_id, poll_id, body.candidate_id
     );
 
-    // TODO: Call poll-service gRPC
+    // TODO: Call social-service gRPC VoteOnPoll
     HttpResponse::NotImplemented().json(serde_json::json!({
-        "error": "Poll service not yet deployed"
+        "error": "Poll feature not yet deployed"
     }))
 }
 
@@ -216,9 +219,9 @@ pub async fn unvote(
 
     info!("User {} unvoting from poll {}", user_id, poll_id);
 
-    // TODO: Call poll-service gRPC
+    // TODO: Call social-service gRPC (unvote not yet implemented)
     HttpResponse::NotImplemented().json(serde_json::json!({
-        "error": "Poll service not yet deployed"
+        "error": "Poll feature not yet deployed"
     }))
 }
 
@@ -236,9 +239,9 @@ pub async fn check_voted(
         }
     };
 
-    // TODO: Call poll-service gRPC
+    // TODO: Call social-service gRPC CheckPollVoted
     HttpResponse::NotImplemented().json(serde_json::json!({
-        "error": "Poll service not yet deployed"
+        "error": "Poll feature not yet deployed"
     }))
 }
 
@@ -251,9 +254,9 @@ pub async fn get_rankings(
 ) -> HttpResponse {
     info!("Getting rankings for poll: {}", poll_id);
 
-    // TODO: Call poll-service gRPC
+    // TODO: Call social-service gRPC GetPollRankings
     HttpResponse::NotImplemented().json(serde_json::json!({
-        "error": "Poll service not yet deployed"
+        "error": "Poll feature not yet deployed"
     }))
 }
 
@@ -271,7 +274,7 @@ pub async fn get_trending_polls(
 ) -> HttpResponse {
     info!("Getting trending polls");
 
-    // TODO: Call poll-service gRPC
+    // TODO: Call social-service gRPC GetTrendingPolls
     // For now, return mock data for UI development
     let mock_polls = vec![PollSummaryResponse {
         id: "00000000-0000-0000-0000-000000000001".to_string(),
@@ -324,9 +327,9 @@ pub async fn get_active_polls(
 ) -> HttpResponse {
     info!("Getting active polls");
 
-    // TODO: Call poll-service gRPC
+    // TODO: Call social-service gRPC (active polls endpoint)
     HttpResponse::NotImplemented().json(serde_json::json!({
-        "error": "Poll service not yet deployed"
+        "error": "Poll feature not yet deployed"
     }))
 }
 
@@ -354,9 +357,9 @@ pub async fn add_candidate(
 
     info!("User {} adding candidate to poll {}", user_id, poll_id);
 
-    // TODO: Call poll-service gRPC
+    // TODO: Call social-service gRPC (add candidate not yet implemented)
     HttpResponse::NotImplemented().json(serde_json::json!({
-        "error": "Poll service not yet deployed"
+        "error": "Poll feature not yet deployed"
     }))
 }
 
@@ -380,9 +383,9 @@ pub async fn remove_candidate(
         user_id, candidate_id, poll_id
     );
 
-    // TODO: Call poll-service gRPC
+    // TODO: Call social-service gRPC (remove candidate not yet implemented)
     HttpResponse::NotImplemented().json(serde_json::json!({
-        "error": "Poll service not yet deployed"
+        "error": "Poll feature not yet deployed"
     }))
 }
 
@@ -402,9 +405,9 @@ pub async fn close_poll(
 
     info!("User {} closing poll {}", user_id, poll_id);
 
-    // TODO: Call poll-service gRPC
+    // TODO: Call social-service gRPC (close poll not yet implemented)
     HttpResponse::NotImplemented().json(serde_json::json!({
-        "error": "Poll service not yet deployed"
+        "error": "Poll feature not yet deployed"
     }))
 }
 
@@ -424,8 +427,8 @@ pub async fn delete_poll(
 
     info!("User {} deleting poll {}", user_id, poll_id);
 
-    // TODO: Call poll-service gRPC
+    // TODO: Call social-service gRPC (delete poll not yet implemented)
     HttpResponse::NotImplemented().json(serde_json::json!({
-        "error": "Poll service not yet deployed"
+        "error": "Poll feature not yet deployed"
     }))
 }

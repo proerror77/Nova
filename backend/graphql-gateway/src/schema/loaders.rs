@@ -1,17 +1,27 @@
 //! DataLoader implementations for N+1 query prevention
-//! ✅ P0-5: N+1 query optimization using batch loading
+//!
+//! P0-5: N+1 query optimization using batch loading
 //!
 //! PATTERN: Instead of loading 1 item per request, batch all IDs and fetch in 1 query
 //!
-//! EXAMPLE:
+//! # Example
+//!
 //! Before (N+1):
-//!   for post_id in [1,2,3] {
+//!
+//! ```text
+//! for post_id in [1,2,3] {
 //!     creator = db.get_user(post.creator_id)  // 3 DB queries
-//!   }
+//! }
+//! ```
 //!
 //! After (with DataLoader):
-//!   creators = dataloader.load_many([user_1, user_2, user_3])  // 1 DB query
-//!   // Results automatically cached per GraphQL request
+//!
+//! ```text
+//! creators = dataloader.load_many([user_1, user_2, user_3])  // 1 DB query
+//! // Results automatically cached per GraphQL request
+//! ```
+
+#![allow(dead_code)]
 
 use async_graphql::dataloader::Loader;
 use std::collections::HashMap;

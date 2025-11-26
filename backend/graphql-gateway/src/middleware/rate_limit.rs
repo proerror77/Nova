@@ -13,10 +13,12 @@
 //! - Falls back to direct connection IP if no proxy header
 //! - LRU cache of up to 10,000 IP addresses to avoid unbounded memory growth
 
+#![allow(dead_code)]
+
 use actix_web::{
     dev::{forward_ready, Service, ServiceRequest, ServiceResponse, Transform},
     error::ErrorTooManyRequests,
-    Error, HttpMessage,
+    Error,
 };
 use futures_util::future::LocalBoxFuture;
 use governor::Quota;
@@ -45,6 +47,7 @@ impl Default for RateLimitConfig {
 /// Rate limit middleware state
 /// Uses a boxed closure to avoid exposing governor's complex generic types
 struct RateLimitState {
+    #[allow(dead_code)]
     config: RateLimitConfig,
     /// Global rate limiter as a boxed closure
     check_limit: Arc<dyn Fn() -> bool + Send + Sync>,

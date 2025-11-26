@@ -1,6 +1,9 @@
-/// REST API request/response models
-///
-/// These models match the iOS app's expected JSON structure
+//! REST API request/response models
+//!
+//! These models match the iOS app's expected JSON structure
+
+#![allow(dead_code)]
+
 use serde::{Deserialize, Serialize};
 
 // ============================================================================

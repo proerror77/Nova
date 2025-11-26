@@ -1,8 +1,13 @@
-/// Alice AI Assistant API endpoints
-///
-/// GET /api/v2/alice/status - Get Alice service status
-/// POST /api/v2/alice/chat - Send chat message to Alice
-/// POST /api/v2/alice/voice - Activate voice mode
+//! Alice AI Assistant API endpoints
+//!
+//! GET /api/v2/alice/status - Get Alice service status
+//! POST /api/v2/alice/chat - Send chat message to Alice
+//! POST /api/v2/alice/voice - Activate voice mode
+//!
+//! Alice AI Assistant is a stub implementation pending AI service integration
+
+#![allow(dead_code)]
+
 use actix_web::{web, HttpResponse, Result};
 use serde::{Deserialize, Serialize};
 use tracing::info;

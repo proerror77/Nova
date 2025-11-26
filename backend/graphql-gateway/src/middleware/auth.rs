@@ -2,6 +2,9 @@
 //!
 //! SECURITY: Uses strongly-typed AuthenticatedUser to prevent type confusion attacks
 
+// Authorization helper functions prepared for mutation permission checks
+#![allow(dead_code)]
+
 use crate::middleware::jwt::AuthenticatedUser;
 use async_graphql::Context;
 use crypto_core::jwt::Claims;

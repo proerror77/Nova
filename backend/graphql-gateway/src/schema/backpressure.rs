@@ -9,6 +9,8 @@
 //! 3. If backpressure fails, drop oldest events
 //! 4. Monitor and alert on backpressure events
 
+#![allow(dead_code)]
+
 use anyhow::Result;
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
@@ -47,6 +49,7 @@ pub struct BackpressureQueue<T: Clone + Send> {
     config: BackpressureConfig,
     queue: Arc<Mutex<VecDeque<T>>>,
     stats: Arc<Mutex<BackpressureStats>>,
+    #[allow(dead_code)]
     sender: mpsc::UnboundedSender<T>,
     receiver: mpsc::UnboundedReceiver<T>,
 }

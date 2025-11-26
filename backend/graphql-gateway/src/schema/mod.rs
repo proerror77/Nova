@@ -24,11 +24,13 @@ use crate::security::{ComplexityLimit, RequestBudget, SecurityConfig};
 pub struct QueryRoot(content::ContentQuery, auth::AuthQuery);
 
 /// Root mutation object (federated)
+///
 /// Each mutation type (ContentMutation, AuthMutation) must:
-/// 1. Implement #[Object] on their impl block
-/// 2. Have #[derive(Default)] on the struct
-/// 3. Be owned types (not references) in the MergedObject tuple
-/// user::UserMutation temporarily disabled - user-service is deprecated
+/// - Implement #[Object] on their impl block
+/// - Have #[derive(Default)] on the struct
+/// - Be owned types (not references) in the MergedObject tuple
+///
+/// Note: user::UserMutation temporarily disabled - user-service is deprecated
 #[derive(MergedObject, Default)]
 pub struct MutationRoot(auth::AuthMutation, content::ContentMutation);
 

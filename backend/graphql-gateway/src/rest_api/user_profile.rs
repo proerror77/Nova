@@ -1,8 +1,11 @@
-/// User Profile Settings API endpoints
-///
-/// GET /api/v2/users/{id} - Get user profile
-/// PUT /api/v2/users/{id} - Update user profile
-/// POST /api/v2/users/avatar - Upload user avatar
+//! User Profile Settings API endpoints
+//!
+//! GET /api/v2/users/{id} - Get user profile
+//! PUT /api/v2/users/{id} - Update user profile
+//! POST /api/v2/users/avatar - Upload user avatar
+
+#![allow(dead_code)]
+
 use actix_web::{web, HttpMessage, HttpRequest, HttpResponse, Result};
 use serde::{Deserialize, Serialize};
 use tracing::{error, info};

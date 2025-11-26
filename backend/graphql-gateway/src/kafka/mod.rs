@@ -12,6 +12,9 @@
 //! - messaging.events: Direct messages
 //! - notification.events: Notifications (likes, follows, mentions)
 
+// Kafka infrastructure prepared but not yet integrated with WebSocket subscriptions
+#![allow(dead_code)]
+
 use rdkafka::consumer::{Consumer, StreamConsumer};
 use rdkafka::ClientConfig;
 use std::sync::Arc;

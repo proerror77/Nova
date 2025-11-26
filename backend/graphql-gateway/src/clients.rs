@@ -7,6 +7,9 @@
 //! - ✅ P0: Circuit breaker protection for all gRPC clients
 //! - Proper error types
 
+// Some client methods and circuit breaker features are prepared for future REST API modules
+#![allow(dead_code)]
+
 use grpc_clients::config::GrpcConfig;
 use resilience::circuit_breaker::{CircuitBreaker, CircuitBreakerConfig, CircuitState};
 use std::sync::Arc;
@@ -137,6 +140,7 @@ impl Default for ServiceClients {
 
 impl ServiceClients {
     /// Build clients using the shared gRPC config (includes TLS/mTLS + timeouts).
+    #[allow(clippy::result_large_err)]
     pub fn from_grpc_config(cfg: &GrpcConfig) -> Result<Self, ServiceError> {
         Ok(Self {
             auth_channel: Arc::new(Self::create_channel_from_endpoint(
@@ -219,6 +223,7 @@ impl ServiceClients {
     /// # Panics:
     /// Panics if any endpoint URL is malformed. In production, endpoints are
     /// hardcoded or validated at startup, so this is acceptable.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         auth_endpoint: &str,
         content_endpoint: &str,
@@ -650,6 +655,7 @@ impl ServiceClients {
 ///
 /// Provides better error context than `Box<dyn Error>`.
 #[derive(Debug, thiserror::Error)]
+#[allow(clippy::result_large_err)]
 pub enum ServiceError {
     #[error("Service unavailable: {service}")]
     Unavailable { service: String },
