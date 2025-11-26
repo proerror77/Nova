@@ -473,7 +473,9 @@ pub async fn start_grpc_server(
     if let Some(tls_config) = load_server_tls_config()? {
         server_builder = server_builder.tls_config(tls_config)?;
     } else {
-        tracing::warn!("gRPC server TLS is DISABLED; enable GRPC_TLS_ENABLED=true for staging/production");
+        tracing::warn!(
+            "gRPC server TLS is DISABLED; enable GRPC_TLS_ENABLED=true for staging/production"
+        );
     }
 
     server_builder
@@ -486,7 +488,7 @@ pub async fn start_grpc_server(
 }
 
 fn load_server_tls_config(
-    ) -> Result<Option<ServerTlsConfig>, Box<dyn std::error::Error + Send + Sync>> {
+) -> Result<Option<ServerTlsConfig>, Box<dyn std::error::Error + Send + Sync>> {
     let tls_enabled = std::env::var("GRPC_TLS_ENABLED")
         .map(|v| matches!(v.as_str(), "1" | "true" | "TRUE"))
         .unwrap_or(false);
@@ -505,7 +507,8 @@ fn load_server_tls_config(
     let server_key = fs::read(&key_path)
         .map_err(|e| format!("Failed to read server key {}: {}", key_path, e))?;
 
-    let mut tls_config = ServerTlsConfig::new().identity(Identity::from_pem(server_cert, server_key));
+    let mut tls_config =
+        ServerTlsConfig::new().identity(Identity::from_pem(server_cert, server_key));
 
     let require_client_cert = std::env::var("GRPC_REQUIRE_CLIENT_CERT")
         .map(|v| matches!(v.as_str(), "1" | "true" | "TRUE"))

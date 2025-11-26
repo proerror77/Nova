@@ -149,7 +149,6 @@ pub async fn update_post_media_key(
     Ok(())
 }
 
-
 /// Soft delete a post by setting soft_delete timestamp
 pub async fn soft_delete_post(pool: &PgPool, post_id: Uuid) -> Result<(), sqlx::Error> {
     sqlx::query(
