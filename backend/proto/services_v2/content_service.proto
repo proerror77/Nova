@@ -1,6 +1,11 @@
 syntax = "proto3";
 package nova.content_service.v2;
 
+import "google/api/annotations.proto";
+
+option go_package = "github.com/nova/api/gen/go/services_v2;services_v2";
+
+// Content Service - Post and Channel Management
 // Minimal content-service surface used by feed-service and social integrations.
 
 enum ContentStatus {
@@ -26,6 +31,9 @@ message Post {
   int64 updated_at = 5;
   int64 deleted_at = 6;
   ContentStatus status = 7;
+  repeated string media_ids = 8;  // Media IDs associated with this post
+  repeated string media_urls = 9; // CDN URLs for attached media (populated by service)
+  string media_type = 10;         // Type of media: "image", "video", "none"
 }
 
 message CreatePostRequest {
@@ -91,7 +99,7 @@ message DeletePostResponse {
   int64 deleted_at = 2;
 }
 
-// ============================================================================ 
+// ============================================================================
 // Channels (category/interest definition)
 // ============================================================================
 message Channel {
@@ -123,16 +131,85 @@ message GetChannelResponse {
 }
 
 service ContentService {
-  rpc CreatePost(CreatePostRequest) returns (CreatePostResponse);
-  rpc GetPost(GetPostRequest) returns (GetPostResponse);
-  rpc GetPostsByIds(GetPostsByIdsRequest) returns (GetPostsByIdsResponse);
-  rpc GetUserPosts(GetUserPostsRequest) returns (GetUserPostsResponse);
-  rpc ListRecentPosts(ListRecentPostsRequest) returns (ListRecentPostsResponse);
-  rpc ListTrendingPosts(ListTrendingPostsRequest) returns (ListTrendingPostsResponse);
-  rpc UpdatePost(UpdatePostRequest) returns (UpdatePostResponse);
-  rpc DeletePost(DeletePostRequest) returns (DeletePostResponse);
+  // Post CRUD operations
+  rpc CreatePost(CreatePostRequest) returns (CreatePostResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/content/post/create"
+      body: "*"
+      additional_bindings {
+        post: "/api/v2/content"
+        body: "*"
+      }
+    };
+  }
+
+  rpc GetPost(GetPostRequest) returns (GetPostResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/content/post/{post_id}"
+      additional_bindings {
+        get: "/api/v2/content/{post_id}"
+      }
+    };
+  }
+
+  rpc GetPostsByIds(GetPostsByIdsRequest) returns (GetPostsByIdsResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/content/posts/batch"
+      body: "*"
+    };
+  }
+
+  rpc GetUserPosts(GetUserPostsRequest) returns (GetUserPostsResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/content/posts/author/{user_id}"
+      additional_bindings {
+        get: "/api/v2/content/user/{user_id}"
+      }
+    };
+  }
+
+  rpc ListRecentPosts(ListRecentPostsRequest) returns (ListRecentPostsResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/content/posts/recent"
+    };
+  }
+
+  rpc ListTrendingPosts(ListTrendingPostsRequest) returns (ListTrendingPostsResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/content/posts/trending"
+    };
+  }
+
+  rpc UpdatePost(UpdatePostRequest) returns (UpdatePostResponse) {
+    option (google.api.http) = {
+      put: "/api/v2/content/post/update/{post_id}"
+      body: "*"
+      additional_bindings {
+        put: "/api/v2/content/{post_id}"
+        body: "*"
+      }
+    };
+  }
+
+  rpc DeletePost(DeletePostRequest) returns (DeletePostResponse) {
+    option (google.api.http) = {
+      delete: "/api/v2/content/post/delete/{post_id}"
+      additional_bindings {
+        delete: "/api/v2/content/{post_id}"
+      }
+    };
+  }
 
   // Channels
-  rpc ListChannels(ListChannelsRequest) returns (ListChannelsResponse);
-  rpc GetChannel(GetChannelRequest) returns (GetChannelResponse);
+  rpc ListChannels(ListChannelsRequest) returns (ListChannelsResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/channels"
+    };
+  }
+
+  rpc GetChannel(GetChannelRequest) returns (GetChannelResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/channels/{id}"
+    };
+  }
 }

@@ -140,19 +140,58 @@ impl ContentService for ContentServiceImpl {
             post_ids.push(Uuid::parse_str(pid).map_err(|_| Status::invalid_argument("bad id"))?);
         }
 
-        let posts = sqlx::query_as::<_, DbPost>(
-            "SELECT id, user_id, content, caption, media_key, media_type, media_urls, status, created_at, updated_at, deleted_at, soft_delete \
-             FROM posts WHERE id = ANY($1::uuid[]) AND soft_delete IS NULL",
-        )
-        .bind(&post_ids)
-        .fetch_all(&self.db_pool)
-        .await
-        .map_err(|e| {
-            tracing::error!("get_posts_by_ids db error: {}", e);
-            Status::internal("failed to fetch posts")
-        })?;
+        // Step 1: Try batch cache lookup first
+        let cached_posts = self.cache.batch_get_posts(&post_ids).await.unwrap_or_default();
 
-        let found: std::collections::HashSet<Uuid> = posts.iter().map(|p| p.id).collect();
+        // Step 2: Identify cache misses
+        let cache_misses: Vec<Uuid> = post_ids
+            .iter()
+            .filter(|id| !cached_posts.contains_key(id))
+            .cloned()
+            .collect();
+
+        tracing::debug!(
+            "get_posts_by_ids: {} cache hits, {} cache misses",
+            cached_posts.len(),
+            cache_misses.len()
+        );
+
+        // Step 3: Fetch cache misses from database
+        let mut db_posts = Vec::new();
+        if !cache_misses.is_empty() {
+            db_posts = sqlx::query_as::<_, DbPost>(
+                "SELECT id, user_id, content, caption, media_key, media_type, media_urls, status, created_at, updated_at, deleted_at, soft_delete \
+                 FROM posts WHERE id = ANY($1::uuid[]) AND soft_delete IS NULL",
+            )
+            .bind(&cache_misses)
+            .fetch_all(&self.db_pool)
+            .await
+            .map_err(|e| {
+                tracing::error!("get_posts_by_ids db error: {}", e);
+                Status::internal("failed to fetch posts")
+            })?;
+
+            // Step 4: Batch cache the DB results for future requests
+            if !db_posts.is_empty() {
+                if let Err(e) = self.cache.batch_cache_posts(&db_posts).await {
+                    tracing::warn!("Failed to batch cache posts: {}", e);
+                }
+            }
+        }
+
+        // Step 5: Merge cached and DB results, preserving request order
+        let mut all_posts: std::collections::HashMap<Uuid, DbPost> = cached_posts;
+        for post in db_posts {
+            all_posts.insert(post.id, post);
+        }
+
+        // Maintain original order from request
+        let ordered_posts: Vec<Post> = post_ids
+            .iter()
+            .filter_map(|id| all_posts.get(id).map(convert_post_to_proto))
+            .collect();
+
+        let found: std::collections::HashSet<Uuid> = all_posts.keys().cloned().collect();
         let missing: Vec<String> = post_ids
             .into_iter()
             .filter(|id| !found.contains(id))
@@ -160,7 +199,7 @@ impl ContentService for ContentServiceImpl {
             .collect();
 
         Ok(Response::new(GetPostsByIdsResponse {
-            posts: posts.iter().map(convert_post_to_proto).collect(),
+            posts: ordered_posts,
             not_found_ids: missing,
         }))
     }
