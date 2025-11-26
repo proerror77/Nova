@@ -782,8 +782,8 @@ fn to_proto_poll_summary(
     }
 }
 
-fn to_proto_candidate_preview(preview: CandidatePreviewModel) -> CandidatePreview {
-    CandidatePreview {
+fn to_proto_candidate_preview(preview: CandidatePreviewModel) -> social::CandidatePreview {
+    social::CandidatePreview {
         id: preview.id.to_string(),
         name: preview.name,
         avatar_url: preview.avatar_url.unwrap_or_default(),
@@ -795,14 +795,14 @@ fn to_proto_candidate_with_rank(
     candidate: PollCandidateModel,
     rank: i32,
     total_votes: i64,
-) -> PollCandidate {
+) -> social::PollCandidate {
     let vote_percentage = if total_votes > 0 {
         (candidate.vote_count as f64 / total_votes as f64) * 100.0
     } else {
         0.0
     };
 
-    PollCandidate {
+    social::PollCandidate {
         id: candidate.id.to_string(),
         name: candidate.name,
         avatar_url: candidate.avatar_url.unwrap_or_default(),
@@ -818,8 +818,8 @@ fn to_proto_candidate_with_rank(
     }
 }
 
-fn to_proto_candidate_ranked(ranked: CandidateWithRank) -> PollCandidate {
-    PollCandidate {
+fn to_proto_candidate_ranked(ranked: CandidateWithRank) -> social::PollCandidate {
+    social::PollCandidate {
         id: ranked.id.to_string(),
         name: ranked.name,
         avatar_url: ranked.avatar_url.unwrap_or_default(),
