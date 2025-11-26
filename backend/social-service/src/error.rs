@@ -45,4 +45,5 @@ impl From<ServiceError> for tonic::Status {
 }
 
 /// Result type alias for service operations
+#[allow(dead_code)]
 pub type ServiceResult<T> = Result<T, ServiceError>;

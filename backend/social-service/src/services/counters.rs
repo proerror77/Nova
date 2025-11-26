@@ -20,6 +20,7 @@ pub struct CounterService {
     pg_pool: PgPool,
 }
 
+#[allow(dead_code)]
 impl CounterService {
     /// TTL for counter keys (7 days) - for set_ex (u64)
     const COUNTER_TTL_U64: u64 = 604800;
@@ -505,6 +506,7 @@ impl CounterService {
 }
 
 /// Post counter statistics
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct PostCounts {
     pub like_count: i64,

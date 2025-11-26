@@ -205,7 +205,7 @@ mod tests {
 
     #[test]
     fn test_cdc_insert_validation() {
-        let msg = CdcMessage {
+        let msg = CdcMessage::WithSchema {
             payload: CdcPayload {
                 before: None,
                 after: Some(json!({"id": 1, "content": "test"})),
@@ -220,7 +220,7 @@ mod tests {
 
     #[test]
     fn test_cdc_delete_validation() {
-        let msg = CdcMessage {
+        let msg = CdcMessage::WithSchema {
             payload: CdcPayload {
                 before: Some(json!({"id": 1, "content": "test"})),
                 after: None,

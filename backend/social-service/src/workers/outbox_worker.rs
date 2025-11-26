@@ -2,6 +2,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tonic::async_trait;
 use tracing::{info, warn};
+#[allow(unused_imports)]
 use transactional_outbox::{
     metrics::OutboxMetrics, KafkaOutboxPublisher, OutboxProcessor, OutboxPublisher,
     OutboxRepository, OutboxResult, SqlxOutboxRepository,

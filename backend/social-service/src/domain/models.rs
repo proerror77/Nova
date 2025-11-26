@@ -34,6 +34,7 @@ pub struct Share {
 }
 
 /// Post statistics aggregated from likes, comments, shares
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PostStats {
     pub post_id: Uuid,

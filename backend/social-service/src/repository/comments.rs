@@ -40,6 +40,7 @@ impl CommentRepository {
     }
 
     /// Update a comment
+    #[allow(dead_code)]
     pub async fn update_comment(
         &self,
         comment_id: Uuid,

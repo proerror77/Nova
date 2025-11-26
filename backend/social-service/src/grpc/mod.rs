@@ -7,4 +7,5 @@
 
 pub mod server_v2;
 
+#[allow(unused_imports)]
 pub use server_v2::{AppState, SocialServiceImpl as SocialServiceV2Impl};

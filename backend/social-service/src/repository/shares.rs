@@ -40,6 +40,7 @@ impl ShareRepository {
     }
 
     /// Check if user has shared a post
+    #[allow(dead_code)]
     pub async fn check_user_shared(&self, user_id: Uuid, post_id: Uuid) -> Result<bool> {
         let exists: bool = sqlx::query_scalar(
             r#"
