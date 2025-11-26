@@ -26,7 +26,7 @@
 //! ```
 
 use idempotent_consumer::{IdempotencyGuard, ProcessingResult};
-use sqlx::PgPool;
+use sqlx::{PgPool, Row};
 use std::env;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
@@ -183,7 +183,7 @@ async fn test_process_if_new_success() {
     let counter_clone = counter.clone();
 
     let result = guard
-        .process_if_new(event_id, async move {
+        .process_if_new(event_id, || async move {
             counter_clone.fetch_add(1, Ordering::SeqCst);
             Ok(())
         })
@@ -226,7 +226,7 @@ async fn test_process_if_new_already_processed() {
     let counter_clone = counter.clone();
 
     let result = guard
-        .process_if_new(event_id, async move {
+        .process_if_new(event_id, || async move {
             counter_clone.fetch_add(1, Ordering::SeqCst);
             Ok(())
         })
@@ -253,7 +253,7 @@ async fn test_process_if_new_processing_fails() {
     let event_id = "test-process-fail-1";
 
     let result = guard
-        .process_if_new(event_id, async {
+        .process_if_new(event_id, || async {
             Err(anyhow::anyhow!("Business logic failed"))
         })
         .await
@@ -308,7 +308,7 @@ async fn test_concurrent_processing_same_event() {
             sleep(Duration::from_millis(i * 10)).await; // Stagger slightly
 
             guard_clone
-                .process_if_new(&event_id_clone, async move {
+                .process_if_new(&event_id_clone, || async move {
                     counter_clone.fetch_add(1, Ordering::SeqCst);
                     sleep(Duration::from_millis(100)).await; // Simulate work
                     Ok(())
