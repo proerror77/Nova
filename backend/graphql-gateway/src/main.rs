@@ -405,6 +405,7 @@ async fn main() -> std::io::Result<()> {
 
 #[cfg(test)]
 mod tests {
+    #[allow(unused_imports)]
     use super::*;
 
     #[tokio::test]

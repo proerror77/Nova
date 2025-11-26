@@ -175,7 +175,7 @@ fn test_idor_admin_can_access_user_resources() {
 #[test]
 fn test_idor_direct_id_manipulation_fails() {
     // Even if user tries to manipulate IDs in request
-    let requested_resource_id = "post_456";
+    let _requested_resource_id = "post_456";
     let user_id = "user2";
     let actual_owner = "user1";
 
@@ -440,7 +440,7 @@ fn test_sql_injection_parameterized_queries() {
     // Would use parameterized queries in real implementation
     // :id is placeholder, not string concatenation
     let query = "SELECT * FROM posts WHERE id = :id";
-    let params = vec![("id", "post_123")];
+    let _params = vec![("id", "post_123")];
 
     assert!(query.contains(":id"));
     assert!(!query.contains("= 'post_123'")); // Not concatenated

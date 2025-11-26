@@ -137,7 +137,7 @@ async fn test_concurrent_access_safety() {
         let cache_clone = Arc::clone(&cache);
         let handle = tokio::spawn(async move {
             let key = format!("key_{}", i % 10);
-            cache_clone.get(&key).await
+            let _ = cache_clone.get(&key).await;
         });
         handles.push(handle);
     }

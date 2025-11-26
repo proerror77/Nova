@@ -14,9 +14,16 @@ pub async fn create_post(
 ) -> Result<Post, sqlx::Error> {
     let post = sqlx::query_as::<_, Post>(
         r#"
-        INSERT INTO posts (user_id, caption, media_key, media_type, status)
-        VALUES ($1, $2, $3, $4, 'pending')
-        RETURNING id, user_id, content, caption, media_key, media_type, status, created_at, updated_at, deleted_at, soft_delete
+        INSERT INTO posts (user_id, caption, media_key, media_type, media_urls, status)
+        VALUES (
+            $1,
+            $2,
+            $3,
+            $4,
+            CASE WHEN $3 = 'text-only' THEN '[]'::jsonb ELSE jsonb_build_array($3) END,
+            'pending'
+        )
+        RETURNING id, user_id, content, caption, media_key, media_type, media_urls, status, created_at, updated_at, deleted_at, soft_delete
         "#,
     )
     .bind(user_id)
@@ -33,7 +40,7 @@ pub async fn create_post(
 pub async fn find_post_by_id(pool: &PgPool, post_id: Uuid) -> Result<Option<Post>, sqlx::Error> {
     let post = sqlx::query_as::<_, Post>(
         r#"
-        SELECT id, user_id, content, caption, media_key, media_type, status, created_at, updated_at, deleted_at, soft_delete
+        SELECT id, user_id, content, caption, media_key, media_type, media_urls, status, created_at, updated_at, deleted_at, soft_delete
         FROM posts
         WHERE id = $1 AND soft_delete IS NULL
         "#,
@@ -55,7 +62,7 @@ pub async fn find_posts_by_user(
 ) -> Result<Vec<Post>, sqlx::Error> {
     let posts = sqlx::query_as::<_, Post>(
         r#"
-        SELECT id, user_id, content, caption, media_key, media_type, status, created_at, updated_at, deleted_at, soft_delete
+        SELECT id, user_id, content, caption, media_key, media_type, media_urls, status, created_at, updated_at, deleted_at, soft_delete
         FROM posts
         WHERE user_id = $1 AND soft_delete IS NULL
         ORDER BY created_at DESC
@@ -182,7 +189,7 @@ pub async fn get_post_with_images(
     let row = sqlx::query(
         r#"
         SELECT
-            p.id, p.user_id, p.content, p.caption, p.media_key, p.media_type, p.status,
+            p.id, p.user_id, p.content, p.caption, p.media_key, p.media_type, p.media_urls, p.status,
             p.created_at, p.updated_at, p.deleted_at, p.soft_delete,
             COALESCE(pm.like_count, 0) as like_count,
             COALESCE(pm.comment_count, 0) as comment_count,

@@ -44,6 +44,13 @@ class FeedViewModel: ObservableObject {
             self.currentCursor = response.cursor
             self.hasMore = response.hasMore
 
+            #if DEBUG
+            // Debug: Log raw response to check media_urls
+            for (index, rawPost) in response.posts.prefix(3).enumerated() {
+                print("[Feed] Post[\(index)] id=\(rawPost.id.prefix(8)), content=\(rawPost.content.prefix(20)), media_urls=\(rawPost.mediaUrls ?? []), media_type=\(rawPost.mediaType ?? "nil")")
+            }
+            #endif
+
             // Convert raw posts to FeedPost objects directly (no separate content-service call needed)
             self.posts = response.posts.map { FeedPost(from: $0) }
 

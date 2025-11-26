@@ -15,6 +15,7 @@ use tracing::{error, info, warn};
 use tracing_subscriber::{fmt, layer::SubscriberExt, Registry};
 
 /// Capture log output for testing
+#[derive(Clone)]
 struct LogCapture {
     logs: Arc<Mutex<Vec<String>>>,
 }

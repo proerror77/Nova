@@ -59,7 +59,7 @@ impl PostService {
 
         let post = sqlx::query_as::<_, Post>(
             r#"
-            SELECT id, user_id, content, caption, media_key, media_type, status,
+            SELECT id, user_id, content, caption, media_key, media_type, media_urls, status,
                    created_at, updated_at, deleted_at, soft_delete
             FROM posts
             WHERE id = $1 AND soft_delete IS NULL
@@ -87,7 +87,7 @@ impl PostService {
     ) -> Result<Vec<Post>> {
         let posts = sqlx::query_as::<_, Post>(
             r#"
-            SELECT id, user_id, content, caption, media_key, media_type, status,
+            SELECT id, user_id, content, caption, media_key, media_type, media_urls, status,
                    created_at, updated_at, deleted_at, soft_delete
             FROM posts
             WHERE user_id = $1 AND soft_delete IS NULL
@@ -117,9 +117,16 @@ impl PostService {
 
         let post = sqlx::query_as::<_, Post>(
             r#"
-            INSERT INTO posts (user_id, caption, media_key, status, media_type)
-            VALUES ($1, $2, $3, 'published', $4)
-            RETURNING id, user_id, content, caption, media_key, media_type, status,
+            INSERT INTO posts (user_id, caption, media_key, media_type, media_urls, status)
+            VALUES (
+                $1,
+                $2,
+                $3,
+                $4,
+                CASE WHEN $3 = 'text-only' THEN '[]'::jsonb ELSE jsonb_build_array($3) END,
+                'published'
+            )
+            RETURNING id, user_id, content, caption, media_key, media_type, media_urls, status,
                       created_at, updated_at, deleted_at, soft_delete
             "#,
         )

@@ -25,9 +25,10 @@ CREATE TABLE IF NOT EXISTS polls (
     CONSTRAINT chk_poll_status CHECK (status IN ('draft', 'active', 'closed', 'archived'))
 );
 
-CREATE INDEX idx_polls_creator_id ON polls(creator_id) WHERE is_deleted = FALSE;
-CREATE INDEX idx_polls_status ON polls(status) WHERE is_deleted = FALSE;
-CREATE INDEX idx_polls_total_votes ON polls(total_votes DESC) WHERE status = 'active' AND is_deleted = FALSE;
+-- Indexes are created with IF NOT EXISTS to make the migration idempotent
+CREATE INDEX IF NOT EXISTS idx_polls_creator_id ON polls(creator_id) WHERE is_deleted = FALSE;
+CREATE INDEX IF NOT EXISTS idx_polls_status ON polls(status) WHERE is_deleted = FALSE;
+CREATE INDEX IF NOT EXISTS idx_polls_total_votes ON polls(total_votes DESC) WHERE status = 'active' AND is_deleted = FALSE;
 
 -- CANDIDATES TABLE (候选人表)
 CREATE TABLE IF NOT EXISTS poll_candidates (
@@ -43,8 +44,8 @@ CREATE TABLE IF NOT EXISTS poll_candidates (
     is_deleted BOOLEAN NOT NULL DEFAULT FALSE
 );
 
-CREATE INDEX idx_poll_candidates_poll_id ON poll_candidates(poll_id) WHERE is_deleted = FALSE;
-CREATE INDEX idx_poll_candidates_vote_count ON poll_candidates(poll_id, vote_count DESC) WHERE is_deleted = FALSE;
+CREATE INDEX IF NOT EXISTS idx_poll_candidates_poll_id ON poll_candidates(poll_id) WHERE is_deleted = FALSE;
+CREATE INDEX IF NOT EXISTS idx_poll_candidates_vote_count ON poll_candidates(poll_id, vote_count DESC) WHERE is_deleted = FALSE;
 
 -- VOTES TABLE (投票记录表)
 CREATE TABLE IF NOT EXISTS poll_votes (
@@ -57,10 +58,13 @@ CREATE TABLE IF NOT EXISTS poll_votes (
     CONSTRAINT unique_vote_per_user_per_poll UNIQUE (poll_id, user_id)
 );
 
-CREATE INDEX idx_poll_votes_poll_id ON poll_votes(poll_id);
-CREATE INDEX idx_poll_votes_user_id ON poll_votes(user_id);
+CREATE INDEX IF NOT EXISTS idx_poll_votes_poll_id ON poll_votes(poll_id);
+CREATE INDEX IF NOT EXISTS idx_poll_votes_user_id ON poll_votes(user_id);
 
 -- TRIGGERS: 自动更新投票计数
+-- Drop existing trigger first to avoid duplicate definition errors on reruns
+DROP TRIGGER IF EXISTS trigger_update_poll_vote_counts ON poll_votes;
+
 CREATE OR REPLACE FUNCTION update_poll_vote_counts() RETURNS TRIGGER AS $$
 BEGIN
     IF TG_OP = 'INSERT' THEN
