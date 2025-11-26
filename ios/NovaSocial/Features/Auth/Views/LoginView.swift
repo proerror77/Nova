@@ -184,14 +184,14 @@ struct LoginView: View {
                                         }
                                 }
                             }
+                            .frame(width: 343, height: 49)
 
-                            // Inline error for email/username
-                            if let error = isLoginMode ? emailError : usernameError {
-                                Text(error)
-                                    .font(Font.custom("Helvetica Neue", size: 11))
-                                    .foregroundColor(Color(red: 1, green: 0.4, blue: 0.4))
-                                    .padding(.leading, 4)
-                            }
+                            // Inline error for email/username - fixed height to prevent layout shift
+                            Text((isLoginMode ? emailError : usernameError) ?? " ")
+                                .font(Font.custom("Helvetica Neue", size: 11))
+                                .foregroundColor(Color(red: 1, green: 0.4, blue: 0.4))
+                                .padding(.leading, 4)
+                                .opacity((isLoginMode ? emailError : usernameError) != nil ? 1 : 0)
                         }
                         .offset(x: 0, y: -69.50)
 
@@ -230,14 +230,14 @@ struct LoginView: View {
                                         }
                                 }
                             }
+                            .frame(width: 343, height: 49)
 
-                            // Inline error for password
-                            if let error = passwordError {
-                                Text(error)
-                                    .font(Font.custom("Helvetica Neue", size: 11))
-                                    .foregroundColor(Color(red: 1, green: 0.4, blue: 0.4))
-                                    .padding(.leading, 4)
-                            }
+                            // Inline error for password - fixed height to prevent layout shift
+                            Text(passwordError ?? " ")
+                                .font(Font.custom("Helvetica Neue", size: 11))
+                                .foregroundColor(Color(red: 1, green: 0.4, blue: 0.4))
+                                .padding(.leading, 4)
+                                .opacity(passwordError != nil ? 1 : 0)
                         }
                         .offset(x: 0, y: -0.50)
 
@@ -267,13 +267,12 @@ struct LoginView: View {
                                         }
                                 }
 
-                                // Inline error for email in register mode
-                                if let error = emailError {
-                                    Text(error)
-                                        .font(Font.custom("Helvetica Neue", size: 11))
-                                        .foregroundColor(Color(red: 1, green: 0.4, blue: 0.4))
-                                        .padding(.leading, 4)
-                                }
+                                // Inline error for email in register mode - fixed height
+                                Text(emailError ?? " ")
+                                    .font(Font.custom("Helvetica Neue", size: 11))
+                                    .foregroundColor(Color(red: 1, green: 0.4, blue: 0.4))
+                                    .padding(.leading, 4)
+                                    .opacity(emailError != nil ? 1 : 0)
                             }
                             .offset(x: 0, y: -138)
 
