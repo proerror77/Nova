@@ -36,7 +36,6 @@ concurrency:
 env:
   AWS_REGION: ${{ vars.AWS_REGION || 'ap-northeast-1' }}
   ECR_REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ vars.AWS_REGION || 'ap-northeast-1' }}.amazonaws.com
-  REGISTRY_ALIAS: nova
   SERVICE_NAME: graphql-gateway
 
 jobs:
@@ -81,8 +80,8 @@ jobs:
             TAG="${{ github.ref_name }}-${{ github.sha }}"
           fi
           echo "tag=$TAG" >> $GITHUB_OUTPUT
-          echo "image=${{ env.ECR_REGISTRY }}/${{ env.REGISTRY_ALIAS }}/${{ env.SERVICE_NAME }}:$TAG" >> $GITHUB_OUTPUT
-          echo "image-latest=${{ env.ECR_REGISTRY }}/${{ env.REGISTRY_ALIAS }}/${{ env.SERVICE_NAME }}:latest" >> $GITHUB_OUTPUT
+          echo "image=${{ env.ECR_REGISTRY }}/${{ env.SERVICE_NAME }}:$TAG" >> $GITHUB_OUTPUT
+          echo "image-latest=${{ env.ECR_REGISTRY }}/${{ env.SERVICE_NAME }}:latest" >> $GITHUB_OUTPUT
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
@@ -94,8 +93,8 @@ jobs:
           tags: |
             ${{ steps.meta.outputs.image }}
             ${{ steps.meta.outputs.image-latest }}
-          cache-from: type=registry,ref=${{ env.ECR_REGISTRY }}/${{ env.REGISTRY_ALIAS }}/${{ env.SERVICE_NAME }}:buildcache
-          cache-to: type=registry,ref=${{ env.ECR_REGISTRY }}/${{ env.REGISTRY_ALIAS }}/${{ env.SERVICE_NAME }}:buildcache,mode=max
+          cache-from: type=registry,ref=${{ env.ECR_REGISTRY }}/${{ env.SERVICE_NAME }}:buildcache
+          cache-to: type=registry,ref=${{ env.ECR_REGISTRY }}/${{ env.SERVICE_NAME }}:buildcache,mode=max
 
       - name: Image scan summary
         run: |
@@ -135,10 +134,6 @@ jobs:
           kubectl cluster-info
           kubectl get nodes
 
-      - name: Create namespace if not exists
-        run: |
-          kubectl create namespace nova-gateway --dry-run=client -o yaml | kubectl apply -f -
-
       - name: Update image in deployment
         run: |
           sed -i "s|image: .*graphql-gateway:.*|image: ${{ needs.build-and-push.outputs.image-full }}|g" k8s/graphql-gateway/deployment.yaml
@@ -152,32 +147,32 @@ jobs:
 
       - name: Wait for rollout
         run: |
-          kubectl rollout status deployment/graphql-gateway -n nova-gateway --timeout=5m
+          kubectl rollout status deployment/graphql-gateway -n nova-staging --timeout=5m
 
       - name: Verify deployment
         run: |
           echo "GraphQL Gateway deployment status:"
-          kubectl get deployment graphql-gateway -n nova-gateway
-          kubectl get pods -n nova-gateway -l app=graphql-gateway
-          kubectl get svc graphql-gateway -n nova-gateway
+          kubectl get deployment graphql-gateway -n nova-staging
+          kubectl get pods -n nova-staging -l app=graphql-gateway
+          kubectl get svc graphql-gateway -n nova-staging
 
       - name: Get service endpoints
         run: |
           echo "GraphQL Gateway endpoints:"
-          kubectl get ingress -n nova-gateway || echo "No ingress configured"
+          kubectl get ingress -n nova-staging || echo "No ingress configured"
 
           echo ""
           echo "Internal endpoint:"
-          echo "http://graphql-gateway.nova-gateway.svc.cluster.local:8080"
+          echo "http://graphql-gateway.nova-staging.svc.cluster.local:8080"
 
       - name: Deployment summary
         run: |
           echo "🚀 GraphQL Gateway deployed successfully!"
           echo "Image: ${{ needs.build-and-push.outputs.image-full }}"
-          echo "Namespace: nova-gateway"
+          echo "Namespace: nova-staging"
           echo ""
           echo "To access the gateway:"
-          echo "kubectl port-forward -n nova-gateway svc/graphql-gateway 8080:8080"
+          echo "kubectl port-forward -n nova-staging svc/graphql-gateway 8080:8080"
           echo "Then visit: http://localhost:8080/playground"
 
   post-deployment-tests:
@@ -206,20 +201,20 @@ jobs:
       - name: Health check
         run: |
           echo "Waiting for GraphQL Gateway to be ready..."
-          kubectl wait --for=condition=ready pod -l app=graphql-gateway -n nova-gateway --timeout=3m
+          kubectl wait --for=condition=ready pod -l app=graphql-gateway -n nova-staging --timeout=3m
 
           echo "Testing health endpoint..."
-          POD_NAME=$(kubectl get pod -n nova-gateway -l app=graphql-gateway -o jsonpath="{.items[0].metadata.name}")
-          kubectl exec -n nova-gateway $POD_NAME -- curl -f http://localhost:8080/health || exit 1
+          POD_NAME=$(kubectl get pod -n nova-staging -l app=graphql-gateway -o jsonpath="{.items[0].metadata.name}")
+          kubectl exec -n nova-staging $POD_NAME -- curl -f http://localhost:8080/health || exit 1
 
           echo "✅ Health check passed!"
 
       - name: Test GraphQL endpoint
         run: |
           echo "Testing GraphQL endpoint..."
-          POD_NAME=$(kubectl get pod -n nova-gateway -l app=graphql-gateway -o jsonpath="{.items[0].metadata.name}")
+          POD_NAME=$(kubectl get pod -n nova-staging -l app=graphql-gateway -o jsonpath="{.items[0].metadata.name}")
 
-          kubectl exec -n nova-gateway $POD_NAME -- curl -X POST http://localhost:8080/graphql \
+          kubectl exec -n nova-staging $POD_NAME -- curl -X POST http://localhost:8080/graphql \
             -H "Content-Type: application/json" \
             -d '{"query": "{ __schema { queryType { name } } }"}' || echo "⚠️  GraphQL test skipped"
 
@@ -261,7 +256,7 @@ jobs:
 
       - name: Set up port-forward
         run: |
-          kubectl port-forward -n nova-gateway svc/graphql-gateway 8080:8080 &
+          kubectl port-forward -n nova-staging svc/graphql-gateway 8080:8080 &
           sleep 2
 
       - name: Run GraphQL load test
@@ -302,7 +297,7 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Access Instructions" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
-          echo "kubectl port-forward -n nova-gateway svc/graphql-gateway 8080:8080" >> $GITHUB_STEP_SUMMARY
+          echo "kubectl port-forward -n nova-staging svc/graphql-gateway 8080:8080" >> $GITHUB_STEP_SUMMARY
           echo "curl http://localhost:8080/health" >> $GITHUB_STEP_SUMMARY
           echo "echo 'Visit http://localhost:8080/playground for GraphQL IDE'" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY

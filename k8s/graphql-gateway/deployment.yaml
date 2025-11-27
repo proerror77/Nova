@@ -1,18 +1,9 @@
 ---
 apiVersion: v1
-kind: Namespace
-metadata:
-  name: nova-gateway
-  labels:
-    app: nova
-    component: gateway
-
----
-apiVersion: v1
 kind: ConfigMap
 metadata:
   name: graphql-gateway-config
-  namespace: nova-gateway
+  namespace: nova-staging
 data:
   # Logging
   RUST_LOG: "info,graphql_gateway=debug,aws_secrets=debug"
@@ -57,7 +48,7 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: graphql-gateway
-  namespace: nova-gateway
+  namespace: nova-staging
   labels:
     app: graphql-gateway
     component: gateway
@@ -76,7 +67,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: graphql-gateway
-  namespace: nova-gateway
+  namespace: nova-staging
   labels:
     app: graphql-gateway
     component: gateway
@@ -169,7 +160,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: graphql-gateway
-  namespace: nova-gateway
+  namespace: nova-staging
   labels:
     app: graphql-gateway
     component: gateway
@@ -188,7 +179,7 @@ apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
   name: graphql-gateway-hpa
-  namespace: nova-gateway
+  namespace: nova-staging
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
@@ -215,7 +206,7 @@ apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
   name: graphql-gateway-pdb
-  namespace: nova-gateway
+  namespace: nova-staging
 spec:
   minAvailable: 2
   selector:
