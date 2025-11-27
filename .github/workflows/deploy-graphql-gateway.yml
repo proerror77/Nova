@@ -93,8 +93,6 @@ jobs:
           tags: |
             ${{ steps.meta.outputs.image }}
             ${{ steps.meta.outputs.image-latest }}
-          cache-from: type=registry,ref=${{ env.ECR_REGISTRY }}/${{ env.SERVICE_NAME }}:buildcache
-          cache-to: type=registry,ref=${{ env.ECR_REGISTRY }}/${{ env.SERVICE_NAME }}:buildcache,mode=max
 
       - name: Image scan summary
         run: |
