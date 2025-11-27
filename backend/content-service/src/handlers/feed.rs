@@ -65,7 +65,7 @@ pub async fn get_feed(
         .map(|u| u.0)
         .ok_or_else(|| AppError::Unauthorized("Missing user context".into()))?;
     let offset = query.decode_cursor()?;
-    let limit = query.limit.min(100).max(1) as usize;
+    let limit = query.limit.clamp(1, 100) as usize;
 
     debug!(
         "Feed request: user={} algo={} limit={} offset={}",

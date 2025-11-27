@@ -24,7 +24,6 @@ use redis::aio::ConnectionManager;
 use redis::{AsyncCommands, Pipeline};
 use serde::{de::DeserializeOwned, Serialize};
 use std::sync::Arc;
-use std::time::Duration;
 use tokio::sync::Mutex;
 use tracing::{debug, warn};
 

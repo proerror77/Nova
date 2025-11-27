@@ -146,7 +146,7 @@ impl StoriesService {
             "#,
         )
         .bind(viewer_id)
-        .bind(limit.max(1).min(100))
+        .bind(limit.clamp(1, 100))
         .fetch_all(&self.pool)
         .await?;
 
@@ -281,7 +281,7 @@ impl StoriesService {
         )
         .bind(owner_id)
         .bind(viewer_id)
-        .bind(limit.max(1).min(100))
+        .bind(limit.clamp(1, 100))
         .fetch_all(&self.pool)
         .await?;
 

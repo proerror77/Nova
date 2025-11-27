@@ -5,7 +5,6 @@
 use crate::{ttl, CacheKey, CacheOperations, CacheResult, NovaCache};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use tracing::debug;
 use uuid::Uuid;
 
 /// Cached post metadata

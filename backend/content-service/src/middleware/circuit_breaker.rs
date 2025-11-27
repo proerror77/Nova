@@ -70,10 +70,6 @@ impl CircuitBreaker {
         }
     }
 
-    pub fn default() -> Self {
-        Self::new(CircuitBreakerConfig::default())
-    }
-
     pub async fn get_state(&self) -> CircuitState {
         let state = self.state.lock().await;
         state.state
@@ -191,5 +187,11 @@ impl CircuitBreaker {
                 Err(err)
             }
         }
+    }
+}
+
+impl Default for CircuitBreaker {
+    fn default() -> Self {
+        Self::new(CircuitBreakerConfig::default())
     }
 }

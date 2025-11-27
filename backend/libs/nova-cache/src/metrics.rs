@@ -1,6 +1,6 @@
 //! Cache metrics for observability
 
-use prometheus::{CounterVec, HistogramVec, Opts, Registry};
+use prometheus::{CounterVec, Opts, Registry};
 use std::sync::OnceLock;
 
 static METRICS: OnceLock<CacheMetricsInner> = OnceLock::new();
