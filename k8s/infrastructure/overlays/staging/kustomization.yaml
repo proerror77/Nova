@@ -16,8 +16,8 @@ patches:
       path: /spec/template/spec/containers/0/resources
       value:
         requests:
-          cpu: 100m
-          memory: 256Mi
+          cpu: 25m
+          memory: 128Mi
         limits:
           cpu: 500m
           memory: 512Mi
@@ -25,7 +25,7 @@ patches:
     group: apps
     kind: Deployment
     name: content-service
-    namespace: nova-staging
+
     version: v1
 - patch: |-
     - op: replace
@@ -35,8 +35,8 @@ patches:
       path: /spec/template/spec/containers/0/resources
       value:
         requests:
-          cpu: 100m
-          memory: 512Mi
+          cpu: 25m
+          memory: 256Mi
         limits:
           cpu: 500m
           memory: 1Gi
@@ -44,7 +44,7 @@ patches:
     group: apps
     kind: Deployment
     name: feed-service
-    namespace: nova-staging
+
     version: v1
 - patch: |-
     - op: replace
@@ -54,8 +54,8 @@ patches:
       path: /spec/template/spec/containers/0/resources
       value:
         requests:
-          cpu: 100m
-          memory: 512Mi
+          cpu: 25m
+          memory: 256Mi
         limits:
           cpu: 500m
           memory: 1Gi
@@ -63,7 +63,7 @@ patches:
     group: apps
     kind: Deployment
     name: media-service
-    namespace: nova-staging
+
     version: v1
 - patch: |-
     - op: replace
@@ -73,16 +73,16 @@ patches:
       path: /spec/template/spec/containers/0/resources
       value:
         requests:
-          cpu: 200m
-          memory: 512Mi
+          cpu: 25m
+          memory: 128Mi
         limits:
-          cpu: 1000m
-          memory: 2Gi
+          cpu: 500m
+          memory: 1Gi
   target:
     group: apps
     kind: Deployment
     name: search-service
-    namespace: nova-staging
+
     version: v1
 - patch: |-
     - op: replace
@@ -92,8 +92,8 @@ patches:
       path: /spec/template/spec/containers/0/resources
       value:
         requests:
-          cpu: 100m
-          memory: 256Mi
+          cpu: 25m
+          memory: 128Mi
         limits:
           cpu: 500m
           memory: 512Mi
@@ -101,7 +101,7 @@ patches:
     group: apps
     kind: Deployment
     name: analytics-service
-    namespace: nova-staging
+
     version: v1
 - patch: |-
     - op: replace
@@ -111,8 +111,8 @@ patches:
       path: /spec/template/spec/containers/0/resources
       value:
         requests:
-          cpu: 100m
-          memory: 256Mi
+          cpu: 25m
+          memory: 128Mi
         limits:
           cpu: 500m
           memory: 512Mi
@@ -120,7 +120,7 @@ patches:
     group: apps
     kind: Deployment
     name: graph-service
-    namespace: nova-staging
+
     version: v1
 - patch: |-
     - op: replace
@@ -130,8 +130,8 @@ patches:
       path: /spec/template/spec/containers/0/resources
       value:
         requests:
-          cpu: 100m
-          memory: 256Mi
+          cpu: 25m
+          memory: 128Mi
         limits:
           cpu: 500m
           memory: 512Mi
@@ -139,7 +139,7 @@ patches:
     group: apps
     kind: Deployment
     name: graphql-gateway
-    namespace: nova-staging
+
     version: v1
 - patch: |-
     - op: replace
@@ -149,8 +149,8 @@ patches:
       path: /spec/template/spec/containers/0/resources
       value:
         requests:
-          cpu: 100m
-          memory: 256Mi
+          cpu: 25m
+          memory: 128Mi
         limits:
           cpu: 500m
           memory: 512Mi
@@ -158,7 +158,7 @@ patches:
     group: apps
     kind: Deployment
     name: identity-service
-    namespace: nova-staging
+
     version: v1
 - patch: |-
     - op: replace
@@ -168,8 +168,8 @@ patches:
       path: /spec/template/spec/containers/0/resources
       value:
         requests:
-          cpu: 100m
-          memory: 256Mi
+          cpu: 25m
+          memory: 128Mi
         limits:
           cpu: 500m
           memory: 512Mi
@@ -177,7 +177,7 @@ patches:
     group: apps
     kind: Deployment
     name: notification-service
-    namespace: nova-staging
+
     version: v1
 - patch: |-
     - op: replace
@@ -187,8 +187,8 @@ patches:
       path: /spec/template/spec/containers/0/resources
       value:
         requests:
-          cpu: 100m
-          memory: 256Mi
+          cpu: 25m
+          memory: 128Mi
         limits:
           cpu: 500m
           memory: 512Mi
@@ -196,7 +196,7 @@ patches:
     group: apps
     kind: Deployment
     name: ranking-service
-    namespace: nova-staging
+
     version: v1
 - patch: |-
     - op: replace
@@ -206,8 +206,8 @@ patches:
       path: /spec/template/spec/containers/0/resources
       value:
         requests:
-          cpu: 100m
-          memory: 256Mi
+          cpu: 25m
+          memory: 128Mi
         limits:
           cpu: 500m
           memory: 512Mi
@@ -215,7 +215,7 @@ patches:
     group: apps
     kind: Deployment
     name: realtime-chat-service
-    namespace: nova-staging
+
     version: v1
 - patch: |-
     - op: replace
@@ -225,8 +225,8 @@ patches:
       path: /spec/template/spec/containers/0/resources
       value:
         requests:
-          cpu: 100m
-          memory: 256Mi
+          cpu: 25m
+          memory: 128Mi
         limits:
           cpu: 500m
           memory: 512Mi
@@ -234,7 +234,7 @@ patches:
     group: apps
     kind: Deployment
     name: social-service
-    namespace: nova-staging
+
     version: v1
 - patch: |-
     - op: replace
@@ -244,8 +244,8 @@ patches:
       path: /spec/template/spec/containers/0/resources
       value:
         requests:
-          cpu: 100m
-          memory: 256Mi
+          cpu: 25m
+          memory: 128Mi
         limits:
           cpu: 500m
           memory: 512Mi
@@ -253,7 +253,7 @@ patches:
     group: apps
     kind: Deployment
     name: trust-safety-service
-    namespace: nova-staging
+
     version: v1
 # search-service ports now defined in grpc-services.yaml (gRPC:50057, HTTP:8086)
 - path: configmap-patch.yaml
@@ -301,75 +301,73 @@ patches:
 images:
 - name: nova/analytics-service
   newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/analytics-service
-  newTag: c849ea7287e61bc77123ee9d58b3f47cb2901cb5
+  newTag: d76baed0b3ece4ccb5d1a3ce34f97954dc792461
 - name: nova/content-service
   newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/content-service
-  newTag: 4e7634a01c998bba650915882af53547504556b7
+  newTag: 04d28e5917f31c454fe785d431d21290a87cf364
 - name: nova/feed-service
   newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/feed-service
-  newTag: c849ea7287e61bc77123ee9d58b3f47cb2901cb5
+  newTag: d76baed0b3ece4ccb5d1a3ce34f97954dc792461
 - name: nova/graph-service
   newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/graph-service
-  newTag: 453ce5e7a4447cd313e55bda15d24e8de2e27975
+  newTag: d76baed0b3ece4ccb5d1a3ce34f97954dc792461
 - name: nova/graphql-gateway
   newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/graphql-gateway
-  newTag: c849ea7287e61bc77123ee9d58b3f47cb2901cb5
+  newTag: d76baed0b3ece4ccb5d1a3ce34f97954dc792461
 - name: nova/identity-service
   newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/identity-service
-  newTag: dae305a3b9bbbb3a3257b3e8b1162f24608aefe9
+  newTag: d76baed0b3ece4ccb5d1a3ce34f97954dc792461
 - name: nova/media-service
   newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/media-service
-  newTag: c849ea7287e61bc77123ee9d58b3f47cb2901cb5
+  newTag: d76baed0b3ece4ccb5d1a3ce34f97954dc792461
 - name: nova/notification-service
   newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/notification-service
-  newTag: c849ea7287e61bc77123ee9d58b3f47cb2901cb5
+  newTag: d76baed0b3ece4ccb5d1a3ce34f97954dc792461
 - name: nova/ranking-service
   newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/ranking-service
-  newTag: c849ea7287e61bc77123ee9d58b3f47cb2901cb5
+  newTag: d76baed0b3ece4ccb5d1a3ce34f97954dc792461
 - name: nova/realtime-chat-service
   newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/realtime-chat-service
-  newTag: c849ea7287e61bc77123ee9d58b3f47cb2901cb5
+  newTag: d76baed0b3ece4ccb5d1a3ce34f97954dc792461
 - name: nova/search-service
   newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/search-service
-  newTag: 3bc3d089df39336265aebb0d902ceb1af1893e0a
+  newTag: d76baed0b3ece4ccb5d1a3ce34f97954dc792461
 - name: nova/social-service
   newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/social-service
-  newTag: c849ea7287e61bc77123ee9d58b3f47cb2901cb5
+  newTag: d76baed0b3ece4ccb5d1a3ce34f97954dc792461
 - name: nova/trust-safety-service
   newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/trust-safety-service
-  newTag: c849ea7287e61bc77123ee9d58b3f47cb2901cb5
+  newTag: d76baed0b3ece4ccb5d1a3ce34f97954dc792461
 
-# Staging replica overrides to keep core path light
-# Disable non-critical services temporarily to free CPU for DB/Redis
-# Disable PgBouncer in staging for now to avoid hostPort conflicts and crashes
-# Keep a single replica for core path services
+# Staging replica configuration
+# All core services enabled with 1 replica
+# PgBouncer disabled due to hostPort conflicts
+# api-gateway removed (deprecated in favor of graphql-gateway); turn-server disabled
 replicas:
 - count: 0
   name: pgbouncer
-- count: 0
+- count: 1
   name: analytics-service
-- count: 0
+- count: 1
   name: ranking-service
-- count: 0
+- count: 1
   name: realtime-chat-service
-- count: 0
+- count: 1
   name: trust-safety-service
-- count: 0
+- count: 1
   name: social-service
-- count: 0
-  name: api-gateway
-- count: 0
+- count: 1
   name: feed-service
 - count: 0
   name: turn-server
-- count: 0
-  name: pgbouncer
 - count: 1
   name: content-service
-- count: 0
+- count: 1
   name: graph-service
-- count: 0
+- count: 1
   name: graphql-gateway
+- count: 1
+  name: identity-service
 - count: 1
   name: media-service
 - count: 1

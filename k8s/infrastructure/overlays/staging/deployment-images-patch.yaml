@@ -7,7 +7,7 @@ spec:
     spec:
       containers:
       - name: content-service
-        image: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/content-service:4e7634a01c998bba650915882af53547504556b7
+        image: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/content-service:04d28e5917f31c454fe785d431d21290a87cf364
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -18,7 +18,8 @@ spec:
     spec:
       containers:
       - name: media-service
-        image: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/media-service:38cc45e2f3b81a611e60955577b5a0a1120fbf56
+        image: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/media-service:d76baed0b3ece4ccb5d1a3ce34f97954dc792461
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -28,7 +29,7 @@ spec:
     spec:
       containers:
       - name: identity-service
-        image: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/identity-service:c93dafd7eac6033f0206a9343f039a6634dcf19e
+        image: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/identity-service:d76baed0b3ece4ccb5d1a3ce34f97954dc792461
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -39,4 +40,26 @@ spec:
     spec:
       containers:
       - name: search-service
-        image: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/search-service:3bc3d089df39336265aebb0d902ceb1af1893e0a
+        image: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/search-service:d76baed0b3ece4ccb5d1a3ce34f97954dc792461
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: realtime-chat-service
+spec:
+  template:
+    spec:
+      containers:
+      - name: realtime-chat-service
+        image: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/realtime-chat-service:d76baed0b3ece4ccb5d1a3ce34f97954dc792461
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: analytics-service
+spec:
+  template:
+    spec:
+      containers:
+      - name: analytics-service
+        image: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/analytics-service:d76baed0b3ece4ccb5d1a3ce34f97954dc792461
