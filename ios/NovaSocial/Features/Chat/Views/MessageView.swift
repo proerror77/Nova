@@ -21,20 +21,7 @@ struct MessageView: View {
     @State private var showImagePicker = false
     @State private var showCamera = false
     @State private var selectedImage: UIImage?
-
-    // 随机消息模板
-    private let messageTemplates = [
-        "Hi", "Hello!", "How are you?", "What's up?", "Good morning!",
-        "See you later", "Thanks!", "Sounds good", "Ok", "Sure thing",
-        "Let's meet up", "Call me later", "I'm on my way", "Almost there",
-        "That's awesome!", "Haha", "😊", "👍", "Miss you", "Bye!"
-    ]
-
-    // 随机时间模板
-    private let timeTemplates = [
-        "09:41 PM", "10:30 AM", "Yesterday", "2:15 PM", "11:20 AM",
-        "3:45 PM", "8:30 PM", "Monday", "Tuesday", "5:10 PM"
-    ]
+    @State private var showGenerateImage = false
 
     // 会话预览数据
     @State private var conversations: [ConversationPreview] = []
@@ -90,6 +77,9 @@ struct MessageView: View {
             } else if showNewPost {
                 NewPostView(showNewPost: $showNewPost)
                     .transition(.identity)
+            } else if showGenerateImage {
+                GenerateImage01View(showGenerateImage: $showGenerateImage)
+                    .transition(.identity)
             } else {
                 messageContent
             }
@@ -106,6 +96,7 @@ struct MessageView: View {
         }
         .animation(.none, value: showChat)
         .animation(.none, value: showNewPost)
+        .animation(.none, value: showGenerateImage)
         .sheet(isPresented: $showQRScanner) {
             QRCodeScannerView(isPresented: $showQRScanner)
         }
@@ -338,8 +329,8 @@ struct MessageView: View {
 
                     // Generate image
                     Button(action: {
-                        // 生成图片操作
                         showPhotoOptions = false
+                        showGenerateImage = true
                     }) {
                         Text("Generate image")
                             .font(Font.custom("Helvetica Neue", size: 18).weight(.medium))

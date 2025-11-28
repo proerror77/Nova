@@ -23,6 +23,7 @@ class ChatLocationManager: NSObject, ObservableObject, CLLocationManagerDelegate
     private let manager = CLLocationManager()
     @Published var location: CLLocationCoordinate2D?
     @Published var authorizationStatus: CLAuthorizationStatus = .notDetermined
+    @Published var locationError: Error?
 
     override init() {
         super.init()
@@ -41,6 +42,7 @@ class ChatLocationManager: NSObject, ObservableObject, CLLocationManagerDelegate
 
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
         print("Location error: \(error.localizedDescription)")
+        locationError = error
     }
 
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
@@ -216,6 +218,13 @@ struct AttachmentOptionButton: View {
 }
 
 struct ChatView: View {
+    // MARK: - Static Properties
+    private static let dateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy/MM/dd  HH:mm"
+        return formatter
+    }()
+
     @Binding var showChat: Bool
     var userName: String = "User"
     var initialMessages: [ChatMessage] = []
@@ -489,11 +498,16 @@ struct ChatView: View {
     // MARK: - 事件处理
     private func handlePhotoSelection(_ newItem: PhotosPickerItem?) {
         Task {
-            if let data = try? await newItem?.loadTransferable(type: Data.self),
-               let image = UIImage(data: data) {
-                await MainActor.run {
-                    sendImageMessage(image: image)
+            do {
+                if let data = try await newItem?.loadTransferable(type: Data.self),
+                   let image = UIImage(data: data) {
+                    await MainActor.run {
+                        sendImageMessage(image: image)
+                    }
                 }
+            } catch {
+                print("Failed to load photo: \(error.localizedDescription)")
+                // Consider showing user-facing error in future
             }
         }
     }
@@ -540,9 +554,7 @@ struct ChatView: View {
 
     // MARK: - 获取当前日期字符串
     private func currentDateString() -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy/MM/dd  HH:mm"
-        return formatter.string(from: Date())
+        return Self.dateFormatter.string(from: Date())
     }
 }
 

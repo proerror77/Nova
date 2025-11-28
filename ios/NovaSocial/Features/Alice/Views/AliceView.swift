@@ -7,8 +7,29 @@ struct AliceView: View {
     @State private var showImagePicker = false
     @State private var showCamera = false
     @State private var selectedImage: UIImage?
+    @State private var showGenerateImage = false
 
     var body: some View {
+        ZStack {
+            // 条件渲染：根据状态切换视图
+            if showGenerateImage {
+                GenerateImage01View(showGenerateImage: $showGenerateImage)
+                    .transition(.identity)
+            } else {
+                aliceContent
+            }
+        }
+        .animation(.none, value: showGenerateImage)
+        .sheet(isPresented: $showImagePicker) {
+            ImagePicker(sourceType: .photoLibrary, selectedImage: $selectedImage)
+        }
+        .sheet(isPresented: $showCamera) {
+            ImagePicker(sourceType: .camera, selectedImage: $selectedImage)
+        }
+    }
+
+    // MARK: - Alice 主内容
+    private var aliceContent: some View {
         ZStack {
             // 背景色
             Color(red: 0.97, green: 0.97, blue: 0.97)
@@ -192,12 +213,6 @@ struct AliceView: View {
                 photoOptionsModal
             }
         }
-        .sheet(isPresented: $showImagePicker) {
-            ImagePicker(sourceType: .photoLibrary, selectedImage: $selectedImage)
-        }
-        .sheet(isPresented: $showCamera) {
-            ImagePicker(sourceType: .camera, selectedImage: $selectedImage)
-        }
     }
 
     // MARK: - 模型选择器弹窗
@@ -353,6 +368,7 @@ struct AliceView: View {
                     // Generate image
                     Button(action: {
                         showPhotoOptions = false
+                        showGenerateImage = true
                     }) {
                         Text("Generate image")
                             .font(Font.custom("Helvetica Neue", size: 18).weight(.medium))

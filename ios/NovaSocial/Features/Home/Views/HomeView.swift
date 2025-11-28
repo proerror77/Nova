@@ -18,6 +18,7 @@ struct HomeView: View {
     @State private var showImagePicker = false
     @State private var showCamera = false
     @State private var selectedImage: UIImage?
+    @State private var showGenerateImage = false
 
     var body: some View {
         ZStack {
@@ -30,6 +31,9 @@ struct HomeView: View {
                     .transition(.identity)
             } else if showNewPost {
                 NewPostView(showNewPost: $showNewPost)
+                    .transition(.identity)
+            } else if showGenerateImage {
+                GenerateImage01View(showGenerateImage: $showGenerateImage)
                     .transition(.identity)
             } else {
                 homeContent
@@ -44,6 +48,9 @@ struct HomeView: View {
                     },
                     onTakePhoto: {
                         showCamera = true
+                    },
+                    onGenerateImage: {
+                        showGenerateImage = true
                     }
                 )
             }
@@ -51,6 +58,7 @@ struct HomeView: View {
         .animation(.none, value: showNotification)
         .animation(.none, value: showSearch)
         .animation(.none, value: showNewPost)
+        .animation(.none, value: showGenerateImage)
         .navigationBarBackButtonHidden(true)
         .sheet(isPresented: $showReportView) {
             ReportModal(isPresented: $showReportView, showThankYouView: $showThankYouView)
@@ -243,7 +251,6 @@ struct HomeView: View {
                                     name: "Lucy Liu",
                                     company: "Morgan Stanley",
                                     votes: "2293",
-                                    isActive: true,
                                     imageAssetName: "PollCard-1"
                                 )
 
@@ -253,7 +260,6 @@ struct HomeView: View {
                                     name: "Lucy Liu",
                                     company: "Morgan Stanley",
                                     votes: "2293",
-                                    isActive: false,
                                     imageAssetName: "PollCard-2"
                                 )
 
@@ -263,7 +269,6 @@ struct HomeView: View {
                                     name: "Lucy Liu",
                                     company: "Morgan Stanley",
                                     votes: "2293",
-                                    isActive: false,
                                     imageAssetName: "PollCard-3"
                                 )
 
@@ -273,7 +278,6 @@ struct HomeView: View {
                                     name: "Lucy Liu",
                                     company: "Morgan Stanley",
                                     votes: "2293",
-                                    isActive: false,
                                     imageAssetName: "PollCard-4"
                                 )
 
@@ -283,7 +287,6 @@ struct HomeView: View {
                                     name: "Lucy Liu",
                                     company: "Morgan Stanley",
                                     votes: "2293",
-                                    isActive: false,
                                     imageAssetName: "PollCard-5"
                                 )
                             }

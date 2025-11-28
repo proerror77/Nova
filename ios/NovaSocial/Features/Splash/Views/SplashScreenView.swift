@@ -18,9 +18,9 @@ struct SplashScreenView: View {
                 .kerning(8)
         }
         .task {
-            // 3秒后自动跳转到欢迎页面
+            // 1.5秒后自动跳转到欢迎页面
             do {
-                try await Task.sleep(for: .seconds(3))
+                try await Task.sleep(for: .seconds(1.5))
                 currentPage = .welcome
             } catch {
                 // Task cancelled

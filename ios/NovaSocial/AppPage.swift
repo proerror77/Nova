@@ -22,4 +22,5 @@ enum AppPage {
     case myChannels
     case addFriends
     case startGroupChat
+    case groupChat
 }

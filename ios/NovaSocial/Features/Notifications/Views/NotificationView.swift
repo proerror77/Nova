@@ -3,7 +3,7 @@ import SwiftUI
 struct NotificationView: View {
     @Binding var showNotification: Bool
     @State private var showChat = false
-    @State private var selectedUserName = "Ethan Miller"
+    @State private var selectedUserName = ""
 
     var body: some View {
         ZStack {
@@ -194,18 +194,15 @@ struct NotificationListItem: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text(userName)
                     .font(Font.custom("Helvetica Neue", size: 16).weight(.bold))
-                    .lineSpacing(20)
                     .foregroundColor(.black)
 
                 HStack(spacing: 4) {
                     Text(action)
                         .font(Font.custom("Helvetica Neue", size: 14))
-                        .lineSpacing(20)
                         .foregroundColor(.black)
 
                     Text(time)
                         .font(Font.custom("Helvetica Neue", size: 14))
-                        .lineSpacing(20)
                         .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
                 }
             }
@@ -223,7 +220,6 @@ struct NotificationListItem: View {
                         .foregroundColor(.black)
                 }
                 .frame(width: 85, height: 24)
-                .cornerRadius(100)
                 .overlay(
                     RoundedRectangle(cornerRadius: 100)
                         .inset(by: 0.50)
@@ -239,7 +235,6 @@ struct NotificationListItem: View {
                         .foregroundColor(Color(red: 0.87, green: 0.11, blue: 0.26))
                 }
                 .frame(width: 85, height: 24)
-                .cornerRadius(100)
                 .overlay(
                     RoundedRectangle(cornerRadius: 100)
                         .inset(by: 0.50)
@@ -255,7 +250,6 @@ struct NotificationListItem: View {
                         .foregroundColor(Color(red: 0.87, green: 0.11, blue: 0.26))
                 }
                 .frame(width: 85, height: 24)
-                .cornerRadius(100)
                 .overlay(
                     RoundedRectangle(cornerRadius: 100)
                         .inset(by: 0.50)

@@ -7,7 +7,6 @@ struct CarouselCardItem: View {
     let name: String
     let company: String
     let votes: String
-    let isActive: Bool
     let imageAssetName: String
 
     var body: some View {
@@ -31,9 +30,13 @@ struct CarouselCardItem: View {
                         Text(name)
                             .font(Font.custom("Helvetica Neue", size: 18).weight(.bold))
                             .foregroundColor(Color(red: 0.25, green: 0.25, blue: 0.25))
+                            .lineLimit(1)
+                            .truncationMode(.tail)
                         Text(company)
                             .font(Font.custom("Helvetica Neue", size: 14).weight(.medium))
                             .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.54))
+                            .lineLimit(1)
+                            .truncationMode(.tail)
                     }
                     .frame(width: 118)
                 }
@@ -63,5 +66,7 @@ struct CarouselCardItem: View {
         .frame(width: 274, height: 340)
         .background(.white)
         .cornerRadius(5)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Rank \(rankNumber): \(name) from \(company), \(votes) votes")
     }
 }

@@ -80,6 +80,9 @@ struct ICEREDApp: App {
                     case .startGroupChat:
                         StartGroupChatView(currentPage: $currentPage)
                             .transition(.identity)
+                    case .groupChat:
+                        GroupChatView(currentPage: $currentPage, groupName: "Group Chat")
+                            .transition(.identity)
                     default:
                         HomeView(currentPage: $currentPage)
                             .transition(.identity)

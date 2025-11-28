@@ -412,6 +412,11 @@ struct CreateAccountView: View {
             return false
         }
 
+        if !isValidEmail(email) {
+            errorMessage = "Please enter a valid email address"
+            return false
+        }
+
         if username.isEmpty {
             errorMessage = "Please enter a username"
             return false
@@ -438,6 +443,11 @@ struct CreateAccountView: View {
         }
 
         return true
+    }
+
+    private func isValidEmail(_ email: String) -> Bool {
+        let emailRegex = #"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$"#
+        return email.range(of: emailRegex, options: .regularExpression) != nil
     }
 }
 
