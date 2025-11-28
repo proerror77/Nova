@@ -12,6 +12,7 @@ struct GenerateImage01View: View {
     @FocusState private var isInputFocused: Bool
     @State private var messages: [MessageType] = []
     @State private var isGenerating: Bool = false
+    @State private var showFeatureComingSoon: Bool = false
 
     var body: some View {
         ZStack {
@@ -139,6 +140,11 @@ struct GenerateImage01View: View {
                 }
             }
         }
+        .alert("Feature Coming Soon", isPresented: $showFeatureComingSoon) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text("AI image generation is currently under development. This feature will be available once the backend API is connected.")
+        }
     }
 
     // MARK: - AI 响应视图
@@ -212,11 +218,16 @@ struct GenerateImage01View: View {
         // 取消输入焦点（收起键盘）
         isInputFocused = false
 
-        // 模拟 AI 生成过程
+        // 显示功能尚未可用的提示
+        showFeatureComingSoon = true
+
+        // 模拟 AI 生成过程（仅用于演示UI）
         isGenerating = true
 
-        // 延迟 1.5 秒后添加 AI 响应
+        // 延迟 1.5 秒后添加 AI 响应（占位符）
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            // TODO: 替换为真实的 AI 图片生成 API 调用
+            // try await AIImageService.generate(prompt: userPrompt)
             messages.append(.aiResponse)
             isGenerating = false
         }
