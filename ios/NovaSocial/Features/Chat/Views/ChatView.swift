@@ -3,6 +3,7 @@ import PhotosUI
 import CoreLocation
 import MapKit
 import Combine
+import AVFoundation
 
 // MARK: - 消息模型
 struct ChatMessage: Identifiable, Equatable {
@@ -240,6 +241,7 @@ struct ChatView: View {
     // 相机相关
     @State private var showCamera = false
     @State private var cameraImage: UIImage?
+    @State private var showCameraPermissionAlert = false
 
     // 位置相关
     @StateObject private var locationManager = ChatLocationManager()
@@ -286,6 +288,16 @@ struct ChatView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("Share your current location?")
+        }
+        .alert("Camera Access Required", isPresented: $showCameraPermissionAlert) {
+            Button("Cancel", role: .cancel) { }
+            Button("Settings") {
+                if let settingsUrl = URL(string: UIApplication.openSettingsURLString) {
+                    UIApplication.shared.open(settingsUrl)
+                }
+            }
+        } message: {
+            Text("Please enable camera access in Settings to take photos.")
         }
         .transaction { transaction in
             transaction.disablesAnimations = true
@@ -472,7 +484,7 @@ struct ChatView: View {
 
                 AttachmentOptionButton(icon: "camera", title: "Camera") {
                     showAttachmentOptions = false
-                    showCamera = true
+                    checkCameraPermissionAndOpen()
                 }
 
                 AttachmentOptionButton(icon: "video.fill", title: "Video Call") {
@@ -555,6 +567,31 @@ struct ChatView: View {
     // MARK: - 获取当前日期字符串
     private func currentDateString() -> String {
         return Self.dateFormatter.string(from: Date())
+    }
+
+    // MARK: - 检查相机权限
+    private func checkCameraPermissionAndOpen() {
+        switch AVCaptureDevice.authorizationStatus(for: .video) {
+        case .authorized:
+            // Already authorized - open camera
+            showCamera = true
+        case .notDetermined:
+            // Request permission
+            AVCaptureDevice.requestAccess(for: .video) { granted in
+                DispatchQueue.main.async {
+                    if granted {
+                        showCamera = true
+                    } else {
+                        showCameraPermissionAlert = true
+                    }
+                }
+            }
+        case .denied, .restricted:
+            // Permission denied - show alert to open settings
+            showCameraPermissionAlert = true
+        @unknown default:
+            showCameraPermissionAlert = true
+        }
     }
 }
 

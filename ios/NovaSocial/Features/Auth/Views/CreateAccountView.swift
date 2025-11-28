@@ -427,8 +427,13 @@ struct CreateAccountView: View {
             return false
         }
 
-        if password.count < 6 {
-            errorMessage = "Password must be at least 6 characters"
+        if password.count < 8 {
+            errorMessage = "Password must be at least 8 characters"
+            return false
+        }
+
+        if !isStrongPassword(password) {
+            errorMessage = "Password must contain uppercase, lowercase, and number"
             return false
         }
 
@@ -448,6 +453,22 @@ struct CreateAccountView: View {
     private func isValidEmail(_ email: String) -> Bool {
         let emailRegex = #"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$"#
         return email.range(of: emailRegex, options: .regularExpression) != nil
+    }
+
+    private func isStrongPassword(_ password: String) -> Bool {
+        // Check for at least one uppercase letter
+        let uppercaseRegex = ".*[A-Z]+.*"
+        let hasUppercase = password.range(of: uppercaseRegex, options: .regularExpression) != nil
+
+        // Check for at least one lowercase letter
+        let lowercaseRegex = ".*[a-z]+.*"
+        let hasLowercase = password.range(of: lowercaseRegex, options: .regularExpression) != nil
+
+        // Check for at least one number
+        let numberRegex = ".*[0-9]+.*"
+        let hasNumber = password.range(of: numberRegex, options: .regularExpression) != nil
+
+        return hasUppercase && hasLowercase && hasNumber
     }
 }
 
