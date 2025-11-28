@@ -1,26 +1,51 @@
 import SwiftUI
 
 @main
-struct FigmaDesignAppApp: App {
+struct ICEREDApp: App {
     // ObservedObject for singleton - App doesn't own it, just observes it
     @ObservedObject private var authManager = AuthenticationManager.shared
-    @State private var currentPage: AppPage = .home
+    @State private var currentPage: AppPage = .splash
 
     var body: some Scene {
         WindowGroup {
             ZStack {
                 // Check authentication state first
                 if !authManager.isAuthenticated {
-                    LoginView()
-                        .transition(.identity)
-                } else {
-                    // 根据状态即时切换页面（无过渡动画）
+                    // 未登录时的页面切换
                     switch currentPage {
+                    case .splash:
+                        SplashScreenView(currentPage: $currentPage)
+                            .transition(.identity)
+                    case .welcome:
+                        WelcomeView(currentPage: $currentPage)
+                            .transition(.identity)
                     case .login:
-                        LoginView()
+                        LoginView(currentPage: $currentPage)
+                            .transition(.identity)
+                    case .createAccount:
+                        CreateAccountView(currentPage: $currentPage)
                             .transition(.identity)
                     case .home:
+                        // Skip 跳过登录直接进入Home
                         HomeView(currentPage: $currentPage)
+                            .transition(.identity)
+                    default:
+                        LoginView(currentPage: $currentPage)
+                            .transition(.identity)
+                    }
+                } else {
+                    // 已登录后的页面切换
+                    switch currentPage {
+                    case .login, .createAccount, .welcome:
+                        // 登录成功后跳转到首页
+                        HomeView(currentPage: $currentPage)
+                            .transition(.identity)
+                            .onAppear { currentPage = .home }
+                    case .home:
+                        HomeView(currentPage: $currentPage)
+                            .transition(.identity)
+                    case .rankingList:
+                        RankingListView(currentPage: $currentPage)
                             .transition(.identity)
                     case .message:
                         MessageView(currentPage: $currentPage)

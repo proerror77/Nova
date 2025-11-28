@@ -40,10 +40,10 @@ struct BottomTabBar: View {
 
             // Alice
             VStack(spacing: -12) {
-                Image("alice-icon")
+                Image("alice-button-off")
                     .resizable()
                     .scaledToFit()
-                    .frame(width: 36, height: 36)
+                    .frame(width: 44, height: 44)
                 Text("")
                     .font(.system(size: DesignTokens.fontCaption))
             }
@@ -53,14 +53,13 @@ struct BottomTabBar: View {
             }
 
             // Account
-            VStack(spacing: DesignTokens.spacing4) {
-                Image("Account-icon")
+            VStack(spacing: -12) {
+                Image("Account-button-off")
                     .resizable()
                     .scaledToFit()
-                    .frame(width: DesignTokens.iconLarge, height: DesignTokens.iconLarge)
-                Text("Account")
+                    .frame(width: 44, height: 44)
+                Text("")
                     .font(.system(size: DesignTokens.fontCaption))
-                    .foregroundColor(.black)
             }
             .frame(maxWidth: .infinity)
             .onTapGesture {

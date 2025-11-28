@@ -163,10 +163,9 @@ struct ContactRow: View {
             }
 
             // 头像
-            Ellipse()
-                .foregroundColor(.clear)
-                .frame(width: 50, height: 50)
-                .background(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
+            Circle()
+                .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
+                .frame(width: 42, height: 42)
 
             // 名字
             VStack(alignment: .leading, spacing: 1) {

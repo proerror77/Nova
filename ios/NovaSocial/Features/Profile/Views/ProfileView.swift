@@ -10,6 +10,9 @@ struct ProfileView: View {
     @State private var showSetting = false
     @State private var selectedPhotoItem: PhotosPickerItem?
     @State private var showPhotoOptions = false
+    @State private var showImagePicker = false
+    @State private var showCamera = false
+    @State private var selectedImage: UIImage?
 
     // Computed property for user display
     private var displayUser: UserProfile? {
@@ -334,10 +337,10 @@ struct ProfileView: View {
 
                     // Alice
                     VStack(spacing: -12) {
-                        Image("alice-icon")
+                        Image("alice-button-off")
                             .resizable()
                             .scaledToFit()
-                            .frame(width: 36, height: 36)
+                            .frame(width: 44, height: 44)
                         Text("")
                             .font(.system(size: 9))
                     }
@@ -351,7 +354,7 @@ struct ProfileView: View {
                         Image("Account-button-on")
                             .resizable()
                             .scaledToFit()
-                            .frame(width: 36, height: 36)
+                            .frame(width: 44, height: 44)
                         Text("")
                             .font(.system(size: 9))
                     }
@@ -369,6 +372,12 @@ struct ProfileView: View {
             }
         }
         .ignoresSafeArea()
+        .sheet(isPresented: $showImagePicker) {
+            ImagePicker(sourceType: .photoLibrary, selectedImage: $selectedImage)
+        }
+        .sheet(isPresented: $showCamera) {
+            ImagePicker(sourceType: .camera, selectedImage: $selectedImage)
+        }
         .onChange(of: selectedPhotoItem) { oldValue, newValue in
             Task {
                 if let photoItem = newValue,
@@ -419,8 +428,8 @@ struct ProfileView: View {
 
                     // Choose Photo
                     Button(action: {
-                        // 选择照片操作
                         showPhotoOptions = false
+                        showImagePicker = true
                     }) {
                         Text("Choose Photo")
                             .font(Font.custom("Helvetica Neue", size: 18).weight(.medium))
@@ -430,8 +439,8 @@ struct ProfileView: View {
 
                     // Take Photo
                     Button(action: {
-                        // 拍照操作
                         showPhotoOptions = false
+                        showCamera = true
                     }) {
                         Text("Take Photo")
                             .font(Font.custom("Helvetica Neue", size: 18).weight(.medium))

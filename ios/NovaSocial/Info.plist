@@ -40,6 +40,8 @@
     <string>$(NOVA_STAGING_URL)</string>
     <key>NSAppTransportSecurity</key>
     <dict>
+        <key>NSAllowsArbitraryLoads</key>
+        <true/>
         <key>NSExceptionDomains</key>
         <dict>
             <key>amazonaws.com</key>
@@ -50,6 +52,13 @@
                 <true/>
             </dict>
             <key>ap-northeast-1.elb.amazonaws.com</key>
+            <dict>
+                <key>NSIncludesSubdomains</key>
+                <true/>
+                <key>NSExceptionAllowsInsecureHTTPLoads</key>
+                <true/>
+            </dict>
+            <key>elb.amazonaws.com</key>
             <dict>
                 <key>NSIncludesSubdomains</key>
                 <true/>

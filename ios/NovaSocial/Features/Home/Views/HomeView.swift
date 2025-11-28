@@ -15,6 +15,9 @@ struct HomeView: View {
     @State private var showPhotoOptions = false
     @State private var showComments = false
     @State private var selectedPostForComment: FeedPost?
+    @State private var showImagePicker = false
+    @State private var showCamera = false
+    @State private var selectedImage: UIImage?
 
     var body: some View {
         ZStack {
@@ -34,7 +37,15 @@ struct HomeView: View {
 
             // MARK: - 照片选项弹窗
             if showPhotoOptions {
-                PhotoOptionsModal(isPresented: $showPhotoOptions)
+                PhotoOptionsModal(
+                    isPresented: $showPhotoOptions,
+                    onChoosePhoto: {
+                        showImagePicker = true
+                    },
+                    onTakePhoto: {
+                        showCamera = true
+                    }
+                )
             }
         }
         .animation(.none, value: showNotification)
@@ -48,6 +59,12 @@ struct HomeView: View {
             if let post = selectedPostForComment {
                 CommentSheetView(post: post, isPresented: $showComments)
             }
+        }
+        .sheet(isPresented: $showImagePicker) {
+            ImagePicker(sourceType: .photoLibrary, selectedImage: $selectedImage)
+        }
+        .sheet(isPresented: $showCamera) {
+            ImagePicker(sourceType: .camera, selectedImage: $selectedImage)
         }
         .onAppear {
             // Load feed when view appears
@@ -199,15 +216,23 @@ struct HomeView: View {
                         }
 
                         // MARK: - 标题部分
-                        VStack(spacing: DesignTokens.spacing8) {
-                            Text("Hottest Banker in H.K.")
-                                .font(.system(size: DesignTokens.fontHeadline, weight: .bold))
-                                .foregroundColor(DesignTokens.textPrimary)
+                        ZStack {
+                            Button(action: {
+                                currentPage = .rankingList
+                            }) {
+                                Text("View more")
+                                    .font(Font.custom("Helvetica Neue", size: 9))
+                                    .underline()
+                                    .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
+                            }
+                            .offset(x: 150, y: 12)
 
-                            Text("Corporate Poll")
-                                .font(.system(size: DesignTokens.fontLarge, weight: .medium))
-                                .foregroundColor(DesignTokens.textSecondary)
+                            Text("Hottest Banker in H.K.")
+                                .font(Font.custom("Helvetica Neue", size: 20).weight(.bold))
+                                .foregroundColor(.black)
+                                .offset(x: 0, y: -5.50)
                         }
+                        .frame(width: 343, height: 35)
 
                         // MARK: - 轮播卡片容器 (水平滚动)
                         ScrollView(.horizontal, showsIndicators: false) {
@@ -278,19 +303,6 @@ struct HomeView: View {
                                     .frame(width: DesignTokens.spacing6, height: DesignTokens.spacing6)
                             }
                         }
-
-                        // MARK: - View more 按钮
-                        HStack(spacing: DesignTokens.spacing8) {
-                            Text("view more")
-                                .font(.system(size: DesignTokens.fontBody))
-                                .foregroundColor(DesignTokens.accentColor)
-
-                            Rectangle()
-                                .stroke(DesignTokens.accentColor, lineWidth: 0.5)
-                                .frame(height: 1)
-                                .frame(width: 50)
-                        }
-                        .padding(.top, DesignTokens.spacing10)
                     }
                     .padding(.vertical, DesignTokens.spacing16)
                     .padding(.horizontal)
