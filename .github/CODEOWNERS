@@ -1,11 +1,25 @@
 # Global default owner
 * @proerror77
 
-# Area-specific ownership (adjust as collaborators join)
-/backend/ @proerror77
-/frontend/ @proerror77
-/ios/ @proerror77
-/streaming/ @proerror77
-/k8s/ @proerror77
-/infra/ @proerror77
-/docs/ @proerror77
+# ============================================
+# Team-based Code Ownership
+# ============================================
+
+# iOS Frontend Team
+# TODO: Replace with actual GitHub usernames or team (@org/ios-team)
+/ios/                    @proerror77
+
+# Backend Team
+# TODO: Replace with actual GitHub usernames or team (@org/backend-team)
+/backend/                @proerror77
+
+# Infrastructure (DevOps)
+/k8s/                    @proerror77
+/terraform/              @proerror77
+/.github/workflows/      @proerror77
+
+# Shared Documentation
+/docs/                   @proerror77
+
+# Proto files - require both teams review (API contract)
+/proto/                  @proerror77
