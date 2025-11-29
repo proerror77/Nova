@@ -1,138 +1,142 @@
 import SwiftUI
 
+// MARK: - Alice Model Data Structure
+struct AliceModel: Identifiable {
+    let id = UUID()
+    let name: String
+    let description: String
+    let isSelected: Bool
+}
+
 struct AliceView: View {
     @Binding var currentPage: AppPage
     @State private var showPhotoOptions = false
+    @State private var showModelSelector = false
+    @State private var showImagePicker = false
+    @State private var showCamera = false
+    @State private var selectedImage: UIImage?
+    @State private var showGenerateImage = false
+    @State private var selectedModel = "alice 5.1 Fast"
+
+    // MARK: - Model Data
+    private let aliceModels: [AliceModel] = [
+        AliceModel(name: "alice 5.1 Fast", description: "fast reply", isSelected: true),
+        AliceModel(name: "alice 4 mini", description: "fast reply", isSelected: false),
+        AliceModel(name: "alice 4.1", description: "fast reply", isSelected: false),
+        AliceModel(name: "alice 4.1 Thinking", description: "fast reply", isSelected: false),
+        AliceModel(name: "alice", description: "fast reply", isSelected: false)
+    ]
 
     var body: some View {
+        ZStack {
+            // 条件渲染：根据状态切换视图
+            if showGenerateImage {
+                GenerateImage01View(showGenerateImage: $showGenerateImage)
+                    .transition(.identity)
+            } else {
+                aliceContent
+            }
+        }
+        .animation(.none, value: showGenerateImage)
+        .sheet(isPresented: $showImagePicker) {
+            ImagePicker(sourceType: .photoLibrary, selectedImage: $selectedImage)
+        }
+        .sheet(isPresented: $showCamera) {
+            ImagePicker(sourceType: .camera, selectedImage: $selectedImage)
+        }
+    }
+
+    // MARK: - Alice 主内容
+    private var aliceContent: some View {
         ZStack {
             // 背景色
             Color(red: 0.97, green: 0.97, blue: 0.97)
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
-                // MARK: - 顶部标题区域
-                VStack(spacing: 0) {
-                    HStack {
-                        Spacer()
-                        Text("alice 5.1 Fast")
-                            .font(Font.custom("Helvetica Neue", size: 20))
-                            .foregroundColor(.black)
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: 14))
-                            .foregroundColor(.black)
-                        Spacer()
-                    }
-                    .padding(.vertical, 16)
-                    .background(Color.white)
-
-                    Divider()
-                        .frame(height: 1)
-                        .background(Color(red: 0.90, green: 0.90, blue: 0.90))
+                // MARK: - 顶部导航栏
+                HStack(spacing: 5) {
+                    Text(selectedModel)
+                        .font(Font.custom("Helvetica Neue", size: 20).weight(.bold))
+                        .foregroundColor(.black)
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundColor(.black)
+                }
+                .frame(maxWidth: .infinity)
+                .frame(height: 56)
+                .background(Color.white)
+                .onTapGesture {
+                    showModelSelector.toggle()
                 }
 
-                Spacer()
-
-                // MARK: - 中间圆环图标
-                Image("alice-center-icon")
-                    .resizable()
-                    .renderingMode(.original)
-                    .aspectRatio(contentMode: .fit)
-                    .frame(width: 140, height: 140)
-                    .padding(.bottom, 40)
+                Divider()
 
                 Spacer()
 
-                // MARK: - 底部区域
-                VStack(spacing: 16) {
+                // MARK: - 底部固定区域（按钮组 + 输入框）
+                VStack(spacing: 6) {
                     // 功能按钮组
-                    HStack(spacing: 12) {
-                        // Get Superalice 按钮
-                        Button(action: {
-                            // Get Superalice 操作
-                        }) {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 10) {
+                            // Get Super alice 按钮
                             HStack(spacing: 8) {
-                                Image(systemName: "circle")
-                                    .font(.system(size: 20, weight: .thin))
+                                Image(systemName: "sparkles")
+                                    .font(.system(size: 18))
                                     .foregroundColor(.black)
-                                Text("Get Superalice")
-                                    .font(Font.custom("Helvetica Neue", size: 16))
+                                Text("Get Super alice")
+                                    .font(Font.custom("Inter", size: 16).weight(.medium))
                                     .foregroundColor(.black)
                             }
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 48)
+                            .padding(.horizontal, 16)
+                            .frame(height: 42)
                             .background(Color.white)
-                            .cornerRadius(24)
+                            .cornerRadius(21)
                             .overlay(
-                                RoundedRectangle(cornerRadius: 24)
-                                    .stroke(Color(red: 0.85, green: 0.85, blue: 0.85), lineWidth: 1)
+                                RoundedRectangle(cornerRadius: 21)
+                                    .inset(by: 0.50)
+                                    .stroke(Color(red: 0.77, green: 0.77, blue: 0.77), lineWidth: 0.50)
                             )
-                        }
 
-                        // Voice Mode 按钮
-                        Button(action: {
-                            // Voice Mode 操作
-                        }) {
+                            // Voice Mode 按钮
                             Text("Voice Mode")
-                                .font(Font.custom("Helvetica Neue", size: 16))
+                                .font(Font.custom("Inter", size: 16).weight(.medium))
                                 .foregroundColor(.black)
-                                .frame(maxWidth: .infinity)
-                                .frame(height: 48)
+                                .frame(width: 131, height: 42)
                                 .background(Color.white)
-                                .cornerRadius(24)
+                                .cornerRadius(21)
                                 .overlay(
-                                    RoundedRectangle(cornerRadius: 24)
-                                        .stroke(Color(red: 0.85, green: 0.85, blue: 0.85), lineWidth: 1)
+                                    RoundedRectangle(cornerRadius: 21)
+                                        .inset(by: 0.50)
+                                        .stroke(Color(red: 0.77, green: 0.77, blue: 0.77), lineWidth: 0.50)
                                 )
                         }
-                    }
-                    .padding(.horizontal, 24)
-
-                    // MARK: - 输入框区域
-                    HStack(spacing: 12) {
-                        // 加号按钮
-                        Button(action: {
-                            // 加号操作
-                        }) {
-                            Image(systemName: "plus")
-                                .font(.system(size: 20))
-                                .foregroundColor(Color(red: 0.60, green: 0.60, blue: 0.60))
-                        }
-                        .frame(width: 44, height: 44)
-
-                        // 输入框
-                        HStack {
-                            Text("Ask any questions")
-                                .font(Font.custom("Helvetica Neue", size: 16))
-                                .foregroundColor(Color(red: 0.60, green: 0.60, blue: 0.60))
-                            Spacer()
-                        }
-                        .frame(height: 48)
                         .padding(.horizontal, 16)
-                        .background(Color.white)
-                        .cornerRadius(24)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 24)
-                                .stroke(Color(red: 0.85, green: 0.85, blue: 0.85), lineWidth: 1)
-                        )
-
-                        // 发送按钮
-                        Button(action: {
-                            // 发送操作
-                        }) {
-                            Circle()
-                                .fill(Color(red: 0.93, green: 0.35, blue: 0.42))
-                                .frame(width: 44, height: 44)
-                                .overlay(
-                                    Image(systemName: "paperplane.fill")
-                                        .font(.system(size: 16))
-                                        .foregroundColor(.white)
-                                )
-                        }
                     }
-                    .padding(.horizontal, 24)
-                    .padding(.bottom, 20)
+                    .frame(height: 50)
+
+                    // 输入框区域
+                    HStack(spacing: 12) {
+                        Image(systemName: "plus")
+                            .font(.system(size: 20, weight: .medium))
+                            .foregroundColor(.black)
+                        Text("Ask any questions")
+                            .font(Font.custom("Inter", size: 16))
+                            .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
+                        Spacer()
+                    }
+                    .padding(.horizontal, 20)
+                    .frame(height: 52)
+                    .background(Color.white)
+                    .cornerRadius(26)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 26)
+                            .inset(by: 0.50)
+                            .stroke(Color(red: 0.77, green: 0.77, blue: 0.77), lineWidth: 0.50)
+                    )
+                    .padding(.horizontal, 16)
                 }
+                .padding(.bottom, -25)
 
                 // MARK: - 底部导航栏
                 HStack(spacing: -20) {
@@ -143,7 +147,7 @@ struct AliceView: View {
                             .scaledToFit()
                             .frame(width: 32, height: 22)
                         Text("Home")
-                            .font(.system(size: 9))
+                            .font(.system(size: 9, weight: .medium))
                             .foregroundColor(.black)
                     }
                     .frame(maxWidth: .infinity)
@@ -174,18 +178,20 @@ struct AliceView: View {
                         Image("alice-button-on")
                             .resizable()
                             .scaledToFit()
-                            .frame(width: 36, height: 36)
+                            .frame(width: 44, height: 44)
                         Text("")
                             .font(.system(size: 9))
                     }
                     .frame(maxWidth: .infinity)
 
                     // Account
-                    VStack(spacing: 4) {
-                        Image("Account-icon")
+                    VStack(spacing: -12) {
+                        Image("Account-button-off")
                             .resizable()
                             .scaledToFit()
-                            .frame(width: 24, height: 24)
+                            .frame(width: 44, height: 44)
+                        Text("")
+                            .font(.system(size: 9))
                     }
                     .frame(maxWidth: .infinity)
                     .onTapGesture {
@@ -195,13 +201,78 @@ struct AliceView: View {
                 .frame(height: 60)
                 .padding(.bottom, 20)
                 .background(Color.white)
-                .border(Color(red: 0.74, green: 0.74, blue: 0.74), width: 0.5)
+                .overlay(
+                    Rectangle()
+                        .stroke(Color(red: 0.77, green: 0.77, blue: 0.77), lineWidth: 0.20)
+                )
                 .offset(y: 35)
+            }
+
+            // MARK: - 中间独立图标框架
+            VStack {
+                Spacer()
+                    .frame(height: 280)
+
+                Image("alice-center-icon")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 100, height: 100)
+
+                Spacer()
+            }
+
+            // MARK: - 模型选择器弹窗
+            if showModelSelector {
+                modelSelectorModal
             }
 
             // MARK: - 照片选项弹窗
             if showPhotoOptions {
                 photoOptionsModal
+            }
+        }
+    }
+
+    // MARK: - 模型选择器弹窗
+    private var modelSelectorModal: some View {
+        ZStack {
+            // 背景模糊遮罩（除了底部导航栏）
+            VStack(spacing: 0) {
+                Color.clear
+                    .background(.ultraThinMaterial)
+                    .ignoresSafeArea()
+
+                // 底部导航栏区域保持清晰
+                Color.clear
+                    .frame(height: 95)
+            }
+            .onTapGesture {
+                showModelSelector = false
+            }
+
+            // 模型选择器 - 使用结构化数据
+            VStack {
+                Spacer()
+                    .frame(height: 140)
+
+                VStack(spacing: 0) {
+                    ForEach(aliceModels) { model in
+                        ModelRowView(
+                            model: model,
+                            isSelected: model.name == selectedModel,
+                            onSelect: {
+                                selectedModel = model.name
+                                showModelSelector = false
+                            }
+                        )
+                    }
+                }
+                .frame(width: 199)
+                .background(Color.white)
+                .cornerRadius(16)
+                .shadow(color: Color(red: 0, green: 0, blue: 0, opacity: 0.25), radius: 4.70)
+
+                Spacer()
             }
         }
     }
@@ -237,6 +308,7 @@ struct AliceView: View {
                     // Choose Photo
                     Button(action: {
                         showPhotoOptions = false
+                        showImagePicker = true
                     }) {
                         Text("Choose Photo")
                             .font(Font.custom("Helvetica Neue", size: 18).weight(.medium))
@@ -247,6 +319,7 @@ struct AliceView: View {
                     // Take Photo
                     Button(action: {
                         showPhotoOptions = false
+                        showCamera = true
                     }) {
                         Text("Take Photo")
                             .font(Font.custom("Helvetica Neue", size: 18).weight(.medium))
@@ -257,6 +330,7 @@ struct AliceView: View {
                     // Generate image
                     Button(action: {
                         showPhotoOptions = false
+                        showGenerateImage = true
                     }) {
                         Text("Generate image")
                             .font(Font.custom("Helvetica Neue", size: 18).weight(.medium))
@@ -305,6 +379,34 @@ struct AliceView: View {
                 .padding(.bottom, 50)
             }
         }
+    }
+}
+
+// MARK: - Model Row Component
+struct ModelRowView: View {
+    let model: AliceModel
+    let isSelected: Bool
+    let onSelect: () -> Void
+
+    var body: some View {
+        Button(action: onSelect) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(model.name)
+                    .font(Font.custom("Helvetica Neue", size: 16))
+                    .foregroundColor(.black)
+
+                Text(model.description)
+                    .font(Font.custom("Helvetica Neue", size: 14))
+                    .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(isSelected ? Color(red: 0.91, green: 0.91, blue: 0.91) : Color.clear)
+            .cornerRadius(14)
+            .padding(.horizontal, 6)
+        }
+        .buttonStyle(PlainButtonStyle())
     }
 }
 

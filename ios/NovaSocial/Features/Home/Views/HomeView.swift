@@ -15,6 +15,10 @@ struct HomeView: View {
     @State private var showPhotoOptions = false
     @State private var showComments = false
     @State private var selectedPostForComment: FeedPost?
+    @State private var showImagePicker = false
+    @State private var showCamera = false
+    @State private var selectedImage: UIImage?
+    @State private var showGenerateImage = false
 
     var body: some View {
         ZStack {
@@ -28,18 +32,33 @@ struct HomeView: View {
             } else if showNewPost {
                 NewPostView(showNewPost: $showNewPost)
                     .transition(.identity)
+            } else if showGenerateImage {
+                GenerateImage01View(showGenerateImage: $showGenerateImage)
+                    .transition(.identity)
             } else {
                 homeContent
             }
 
             // MARK: - 照片选项弹窗
             if showPhotoOptions {
-                PhotoOptionsModal(isPresented: $showPhotoOptions)
+                PhotoOptionsModal(
+                    isPresented: $showPhotoOptions,
+                    onChoosePhoto: {
+                        showImagePicker = true
+                    },
+                    onTakePhoto: {
+                        showCamera = true
+                    },
+                    onGenerateImage: {
+                        showGenerateImage = true
+                    }
+                )
             }
         }
         .animation(.none, value: showNotification)
         .animation(.none, value: showSearch)
         .animation(.none, value: showNewPost)
+        .animation(.none, value: showGenerateImage)
         .navigationBarBackButtonHidden(true)
         .sheet(isPresented: $showReportView) {
             ReportModal(isPresented: $showReportView, showThankYouView: $showThankYouView)
@@ -48,6 +67,12 @@ struct HomeView: View {
             if let post = selectedPostForComment {
                 CommentSheetView(post: post, isPresented: $showComments)
             }
+        }
+        .sheet(isPresented: $showImagePicker) {
+            ImagePicker(sourceType: .photoLibrary, selectedImage: $selectedImage)
+        }
+        .sheet(isPresented: $showCamera) {
+            ImagePicker(sourceType: .camera, selectedImage: $selectedImage)
         }
         .onAppear {
             // Load feed when view appears
@@ -199,15 +224,23 @@ struct HomeView: View {
                         }
 
                         // MARK: - 标题部分
-                        VStack(spacing: DesignTokens.spacing8) {
-                            Text("Hottest Banker in H.K.")
-                                .font(.system(size: DesignTokens.fontHeadline, weight: .bold))
-                                .foregroundColor(DesignTokens.textPrimary)
+                        ZStack {
+                            Button(action: {
+                                currentPage = .rankingList
+                            }) {
+                                Text("View more")
+                                    .font(Font.custom("Helvetica Neue", size: 9))
+                                    .underline()
+                                    .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
+                            }
+                            .offset(x: 150, y: 12)
 
-                            Text("Corporate Poll")
-                                .font(.system(size: DesignTokens.fontLarge, weight: .medium))
-                                .foregroundColor(DesignTokens.textSecondary)
+                            Text("Hottest Banker in H.K.")
+                                .font(Font.custom("Helvetica Neue", size: 20).weight(.bold))
+                                .foregroundColor(.black)
+                                .offset(x: 0, y: -5.50)
                         }
+                        .frame(width: 343, height: 35)
 
                         // MARK: - 轮播卡片容器 (水平滚动)
                         ScrollView(.horizontal, showsIndicators: false) {
@@ -218,7 +251,6 @@ struct HomeView: View {
                                     name: "Lucy Liu",
                                     company: "Morgan Stanley",
                                     votes: "2293",
-                                    isActive: true,
                                     imageAssetName: "PollCard-1"
                                 )
 
@@ -228,7 +260,6 @@ struct HomeView: View {
                                     name: "Lucy Liu",
                                     company: "Morgan Stanley",
                                     votes: "2293",
-                                    isActive: false,
                                     imageAssetName: "PollCard-2"
                                 )
 
@@ -238,7 +269,6 @@ struct HomeView: View {
                                     name: "Lucy Liu",
                                     company: "Morgan Stanley",
                                     votes: "2293",
-                                    isActive: false,
                                     imageAssetName: "PollCard-3"
                                 )
 
@@ -248,7 +278,6 @@ struct HomeView: View {
                                     name: "Lucy Liu",
                                     company: "Morgan Stanley",
                                     votes: "2293",
-                                    isActive: false,
                                     imageAssetName: "PollCard-4"
                                 )
 
@@ -258,7 +287,6 @@ struct HomeView: View {
                                     name: "Lucy Liu",
                                     company: "Morgan Stanley",
                                     votes: "2293",
-                                    isActive: false,
                                     imageAssetName: "PollCard-5"
                                 )
                             }
@@ -278,19 +306,6 @@ struct HomeView: View {
                                     .frame(width: DesignTokens.spacing6, height: DesignTokens.spacing6)
                             }
                         }
-
-                        // MARK: - View more 按钮
-                        HStack(spacing: DesignTokens.spacing8) {
-                            Text("view more")
-                                .font(.system(size: DesignTokens.fontBody))
-                                .foregroundColor(DesignTokens.accentColor)
-
-                            Rectangle()
-                                .stroke(DesignTokens.accentColor, lineWidth: 0.5)
-                                .frame(height: 1)
-                                .frame(width: 50)
-                        }
-                        .padding(.top, DesignTokens.spacing10)
                     }
                     .padding(.vertical, DesignTokens.spacing16)
                     .padding(.horizontal)

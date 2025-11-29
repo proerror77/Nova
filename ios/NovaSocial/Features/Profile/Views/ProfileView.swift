@@ -10,6 +10,10 @@ struct ProfileView: View {
     @State private var showSetting = false
     @State private var selectedPhotoItem: PhotosPickerItem?
     @State private var showPhotoOptions = false
+    @State private var showImagePicker = false
+    @State private var showCamera = false
+    @State private var selectedImage: UIImage?
+    @State private var showGenerateImage = false
 
     // Computed property for user display
     private var displayUser: UserProfile? {
@@ -17,6 +21,39 @@ struct ProfileView: View {
     }
 
     var body: some View {
+        ZStack {
+            // 条件渲染：根据状态切换视图
+            if showGenerateImage {
+                GenerateImage01View(showGenerateImage: $showGenerateImage)
+                    .transition(.identity)
+            } else if showSetting {
+                SettingsView(currentPage: $currentPage)
+                    .transition(.identity)
+            } else {
+                profileContent
+            }
+        }
+        .animation(.none, value: showGenerateImage)
+        .animation(.none, value: showSetting)
+        .sheet(isPresented: $showImagePicker) {
+            ImagePicker(sourceType: .photoLibrary, selectedImage: $selectedImage)
+        }
+        .sheet(isPresented: $showCamera) {
+            ImagePicker(sourceType: .camera, selectedImage: $selectedImage)
+        }
+        .onChange(of: selectedPhotoItem) { oldValue, newValue in
+            Task {
+                if let photoItem = newValue,
+                   let data = try? await photoItem.loadTransferable(type: Data.self),
+                   let image = UIImage(data: data) {
+                    await profileData.uploadAvatar(image: image)
+                }
+            }
+        }
+    }
+
+    // MARK: - Profile 主内容
+    private var profileContent: some View {
         ZStack {
             Color.white
                 .ignoresSafeArea()
@@ -334,10 +371,10 @@ struct ProfileView: View {
 
                     // Alice
                     VStack(spacing: -12) {
-                        Image("alice-icon")
+                        Image("alice-button-off")
                             .resizable()
                             .scaledToFit()
-                            .frame(width: 36, height: 36)
+                            .frame(width: 44, height: 44)
                         Text("")
                             .font(.system(size: 9))
                     }
@@ -351,7 +388,7 @@ struct ProfileView: View {
                         Image("Account-button-on")
                             .resizable()
                             .scaledToFit()
-                            .frame(width: 36, height: 36)
+                            .frame(width: 44, height: 44)
                         Text("")
                             .font(.system(size: 9))
                     }
@@ -369,15 +406,6 @@ struct ProfileView: View {
             }
         }
         .ignoresSafeArea()
-        .onChange(of: selectedPhotoItem) { oldValue, newValue in
-            Task {
-                if let photoItem = newValue,
-                   let data = try? await photoItem.loadTransferable(type: Data.self),
-                   let image = UIImage(data: data) {
-                    await profileData.uploadAvatar(image: image)
-                }
-            }
-        }
         .task {
             // Use current user from AuthenticationManager
             if let userId = authManager.currentUser?.id {
@@ -419,8 +447,8 @@ struct ProfileView: View {
 
                     // Choose Photo
                     Button(action: {
-                        // 选择照片操作
                         showPhotoOptions = false
+                        showImagePicker = true
                     }) {
                         Text("Choose Photo")
                             .font(Font.custom("Helvetica Neue", size: 18).weight(.medium))
@@ -430,8 +458,8 @@ struct ProfileView: View {
 
                     // Take Photo
                     Button(action: {
-                        // 拍照操作
                         showPhotoOptions = false
+                        showCamera = true
                     }) {
                         Text("Take Photo")
                             .font(Font.custom("Helvetica Neue", size: 18).weight(.medium))
@@ -441,8 +469,8 @@ struct ProfileView: View {
 
                     // Generate image
                     Button(action: {
-                        // 生成图片操作
                         showPhotoOptions = false
+                        showGenerateImage = true
                     }) {
                         Text("Generate image")
                             .font(Font.custom("Helvetica Neue", size: 18).weight(.medium))

@@ -12,65 +12,65 @@ struct StartGroupChatView: View {
 
             VStack(spacing: 0) {
                 // MARK: - 顶部导航栏
-                ZStack {
-                    Rectangle()
-                        .foregroundColor(.clear)
-                        .frame(width: 375, height: 88)
-                        .background(.white)
-                        .overlay(
-                            Rectangle()
-                                .inset(by: 0.20)
-                                .stroke(Color(red: 0.77, green: 0.77, blue: 0.77), lineWidth: 0.20)
-                        )
-
-                    HStack(spacing: 50) {
-                        Button(action: {
-                            currentPage = .message
-                        }) {
-                            Image(systemName: "chevron.left")
-                                .font(.system(size: 20))
-                                .foregroundColor(.black)
-                                .frame(width: 24, height: 24)
-                        }
-
-                        Text("Start Group Chat")
-                            .font(Font.custom("Helvetica Neue", size: 24).weight(.medium))
-                            .lineSpacing(20)
+                HStack(spacing: 0) {
+                    Button(action: {
+                        currentPage = .message
+                    }) {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 20))
                             .foregroundColor(.black)
-
-                        Button(action: {
-                            // TODO: 保存群聊
-                        }) {
-                            Text("Save")
-                                .font(Font.custom("Helvetica Neue", size: 14))
-                                .lineSpacing(20)
-                                .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
-                        }
-                        .frame(width: 36, height: 20)
+                            .frame(width: 24, height: 24)
                     }
-                    .frame(width: 343, height: 24)
-                    .offset(y: 22)
+                    .frame(width: 60, alignment: .leading)
+
+                    Spacer()
+
+                    Text("Start Group Chat")
+                        .font(Font.custom("Helvetica Neue", size: 24).weight(.medium))
+                        .foregroundColor(.black)
+
+                    Spacer()
+
+                    Button(action: {
+                        if !selectedContacts.isEmpty {
+                            currentPage = .groupChat
+                        }
+                    }) {
+                        Text(selectedContacts.isEmpty ? "Save" : "Save(\(selectedContacts.count))")
+                            .font(Font.custom("Helvetica Neue", size: 14))
+                            .foregroundColor(selectedContacts.isEmpty ? Color(red: 0.53, green: 0.53, blue: 0.53) : Color(red: 0.87, green: 0.11, blue: 0.26))
+                    }
+                    .frame(width: 60, alignment: .trailing)
+                    .disabled(selectedContacts.isEmpty)
                 }
-                .frame(height: 88)
+                .frame(maxWidth: .infinity)
+                .frame(height: 60)
+                .padding(.horizontal, 16)
+                .background(.white)
+                .overlay(
+                    Rectangle()
+                        .frame(height: 0.5)
+                        .foregroundColor(Color(red: 0.74, green: 0.74, blue: 0.74)),
+                    alignment: .bottom
+                )
 
                 // MARK: - 搜索框
                 HStack(spacing: 10) {
                     Image(systemName: "magnifyingglass")
                         .font(.system(size: 15))
-                        .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
+                        .foregroundColor(Color(red: 0.69, green: 0.68, blue: 0.68))
 
                     Text("Search")
                         .font(Font.custom("Helvetica Neue", size: 15))
-                        .lineSpacing(20)
-                        .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
+                        .foregroundColor(Color(red: 0.69, green: 0.68, blue: 0.68))
 
                     Spacer()
                 }
                 .padding(EdgeInsets(top: 6, leading: 12, bottom: 6, trailing: 12))
-                .frame(width: 351, height: 32)
-                .background(Color(red: 0.91, green: 0.91, blue: 0.91))
+                .frame(height: 32)
+                .background(Color(red: 0.89, green: 0.88, blue: 0.87))
                 .cornerRadius(32)
-                .padding(.top, 20)
+                .padding(EdgeInsets(top: 12, leading: 18, bottom: 16, trailing: 18))
 
                 // MARK: - Select an existing group
                 HStack {
@@ -163,10 +163,9 @@ struct ContactRow: View {
             }
 
             // 头像
-            Ellipse()
-                .foregroundColor(.clear)
-                .frame(width: 50, height: 50)
-                .background(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
+            Circle()
+                .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
+                .frame(width: 42, height: 42)
 
             // 名字
             VStack(alignment: .leading, spacing: 1) {

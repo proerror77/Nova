@@ -11,7 +11,7 @@ struct AddFriendsView: View {
 
             VStack(spacing: 0) {
                 // MARK: - 顶部导航栏
-                HStack(spacing: 97) {
+                HStack {
                     Button(action: {
                         currentPage = .message
                     }) {
@@ -20,22 +20,23 @@ struct AddFriendsView: View {
                             .foregroundColor(.black)
                     }
 
+                    Spacer()
+
                     Text("Add friends")
-                        .font(Font.custom("Helvetica Neue", size: 24).weight(.medium))
-                        .lineSpacing(20)
+                        .font(Font.custom("Helvetica Neue", size: 20).weight(.bold))
                         .foregroundColor(.black)
 
                     Spacer()
-                        .frame(width: 20)
+
+                    // 占位空间，保持标题居中
+                    Color.clear
+                        .frame(width: 20, height: 20)
                 }
-                .frame(width: 343, height: 88)
-                .background(.white)
-                .overlay(
-                    Rectangle()
-                        .inset(by: 0.20)
-                        .stroke(Color(red: 0.77, green: 0.77, blue: 0.77), lineWidth: 0.20),
-                    alignment: .bottom
-                )
+                .frame(height: 56)
+                .padding(.horizontal, 16)
+                .background(Color.white)
+
+                Divider()
 
                 // MARK: - 搜索框
                 HStack(spacing: 10) {
@@ -45,16 +46,16 @@ struct AddFriendsView: View {
 
                     Text("Search")
                         .font(Font.custom("Helvetica Neue", size: 15))
-                        .lineSpacing(20)
                         .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
 
                     Spacer()
                 }
                 .padding(EdgeInsets(top: 6, leading: 12, bottom: 6, trailing: 12))
-                .frame(width: 351, height: 32)
+                .frame(maxWidth: .infinity, minHeight: 32)
                 .background(Color(red: 0.91, green: 0.91, blue: 0.91))
                 .cornerRadius(32)
-                .padding(.top, 20)
+                .padding(.horizontal, 16)
+                .padding(.top, 12)
 
                 // MARK: - Icered contacts above 标题
                 HStack {

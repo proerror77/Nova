@@ -2,8 +2,12 @@ import SwiftUI
 
 /// 应用页面枚举
 enum AppPage {
+    case splash
+    case welcome
     case login
+    case createAccount
     case home
+    case rankingList
     case search
     case newPost
     case notification
@@ -18,4 +22,5 @@ enum AppPage {
     case myChannels
     case addFriends
     case startGroupChat
+    case groupChat
 }

@@ -90,6 +90,42 @@ class AuthenticationManager: ObservableObject {
         }
     }
 
+    // MARK: - Guest Mode (临时登录)
+
+    /// 设置访客模式，允许用户跳过登录浏览应用
+    func setGuestMode() {
+        self.isAuthenticated = true
+        self.currentUser = UserProfile(
+            id: "guest",
+            username: "Guest",
+            email: nil,
+            displayName: "Guest User",
+            bio: nil,
+            avatarUrl: nil,
+            coverUrl: nil,
+            website: nil,
+            location: nil,
+            isVerified: false,
+            isPrivate: false,
+            followerCount: 0,
+            followingCount: 0,
+            postCount: 0,
+            createdAt: nil,
+            updatedAt: nil,
+            deletedAt: nil
+        )
+        self.authToken = "guest_token"
+
+        #if DEBUG
+        print("[Auth] Guest mode enabled")
+        #endif
+    }
+
+    /// 检查是否为访客模式
+    var isGuestMode: Bool {
+        currentUser?.id == "guest"
+    }
+
     // MARK: - Registration
 
     /// Register new user

@@ -1,5 +1,14 @@
 import SwiftUI
 
+// MARK: - 会话预览数据模型
+struct ConversationPreview {
+    let userName: String
+    let lastMessage: String
+    let time: String
+    let unreadCount: Int
+    let hasUnread: Bool
+}
+
 struct MessageView: View {
     @Binding var currentPage: AppPage
     @State private var showNewPost = false
@@ -7,15 +16,69 @@ struct MessageView: View {
     @State private var showPhotoOptions = false
     @State private var showAddOptionsMenu = false
     @State private var showQRScanner = false
+    @State private var selectedUserName = "User"
+    @State private var selectedUserMessages: [ChatMessage] = []
+    @State private var showImagePicker = false
+    @State private var showCamera = false
+    @State private var selectedImage: UIImage?
+    @State private var showGenerateImage = false
+
+    // 会话预览数据
+    @State private var conversations: [ConversationPreview] = []
+
+    init(currentPage: Binding<AppPage>) {
+        self._currentPage = currentPage
+
+        // 初始化用户名
+        var names = ["alice", "Ethan Miller"]
+        let randomNames = ["Liam", "Emma", "Noah", "Olivia", "James", "Ava", "Lucas", "Sophia", "Mason", "Isabella", "Mia", "Alexander", "Charlotte", "Michael", "Amelia", "Daniel", "Harper", "Henry", "Evelyn"].shuffled()
+        names.append(contentsOf: Array(randomNames.prefix(7)))
+
+        // 初始化会话预览数据
+        let messages = [
+            "Hi", "Hello!", "How are you?", "What's up?", "Good morning!",
+            "See you later", "Thanks!", "Sounds good", "Ok", "Sure thing",
+            "Let's meet up", "Call me later", "I'm on my way", "Almost there",
+            "That's awesome!", "Haha", "😊", "👍", "Miss you", "Bye!"
+        ]
+
+        let times = [
+            "09:41 PM", "10:30 AM", "Yesterday", "2:15 PM", "11:20 AM",
+            "3:45 PM", "8:30 PM", "Monday", "Tuesday", "5:10 PM"
+        ]
+
+        var convos: [ConversationPreview] = []
+        for name in names {
+            // 70% 概率显示真实消息
+            let hasRealMessage = Double.random(in: 0...1) < 0.7
+            let message = hasRealMessage ? (messages.randomElement() ?? "") : "Now let's start chatting!"
+            let time = hasRealMessage ? times.randomElement() ?? "" : ""
+            let hasUnread = hasRealMessage && Double.random(in: 0...1) < 0.6 // 60% 概率有未读
+            let unreadCount = hasUnread ? Int.random(in: 1...5) : 0
+
+            convos.append(ConversationPreview(
+                userName: name,
+                lastMessage: message,
+                time: time,
+                unreadCount: unreadCount,
+                hasUnread: hasUnread
+            ))
+        }
+
+        self._conversations = State(initialValue: convos)
+    }
 
     var body: some View {
         ZStack {
             // 条件渲染：根据状态即时切换视图
             if showChat {
-                ChatView(showChat: $showChat)
+                ChatView(showChat: $showChat, userName: selectedUserName, initialMessages: selectedUserMessages)
                     .transition(.identity)
             } else if showNewPost {
                 NewPostView(showNewPost: $showNewPost)
+                    .transition(.identity)
+            } else if showGenerateImage {
+                GenerateImage01View(showGenerateImage: $showGenerateImage)
                     .transition(.identity)
             } else {
                 messageContent
@@ -33,8 +96,15 @@ struct MessageView: View {
         }
         .animation(.none, value: showChat)
         .animation(.none, value: showNewPost)
+        .animation(.none, value: showGenerateImage)
         .sheet(isPresented: $showQRScanner) {
             QRCodeScannerView(isPresented: $showQRScanner)
+        }
+        .sheet(isPresented: $showImagePicker) {
+            ImagePicker(sourceType: .photoLibrary, selectedImage: $selectedImage)
+        }
+        .sheet(isPresented: $showCamera) {
+            ImagePicker(sourceType: .camera, selectedImage: $selectedImage)
         }
     }
 
@@ -95,13 +165,40 @@ struct MessageView: View {
                 // MARK: - 消息列表
                 ScrollView {
                     VStack(spacing: 2) {
-                        ForEach(0..<9, id: \.self) { index in
-                            MessageListItem(name: index == 0 ? "alice" : "Liam")
-                                .onTapGesture {
+                        ForEach(conversations.indices, id: \.self) { index in
+                            let convo = conversations[index]
+                            MessageListItem(
+                                name: convo.userName,
+                                messagePreview: convo.lastMessage,
+                                time: convo.time,
+                                unreadCount: convo.unreadCount,
+                                showMessagePreview: true, // 总是显示消息预览
+                                showTimeAndBadge: convo.hasUnread
+                            )
+                            .onTapGesture {
+                                let userName = convo.userName
+                                // alice 跳转到 Alice 页面，其他用户跳转到 Chat 页面
+                                if userName.lowercased() == "alice" {
+                                    currentPage = .alice
+                                } else {
+                                    selectedUserName = userName
+                                    // 创建初始消息（只有真实消息才显示在 Chat 中）
+                                    if !convo.lastMessage.isEmpty && convo.lastMessage != "Now let's start chatting!" {
+                                        selectedUserMessages = [
+                                            ChatMessage(
+                                                text: convo.lastMessage,
+                                                isFromMe: false,
+                                                timestamp: Date()
+                                            )
+                                        ]
+                                    } else {
+                                        selectedUserMessages = []
+                                    }
                                     showChat = true
                                 }
+                            }
 
-                            if index < 8 {
+                            if index < conversations.count - 1 {
                                 Divider()
                                     .frame(height: 0.25)
                                     .background(Color(red: 0.74, green: 0.74, blue: 0.74))
@@ -145,10 +242,10 @@ struct MessageView: View {
 
                     // Alice
                     VStack(spacing: -12) {
-                        Image("alice-icon")
+                        Image("alice-button-off")
                             .resizable()
                             .scaledToFit()
-                            .frame(width: 36, height: 36)
+                            .frame(width: 44, height: 44)
                         Text("")
                             .font(.system(size: 9))
                     }
@@ -158,11 +255,13 @@ struct MessageView: View {
                     }
 
                     // Account
-                    VStack(spacing: 4) {
-                        Image("Account-icon")
+                    VStack(spacing: -12) {
+                        Image("Account-button-off")
                             .resizable()
                             .scaledToFit()
-                            .frame(width: 24, height: 24)
+                            .frame(width: 44, height: 44)
+                        Text("")
+                            .font(.system(size: 9))
                     }
                     .frame(maxWidth: .infinity)
                     .onTapGesture {
@@ -208,8 +307,8 @@ struct MessageView: View {
 
                     // Choose Photo
                     Button(action: {
-                        // 选择照片操作
                         showPhotoOptions = false
+                        showImagePicker = true
                     }) {
                         Text("Choose Photo")
                             .font(Font.custom("Helvetica Neue", size: 18).weight(.medium))
@@ -219,8 +318,8 @@ struct MessageView: View {
 
                     // Take Photo
                     Button(action: {
-                        // 拍照操作
                         showPhotoOptions = false
+                        showCamera = true
                     }) {
                         Text("Take Photo")
                             .font(Font.custom("Helvetica Neue", size: 18).weight(.medium))
@@ -230,8 +329,8 @@ struct MessageView: View {
 
                     // Generate image
                     Button(action: {
-                        // 生成图片操作
                         showPhotoOptions = false
+                        showGenerateImage = true
                     }) {
                         Text("Generate image")
                             .font(Font.custom("Helvetica Neue", size: 18).weight(.medium))
@@ -391,13 +490,26 @@ struct MessageView: View {
 // MARK: - 消息列表项组件
 struct MessageListItem: View {
     var name: String = "Liam"
+    var messagePreview: String = "Hello, how are you bro~"
+    var time: String = "09:41 PM"
+    var unreadCount: Int = 1
+    var showMessagePreview: Bool = true
+    var showTimeAndBadge: Bool = true
 
     var body: some View {
         HStack(spacing: 12) {
-            // 头像
-            Circle()
-                .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
-                .frame(width: 63, height: 63)
+            // 头像 - alice 使用自定义图片，其他用户使用默认圆形
+            if name.lowercased() == "alice" {
+                Image("alice-avatar")
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 63, height: 63)
+                    .clipShape(Circle())
+            } else {
+                Circle()
+                    .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
+                    .frame(width: 63, height: 63)
+            }
 
             // 消息内容
             VStack(alignment: .leading, spacing: 5) {
@@ -405,27 +517,31 @@ struct MessageListItem: View {
                     .font(Font.custom("Helvetica Neue", size: 19).weight(.bold))
                     .foregroundColor(.black)
 
-                Text("Hello, how are you bro~")
+                // 消息预览 - 使用动态消息
+                Text(messagePreview)
                     .font(Font.custom("Helvetica Neue", size: 15))
                     .foregroundColor(Color(red: 0.54, green: 0.54, blue: 0.54))
+                    .opacity(showMessagePreview ? 1 : 0)
             }
 
             Spacer()
 
-            // 时间和未读标记
-            VStack(alignment: .trailing, spacing: 6) {
-                Text("09:41 PM")
-                    .font(Font.custom("Helvetica Neue", size: 13))
-                    .foregroundColor(Color(red: 0.65, green: 0.65, blue: 0.65))
+            // 时间和未读标记 - 可隐藏
+            if showTimeAndBadge {
+                VStack(alignment: .trailing, spacing: 6) {
+                    Text(time)
+                        .font(Font.custom("Helvetica Neue", size: 13))
+                        .foregroundColor(Color(red: 0.65, green: 0.65, blue: 0.65))
 
-                ZStack {
-                    Circle()
-                        .fill(Color(red: 0.82, green: 0.11, blue: 0.26))
-                        .frame(width: 17, height: 17)
+                    ZStack {
+                        Circle()
+                            .fill(Color(red: 0.82, green: 0.11, blue: 0.26))
+                            .frame(width: 17, height: 17)
 
-                    Text("1")
-                        .font(Font.custom("Helvetica Neue", size: 12).weight(.medium))
-                        .foregroundColor(.white)
+                        Text("\(unreadCount)")
+                            .font(Font.custom("Helvetica Neue", size: 12).weight(.medium))
+                            .foregroundColor(.white)
+                    }
                 }
             }
         }
@@ -436,5 +552,13 @@ struct MessageListItem: View {
 }
 
 #Preview {
-    MessageView(currentPage: .constant(.message))
+    struct PreviewWrapper: View {
+        @State private var currentPage: AppPage = .message
+
+        var body: some View {
+            MessageView(currentPage: $currentPage)
+        }
+    }
+
+    return PreviewWrapper()
 }

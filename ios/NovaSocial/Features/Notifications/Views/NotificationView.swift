@@ -2,8 +2,23 @@ import SwiftUI
 
 struct NotificationView: View {
     @Binding var showNotification: Bool
+    @State private var showChat = false
+    @State private var selectedUserName = ""
 
     var body: some View {
+        ZStack {
+            // 条件渲染：根据状态切换视图
+            if showChat {
+                ChatView(showChat: $showChat, userName: selectedUserName, initialMessages: [])
+                    .transition(.identity)
+            } else {
+                notificationContent
+            }
+        }
+        .animation(.none, value: showChat)
+    }
+
+    private var notificationContent: some View {
         ZStack {
             // MARK: - 背景色
             Color.white
@@ -45,94 +60,208 @@ struct NotificationView: View {
 
                 // MARK: - 通知列表
                 ScrollView {
-                    VStack(spacing: 0) {
-                        // 通知项 1：点赞通知
-                        NotificationListItem(
-                            avatarColor: Color(red: 0.81, green: 0.13, blue: 0.25),
-                            userName: "Liam",
-                            action: "liked your post.",
-                            time: "4d",
-                            showFollowButton: false
-                        )
+                    VStack(alignment: .leading, spacing: 16) {
+                        // Today Section
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Today")
+                                .font(Font.custom("Helvetica Neue", size: 16).weight(.medium))
+                                .foregroundColor(Color(red: 0.27, green: 0.27, blue: 0.27))
+                                .padding(.horizontal, 16)
 
-                        // 分隔线
-                        Divider()
-                            .frame(height: 0.5)
-                            .background(Color(red: 0.74, green: 0.74, blue: 0.74))
+                            NotificationListItem(
+                                userName: "Ethan Miller",
+                                action: "Go for your job.",
+                                time: "4d",
+                                buttonType: .message,
+                                onMessageTap: {
+                                    selectedUserName = "Ethan Miller"
+                                    showChat = true
+                                }
+                            )
+                        }
 
-                        // 通知项 2：关注通知
-                        NotificationListItem(
-                            avatarColor: Color(red: 0.81, green: 0.13, blue: 0.25),
-                            userName: "Liam",
-                            action: "started following you.",
-                            time: "4d",
-                            showFollowButton: true
-                        )
+                        // Last 7 Days Section
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Last 7 Days")
+                                .font(Font.custom("Helvetica Neue", size: 16).weight(.medium))
+                                .foregroundColor(Color(red: 0.27, green: 0.27, blue: 0.27))
+                                .padding(.horizontal, 16)
+
+                            NotificationListItem(
+                                userName: "Lucas",
+                                action: "liked your post.",
+                                time: "4d",
+                                buttonType: .followBack
+                            )
+
+                            NotificationListItem(
+                                userName: "Noah Carter",
+                                action: "liked your post.",
+                                time: "4d",
+                                buttonType: .follow
+                            )
+
+                            NotificationListItem(
+                                userName: "Oliver Hayes",
+                                action: "liked your post.",
+                                time: "4d",
+                                buttonType: .follow
+                            )
+
+                            NotificationListItem(
+                                userName: "Liam Foster",
+                                action: "liked your post.",
+                                time: "4d",
+                                buttonType: .follow
+                            )
+                        }
+
+                        // Last 30 Days Section
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Last 30 Days")
+                                .font(Font.custom("Helvetica Neue", size: 16).weight(.medium))
+                                .foregroundColor(Color(red: 0.27, green: 0.27, blue: 0.27))
+                                .padding(.horizontal, 16)
+
+                            NotificationListItem(
+                                userName: "Ava Turner",
+                                action: "liked your post.",
+                                time: "4w",
+                                buttonType: .followBack
+                            )
+
+                            NotificationListItem(
+                                userName: "Sophia Reed",
+                                action: "liked your post.",
+                                time: "4w",
+                                buttonType: .follow
+                            )
+
+                            NotificationListItem(
+                                userName: "Sophia Reed",
+                                action: "liked your post.",
+                                time: "4w",
+                                buttonType: .follow
+                            )
+
+                            NotificationListItem(
+                                userName: "Sophia Reed",
+                                action: "liked your post.",
+                                time: "4w",
+                                buttonType: .follow
+                            )
+
+                            NotificationListItem(
+                                userName: "Sophia Reed",
+                                action: "liked your post.",
+                                time: "4w",
+                                buttonType: .follow
+                            )
+                        }
                     }
+                    .padding(.vertical, 16)
                 }
             }
         }
     }
 }
 
+// MARK: - 按钮类型枚举
+enum NotificationButtonType {
+    case message
+    case follow
+    case followBack
+    case none
+}
+
 // MARK: - 通知列表项组件
 struct NotificationListItem: View {
-    let avatarColor: Color
     let userName: String
     let action: String
     let time: String
-    let showFollowButton: Bool
+    let buttonType: NotificationButtonType
+    var onMessageTap: (() -> Void)?
     @State private var isFollowing = false
 
     var body: some View {
-        HStack(spacing: 12) {
-            // 头像
-            ZStack {
-                Circle()
-                    .fill(avatarColor)
-                    .frame(width: 57, height: 57)
-
-                Circle()
-                    .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
-                    .frame(width: 53, height: 53)
-            }
+        HStack(spacing: 13) {
+            // 头像 - 42x42
+            Circle()
+                .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
+                .frame(width: 42, height: 42)
 
             // 内容
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 1) {
                 Text(userName)
-                    .font(Font.custom("Helvetica Neue", size: 19).weight(.bold))
+                    .font(Font.custom("Helvetica Neue", size: 16).weight(.bold))
                     .foregroundColor(.black)
 
                 HStack(spacing: 4) {
                     Text(action)
-                        .font(Font.custom("Helvetica Neue", size: 15))
-                        .foregroundColor(Color(red: 0.16, green: 0.16, blue: 0.16))
+                        .font(Font.custom("Helvetica Neue", size: 14))
+                        .foregroundColor(.black)
 
                     Text(time)
-                        .font(Font.custom("Helvetica Neue", size: 13))
-                        .foregroundColor(Color(red: 0.65, green: 0.65, blue: 0.65))
+                        .font(Font.custom("Helvetica Neue", size: 14))
+                        .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
                 }
             }
 
             Spacer()
 
-            // Follow back 按钮
-            if showFollowButton {
+            // 按钮
+            switch buttonType {
+            case .message:
+                Button(action: {
+                    onMessageTap?()
+                }) {
+                    Text("Message")
+                        .font(Font.custom("Helvetica Neue", size: 12).weight(.medium))
+                        .foregroundColor(.black)
+                }
+                .frame(width: 85, height: 24)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 100)
+                        .inset(by: 0.50)
+                        .stroke(.black, lineWidth: 0.50)
+                )
+
+            case .follow:
+                Button(action: {
+                    isFollowing.toggle()
+                }) {
+                    Text(isFollowing ? "Following" : "Follow")
+                        .font(Font.custom("Helvetica Neue", size: 12))
+                        .foregroundColor(Color(red: 0.87, green: 0.11, blue: 0.26))
+                }
+                .frame(width: 85, height: 24)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 100)
+                        .inset(by: 0.50)
+                        .stroke(Color(red: 0.87, green: 0.11, blue: 0.26), lineWidth: 0.50)
+                )
+
+            case .followBack:
                 Button(action: {
                     isFollowing.toggle()
                 }) {
                     Text(isFollowing ? "Following" : "Follow back")
-                        .font(Font.custom("Helvetica Neue", size: 12).weight(.medium))
-                        .foregroundColor(.white)
-                        .padding(EdgeInsets(top: 2, leading: 18, bottom: 2, trailing: 18))
-                        .frame(height: 25)
-                        .background(Color(red: 0.81, green: 0.13, blue: 0.25))
-                        .cornerRadius(6)
+                        .font(Font.custom("Helvetica Neue", size: 12))
+                        .foregroundColor(Color(red: 0.87, green: 0.11, blue: 0.26))
                 }
+                .frame(width: 85, height: 24)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 100)
+                        .inset(by: 0.50)
+                        .stroke(Color(red: 0.87, green: 0.11, blue: 0.26), lineWidth: 0.50)
+                )
+
+            case .none:
+                EmptyView()
             }
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 12)
+        .padding(.vertical, 8)
         .background(Color.white)
     }
 }
