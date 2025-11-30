@@ -395,29 +395,9 @@ impl ConversationService {
             .await
             .map_err(|e| crate::error::AppError::StartServer(format!("tx: {e}")))?;
 
-        // Ensure creator exists
-        let creator_username = format!("u_{}", &creator_id.to_string()[..8]);
-        sqlx::query("INSERT INTO users (id, username) VALUES ($1, $2) ON CONFLICT (id) DO NOTHING")
-            .bind(creator_id)
-            .bind(creator_username)
-            .execute(&mut *tx)
-            .await
-            .map_err(|e| crate::error::AppError::StartServer(format!("ensure creator: {e}")))?;
-
-        // Ensure all members exist
-        for member_id in &member_ids {
-            let username = format!("u_{}", &member_id.to_string()[..8]);
-            sqlx::query(
-                "INSERT INTO users (id, username) VALUES ($1, $2) ON CONFLICT (id) DO NOTHING",
-            )
-            .bind(member_id)
-            .bind(username)
-            .execute(&mut *tx)
-            .await
-            .map_err(|e| {
-                crate::error::AppError::StartServer(format!("ensure member {}: {e}", member_id))
-            })?;
-        }
+        // Note: FK constraints to users table have been removed (migration 0024)
+        // User existence is validated at application layer via identity-service
+        // This follows the single-writer principle for microservices architecture
 
         // Calculate total member count (creator + members, deduplicated)
         let mut all_members = vec![creator_id];
