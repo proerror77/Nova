@@ -153,4 +153,61 @@ impl EmailService {
         }
         Ok(())
     }
+
+    /// Send HTML email with plain text fallback
+    ///
+    /// ## Arguments
+    ///
+    /// * `recipient` - Email address
+    /// * `subject` - Email subject
+    /// * `html_body` - HTML body content
+    /// * `text_body` - Plain text fallback content
+    pub async fn send_html_email(
+        &self,
+        recipient: &str,
+        subject: &str,
+        html_body: &str,
+        text_body: &str,
+    ) -> Result<()> {
+        use lettre::message::MultiPart;
+
+        if let Some(transport) = &self.transport {
+            let to = recipient.parse::<Mailbox>().map_err(|e| {
+                IdentityError::Internal(format!("Invalid recipient email address: {}", e))
+            })?;
+
+            let email = Message::builder()
+                .from(self.from.clone())
+                .to(to)
+                .subject(subject)
+                .multipart(
+                    MultiPart::alternative()
+                        .singlepart(
+                            lettre::message::SinglePart::builder()
+                                .header(header::ContentType::TEXT_PLAIN)
+                                .body(text_body.to_string()),
+                        )
+                        .singlepart(
+                            lettre::message::SinglePart::builder()
+                                .header(header::ContentType::TEXT_HTML)
+                                .body(html_body.to_string()),
+                        ),
+                )
+                .map_err(|e| {
+                    IdentityError::Internal(format!("Failed to build HTML email message: {}", e))
+                })?;
+
+            transport
+                .send(email)
+                .await
+                .map_err(|e| IdentityError::Internal(format!("Failed to send HTML email: {}", e)))?;
+            info!(subject, "HTML email sent successfully");
+        } else {
+            info!(
+                subject,
+                recipient, "Email service running in no-op mode; skipping actual send"
+            );
+        }
+        Ok(())
+    }
 }

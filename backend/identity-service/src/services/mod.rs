@@ -6,13 +6,16 @@
 /// - Two-factor authentication (TOTP + backup codes)
 /// - OAuth 2.0 (Google, Apple, Facebook, WeChat)
 /// - Transactional outbox (reliable event publishing)
+/// - Invite delivery (SMS via AWS SNS, Email, Dynamic Links)
 pub mod email;
+pub mod invite_delivery;
 pub mod kafka_events;
 pub mod oauth;
 pub mod outbox;
 pub mod two_fa;
 
 pub use email::EmailService;
+pub use invite_delivery::{InviteDeliveryConfig, InviteDeliveryService, SendInviteResult};
 pub use kafka_events::KafkaEventProducer;
 pub use oauth::{OAuthAuthorizationUrl, OAuthCallbackResult, OAuthProvider, OAuthService};
 pub use outbox::{spawn_outbox_consumer, OutboxConsumerConfig};

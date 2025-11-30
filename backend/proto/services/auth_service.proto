@@ -224,6 +224,7 @@ message RegisterRequest {
   string email = 1;        // User email address (must be valid format)
   string username = 2;     // User username (3-32 chars, alphanumeric + underscore)
   string password = 3;     // User password (validated by zxcvbn score >= 3)
+  string invite_code = 4;  // Required: valid invite code for registration
 }
 
 message RegisterResponse {
@@ -317,6 +318,123 @@ message GetInvitationStatsResponse {
   int32 total_redeemed = 2;
   int32 total_pending = 3;
   int32 total_expired = 4;
+}
+
+// ============================================================================
+// Invite Quota Management
+// ============================================================================
+message GetInviteQuotaRequest {
+  string user_id = 1;
+}
+
+message GetInviteQuotaResponse {
+  int32 total_quota = 1;           // Total invite quota
+  int32 used_quota = 2;            // Already generated invites
+  int32 remaining_quota = 3;       // Remaining invites available
+  int32 successful_referrals = 4;  // Count of successful referrals
+}
+
+// ============================================================================
+// Send Invite via Channel (SMS, Email, Link)
+// ============================================================================
+message SendInviteRequest {
+  string user_id = 1;              // Issuer user ID
+  string channel = 2;              // "sms", "email", "link"
+  optional string recipient = 3;   // Phone number or email (required for sms/email)
+  optional string message = 4;     // Custom message to include
+}
+
+message SendInviteResponse {
+  bool success = 1;
+  string invite_code = 2;
+  string invite_url = 3;           // Firebase Dynamic Link URL
+  string share_text = 4;           // Pre-formatted share message
+  optional string delivery_id = 5; // Tracking ID for SMS/Email delivery
+  optional string error = 6;
+}
+
+// ============================================================================
+// Validate Invite Code (check before registration)
+// ============================================================================
+message ValidateInviteRequest {
+  string code = 1;
+}
+
+message ValidateInviteResponse {
+  bool is_valid = 1;
+  optional string issuer_username = 2;  // Who sent the invite
+  optional int64 expires_at = 3;
+  optional string error = 4;  // "expired", "already_used", "not_found"
+}
+
+// ============================================================================
+// Referral Chain Info
+// ============================================================================
+message GetReferralInfoRequest {
+  string user_id = 1;
+}
+
+message ReferralUser {
+  string user_id = 1;
+  string username = 2;
+  optional string avatar_url = 3;
+  int64 joined_at = 4;
+  string status = 5;  // "pending", "active"
+}
+
+message GetReferralInfoResponse {
+  optional ReferralUser referred_by = 1;    // Who invited this user
+  repeated ReferralUser referrals = 2;      // Users this user invited
+  int32 total_referrals = 3;
+  int32 active_referrals = 4;
+}
+
+// ============================================================================
+// User Settings (P0: user-service migration)
+// ============================================================================
+
+message UserSettings {
+  string user_id = 1;
+  string dm_permission = 2;           // "anyone", "followers", "mutuals", "nobody"
+  bool email_notifications = 3;
+  bool push_notifications = 4;
+  bool marketing_emails = 5;
+  string timezone = 6;
+  string language = 7;
+  bool dark_mode = 8;
+  string privacy_level = 9;           // "public", "friends_only", "private"
+  bool allow_messages = 10;
+  bool show_online_status = 11;
+  int64 created_at = 12;
+  int64 updated_at = 13;
+}
+
+message GetUserSettingsRequest {
+  string user_id = 1;
+}
+
+message GetUserSettingsResponse {
+  UserSettings settings = 1;
+  optional .nova.common.v2.ErrorStatus error = 2;
+}
+
+message UpdateUserSettingsRequest {
+  string user_id = 1;
+  optional string dm_permission = 2;
+  optional bool email_notifications = 3;
+  optional bool push_notifications = 4;
+  optional bool marketing_emails = 5;
+  optional string timezone = 6;
+  optional string language = 7;
+  optional bool dark_mode = 8;
+  optional string privacy_level = 9;
+  optional bool allow_messages = 10;
+  optional bool show_online_status = 11;
+}
+
+message UpdateUserSettingsResponse {
+  UserSettings settings = 1;
+  optional .nova.common.v2.ErrorStatus error = 2;
 }
 
 // ============================================================================
@@ -517,6 +635,35 @@ service AuthService {
     };
   }
 
+  // Invite Quota
+  rpc GetInviteQuota(GetInviteQuotaRequest) returns (GetInviteQuotaResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/auth/invites/quota"
+    };
+  }
+
+  // Send Invite via Channel (SMS, Email, Link)
+  rpc SendInvite(SendInviteRequest) returns (SendInviteResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/auth/invites/send"
+      body: "*"
+    };
+  }
+
+  // Validate Invite Code (public - no auth required)
+  rpc ValidateInvite(ValidateInviteRequest) returns (ValidateInviteResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/auth/invites/validate"
+    };
+  }
+
+  // Referral Info
+  rpc GetReferralInfo(GetReferralInfoRequest) returns (GetReferralInfoResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/auth/referrals"
+    };
+  }
+
   // Devices
   rpc ListDevices(ListDevicesRequest) returns (ListDevicesResponse) {
     option (google.api.http) = {
@@ -544,6 +691,19 @@ service AuthService {
   rpc UpdateUserChannels(UpdateUserChannelsRequest) returns (UpdateUserChannelsResponse) {
     option (google.api.http) = {
       put: "/api/v2/auth/users/{user_id}/channels"
+      body: "*"
+    };
+  }
+
+  // User Settings (P0: user-service migration)
+  rpc GetUserSettings(GetUserSettingsRequest) returns (GetUserSettingsResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/auth/users/{user_id}/settings"
+    };
+  }
+  rpc UpdateUserSettings(UpdateUserSettingsRequest) returns (UpdateUserSettingsResponse) {
+    option (google.api.http) = {
+      put: "/api/v2/auth/users/{user_id}/settings"
       body: "*"
     };
   }
