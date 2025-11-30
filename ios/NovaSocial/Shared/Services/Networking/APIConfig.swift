@@ -104,6 +104,7 @@ struct APIConfig {
 
     struct Auth {
         static let login = "/api/v2/auth/login"
+        /// POST 註冊 - 需要 invite_code: {email, username, password, invite_code}
         static let register = "/api/v2/auth/register"
         static let refresh = "/api/v2/auth/refresh"
         static let logout = "/api/v2/auth/logout"
@@ -190,12 +191,22 @@ struct APIConfig {
         static let getCurrentDevice = "/api/v2/devices/current"  // GET 獲取當前設備信息
     }
 
-    // MARK: - Invitation API
+    // MARK: - Invitation API (邀請制系統)
     struct Invitations {
-        static let generateInviteCode = "/api/v2/invitations/generate"  // POST 生成邀請碼
-        static let getInviteLink = "/api/v2/invitations/link"  // GET 獲取邀請鏈接
-        static let inviteFriends = "/api/v2/invitations/send"  // POST 發送邀請
-        static let getInvitationStatus = "/api/v2/invitations"  // GET 獲取邀請狀態
+        // 生成邀請碼
+        static let generate = "/api/v2/auth/invites"  // POST 生成新邀請碼
+        // 列表我的邀請碼
+        static let list = "/api/v2/auth/invites"  // GET 獲取已生成的邀請碼列表
+        // 邀請統計
+        static let stats = "/api/v2/auth/invites/stats"  // GET {total_generated, total_redeemed, total_pending, total_expired}
+        // 配額查詢
+        static let quota = "/api/v2/auth/invites/quota"  // GET {total_quota, used_quota, remaining_quota, successful_referrals}
+        // 發送邀請 (SMS/Email/Link)
+        static let send = "/api/v2/auth/invites/send"  // POST {channel: "sms"|"email"|"link", recipient?, message?}
+        // 驗證邀請碼 (註冊前檢查 - 無需認證)
+        static let validate = "/api/v2/auth/invites/validate"  // GET ?code=XXXXX
+        // 推薦資訊
+        static let referrals = "/api/v2/auth/referrals"  // GET 獲取推薦人和被推薦人列表
     }
 
     // MARK: - Chat & Messaging API
@@ -210,6 +221,30 @@ struct APIConfig {
         static let getGroupDetails = "/api/v2/chat/groups"  // TODO: 後端尚未提供
         static let addGroupMembers = "/api/v2/chat/groups/members/add"  // POST 添加群組成員
         static let removeGroupMembers = "/api/v2/chat/groups/members/remove"  // DELETE 移除群組成員
+    }
+
+    // MARK: - Relationships & Privacy API (realtime-chat-service)
+    struct Relationships {
+        // Block Management
+        static let blockUser = "/api/v2/blocks"  // POST 封鎖用戶 {user_id, reason?}
+        /// DELETE /api/v2/blocks/{user_id} 解除封鎖
+        static func unblockUser(_ userId: String) -> String { "/api/v2/blocks/\(userId)" }
+        static let getBlockedUsers = "/api/v2/blocks"  // GET 獲取封鎖列表 ?limit=&offset=
+
+        // Relationship Status
+        /// GET /api/v2/relationships/{user_id} 獲取與用戶的關係狀態
+        static func getRelationship(_ userId: String) -> String { "/api/v2/relationships/\(userId)" }
+
+        // Privacy Settings
+        static let getPrivacySettings = "/api/v2/settings/privacy"  // GET 獲取私訊權限設定
+        static let updatePrivacySettings = "/api/v2/settings/privacy"  // PUT 更新私訊權限 {dm_permission: "anyone"|"followers"|"mutuals"|"nobody"}
+
+        // Message Requests (when dm_permission restricts non-followers)
+        static let getMessageRequests = "/api/v2/message-requests"  // GET 獲取待處理的訊息請求
+        /// POST /api/v2/message-requests/{id}/accept 接受訊息請求
+        static func acceptMessageRequest(_ requestId: String) -> String { "/api/v2/message-requests/\(requestId)/accept" }
+        /// POST /api/v2/message-requests/{id}/reject 拒絕訊息請求
+        static func rejectMessageRequest(_ requestId: String) -> String { "/api/v2/message-requests/\(requestId)/reject" }
     }
 
     // MARK: - Service Ports (for direct gRPC access if needed)
