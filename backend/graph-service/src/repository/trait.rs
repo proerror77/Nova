@@ -51,6 +51,31 @@ pub trait GraphRepositoryTrait: Send + Sync {
     /// Check if blocker has blocked blocked
     async fn is_blocked(&self, blocker_id: Uuid, blocked_id: Uuid) -> Result<bool>;
 
+    /// Check if either user has blocked the other (bidirectional)
+    /// Returns: (has_block, a_blocked_b, b_blocked_a)
+    async fn has_block_between(&self, user_a: Uuid, user_b: Uuid) -> Result<(bool, bool, bool)> {
+        let a_blocked_b = self.is_blocked(user_a, user_b).await?;
+        let b_blocked_a = self.is_blocked(user_b, user_a).await?;
+        Ok((a_blocked_b || b_blocked_a, a_blocked_b, b_blocked_a))
+    }
+
+    /// Get list of users blocked by a user
+    /// Returns: (blocked_user_ids, total_count, has_more)
+    async fn get_blocked_users(
+        &self,
+        user_id: Uuid,
+        limit: i32,
+        offset: i32,
+    ) -> Result<(Vec<Uuid>, i32, bool)>;
+
+    /// Check if two users are mutual followers
+    /// Returns: (are_mutuals, a_follows_b, b_follows_a)
+    async fn are_mutual_followers(&self, user_a: Uuid, user_b: Uuid) -> Result<(bool, bool, bool)> {
+        let a_follows_b = self.is_following(user_a, user_b).await?;
+        let b_follows_a = self.is_following(user_b, user_a).await?;
+        Ok((a_follows_b && b_follows_a, a_follows_b, b_follows_a))
+    }
+
     /// Batch check if follower is following multiple followees
     /// Returns: HashMap<followee_id_string, is_following>
     async fn batch_check_following(

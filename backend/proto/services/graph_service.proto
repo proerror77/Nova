@@ -95,6 +95,27 @@ service GraphService {
     };
   }
 
+  // Check if either user has blocked the other (bidirectional)
+  rpc HasBlockBetween(HasBlockBetweenRequest) returns (HasBlockBetweenResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/graph/has-block-between"
+    };
+  }
+
+  // Get list of users blocked by a user
+  rpc GetBlockedUsers(GetBlockedUsersRequest) returns (GetBlockedUsersResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/graph/blocked/{user_id}"
+    };
+  }
+
+  // Check if two users are mutual followers
+  rpc AreMutualFollowers(AreMutualFollowersRequest) returns (AreMutualFollowersResponse) {
+    option (google.api.http) = {
+      get: "/api/v2/graph/are-mutuals"
+    };
+  }
+
   // Batch check following relationships
   rpc BatchCheckFollowing(BatchCheckFollowingRequest) returns (BatchCheckFollowingResponse) {
     option (google.api.http) = {
@@ -231,4 +252,41 @@ message BatchCheckFollowingRequest {
 
 message BatchCheckFollowingResponse {
   map<string, bool> results = 1;  // followee_id -> is_following
+}
+
+// Check if either user has blocked the other
+message HasBlockBetweenRequest {
+  string user_a = 1;
+  string user_b = 2;
+}
+
+message HasBlockBetweenResponse {
+  bool has_block = 1;           // true if either blocked the other
+  bool a_blocked_b = 2;         // true if user_a blocked user_b
+  bool b_blocked_a = 3;         // true if user_b blocked user_a
+}
+
+// Get blocked users list
+message GetBlockedUsersRequest {
+  string user_id = 1;
+  int32 limit = 2;              // Default 50, max 1000
+  int32 offset = 3;
+}
+
+message GetBlockedUsersResponse {
+  repeated string blocked_user_ids = 1;
+  int32 total_count = 2;
+  bool has_more = 3;
+}
+
+// Check mutual followers
+message AreMutualFollowersRequest {
+  string user_a = 1;
+  string user_b = 2;
+}
+
+message AreMutualFollowersResponse {
+  bool are_mutuals = 1;         // true if both follow each other
+  bool a_follows_b = 2;         // true if user_a follows user_b
+  bool b_follows_a = 3;         // true if user_b follows user_a
 }

@@ -211,4 +211,60 @@ impl PostgresGraphRepository {
 
         Ok(exists)
     }
+
+    /// Check if blocked
+    pub async fn is_blocked(&self, blocker_id: Uuid, blocked_id: Uuid) -> Result<bool> {
+        let exists: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM blocks WHERE blocker_id = $1 AND blocked_id = $2)",
+        )
+        .bind(blocker_id)
+        .bind(blocked_id)
+        .fetch_one(&self.pool)
+        .await?;
+
+        Ok(exists)
+    }
+
+    /// Get blocked users with pagination (PostgreSQL fallback)
+    pub async fn get_blocked_users(
+        &self,
+        user_id: Uuid,
+        limit: i32,
+        offset: i32,
+    ) -> Result<(Vec<Uuid>, i32, bool)> {
+        let effective_limit = limit.min(10000);
+
+        // Get total count
+        let total_count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM blocks WHERE blocker_id = $1")
+                .bind(user_id)
+                .fetch_one(&self.pool)
+                .await?;
+
+        // Get paginated blocked users
+        let blocked: Vec<(Uuid,)> = sqlx::query_as(
+            "SELECT blocked_id FROM blocks
+             WHERE blocker_id = $1
+             ORDER BY created_at DESC
+             LIMIT $2 OFFSET $3",
+        )
+        .bind(user_id)
+        .bind(effective_limit as i64)
+        .bind(offset as i64)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let blocked_ids: Vec<Uuid> = blocked.into_iter().map(|(id,)| id).collect();
+        let has_more = (offset as i64 + effective_limit as i64) < total_count;
+
+        debug!(
+            "Got {} blocked users for user {} from PostgreSQL (offset: {}, has_more: {})",
+            blocked_ids.len(),
+            user_id,
+            offset,
+            has_more
+        );
+
+        Ok((blocked_ids, total_count as i32, has_more))
+    }
 }
