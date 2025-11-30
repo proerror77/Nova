@@ -1,0 +1,63 @@
+# GCP Project Configuration
+gcp_project_id = "banded-pad-479802-k9"
+gcp_region     = "asia-northeast1"
+environment    = "production"
+
+# Network Configuration
+vpc_name    = "nova-vpc-production"
+vpc_cidr    = "10.0.0.0/16"
+subnet_cidr = "10.0.0.0/20"
+
+# GKE Configuration
+gke_cluster_name   = "nova-production-gke"
+kubernetes_version = "1.27"
+
+# On-Demand Node Pool (stable workloads)
+on_demand_initial_node_count = 3
+on_demand_min_node_count     = 3
+on_demand_max_node_count     = 10
+on_demand_machine_type       = "n2-standard-8"  # Larger for production
+
+# Spot Node Pool (cost optimization)
+spot_initial_node_count = 2
+spot_min_node_count     = 1
+spot_max_node_count     = 5
+spot_machine_type       = "n2-standard-4"
+
+# Cloud SQL Configuration (HA enabled)
+database_instance_name = "nova"
+database_name          = "nova"
+database_user          = "nova_admin"
+postgres_version       = "15"
+database_machine_type  = "db-custom-8-32768"  # 8 vCPU, 32GB RAM
+database_disk_size     = 500                  # GB
+
+# Memorystore Redis Configuration (HA enabled)
+redis_instance_name = "nova-redis"
+redis_size_gb       = 5                  # 5GB for production
+redis_tier          = "STANDARD"         # High availability tier
+redis_version       = "7.0"
+
+# Artifact Registry Configuration
+artifact_repo_name            = "nova"
+artifact_keep_recent_versions = 20
+
+# GitHub Actions OIDC Configuration
+github_org              = "proerror"
+github_repo             = "nova"
+github_main_branch      = "main"
+enable_branch_specific_oidc = true  # Stricter control for production
+
+# Kubernetes Configuration
+k8s_namespace       = "nova-production"
+k8s_service_account = "k8s-workloads"
+
+# Custom Tags
+tags = {
+  project     = "nova"
+  environment = "production"
+  managed_by  = "terraform"
+  team        = "infrastructure"
+  cost_center = "engineering"
+  sla         = "99.9"
+}
