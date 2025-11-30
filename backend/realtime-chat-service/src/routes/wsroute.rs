@@ -86,6 +86,77 @@ async fn handle_ws_event_async(
         WsInboundEvent::GetUnacked => {
             tracing::debug!("Client {} requested unacked messages", user_id);
         }
+
+        // ============================================================
+        // E2EE Events (stubs - to be implemented)
+        // ============================================================
+        WsInboundEvent::GetToDeviceMessages { device_id, since } => {
+            tracing::debug!(
+                user_id = %user_id,
+                device_id = %device_id,
+                since = ?since,
+                "Client requested to-device messages (E2EE stub)"
+            );
+            // TODO: Implement fetching to-device messages from database
+        }
+
+        WsInboundEvent::AckToDeviceMessage { message_id } => {
+            tracing::debug!(
+                user_id = %user_id,
+                message_id = %message_id,
+                "Client acknowledged to-device message (E2EE stub)"
+            );
+            // TODO: Implement marking to-device message as delivered
+        }
+
+        WsInboundEvent::RequestRoomKeys {
+            conversation_id: room_id,
+            device_id,
+            session_id,
+        } => {
+            tracing::debug!(
+                user_id = %user_id,
+                room_id = %room_id,
+                device_id = %device_id,
+                session_id = %session_id,
+                "Client requested room keys (E2EE stub)"
+            );
+            // TODO: Implement room key request forwarding to other devices
+        }
+
+        WsInboundEvent::ShareRoomKey {
+            target_device_id,
+            room_id,
+            encrypted_key,
+        } => {
+            tracing::debug!(
+                user_id = %user_id,
+                target_device_id = %target_device_id,
+                room_id = %room_id,
+                key_len = encrypted_key.len(),
+                "Client sharing room key (E2EE stub)"
+            );
+            // TODO: Implement room key sharing via to-device messaging
+        }
+
+        WsInboundEvent::SendE2eeMessage {
+            conversation_id: msg_conv_id,
+            device_id,
+            session_id,
+            ciphertext,
+            message_index,
+        } => {
+            tracing::debug!(
+                user_id = %user_id,
+                conversation_id = %msg_conv_id,
+                device_id = %device_id,
+                session_id = %session_id,
+                message_index = message_index,
+                ciphertext_len = ciphertext.len(),
+                "Client sending E2EE message (stub)"
+            );
+            // TODO: Implement E2EE message persistence and broadcasting
+        }
     }
     Ok(())
 }
@@ -239,6 +310,77 @@ impl WsSession {
             WsInboundEvent::GetUnacked => {
                 // Handled in separate context via ctx.text()
                 tracing::debug!("Client {} requested unacked messages", self.user_id);
+            }
+
+            // ============================================================
+            // E2EE Events (stubs - to be implemented)
+            // ============================================================
+            WsInboundEvent::GetToDeviceMessages { device_id, since } => {
+                tracing::debug!(
+                    user_id = %self.user_id,
+                    device_id = %device_id,
+                    since = ?since,
+                    "Client requested to-device messages (E2EE stub)"
+                );
+                // TODO: Implement fetching to-device messages from database
+            }
+
+            WsInboundEvent::AckToDeviceMessage { message_id } => {
+                tracing::debug!(
+                    user_id = %self.user_id,
+                    message_id = %message_id,
+                    "Client acknowledged to-device message (E2EE stub)"
+                );
+                // TODO: Implement marking to-device message as delivered
+            }
+
+            WsInboundEvent::RequestRoomKeys {
+                conversation_id: room_id,
+                device_id,
+                session_id,
+            } => {
+                tracing::debug!(
+                    user_id = %self.user_id,
+                    room_id = %room_id,
+                    device_id = %device_id,
+                    session_id = %session_id,
+                    "Client requested room keys (E2EE stub)"
+                );
+                // TODO: Implement room key request forwarding to other devices
+            }
+
+            WsInboundEvent::ShareRoomKey {
+                target_device_id,
+                room_id,
+                encrypted_key,
+            } => {
+                tracing::debug!(
+                    user_id = %self.user_id,
+                    target_device_id = %target_device_id,
+                    room_id = %room_id,
+                    key_len = encrypted_key.len(),
+                    "Client sharing room key (E2EE stub)"
+                );
+                // TODO: Implement room key sharing via to-device messaging
+            }
+
+            WsInboundEvent::SendE2eeMessage {
+                conversation_id: msg_conv_id,
+                device_id,
+                session_id,
+                ciphertext,
+                message_index,
+            } => {
+                tracing::debug!(
+                    user_id = %self.user_id,
+                    conversation_id = %msg_conv_id,
+                    device_id = %device_id,
+                    session_id = %session_id,
+                    message_index = message_index,
+                    ciphertext_len = ciphertext.len(),
+                    "Client sending E2EE message (stub)"
+                );
+                // TODO: Implement E2EE message persistence and broadcasting
             }
         }
     }

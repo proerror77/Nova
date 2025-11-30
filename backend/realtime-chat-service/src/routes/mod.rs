@@ -7,5 +7,6 @@ pub mod key_exchange;
 pub mod locations;
 pub mod messages;
 pub mod reactions;
+pub mod relationships;
 pub mod rtc;
 pub mod wsroute;

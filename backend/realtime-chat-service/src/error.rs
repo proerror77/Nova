@@ -49,6 +49,9 @@ pub enum AppError {
     #[error("internal server error")]
     Internal,
 
+    #[error("service unavailable: {0}")]
+    ServiceUnavailable(String),
+
     #[error("message already recalled")]
     AlreadyRecalled,
 
@@ -101,6 +104,7 @@ impl AppError {
             AppError::AlreadyRecalled => 410,        // 410 Gone
             AppError::VersionConflict { .. } => 409, // 409 Conflict
             AppError::RecallWindowExpired { .. } | AppError::EditWindowExpired { .. } => 403,
+            AppError::ServiceUnavailable(_) => 503,  // 503 Service Unavailable
             AppError::Database(_) | AppError::GrpcClient(_) | AppError::Internal => 500,
             _ => 500,
         }

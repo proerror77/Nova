@@ -1,7 +1,12 @@
 use crate::{
     config::Config,
     redis_client::RedisClient,
-    services::{encryption::EncryptionService, key_exchange::KeyExchangeService},
+    services::{
+        encryption::EncryptionService,
+        key_exchange::KeyExchangeService,
+        OlmService,
+        MegolmService,
+    },
     websocket::ConnectionRegistry,
 };
 use grpc_clients::AuthClient;
@@ -17,4 +22,8 @@ pub struct AppState {
     pub encryption: Arc<EncryptionService>,
     pub key_exchange_service: Option<Arc<KeyExchangeService>>,
     pub auth_client: Arc<AuthClient>,
+    /// Olm service for 1:1 E2EE (vodozemac Double Ratchet)
+    pub olm_service: Option<Arc<OlmService>>,
+    /// Megolm service for group E2EE (vodozemac symmetric ratchet)
+    pub megolm_service: Option<Arc<MegolmService>>,
 }

@@ -2,11 +2,16 @@ use actix_web::{web, App, HttpServer};
 use crypto_core::jwt as core_jwt;
 use grpc_clients::AuthClient;
 use realtime_chat_service::{
-    config, db, error, grpc, logging,
+    config, db, error, grpc, handlers, logging,
     nova::realtime_chat::v1::realtime_chat_service_server::RealtimeChatServiceServer,
     redis_client::RedisClient,
     routes,
-    services::{encryption::EncryptionService, key_exchange::KeyExchangeService},
+    services::{
+        encryption::EncryptionService,
+        key_exchange::KeyExchangeService,
+        olm_service::{AccountEncryptionKey, OlmService},
+        megolm_service::MegolmService,
+    },
     state::AppState,
     websocket::streams::{start_streams_listener, StreamsConfig},
 };
@@ -61,6 +66,28 @@ async fn main() -> Result<(), error::AppError> {
     let encryption = Arc::new(EncryptionService::new(cfg.encryption_master_key));
     let key_exchange_service = Arc::new(KeyExchangeService::new(Arc::new(db.clone())));
 
+    // Initialize E2EE services (vodozemac Olm/Megolm)
+    let (olm_service, megolm_service) = match AccountEncryptionKey::from_env() {
+        Ok(encryption_key) => {
+            // Copy key bytes for MegolmService before moving into OlmService
+            let key_bytes = encryption_key.0;
+            let olm = Arc::new(OlmService::new(db.clone(), encryption_key));
+            let megolm = Arc::new(MegolmService::new(
+                db.clone(),
+                realtime_chat_service::services::megolm_service::AccountEncryptionKey::new(key_bytes),
+            ));
+            tracing::info!("✅ E2EE services (Olm/Megolm) initialized");
+            (Some(olm), Some(megolm))
+        }
+        Err(e) => {
+            tracing::warn!(
+                error = %e,
+                "E2EE services disabled - OLM_ACCOUNT_KEY not set"
+            );
+            (None, None)
+        }
+    };
+
     // Initialize AuthClient (identity-service only - lazy connection)
     tracing::info!("Initializing Auth gRPC client (lazy connection)");
     let identity_service_url = env::var("GRPC_IDENTITY_SERVICE_URL")
@@ -86,6 +113,8 @@ async fn main() -> Result<(), error::AppError> {
         encryption: encryption.clone(),
         key_exchange_service: Some(key_exchange_service),
         auth_client: auth_client.clone(),
+        olm_service,
+        megolm_service,
     };
 
     // Start Redis Streams listener for cross-instance fanout
@@ -195,6 +224,12 @@ async fn main() -> Result<(), error::AppError> {
             .service(routes::locations::stop_sharing_location)
             .service(routes::locations::get_nearby_users)
             .service(routes::wsroute::ws_handler)
+            // API v2 routes (matches iOS APIConfig)
+            .service(
+                web::scope("/api/v2")
+                    .configure(handlers::e2ee::configure)
+                    .configure(routes::relationships::configure)
+            )
             .route("/health", web::get().to(|| async { "OK" }))
     })
     .bind(&bind_addr)

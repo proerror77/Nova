@@ -1,3 +1,4 @@
+use crate::services::relationship_service::{CanMessageResult, RelationshipService};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::{Pool, Postgres, Row};
@@ -45,45 +46,116 @@ pub struct ConversationWithMembers {
 pub struct ConversationService;
 
 impl ConversationService {
+    /// Create a direct (1:1) conversation between two users
+    /// Performs authorization checks based on recipient's DM settings and block status
     pub async fn create_direct_conversation(
         db: &Pool<Postgres>,
-        a: Uuid,
-        b: Uuid,
+        initiator: Uuid,
+        recipient: Uuid,
     ) -> Result<Uuid, crate::error::AppError> {
+        // Check if conversation already exists between these users
+        if let Some(existing_id) = Self::find_existing_direct_conversation(db, initiator, recipient).await? {
+            return Ok(existing_id);
+        }
+
+        // Authorization check: can initiator message recipient?
+        let can_message = RelationshipService::can_message(db, initiator, recipient).await?;
+
+        match can_message {
+            CanMessageResult::Allowed => {
+                // Proceed with conversation creation
+            }
+            CanMessageResult::Blocked => {
+                // Don't reveal block status - return generic forbidden
+                return Err(crate::error::AppError::Forbidden);
+            }
+            CanMessageResult::NeedMutualFollow => {
+                return Err(crate::error::AppError::BadRequest(
+                    "You must be mutual followers to send messages to this user".to_string(),
+                ));
+            }
+            CanMessageResult::NeedToFollow => {
+                return Err(crate::error::AppError::BadRequest(
+                    "You must follow this user to send them messages".to_string(),
+                ));
+            }
+            CanMessageResult::NotAllowed => {
+                return Err(crate::error::AppError::BadRequest(
+                    "This user doesn't accept direct messages".to_string(),
+                ));
+            }
+            CanMessageResult::NeedMessageRequest => {
+                // Could create a message request instead, but for now return error
+                return Err(crate::error::AppError::BadRequest(
+                    "You need to send a message request first".to_string(),
+                ));
+            }
+        }
+
         let id = Uuid::new_v4();
         let mut tx = db
             .begin()
             .await
             .map_err(|e| crate::error::AppError::StartServer(format!("tx: {e}")))?;
+
         // Note: Do not attempt to upsert into the canonical users table here.
         // The users table is owned by user-service and may have stricter NOT NULL
         // constraints (e.g., password_hash). Assume provided user IDs already exist
         // and let FK constraints enforce integrity.
+
         // Insert conversation using user-service schema
         // conversations(id, conversation_type, created_by)
         sqlx::query(
             "INSERT INTO conversations (id, conversation_type, created_by) VALUES ($1, 'direct', $2)",
         )
         .bind(id)
-        .bind(a)
+        .bind(initiator)
         .execute(&mut *tx)
         .await
         .map_err(|e| {
             crate::error::AppError::StartServer(format!("insert conversation: {e}"))
         })?;
+
         sqlx::query(
             "INSERT INTO conversation_members (conversation_id, user_id, role) VALUES ($1, $2, 'member'), ($1, $3, 'member') ON CONFLICT DO NOTHING"
         )
         .bind(id)
-        .bind(a)
-        .bind(b)
+        .bind(initiator)
+        .bind(recipient)
         .execute(&mut *tx)
         .await
         .map_err(|e| crate::error::AppError::StartServer(format!("insert members: {e}")))?;
+
         tx.commit()
             .await
             .map_err(|e| crate::error::AppError::StartServer(format!("commit: {e}")))?;
+
         Ok(id)
+    }
+
+    /// Find existing direct conversation between two users
+    async fn find_existing_direct_conversation(
+        db: &Pool<Postgres>,
+        user_a: Uuid,
+        user_b: Uuid,
+    ) -> Result<Option<Uuid>, crate::error::AppError> {
+        let result: Option<(Uuid,)> = sqlx::query_as(
+            r#"
+            SELECT c.id
+            FROM conversations c
+            WHERE c.conversation_type = 'direct'
+              AND EXISTS (SELECT 1 FROM conversation_members WHERE conversation_id = c.id AND user_id = $1)
+              AND EXISTS (SELECT 1 FROM conversation_members WHERE conversation_id = c.id AND user_id = $2)
+            LIMIT 1
+            "#,
+        )
+        .bind(user_a)
+        .bind(user_b)
+        .fetch_optional(db)
+        .await
+        .map_err(|e| crate::error::AppError::Database(format!("find_existing_conversation: {e}")))?;
+
+        Ok(result.map(|(id,)| id))
     }
 
     pub async fn get_conversation_db(
