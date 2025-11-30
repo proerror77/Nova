@@ -3,6 +3,8 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 /// 邊的類型
+/// Reserved for unified edge representation in graph operations
+#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum EdgeType {
@@ -11,6 +13,7 @@ pub enum EdgeType {
     Block,
 }
 
+#[allow(dead_code)]
 impl EdgeType {
     pub fn as_str(&self) -> &'static str {
         match self {
@@ -22,6 +25,8 @@ impl EdgeType {
 }
 
 /// 關係邊（有向邊）
+/// Reserved for batch edge operations and graph traversal
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Edge {
     pub from_user_id: Uuid,
@@ -30,6 +35,7 @@ pub struct Edge {
     pub created_at: DateTime<Utc>,
 }
 
+#[allow(dead_code)]
 impl Edge {
     pub fn new_follow(follower_id: Uuid, followee_id: Uuid) -> Self {
         Self {
@@ -60,6 +66,8 @@ impl Edge {
 }
 
 /// 關係圖統計
+/// Reserved for graph analytics endpoints
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GraphStats {
     pub user_id: Uuid,

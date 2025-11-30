@@ -555,6 +555,7 @@ impl GraphRepository {
     }
 
     /// Get graph stats for a user (followers/following/muted/blocked counts)
+    #[allow(dead_code)] // Reserved for graph analytics endpoint
     pub async fn get_graph_stats(&self, user_id: Uuid) -> Result<GraphStats> {
         let cypher = r#"
             MATCH (user:User {id: $user_id})

@@ -259,6 +259,7 @@ impl DualWriteRepository {
     }
 
     /// Get graph stats (Neo4j only - complex query)
+    #[allow(dead_code)] // Reserved for graph analytics endpoint
     pub async fn get_graph_stats(&self, user_id: Uuid) -> Result<GraphStats> {
         self.neo4j.get_graph_stats(user_id).await
     }

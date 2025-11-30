@@ -35,6 +35,7 @@ impl CachedGraphRepository {
     }
 
     /// Get cache hit/miss stats for monitoring
+    #[allow(dead_code)] // Reserved for cache metrics endpoint
     pub fn is_cache_enabled(&self) -> bool {
         self.enabled
     }

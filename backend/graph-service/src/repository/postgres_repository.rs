@@ -213,6 +213,7 @@ impl PostgresGraphRepository {
     }
 
     /// Check if blocked
+    #[allow(dead_code)] // PostgreSQL fallback - primary queries use Neo4j
     pub async fn is_blocked(&self, blocker_id: Uuid, blocked_id: Uuid) -> Result<bool> {
         let exists: bool = sqlx::query_scalar(
             "SELECT EXISTS(SELECT 1 FROM blocks WHERE blocker_id = $1 AND blocked_id = $2)",
