@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use trust_safety_service::{
     config::Config,
-    db::ModerationDb,
+    db::{BansDb, ModerationDb, ReportsDb, WarningsDb},
     grpc::{
         server::trust_safety::trust_safety_service_server::TrustSafetyServiceServer,
         TrustSafetyServiceImpl,
@@ -81,6 +81,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let moderation_db = Arc::new(ModerationDb::new(db.clone()));
     let appeal_service = Arc::new(AppealService::new(db.clone()));
 
+    // P0: Initialize enforcement DBs
+    let reports_db = Arc::new(ReportsDb::new(db.clone()));
+    let warnings_db = Arc::new(WarningsDb::new(db.clone()));
+    let bans_db = Arc::new(BansDb::new(db.clone()));
+    tracing::info!("Enforcement DBs initialized (Reports, Warnings, Bans)");
+
     // Create gRPC service
     let trust_safety_service = TrustSafetyServiceImpl::new(
         Arc::new(config.clone()),
@@ -89,6 +95,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         spam_detector,
         appeal_service,
         moderation_db,
+        reports_db,
+        warnings_db,
+        bans_db,
     );
 
     // Start health check server (HTTP)

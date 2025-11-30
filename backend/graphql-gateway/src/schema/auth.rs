@@ -71,6 +71,7 @@ impl AuthMutation {
         email: String,
         password: String,
         username: String,
+        invite_code: String,
     ) -> GraphQLResult<RegisterResponse> {
         let clients = ctx
             .data::<ServiceClients>()
@@ -82,6 +83,7 @@ impl AuthMutation {
             email,
             password,
             username,
+            invite_code,
         });
 
         let response = client

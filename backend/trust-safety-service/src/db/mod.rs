@@ -1,3 +1,11 @@
+pub mod bans;
+pub mod reports;
+pub mod warnings;
+
+pub use bans::BansDb;
+pub use reports::ReportsDb;
+pub use warnings::WarningsDb;
+
 use crate::error::{Result, TrustSafetyError};
 use crate::models::ModerationLog;
 use chrono::Utc;
