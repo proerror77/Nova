@@ -59,8 +59,13 @@ pub async fn create_conversation(
 ) -> Result<HttpResponse, AppError> {
     // Security: Can only create conversations with yourself or another user
     // For now, we allow creation. In future, might want to verify user_a == authenticated user
-    let id = ConversationService::create_direct_conversation(&state.db, body.user_a, body.user_b)
-        .await?;
+    let id = ConversationService::create_direct_conversation(
+        &state.db,
+        &state.auth_client,
+        body.user_a,
+        body.user_b,
+    )
+    .await?;
     // fetch details for response
     let details = ConversationService::get_conversation_db(&state.db, id).await?;
     Ok(HttpResponse::Ok().json(ConversationResponse {
@@ -124,6 +129,7 @@ pub async fn create_group_conversation(
     // Create the group conversation with the authenticated user as creator
     let conversation_id = ConversationService::create_group_conversation(
         &state.db,
+        &state.auth_client,
         user.id,
         name.clone(),
         description.clone(),

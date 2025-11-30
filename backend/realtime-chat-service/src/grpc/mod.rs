@@ -55,6 +55,7 @@ impl RealtimeChatService for RealtimeChatServiceImpl {
         let conversation_id = match ConversationType::from_i32(req.conversation_type) {
             Some(ConversationType::Group) => ConversationService::create_group_conversation(
                 &self.state.db,
+                &self.state.auth_client,
                 creator_id,
                 req.name.clone(),
                 None,
@@ -68,9 +69,14 @@ impl RealtimeChatService for RealtimeChatServiceImpl {
                 // direct conversation only needs two participants
                 let a = participant_ids[0];
                 let b = participant_ids[1];
-                ConversationService::create_direct_conversation(&self.state.db, a, b)
-                    .await
-                    .map_err(|e| Status::internal(format!("failed to create direct: {e}")))?
+                ConversationService::create_direct_conversation(
+                    &self.state.db,
+                    &self.state.auth_client,
+                    a,
+                    b,
+                )
+                .await
+                .map_err(|e| Status::internal(format!("failed to create direct: {e}")))?
             }
         };
 

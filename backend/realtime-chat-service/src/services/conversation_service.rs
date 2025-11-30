@@ -1,5 +1,6 @@
 use crate::services::relationship_service::{CanMessageResult, RelationshipService};
 use chrono::{DateTime, Utc};
+use grpc_clients::AuthClient;
 use serde::{Deserialize, Serialize};
 use sqlx::{Pool, Postgres, Row};
 use uuid::Uuid;
@@ -50,9 +51,24 @@ impl ConversationService {
     /// Performs authorization checks based on recipient's DM settings and block status
     pub async fn create_direct_conversation(
         db: &Pool<Postgres>,
+        auth_client: &AuthClient,
         initiator: Uuid,
         recipient: Uuid,
     ) -> Result<Uuid, crate::error::AppError> {
+        // Validate users exist via identity-service (replaces FK constraint validation)
+        for user_id in [initiator, recipient] {
+            let exists = auth_client.user_exists(user_id).await.map_err(|e| {
+                tracing::error!(user_id = %user_id, error = %e, "auth-service user_exists failed");
+                crate::error::AppError::StartServer(format!("validate user: {e}"))
+            })?;
+            if !exists {
+                return Err(crate::error::AppError::BadRequest(format!(
+                    "User {} does not exist",
+                    user_id
+                )));
+            }
+        }
+
         // Check if conversation already exists between these users
         if let Some(existing_id) = Self::find_existing_direct_conversation(db, initiator, recipient).await? {
             return Ok(existing_id);
@@ -357,6 +373,7 @@ impl ConversationService {
     ///   - privacy_mode: Privacy mode (default: strict_e2e)
     pub async fn create_group_conversation(
         db: &Pool<Postgres>,
+        auth_client: &AuthClient,
         creator_id: Uuid,
         name: String,
         description: Option<String>,
@@ -383,6 +400,29 @@ impl ConversationService {
             }
         }
 
+        // Calculate total member count (creator + members, deduplicated)
+        let mut all_members = vec![creator_id];
+        for member_id in &member_ids {
+            if member_id != &creator_id && !all_members.contains(member_id) {
+                all_members.push(*member_id);
+            }
+        }
+
+        // Validate all users exist via identity-service (replaces FK constraint validation)
+        // Single-writer principle: identity-service owns users table
+        for user_id in &all_members {
+            let exists = auth_client.user_exists(*user_id).await.map_err(|e| {
+                tracing::error!(user_id = %user_id, error = %e, "auth-service user_exists failed");
+                crate::error::AppError::StartServer(format!("validate user: {e}"))
+            })?;
+            if !exists {
+                return Err(crate::error::AppError::BadRequest(format!(
+                    "User {} does not exist",
+                    user_id
+                )));
+            }
+        }
+
         let conversation_id = Uuid::new_v4();
         let privacy = privacy_mode.unwrap_or_default();
         let privacy_str = match privacy {
@@ -394,18 +434,6 @@ impl ConversationService {
             .begin()
             .await
             .map_err(|e| crate::error::AppError::StartServer(format!("tx: {e}")))?;
-
-        // Note: FK constraints to users table have been removed (migration 0024)
-        // User existence is validated at application layer via identity-service
-        // This follows the single-writer principle for microservices architecture
-
-        // Calculate total member count (creator + members, deduplicated)
-        let mut all_members = vec![creator_id];
-        for member_id in &member_ids {
-            if member_id != &creator_id && !all_members.contains(member_id) {
-                all_members.push(*member_id);
-            }
-        }
         let member_count = all_members.len() as i32;
 
         // Create conversation
