@@ -46,9 +46,12 @@ use nova::auth_service::*;
 #[derive(Clone)]
 pub struct IdentityServiceServer {
     db: PgPool,
-    redis: SharedConnectionManager,
-    email: EmailService,
-    two_fa: TwoFaService,
+    #[allow(dead_code)] // Reserved for rate limiting implementation
+    _redis: SharedConnectionManager,
+    #[allow(dead_code)] // Reserved for email verification flow
+    _email: EmailService,
+    #[allow(dead_code)] // Reserved for 2FA implementation
+    _two_fa: TwoFaService,
     kafka: Option<KafkaEventProducer>,
     invite_delivery: std::sync::Arc<InviteDeliveryService>,
 }
@@ -70,9 +73,9 @@ impl IdentityServiceServer {
         ));
         Self {
             db,
-            redis,
-            email,
-            two_fa,
+            _redis: redis,
+            _email: email,
+            _two_fa: two_fa,
             kafka,
             invite_delivery,
         }

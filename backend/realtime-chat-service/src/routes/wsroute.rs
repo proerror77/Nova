@@ -40,6 +40,7 @@ struct WsSession {
     subscriber_id: crate::websocket::SubscriberId,
     registry: ConnectionRegistry,
     redis: RedisClient,
+    #[allow(dead_code)] // Reserved for database operations in event handlers
     db: Pool<Postgres>,
     hb: Instant,
     // Store full AppState for event handling
@@ -236,7 +237,7 @@ impl WsSession {
         let conversation_id = self.conversation_id;
         let client_id = self.client_id;
 
-        ctx.run_interval(Duration::from_secs(10), move |act, ctx| {
+        ctx.run_interval(Duration::from_secs(10), move |_act, ctx| {
             let redis = redis.clone();
             let addr = ctx.address();
             actix::spawn(async move {
@@ -258,6 +259,7 @@ impl WsSession {
         });
     }
 
+    #[allow(dead_code)] // Reserved for future synchronous event handling
     async fn handle_ws_event(&self, evt: &WsInboundEvent, state: &AppState) {
         match evt {
             WsInboundEvent::Typing {
@@ -675,7 +677,7 @@ pub async fn ws_handler(
     // This bridges the registry's unbounded receiver to the WebSocket actor
     // Note: This is a simplified version - production should handle backpressure
     tokio::spawn(async move {
-        while let Some(msg) = rx.recv().await {
+        while let Some(_msg) = rx.recv().await {
             // Convert axum::extract::ws::Message to String
             // This is a placeholder - actual implementation depends on message format
             tracing::debug!("Received broadcast message (forwarding not implemented yet)");

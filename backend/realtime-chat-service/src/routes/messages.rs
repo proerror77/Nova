@@ -205,10 +205,12 @@ pub struct UpdateMessageRequest {
 
 /// Encapsulates validation logic for message editing
 struct MessageEditValidator {
+    #[allow(dead_code)] // Reserved for per-conversation edit policy
     conversation_id: Uuid,
     sender_id: Uuid,
     current_version: i32,
     created_at: chrono::DateTime<chrono::Utc>,
+    #[allow(dead_code)] // Reserved for privacy-aware edit restrictions
     privacy_mode: crate::services::conversation_service::PrivacyMode,
     old_content: String,
 }

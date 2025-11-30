@@ -418,9 +418,9 @@ pub async fn query_keys(
     tag = "E2EE"
 )]
 #[get("/to-device")]
-#[instrument(skip(state, req), fields(user_id = %user.id))]
+#[instrument(skip(_state, req), fields(user_id = %user.id))]
 pub async fn get_to_device_messages(
-    state: web::Data<AppState>,
+    _state: web::Data<AppState>,
     user: User,
     req: HttpRequest,
     query: web::Query<ToDeviceQuery>,
@@ -460,9 +460,9 @@ pub async fn get_to_device_messages(
     tag = "E2EE"
 )]
 #[delete("/to-device/{message_id}")]
-#[instrument(skip(state), fields(user_id = %user.id, message_id = %message_id))]
+#[instrument(skip(_state), fields(user_id = %user.id, message_id = %message_id))]
 pub async fn ack_to_device_message(
-    state: web::Data<AppState>,
+    _state: web::Data<AppState>,
     user: User,
     message_id: web::Path<String>,
 ) -> Result<HttpResponse, AppError> {

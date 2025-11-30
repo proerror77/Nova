@@ -4,11 +4,11 @@
 
 use super::GraphRepositoryTrait;
 use anyhow::Result;
-use nova_cache::graph::{CachedRelationshipList, GraphCache};
+use nova_cache::graph::GraphCache;
 use nova_cache::NovaCache;
 use std::collections::HashMap;
 use std::sync::Arc;
-use tracing::{debug, info, warn};
+use tracing::{debug, warn};
 use uuid::Uuid;
 
 /// Repository wrapper that adds caching to any GraphRepositoryTrait implementation
