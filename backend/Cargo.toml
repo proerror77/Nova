@@ -138,7 +138,7 @@ governor = "0.6"
 tower = "0.4"
 
 # AWS SDK
-aws-config = "1.1"
+aws-config = "1.8"
 aws-sdk-secretsmanager = "1.13"
 aws-sdk-s3 = "1.15"
 moka = { version = "0.12", features = ["future"] }
