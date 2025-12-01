@@ -22,8 +22,8 @@ enum APIEnvironment {
                !stagingURL.hasPrefix("$(") {  // Skip unresolved build variables
                 return stagingURL
             }
-            // Fallback to staging API (AWS ELB)
-            return "http://a3326508b1e3c43239348cac7ce9ee03-1036729988.ap-northeast-1.elb.amazonaws.com"
+            // Fallback to staging API (GKE Load Balancer)
+            return "http://34.49.209.193"
         case .production:
             return "https://api.nova.social"
         }

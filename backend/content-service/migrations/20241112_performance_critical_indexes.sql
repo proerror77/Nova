@@ -24,7 +24,8 @@ DROP INDEX IF EXISTS idx_posts_user_id;
 -- - Eliminates separate sort step (Index Scan directly returns sorted results)
 -- - Partial index (WHERE deleted_at IS NULL) reduces index size by ~10%
 -- - DESC ordering matches query pattern exactly
-CREATE INDEX CONCURRENTLY idx_posts_user_created
+-- Note: Removed CONCURRENTLY as it cannot run inside a transaction block (sqlx limitation)
+CREATE INDEX IF NOT EXISTS idx_posts_user_created
 ON posts(user_id, created_at DESC)
 WHERE deleted_at IS NULL;
 
@@ -40,15 +41,13 @@ WHERE deleted_at IS NULL;
 -- 2. Additional Performance Index - Posts by Status
 -- ============================================================================
 
--- Query pattern: Fetch recent published posts (fallback feed)
--- SELECT id FROM posts
--- WHERE status = 'published' AND soft_delete IS NULL
--- ORDER BY created_at DESC
--- LIMIT $1
-
-CREATE INDEX CONCURRENTLY idx_posts_status_created
-ON posts(status, created_at DESC)
-WHERE deleted_at IS NULL;
+-- NOTE: Removed - posts table does not have a 'status' column
+-- Original query pattern was for published posts (fallback feed)
+-- If status column is added later, uncomment this index:
+--
+-- CREATE INDEX IF NOT EXISTS idx_posts_status_created
+-- ON posts(status, created_at DESC)
+-- WHERE deleted_at IS NULL;
 
 -- ============================================================================
 -- 3. Likes Table - Fix like count aggregation performance
@@ -63,7 +62,7 @@ WHERE deleted_at IS NULL;
 -- 3. User-specific like checks
 
 -- Add covering index for reverse lookup (user's liked posts)
-CREATE INDEX CONCURRENTLY idx_likes_user_created
+CREATE INDEX IF NOT EXISTS idx_likes_user_created
 ON likes(user_id, created_at DESC);
 
 -- ============================================================================
@@ -78,7 +77,7 @@ ON likes(user_id, created_at DESC);
 
 DROP INDEX IF EXISTS idx_comments_post_id;
 
-CREATE INDEX CONCURRENTLY idx_comments_post_created
+CREATE INDEX IF NOT EXISTS idx_comments_post_created
 ON comments(post_id, created_at ASC)
 WHERE soft_delete IS NULL;
 
@@ -94,7 +93,7 @@ WHERE soft_delete IS NULL;
 
 DROP INDEX IF EXISTS idx_bookmarks_user_id;
 
-CREATE INDEX CONCURRENTLY idx_bookmarks_user_created
+CREATE INDEX IF NOT EXISTS idx_bookmarks_user_created
 ON bookmarks(user_id, created_at DESC);
 
 -- ============================================================================

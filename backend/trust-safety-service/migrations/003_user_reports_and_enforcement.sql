@@ -59,8 +59,10 @@ ALTER TABLE user_warnings
 CREATE INDEX IF NOT EXISTS idx_user_warnings_user ON user_warnings (user_id);
 CREATE INDEX IF NOT EXISTS idx_user_warnings_type ON user_warnings (warning_type);
 CREATE INDEX IF NOT EXISTS idx_user_warnings_created ON user_warnings (created_at DESC);
+-- Note: Removed NOW() from index predicate as it's not IMMUTABLE
+-- Use application-level filtering for active warnings instead
 CREATE INDEX IF NOT EXISTS idx_user_warnings_active ON user_warnings (user_id, expires_at)
-    WHERE expires_at IS NULL OR expires_at > NOW();
+    WHERE expires_at IS NULL;
 
 -- User Bans (temporary or permanent)
 CREATE TABLE IF NOT EXISTS user_bans (
