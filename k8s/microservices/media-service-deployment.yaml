@@ -63,7 +63,7 @@ spec:
             name: media-service-config
         - secretRef:
             name: media-service-secret
-        image: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/media-service:latest
+        image: nova/media-service
         livenessProbe:
           failureThreshold: 3
           httpGet:

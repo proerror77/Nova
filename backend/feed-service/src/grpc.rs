@@ -361,6 +361,7 @@ impl RecommendationServiceImpl {
         use grpc_clients::nova::content_service::v2::{
             GetPostsByIdsRequest, ListRecentPostsRequest,
         };
+        use grpc_clients::nova::social_service::v2::BatchGetCountsRequest;
 
         // Step 1: Get recent post IDs from content-service
         let mut content_client = self.grpc_pool.content();
@@ -401,26 +402,47 @@ impl RecommendationServiceImpl {
             })?
             .into_inner();
 
-        // Step 3: Convert to CachedFeedPost format
+        // Step 3: Fetch social stats from social-service (BatchGetCounts)
+        let mut social_client = self.grpc_pool.social();
+        let counts_request = BatchGetCountsRequest {
+            post_ids: post_ids.clone(),
+        };
+
+        let social_counts = match social_client.batch_get_counts(counts_request).await {
+            Ok(response) => {
+                let counts = response.into_inner().counts;
+                info!("Fetched social counts for {} posts", counts.len());
+                counts
+            }
+            Err(e) => {
+                warn!("Failed to fetch social counts (continuing with zeros): {}", e);
+                std::collections::HashMap::new()
+            }
+        };
+
+        // Step 4: Convert to CachedFeedPost format with social stats
         let posts: Vec<CachedFeedPost> = get_response
             .posts
             .into_iter()
             .enumerate()
-            .map(|(idx, post)| CachedFeedPost {
-                id: post.id,
-                user_id: post.author_id,
-                content: post.content,
-                created_at: post.created_at,
-                ranking_score: 1.0 - (idx as f64 * 0.01), // Simple ranking by recency
-                like_count: 0,                            // TODO: Fetch from social-service
-                comment_count: 0,
-                share_count: 0,
-                media_urls: post.media_urls,
-                media_type: post.media_type,
+            .map(|(idx, post)| {
+                let counts = social_counts.get(&post.id);
+                CachedFeedPost {
+                    id: post.id.clone(),
+                    user_id: post.author_id,
+                    content: post.content,
+                    created_at: post.created_at,
+                    ranking_score: 1.0 - (idx as f64 * 0.01), // Simple ranking by recency
+                    like_count: counts.map(|c| c.like_count as u32).unwrap_or(0),
+                    comment_count: counts.map(|c| c.comment_count as u32).unwrap_or(0),
+                    share_count: counts.map(|c| c.share_count as u32).unwrap_or(0),
+                    media_urls: post.media_urls,
+                    media_type: post.media_type,
+                }
             })
             .collect();
 
-        info!("Fetched {} posts from content-service", posts.len());
+        info!("Fetched {} posts from content-service with social stats", posts.len());
         Ok(posts)
     }
 }

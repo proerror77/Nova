@@ -22,8 +22,8 @@ enum APIEnvironment {
                !stagingURL.hasPrefix("$(") {  // Skip unresolved build variables
                 return stagingURL
             }
-            // Fallback to staging API (GKE Load Balancer)
-            return "http://34.49.209.193"
+            // Staging API via LoadBalancer (graphql-gateway-lb)
+            return "http://34.104.179.123"
         case .production:
             return "https://api.nova.social"
         }

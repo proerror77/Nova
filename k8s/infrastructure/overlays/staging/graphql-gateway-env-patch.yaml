@@ -1,5 +1,6 @@
 # GraphQL Gateway Service URL patches for staging
-# Fix: Configure correct service URLs for gRPC connections
+# Fix: Configure correct service URLs for gRPC connections with mTLS
+# IMPORTANT: Use GRPC_* prefix for URLs read by grpc-clients library
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -10,31 +11,50 @@ spec:
       containers:
       - name: graphql-gateway
         env:
-        # Search service uses port 50057 (gRPC) in staging
-        # The default config.rs uses port 50060 which doesn't exist
-        - name: SEARCH_SERVICE_URL
-          value: "http://search-service.nova-staging.svc.cluster.local:50057"
-        # Content service gRPC port
-        - name: CONTENT_SERVICE_URL
-          value: "http://content-service.nova-staging.svc.cluster.local:50051"
-        # Notification service gRPC port
-        - name: NOTIFICATION_SERVICE_URL
-          value: "http://notification-service.nova-staging.svc.cluster.local:50051"
-        # Feed service gRPC port (9084 is the actual gRPC port)
-        - name: FEED_SERVICE_URL
-          value: "http://feed-service.nova-staging.svc.cluster.local:9084"
-        # Media service gRPC port
-        - name: MEDIA_SERVICE_URL
-          value: "http://media-service.nova-staging.svc.cluster.local:50051"
-        # gRPC client configuration (TLS/mTLS) for identity-service and core services
+        # ============================================================
+        # gRPC Service URLs (GRPC_* prefix required by grpc-clients lib)
+        # All internal services use https:// for mTLS
+        # ============================================================
+        # Feed service - gRPC port 9084 with mTLS
+        - name: GRPC_FEED_SERVICE_URL
+          value: "https://feed-service.nova-staging.svc.cluster.local:9084"
+        # Content service - gRPC port 50051 with mTLS
+        - name: GRPC_CONTENT_SERVICE_URL
+          value: "https://content-service.nova-staging.svc.cluster.local:50051"
+        # Search service - gRPC port 50057 with mTLS
+        - name: GRPC_SEARCH_SERVICE_URL
+          value: "https://search-service.nova-staging.svc.cluster.local:50057"
+        # Media service - gRPC port 50051 with mTLS
+        - name: GRPC_MEDIA_SERVICE_URL
+          value: "https://media-service.nova-staging.svc.cluster.local:50051"
+        # Identity service - gRPC port 50051 with mTLS
         - name: GRPC_IDENTITY_SERVICE_URL
           value: "https://identity-service.nova-staging.svc.cluster.local:50051"
+        # Social service - gRPC port 9006 with mTLS
+        - name: GRPC_SOCIAL_SERVICE_URL
+          value: "https://social-service.nova-staging.svc.cluster.local:9006"
+        # Chat service - gRPC port 9085 with mTLS
+        - name: GRPC_CHAT_SERVICE_URL
+          value: "https://realtime-chat-service.nova-staging.svc.cluster.local:9085"
+        # ============================================================
+        # Legacy environment variables (for backward compatibility)
+        # Used by notification/graph services not yet in GrpcConfig
+        # ============================================================
+        - name: NOTIFICATION_SERVICE_URL
+          value: "http://notification-service.nova-staging.svc.cluster.local:50051"
+        - name: GRAPH_SERVICE_URL
+          value: "http://graph-service.nova-staging.svc.cluster.local:50051"
+        # ============================================================
+        # TLS/mTLS Configuration
+        # Certificate SAN: *.nova-staging.svc.cluster.local (wildcard)
+        # ============================================================
         - name: GRPC_TLS_ENABLED
           value: "true"
         - name: GRPC_TLS_CA_CERT_PATH
           value: "/etc/nova/certs/ca.crt"
+        # Domain name for TLS verification - wildcard cert allows any *.nova-staging
         - name: GRPC_TLS_DOMAIN_NAME
-          value: "identity-service.nova-staging.svc.cluster.local"
+          value: "feed-service.nova-staging.svc.cluster.local"
         - name: GRPC_TLS_CLIENT_CERT_PATH
           value: "/etc/nova/certs/client.crt"
         - name: GRPC_TLS_CLIENT_KEY_PATH

@@ -2,14 +2,14 @@ use actix_web::{get, web, HttpMessage, HttpRequest, HttpResponse};
 use base64::{engine::general_purpose, Engine as _};
 use serde::Deserialize;
 use std::sync::Arc;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 use uuid::Uuid;
 
 use crate::error::{AppError, Result};
 use crate::grpc::clients::{ContentServiceClient, GraphServiceClient};
 use crate::middleware::jwt_auth::UserId;
 use crate::models::FeedResponse;
-use grpc_clients::nova::content_service::v2::{ContentStatus, GetUserPostsRequest};
+use grpc_clients::nova::content_service::v2::{ContentStatus, GetUserPostsRequest, ListRecentPostsRequest};
 use grpc_clients::nova::graph_service::v2::GetFollowingRequest;
 
 #[derive(Debug, Deserialize)]
@@ -82,8 +82,9 @@ pub async fn get_feed(
         user_id, query.algo, limit, offset
     );
 
-    // Step 1: Get user's following list via graph-service gRPC
-    let following_resp = state
+    // Step 1: Try to get user's following list via graph-service gRPC
+    // If graph-service is unavailable, fall back to global/recent posts (graceful degradation)
+    let following_result = state
         .graph_client
         .pool
         .graph()
@@ -92,73 +93,92 @@ pub async fn get_feed(
             limit: 1000,
             offset: 0,
         })
-        .await
-        .map_err(|e| AppError::Internal(format!("Failed to fetch following list: {}", e)))?
-        .into_inner();
+        .await;
 
-    // Step 2: Get posts from followed users via batch gRPC call
-    let followed_user_ids: Vec<String> = following_resp
-        .user_ids
-        .into_iter()
-        .take(100) // Limit to prevent huge batch requests
-        .collect();
+    let (posts, posts_count, total_count, has_more) = match following_result {
+        Ok(following_resp) => {
+            // Step 2: Get posts from followed users via batch gRPC call
+            let followed_user_ids: Vec<String> = following_resp
+                .into_inner()
+                .user_ids
+                .into_iter()
+                .take(100) // Limit to prevent huge batch requests
+                .collect();
 
-    if followed_user_ids.is_empty() {
-        // User doesn't follow anyone, return empty feed
-        return Ok(HttpResponse::Ok().json(FeedResponse {
-            posts: vec![],
-            cursor: None,
-            has_more: false,
-            total_count: 0,
-        }));
-    }
+            if followed_user_ids.is_empty() {
+                // User doesn't follow anyone - fall back to global feed
+                warn!(
+                    "User {} follows no one, falling back to global feed",
+                    user_id
+                );
+                fetch_global_posts(&state.content_client, limit, offset).await?
+            } else {
+                // Fetch posts from followed users and respect pagination (offset/cursor)
+                // Note: For now we do a simple round-robin scan; ranking-service can be plugged in later.
+                let mut posts: Vec<Uuid> = Vec::new();
+                let mut skipped = offset; // apply cursor across aggregated stream
+                let mut remaining = limit as usize;
 
-    // Fetch posts from followed users and respect pagination (offset/cursor)
-    // Note: For now we do a simple round-robin scan; ranking-service can be plugged in later.
-    let mut posts: Vec<Uuid> = Vec::new();
-    let mut skipped = offset; // apply cursor across aggregated stream
-    let mut remaining = limit as usize;
-
-    for user_id in followed_user_ids.iter() {
-        if remaining == 0 {
-            break;
-        }
-
-        match state
-            .content_client
-            .get_user_posts(GetUserPostsRequest {
-                user_id: user_id.clone(),
-                limit: remaining as i32, // bound fetch to what's still needed
-                offset: 0,
-                status: ContentStatus::Published as i32,
-            })
-            .await
-        {
-            Ok(resp) => {
-                for post in resp.posts {
+                for uid in followed_user_ids.iter() {
                     if remaining == 0 {
                         break;
                     }
-                    if skipped > 0 {
-                        skipped -= 1;
-                        continue;
-                    }
-                    if let Ok(post_id) = Uuid::parse_str(&post.id) {
-                        posts.push(post_id);
-                        remaining -= 1;
+
+                    match state
+                        .content_client
+                        .get_user_posts(GetUserPostsRequest {
+                            user_id: uid.clone(),
+                            limit: remaining as i32, // bound fetch to what's still needed
+                            offset: 0,
+                            status: ContentStatus::Published as i32,
+                        })
+                        .await
+                    {
+                        Ok(resp) => {
+                            for post in resp.posts {
+                                if remaining == 0 {
+                                    break;
+                                }
+                                if skipped > 0 {
+                                    skipped -= 1;
+                                    continue;
+                                }
+                                if let Ok(post_id) = Uuid::parse_str(&post.id) {
+                                    posts.push(post_id);
+                                    remaining -= 1;
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            debug!("Failed to fetch posts from user {}: {}", uid, e);
+                            // Continue fetching other users' posts on partial failure
+                        }
                     }
                 }
-            }
-            Err(e) => {
-                debug!("Failed to fetch posts from user {}: {}", user_id, e);
-                // Continue fetching other users' posts on partial failure
+
+                let posts_count = posts.len();
+                let total_count = offset + posts_count; // best-effort; exact total would need a count query
+                let has_more = remaining == 0;
+
+                info!(
+                    "Feed generated for user: {} (followers: {}, posts: {})",
+                    user_id,
+                    followed_user_ids.len(),
+                    posts_count
+                );
+
+                (posts, posts_count, total_count, has_more)
             }
         }
-    }
-
-    let posts_count = posts.len();
-    let total_count = offset + posts_count; // best-effort; exact total would need a count query
-    let has_more = remaining == 0;
+        Err(e) => {
+            // Graph-service unavailable - graceful degradation to global feed
+            warn!(
+                "Graph-service unavailable ({}), falling back to global feed for user {}",
+                e, user_id
+            );
+            fetch_global_posts(&state.content_client, limit, offset).await?
+        }
+    };
 
     let cursor = if has_more {
         Some(FeedQueryParams::encode_cursor(offset + posts_count))
@@ -166,19 +186,46 @@ pub async fn get_feed(
         None
     };
 
-    info!(
-        "Feed generated for user: {} (followers: {}, posts: {})",
-        user_id,
-        followed_user_ids.len(),
-        posts_count
-    );
-
     Ok(HttpResponse::Ok().json(FeedResponse {
         posts,
         cursor,
         has_more,
         total_count,
     }))
+}
+
+/// Fetch global/recent posts as a fallback when graph-service is unavailable
+/// or user doesn't follow anyone
+async fn fetch_global_posts(
+    content_client: &ContentServiceClient,
+    limit: u32,
+    offset: usize,
+) -> Result<(Vec<Uuid>, usize, usize, bool)> {
+    let resp = content_client
+        .list_recent_posts(ListRecentPostsRequest {
+            limit: limit as i32,
+            offset: offset as i32,
+            status: ContentStatus::Published as i32,
+        })
+        .await
+        .map_err(|e| AppError::Internal(format!("Failed to fetch recent posts: {}", e)))?;
+
+    let posts: Vec<Uuid> = resp
+        .posts
+        .into_iter()
+        .filter_map(|p| Uuid::parse_str(&p.id).ok())
+        .collect();
+
+    let posts_count = posts.len();
+    let total_count = offset + posts_count;
+    let has_more = posts_count == limit as usize;
+
+    info!(
+        "Global feed generated (fallback): posts={}, offset={}, has_more={}",
+        posts_count, offset, has_more
+    );
+
+    Ok((posts, posts_count, total_count, has_more))
 }
 
 /// Cache invalidation is handled through Redis/Kafka events in production.

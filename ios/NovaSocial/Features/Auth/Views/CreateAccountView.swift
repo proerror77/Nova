@@ -427,13 +427,13 @@ struct CreateAccountView: View {
             return false
         }
 
-        if password.count < 8 {
-            errorMessage = "Password must be at least 8 characters"
+        if password.count < 12 {
+            errorMessage = "Password must be at least 12 characters"
             return false
         }
 
         if !isStrongPassword(password) {
-            errorMessage = "Password must contain uppercase, lowercase, and number"
+            errorMessage = "Password must contain uppercase, lowercase, number, and special character (!@#$%)"
             return false
         }
 
@@ -457,18 +457,26 @@ struct CreateAccountView: View {
 
     private func isStrongPassword(_ password: String) -> Bool {
         // Check for at least one uppercase letter
-        let uppercaseRegex = ".*[A-Z]+.*"
-        let hasUppercase = password.range(of: uppercaseRegex, options: .regularExpression) != nil
+        let hasUppercase = password.range(of: "[A-Z]", options: .regularExpression) != nil
 
         // Check for at least one lowercase letter
-        let lowercaseRegex = ".*[a-z]+.*"
-        let hasLowercase = password.range(of: lowercaseRegex, options: .regularExpression) != nil
+        let hasLowercase = password.range(of: "[a-z]", options: .regularExpression) != nil
 
         // Check for at least one number
-        let numberRegex = ".*[0-9]+.*"
-        let hasNumber = password.range(of: numberRegex, options: .regularExpression) != nil
+        let hasNumber = password.range(of: "[0-9]", options: .regularExpression) != nil
 
-        return hasUppercase && hasLowercase && hasNumber
+        // Check for at least one special character
+        let hasSpecial = password.range(of: "[^A-Za-z0-9]", options: .regularExpression) != nil
+
+        // Check minimum length (backend requires 8+)
+        let hasMinLength = password.count >= 12
+
+        // Avoid common patterns that zxcvbn scores poorly
+        let hasCommonPattern = password.lowercased().contains("password") ||
+                               password.lowercased().contains("123456") ||
+                               password.lowercased().contains("qwerty")
+
+        return hasUppercase && hasLowercase && hasNumber && hasSpecial && hasMinLength && !hasCommonPattern
     }
 }
 

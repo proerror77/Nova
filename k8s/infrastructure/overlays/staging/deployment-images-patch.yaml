@@ -7,7 +7,7 @@ spec:
     spec:
       containers:
       - name: content-service
-        image: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/content-service:04d28e5917f31c454fe785d431d21290a87cf364
+        image: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/content-service@sha256:fcfdfbb0a22754c3f3b93de8c7056eef9263ea80e7035d616fbc0a67b2c23f4f
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -18,7 +18,7 @@ spec:
     spec:
       containers:
       - name: media-service
-        image: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/media-service:d76baed0b3ece4ccb5d1a3ce34f97954dc792461
+        image: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/media-service@sha256:74783644c0f930475746c32ba2b8d8cb6e614e4712c2c7e2249b09871c5a8420
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -29,7 +29,7 @@ spec:
     spec:
       containers:
       - name: identity-service
-        image: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/identity-service:d76baed0b3ece4ccb5d1a3ce34f97954dc792461
+        image: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/identity-service@sha256:8c4d3411c85024f6cfef5e10fc5610268c86e3146ade5e1d01641fcb68b09c09
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -40,7 +40,7 @@ spec:
     spec:
       containers:
       - name: search-service
-        image: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/search-service:d76baed0b3ece4ccb5d1a3ce34f97954dc792461
+        image: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/search-service@sha256:018d8a99fce3f86924fa68d5a17d9d54a9d4c60b257f6cc785acd908fd97a8ba
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -51,7 +51,7 @@ spec:
     spec:
       containers:
       - name: realtime-chat-service
-        image: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/realtime-chat-service:d76baed0b3ece4ccb5d1a3ce34f97954dc792461
+        image: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/realtime-chat-service@sha256:82dcc42c3e87ad98da35ad4b7e592a9cc76ffcd83e13096e144ac3f9a7299dde
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -62,4 +62,81 @@ spec:
     spec:
       containers:
       - name: analytics-service
-        image: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/analytics-service:d76baed0b3ece4ccb5d1a3ce34f97954dc792461
+        image: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/analytics-service@sha256:98445ba5834989cd6ad73e3e1ecf21bfa6a32a950bf38aa0f6005ed4711d4154
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: graph-service
+spec:
+  template:
+    spec:
+      containers:
+      - name: graph-service
+        image: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/graph-service@sha256:3edbb11e2c360fb9f0dd3c4f4fe7f9a3f591c7232e45fc9bc1d32daafc89a949
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: graphql-gateway
+spec:
+  template:
+    spec:
+      containers:
+      - name: graphql-gateway
+        image: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/graphql-gateway@sha256:a3c86da10763ab9fd862814b64c9d8f48df56f2989cd760413be1c930cf8d1c2
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notification-service
+spec:
+  template:
+    spec:
+      containers:
+      - name: notification-service
+        image: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/notification-service@sha256:1a878d5464cc3467f621638d23787f2767e2ed89b41b897097dd011e3ea65cfe
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ranking-service
+spec:
+  template:
+    spec:
+      containers:
+      - name: ranking-service
+        image: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/ranking-service@sha256:2a58fadd34d88181dadb5594bf6008d2cf813ae2ff25aebf18b4d625870cab6e
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: social-service
+spec:
+  template:
+    spec:
+      containers:
+      - name: social-service
+        image: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/social-service@sha256:03a60a7f029785f30d1be5b80b1863609c39504ee2bc4d8e2c44295ceeb5ab82
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: trust-safety-service
+spec:
+  template:
+    spec:
+      containers:
+      - name: trust-safety-service
+        image: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/trust-safety-service@sha256:e0429e30348a48d48ae9899514a8a1ceedadca32d6152eca1a5b0b5200c0a483
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: feed-service
+spec:
+  template:
+    spec:
+      containers:
+      - name: feed-service
+        image: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/feed-service@sha256:96c19c7b0560d47578f8e86d618881237606ef70150d6eef7090a87b8aefb23f

@@ -55,7 +55,7 @@ spec:
             name: realtime-chat-service-config
         - secretRef:
             name: realtime-chat-service-secret
-        image: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/realtime-chat-service:main-bd6fbdba24e1dec6873163aa51d2297d45cc5cc3
+        image: nova/realtime-chat-service
         livenessProbe:
           failureThreshold: 3
           httpGet:

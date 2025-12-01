@@ -10,6 +10,8 @@ spec:
         env:
         - name: APP_PORT
           value: "8084"
+        - name: SERVER_PORT
+          value: "8084"
         - name: KAFKA_BOOTSTRAP_SERVERS
           valueFrom:
             configMapKeyRef:
@@ -20,4 +22,10 @@ spec:
           value: "1"
         # identity-service 在啟動時可能尚未就緒，降級 tier 避免 CrashLoop
         - name: GRPC_IDENTITY_SERVICE_TIER
+          value: "1"
+        # graph-service gRPC URL (mTLS enabled)
+        - name: GRPC_GRAPH_SERVICE_URL
+          value: "https://graph-service.nova-staging.svc.cluster.local:9080"
+        # graph-service 非必要依賴，降級 tier 避免啟動時 CrashLoop
+        - name: GRPC_GRAPH_SERVICE_TIER
           value: "1"

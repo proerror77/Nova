@@ -255,6 +255,54 @@ patches:
     name: trust-safety-service
 
     version: v1
+- patch: |-
+    - op: replace
+      path: /spec/template/spec/containers/0/resources
+      value:
+        requests:
+          cpu: 10m
+          memory: 64Mi
+        limits:
+          cpu: 500m
+          memory: 512Mi
+  target:
+    group: apps
+    kind: Deployment
+    name: notification-service
+
+    version: v1
+- patch: |-
+    - op: replace
+      path: /spec/template/spec/containers/0/resources
+      value:
+        requests:
+          cpu: 10m
+          memory: 64Mi
+        limits:
+          cpu: 500m
+          memory: 512Mi
+  target:
+    group: apps
+    kind: Deployment
+    name: pgbouncer
+
+    version: v1
+- patch: |-
+    - op: replace
+      path: /spec/template/spec/containers/0/resources
+      value:
+        requests:
+          cpu: 100m
+          memory: 128Mi
+        limits:
+          cpu: 2000m
+          memory: 1Gi
+  target:
+    group: apps
+    kind: Deployment
+    name: turn-server
+
+    version: v1
 # search-service ports now defined in grpc-services.yaml (gRPC:50057, HTTP:8086)
 - path: configmap-patch.yaml
 - path: deployment-images-patch.yaml
@@ -298,53 +346,10 @@ patches:
 # Remove deprecated/retired services from staging (none currently included)
 # Note: ClickHouse 需要额外的网络隔离 patches
 
-images:
-- name: nova/analytics-service
-  newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/analytics-service
-  newTag: d76baed0b3ece4ccb5d1a3ce34f97954dc792461
-- name: nova/content-service
-  newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/content-service
-  newTag: 04d28e5917f31c454fe785d431d21290a87cf364
-- name: nova/feed-service
-  newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/feed-service
-  newTag: d76baed0b3ece4ccb5d1a3ce34f97954dc792461
-- name: nova/graph-service
-  newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/graph-service
-  newTag: d76baed0b3ece4ccb5d1a3ce34f97954dc792461
-- name: nova/graphql-gateway
-  newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/graphql-gateway
-  newTag: d76baed0b3ece4ccb5d1a3ce34f97954dc792461
-- name: nova/identity-service
-  newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/identity-service
-  newTag: d76baed0b3ece4ccb5d1a3ce34f97954dc792461
-- name: nova/media-service
-  newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/media-service
-  newTag: d76baed0b3ece4ccb5d1a3ce34f97954dc792461
-- name: nova/notification-service
-  newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/notification-service
-  newTag: d76baed0b3ece4ccb5d1a3ce34f97954dc792461
-- name: nova/ranking-service
-  newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/ranking-service
-  newTag: d76baed0b3ece4ccb5d1a3ce34f97954dc792461
-- name: nova/realtime-chat-service
-  newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/realtime-chat-service
-  newTag: d76baed0b3ece4ccb5d1a3ce34f97954dc792461
-- name: nova/search-service
-  newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/search-service
-  newTag: d76baed0b3ece4ccb5d1a3ce34f97954dc792461
-- name: nova/social-service
-  newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/social-service
-  newTag: d76baed0b3ece4ccb5d1a3ce34f97954dc792461
-- name: nova/trust-safety-service
-  newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/trust-safety-service
-  newTag: d76baed0b3ece4ccb5d1a3ce34f97954dc792461
-
 # Staging replica configuration
 # All core services enabled with 1 replica
-# PgBouncer disabled due to hostPort conflicts
-# api-gateway removed (deprecated in favor of graphql-gateway); turn-server disabled
 replicas:
-- count: 0
+- count: 1
   name: pgbouncer
 - count: 1
   name: analytics-service
