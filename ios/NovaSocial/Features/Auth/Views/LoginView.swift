@@ -263,14 +263,23 @@ struct LoginView: View {
         errorMessage = nil
 
         do {
-            // Use email for login in this new UI
-            let _ = try await authManager.login(
-                username: email,
+            _ = try await authManager.login(
+                username: email.trimmingCharacters(in: .whitespacesAndNewlines),
                 password: password
             )
             // Success - AuthenticationManager will update isAuthenticated
         } catch {
-            errorMessage = "Login failed: \(error.localizedDescription)"
+            // Provide user-friendly error messages
+            if error.localizedDescription.contains("401") || error.localizedDescription.contains("Unauthorized") {
+                errorMessage = "Invalid email or password. Please try again."
+            } else if error.localizedDescription.contains("network") || error.localizedDescription.contains("connection") {
+                errorMessage = "Network error. Please check your connection."
+            } else {
+                errorMessage = "Login failed. Please try again."
+            }
+            #if DEBUG
+            print("[LoginView] Login error: \(error)")
+            #endif
         }
 
         isLoading = false

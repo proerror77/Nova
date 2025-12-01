@@ -5,9 +5,11 @@ import MapKit
 import Combine
 import AVFoundation
 
-// MARK: - 消息模型
+// MARK: - 消息UI模型
+/// UI层的消息模型，包含后端Message + UI特定字段（图片、位置）
 struct ChatMessage: Identifiable, Equatable {
-    let id = UUID()
+    let id: String  // 改为String以匹配后端Message.id
+    let backendMessage: Message?  // 后端消息对象（可选，本地消息可能还没发送）
     let text: String
     let isFromMe: Bool
     let timestamp: Date
@@ -16,6 +18,28 @@ struct ChatMessage: Identifiable, Equatable {
 
     static func == (lhs: ChatMessage, rhs: ChatMessage) -> Bool {
         lhs.id == rhs.id
+    }
+
+    /// 从后端Message创建ChatMessage
+    init(from message: Message, currentUserId: String) {
+        self.id = message.id
+        self.backendMessage = message
+        self.text = message.content
+        self.isFromMe = message.senderId == currentUserId
+        self.timestamp = message.createdAt
+        self.image = nil  // 图片需要单独加载
+        self.location = nil  // TODO: 解析location类型消息
+    }
+
+    /// 创建本地消息（发送前）
+    init(localText: String, isFromMe: Bool = true, image: UIImage? = nil, location: CLLocationCoordinate2D? = nil) {
+        self.id = UUID().uuidString
+        self.backendMessage = nil
+        self.text = localText
+        self.isFromMe = isFromMe
+        self.timestamp = Date()
+        self.image = image
+        self.location = location
     }
 }
 
@@ -226,14 +250,27 @@ struct ChatView: View {
         return formatter
     }()
 
+    // MARK: - Dependencies & Required Properties
+    /// 聊天服务 - 负责发送/接收消息、WebSocket连接
+    /// ⚠️ 这是连接后端API的关键，不要替换成其他Service
+    @State private var chatService = ChatService()
+
+    /// 必需参数
     @Binding var showChat: Bool
+    let conversationId: String  // ← 从上级View传入，标识当前聊天对象
     var userName: String = "User"
-    var initialMessages: [ChatMessage] = []
+
+    // MARK: - State
     @State private var messageText = ""
     @State private var showUserProfile = false
     @State private var messages: [ChatMessage] = []
     @State private var showAttachmentOptions = false
     @FocusState private var isInputFocused: Bool
+
+    // 加载状态
+    @State private var isLoadingHistory = false
+    @State private var isSending = false
+    @State private var error: String?
 
     // 相册相关
     @State private var selectedPhotoItem: PhotosPickerItem?
@@ -246,6 +283,11 @@ struct ChatView: View {
     // 位置相关
     @StateObject private var locationManager = ChatLocationManager()
     @State private var showLocationAlert = false
+
+    // 当前用户ID（从Keychain获取）
+    private var currentUserId: String {
+        KeychainService.shared.get(.userId) ?? "unknown"
+    }
 
     var body: some View {
         ZStack {
@@ -302,11 +344,13 @@ struct ChatView: View {
         .transaction { transaction in
             transaction.disablesAnimations = true
         }
-        .onAppear {
-            // 加载初始消息
-            if messages.isEmpty && !initialMessages.isEmpty {
-                messages = initialMessages
-            }
+        .task {
+            // ✅ 使用.task而非.onAppear - 自动处理取消
+            await loadChatData()
+        }
+        .onDisappear {
+            // 断开WebSocket连接
+            chatService.disconnectWebSocket()
         }
     }
 
@@ -360,6 +404,30 @@ struct ChatView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 VStack(spacing: 16) {
+                    // 加载状态指示器
+                    if isLoadingHistory {
+                        ProgressView("Loading messages...")
+                            .padding()
+                    }
+
+                    // 错误提示
+                    if let error = error {
+                        VStack(spacing: 8) {
+                            Image(systemName: "exclamationmark.triangle")
+                                .font(.system(size: 30))
+                                .foregroundColor(.orange)
+                            Text(error)
+                                .font(.system(size: 14))
+                                .foregroundColor(.secondary)
+                                .multilineTextAlignment(.center)
+                            Button("Retry") {
+                                Task { await loadChatData() }
+                            }
+                            .buttonStyle(.bordered)
+                        }
+                        .padding()
+                    }
+
                     Text(currentDateString())
                         .font(Font.custom("Helvetica Neue", size: 12))
                         .foregroundColor(Color(red: 0.59, green: 0.59, blue: 0.59))
@@ -368,6 +436,20 @@ struct ChatView: View {
                     ForEach(messages) { message in
                         MessageBubbleView(message: message)
                             .id(message.id)
+                    }
+
+                    // 发送中指示器
+                    if isSending {
+                        HStack {
+                            Spacer()
+                            ProgressView()
+                                .scaleEffect(0.8)
+                            Text("Sending...")
+                                .font(.system(size: 12))
+                                .foregroundColor(.secondary)
+                            Spacer()
+                        }
+                        .padding(.horizontal)
                     }
                 }
                 .padding(.bottom, 16)
@@ -538,30 +620,108 @@ struct ChatView: View {
         }
     }
 
+    // MARK: - API调用
+
+    /// 加载聊天数据（消息历史 + WebSocket连接）
+    private func loadChatData() async {
+        isLoadingHistory = true
+        error = nil
+
+        do {
+            // 1. 获取消息历史
+            let response = try await chatService.getMessages(conversationId: conversationId, limit: 50)
+
+            // 2. 转换为UI消息
+            messages = response.messages.map { ChatMessage(from: $0, currentUserId: currentUserId) }
+
+            // 3. 连接WebSocket接收实时消息
+            chatService.onMessageReceived = { [weak chatService] newMessage in
+                Task { @MainActor in
+                    // 避免重复添加（如果消息已存在）
+                    guard !self.messages.contains(where: { $0.id == newMessage.id }) else { return }
+                    self.messages.append(ChatMessage(from: newMessage, currentUserId: self.currentUserId))
+                }
+            }
+            chatService.connectWebSocket()
+
+            #if DEBUG
+            print("[ChatView] Loaded \(messages.count) messages for conversation \(conversationId)")
+            #endif
+
+        } catch {
+            self.error = "Failed to load messages: \(error.localizedDescription)"
+            #if DEBUG
+            print("[ChatView] Load error: \(error)")
+            #endif
+        }
+
+        isLoadingHistory = false
+    }
+
     // MARK: - 发送文字消息
     private func sendMessage() {
         let trimmedText = messageText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedText.isEmpty else { return }
+        guard !trimmedText.isEmpty, !isSending else { return }
 
-        let myMessage = ChatMessage(text: trimmedText, isFromMe: true, timestamp: Date())
-        messages.append(myMessage)
+        // 立即添加到UI（乐观更新）
+        let localMessage = ChatMessage(localText: trimmedText, isFromMe: true)
+        messages.append(localMessage)
 
         messageText = ""
         showAttachmentOptions = false
+
+        // 异步发送到服务器
+        Task {
+            isSending = true
+            do {
+                let sentMessage = try await chatService.sendMessage(
+                    conversationId: conversationId,
+                    content: trimmedText,
+                    type: .text
+                )
+
+                // 替换本地消息为服务器返回的消息
+                if let index = messages.firstIndex(where: { $0.id == localMessage.id }) {
+                    messages[index] = ChatMessage(from: sentMessage, currentUserId: currentUserId)
+                }
+
+                #if DEBUG
+                print("[ChatView] Message sent successfully: \(sentMessage.id)")
+                #endif
+
+            } catch {
+                // 发送失败 - 标记消息为失败状态（TODO: 添加重试UI）
+                #if DEBUG
+                print("[ChatView] Failed to send message: \(error)")
+                #endif
+                // 可以在这里移除失败的消息或添加重试按钮
+            }
+            isSending = false
+        }
     }
 
     // MARK: - 发送图片消息
     private func sendImageMessage(image: UIImage) {
-        var message = ChatMessage(text: "", isFromMe: true, timestamp: Date())
-        message.image = image
-        messages.append(message)
+        // TODO: 先上传图片到Media Service，获取URL，然后发送消息
+        // 暂时只添加到本地UI
+        let localMessage = ChatMessage(localText: "", isFromMe: true, image: image)
+        messages.append(localMessage)
+
+        #if DEBUG
+        print("[ChatView] Image upload not yet implemented")
+        #endif
     }
 
     // MARK: - 发送位置消息
     private func sendLocationMessage(location: CLLocationCoordinate2D) {
-        var message = ChatMessage(text: "", isFromMe: true, timestamp: Date())
-        message.location = location
-        messages.append(message)
+        // TODO: 发送location类型消息
+        // 暂时只添加到本地UI
+        let localMessage = ChatMessage(localText: "", isFromMe: true, location: location)
+        messages.append(localMessage)
+
+        #if DEBUG
+        print("[ChatView] Location sharing not yet implemented")
+        #endif
     }
 
     // MARK: - 获取当前日期字符串
@@ -596,5 +756,9 @@ struct ChatView: View {
 }
 
 #Preview {
-    ChatView(showChat: .constant(true), userName: "alice")
+    ChatView(
+        showChat: .constant(true),
+        conversationId: "preview_conversation_123",
+        userName: "Alice AI"
+    )
 }

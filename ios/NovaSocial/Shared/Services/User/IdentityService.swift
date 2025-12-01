@@ -31,7 +31,7 @@ class IdentityService {
         )
 
         // Save token for subsequent requests
-        client.setAuthToken(response.token)
+        client.setAuthToken(response.accessToken)
 
         return response
     }
@@ -52,7 +52,7 @@ class IdentityService {
         )
 
         // Save token for subsequent requests
-        client.setAuthToken(response.token)
+        client.setAuthToken(response.accessToken)
 
         return response
     }
@@ -72,7 +72,7 @@ class IdentityService {
         )
 
         // Update token
-        client.setAuthToken(response.token)
+        client.setAuthToken(response.accessToken)
 
         return response
     }
@@ -128,13 +128,15 @@ class IdentityService {
 // MARK: - Request/Response Models
 
 struct AuthResponse: Codable {
-    let token: String
+    let accessToken: String
     let refreshToken: String?
+    let expiresIn: Int?
     let user: UserProfile
 
     enum CodingKeys: String, CodingKey {
-        case token
+        case accessToken = "access_token"
         case refreshToken = "refresh_token"
+        case expiresIn = "expires_in"
         case user
     }
 }

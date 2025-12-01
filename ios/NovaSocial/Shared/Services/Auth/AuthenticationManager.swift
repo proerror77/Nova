@@ -138,7 +138,7 @@ class AuthenticationManager: ObservableObject {
         )
 
         // Save authentication with refresh token
-        await saveAuth(token: response.token, refreshToken: response.refreshToken, user: response.user)
+        await saveAuth(token: response.accessToken, refreshToken: response.refreshToken, user: response.user)
 
         return response.user
     }
@@ -153,7 +153,7 @@ class AuthenticationManager: ObservableObject {
         )
 
         // Save authentication with refresh token
-        await saveAuth(token: response.token, refreshToken: response.refreshToken, user: response.user)
+        await saveAuth(token: response.accessToken, refreshToken: response.refreshToken, user: response.user)
 
         return response.user
     }
@@ -184,9 +184,9 @@ class AuthenticationManager: ObservableObject {
         let response = try await identityService.refreshToken(refreshToken: refreshToken)
 
         // Update token in Keychain
-        self.authToken = response.token
-        APIClient.shared.setAuthToken(response.token)
-        _ = keychain.save(response.token, for: .authToken)
+        self.authToken = response.accessToken
+        APIClient.shared.setAuthToken(response.accessToken)
+        _ = keychain.save(response.accessToken, for: .authToken)
 
         // Update refresh token if provided
         if let newRefreshToken = response.refreshToken {

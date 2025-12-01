@@ -9,8 +9,12 @@ struct NotificationView: View {
         ZStack {
             // 条件渲染：根据状态切换视图
             if showChat {
-                ChatView(showChat: $showChat, userName: selectedUserName, initialMessages: [])
-                    .transition(.identity)
+                ChatView(
+                    showChat: $showChat,
+                    conversationId: "temp_conversation_\(selectedUserName)",  // TODO: 使用真实conversation ID
+                    userName: selectedUserName
+                )
+                .transition(.identity)
             } else {
                 notificationContent
             }

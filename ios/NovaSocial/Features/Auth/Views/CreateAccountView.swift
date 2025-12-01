@@ -387,9 +387,9 @@ struct CreateAccountView: View {
         errorMessage = nil
 
         do {
-            let _ = try await authManager.register(
-                username: username,
-                email: email,
+            _ = try await authManager.register(
+                username: username.trimmingCharacters(in: .whitespacesAndNewlines),
+                email: email.trimmingCharacters(in: .whitespacesAndNewlines),
                 password: password,
                 displayName: displayName.isEmpty ? username : displayName
             )
@@ -398,7 +398,17 @@ struct CreateAccountView: View {
                 currentPage = .home
             }
         } catch {
-            errorMessage = "Registration failed: \(error.localizedDescription)"
+            // Provide user-friendly error messages
+            if error.localizedDescription.contains("409") || error.localizedDescription.contains("already exists") {
+                errorMessage = "Username or email already exists. Please try another."
+            } else if error.localizedDescription.contains("network") || error.localizedDescription.contains("connection") {
+                errorMessage = "Network error. Please check your connection."
+            } else {
+                errorMessage = "Registration failed. Please try again."
+            }
+            #if DEBUG
+            print("[CreateAccountView] Registration error: \(error)")
+            #endif
         }
 
         isLoading = false
