@@ -46,6 +46,10 @@ config = "0.14"
 dotenv = "0.15"
 aws-secrets = { path = "../libs/aws-secrets" }
 
+# AWS SDK (for SNS SMS delivery)
+aws-config = { version = "1.5", features = ["behavior-version-latest"] }
+aws-sdk-sns = "1.47"
+
 # Resilience (P0-5)
 resilience = { path = "../libs/resilience" }
 

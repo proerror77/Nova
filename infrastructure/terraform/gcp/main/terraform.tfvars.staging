@@ -1,0 +1,62 @@
+# GCP Project Configuration
+gcp_project_id = "banded-pad-479802-k9"
+gcp_region     = "asia-northeast1"
+environment    = "staging"
+
+# Network Configuration
+vpc_name    = "nova-vpc-staging"
+vpc_cidr    = "10.0.0.0/16"
+subnet_cidr = "10.0.0.0/20"
+
+# GKE Configuration
+gke_cluster_name   = "nova-staging-gke"
+kubernetes_version = "1.27"
+
+# On-Demand Node Pool (stable workloads)
+on_demand_initial_node_count = 2
+on_demand_min_node_count     = 2
+on_demand_max_node_count     = 5
+on_demand_machine_type       = "n2-standard-4"
+
+# Spot Node Pool (disabled for staging)
+spot_initial_node_count = 0
+spot_min_node_count     = 0
+spot_max_node_count     = 3
+spot_machine_type       = "n2-standard-4"
+
+# Cloud SQL Configuration
+database_instance_name = "nova"
+database_name          = "nova"
+database_user          = "nova_admin"
+postgres_version       = "15"
+database_machine_type  = "db-custom-4-16384"  # 4 vCPU, 16GB RAM
+database_disk_size     = 100                  # GB
+
+# Memorystore Redis Configuration
+redis_instance_name = "nova-redis"
+redis_size_gb       = 1                  # 1GB for staging
+redis_tier          = "STANDARD"
+redis_version       = "7.0"
+
+# Artifact Registry Configuration
+artifact_repo_name            = "nova"
+artifact_keep_recent_versions = 10
+
+# GitHub Actions OIDC Configuration
+github_org              = "proerror"
+github_repo             = "nova"
+github_main_branch      = "main"
+enable_branch_specific_oidc = false  # Optional: enable for production
+
+# Kubernetes Configuration
+k8s_namespace       = "nova-staging"
+k8s_service_account = "k8s-workloads"
+
+# Custom Tags
+tags = {
+  project     = "nova"
+  environment = "staging"
+  managed_by  = "terraform"
+  team        = "infrastructure"
+  cost_center = "engineering"
+}

@@ -36,6 +36,7 @@ struct ProfileView: View {
     @State private var showShareSheet = false
     @State private var localAvatarImage: UIImage? = nil  // 本地选择的头像
 
+
     // Computed property for user display
     private var displayUser: UserProfile? {
         authManager.currentUser ?? profileData.userProfile

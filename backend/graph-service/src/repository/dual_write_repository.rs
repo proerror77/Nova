@@ -259,8 +259,41 @@ impl DualWriteRepository {
     }
 
     /// Get graph stats (Neo4j only - complex query)
+    #[allow(dead_code)] // Reserved for graph analytics endpoint
     pub async fn get_graph_stats(&self, user_id: Uuid) -> Result<GraphStats> {
         self.neo4j.get_graph_stats(user_id).await
+    }
+
+    /// Get blocked users (Neo4j first, PostgreSQL fallback)
+    pub async fn get_blocked_users(
+        &self,
+        user_id: Uuid,
+        limit: i32,
+        offset: i32,
+    ) -> Result<(Vec<Uuid>, i32, bool)> {
+        let start = std::time::Instant::now();
+
+        match self.neo4j.get_blocked_users(user_id, limit, offset).await {
+            Ok(result) => {
+                let duration = start.elapsed();
+                tracing::debug!(
+                    "neo4j_query_success{{operation=\"get_blocked_users\",duration_ms={}}}",
+                    duration.as_millis()
+                );
+                Ok(result)
+            }
+            Err(e) => {
+                error!(
+                    "Neo4j get_blocked_users failed, falling back to PostgreSQL: {}",
+                    e
+                );
+                tracing::warn!("neo4j_query_failure{{operation=\"get_blocked_users\"}}");
+
+                let result = self.postgres.get_blocked_users(user_id, limit, offset).await?;
+                tracing::warn!("postgres_query_fallback{{operation=\"get_blocked_users\"}}");
+                Ok(result)
+            }
+        }
     }
 }
 
@@ -327,6 +360,15 @@ impl GraphRepositoryTrait for DualWriteRepository {
         followee_ids: Vec<Uuid>,
     ) -> Result<std::collections::HashMap<String, bool>> {
         Self::batch_check_following(self, follower_id, followee_ids).await
+    }
+
+    async fn get_blocked_users(
+        &self,
+        user_id: Uuid,
+        limit: i32,
+        offset: i32,
+    ) -> Result<(Vec<Uuid>, i32, bool)> {
+        Self::get_blocked_users(self, user_id, limit, offset).await
     }
 
     async fn health_check(&self) -> Result<()> {

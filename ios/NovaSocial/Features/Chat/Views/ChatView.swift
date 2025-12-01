@@ -272,6 +272,7 @@ struct ChatView: View {
     @State private var isSending = false
     @State private var error: String?
 
+
     // 相册相关
     @State private var selectedPhotoItem: PhotosPickerItem?
 
@@ -288,6 +289,7 @@ struct ChatView: View {
     private var currentUserId: String {
         KeychainService.shared.get(.userId) ?? "unknown"
     }
+
 
     var body: some View {
         ZStack {

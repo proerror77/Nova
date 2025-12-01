@@ -1,9 +1,10 @@
 use crate::error::AppError;
 use base64::{engine::general_purpose, Engine as _};
-use rand::Rng;
+use rand::rngs::OsRng;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use uuid::Uuid;
+use x25519_dalek::{PublicKey, StaticSecret};
 
 /// Device key pair for ECDH key exchange
 #[derive(Clone, Serialize, Deserialize)]
@@ -29,15 +30,11 @@ impl KeyExchangeService {
 
     /// Generates a new X25519 key pair for a device
     pub fn generate_keypair() -> Result<(Vec<u8>, Vec<u8>), AppError> {
-        // Generate a random 32-byte private key
-        let mut rng = rand::thread_rng();
-        let mut private_key = [0u8; 32];
-        rng.fill(&mut private_key);
+        // Generate a cryptographically secure private key
+        let secret = StaticSecret::random_from_rng(OsRng);
+        let public = PublicKey::from(&secret);
 
-        // Derive public key from private key using x25519
-        let public_key = x25519_dalek::x25519(private_key, x25519_dalek::X25519_BASEPOINT_BYTES);
-
-        Ok((private_key.to_vec(), public_key.to_vec()))
+        Ok((secret.as_bytes().to_vec(), public.as_bytes().to_vec()))
     }
 
     /// Performs ECDH to derive a shared secret
@@ -61,9 +58,11 @@ impl KeyExchangeService {
         let public_array =
             <[u8; 32]>::try_from(their_public_key).map_err(|_| AppError::Internal)?;
 
-        let shared_secret = x25519_dalek::x25519(private_array, public_array);
+        let secret = StaticSecret::from(private_array);
+        let public = PublicKey::from(public_array);
+        let shared_secret = secret.diffie_hellman(&public);
 
-        Ok(shared_secret.to_vec())
+        Ok(shared_secret.as_bytes().to_vec())
     }
 
     /// Derives a message encryption key from the shared secret

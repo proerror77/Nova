@@ -17,9 +17,6 @@ patchesStrategicMerge:
   - content-service/env-patch.yaml
   - feed-service/env-patch.yaml
   - analytics-service/env-patch.yaml
-  - content-service/env-patch.yaml
-  - feed-service/env-patch.yaml
-  - analytics-service/env-patch.yaml
 
 # Common labels for all resources in staging environment
 labels:
@@ -29,64 +26,64 @@ labels:
       app.kubernetes.io/managed-by: kustomize
 
 # Staging-specific image overrides
-# Use GCR staging registry for pre-production testing
+# Use GCP Artifact Registry for staging environment
 images:
   # Tier 1: Foundation
   - name: nova/identity-service
-    newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/identity-service
-    newTag: main-bd6fbdba24e1dec6873163aa51d2297d45cc5cc3
+    newName: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/identity-service
+    newTag: 178b5cc3
 
   # Tier 3: Content Platform
   - name: nova/content-service
-    newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/content-service
-    newTag: main-bd6fbdba24e1dec6873163aa51d2297d45cc5cc3
+    newName: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/content-service
+    newTag: 178b5cc3
 
   # Tier 4: Social & Graph
   - name: nova/social-service
-    newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/social-service
-    newTag: main-bd6fbdba24e1dec6873163aa51d2297d45cc5cc3
+    newName: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/social-service
+    newTag: 178b5cc3
 
   - name: nova/graph-service
-    newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/graph-service
-    newTag: main-bd6fbdba24e1dec6873163aa51d2297d45cc5cc3
+    newName: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/graph-service
+    newTag: 178b5cc3
 
   # Tier 5: Advanced Features
   - name: nova/feed-service
-    newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/feed-service
-    newTag: main-bd6fbdba24e1dec6873163aa51d2297d45cc5cc3
+    newName: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/feed-service
+    newTag: 178b5cc3
 
   - name: nova/ranking-service
-    newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/ranking-service
-    newTag: main-bd6fbdba24e1dec6873163aa51d2297d45cc5cc3
+    newName: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/ranking-service
+    newTag: 178b5cc3
 
   - name: nova/analytics-service
-    newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/analytics-service
-    newTag: main-bd6fbdba24e1dec6873163aa51d2297d45cc5cc3
+    newName: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/analytics-service
+    newTag: 178b5cc3
 
   - name: nova/notification-service
-    newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/notification-service
-    newTag: main-bd6fbdba24e1dec6873163aa51d2297d45cc5cc3
+    newName: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/notification-service
+    newTag: 178b5cc3
 
   - name: nova/realtime-chat-service
-    newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/realtime-chat-service
-    newTag: main-bd6fbdba24e1dec6873163aa51d2297d45cc5cc3
+    newName: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/realtime-chat-service
+    newTag: 178b5cc3
 
   - name: nova/search-service
-    newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/search-service
-    newTag: main-bd6fbdba24e1dec6873163aa51d2297d45cc5cc3
+    newName: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/search-service
+    newTag: 178b5cc3
 
   - name: nova/media-service
-    newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/media-service
-    newTag: main-bd6fbdba24e1dec6873163aa51d2297d45cc5cc3
+    newName: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/media-service
+    newTag: 178b5cc3
 
   - name: nova/trust-safety-service
-    newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/trust-safety-service
-    newTag: main-bd6fbdba24e1dec6873163aa51d2297d45cc5cc3
+    newName: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/trust-safety-service
+    newTag: 178b5cc3
 
   # Tier 6: API Gateway
   - name: nova/graphql-gateway
-    newName: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/graphql-gateway
-    newTag: main-bd6fbdba24e1dec6873163aa51d2297d45cc5cc3
+    newName: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/graphql-gateway
+    newTag: 178b5cc3
 
 # Staging-specific ConfigMap
 configMapGenerator:

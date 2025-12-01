@@ -1,4 +1,6 @@
+use crate::services::relationship_service::{CanMessageResult, RelationshipService};
 use chrono::{DateTime, Utc};
+use grpc_clients::AuthClient;
 use serde::{Deserialize, Serialize};
 use sqlx::{Pool, Postgres, Row};
 use uuid::Uuid;
@@ -45,45 +47,131 @@ pub struct ConversationWithMembers {
 pub struct ConversationService;
 
 impl ConversationService {
+    /// Create a direct (1:1) conversation between two users
+    /// Performs authorization checks based on recipient's DM settings and block status
     pub async fn create_direct_conversation(
         db: &Pool<Postgres>,
-        a: Uuid,
-        b: Uuid,
+        auth_client: &AuthClient,
+        initiator: Uuid,
+        recipient: Uuid,
     ) -> Result<Uuid, crate::error::AppError> {
+        // Validate users exist via identity-service (replaces FK constraint validation)
+        for user_id in [initiator, recipient] {
+            let exists = auth_client.user_exists(user_id).await.map_err(|e| {
+                tracing::error!(user_id = %user_id, error = %e, "auth-service user_exists failed");
+                crate::error::AppError::StartServer(format!("validate user: {e}"))
+            })?;
+            if !exists {
+                return Err(crate::error::AppError::BadRequest(format!(
+                    "User {} does not exist",
+                    user_id
+                )));
+            }
+        }
+
+        // Check if conversation already exists between these users
+        if let Some(existing_id) = Self::find_existing_direct_conversation(db, initiator, recipient).await? {
+            return Ok(existing_id);
+        }
+
+        // Authorization check: can initiator message recipient?
+        let can_message = RelationshipService::can_message(db, initiator, recipient).await?;
+
+        match can_message {
+            CanMessageResult::Allowed => {
+                // Proceed with conversation creation
+            }
+            CanMessageResult::Blocked => {
+                // Don't reveal block status - return generic forbidden
+                return Err(crate::error::AppError::Forbidden);
+            }
+            CanMessageResult::NeedMutualFollow => {
+                return Err(crate::error::AppError::BadRequest(
+                    "You must be mutual followers to send messages to this user".to_string(),
+                ));
+            }
+            CanMessageResult::NeedToFollow => {
+                return Err(crate::error::AppError::BadRequest(
+                    "You must follow this user to send them messages".to_string(),
+                ));
+            }
+            CanMessageResult::NotAllowed => {
+                return Err(crate::error::AppError::BadRequest(
+                    "This user doesn't accept direct messages".to_string(),
+                ));
+            }
+            CanMessageResult::NeedMessageRequest => {
+                // Could create a message request instead, but for now return error
+                return Err(crate::error::AppError::BadRequest(
+                    "You need to send a message request first".to_string(),
+                ));
+            }
+        }
+
         let id = Uuid::new_v4();
         let mut tx = db
             .begin()
             .await
             .map_err(|e| crate::error::AppError::StartServer(format!("tx: {e}")))?;
+
         // Note: Do not attempt to upsert into the canonical users table here.
         // The users table is owned by user-service and may have stricter NOT NULL
         // constraints (e.g., password_hash). Assume provided user IDs already exist
         // and let FK constraints enforce integrity.
+
         // Insert conversation using user-service schema
         // conversations(id, conversation_type, created_by)
         sqlx::query(
             "INSERT INTO conversations (id, conversation_type, created_by) VALUES ($1, 'direct', $2)",
         )
         .bind(id)
-        .bind(a)
+        .bind(initiator)
         .execute(&mut *tx)
         .await
         .map_err(|e| {
             crate::error::AppError::StartServer(format!("insert conversation: {e}"))
         })?;
+
         sqlx::query(
             "INSERT INTO conversation_members (conversation_id, user_id, role) VALUES ($1, $2, 'member'), ($1, $3, 'member') ON CONFLICT DO NOTHING"
         )
         .bind(id)
-        .bind(a)
-        .bind(b)
+        .bind(initiator)
+        .bind(recipient)
         .execute(&mut *tx)
         .await
         .map_err(|e| crate::error::AppError::StartServer(format!("insert members: {e}")))?;
+
         tx.commit()
             .await
             .map_err(|e| crate::error::AppError::StartServer(format!("commit: {e}")))?;
+
         Ok(id)
+    }
+
+    /// Find existing direct conversation between two users
+    async fn find_existing_direct_conversation(
+        db: &Pool<Postgres>,
+        user_a: Uuid,
+        user_b: Uuid,
+    ) -> Result<Option<Uuid>, crate::error::AppError> {
+        let result: Option<(Uuid,)> = sqlx::query_as(
+            r#"
+            SELECT c.id
+            FROM conversations c
+            WHERE c.conversation_type = 'direct'
+              AND EXISTS (SELECT 1 FROM conversation_members WHERE conversation_id = c.id AND user_id = $1)
+              AND EXISTS (SELECT 1 FROM conversation_members WHERE conversation_id = c.id AND user_id = $2)
+            LIMIT 1
+            "#,
+        )
+        .bind(user_a)
+        .bind(user_b)
+        .fetch_optional(db)
+        .await
+        .map_err(|e| crate::error::AppError::Database(format!("find_existing_conversation: {e}")))?;
+
+        Ok(result.map(|(id,)| id))
     }
 
     pub async fn get_conversation_db(
@@ -285,6 +373,7 @@ impl ConversationService {
     ///   - privacy_mode: Privacy mode (default: strict_e2e)
     pub async fn create_group_conversation(
         db: &Pool<Postgres>,
+        auth_client: &AuthClient,
         creator_id: Uuid,
         name: String,
         description: Option<String>,
@@ -311,6 +400,29 @@ impl ConversationService {
             }
         }
 
+        // Calculate total member count (creator + members, deduplicated)
+        let mut all_members = vec![creator_id];
+        for member_id in &member_ids {
+            if member_id != &creator_id && !all_members.contains(member_id) {
+                all_members.push(*member_id);
+            }
+        }
+
+        // Validate all users exist via identity-service (replaces FK constraint validation)
+        // Single-writer principle: identity-service owns users table
+        for user_id in &all_members {
+            let exists = auth_client.user_exists(*user_id).await.map_err(|e| {
+                tracing::error!(user_id = %user_id, error = %e, "auth-service user_exists failed");
+                crate::error::AppError::StartServer(format!("validate user: {e}"))
+            })?;
+            if !exists {
+                return Err(crate::error::AppError::BadRequest(format!(
+                    "User {} does not exist",
+                    user_id
+                )));
+            }
+        }
+
         let conversation_id = Uuid::new_v4();
         let privacy = privacy_mode.unwrap_or_default();
         let privacy_str = match privacy {
@@ -322,38 +434,6 @@ impl ConversationService {
             .begin()
             .await
             .map_err(|e| crate::error::AppError::StartServer(format!("tx: {e}")))?;
-
-        // Ensure creator exists
-        let creator_username = format!("u_{}", &creator_id.to_string()[..8]);
-        sqlx::query("INSERT INTO users (id, username) VALUES ($1, $2) ON CONFLICT (id) DO NOTHING")
-            .bind(creator_id)
-            .bind(creator_username)
-            .execute(&mut *tx)
-            .await
-            .map_err(|e| crate::error::AppError::StartServer(format!("ensure creator: {e}")))?;
-
-        // Ensure all members exist
-        for member_id in &member_ids {
-            let username = format!("u_{}", &member_id.to_string()[..8]);
-            sqlx::query(
-                "INSERT INTO users (id, username) VALUES ($1, $2) ON CONFLICT (id) DO NOTHING",
-            )
-            .bind(member_id)
-            .bind(username)
-            .execute(&mut *tx)
-            .await
-            .map_err(|e| {
-                crate::error::AppError::StartServer(format!("ensure member {}: {e}", member_id))
-            })?;
-        }
-
-        // Calculate total member count (creator + members, deduplicated)
-        let mut all_members = vec![creator_id];
-        for member_id in &member_ids {
-            if member_id != &creator_id && !all_members.contains(member_id) {
-                all_members.push(*member_id);
-            }
-        }
         let member_count = all_members.len() as i32;
 
         // Create conversation

@@ -287,6 +287,27 @@ async fn main() -> std::io::Result<()> {
                 "/api/v2/feed/trending",
                 web::get().to(rest_api::get_trending_feed),
             )
+            // ✅ Content API (Posts)
+            .route(
+                "/api/v2/content",
+                web::post().to(rest_api::content::create_post),
+            )
+            .route(
+                "/api/v2/content/{id}",
+                web::get().to(rest_api::content::get_post),
+            )
+            .route(
+                "/api/v2/content/user/{user_id}",
+                web::get().to(rest_api::content::get_user_posts),
+            )
+            .route(
+                "/api/v2/content/{id}",
+                web::put().to(rest_api::content::update_post),
+            )
+            .route(
+                "/api/v2/content/{id}",
+                web::delete().to(rest_api::content::delete_post),
+            )
             // ✅ User Profile API
             .route("/api/v2/users/{id}", web::get().to(rest_api::get_profile))
             .route(

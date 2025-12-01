@@ -30,6 +30,17 @@
     <array>
         <string>UIInterfaceOrientationPortrait</string>
     </array>
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>icered</string>
+            </array>
+            <key>CFBundleURLName</key>
+            <string>com.icered.oauth</string>
+        </dict>
+    </array>
     <key>NSCameraUsageDescription</key>
     <string>We need access to your camera to take photos and scan QR codes.</string>
     <key>NSPhotoLibraryUsageDescription</key>

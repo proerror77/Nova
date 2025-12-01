@@ -5,6 +5,9 @@ use rand::{thread_rng, Rng};
 use sqlx::PgPool;
 use uuid::Uuid;
 
+/// Default invite code expiry: 30 days
+const DEFAULT_INVITE_EXPIRY_DAYS: i64 = 30;
+
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct InviteCode {
     pub id: Uuid,
@@ -18,6 +21,55 @@ pub struct InviteCode {
     pub created_at: DateTime<Utc>,
 }
 
+/// Invite quota information
+#[derive(Debug, Clone)]
+pub struct InviteQuota {
+    pub total_quota: i32,
+    pub used_quota: i32,
+    pub remaining_quota: i32,
+    pub successful_referrals: i32,
+}
+
+/// Invite validation result
+#[derive(Debug, Clone)]
+pub struct InviteValidation {
+    pub is_valid: bool,
+    pub issuer_username: Option<String>,
+    pub expires_at: Option<DateTime<Utc>>,
+    pub error: Option<String>,
+}
+
+/// Referral user info
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct ReferralUser {
+    pub user_id: Uuid,
+    pub username: String,
+    pub avatar_url: Option<String>,
+    pub joined_at: DateTime<Utc>,
+    pub status: String,
+}
+
+/// Referral info response
+#[derive(Debug, Clone)]
+pub struct ReferralInfo {
+    pub referred_by: Option<ReferralUser>,
+    pub referrals: Vec<ReferralUser>,
+    pub total_referrals: i32,
+    pub active_referrals: i32,
+}
+
+/// Invite delivery record
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct InviteDelivery {
+    pub id: Uuid,
+    pub invite_code_id: Uuid,
+    pub channel: String,
+    pub recipient: Option<String>,
+    pub external_id: Option<String>,
+    pub status: String,
+    pub sent_at: DateTime<Utc>,
+}
+
 fn generate_code() -> String {
     let mut rng = thread_rng();
     std::iter::repeat_with(|| rng.sample(Alphanumeric))
@@ -28,6 +80,45 @@ fn generate_code() -> String {
         .to_uppercase()
 }
 
+/// Check user's invite quota
+pub async fn get_invite_quota(pool: &PgPool, user_id: Uuid) -> Result<InviteQuota> {
+    #[derive(sqlx::FromRow)]
+    struct QuotaRow {
+        invite_quota: i32,
+        total_successful_referrals: i32,
+    }
+
+    let user = sqlx::query_as::<_, QuotaRow>(
+        "SELECT invite_quota, total_successful_referrals FROM users WHERE id = $1",
+    )
+    .bind(user_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| IdentityError::Database(e.to_string()))?
+    .ok_or_else(|| IdentityError::UserNotFound)?;
+
+    let used = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM invite_codes WHERE issuer_user_id = $1",
+    )
+    .bind(user_id)
+    .fetch_one(pool)
+    .await
+    .map_err(|e| IdentityError::Database(e.to_string()))? as i32;
+
+    Ok(InviteQuota {
+        total_quota: user.invite_quota,
+        used_quota: used,
+        remaining_quota: (user.invite_quota - used).max(0),
+        successful_referrals: user.total_successful_referrals,
+    })
+}
+
+/// Check if user can create more invites
+pub async fn can_create_invite(pool: &PgPool, user_id: Uuid) -> Result<bool> {
+    let quota = get_invite_quota(pool, user_id).await?;
+    Ok(quota.remaining_quota > 0)
+}
+
 pub async fn create_invite(
     pool: &PgPool,
     issuer: Uuid,
@@ -35,8 +126,15 @@ pub async fn create_invite(
     target_phone: Option<String>,
     expires_at: Option<DateTime<Utc>>,
 ) -> Result<InviteCode> {
-    // default expiry 7 days
-    let expiry = expires_at.unwrap_or_else(|| Utc::now() + Duration::days(7));
+    // Check quota first
+    if !can_create_invite(pool, issuer).await? {
+        return Err(IdentityError::Validation(
+            "No remaining invite quota. Refer more friends to earn more invites.".into(),
+        ));
+    }
+
+    // Default expiry: 30 days
+    let expiry = expires_at.unwrap_or_else(|| Utc::now() + Duration::days(DEFAULT_INVITE_EXPIRY_DAYS));
     let mut attempts = 0;
     loop {
         let code = generate_code();
@@ -177,4 +275,178 @@ pub struct InvitationStats {
     pub total_redeemed: i32,
     pub total_pending: i32,
     pub total_expired: i32,
+}
+
+/// Validate an invite code (public endpoint - no auth required)
+pub async fn validate_invite(pool: &PgPool, code: &str) -> Result<InviteValidation> {
+    #[derive(sqlx::FromRow)]
+    struct InviteWithIssuer {
+        expires_at: DateTime<Utc>,
+        redeemed_at: Option<DateTime<Utc>>,
+        username: String,
+    }
+
+    let result = sqlx::query_as::<_, InviteWithIssuer>(
+        r#"
+        SELECT ic.expires_at, ic.redeemed_at, u.username
+        FROM invite_codes ic
+        JOIN users u ON u.id = ic.issuer_user_id
+        WHERE ic.code = $1
+        "#,
+    )
+    .bind(code)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| IdentityError::Database(e.to_string()))?;
+
+    match result {
+        None => Ok(InviteValidation {
+            is_valid: false,
+            issuer_username: None,
+            expires_at: None,
+            error: Some("not_found".into()),
+        }),
+        Some(invite) => {
+            if invite.redeemed_at.is_some() {
+                Ok(InviteValidation {
+                    is_valid: false,
+                    issuer_username: Some(invite.username),
+                    expires_at: Some(invite.expires_at),
+                    error: Some("already_used".into()),
+                })
+            } else if invite.expires_at < Utc::now() {
+                Ok(InviteValidation {
+                    is_valid: false,
+                    issuer_username: Some(invite.username),
+                    expires_at: Some(invite.expires_at),
+                    error: Some("expired".into()),
+                })
+            } else {
+                Ok(InviteValidation {
+                    is_valid: true,
+                    issuer_username: Some(invite.username),
+                    expires_at: Some(invite.expires_at),
+                    error: None,
+                })
+            }
+        }
+    }
+}
+
+/// Get referral information for a user
+pub async fn get_referral_info(pool: &PgPool, user_id: Uuid) -> Result<ReferralInfo> {
+    // Get who referred this user
+    let referred_by = sqlx::query_as::<_, ReferralUser>(
+        r#"
+        SELECT
+            u.id as user_id,
+            u.username,
+            u.avatar_url,
+            u.created_at as joined_at,
+            COALESCE(rc.status, 'active') as status
+        FROM users u
+        LEFT JOIN referral_chains rc ON rc.referrer_id = u.id AND rc.referee_id = $1
+        WHERE u.id = (SELECT referred_by_user_id FROM users WHERE id = $1)
+        "#,
+    )
+    .bind(user_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| IdentityError::Database(e.to_string()))?;
+
+    // Get users this user has referred
+    let referrals = sqlx::query_as::<_, ReferralUser>(
+        r#"
+        SELECT
+            u.id as user_id,
+            u.username,
+            u.avatar_url,
+            u.created_at as joined_at,
+            COALESCE(rc.status, 'pending') as status
+        FROM users u
+        JOIN referral_chains rc ON rc.referee_id = u.id
+        WHERE rc.referrer_id = $1
+        ORDER BY u.created_at DESC
+        LIMIT 100
+        "#,
+    )
+    .bind(user_id)
+    .fetch_all(pool)
+    .await
+    .map_err(|e| IdentityError::Database(e.to_string()))?;
+
+    let total_referrals = referrals.len() as i32;
+    let active_referrals = referrals.iter().filter(|r| r.status == "active").count() as i32;
+
+    Ok(ReferralInfo {
+        referred_by,
+        referrals,
+        total_referrals,
+        active_referrals,
+    })
+}
+
+/// Record an invite delivery (SMS, Email, or Link share)
+pub async fn record_invite_delivery(
+    pool: &PgPool,
+    invite_code_id: Uuid,
+    channel: &str,
+    recipient: Option<&str>,
+    external_id: Option<&str>,
+) -> Result<InviteDelivery> {
+    let delivery = sqlx::query_as::<_, InviteDelivery>(
+        r#"
+        INSERT INTO invite_deliveries (invite_code_id, channel, recipient, external_id, status)
+        VALUES ($1, $2, $3, $4, 'sent')
+        RETURNING id, invite_code_id, channel, recipient, external_id, status, sent_at
+        "#,
+    )
+    .bind(invite_code_id)
+    .bind(channel)
+    .bind(recipient)
+    .bind(external_id)
+    .fetch_one(pool)
+    .await
+    .map_err(|e| IdentityError::Database(e.to_string()))?;
+
+    Ok(delivery)
+}
+
+/// Update delivery status
+pub async fn update_delivery_status(
+    pool: &PgPool,
+    delivery_id: Uuid,
+    status: &str,
+    error_message: Option<&str>,
+) -> Result<()> {
+    sqlx::query(
+        r#"
+        UPDATE invite_deliveries
+        SET status = $2,
+            error_message = $3,
+            delivered_at = CASE WHEN $2 = 'delivered' THEN NOW() ELSE delivered_at END,
+            opened_at = CASE WHEN $2 = 'opened' THEN NOW() ELSE opened_at END
+        WHERE id = $1
+        "#,
+    )
+    .bind(delivery_id)
+    .bind(status)
+    .bind(error_message)
+    .execute(pool)
+    .await
+    .map_err(|e| IdentityError::Database(e.to_string()))?;
+
+    Ok(())
+}
+
+/// Grant referral reward when referee becomes active
+pub async fn grant_referral_reward(pool: &PgPool, referee_id: Uuid) -> Result<bool> {
+    // This calls the database function we created in the migration
+    let result = sqlx::query("SELECT grant_referral_reward($1)")
+        .bind(referee_id)
+        .execute(pool)
+        .await
+        .map_err(|e| IdentityError::Database(e.to_string()))?;
+
+    Ok(result.rows_affected() > 0)
 }

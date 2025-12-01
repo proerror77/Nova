@@ -33,6 +33,9 @@ pub enum TrustSafetyError {
     #[error("Moderation log not found: {0}")]
     ModerationLogNotFound(String),
 
+    #[error("Not found: {0}")]
+    NotFound(String),
+
     #[error("Invalid appeal status transition: {from} -> {to}")]
     InvalidAppealStatusTransition { from: String, to: String },
 
@@ -81,6 +84,7 @@ impl From<TrustSafetyError> for Status {
             TrustSafetyError::ModerationLogNotFound(id) => {
                 Status::not_found(format!("Moderation log not found: {}", id))
             }
+            TrustSafetyError::NotFound(msg) => Status::not_found(msg),
             TrustSafetyError::InvalidAppealStatusTransition { from, to } => {
                 Status::failed_precondition(format!(
                     "Invalid appeal status transition: {} -> {}",

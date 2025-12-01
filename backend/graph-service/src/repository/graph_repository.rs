@@ -437,6 +437,75 @@ impl GraphRepository {
         }
     }
 
+    /// Get list of users blocked by a user
+    pub async fn get_blocked_users(
+        &self,
+        user_id: Uuid,
+        limit: i32,
+        offset: i32,
+    ) -> Result<(Vec<Uuid>, i32, bool)> {
+        let effective_limit = limit.min(10000);
+
+        // Get total count
+        let count_cypher = r#"
+            MATCH (user:User {id: $user_id})-[:BLOCKS]->(blocked:User)
+            RETURN count(blocked) AS total
+        "#;
+
+        let mut count_result = self
+            .graph
+            .execute(query(count_cypher).param("user_id", user_id.to_string()))
+            .await
+            .context("Failed to count blocked users")?;
+
+        let total_count: i32 = if let Some(row) = count_result.next().await? {
+            row.get("total").unwrap_or(0)
+        } else {
+            0
+        };
+
+        // Get paginated blocked users list
+        let cypher = r#"
+            MATCH (user:User {id: $user_id})-[:BLOCKS]->(blocked:User)
+            RETURN blocked.id AS blocked_id
+            ORDER BY blocked.id
+            SKIP $offset
+            LIMIT $limit
+        "#;
+
+        let mut result = self
+            .graph
+            .execute(
+                query(cypher)
+                    .param("user_id", user_id.to_string())
+                    .param("offset", offset as i64)
+                    .param("limit", effective_limit as i64),
+            )
+            .await
+            .context("Failed to get blocked users list")?;
+
+        let mut blocked_users = Vec::new();
+        while let Some(row) = result.next().await? {
+            if let Ok(id_str) = row.get::<String>("blocked_id") {
+                if let Ok(blocked_id) = Uuid::parse_str(&id_str) {
+                    blocked_users.push(blocked_id);
+                }
+            }
+        }
+
+        let has_more = (offset + effective_limit) < total_count;
+
+        debug!(
+            "Got {} blocked users for user {} (offset: {}, has_more: {})",
+            blocked_users.len(),
+            user_id,
+            offset,
+            has_more
+        );
+
+        Ok((blocked_users, total_count, has_more))
+    }
+
     /// Batch check if follower follows multiple users
     /// Max 100 followee_ids as per spec
     pub async fn batch_check_following(
@@ -486,6 +555,7 @@ impl GraphRepository {
     }
 
     /// Get graph stats for a user (followers/following/muted/blocked counts)
+    #[allow(dead_code)] // Reserved for graph analytics endpoint
     pub async fn get_graph_stats(&self, user_id: Uuid) -> Result<GraphStats> {
         let cypher = r#"
             MATCH (user:User {id: $user_id})
@@ -656,6 +726,15 @@ impl GraphRepositoryTrait for GraphRepository {
         followee_ids: Vec<Uuid>,
     ) -> Result<std::collections::HashMap<String, bool>> {
         Self::batch_check_following(self, follower_id, followee_ids).await
+    }
+
+    async fn get_blocked_users(
+        &self,
+        user_id: Uuid,
+        limit: i32,
+        offset: i32,
+    ) -> Result<(Vec<Uuid>, i32, bool)> {
+        Self::get_blocked_users(self, user_id, limit, offset).await
     }
 
     async fn health_check(&self) -> Result<()> {

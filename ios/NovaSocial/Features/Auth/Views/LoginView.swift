@@ -10,6 +10,7 @@ struct LoginView: View {
     @State private var email = ""
     @State private var password = ""
     @State private var isLoading = false
+    @State private var isGoogleLoading = false
     @State private var errorMessage: String?
     @State private var showPassword = false
 
@@ -101,15 +102,42 @@ struct LoginView: View {
                             .background(Color(red: 0.87, green: 0.11, blue: 0.26))
                             .cornerRadius(31.50)
                         }
-                        .disabled(isLoading)
+                        .disabled(isLoading || isGoogleLoading)
                         .offset(x: 0, y: 87)
+
+                        // Google Sign-In Button
+                        Button(action: {
+                            Task {
+                                await handleGoogleSignIn()
+                            }
+                        }) {
+                            HStack(spacing: 12) {
+                                if isGoogleLoading {
+                                    ProgressView()
+                                        .progressViewStyle(CircularProgressViewStyle(tint: .black))
+                                } else {
+                                    // Google Logo
+                                    Image(systemName: "g.circle.fill")
+                                        .font(.system(size: 20))
+                                        .foregroundColor(.red)
+                                }
+                                Text("Continue with Google")
+                                    .font(Font.custom("Helvetica Neue", size: 16).weight(.medium))
+                                    .foregroundColor(.black)
+                            }
+                            .frame(width: 343, height: 46)
+                            .background(Color.white)
+                            .cornerRadius(31.50)
+                        }
+                        .disabled(isLoading || isGoogleLoading)
+                        .offset(x: 0, y: 145)
 
                         // "or you can" text
                         Text("or you can")
                             .font(Font.custom("Helvetica Neue", size: 16).weight(.medium))
                             .lineSpacing(20)
                             .foregroundColor(.white)
-                            .offset(x: 0.50, y: 150)
+                            .offset(x: 0.50, y: 208)
 
                         // Create Account Button - 跳转到 CreateAccountView
                         Button(action: {
@@ -129,7 +157,20 @@ struct LoginView: View {
                                     .stroke(.white, lineWidth: 0.20)
                             )
                         }
-                        .offset(x: 0, y: 213)
+                        .offset(x: 0, y: 265)
+
+                        // Skip Button - 跳过登录直接进入Home（临时登录模式）
+                        Button(action: {
+                            // 设置临时登录状态
+                            AuthenticationManager.shared.setGuestMode()
+                            currentPage = .home
+                        }) {
+                            Text("Skip")
+                                .font(Font.custom("Helvetica Neue", size: 14).weight(.light))
+                                .foregroundColor(Color(red: 0.77, green: 0.77, blue: 0.77))
+                                .underline()
+                        }
+                        .offset(x: 0, y: 330)
 
                         // Skip Button - 跳过登录直接进入Home（临时登录模式）
                         Button(action: {
@@ -283,6 +324,26 @@ struct LoginView: View {
         }
 
         isLoading = false
+    }
+
+    private func handleGoogleSignIn() async {
+        isGoogleLoading = true
+        errorMessage = nil
+
+        do {
+            let _ = try await authManager.loginWithGoogle()
+            // Success - AuthenticationManager will update isAuthenticated
+        } catch {
+            // Check if user cancelled (error description contains "cancelled")
+            let errorDesc = error.localizedDescription.lowercased()
+            if errorDesc.contains("cancel") {
+                // User cancelled, no error message needed
+            } else {
+                errorMessage = error.localizedDescription
+            }
+        }
+
+        isGoogleLoading = false
     }
 
     // MARK: - Validation

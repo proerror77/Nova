@@ -31,6 +31,10 @@ pub fn map_error(err: &AppError) -> (u16, ErrorResponse) {
             "server_error",
             error_types::error_codes::INTERNAL_SERVER_ERROR,
         ),
+        AppError::ServiceUnavailable(_) => (
+            "server_error",
+            "SERVICE_UNAVAILABLE",
+        ),
         AppError::AlreadyRecalled => (
             "conflict_error",
             error_types::error_codes::MESSAGE_ALREADY_RECALLED,
@@ -58,6 +62,7 @@ pub fn map_error(err: &AppError) -> (u16, ErrorResponse) {
             409 => "Conflict",
             410 => "Gone",
             500 => "Internal Server Error",
+            503 => "Service Unavailable",
             _ => "Error",
         },
         &message,

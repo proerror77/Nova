@@ -420,4 +420,113 @@ impl GraphService for GraphServiceImpl {
             }
         }
     }
+
+    async fn has_block_between(
+        &self,
+        request: Request<HasBlockBetweenRequest>,
+    ) -> Result<Response<HasBlockBetweenResponse>, Status> {
+        let req = request.into_inner();
+
+        let user_a = Uuid::parse_str(&req.user_a)
+            .map_err(|e| Status::invalid_argument(format!("Invalid user_a: {}", e)))?;
+
+        let user_b = Uuid::parse_str(&req.user_b)
+            .map_err(|e| Status::invalid_argument(format!("Invalid user_b: {}", e)))?;
+
+        match self.repo.has_block_between(user_a, user_b).await {
+            Ok((has_block, a_blocked_b, b_blocked_a)) => {
+                info!(
+                    "Checked block between {} and {}: has_block={}, a->b={}, b->a={}",
+                    user_a, user_b, has_block, a_blocked_b, b_blocked_a
+                );
+                Ok(Response::new(HasBlockBetweenResponse {
+                    has_block,
+                    a_blocked_b,
+                    b_blocked_a,
+                }))
+            }
+            Err(e) => {
+                error!("Failed to check block between users: {}", e);
+                Err(Status::internal(format!(
+                    "Failed to check block between users: {}",
+                    e
+                )))
+            }
+        }
+    }
+
+    async fn get_blocked_users(
+        &self,
+        request: Request<GetBlockedUsersRequest>,
+    ) -> Result<Response<GetBlockedUsersResponse>, Status> {
+        let req = request.into_inner();
+
+        let user_id = Uuid::parse_str(&req.user_id)
+            .map_err(|e| Status::invalid_argument(format!("Invalid user_id: {}", e)))?;
+
+        let limit = if req.limit > 0 { req.limit } else { 50 };
+        let offset = req.offset;
+
+        match self.repo.get_blocked_users(user_id, limit, offset).await {
+            Ok((blocked_users, total_count, has_more)) => {
+                let blocked_user_ids: Vec<String> =
+                    blocked_users.iter().map(|id| id.to_string()).collect();
+
+                info!(
+                    "Get blocked users for {}: {} results (offset: {}, has_more: {})",
+                    user_id,
+                    blocked_user_ids.len(),
+                    offset,
+                    has_more
+                );
+
+                Ok(Response::new(GetBlockedUsersResponse {
+                    blocked_user_ids,
+                    total_count,
+                    has_more,
+                }))
+            }
+            Err(e) => {
+                error!("Failed to get blocked users: {}", e);
+                Err(Status::internal(format!(
+                    "Failed to get blocked users: {}",
+                    e
+                )))
+            }
+        }
+    }
+
+    async fn are_mutual_followers(
+        &self,
+        request: Request<AreMutualFollowersRequest>,
+    ) -> Result<Response<AreMutualFollowersResponse>, Status> {
+        let req = request.into_inner();
+
+        let user_a = Uuid::parse_str(&req.user_a)
+            .map_err(|e| Status::invalid_argument(format!("Invalid user_a: {}", e)))?;
+
+        let user_b = Uuid::parse_str(&req.user_b)
+            .map_err(|e| Status::invalid_argument(format!("Invalid user_b: {}", e)))?;
+
+        match self.repo.are_mutual_followers(user_a, user_b).await {
+            Ok((are_mutuals, a_follows_b, b_follows_a)) => {
+                info!(
+                    "Checked mutual followers {} and {}: mutuals={}, a->b={}, b->a={}",
+                    user_a, user_b, are_mutuals, a_follows_b, b_follows_a
+                );
+                Ok(Response::new(AreMutualFollowersResponse {
+                    are_mutuals,
+                    a_follows_b,
+                    b_follows_a,
+                }))
+            }
+            Err(e) => {
+                error!("Failed to check mutual followers: {}", e);
+                Err(Status::internal(format!(
+                    "Failed to check mutual followers: {}",
+                    e
+                )))
+            }
+        }
+    }
 }

@@ -24,7 +24,7 @@ metadata:
     nginx.ingress.kubernetes.io/proxy-read-timeout: "120"
 
     # WebSocket 支持
-    nginx.ingress.kubernetes.io/websocket-services: "messaging-service"
+    nginx.ingress.kubernetes.io/websocket-services: "graphql-gateway"
     nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
 
@@ -80,12 +80,12 @@ spec:
             port:
               number: 8082
 
-      # Identity Service - Users/Auth
+      # Identity Service - Users/Auth (via GraphQL Gateway → gRPC identity-service)
       - path: /api/v2/users
         pathType: Prefix
         backend:
           service:
-            name: identity-service
+            name: graphql-gateway
             port:
               number: 8080
 
@@ -93,7 +93,7 @@ spec:
         pathType: Prefix
         backend:
           service:
-            name: identity-service
+            name: graphql-gateway
             port:
               number: 8080
 
@@ -223,12 +223,12 @@ spec:
             name: graphql-gateway
             port:
               number: 8080
-      # WebSocket endpoint for messaging
+      # WebSocket endpoint (GraphQL subscriptions / real-time)
       - path: /ws
         pathType: Prefix
         backend:
           service:
-            name: messaging-service
+            name: graphql-gateway
             port:
               number: 8080
 
@@ -237,7 +237,7 @@ spec:
         pathType: Exact
         backend:
           service:
-            name: identity-service
+            name: graphql-gateway
             port:
               number: 8080
 

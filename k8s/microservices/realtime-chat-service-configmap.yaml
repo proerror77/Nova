@@ -5,3 +5,16 @@ metadata:
 data:
   LOG_LEVEL: "info"
   ENVIRONMENT: "staging"
+  # Server
+  PORT: "8080"
+  GRPC_PORT: "9095"
+  # Redis
+  REDIS_URL: "redis://redis-master.nova-staging.svc.cluster.local:6379"
+  # gRPC services
+  GRPC_IDENTITY_SERVICE_URL: "https://identity-service.nova-staging.svc.cluster.local:50051"
+  # S3
+  S3_BUCKET: "nova-media-staging"
+  S3_REGION: "ap-northeast-1"
+  # WebRTC ICE
+  ICE_TTL_SECONDS: "86400"
+  RTC_STUN_URLS: "stun:stun.l.google.com:19302,stun:stun1.l.google.com:19302"

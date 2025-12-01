@@ -4,11 +4,11 @@
 
 use super::GraphRepositoryTrait;
 use anyhow::Result;
-use nova_cache::graph::{CachedRelationshipList, GraphCache};
+use nova_cache::graph::GraphCache;
 use nova_cache::NovaCache;
 use std::collections::HashMap;
 use std::sync::Arc;
-use tracing::{debug, info, warn};
+use tracing::{debug, warn};
 use uuid::Uuid;
 
 /// Repository wrapper that adds caching to any GraphRepositoryTrait implementation
@@ -35,6 +35,7 @@ impl CachedGraphRepository {
     }
 
     /// Get cache hit/miss stats for monitoring
+    #[allow(dead_code)] // Reserved for cache metrics endpoint
     pub fn is_cache_enabled(&self) -> bool {
         self.enabled
     }
@@ -377,6 +378,17 @@ impl GraphRepositoryTrait for CachedGraphRepository {
         }
 
         Ok(results)
+    }
+
+    async fn get_blocked_users(
+        &self,
+        user_id: Uuid,
+        limit: i32,
+        offset: i32,
+    ) -> Result<(Vec<Uuid>, i32, bool)> {
+        // For blocked users, we don't cache the list to keep it simple
+        // Block relationship changes are already cached individually via is_blocked
+        self.inner.get_blocked_users(user_id, limit, offset).await
     }
 
     async fn health_check(&self) -> Result<()> {

@@ -1,5 +1,6 @@
 use crate::config::Config;
-use crate::db::ModerationDb;
+use crate::db::{BansDb, ModerationDb, ReportsDb, WarningsDb};
+use crate::models::enforcement::{CreateBanInput, CreateReportInput, CreateWarningInput};
 use crate::models::{AppealStatus, ContentType, RiskScore};
 use crate::services::{AppealService, NsfwDetector, SpamContext, SpamDetector, TextModerator};
 use std::sync::Arc;
@@ -22,6 +23,10 @@ pub struct TrustSafetyServiceImpl {
     spam_detector: Arc<SpamDetector>,
     appeal_service: Arc<AppealService>,
     moderation_db: Arc<ModerationDb>,
+    // P0: Enforcement DBs
+    reports_db: Arc<ReportsDb>,
+    warnings_db: Arc<WarningsDb>,
+    bans_db: Arc<BansDb>,
 }
 
 impl TrustSafetyServiceImpl {
@@ -32,6 +37,9 @@ impl TrustSafetyServiceImpl {
         spam_detector: Arc<SpamDetector>,
         appeal_service: Arc<AppealService>,
         moderation_db: Arc<ModerationDb>,
+        reports_db: Arc<ReportsDb>,
+        warnings_db: Arc<WarningsDb>,
+        bans_db: Arc<BansDb>,
     ) -> Self {
         Self {
             config,
@@ -40,6 +48,9 @@ impl TrustSafetyServiceImpl {
             spam_detector,
             appeal_service,
             moderation_db,
+            reports_db,
+            warnings_db,
+            bans_db,
         }
     }
 }
@@ -379,5 +390,576 @@ impl TrustSafetyService for TrustSafetyServiceImpl {
             logs: moderation_logs,
             total_count: total_count as i32,
         }))
+    }
+
+    // ==================== P0: User Reports ====================
+
+    async fn submit_report(
+        &self,
+        request: Request<SubmitReportRequest>,
+    ) -> Result<Response<SubmitReportResponse>, Status> {
+        let req = request.into_inner();
+
+        let reporter_id = Uuid::parse_str(&req.reporter_user_id)
+            .map_err(|e| Status::invalid_argument(format!("Invalid reporter_user_id: {}", e)))?;
+
+        let reported_user_id = if !req.reported_user_id.is_empty() {
+            Some(Uuid::parse_str(&req.reported_user_id).map_err(|e| {
+                Status::invalid_argument(format!("Invalid reported_user_id: {}", e))
+            })?)
+        } else {
+            None
+        };
+
+        let input = CreateReportInput {
+            reporter_user_id: reporter_id,
+            reported_user_id,
+            reported_content_id: if req.reported_content_id.is_empty() {
+                None
+            } else {
+                Some(req.reported_content_id.clone())
+            },
+            reported_content_type: if req.reported_content_type.is_empty() {
+                None
+            } else {
+                Some(req.reported_content_type.clone())
+            },
+            report_type: report_type_to_string(req.report_type),
+            description: if req.description.is_empty() {
+                None
+            } else {
+                Some(req.description.clone())
+            },
+        };
+
+        let report = self
+            .reports_db
+            .create_report(input)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to create report: {}", e)))?;
+
+        Ok(Response::new(SubmitReportResponse {
+            report_id: report.id.to_string(),
+            status: ReportStatus::ReportPending as i32,
+            created_at: report.created_at.to_rfc3339(),
+        }))
+    }
+
+    async fn get_user_reports(
+        &self,
+        request: Request<GetUserReportsRequest>,
+    ) -> Result<Response<GetUserReportsResponse>, Status> {
+        let req = request.into_inner();
+
+        let user_id = Uuid::parse_str(&req.user_id)
+            .map_err(|e| Status::invalid_argument(format!("Invalid user_id: {}", e)))?;
+
+        let limit = if req.limit > 0 { req.limit as i64 } else { 50 };
+        let offset = req.offset as i64;
+        let status_filter = if req.status != 0 {
+            Some(report_status_to_string(req.status))
+        } else {
+            None
+        };
+
+        let reports = self
+            .reports_db
+            .get_reports_by_reporter(user_id, status_filter.as_deref(), limit, offset)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to get reports: {}", e)))?;
+
+        let total_count = self
+            .reports_db
+            .count_reports_by_reporter(user_id, status_filter.as_deref())
+            .await
+            .map_err(|e| Status::internal(format!("Failed to count reports: {}", e)))?;
+
+        let proto_reports: Vec<trust_safety::UserReport> = reports
+            .into_iter()
+            .map(|r| trust_safety::UserReport {
+                id: r.id.to_string(),
+                reporter_user_id: r.reporter_user_id.to_string(),
+                reported_user_id: r.reported_user_id.map(|id| id.to_string()).unwrap_or_default(),
+                reported_content_id: r.reported_content_id.unwrap_or_default(),
+                reported_content_type: r.reported_content_type.unwrap_or_default(),
+                report_type: string_to_report_type(&r.report_type),
+                description: r.description.unwrap_or_default(),
+                status: string_to_report_status(&r.status),
+                resolution: r.resolution.unwrap_or_default(),
+                created_at: r.created_at.to_rfc3339(),
+                reviewed_at: r.reviewed_at.map(|dt| dt.to_rfc3339()).unwrap_or_default(),
+            })
+            .collect();
+
+        Ok(Response::new(GetUserReportsResponse {
+            reports: proto_reports,
+            total_count: total_count as i32,
+        }))
+    }
+
+    async fn review_report(
+        &self,
+        request: Request<ReviewReportRequest>,
+    ) -> Result<Response<ReviewReportResponse>, Status> {
+        let req = request.into_inner();
+
+        let report_id = Uuid::parse_str(&req.report_id)
+            .map_err(|e| Status::invalid_argument(format!("Invalid report_id: {}", e)))?;
+
+        let admin_id = Uuid::parse_str(&req.admin_id)
+            .map_err(|e| Status::invalid_argument(format!("Invalid admin_id: {}", e)))?;
+
+        let resolution = resolution_to_string(req.resolution);
+        let status = match req.resolution {
+            x if x == ReportResolution::NoAction as i32 => "dismissed",
+            _ => "actioned",
+        };
+
+        let report = self
+            .reports_db
+            .review_report(report_id, admin_id, &resolution, status)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to review report: {}", e)))?;
+
+        Ok(Response::new(ReviewReportResponse {
+            report_id: report.id.to_string(),
+            status: string_to_report_status(&report.status),
+            reviewed_at: report
+                .reviewed_at
+                .map(|dt| dt.to_rfc3339())
+                .unwrap_or_default(),
+        }))
+    }
+
+    // ==================== P0: User Warnings ====================
+
+    async fn issue_warning(
+        &self,
+        request: Request<IssueWarningRequest>,
+    ) -> Result<Response<IssueWarningResponse>, Status> {
+        let req = request.into_inner();
+
+        let user_id = Uuid::parse_str(&req.user_id)
+            .map_err(|e| Status::invalid_argument(format!("Invalid user_id: {}", e)))?;
+
+        let issued_by = Uuid::parse_str(&req.issued_by)
+            .map_err(|e| Status::invalid_argument(format!("Invalid issued_by: {}", e)))?;
+
+        let moderation_log_id = if !req.moderation_log_id.is_empty() {
+            Some(Uuid::parse_str(&req.moderation_log_id).map_err(|e| {
+                Status::invalid_argument(format!("Invalid moderation_log_id: {}", e))
+            })?)
+        } else {
+            None
+        };
+
+        let report_id = if !req.report_id.is_empty() {
+            Some(Uuid::parse_str(&req.report_id).map_err(|e| {
+                Status::invalid_argument(format!("Invalid report_id: {}", e))
+            })?)
+        } else {
+            None
+        };
+
+        let input = CreateWarningInput {
+            user_id,
+            warning_type: warning_type_to_string(req.warning_type),
+            severity: severity_to_string(req.severity),
+            strike_points: req.strike_points,
+            reason: req.reason.clone(),
+            moderation_log_id,
+            report_id,
+            issued_by,
+            expires_in_days: if req.expires_in_days > 0 {
+                Some(req.expires_in_days)
+            } else {
+                None
+            },
+        };
+
+        let warning = self
+            .warnings_db
+            .create_warning(input)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to create warning: {}", e)))?;
+
+        let total_strike_points = self
+            .warnings_db
+            .get_total_strike_points(user_id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to get strike points: {}", e)))?;
+
+        // Check if auto-ban should be triggered (threshold: 10 points)
+        let auto_ban_triggered = self
+            .warnings_db
+            .should_auto_ban(user_id, 10)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to check auto-ban: {}", e)))?;
+
+        Ok(Response::new(IssueWarningResponse {
+            warning_id: warning.id.to_string(),
+            total_strike_points,
+            auto_ban_triggered,
+        }))
+    }
+
+    async fn get_user_warnings(
+        &self,
+        request: Request<GetUserWarningsRequest>,
+    ) -> Result<Response<GetUserWarningsResponse>, Status> {
+        let req = request.into_inner();
+
+        let user_id = Uuid::parse_str(&req.user_id)
+            .map_err(|e| Status::invalid_argument(format!("Invalid user_id: {}", e)))?;
+
+        let limit = if req.limit > 0 { req.limit as i64 } else { 50 };
+        let offset = req.offset as i64;
+
+        let warnings = self
+            .warnings_db
+            .get_user_warnings(user_id, req.active_only, limit, offset)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to get warnings: {}", e)))?;
+
+        let total_strike_points = self
+            .warnings_db
+            .get_total_strike_points(user_id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to get strike points: {}", e)))?;
+
+        let total_count = self
+            .warnings_db
+            .count_user_warnings(user_id, req.active_only)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to count warnings: {}", e)))?;
+
+        let proto_warnings: Vec<trust_safety::UserWarning> = warnings
+            .into_iter()
+            .map(|w| trust_safety::UserWarning {
+                id: w.id.to_string(),
+                user_id: w.user_id.to_string(),
+                warning_type: string_to_warning_type(&w.warning_type),
+                severity: string_to_severity(&w.severity),
+                strike_points: w.strike_points,
+                reason: w.reason,
+                acknowledged: w.acknowledged,
+                expires_at: w.expires_at.map(|dt| dt.to_rfc3339()).unwrap_or_default(),
+                created_at: w.created_at.to_rfc3339(),
+            })
+            .collect();
+
+        Ok(Response::new(GetUserWarningsResponse {
+            warnings: proto_warnings,
+            total_strike_points,
+            total_count: total_count as i32,
+        }))
+    }
+
+    async fn acknowledge_warning(
+        &self,
+        request: Request<AcknowledgeWarningRequest>,
+    ) -> Result<Response<AcknowledgeWarningResponse>, Status> {
+        let req = request.into_inner();
+
+        let warning_id = Uuid::parse_str(&req.warning_id)
+            .map_err(|e| Status::invalid_argument(format!("Invalid warning_id: {}", e)))?;
+
+        let user_id = Uuid::parse_str(&req.user_id)
+            .map_err(|e| Status::invalid_argument(format!("Invalid user_id: {}", e)))?;
+
+        let success = self
+            .warnings_db
+            .acknowledge_warning(warning_id, user_id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to acknowledge warning: {}", e)))?;
+
+        Ok(Response::new(AcknowledgeWarningResponse { success }))
+    }
+
+    // ==================== P0: User Bans ====================
+
+    async fn ban_user(
+        &self,
+        request: Request<BanUserRequest>,
+    ) -> Result<Response<BanUserResponse>, Status> {
+        let req = request.into_inner();
+
+        let user_id = Uuid::parse_str(&req.user_id)
+            .map_err(|e| Status::invalid_argument(format!("Invalid user_id: {}", e)))?;
+
+        let banned_by = Uuid::parse_str(&req.banned_by)
+            .map_err(|e| Status::invalid_argument(format!("Invalid banned_by: {}", e)))?;
+
+        let warning_id = if !req.warning_id.is_empty() {
+            Some(Uuid::parse_str(&req.warning_id).map_err(|e| {
+                Status::invalid_argument(format!("Invalid warning_id: {}", e))
+            })?)
+        } else {
+            None
+        };
+
+        let report_id = if !req.report_id.is_empty() {
+            Some(Uuid::parse_str(&req.report_id).map_err(|e| {
+                Status::invalid_argument(format!("Invalid report_id: {}", e))
+            })?)
+        } else {
+            None
+        };
+
+        let input = CreateBanInput {
+            user_id,
+            ban_type: ban_type_to_string(req.ban_type),
+            reason: req.reason.clone(),
+            banned_by,
+            warning_id,
+            report_id,
+            duration_hours: if req.duration_hours > 0 {
+                Some(req.duration_hours)
+            } else {
+                None
+            },
+        };
+
+        let ban = self
+            .bans_db
+            .create_ban(input)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to create ban: {}", e)))?;
+
+        Ok(Response::new(BanUserResponse {
+            ban_id: ban.id.to_string(),
+            ends_at: ban.ends_at.map(|dt| dt.to_rfc3339()).unwrap_or_default(),
+            success: true,
+        }))
+    }
+
+    async fn lift_ban(
+        &self,
+        request: Request<LiftBanRequest>,
+    ) -> Result<Response<LiftBanResponse>, Status> {
+        let req = request.into_inner();
+
+        let ban_id = Uuid::parse_str(&req.ban_id)
+            .map_err(|e| Status::invalid_argument(format!("Invalid ban_id: {}", e)))?;
+
+        let lifted_by = Uuid::parse_str(&req.lifted_by)
+            .map_err(|e| Status::invalid_argument(format!("Invalid lifted_by: {}", e)))?;
+
+        self.bans_db
+            .lift_ban(ban_id, lifted_by, &req.lift_reason)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to lift ban: {}", e)))?;
+
+        Ok(Response::new(LiftBanResponse { success: true }))
+    }
+
+    async fn check_user_ban(
+        &self,
+        request: Request<CheckUserBanRequest>,
+    ) -> Result<Response<CheckUserBanResponse>, Status> {
+        let req = request.into_inner();
+
+        let user_id = Uuid::parse_str(&req.user_id)
+            .map_err(|e| Status::invalid_argument(format!("Invalid user_id: {}", e)))?;
+
+        let is_banned = self
+            .bans_db
+            .is_user_banned(user_id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to check ban status: {}", e)))?;
+
+        let active_ban = if is_banned {
+            self.bans_db
+                .get_active_ban(user_id)
+                .await
+                .map_err(|e| Status::internal(format!("Failed to get active ban: {}", e)))?
+                .map(|b| trust_safety::UserBan {
+                    id: b.id.to_string(),
+                    user_id: b.user_id.to_string(),
+                    ban_type: string_to_ban_type(&b.ban_type),
+                    reason: b.reason,
+                    banned_by: b.banned_by.to_string(),
+                    starts_at: b.starts_at.to_rfc3339(),
+                    ends_at: b.ends_at.map(|dt| dt.to_rfc3339()).unwrap_or_default(),
+                    lifted_at: b.lifted_at.map(|dt| dt.to_rfc3339()).unwrap_or_default(),
+                    lift_reason: b.lift_reason.unwrap_or_default(),
+                    created_at: b.created_at.to_rfc3339(),
+                })
+        } else {
+            None
+        };
+
+        Ok(Response::new(CheckUserBanResponse {
+            is_banned,
+            active_ban,
+        }))
+    }
+
+    async fn get_user_bans(
+        &self,
+        request: Request<GetUserBansRequest>,
+    ) -> Result<Response<GetUserBansResponse>, Status> {
+        let req = request.into_inner();
+
+        let user_id = Uuid::parse_str(&req.user_id)
+            .map_err(|e| Status::invalid_argument(format!("Invalid user_id: {}", e)))?;
+
+        let limit = if req.limit > 0 { req.limit as i64 } else { 50 };
+        let offset = req.offset as i64;
+
+        let bans = self
+            .bans_db
+            .get_user_bans(user_id, req.active_only, limit, offset)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to get bans: {}", e)))?;
+
+        let total_count = self
+            .bans_db
+            .count_user_bans(user_id, req.active_only)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to count bans: {}", e)))?;
+
+        let proto_bans: Vec<trust_safety::UserBan> = bans
+            .into_iter()
+            .map(|b| trust_safety::UserBan {
+                id: b.id.to_string(),
+                user_id: b.user_id.to_string(),
+                ban_type: string_to_ban_type(&b.ban_type),
+                reason: b.reason,
+                banned_by: b.banned_by.to_string(),
+                starts_at: b.starts_at.to_rfc3339(),
+                ends_at: b.ends_at.map(|dt| dt.to_rfc3339()).unwrap_or_default(),
+                lifted_at: b.lifted_at.map(|dt| dt.to_rfc3339()).unwrap_or_default(),
+                lift_reason: b.lift_reason.unwrap_or_default(),
+                created_at: b.created_at.to_rfc3339(),
+            })
+            .collect();
+
+        Ok(Response::new(GetUserBansResponse {
+            bans: proto_bans,
+            total_count: total_count as i32,
+        }))
+    }
+}
+
+// ==================== Helper Functions ====================
+
+fn report_type_to_string(t: i32) -> String {
+    match ReportType::try_from(t) {
+        Ok(ReportType::Spam) => "spam",
+        Ok(ReportType::Harassment) => "harassment",
+        Ok(ReportType::HateSpeech) => "hate_speech",
+        Ok(ReportType::NsfwContent) => "nsfw",
+        Ok(ReportType::Impersonation) => "impersonation",
+        Ok(ReportType::Violence) => "violence",
+        Ok(ReportType::Misinformation) => "misinformation",
+        Ok(ReportType::Other) | _ => "other",
+    }
+    .to_string()
+}
+
+fn string_to_report_type(s: &str) -> i32 {
+    match s {
+        "spam" => ReportType::Spam as i32,
+        "harassment" => ReportType::Harassment as i32,
+        "hate_speech" => ReportType::HateSpeech as i32,
+        "nsfw" => ReportType::NsfwContent as i32,
+        "impersonation" => ReportType::Impersonation as i32,
+        "violence" => ReportType::Violence as i32,
+        "misinformation" => ReportType::Misinformation as i32,
+        _ => ReportType::Other as i32,
+    }
+}
+
+fn report_status_to_string(s: i32) -> String {
+    match ReportStatus::try_from(s) {
+        Ok(ReportStatus::ReportPending) => "pending",
+        Ok(ReportStatus::ReportReviewed) => "reviewed",
+        Ok(ReportStatus::ReportActioned) => "actioned",
+        Ok(ReportStatus::ReportDismissed) => "dismissed",
+        _ => "pending",
+    }
+    .to_string()
+}
+
+fn string_to_report_status(s: &str) -> i32 {
+    match s {
+        "pending" => ReportStatus::ReportPending as i32,
+        "reviewed" => ReportStatus::ReportReviewed as i32,
+        "actioned" => ReportStatus::ReportActioned as i32,
+        "dismissed" => ReportStatus::ReportDismissed as i32,
+        _ => ReportStatus::ReportPending as i32,
+    }
+}
+
+fn resolution_to_string(r: i32) -> String {
+    match ReportResolution::try_from(r) {
+        Ok(ReportResolution::WarningIssued) => "warning_issued",
+        Ok(ReportResolution::ContentRemoved) => "content_removed",
+        Ok(ReportResolution::UserBanned) => "user_banned",
+        Ok(ReportResolution::NoAction) => "no_action",
+        _ => "unspecified",
+    }
+    .to_string()
+}
+
+fn warning_type_to_string(t: i32) -> String {
+    match WarningType::try_from(t) {
+        Ok(WarningType::ContentViolation) => "content_violation",
+        Ok(WarningType::SpamViolation) => "spam",
+        Ok(WarningType::HarassmentViolation) => "harassment",
+        Ok(WarningType::TosViolation) => "tos_violation",
+        Ok(WarningType::CommunityGuidelines) => "community_guidelines",
+        _ => "content_violation",
+    }
+    .to_string()
+}
+
+fn string_to_warning_type(s: &str) -> i32 {
+    match s {
+        "content_violation" => WarningType::ContentViolation as i32,
+        "spam" => WarningType::SpamViolation as i32,
+        "harassment" => WarningType::HarassmentViolation as i32,
+        "tos_violation" => WarningType::TosViolation as i32,
+        "community_guidelines" => WarningType::CommunityGuidelines as i32,
+        _ => WarningType::ContentViolation as i32,
+    }
+}
+
+fn severity_to_string(s: i32) -> String {
+    match WarningSeverity::try_from(s) {
+        Ok(WarningSeverity::Mild) => "mild",
+        Ok(WarningSeverity::Moderate) => "moderate",
+        Ok(WarningSeverity::Severe) => "severe",
+        _ => "mild",
+    }
+    .to_string()
+}
+
+fn string_to_severity(s: &str) -> i32 {
+    match s {
+        "mild" => WarningSeverity::Mild as i32,
+        "moderate" => WarningSeverity::Moderate as i32,
+        "severe" => WarningSeverity::Severe as i32,
+        _ => WarningSeverity::Mild as i32,
+    }
+}
+
+fn ban_type_to_string(t: i32) -> String {
+    match BanType::try_from(t) {
+        Ok(BanType::Temporary) => "temporary",
+        Ok(BanType::Permanent) => "permanent",
+        Ok(BanType::Shadow) => "shadow",
+        _ => "temporary",
+    }
+    .to_string()
+}
+
+fn string_to_ban_type(s: &str) -> i32 {
+    match s {
+        "temporary" => BanType::Temporary as i32,
+        "permanent" => BanType::Permanent as i32,
+        "shadow" => BanType::Shadow as i32,
+        _ => BanType::Temporary as i32,
     }
 }

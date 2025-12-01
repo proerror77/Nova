@@ -158,6 +158,52 @@ class AuthenticationManager: ObservableObject {
         return response.user
     }
 
+    // MARK: - OAuth Login
+
+    /// Login with Google OAuth
+    func loginWithGoogle() async throws -> UserProfile {
+        let oauthService = OAuthService.shared
+
+        // Perform Google Sign-In flow
+        let response = try await oauthService.signInWithGoogle()
+
+        // Create user profile from response
+        let user: UserProfile
+        if let responseUser = response.user {
+            user = responseUser
+        } else {
+            // Minimal profile if not provided
+            user = UserProfile(
+                id: response.userId,
+                username: "user_\(response.userId.prefix(8))",
+                email: nil,
+                displayName: nil,
+                bio: nil,
+                avatarUrl: nil,
+                coverUrl: nil,
+                website: nil,
+                location: nil,
+                isVerified: false,
+                isPrivate: false,
+                followerCount: 0,
+                followingCount: 0,
+                postCount: 0,
+                createdAt: nil,
+                updatedAt: nil,
+                deletedAt: nil
+            )
+        }
+
+        // Save authentication
+        await saveAuth(token: response.token, refreshToken: response.refreshToken, user: user)
+
+        #if DEBUG
+        print("[Auth] Google Sign-In successful, isNewUser: \(response.isNewUser)")
+        #endif
+
+        return user
+    }
+
     // MARK: - Logout
 
     /// Logout current user

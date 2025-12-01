@@ -128,12 +128,27 @@ async fn main() -> Result<()> {
         None
     };
 
+    // Initialize AWS SNS client for SMS invites (optional)
+    let sns_client = if std::env::var("AWS_REGION").is_ok() {
+        match aws_config::load_defaults(aws_config::BehaviorVersion::latest()).await {
+            config => {
+                let client = aws_sdk_sns::Client::new(&config);
+                info!("AWS SNS client initialized for invite SMS delivery");
+                Some(client)
+            }
+        }
+    } else {
+        info!("AWS region not configured; SMS invite delivery disabled");
+        None
+    };
+
     // Build gRPC server
     let identity_service = IdentityServiceServer::new(
         db_pool.clone(),
         redis.clone(),
         email_service,
         kafka_producer,
+        sns_client,
     );
 
     let addr = format!("{}:{}", settings.server.host, settings.server.port)

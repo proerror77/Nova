@@ -250,83 +250,27 @@ struct AliceView: View {
                 showModelSelector = false
             }
 
-            // 模型选择器弹窗内容
+            // 模型选择器 - 使用结构化数据
             VStack {
                 Spacer()
                     .frame(height: 140)
 
-                ZStack() {
-                    Group {
-                        Rectangle()
-                            .foregroundColor(.clear)
-                            .frame(width: 199, height: 295)
-                            .background(.white)
-                            .cornerRadius(16)
-                            .offset(x: 0, y: 0)
-                            .shadow(
-                                color: Color(red: 0, green: 0, blue: 0, opacity: 0.25), radius: 4.70
-                            )
-                        Rectangle()
-                            .foregroundColor(.clear)
-                            .frame(width: 186, height: 53)
-                            .background(Color(red: 0.91, green: 0.91, blue: 0.91))
-                            .cornerRadius(14)
-                            .offset(x: -0.50, y: -115)
-                        Text("alice 5.1 Fast")
-                            .font(Font.custom("Helvetica Neue", size: 16))
-                            .lineSpacing(16)
-                            .foregroundColor(.black)
-                            .offset(x: -28.50, y: -123.50)
-                        Text("fast reply")
-                            .font(Font.custom("Helvetica Neue", size: 14))
-                            .lineSpacing(16)
-                            .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
-                            .offset(x: -44, y: -104.50)
-                        Text("alice 4 mini")
-                            .font(Font.custom("Helvetica Neue", size: 16))
-                            .lineSpacing(16)
-                            .foregroundColor(.black)
-                            .offset(x: -28.50, y: -69.50)
-                        Text("fast reply")
-                            .font(Font.custom("Helvetica Neue", size: 14))
-                            .lineSpacing(16)
-                            .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
-                            .offset(x: -44, y: -50.50)
-                        Text("alice 4.1 Thinking")
-                            .font(Font.custom("Helvetica Neue", size: 16))
-                            .lineSpacing(16)
-                            .foregroundColor(.black)
-                            .offset(x: -14.50, y: 40.50)
-                        Text("fast reply")
-                            .font(Font.custom("Helvetica Neue", size: 14))
-                            .lineSpacing(16)
-                            .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
-                            .offset(x: -44, y: 59.50)
-                        Text("alice 4.1")
-                            .font(Font.custom("Helvetica Neue", size: 16))
-                            .lineSpacing(16)
-                            .foregroundColor(.black)
-                            .offset(x: -28.50, y: -14.50)
-                        Text("fast reply")
-                            .font(Font.custom("Helvetica Neue", size: 14))
-                            .lineSpacing(16)
-                            .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
-                            .offset(x: -44, y: 4.50)
-                    }
-                    Group {
-                        Text("alice")
-                            .font(Font.custom("Helvetica Neue", size: 16))
-                            .lineSpacing(16)
-                            .foregroundColor(.black)
-                            .offset(x: -28.50, y: 95.50)
-                        Text("fast reply")
-                            .font(Font.custom("Helvetica Neue", size: 14))
-                            .lineSpacing(16)
-                            .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
-                            .offset(x: -44, y: 114.50)
+                VStack(spacing: 0) {
+                    ForEach(aliceModels) { model in
+                        ModelRowView(
+                            model: model,
+                            isSelected: model.name == selectedModel,
+                            onSelect: {
+                                selectedModel = model.name
+                                showModelSelector = false
+                            }
+                        )
                     }
                 }
-                .frame(width: 199, height: 295)
+                .frame(width: 199)
+                .background(Color.white)
+                .cornerRadius(16)
+                .shadow(color: Color(red: 0, green: 0, blue: 0, opacity: 0.25), radius: 4.70)
 
                 Spacer()
             }

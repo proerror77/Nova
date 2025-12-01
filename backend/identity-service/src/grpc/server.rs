@@ -11,7 +11,9 @@
 use crate::db;
 use crate::error::IdentityError;
 use crate::security::{generate_token_pair, hash_password, validate_token, verify_password};
-use crate::services::{EmailService, KafkaEventProducer, TwoFaService};
+use crate::services::{
+    EmailService, InviteDeliveryConfig, InviteDeliveryService, KafkaEventProducer, TwoFaService,
+};
 use chrono::{TimeZone, Utc};
 use redis_utils::SharedConnectionManager;
 use sqlx::PgPool;
@@ -44,10 +46,14 @@ use nova::auth_service::*;
 #[derive(Clone)]
 pub struct IdentityServiceServer {
     db: PgPool,
-    redis: SharedConnectionManager,
-    email: EmailService,
-    two_fa: TwoFaService,
+    #[allow(dead_code)] // Reserved for rate limiting implementation
+    _redis: SharedConnectionManager,
+    #[allow(dead_code)] // Reserved for email verification flow
+    _email: EmailService,
+    #[allow(dead_code)] // Reserved for 2FA implementation
+    _two_fa: TwoFaService,
     kafka: Option<KafkaEventProducer>,
+    invite_delivery: std::sync::Arc<InviteDeliveryService>,
 }
 
 impl IdentityServiceServer {
@@ -56,28 +62,57 @@ impl IdentityServiceServer {
         redis: SharedConnectionManager,
         email: EmailService,
         kafka: Option<KafkaEventProducer>,
+        sns_client: Option<aws_sdk_sns::Client>,
     ) -> Self {
         let two_fa = TwoFaService::new(db.clone(), redis.clone(), kafka.clone());
+        let invite_delivery = std::sync::Arc::new(InviteDeliveryService::new(
+            db.clone(),
+            sns_client,
+            email.clone(),
+            InviteDeliveryConfig::default(),
+        ));
         Self {
             db,
-            redis,
-            email,
-            two_fa,
+            _redis: redis,
+            _email: email,
+            _two_fa: two_fa,
             kafka,
+            invite_delivery,
         }
     }
 }
 
 #[tonic::async_trait]
 impl AuthService for IdentityServiceServer {
-    /// Register new user with email, username, password
+    /// Register new user with email, username, password, and invite code
     async fn register(
         &self,
         request: Request<RegisterRequest>,
     ) -> std::result::Result<Response<RegisterResponse>, Status> {
         let req = request.into_inner();
 
-        // Validate email and username
+        // 1. Validate invite code FIRST (invite-only registration)
+        if req.invite_code.is_empty() {
+            return Err(Status::invalid_argument(
+                "Invite code is required. Nova is invite-only.",
+            ));
+        }
+
+        let invite_validation = db::invitations::validate_invite(&self.db, &req.invite_code)
+            .await
+            .map_err(to_status)?;
+
+        if !invite_validation.is_valid {
+            let error_msg = match invite_validation.error.as_deref() {
+                Some("not_found") => "Invalid invite code",
+                Some("already_used") => "This invite code has already been used",
+                Some("expired") => "This invite code has expired",
+                _ => "Invalid invite code",
+            };
+            return Err(Status::invalid_argument(error_msg));
+        }
+
+        // 2. Validate email and username
         if !crate::validators::validate_email(&req.email) {
             return Err(Status::invalid_argument("Invalid email format"));
         }
@@ -85,7 +120,7 @@ impl AuthService for IdentityServiceServer {
             return Err(Status::invalid_argument("Invalid username format"));
         }
 
-        // Check if user already exists
+        // 3. Check if user already exists
         if db::users::find_by_email(&self.db, &req.email)
             .await
             .map_err(to_status)?
@@ -94,19 +129,40 @@ impl AuthService for IdentityServiceServer {
             return Err(Status::already_exists("Email already registered"));
         }
 
-        // Hash password (includes strength validation)
+        // 4. Hash password (includes strength validation)
         let password_hash = hash_password(&req.password).map_err(to_status)?;
 
-        // Create user
+        // 5. Create user
         let user = db::users::create_user(&self.db, &req.email, &req.username, &password_hash)
             .await
             .map_err(to_status)?;
 
-        // Generate token pair
+        // 6. Redeem the invite code (this triggers referral chain setup via DB trigger)
+        let redeemed = db::invitations::redeem_invite(&self.db, &req.invite_code, user.id)
+            .await
+            .map_err(to_status)?;
+
+        if !redeemed {
+            // This shouldn't happen if validation passed, but log it
+            warn!(
+                user_id = %user.id,
+                invite_code = %req.invite_code,
+                "Failed to redeem invite code after user creation"
+            );
+        } else {
+            info!(
+                user_id = %user.id,
+                invite_code = %req.invite_code,
+                inviter = ?invite_validation.issuer_username,
+                "Invite code redeemed successfully"
+            );
+        }
+
+        // 7. Generate token pair
         let tokens =
             generate_token_pair(user.id, &user.email, &user.username).map_err(anyhow_to_status)?;
 
-        // Publish UserCreated event
+        // 8. Publish UserCreated event
         if let Some(producer) = &self.kafka {
             if let Err(err) = producer
                 .publish_user_created(user.id, &user.email, &user.username)
@@ -116,7 +172,12 @@ impl AuthService for IdentityServiceServer {
             }
         }
 
-        info!(user_id = %user.id, email = %user.email, "User registered successfully");
+        info!(
+            user_id = %user.id,
+            email = %user.email,
+            referred_by = ?invite_validation.issuer_username,
+            "User registered successfully via invite"
+        );
 
         Ok(Response::new(RegisterResponse {
             user_id: user.id.to_string(),
@@ -338,6 +399,149 @@ impl AuthService for IdentityServiceServer {
             total_redeemed: stats.total_redeemed,
             total_pending: stats.total_pending,
             total_expired: stats.total_expired,
+        }))
+    }
+
+    /// Get invite quota for a user
+    async fn get_invite_quota(
+        &self,
+        request: Request<GetInviteQuotaRequest>,
+    ) -> std::result::Result<Response<GetInviteQuotaResponse>, Status> {
+        let req = request.into_inner();
+        let user_id = Uuid::parse_str(&req.user_id)
+            .map_err(|_| Status::invalid_argument("Invalid user_id"))?;
+
+        let quota = db::invitations::get_invite_quota(&self.db, user_id)
+            .await
+            .map_err(to_status)?;
+
+        Ok(Response::new(GetInviteQuotaResponse {
+            total_quota: quota.total_quota,
+            used_quota: quota.used_quota,
+            remaining_quota: quota.remaining_quota,
+            successful_referrals: quota.successful_referrals,
+        }))
+    }
+
+    /// Send invite via SMS, Email, or Link
+    async fn send_invite(
+        &self,
+        request: Request<SendInviteRequest>,
+    ) -> std::result::Result<Response<SendInviteResponse>, Status> {
+        let req = request.into_inner();
+        let user_id = Uuid::parse_str(&req.user_id)
+            .map_err(|_| Status::invalid_argument("Invalid user_id"))?;
+
+        // Check quota
+        if !db::invitations::can_create_invite(&self.db, user_id)
+            .await
+            .map_err(to_status)?
+        {
+            return Ok(Response::new(SendInviteResponse {
+                success: false,
+                invite_code: String::new(),
+                invite_url: String::new(),
+                share_text: String::new(),
+                delivery_id: None,
+                error: Some("No remaining invite quota".into()),
+            }));
+        }
+
+        // Get user info for personalized message
+        let user = db::users::find_by_id(&self.db, user_id)
+            .await
+            .map_err(to_status)?
+            .ok_or_else(|| Status::not_found("User not found"))?;
+
+        // Create invite code
+        let invite = db::invitations::create_invite(&self.db, user_id, None, None, None)
+            .await
+            .map_err(to_status)?;
+
+        // Send via the specified channel
+        let result = self
+            .invite_delivery
+            .send_invite(
+                &invite,
+                &req.channel,
+                req.recipient.as_deref(),
+                Some(&user.username),
+                req.message.as_deref(),
+            )
+            .await
+            .map_err(to_status)?;
+
+        Ok(Response::new(SendInviteResponse {
+            success: result.success,
+            invite_code: result.invite_code,
+            invite_url: result.invite_url,
+            share_text: result.share_text,
+            delivery_id: result.delivery_id,
+            error: result.error,
+        }))
+    }
+
+    /// Validate invite code (public - no auth required)
+    async fn validate_invite(
+        &self,
+        request: Request<ValidateInviteRequest>,
+    ) -> std::result::Result<Response<ValidateInviteResponse>, Status> {
+        let req = request.into_inner();
+
+        if req.code.is_empty() {
+            return Err(Status::invalid_argument("Invite code is required"));
+        }
+
+        let validation = db::invitations::validate_invite(&self.db, &req.code)
+            .await
+            .map_err(to_status)?;
+
+        Ok(Response::new(ValidateInviteResponse {
+            is_valid: validation.is_valid,
+            issuer_username: validation.issuer_username,
+            expires_at: validation.expires_at.map(|dt| dt.timestamp()),
+            error: validation.error,
+        }))
+    }
+
+    /// Get referral chain info for a user
+    async fn get_referral_info(
+        &self,
+        request: Request<GetReferralInfoRequest>,
+    ) -> std::result::Result<Response<GetReferralInfoResponse>, Status> {
+        let req = request.into_inner();
+        let user_id = Uuid::parse_str(&req.user_id)
+            .map_err(|_| Status::invalid_argument("Invalid user_id"))?;
+
+        let info = db::invitations::get_referral_info(&self.db, user_id)
+            .await
+            .map_err(to_status)?;
+
+        let referred_by = info.referred_by.map(|r| ReferralUser {
+            user_id: r.user_id.to_string(),
+            username: r.username,
+            avatar_url: r.avatar_url,
+            joined_at: r.joined_at.timestamp(),
+            status: r.status,
+        });
+
+        let referrals: Vec<ReferralUser> = info
+            .referrals
+            .into_iter()
+            .map(|r| ReferralUser {
+                user_id: r.user_id.to_string(),
+                username: r.username,
+                avatar_url: r.avatar_url,
+                joined_at: r.joined_at.timestamp(),
+                status: r.status,
+            })
+            .collect();
+
+        Ok(Response::new(GetReferralInfoResponse {
+            referred_by,
+            referrals,
+            total_referrals: info.total_referrals,
+            active_referrals: info.active_referrals,
         }))
     }
 
@@ -789,6 +993,77 @@ impl AuthService for IdentityServiceServer {
             channel_ids: channels,
         }))
     }
+
+    /// Get user settings (P0: user-service migration)
+    async fn get_user_settings(
+        &self,
+        request: Request<GetUserSettingsRequest>,
+    ) -> std::result::Result<Response<GetUserSettingsResponse>, Status> {
+        let req = request.into_inner();
+        let user_id = Uuid::parse_str(&req.user_id)
+            .map_err(|_| Status::invalid_argument("Invalid user ID format"))?;
+
+        let settings = db::user_settings::get_user_settings(&self.db, user_id)
+            .await
+            .map_err(to_status)?;
+
+        Ok(Response::new(GetUserSettingsResponse {
+            settings: Some(settings_to_proto(&settings)),
+            error: None,
+        }))
+    }
+
+    /// Update user settings (P0: user-service migration)
+    async fn update_user_settings(
+        &self,
+        request: Request<UpdateUserSettingsRequest>,
+    ) -> std::result::Result<Response<UpdateUserSettingsResponse>, Status> {
+        let req = request.into_inner();
+        let user_id = Uuid::parse_str(&req.user_id)
+            .map_err(|_| Status::invalid_argument("Invalid user ID format"))?;
+
+        // Validate dm_permission if provided
+        if let Some(ref dm) = req.dm_permission {
+            if !["anyone", "followers", "mutuals", "nobody"].contains(&dm.as_str()) {
+                return Err(Status::invalid_argument(
+                    "Invalid dm_permission: must be 'anyone', 'followers', 'mutuals', or 'nobody'",
+                ));
+            }
+        }
+
+        // Validate privacy_level if provided
+        if let Some(ref pl) = req.privacy_level {
+            if !["public", "friends_only", "private"].contains(&pl.as_str()) {
+                return Err(Status::invalid_argument(
+                    "Invalid privacy_level: must be 'public', 'friends_only', or 'private'",
+                ));
+            }
+        }
+
+        let fields = db::user_settings::UpdateUserSettingsFields {
+            dm_permission: req.dm_permission,
+            email_notifications: req.email_notifications,
+            push_notifications: req.push_notifications,
+            marketing_emails: req.marketing_emails,
+            timezone: req.timezone,
+            language: req.language,
+            dark_mode: req.dark_mode,
+            privacy_level: req.privacy_level,
+            allow_messages: req.allow_messages,
+            show_online_status: req.show_online_status,
+        };
+
+        let settings = db::user_settings::update_user_settings(&self.db, user_id, fields)
+            .await
+            .map_err(to_status)?;
+
+        info!(user_id = %user_id, "User settings updated");
+
+        Ok(Response::new(UpdateUserSettingsResponse {
+            settings: Some(settings_to_proto(&settings)),
+            error: None,
+        }))
+    }
 }
 
 // ===== Helper Functions =====
@@ -856,5 +1131,23 @@ fn user_model_to_proto(user: &crate::models::User) -> User {
         is_active: user.deleted_at.is_none(),
         failed_login_attempts: user.failed_login_attempts,
         locked_until: user.locked_until.map(|dt| dt.timestamp()),
+    }
+}
+
+fn settings_to_proto(settings: &db::user_settings::UserSettingsRecord) -> UserSettings {
+    UserSettings {
+        user_id: settings.user_id.to_string(),
+        dm_permission: settings.dm_permission.clone(),
+        email_notifications: settings.email_notifications,
+        push_notifications: settings.push_notifications,
+        marketing_emails: settings.marketing_emails,
+        timezone: settings.timezone.clone(),
+        language: settings.language.clone(),
+        dark_mode: settings.dark_mode,
+        privacy_level: settings.privacy_level.clone(),
+        allow_messages: settings.allow_messages,
+        show_online_status: settings.show_online_status,
+        created_at: settings.created_at.timestamp(),
+        updated_at: settings.updated_at.timestamp(),
     }
 }
