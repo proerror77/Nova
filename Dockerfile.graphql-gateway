@@ -1,7 +1,7 @@
 # Multi-architecture build for graphql-gateway from project root
 # Supports both x86_64 and ARM64
 
-FROM public.ecr.aws/docker/library/rust:1.83-slim AS builder
+FROM public.ecr.aws/docker/library/rust:1.91-slim AS builder
 
 # Install build dependencies
 RUN apt-get update && \
