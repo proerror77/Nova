@@ -4,7 +4,27 @@ import SwiftUI
 struct ICEREDApp: App {
     // ObservedObject for singleton - App doesn't own it, just observes it
     @ObservedObject private var authManager = AuthenticationManager.shared
-    @State private var currentPage: AppPage = .splash
+    @State private var currentPage: AppPage
+
+    // Check if running in UI testing mode
+    private var isUITesting: Bool {
+        ProcessInfo.processInfo.arguments.contains("--uitesting")
+    }
+
+    init() {
+        // Reset auth state and skip to login when running UI tests
+        if ProcessInfo.processInfo.arguments.contains("--uitesting") {
+            // CRITICAL: Clear isAuthenticated synchronously to prevent race condition
+            // The view renders before async logout() completes, so we must set this first
+            AuthenticationManager.shared.isAuthenticated = false
+            // Then run full async cleanup (clears keychain, tokens, etc.)
+            Task { await AuthenticationManager.shared.logout() }
+            // Start directly on login page for UI tests
+            _currentPage = State(initialValue: .login)
+        } else {
+            _currentPage = State(initialValue: .splash)
+        }
+    }
 
     var body: some Scene {
         WindowGroup {

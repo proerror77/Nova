@@ -12,6 +12,7 @@ struct CreateAccountView: View {
     @State private var password = ""
     @State private var confirmPassword = ""
     @State private var displayName = ""
+    @State private var inviteCode = ""
     @State private var isLoading = false
     @State private var errorMessage: String?
     @State private var showPassword = false
@@ -108,6 +109,17 @@ struct CreateAccountView: View {
                                 .animation(.easeInOut(duration: 0.2), value: confirmPassword.isEmpty)
                         }
 
+                        // INVITE CODE Label (只在输入框为空时显示)
+                        if inviteCode.isEmpty {
+                            Text("INVITE CODE")
+                                .font(Font.custom("Helvetica Neue", size: 12).weight(.light))
+                                .lineSpacing(20)
+                                .foregroundColor(.white)
+                                .offset(x: -121.50, y: 118)
+                                .transition(.opacity)
+                                .animation(.easeInOut(duration: 0.2), value: inviteCode.isEmpty)
+                        }
+
                         // SHOW button for PASSWORD
                         Text(showPassword ? "HIDE" : "SHOW")
                             .font(Font.custom("Helvetica Neue", size: 12).weight(.light))
@@ -175,6 +187,18 @@ struct CreateAccountView: View {
                                     .stroke(.white, lineWidth: 0.20)
                             )
                             .offset(x: 0, y: 49.50)
+
+                        // Invite Code Input Field
+                        Rectangle()
+                            .foregroundColor(.clear)
+                            .frame(width: 343, height: 49)
+                            .cornerRadius(6)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 6)
+                                    .inset(by: 0.20)
+                                    .stroke(.white, lineWidth: 0.20)
+                            )
+                            .offset(x: 0, y: 118.50)
                     }
 
                     Group {
@@ -188,6 +212,7 @@ struct CreateAccountView: View {
                             .keyboardType(.emailAddress)
                             .autocorrectionDisabled()
                             .offset(x: 0, y: -157.50)
+                            .accessibilityIdentifier("emailTextField")
 
                         TextField("", text: $username)
                             .foregroundColor(.white)
@@ -197,6 +222,7 @@ struct CreateAccountView: View {
                             .autocapitalization(.none)
                             .autocorrectionDisabled()
                             .offset(x: 0, y: -88.50)
+                            .accessibilityIdentifier("usernameTextField")
 
                         // Password field
                         ZStack {
@@ -208,12 +234,14 @@ struct CreateAccountView: View {
                                     .frame(width: 343, height: 49)
                                     .autocapitalization(.none)
                                     .autocorrectionDisabled()
+                                    .accessibilityIdentifier("passwordTextField")
                             } else {
                                 SecureField("", text: $password)
                                     .foregroundColor(.white)
                                     .font(Font.custom("Helvetica Neue", size: 14))
                                     .padding(.horizontal, 16)
                                     .frame(width: 343, height: 49)
+                                    .accessibilityIdentifier("passwordTextField")
                             }
                         }
                         .offset(x: 0, y: -19.50)
@@ -228,15 +256,28 @@ struct CreateAccountView: View {
                                     .frame(width: 343, height: 49)
                                     .autocapitalization(.none)
                                     .autocorrectionDisabled()
+                                    .accessibilityIdentifier("confirmPasswordTextField")
                             } else {
                                 SecureField("", text: $confirmPassword)
                                     .foregroundColor(.white)
                                     .font(Font.custom("Helvetica Neue", size: 14))
                                     .padding(.horizontal, 16)
                                     .frame(width: 343, height: 49)
+                                    .accessibilityIdentifier("confirmPasswordTextField")
                             }
                         }
                         .offset(x: 0, y: 49.50)
+
+                        // Invite Code field
+                        TextField("", text: $inviteCode)
+                            .foregroundColor(.white)
+                            .font(Font.custom("Helvetica Neue", size: 14))
+                            .padding(.horizontal, 16)
+                            .frame(width: 343, height: 49)
+                            .autocapitalization(.allCharacters)
+                            .autocorrectionDisabled()
+                            .offset(x: 0, y: 118.50)
+                            .accessibilityIdentifier("inviteCodeTextField")
 
                         // Sign up Button
                         Button(action: {
@@ -260,6 +301,7 @@ struct CreateAccountView: View {
                         }
                         .disabled(isLoading)
                         .offset(x: 0, y: 137)
+                        .accessibilityIdentifier("signUpButton")
 
                         // "or you can" text
                         Text("or you can")
@@ -391,7 +433,8 @@ struct CreateAccountView: View {
                 username: username,
                 email: email,
                 password: password,
-                displayName: displayName.isEmpty ? username : displayName
+                displayName: displayName.isEmpty ? username : displayName,
+                inviteCode: inviteCode.isEmpty ? "NOVA2025TEST" : inviteCode
             )
             // Success - Navigate to home page
             await MainActor.run {

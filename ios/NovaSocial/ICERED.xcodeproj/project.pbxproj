@@ -74,6 +74,7 @@
 		SPLASHVIEW001 /* SplashScreenView.swift in Sources */ = {isa = PBXBuildFile; fileRef = SPLASHVIEW002 /* SplashScreenView.swift */; };
 		WELCOMEVIEW001 /* WelcomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = WELCOMEVIEW002 /* WelcomeView.swift */; };
 		7F8BF36C87774F6FA10FC78D /* GenerateImage01View.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01DB89BF1F554C0AA4C14AAD /* GenerateImage01View.swift */; };
+		UITEST001 /* ICEREDUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = UITEST002 /* ICEREDUITests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -147,6 +148,9 @@
 		SPLASHVIEW002 /* SplashScreenView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SplashScreenView.swift; sourceTree = "<group>"; };
 		WELCOMEVIEW002 /* WelcomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeView.swift; sourceTree = "<group>"; };
 		01DB89BF1F554C0AA4C14AAD /* GenerateImage01View.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenerateImage01View.swift; sourceTree = "<group>"; };
+		UITEST002 /* ICEREDUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ICEREDUITests.swift; sourceTree = "<group>"; };
+		UITEST003 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		UITEST004 /* ICEREDUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ICEREDUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -397,6 +401,7 @@
 			isa = PBXGroup;
 			children = (
 				1D3041E7FCC0ACD7F53D08BA /* ICERED.app */,
+				UITEST004 /* ICEREDUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -520,6 +525,7 @@
 				30188A2E994C571943EC7EDF /* Features */,
 				83156329836565A2778B94AC /* NovaSocial */,
 				565E49CEA7D25E6D91A52C2B /* Shared */,
+				UITESTGROUP001 /* ICEREDUITests */,
 				7C3FDB1C3B7BCF5AF8E3D483 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -691,7 +697,34 @@
 			path = Views;
 			sourceTree = "<group>";
 		};
+		UITESTGROUP001 /* ICEREDUITests */ = {
+			isa = PBXGroup;
+			children = (
+				UITEST002 /* ICEREDUITests.swift */,
+				UITEST003 /* Info.plist */,
+			);
+			path = ICEREDUITests;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
+
+/* Begin PBXContainerItemProxy section */
+		UITESTPROXY001 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 5E408F8D0DDC235DCAE790E7 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = ACADFBFE15FADF5A1AF04334;
+			remoteInfo = ICERED;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXTargetDependency section */
+		UITESTDEP001 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = ACADFBFE15FADF5A1AF04334 /* ICERED */;
+			targetProxy = UITESTPROXY001 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin PBXNativeTarget section */
 		ACADFBFE15FADF5A1AF04334 /* ICERED */ = {
@@ -711,6 +744,23 @@
 			productName = ICERED;
 			productReference = 1D3041E7FCC0ACD7F53D08BA /* ICERED.app */;
 			productType = "com.apple.product-type.application";
+		};
+		UITESTTARGET001 /* ICEREDUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = UITESTCONFIGLIST001 /* Build configuration list for PBXNativeTarget "ICEREDUITests" */;
+			buildPhases = (
+				UITESTSOURCES001 /* Sources */,
+				UITESTRESOURCES001 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				UITESTDEP001 /* PBXTargetDependency */,
+			);
+			name = ICEREDUITests;
+			productName = ICEREDUITests;
+			productReference = UITEST004 /* ICEREDUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
 		};
 /* End PBXNativeTarget section */
 
@@ -735,6 +785,7 @@
 			projectRoot = "";
 			targets = (
 				ACADFBFE15FADF5A1AF04334 /* ICERED */,
+				UITESTTARGET001 /* ICEREDUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -751,9 +802,24 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		UITESTRESOURCES001 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		UITESTSOURCES001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				UITEST001 /* ICEREDUITests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		2EB212114C3B8FD6E081C091 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -992,6 +1058,58 @@
 			};
 			name = Debug;
 		};
+		UITESTCONFIG001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 94DTB4RN55;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = ICEREDUITests/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.bruce.figmadesignapp.ICEREDUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = ICERED;
+			};
+			name = Debug;
+		};
+		UITESTCONFIG002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 94DTB4RN55;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = ICEREDUITests/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.bruce.figmadesignapp.ICEREDUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = ICERED;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -1009,6 +1127,15 @@
 			buildConfigurations = (
 				745621F622BA4F1283F1268F /* Debug */,
 				447C4692A7535B7D745B4C8A /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		UITESTCONFIGLIST001 /* Build configuration list for PBXNativeTarget "ICEREDUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				UITESTCONFIG001 /* Debug */,
+				UITESTCONFIG002 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
