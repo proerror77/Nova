@@ -139,6 +139,14 @@ service SocialService {
       get: "/api/v2/polls/{poll_id}/voted"
     };
   }
+
+  // Batch Operations (Feed Rendering Optimization)
+  rpc BatchGetCounts(BatchGetCountsRequest) returns (BatchGetCountsResponse) {
+    option (google.api.http) = {
+      post: "/api/v2/social/batch/counts"
+      body: "*"
+    };
+  }
 }
 
 // Relationships
@@ -336,4 +344,19 @@ message CandidatePreview {
   string name = 2;
   string avatar_url = 3;
   int32 rank = 4;
+}
+
+// Batch Operations Messages
+message BatchGetCountsRequest {
+  repeated string post_ids = 1;  // List of post UUIDs (max 100)
+}
+
+message BatchGetCountsResponse {
+  map<string, PostCounts> counts = 1;  // post_id -> counts mapping
+}
+
+message PostCounts {
+  int64 like_count = 1;
+  int64 comment_count = 2;
+  int64 share_count = 3;
 }

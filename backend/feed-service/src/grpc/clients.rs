@@ -1,5 +1,6 @@
 use grpc_clients::nova::content_service::v2::{
     GetPostsByIdsRequest, GetPostsByIdsResponse, GetUserPostsRequest, GetUserPostsResponse,
+    ListRecentPostsRequest, ListRecentPostsResponse,
 };
 /// gRPC clients for calling other services (centralized)
 ///
@@ -52,6 +53,18 @@ impl ContentServiceClient {
         let mut client = self.pool.content();
         client
             .get_user_posts(request)
+            .await
+            .map(|resp| resp.into_inner())
+    }
+
+    /// List recent posts globally (degraded fallback for feed/recommendation)
+    pub async fn list_recent_posts(
+        &self,
+        request: ListRecentPostsRequest,
+    ) -> Result<ListRecentPostsResponse, Status> {
+        let mut client = self.pool.content();
+        client
+            .list_recent_posts(request)
             .await
             .map(|resp| resp.into_inner())
     }

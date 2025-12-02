@@ -129,12 +129,13 @@ class AuthenticationManager: ObservableObject {
     // MARK: - Registration
 
     /// Register new user
-    func register(username: String, email: String, password: String, displayName: String) async throws -> UserProfile {
+    func register(username: String, email: String, password: String, displayName: String, inviteCode: String = "NOVA2025TEST") async throws -> UserProfile {
         let response = try await identityService.register(
             username: username,
             email: email,
             password: password,
-            displayName: displayName
+            displayName: displayName,
+            inviteCode: inviteCode
         )
 
         // Save authentication with refresh token

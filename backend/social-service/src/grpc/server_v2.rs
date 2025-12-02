@@ -648,6 +648,60 @@ impl SocialService for SocialServiceImpl {
             voted_at: vote.map(|v| to_ts(v.created_at)).flatten(),
         }))
     }
+
+    // ========= Batch Operations (Feed Rendering Optimization) =========
+
+    async fn batch_get_counts(
+        &self,
+        request: Request<BatchGetCountsRequest>,
+    ) -> Result<Response<BatchGetCountsResponse>, Status> {
+        let req = request.into_inner();
+
+        // Validate input
+        if req.post_ids.is_empty() {
+            return Ok(Response::new(BatchGetCountsResponse {
+                counts: std::collections::HashMap::new(),
+            }));
+        }
+
+        if req.post_ids.len() > 100 {
+            return Err(Status::invalid_argument("Maximum 100 post_ids allowed"));
+        }
+
+        // Parse UUIDs
+        let post_ids: Vec<Uuid> = req
+            .post_ids
+            .iter()
+            .map(|id| parse_uuid(id, "post_id"))
+            .collect::<Result<Vec<_>, _>>()?;
+
+        // Fetch counts from CounterService
+        let counts = self
+            .state
+            .counter_service
+            .batch_get_counts(&post_ids)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to fetch counts: {}", e)))?;
+
+        // Convert to proto response
+        let proto_counts: std::collections::HashMap<String, PostCounts> = counts
+            .into_iter()
+            .map(|(post_id, counts)| {
+                (
+                    post_id.to_string(),
+                    PostCounts {
+                        like_count: counts.like_count,
+                        comment_count: counts.comment_count,
+                        share_count: counts.share_count,
+                    },
+                )
+            })
+            .collect();
+
+        Ok(Response::new(BatchGetCountsResponse {
+            counts: proto_counts,
+        }))
+    }
 }
 
 fn parse_uuid(value: &str, field: &str) -> Result<Uuid, Status> {

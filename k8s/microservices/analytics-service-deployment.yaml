@@ -85,7 +85,7 @@ spec:
             name: analytics-service-config
         - secretRef:
             name: analytics-service-secret
-        image: 025434362120.dkr.ecr.ap-northeast-1.amazonaws.com/nova/analytics-service:main-bd6fbdba24e1dec6873163aa51d2297d45cc5cc3
+        image: nova/analytics-service
         livenessProbe:
           failureThreshold: 3
           httpGet:

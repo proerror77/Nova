@@ -103,6 +103,7 @@ struct LoginView: View {
                             .cornerRadius(31.50)
                         }
                         .disabled(isLoading || isGoogleLoading)
+                        .accessibilityIdentifier("signInButton")
                         .offset(x: 0, y: 87)
 
                         // Google Sign-In Button
@@ -157,6 +158,7 @@ struct LoginView: View {
                                     .stroke(.white, lineWidth: 0.20)
                             )
                         }
+                        .accessibilityIdentifier("createAccountButton")
                         .offset(x: 0, y: 265)
 
                         // Skip Button - 跳过登录直接进入Home（临时登录模式）
@@ -217,6 +219,7 @@ struct LoginView: View {
                                     .autocapitalization(.none)
                                     .keyboardType(.emailAddress)
                                     .autocorrectionDisabled()
+                                    .accessibilityIdentifier("loginEmailTextField")
                                     .onChange(of: email) { _, newValue in
                                         validateEmailRealtime(newValue)
                                     }
@@ -253,12 +256,14 @@ struct LoginView: View {
                                         .padding(.trailing, 60)
                                         .autocapitalization(.none)
                                         .autocorrectionDisabled()
+                                        .accessibilityIdentifier("loginPasswordTextField")
                                 } else {
                                     SecureField("", text: $password, prompt: Text("Enter your password").foregroundColor(Color.white.opacity(0.4)))
                                         .foregroundColor(.white)
                                         .font(Font.custom("Helvetica Neue", size: 14))
                                         .padding(.horizontal, 16)
                                         .padding(.trailing, 60)
+                                        .accessibilityIdentifier("loginPasswordTextField")
                                 }
                             }
                             .frame(width: 343, height: 49)

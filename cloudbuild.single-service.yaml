@@ -1,0 +1,24 @@
+steps:
+  # Build a single backend service image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - '${_REGISTRY}/${_SERVICE}:${_TAG}'
+      - '-f'
+      - 'backend/${_SERVICE}/Dockerfile'
+      - '.'
+
+  # Push the image to Artifact Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - '${_REGISTRY}/${_SERVICE}:${_TAG}'
+
+timeout: '3600s'
+
+substitutions:
+  _REGISTRY: 'asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova'
+  _SERVICE: 'graphql-gateway'
+  _TAG: 'local-48fcfb91'
+
