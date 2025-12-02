@@ -1,3 +1,7 @@
+# gRPC mTLS 配置 - 统一使用 grpc-mtls-shared secret
+# 所有需要 mTLS 的服务使用相同的证书配置
+
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -14,14 +18,27 @@ spec:
           value: "nova-grpc-services.nova-staging.svc.cluster.local"
         - name: GRPC_TLS_CA_CERT_PATH
           value: "/etc/nova/certs/ca.crt"
+        - name: GRPC_TLS_CLIENT_CERT_PATH
+          value: "/etc/nova/certs/client.crt"
+        - name: GRPC_TLS_CLIENT_KEY_PATH
+          value: "/etc/nova/certs/client.key"
+        - name: GRPC_SERVER_CERT_PATH
+          value: "/etc/nova/certs/server.crt"
+        - name: GRPC_SERVER_KEY_PATH
+          value: "/etc/nova/certs/server.key"
+        - name: GRPC_CLIENT_CA_CERT_PATH
+          value: "/etc/nova/certs/ca.crt"
+        - name: GRPC_REQUIRE_CLIENT_CERT
+          value: "true"
         volumeMounts:
-        - name: grpc-ca-cert
+        - name: grpc-mtls-shared
           mountPath: /etc/nova/certs
           readOnly: true
       volumes:
-      - name: grpc-ca-cert
+      - name: grpc-mtls-shared
         secret:
-          secretName: grpc-ca-cert
+          secretName: grpc-mtls-shared
+
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -32,6 +49,5 @@ spec:
     spec:
       containers:
       - name: search-service
-        # Staging environment: run gRPC without TLS.
-        # Production will enable mTLS via environment-specific patches
-        # and APP_ENV-based gating in the service code.
+        # Staging: search-service 目前只提供 HTTP，不需要 gRPC TLS
+        env: []

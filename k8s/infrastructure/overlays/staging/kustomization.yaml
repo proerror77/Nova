@@ -361,9 +361,21 @@ patches:
 - path: service-redis-env-patch.yaml
 - path: grpc-tls-env-patch.yaml
 - path: graphql-gateway-env-patch.yaml
+- path: social-service-env-patch.yaml
 - path: patch-deployment-selectors.yaml
 - path: patch-analytics-kafka-env.yaml
 - path: patch-search-service-ports.yaml
+- patch: |-
+    apiVersion: networking.k8s.io/v1
+    kind: Ingress
+    metadata:
+      name: nova-api-gateway
+    $patch: delete
+  target:
+    group: networking.k8s.io
+    version: v1
+    kind: Ingress
+    name: nova-api-gateway
 - patch: |-
     apiVersion: cert-manager.io/v1
     kind: Certificate
@@ -506,6 +518,7 @@ commonAnnotations:
 # ========================================
 resources:
 - ../../base
+# grpc-services.yaml - 移除: Service 已在 microservices 中定义，用 patch 方式修改端口
 - postgres-pvc-gp3.yaml
 - pgbouncer-userlist-patch.yaml
 - clickhouse-pvc.yaml

@@ -1,6 +1,6 @@
 # gRPC 微服务端口配置
-# Staging 环境中所有微服务的 gRPC 服务暴露配置
-# 每个服务都通过 Kubernetes DNS 暴露为 <service-name>.nova-staging.svc.cluster.local:50051
+# Staging 环境中所有微服务的服务暴露配置
+# 端口配置与集群实际运行一致
 
 ---
 apiVersion: v1
@@ -16,13 +16,13 @@ spec:
   selector:
     app: content-service
   ports:
-  - name: grpc
-    port: 50051
-    targetPort: 50051
+  - name: http
+    port: 8080
+    targetPort: 8080
     protocol: TCP
-  - name: metrics
-    port: 9090
-    targetPort: 9090
+  - name: grpc
+    port: 9080
+    targetPort: 9080
     protocol: TCP
 
 ---
@@ -39,108 +39,13 @@ spec:
   selector:
     app: feed-service
   ports:
-  - name: grpc
-    port: 50051
-    targetPort: 50051
-    protocol: TCP
-  - name: metrics
-    port: 9090
-    targetPort: 9090
-    protocol: TCP
-
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: search-service
-  namespace: nova-staging
-  labels:
-    app: search-service
-    service-type: grpc
-spec:
-  type: ClusterIP
-  selector:
-    app: search-service
-  ports:
-  - name: grpc
-    port: 50057
-    targetPort: 50057
-    protocol: TCP
   - name: http
-    port: 8086
-    targetPort: 8086
+    port: 8084
+    targetPort: 8084
     protocol: TCP
-  - name: metrics
-    port: 9090
-    targetPort: 9090
-    protocol: TCP
-
-apiVersion: v1
-kind: Service
-metadata:
-  name: notification-service
-  namespace: nova-staging
-  labels:
-    app: notification-service
-    service-type: grpc
-spec:
-  type: ClusterIP
-  selector:
-    app: notification-service
-  ports:
   - name: grpc
-    port: 50051
-    targetPort: 50051
-    protocol: TCP
-  - name: metrics
-    port: 9090
-    targetPort: 9090
-    protocol: TCP
-
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: media-service
-  namespace: nova-staging
-  labels:
-    app: media-service
-    service-type: grpc
-spec:
-  type: ClusterIP
-  selector:
-    app: media-service
-  ports:
-  - name: grpc
-    port: 50051
-    targetPort: 50051
-    protocol: TCP
-  - name: metrics
-    port: 9090
-    targetPort: 9090
-    protocol: TCP
-
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: analytics-service
-  namespace: nova-staging
-  labels:
-    app: analytics-service
-    service-type: grpc
-spec:
-  type: ClusterIP
-  selector:
-    app: analytics-service
-  ports:
-  - name: grpc
-    port: 50051
-    targetPort: 50051
-    protocol: TCP
-  - name: metrics
-    port: 9090
-    targetPort: 9090
+    port: 9084
+    targetPort: 9084
     protocol: TCP
 
 ---
@@ -157,13 +62,101 @@ spec:
   selector:
     app: graph-service
   ports:
+  - name: http
+    port: 8080
+    targetPort: 8080
+    protocol: TCP
+  - name: grpc
+    port: 9080
+    targetPort: 9080
+    protocol: TCP
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: social-service
+  namespace: nova-staging
+  labels:
+    app: social-service
+    service-type: grpc
+spec:
+  type: ClusterIP
+  selector:
+    app: social-service
+  ports:
+  - name: http
+    port: 8006
+    targetPort: 8006
+    protocol: TCP
+  - name: grpc
+    port: 50052
+    targetPort: 50052
+    protocol: TCP
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: identity-service
+  namespace: nova-staging
+  labels:
+    app: identity-service
+    service-type: grpc
+spec:
+  type: ClusterIP
+  selector:
+    app: identity-service
+  ports:
+  - name: http
+    port: 8080
+    targetPort: 8080
+    protocol: TCP
   - name: grpc
     port: 50051
     targetPort: 50051
     protocol: TCP
-  - name: metrics
-    port: 9090
-    targetPort: 9090
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: identity-service-headless
+  namespace: nova-staging
+  labels:
+    app: identity-service
+spec:
+  type: ClusterIP
+  clusterIP: None
+  selector:
+    app: identity-service
+  ports:
+  - name: grpc
+    port: 50051
+    targetPort: 50051
+    protocol: TCP
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: media-service
+  namespace: nova-staging
+  labels:
+    app: media-service
+    service-type: grpc
+spec:
+  type: ClusterIP
+  selector:
+    app: media-service
+  ports:
+  - name: http
+    port: 8082
+    targetPort: 8082
+    protocol: TCP
+  - name: grpc
+    port: 9082
+    targetPort: 9082
     protocol: TCP
 
 ---
@@ -180,36 +173,13 @@ spec:
   selector:
     app: ranking-service
   ports:
+  - name: http
+    port: 8011
+    targetPort: 8011
+    protocol: TCP
   - name: grpc
-    port: 50051
-    targetPort: 50051
-    protocol: TCP
-  - name: metrics
-    port: 9090
-    targetPort: 9090
-    protocol: TCP
-
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: feature-store
-  namespace: nova-staging
-  labels:
-    app: feature-store
-    service-type: grpc
-spec:
-  type: ClusterIP
-  selector:
-    app: feature-store
-  ports:
-  - name: grpc
-    port: 50051
-    targetPort: 50051
-    protocol: TCP
-  - name: metrics
-    port: 9090
-    targetPort: 9090
+    port: 9011
+    targetPort: 9011
     protocol: TCP
 
 ---
@@ -226,11 +196,70 @@ spec:
   selector:
     app: realtime-chat-service
   ports:
-  - name: grpc
-    port: 50051
-    targetPort: 50051
+  - name: http
+    port: 8080
+    targetPort: 8080
     protocol: TCP
-  - name: websocket
+  - name: grpc
+    port: 9095
+    targetPort: 9095
+    protocol: TCP
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: notification-service
+  namespace: nova-staging
+  labels:
+    app: notification-service
+    service-type: grpc
+spec:
+  type: ClusterIP
+  selector:
+    app: notification-service
+  ports:
+  - name: http
+    port: 8080
+    targetPort: 8080
+    protocol: TCP
+  - name: grpc
+    port: 9093
+    targetPort: 9093
+    protocol: TCP
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: search-service
+  namespace: nova-staging
+  labels:
+    app: search-service
+spec:
+  type: ClusterIP
+  selector:
+    app: search-service
+  ports:
+  - name: http
+    port: 8086
+    targetPort: 8086
+    protocol: TCP
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: analytics-service
+  namespace: nova-staging
+  labels:
+    app: analytics-service
+spec:
+  type: ClusterIP
+  selector:
+    app: analytics-service
+  ports:
+  - name: http
     port: 8080
     targetPort: 8080
     protocol: TCP
@@ -257,36 +286,9 @@ spec:
     port: 50051
     targetPort: 50051
     protocol: TCP
-  - name: metrics
-    port: 9090
-    targetPort: 9090
-    protocol: TCP
 
 ---
-apiVersion: v1
-kind: Service
-metadata:
-  name: identity-service
-  namespace: nova-staging
-  labels:
-    app: identity-service
-    service-type: grpc
-spec:
-  type: ClusterIP
-  selector:
-    app: identity-service
-  ports:
-  - name: grpc
-    port: 50051
-    targetPort: 50051
-    protocol: TCP
-  - name: metrics
-    port: 9090
-    targetPort: 9090
-    protocol: TCP
-
----
-# 供应链微服务集合的服务发现
+# Headless service for DNS discovery of all gRPC services
 apiVersion: v1
 kind: Service
 metadata:
@@ -297,7 +299,7 @@ metadata:
     description: "Service discovery for all Nova gRPC microservices"
 spec:
   type: ClusterIP
-  clusterIP: None  # Headless service for DNS discovery
+  clusterIP: None
   selector:
     service-type: grpc
   ports:
