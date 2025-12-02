@@ -70,10 +70,9 @@ resources:
   - trust-safety-service-configmap.yaml
   - trust-safety-service-serviceaccount.yaml
 
-  # API Gateway (legacy deployment, kept for reference but not used in staging)
-  - api-gateway/deployment.yaml
-  - api-gateway/service.yaml
-  - api-gateway/configmap-nginx.yaml
+  # API Gateway: DEPRECATED - now using GKE ELB directly via graphql-gateway
+  # api-gateway/deployment.yaml, service.yaml, configmap-nginx.yaml are archived
+  # See k8s/microservices/api-gateway/ for reference only
 
   # NOTE: Ingress for nova-api-gateway is now managed in k8s/infrastructure/base/ingress.yaml
   # to avoid duplicate Ingress definitions across environments.

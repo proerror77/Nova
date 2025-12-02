@@ -3,4 +3,4 @@ kind: PersistentVolumeClaim
 metadata:
   name: postgres-pvc
 spec:
-  storageClassName: gp3
+  storageClassName: standard-rwo

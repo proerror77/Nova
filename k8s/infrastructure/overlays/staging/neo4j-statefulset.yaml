@@ -83,7 +83,7 @@ spec:
       spec:
         accessModes:
           - ReadWriteOnce
-        storageClassName: gp3
+        storageClassName: standard-rwo
         resources:
           requests:
             storage: 20Gi
