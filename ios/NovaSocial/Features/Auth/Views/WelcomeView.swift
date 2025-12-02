@@ -154,9 +154,13 @@ struct WelcomeView: View {
             print("[WelcomeView] Base URL: \(APIConfig.current.baseURL)")
             #endif
 
+            // Note: APIClient uses .convertFromSnakeCase, so property names
+            // will automatically map from snake_case (is_valid -> isValid)
             struct ValidateResponse: Codable {
-                let valid: Bool
-                let message: String?
+                let isValid: Bool
+                let issuerUsername: String?
+                let expiresAt: Int64?
+                let error: String?
             }
 
             let response: ValidateResponse = try await client.request(
@@ -165,17 +169,17 @@ struct WelcomeView: View {
             )
 
             #if DEBUG
-            print("[WelcomeView] API response - valid: \(response.valid), message: \(response.message ?? "nil")")
+            print("[WelcomeView] API response - isValid: \(response.isValid), issuer: \(response.issuerUsername ?? "nil"), error: \(response.error ?? "nil")")
             #endif
 
-            if response.valid {
+            if response.isValid {
                 // Valid invite code - navigate to login
                 await MainActor.run {
                     currentPage = .login
                 }
             } else {
                 // Invalid invite code
-                errorMessage = response.message ?? "Invalid invite code. Please try again."
+                errorMessage = response.error ?? "Invalid invite code. Please try again."
             }
         } catch {
             // Handle network errors

@@ -20,7 +20,11 @@ pub struct Post {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub deleted_at: Option<DateTime<Utc>>,
-    pub soft_delete: Option<DateTime<Utc>>,
+    /// Legacy soft-delete column which may be either a boolean or timestamp
+    /// depending on the deployed schema version. We map it as text for maximum
+    /// compatibility but do not rely on it for filtering – `deleted_at` is the
+    /// canonical flag for soft-deletion.
+    pub soft_delete: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]

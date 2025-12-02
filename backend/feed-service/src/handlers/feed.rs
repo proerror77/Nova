@@ -241,6 +241,69 @@ async fn fetch_global_posts(
 /// Manual invalidation endpoint would trigger cache refresh for user's feed.
 /// TODO: Implement Redis cache invalidation layer (Phase 1 Stage 1.4 Week 13-14)
 
+/// Guest Feed endpoint - returns trending/recent posts without authentication.
+/// This enables the "Guest Mode" UX where users can browse content before signing up.
+///
+/// Algorithm: Returns recent published posts sorted by recency (time-based).
+/// Future improvement: Add engagement-based ranking (likes * 1 + comments * 2 + shares * 3).
+#[get("/trending")]
+pub async fn get_guest_feed(
+    query: web::Query<FeedQueryParams>,
+    state: web::Data<FeedHandlerState>,
+) -> Result<HttpResponse> {
+    let limit = query.limit.min(50).max(1); // Stricter limit for guest feed
+    let offset = query.decode_cursor()?;
+
+    info!(
+        "Guest feed request: limit={} offset={}",
+        limit, offset
+    );
+
+    // Fetch global/recent posts - no user exclusion for guest mode
+    let request_limit = ((limit as usize).saturating_add(offset)).min(200) as i32;
+
+    let resp = state
+        .content_client
+        .list_recent_posts(ListRecentPostsRequest {
+            limit: request_limit,
+            exclude_user_id: String::new(), // Don't exclude any user
+        })
+        .await
+        .map_err(|e| AppError::Internal(format!("Failed to fetch trending posts: {}", e)))?;
+
+    let all_posts: Vec<Uuid> = resp
+        .post_ids
+        .into_iter()
+        .filter_map(|id| Uuid::parse_str(&id).ok())
+        .collect();
+
+    let start = offset.min(all_posts.len());
+    let end = (start + limit as usize).min(all_posts.len());
+    let posts = all_posts[start..end].to_vec();
+
+    let posts_count = posts.len();
+    let total_count = offset + posts_count;
+    let has_more = (all_posts.len() as i32) == request_limit && posts_count == limit as usize;
+
+    let cursor = if has_more {
+        Some(FeedQueryParams::encode_cursor(offset + posts_count))
+    } else {
+        None
+    };
+
+    info!(
+        "Guest feed generated: posts={}, offset={}, has_more={}",
+        posts_count, offset, has_more
+    );
+
+    Ok(HttpResponse::Ok().json(FeedResponse {
+        posts,
+        cursor,
+        has_more,
+        total_count,
+    }))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

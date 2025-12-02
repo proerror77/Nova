@@ -3,14 +3,9 @@ kind: Deployment
 metadata:
   name: content-service
 spec:
-  selector:
-    matchLabels:
-      app: content-service
   template:
     metadata:
       labels:
-        app: content-service
-        component: content-service
         tier: backend
 ---
 apiVersion: apps/v1
@@ -18,14 +13,9 @@ kind: Deployment
 metadata:
   name: feed-service
 spec:
-  selector:
-    matchLabels:
-      app: feed-service
   template:
     metadata:
       labels:
-        app: feed-service
-        component: feed-service
         tier: backend
 ---
 apiVersion: apps/v1
@@ -33,26 +23,18 @@ kind: Deployment
 metadata:
   name: media-service
 spec:
-  selector:
-    matchLabels:
-      app: media-service
   template:
     metadata:
       labels:
-        app: media-service
-        component: media-service
         tier: backend
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: search-service
 spec:
-  selector:
-    matchLabels:
-      app: nova
-      component: search-service
   template:
     metadata:
       labels:
-        app: nova
-        component: search-service
+        app: search-service
+        tier: backend

@@ -42,7 +42,7 @@ fn convert_post_to_proto(post: &DbPost) -> Post {
         content: post.caption.clone().unwrap_or_default(),
         created_at: post.created_at.timestamp(),
         updated_at: post.updated_at.timestamp(),
-        deleted_at: post.soft_delete.map(|d| d.timestamp()).unwrap_or(0),
+        deleted_at: post.deleted_at.map(|d| d.timestamp()).unwrap_or(0),
         status: map_status(post.status.as_str()),
         media_ids: vec![],
         media_urls: post.media_urls.clone().unwrap_or_default(),
@@ -164,8 +164,8 @@ impl ContentService for ContentServiceImpl {
         let mut db_posts = Vec::new();
         if !cache_misses.is_empty() {
             db_posts = sqlx::query_as::<_, DbPost>(
-                "SELECT id, user_id, content, caption, media_key, media_type, media_urls, status, created_at, updated_at, deleted_at, soft_delete \
-                 FROM posts WHERE id = ANY($1::uuid[]) AND soft_delete IS NULL",
+                "SELECT id, user_id, content, caption, media_key, media_type, media_urls, status, created_at, updated_at, deleted_at, soft_delete::text AS soft_delete \
+                 FROM posts WHERE deleted_at IS NULL AND id = ANY($1::uuid[])",
             )
             .bind(&cache_misses)
             .fetch_all(&self.db_pool)
@@ -189,10 +189,61 @@ impl ContentService for ContentServiceImpl {
             all_posts.insert(post.id, post);
         }
 
-        // Maintain original order from request
+        // Step 6: Load media URLs from post_images for posts that don't yet have media_urls.
+        let media_rows = sqlx::query(
+            r#"
+            SELECT post_id, url
+            FROM post_images
+            WHERE post_id = ANY($1::uuid[])
+              AND status = 'completed'
+              AND url IS NOT NULL
+            ORDER BY post_id, size_variant
+            "#,
+        )
+        .bind(&post_ids)
+        .fetch_all(&self.db_pool)
+        .await
+        .map_err(|e| {
+            tracing::error!("get_posts_by_ids media query error: {}", e);
+            Status::internal("failed to fetch post images")
+        })?;
+
+        let mut media_map: std::collections::HashMap<Uuid, Vec<String>> =
+            std::collections::HashMap::new();
+        for row in media_rows {
+            let post_id: Uuid = row.get("post_id");
+            let url: String = row.get("url");
+            media_map.entry(post_id).or_default().push(url);
+        }
+
+        // Maintain original order from request and enrich media_urls:
+        // 1) If DbPost.media_urls is already populated, prefer it.
+        // 2) Otherwise, fall back to URLs from post_images (media_map).
         let ordered_posts: Vec<Post> = post_ids
             .iter()
-            .filter_map(|id| all_posts.get(id).map(convert_post_to_proto))
+            .filter_map(|id| {
+                all_posts.get(id).map(|post| {
+                    let mut media_urls = post.media_urls.clone().unwrap_or_default();
+                    if media_urls.is_empty() {
+                        if let Some(urls) = media_map.get(id) {
+                            media_urls = urls.clone();
+                        }
+                    }
+
+                    Post {
+                        id: post.id.to_string(),
+                        author_id: post.user_id.to_string(),
+                        content: post.caption.clone().unwrap_or_default(),
+                        created_at: post.created_at.timestamp(),
+                        updated_at: post.updated_at.timestamp(),
+                        deleted_at: post.deleted_at.map(|d| d.timestamp()).unwrap_or(0),
+                        status: map_status(post.status.as_str()),
+                        media_ids: vec![],
+                        media_urls,
+                        media_type: post.media_type.clone(),
+                    }
+                })
+            })
             .collect();
 
         let found: std::collections::HashSet<Uuid> = all_posts.keys().cloned().collect();
@@ -222,8 +273,8 @@ impl ContentService for ContentServiceImpl {
         let (posts, total): (Vec<DbPost>, i64) = if req.status == ContentStatus::Unspecified as i32
         {
             let posts = sqlx::query_as::<_, DbPost>(
-                "SELECT id, user_id, content, caption, media_key, media_type, media_urls, status, created_at, updated_at, deleted_at, soft_delete \
-                 FROM posts WHERE user_id = $1 AND soft_delete IS NULL ORDER BY created_at DESC LIMIT $2 OFFSET $3",
+                "SELECT id, user_id, content, caption, media_key, media_type, media_urls, status, created_at, updated_at, deleted_at, soft_delete::text AS soft_delete \
+                 FROM posts WHERE user_id = $1 AND deleted_at IS NULL ORDER BY created_at DESC LIMIT $2 OFFSET $3",
             )
             .bind(user_id)
             .bind(limit)
@@ -233,7 +284,7 @@ impl ContentService for ContentServiceImpl {
             .map_err(|e| Status::internal(format!("db error: {}", e)))?;
 
             let total = sqlx::query_scalar::<_, i64>(
-                "SELECT COUNT(*) FROM posts WHERE user_id = $1 AND soft_delete IS NULL",
+                "SELECT COUNT(*) FROM posts WHERE user_id = $1 AND deleted_at IS NULL",
             )
             .bind(user_id)
             .fetch_one(&self.db_pool)
@@ -251,8 +302,8 @@ impl ContentService for ContentServiceImpl {
             };
 
             let posts = sqlx::query_as::<_, DbPost>(
-                "SELECT id, user_id, content, caption, media_key, media_type, media_urls, status, created_at, updated_at, deleted_at, soft_delete \
-                 FROM posts WHERE user_id = $1 AND status = $2 AND soft_delete IS NULL ORDER BY created_at DESC LIMIT $3 OFFSET $4",
+                "SELECT id, user_id, content, caption, media_key, media_type, media_urls, status, created_at, updated_at, deleted_at, soft_delete::text AS soft_delete \
+                 FROM posts WHERE user_id = $1 AND status = $2 AND deleted_at IS NULL ORDER BY created_at DESC LIMIT $3 OFFSET $4",
             )
             .bind(user_id)
             .bind(status_filter)
@@ -263,7 +314,7 @@ impl ContentService for ContentServiceImpl {
             .map_err(|e| Status::internal(format!("db error: {}", e)))?;
 
             let total = sqlx::query_scalar::<_, i64>(
-                "SELECT COUNT(*) FROM posts WHERE user_id = $1 AND status = $2 AND soft_delete IS NULL",
+                "SELECT COUNT(*) FROM posts WHERE user_id = $1 AND status = $2 AND deleted_at IS NULL",
             )
             .bind(user_id)
             .bind(status_filter)
@@ -292,14 +343,14 @@ impl ContentService for ContentServiceImpl {
 
         let rows = if req.exclude_user_id.is_empty() {
             sqlx::query(
-                "SELECT id::text AS id FROM posts WHERE status = 'published' AND soft_delete IS NULL ORDER BY created_at DESC LIMIT $1",
+                "SELECT id::text AS id FROM posts WHERE status = 'published' AND deleted_at IS NULL ORDER BY created_at DESC LIMIT $1",
             )
             .bind(limit)
             .fetch_all(&self.db_pool)
             .await
         } else {
             sqlx::query(
-                "SELECT id::text AS id FROM posts WHERE status = 'published' AND soft_delete IS NULL AND user_id <> $1::uuid ORDER BY created_at DESC LIMIT $2",
+                "SELECT id::text AS id FROM posts WHERE status = 'published' AND deleted_at IS NULL AND user_id <> $1::uuid ORDER BY created_at DESC LIMIT $2",
             )
             .bind(&req.exclude_user_id)
             .bind(limit)
@@ -328,14 +379,14 @@ impl ContentService for ContentServiceImpl {
 
         let rows = if req.exclude_user_id.is_empty() {
             sqlx::query(
-                "SELECT p.id::text AS id FROM posts p JOIN post_metadata pm ON pm.post_id = p.id WHERE p.status = 'published' AND p.soft_delete IS NULL ORDER BY (pm.like_count * 3 + pm.comment_count * 2 + pm.view_count) DESC, p.created_at DESC LIMIT $1",
+                "SELECT p.id::text AS id FROM posts p JOIN post_metadata pm ON pm.post_id = p.id WHERE p.status = 'published' AND p.deleted_at IS NULL ORDER BY (pm.like_count * 3 + pm.comment_count * 2 + pm.view_count) DESC, p.created_at DESC LIMIT $1",
             )
             .bind(limit)
             .fetch_all(&self.db_pool)
             .await
         } else {
             sqlx::query(
-                "SELECT p.id::text AS id FROM posts p JOIN post_metadata pm ON pm.post_id = p.id WHERE p.status = 'published' AND p.soft_delete IS NULL AND p.user_id <> $1::uuid ORDER BY (pm.like_count * 3 + pm.comment_count * 2 + pm.view_count) DESC, p.created_at DESC LIMIT $2",
+                "SELECT p.id::text AS id FROM posts p JOIN post_metadata pm ON pm.post_id = p.id WHERE p.status = 'published' AND p.deleted_at IS NULL AND p.user_id <> $1::uuid ORDER BY (pm.like_count * 3 + pm.comment_count * 2 + pm.view_count) DESC, p.created_at DESC LIMIT $2",
             )
             .bind(&req.exclude_user_id)
             .bind(limit)
@@ -380,7 +431,7 @@ impl ContentService for ContentServiceImpl {
             .push_bind(req.comments_enabled);
 
         builder.push(" WHERE id = ").push_bind(post_id);
-        builder.push(" AND soft_delete IS NULL RETURNING id, user_id, content, caption, media_key, media_type, media_urls, status, created_at, updated_at, deleted_at, soft_delete");
+        builder.push(" AND deleted_at IS NULL RETURNING id, user_id, content, caption, media_key, media_type, media_urls, status, created_at, updated_at, deleted_at, soft_delete::text AS soft_delete");
 
         let post = builder
             .build_query_as::<DbPost>()
@@ -412,7 +463,7 @@ impl ContentService for ContentServiceImpl {
             .map_err(|_| Status::invalid_argument("invalid post_id"))?;
 
         let result = sqlx::query_scalar::<_, Option<chrono::DateTime<chrono::Utc>>>(
-            "UPDATE posts SET soft_delete = NOW() WHERE id = $1 AND soft_delete IS NULL RETURNING soft_delete",
+            "UPDATE posts SET deleted_at = NOW() WHERE id = $1 AND deleted_at IS NULL RETURNING deleted_at",
         )
         .bind(post_id)
         .fetch_optional(&self.db_pool)

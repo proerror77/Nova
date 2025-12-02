@@ -307,7 +307,7 @@ kind: ConfigMap
 metadata:
   name: redis-exporter-config
   namespace: nova-staging
-spec:
+data:
   redis-exporter.sh: |
     #!/bin/sh
     # Simple redis-exporter sidecar can be added if needed

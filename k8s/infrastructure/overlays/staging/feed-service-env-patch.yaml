@@ -29,3 +29,9 @@ spec:
         # graph-service 非必要依賴，降級 tier 避免啟動時 CrashLoop
         - name: GRPC_GRAPH_SERVICE_TIER
           value: "1"
+        # Feed-service 作為 gRPC client 需要使用 content-service 的服務域名以完成 mTLS 驗證
+        - name: GRPC_TLS_DOMAIN_NAME
+          value: "content-service.nova-staging.svc.cluster.local"
+        # Default image URL for posts marked as image but missing media_urls (staging-only)
+        - name: FEED_DEFAULT_IMAGE_URL
+          value: "https://picsum.photos/seed/nova-feed/800/600"

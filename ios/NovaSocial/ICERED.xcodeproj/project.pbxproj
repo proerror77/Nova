@@ -75,6 +75,9 @@
 		WELCOMEVIEW001 /* WelcomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = WELCOMEVIEW002 /* WelcomeView.swift */; };
 		7F8BF36C87774F6FA10FC78D /* GenerateImage01View.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01DB89BF1F554C0AA4C14AAD /* GenerateImage01View.swift */; };
 		UITEST001 /* ICEREDUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = UITEST002 /* ICEREDUITests.swift */; };
+		CHATSERVICE001 /* ChatService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CHATSERVICE002 /* ChatService.swift */; };
+		KEYBOARDEXT001 /* KeyboardExtension.swift in Sources */ = {isa = PBXBuildFile; fileRef = KEYBOARDEXT002 /* KeyboardExtension.swift */; };
+		SHARESHEET001 /* ShareSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = SHARESHEET002 /* ShareSheet.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -151,6 +154,9 @@
 		UITEST002 /* ICEREDUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ICEREDUITests.swift; sourceTree = "<group>"; };
 		UITEST003 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		UITEST004 /* ICEREDUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ICEREDUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		CHATSERVICE002 /* ChatService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatService.swift; sourceTree = "<group>"; };
+		KEYBOARDEXT002 /* KeyboardExtension.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardExtension.swift; sourceTree = "<group>"; };
+		SHARESHEET002 /* ShareSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareSheet.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -328,6 +334,7 @@
 			isa = PBXGroup;
 			children = (
 				D4B8234BED929FB978C1D102 /* DateExtension.swift */,
+				KEYBOARDEXT002 /* KeyboardExtension.swift */,
 			);
 			path = Extensions;
 			sourceTree = "<group>";
@@ -393,6 +400,7 @@
 			children = (
 				5FDC1F4969D718C7CCCA4AE0 /* Carousels */,
 				166F4398A7627F3D582783BE /* Location */,
+				SHARESHEET002 /* ShareSheet.swift */,
 			);
 			path = Components;
 			sourceTree = "<group>";
@@ -624,6 +632,7 @@
 		C652DC05CDF0383A5C43BEC2 /* Services */ = {
 			isa = PBXGroup;
 			children = (
+				CHATSERVICEGROUP /* Chat */,
 				4E85EECF31BEE6AC3820E20B /* Feed */,
 				E208F4762BA09D9DB85B836A /* Security */,
 				DBF089D6F321073A5A00AEED /* Auth */,
@@ -637,6 +646,14 @@
 				1F229D0385FF3AA68655E53A /* User */,
 			);
 			path = Services;
+			sourceTree = "<group>";
+		};
+		CHATSERVICEGROUP /* Chat */ = {
+			isa = PBXGroup;
+			children = (
+				CHATSERVICE002 /* ChatService.swift */,
+			);
+			path = Chat;
 			sourceTree = "<group>";
 		};
 		DA5913B03AADDAF0AE36289D /* Search */ = {
@@ -887,6 +904,9 @@
 				CREATEACCOUNT001 /* CreateAccountView.swift in Sources */,
 				WELCOMEVIEW001 /* WelcomeView.swift in Sources */,
 				SPLASHVIEW001 /* SplashScreenView.swift in Sources */,
+				CHATSERVICE001 /* ChatService.swift in Sources */,
+				KEYBOARDEXT001 /* KeyboardExtension.swift in Sources */,
+				SHARESHEET001 /* ShareSheet.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -1,0 +1,25 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: search-service
+spec:
+  template:
+    spec:
+      containers:
+      - name: search-service
+        livenessProbe:
+          httpGet:
+            port: 8086
+        readinessProbe:
+          httpGet:
+            port: 8086
+        startupProbe:
+          httpGet:
+            port: 8086
+        ports:
+        - name: http
+          containerPort: 8086
+          protocol: TCP
+        - name: grpc
+          containerPort: 50057
+          protocol: TCP

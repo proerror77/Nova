@@ -1,25 +1,6 @@
 import SwiftUI
 import PhotosUI
 
-// MARK: - Share Sheet Component
-
-/// iOS 原生分享面板组件
-struct ShareSheet: UIViewControllerRepresentable {
-    let items: [Any]
-
-    func makeUIViewController(context: Context) -> UIActivityViewController {
-        let controller = UIActivityViewController(
-            activityItems: items,
-            applicationActivities: nil
-        )
-        return controller
-    }
-
-    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {
-        // No update needed
-    }
-}
-
 struct ProfileView: View {
     @Binding var currentPage: AppPage
     // Use ObservedObject for shared singleton (not StateObject which implies ownership)
@@ -121,7 +102,7 @@ struct ProfileView: View {
             NewPostView(showNewPost: $showNewPost)
         }
         .sheet(isPresented: $showShareSheet) {
-            ShareSheet(items: shareItems)
+            NovaShareSheet(items: shareItems)
         }
     }
 

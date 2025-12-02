@@ -18,9 +18,9 @@ spec:
         # Feed service - gRPC port 9084 with mTLS
         - name: GRPC_FEED_SERVICE_URL
           value: "https://feed-service.nova-staging.svc.cluster.local:9084"
-        # Content service - gRPC port 50051 with mTLS
+        # Content service - gRPC port 9080 with mTLS
         - name: GRPC_CONTENT_SERVICE_URL
-          value: "https://content-service.nova-staging.svc.cluster.local:50051"
+          value: "https://content-service.nova-staging.svc.cluster.local:9080"
         # Search service - gRPC port 50057 with mTLS
         - name: GRPC_SEARCH_SERVICE_URL
           value: "https://search-service.nova-staging.svc.cluster.local:50057"

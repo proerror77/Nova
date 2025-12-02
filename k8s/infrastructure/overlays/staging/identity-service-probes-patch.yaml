@@ -9,14 +9,14 @@ spec:
         - name: identity-service
           livenessProbe:
             tcpSocket:
-              port: 8080
+              port: 50051
             initialDelaySeconds: 10
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 3
           readinessProbe:
             tcpSocket:
-              port: 8080
+              port: 50051
             initialDelaySeconds: 5
             periodSeconds: 5
             timeoutSeconds: 3

@@ -420,6 +420,11 @@ impl RecommendationServiceImpl {
             }
         };
 
+        // Determine default image URL for posts marked as `image` but missing media_urls.
+        // This is primarily used in staging/dev environments to ensure photos render even when
+        // media_urls were not backfilled correctly in content-service.
+        let default_image_url = std::env::var("FEED_DEFAULT_IMAGE_URL").unwrap_or_default();
+
         // Step 4: Convert to CachedFeedPost format with social stats
         let posts: Vec<CachedFeedPost> = get_response
             .posts
@@ -427,6 +432,16 @@ impl RecommendationServiceImpl {
             .enumerate()
             .map(|(idx, post)| {
                 let counts = social_counts.get(&post.id);
+                // Fallback: if this is an image post but media_urls is empty, inject a default URL.
+                let mut media_urls = post.media_urls.clone();
+                let media_type = post.media_type.clone();
+                if media_urls.is_empty()
+                    && media_type == "image"
+                    && !default_image_url.is_empty()
+                {
+                    media_urls = vec![default_image_url.clone()];
+                }
+
                 CachedFeedPost {
                     id: post.id.clone(),
                     user_id: post.author_id,
@@ -436,8 +451,8 @@ impl RecommendationServiceImpl {
                     like_count: counts.map(|c| c.like_count as u32).unwrap_or(0),
                     comment_count: counts.map(|c| c.comment_count as u32).unwrap_or(0),
                     share_count: counts.map(|c| c.share_count as u32).unwrap_or(0),
-                    media_urls: post.media_urls,
-                    media_type: post.media_type,
+                    media_urls,
+                    media_type,
                 }
             })
             .collect();

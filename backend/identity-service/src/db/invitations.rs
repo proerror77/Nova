@@ -8,6 +8,10 @@ use uuid::Uuid;
 /// Default invite code expiry: 30 days
 const DEFAULT_INVITE_EXPIRY_DAYS: i64 = 30;
 
+/// Global non-expiring test invite code.
+/// This is intended for staging / development environments only.
+const GLOBAL_TEST_INVITE_CODE: &str = "NOVATEST";
+
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct InviteCode {
     pub id: Uuid,
@@ -169,6 +173,16 @@ pub async fn create_invite(
 }
 
 pub async fn redeem_invite(pool: &PgPool, code: &str, new_user_id: Uuid) -> Result<bool> {
+    // Allow a global non-expiring test invite code for non-production environments.
+    // The code is GLOBAL_TEST_INVITE_CODE and must NEVER be advertised or enabled
+    // in production (APP_ENV=production).
+    let app_env = std::env::var("APP_ENV").unwrap_or_else(|_| "development".to_string());
+    if app_env != "production" && code.eq_ignore_ascii_case(GLOBAL_TEST_INVITE_CODE) {
+        // For the global test code we don't persist any DB state and treat
+        // it as always redeemable.
+        return Ok(true);
+    }
+
     let now = Utc::now();
     let updated = sqlx::query(
         r#"
@@ -279,6 +293,18 @@ pub struct InvitationStats {
 
 /// Validate an invite code (public endpoint - no auth required)
 pub async fn validate_invite(pool: &PgPool, code: &str) -> Result<InviteValidation> {
+    // Global non-expiring test invite code for non-production environments.
+    // When present and matching, always treat as valid and non-expiring.
+    let app_env = std::env::var("APP_ENV").unwrap_or_else(|_| "development".to_string());
+    if app_env != "production" && code.eq_ignore_ascii_case(GLOBAL_TEST_INVITE_CODE) {
+        return Ok(InviteValidation {
+            is_valid: true,
+            issuer_username: Some("staging-test".into()),
+            expires_at: None,
+            error: None,
+        });
+    }
+
     #[derive(sqlx::FromRow)]
     struct InviteWithIssuer {
         expires_at: DateTime<Utc>,

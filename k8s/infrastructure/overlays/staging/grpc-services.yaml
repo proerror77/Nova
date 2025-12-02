@@ -64,11 +64,11 @@ spec:
   ports:
   - name: grpc
     port: 50057
-    targetPort: 9081
+    targetPort: 50057
     protocol: TCP
   - name: http
     port: 8086
-    targetPort: 8081
+    targetPort: 8086
     protocol: TCP
   - name: metrics
     port: 9090

@@ -4,12 +4,13 @@ struct NotificationView: View {
     @Binding var showNotification: Bool
     @State private var showChat = false
     @State private var selectedUserName = ""
+    @State private var selectedConversationId = ""
 
     var body: some View {
         ZStack {
             // 条件渲染：根据状态切换视图
             if showChat {
-                ChatView(showChat: $showChat, userName: selectedUserName, initialMessages: [])
+                ChatView(showChat: $showChat, conversationId: selectedConversationId, userName: selectedUserName)
                     .transition(.identity)
             } else {
                 notificationContent
@@ -75,6 +76,8 @@ struct NotificationView: View {
                                 buttonType: .message,
                                 onMessageTap: {
                                     selectedUserName = "Ethan Miller"
+                                    // TODO: Get actual conversation ID from API
+                                    selectedConversationId = "notification_conv_ethan_miller"
                                     showChat = true
                                 }
                             )

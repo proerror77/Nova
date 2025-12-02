@@ -23,7 +23,8 @@ pub async fn create_post(
             CASE WHEN $3 = 'text-only' THEN '[]'::jsonb ELSE jsonb_build_array($3) END,
             'pending'
         )
-        RETURNING id, user_id, content, caption, media_key, media_type, media_urls, status, created_at, updated_at, deleted_at, soft_delete
+        RETURNING id, user_id, content, caption, media_key, media_type, media_urls, status,
+                  created_at, updated_at, deleted_at, soft_delete::text AS soft_delete
         "#,
     )
     .bind(user_id)
@@ -40,9 +41,10 @@ pub async fn create_post(
 pub async fn find_post_by_id(pool: &PgPool, post_id: Uuid) -> Result<Option<Post>, sqlx::Error> {
     let post = sqlx::query_as::<_, Post>(
         r#"
-        SELECT id, user_id, content, caption, media_key, media_type, media_urls, status, created_at, updated_at, deleted_at, soft_delete
+        SELECT id, user_id, content, caption, media_key, media_type, media_urls, status,
+               created_at, updated_at, deleted_at, soft_delete::text AS soft_delete
         FROM posts
-        WHERE id = $1 AND soft_delete IS NULL
+        WHERE id = $1 AND deleted_at IS NULL
         "#,
     )
     .bind(post_id)
@@ -62,9 +64,10 @@ pub async fn find_posts_by_user(
 ) -> Result<Vec<Post>, sqlx::Error> {
     let posts = sqlx::query_as::<_, Post>(
         r#"
-        SELECT id, user_id, content, caption, media_key, media_type, media_urls, status, created_at, updated_at, deleted_at, soft_delete
+        SELECT id, user_id, content, caption, media_key, media_type, media_urls, status,
+               created_at, updated_at, deleted_at, soft_delete::text AS soft_delete
         FROM posts
-        WHERE user_id = $1 AND soft_delete IS NULL
+        WHERE user_id = $1 AND deleted_at IS NULL
         ORDER BY created_at DESC
         LIMIT $2 OFFSET $3
         "#,
@@ -81,7 +84,7 @@ pub async fn find_posts_by_user(
 /// Count total posts for a user (excluding soft-deleted)
 pub async fn count_posts_by_user(pool: &PgPool, user_id: Uuid) -> Result<i64, sqlx::Error> {
     let row = sqlx::query(
-        "SELECT COUNT(*) as count FROM posts WHERE user_id = $1 AND soft_delete IS NULL",
+        "SELECT COUNT(*) as count FROM posts WHERE user_id = $1 AND deleted_at IS NULL",
     )
     .bind(user_id)
     .fetch_one(pool)
@@ -100,7 +103,7 @@ pub async fn get_recent_published_post_ids(
         r#"
         SELECT id
         FROM posts
-        WHERE soft_delete IS NULL
+        WHERE deleted_at IS NULL
           AND status = 'published'
         ORDER BY created_at DESC
         LIMIT $1 OFFSET $2
@@ -161,7 +164,7 @@ pub async fn soft_delete_post(pool: &PgPool, post_id: Uuid) -> Result<(), sqlx::
     sqlx::query(
         r#"
         UPDATE posts
-        SET soft_delete = NOW(), updated_at = NOW()
+        SET deleted_at = NOW(), updated_at = NOW()
         WHERE id = $1
         "#,
     )
@@ -190,7 +193,7 @@ pub async fn get_post_with_images(
         r#"
         SELECT
             p.id, p.user_id, p.content, p.caption, p.media_key, p.media_type, p.media_urls, p.status,
-            p.created_at, p.updated_at, p.deleted_at, p.soft_delete,
+            p.created_at, p.updated_at, p.deleted_at, p.soft_delete::text AS soft_delete,
             COALESCE(pm.like_count, 0) as like_count,
             COALESCE(pm.comment_count, 0) as comment_count,
             COALESCE(pm.view_count, 0) as view_count,
@@ -200,7 +203,7 @@ pub async fn get_post_with_images(
             (SELECT url FROM post_images WHERE post_id = p.id AND size_variant = 'original' AND status = 'completed' LIMIT 1) as original_url
         FROM posts p
         LEFT JOIN post_metadata pm ON p.id = pm.post_id
-        WHERE p.id = $1 AND p.soft_delete IS NULL
+        WHERE p.id = $1 AND p.deleted_at IS NULL
         "#,
     )
     .bind(post_id)

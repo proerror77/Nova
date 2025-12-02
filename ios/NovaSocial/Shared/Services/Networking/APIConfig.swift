@@ -65,14 +65,14 @@ struct APIConfig {
 
     struct Social {
         static let createLike = "/api/v2/social/like"
-        static let deleteLike = "/api/v2/social/unlike"
-        static let getLikes = "/api/v2/social/likes"
-        static let checkLiked = "/api/v2/social/check-liked"
+        static func deleteLike(_ postId: String) -> String { "/api/v2/social/unlike/\(postId)" }
+        static func getLikes(_ postId: String) -> String { "/api/v2/social/likes/\(postId)" }
+        static func checkLiked(_ postId: String) -> String { "/api/v2/social/check-liked/\(postId)" }
         static let createComment = "/api/v2/social/comment"
-        static let deleteComment = "/api/v2/social/comment/delete"
-        static let getComments = "/api/v2/social/comments"
+        static func deleteComment(_ commentId: String) -> String { "/api/v2/social/comment/\(commentId)" }
+        static func getComments(_ postId: String) -> String { "/api/v2/social/comments/\(postId)" }
         static let createShare = "/api/v2/social/share"
-        static let getShareCount = "/api/v2/social/shares/count"
+        static func getShareCount(_ postId: String) -> String { "/api/v2/social/shares/count/\(postId)" }
         static let batchGetStats = "/api/v2/social/stats/batch"
     }
 
@@ -214,10 +214,23 @@ struct APIConfig {
     struct Chat {
         static let createGroupChat = "/api/v2/chat/groups/create"  // POST 創建群組
         static let getConversations = "/api/v2/chat/conversations"  // GET 獲取對話列表
-        static let sendMessage = "/api/v2/chat/messages"  // POST 發送消息
-        static let getMessages = "/api/v2/chat/messages"  // GET 獲取消息歷史
+        static let createConversation = "/api/v2/chat/conversations"  // POST 創建對話
+        /// POST /api/v2/chat/conversations/{id}/messages 發送消息
+        static func sendMessage(_ conversationId: String) -> String { "/api/v2/chat/conversations/\(conversationId)/messages" }
+        /// GET /api/v2/chat/conversations/{id}/messages 獲取消息歷史
+        static func getMessages(_ conversationId: String) -> String { "/api/v2/chat/conversations/\(conversationId)/messages" }
         /// GET /api/v2/chat/conversations/{id} 獲取群組詳情
         static func getConversation(_ id: String) -> String { "/api/v2/chat/conversations/\(id)" }
+        /// PUT /api/v2/chat/messages/{id} 編輯消息
+        static func editMessage(_ messageId: String) -> String { "/api/v2/chat/messages/\(messageId)" }
+        /// DELETE /api/v2/chat/messages/{id} 刪除消息
+        static func deleteMessage(_ messageId: String) -> String { "/api/v2/chat/messages/\(messageId)" }
+        /// POST /api/v2/chat/conversations/{conversationId}/messages/{messageId}/recall 撤回消息
+        static func recallMessage(conversationId: String, messageId: String) -> String {
+            "/api/v2/chat/conversations/\(conversationId)/messages/\(messageId)/recall"
+        }
+        /// WebSocket 連接端點
+        static let websocket = "/ws/chat"
         /// 未實作的群組成員相關端點預留，避免誤調 404
         static let getGroupDetails = "/api/v2/chat/groups"  // TODO: 後端尚未提供
         static let addGroupMembers = "/api/v2/chat/groups/members/add"  // POST 添加群組成員
@@ -246,6 +259,28 @@ struct APIConfig {
         static func acceptMessageRequest(_ requestId: String) -> String { "/api/v2/message-requests/\(requestId)/accept" }
         /// POST /api/v2/message-requests/{id}/reject 拒絕訊息請求
         static func rejectMessageRequest(_ requestId: String) -> String { "/api/v2/message-requests/\(requestId)/reject" }
+    }
+
+    // MARK: - Search API
+    struct Search {
+        /// GET /api/v2/search - 通用搜索
+        static let search = "/api/v2/search"
+        static let searchAll = "/api/v2/search"  // Alias for SearchService
+        /// GET /api/v2/search/users - 搜索用戶
+        static let users = "/api/v2/search/users"
+        static let searchUsers = "/api/v2/search/users"  // Alias for SearchService
+        /// GET /api/v2/search/posts - 搜索貼文
+        static let posts = "/api/v2/search/posts"
+        static let searchContent = "/api/v2/search/posts"  // Alias for SearchService
+        /// GET /api/v2/search/tags - 搜索標籤
+        static let tags = "/api/v2/search/tags"
+        static let searchHashtags = "/api/v2/search/tags"  // Alias for SearchService
+        /// GET /api/v2/search/suggestions - 搜索建議
+        static let suggestions = "/api/v2/search/suggestions"
+        static let getSuggestions = "/api/v2/search/suggestions"  // Alias for SearchService
+        /// GET /api/v2/search/trending - 熱門搜索
+        static let trending = "/api/v2/search/trending"
+        static let getTrending = "/api/v2/search/trending"  // Alias for SearchService
     }
 
     // MARK: - Service Ports (for direct gRPC access if needed)

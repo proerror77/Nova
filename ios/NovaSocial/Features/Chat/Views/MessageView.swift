@@ -1,7 +1,8 @@
 import SwiftUI
 
 // MARK: - 会话预览数据模型
-struct ConversationPreview {
+struct ConversationPreview: Identifiable {
+    let id: String
     let userName: String
     let lastMessage: String
     let time: String
@@ -17,54 +18,90 @@ struct MessageView: View {
     @State private var showAddOptionsMenu = false
     @State private var showQRScanner = false
     @State private var selectedUserName = "User"
+    @State private var selectedConversationId = ""
     @State private var showImagePicker = false
     @State private var showCamera = false
     @State private var selectedImage: UIImage?
     @State private var showGenerateImage = false
 
-    // 会话预览数据
+    // 会话预览数据 - 从API获取
     @State private var conversations: [ConversationPreview] = []
+    @State private var isLoading = false
+    @State private var errorMessage: String?
+
+    // ChatService 实例
+    private let chatService = ChatService()
 
     init(currentPage: Binding<AppPage>) {
         self._currentPage = currentPage
+    }
 
-        // 初始化用户名
-        var names = ["alice", "Ethan Miller"]
-        let randomNames = ["Liam", "Emma", "Noah", "Olivia", "James", "Ava", "Lucas", "Sophia", "Mason", "Isabella", "Mia", "Alexander", "Charlotte", "Michael", "Amelia", "Daniel", "Harper", "Henry", "Evelyn"].shuffled()
-        names.append(contentsOf: Array(randomNames.prefix(7)))
+    // MARK: - 从API加载会话列表
+    private func loadConversations() async {
+        isLoading = true
+        errorMessage = nil
 
-        // 初始化会话预览数据
-        let messages = [
-            "Hi", "Hello!", "How are you?", "What's up?", "Good morning!",
-            "See you later", "Thanks!", "Sounds good", "Ok", "Sure thing",
-            "Let's meet up", "Call me later", "I'm on my way", "Almost there",
-            "That's awesome!", "Haha", "😊", "👍", "Miss you", "Bye!"
-        ]
+        do {
+            let apiConversations = try await chatService.getConversations()
 
-        let times = [
-            "09:41 PM", "10:30 AM", "Yesterday", "2:15 PM", "11:20 AM",
-            "3:45 PM", "8:30 PM", "Monday", "Tuesday", "5:10 PM"
-        ]
+            #if DEBUG
+            print("[MessageView] Loaded \(apiConversations.count) conversations from API")
+            #endif
 
-        var convos: [ConversationPreview] = []
-        for name in names {
-            // 70% 概率显示真实消息
-            let hasRealMessage = Double.random(in: 0...1) < 0.7
-            let message = hasRealMessage ? (messages.randomElement() ?? "") : "Now let's start chatting!"
-            let time = hasRealMessage ? times.randomElement() ?? "" : ""
-            let hasUnread = hasRealMessage && Double.random(in: 0...1) < 0.6 // 60% 概率有未读
-            let unreadCount = hasUnread ? Int.random(in: 1...5) : 0
+            // 转换为UI模型
+            let previews = apiConversations.map { conv -> ConversationPreview in
+                let userName = conv.name ?? "User \(conv.id.prefix(4))"
+                let lastMsg = conv.lastMessage?.content ?? "Start chatting!"
+                let timeStr = formatTime(conv.lastMessage?.timestamp ?? conv.updatedAt)
 
-            convos.append(ConversationPreview(
-                userName: name,
-                lastMessage: message,
-                time: time,
-                unreadCount: unreadCount,
-                hasUnread: hasUnread
-            ))
+                return ConversationPreview(
+                    id: conv.id,
+                    userName: userName,
+                    lastMessage: lastMsg,
+                    time: timeStr,
+                    unreadCount: conv.unreadCount,
+                    hasUnread: conv.unreadCount > 0
+                )
+            }
+
+            await MainActor.run {
+                self.conversations = previews
+                self.isLoading = false
+            }
+        } catch {
+            #if DEBUG
+            print("[MessageView] Failed to load conversations: \(error)")
+            #endif
+
+            await MainActor.run {
+                self.errorMessage = "Failed to load messages"
+                self.isLoading = false
+                // 如果API失败，显示空列表而不是mock数据
+                self.conversations = []
+            }
         }
+    }
 
-        self._conversations = State(initialValue: convos)
+    // 格式化时间显示
+    private func formatTime(_ date: Date) -> String {
+        let calendar = Calendar.current
+        let now = Date()
+
+        if calendar.isDateInToday(date) {
+            let formatter = DateFormatter()
+            formatter.dateFormat = "h:mm a"
+            return formatter.string(from: date)
+        } else if calendar.isDateInYesterday(date) {
+            return "Yesterday"
+        } else if calendar.isDate(date, equalTo: now, toGranularity: .weekOfYear) {
+            let formatter = DateFormatter()
+            formatter.dateFormat = "EEEE"
+            return formatter.string(from: date)
+        } else {
+            let formatter = DateFormatter()
+            formatter.dateFormat = "MM/dd"
+            return formatter.string(from: date)
+        }
     }
 
     var body: some View {
@@ -73,7 +110,7 @@ struct MessageView: View {
             if showChat {
                 ChatView(
                     showChat: $showChat,
-                    conversationId: "temp_conversation_\(selectedUserName)",
+                    conversationId: selectedConversationId,
                     userName: selectedUserName
                 )
                 .transition(.identity)
@@ -108,6 +145,12 @@ struct MessageView: View {
         }
         .sheet(isPresented: $showCamera) {
             ImagePicker(sourceType: .camera, selectedImage: $selectedImage)
+        }
+        .onAppear {
+            // 页面显示时加载会话列表
+            Task {
+                await loadConversations()
+            }
         }
     }
 
