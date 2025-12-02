@@ -111,7 +111,7 @@ pub async fn get_feed(
                     "User {} follows no one, falling back to global feed",
                     user_id
                 );
-                fetch_global_posts(&state.content_client, limit, offset).await?
+                fetch_global_posts(&state.content_client, user_id, limit, offset).await?
             } else {
                 // Fetch posts from followed users and respect pagination (offset/cursor)
                 // Note: For now we do a simple round-robin scan; ranking-service can be plugged in later.
@@ -176,7 +176,7 @@ pub async fn get_feed(
                 "Graph-service unavailable ({}), falling back to global feed for user {}",
                 e, user_id
             );
-            fetch_global_posts(&state.content_client, limit, offset).await?
+            fetch_global_posts(&state.content_client, user_id, limit, offset).await?
         }
     };
 
@@ -198,31 +198,40 @@ pub async fn get_feed(
 /// or user doesn't follow anyone
 async fn fetch_global_posts(
     content_client: &ContentServiceClient,
+    user_id: Uuid,
     limit: u32,
     offset: usize,
 ) -> Result<(Vec<Uuid>, usize, usize, bool)> {
+    // Prevent unbounded requests in degraded mode
+    let page_limit = limit.min(100).max(1);
+    let request_limit = ((page_limit as usize).saturating_add(offset)).min(500) as i32;
+
     let resp = content_client
         .list_recent_posts(ListRecentPostsRequest {
-            limit: limit as i32,
-            offset: offset as i32,
-            status: ContentStatus::Published as i32,
+            limit: request_limit,
+            exclude_user_id: user_id.to_string(),
         })
         .await
         .map_err(|e| AppError::Internal(format!("Failed to fetch recent posts: {}", e)))?;
 
-    let posts: Vec<Uuid> = resp
-        .posts
+    let all_posts: Vec<Uuid> = resp
+        .post_ids
         .into_iter()
-        .filter_map(|p| Uuid::parse_str(&p.id).ok())
+        .filter_map(|id| Uuid::parse_str(&id).ok())
         .collect();
+
+    let start = offset.min(all_posts.len());
+    let end = (start + page_limit as usize).min(all_posts.len());
+    let posts = all_posts[start..end].to_vec();
 
     let posts_count = posts.len();
     let total_count = offset + posts_count;
-    let has_more = posts_count == limit as usize;
+    // Best-effort has_more: assume more items may exist if we received a full page
+    let has_more = (all_posts.len() as i32) == request_limit && posts_count == page_limit as usize;
 
     info!(
-        "Global feed generated (fallback): posts={}, offset={}, has_more={}",
-        posts_count, offset, has_more
+        "Global feed generated (fallback): posts_page={}, offset={}, requested_limit={}, has_more={}",
+        posts_count, offset, page_limit, has_more
     );
 
     Ok((posts, posts_count, total_count, has_more))
