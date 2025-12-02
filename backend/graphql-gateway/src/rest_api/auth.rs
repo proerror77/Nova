@@ -270,3 +270,72 @@ pub async fn logout(_clients: web::Data<ServiceClients>) -> Result<HttpResponse>
         "message": "Logged out successfully"
     })))
 }
+
+/// GET /api/v2/auth/invites/validate?code=XXXXX
+/// Validate an invite code (public endpoint - no auth required)
+/// Used by mobile clients before registration to check if invite code is valid
+pub async fn validate_invite_code(
+    query: web::Query<ValidateInviteQuery>,
+    clients: web::Data<ServiceClients>,
+) -> Result<HttpResponse> {
+    info!(code = %query.code, "GET /api/v2/auth/invites/validate");
+
+    let mut auth_client = clients.auth_client();
+
+    let request = tonic::Request::new(
+        crate::clients::proto::auth::ValidateInviteRequest {
+            code: query.code.clone(),
+        },
+    );
+
+    match auth_client.validate_invite(request).await {
+        Ok(response) => {
+            let validation = response.into_inner();
+            info!(
+                code = %query.code,
+                is_valid = validation.is_valid,
+                "Invite code validation completed"
+            );
+
+            Ok(HttpResponse::Ok().json(InviteValidationResponse {
+                is_valid: validation.is_valid,
+                issuer_username: validation.issuer_username.filter(|s| !s.is_empty()),
+                expires_at: validation.expires_at.filter(|&t| t != 0),
+                error: validation.error.filter(|s| !s.is_empty()),
+            }))
+        }
+        Err(status) => {
+            error!(
+                code = %query.code,
+                error = %status,
+                "Invite code validation failed"
+            );
+
+            // Return a structured error response for client handling
+            Ok(HttpResponse::BadRequest().json(InviteValidationResponse {
+                is_valid: false,
+                issuer_username: None,
+                expires_at: None,
+                error: Some(status.message().to_string()),
+            }))
+        }
+    }
+}
+
+/// Query parameters for invite validation
+#[derive(Debug, serde::Deserialize)]
+pub struct ValidateInviteQuery {
+    pub code: String,
+}
+
+/// Response for invite validation
+#[derive(Debug, serde::Serialize)]
+pub struct InviteValidationResponse {
+    pub is_valid: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub issuer_username: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expires_at: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
