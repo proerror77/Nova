@@ -161,32 +161,6 @@ struct LoginView: View {
                         .accessibilityIdentifier("createAccountButton")
                         .offset(x: 0, y: 265)
 
-                        // Skip Button - 跳过登录直接进入Home（临时登录模式）
-                        Button(action: {
-                            // 设置临时登录状态
-                            AuthenticationManager.shared.setGuestMode()
-                            currentPage = .home
-                        }) {
-                            Text("Skip")
-                                .font(Font.custom("Helvetica Neue", size: 14).weight(.light))
-                                .foregroundColor(Color(red: 0.77, green: 0.77, blue: 0.77))
-                                .underline()
-                        }
-                        .offset(x: 0, y: 330)
-
-                        // Skip Button - 跳过登录直接进入Home（临时登录模式）
-                        Button(action: {
-                            // 设置临时登录状态
-                            AuthenticationManager.shared.setGuestMode()
-                            currentPage = .home
-                        }) {
-                            Text("Skip")
-                                .font(Font.custom("Helvetica Neue", size: 14).weight(.light))
-                                .foregroundColor(Color(red: 0.77, green: 0.77, blue: 0.77))
-                                .underline()
-                        }
-                        .offset(x: 0, y: 280)
-
                         // Error Message
                         if let errorMessage = errorMessage {
                             Text(errorMessage)
@@ -296,6 +270,10 @@ struct LoginView: View {
                 .frame(width: 375, height: 812)
 
                 Spacer()
+            }
+            .contentShape(Rectangle())
+            .onTapGesture {
+                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
             }
         }
     }

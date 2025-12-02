@@ -182,6 +182,10 @@ struct LocationView: View {
                     }
                     .padding(.horizontal, 18)
                 }
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                }
 
                 Spacer()
 

@@ -70,6 +70,10 @@ struct SearchView: View {
                     }
                     .padding(.top, 16)
                 }
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    isSearchFocused = false
+                }
 
                 Spacer()
             }

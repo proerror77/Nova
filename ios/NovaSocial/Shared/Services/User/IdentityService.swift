@@ -9,7 +9,7 @@ class IdentityService {
     // MARK: - Authentication
 
     /// Register a new user
-    func register(username: String, email: String, password: String, displayName: String, inviteCode: String = "NOVA2025TEST") async throws -> AuthResponse {
+    func register(username: String, email: String, password: String, displayName: String, inviteCode: String = "NOVATEST") async throws -> AuthResponse {
         struct RegisterRequest: Codable {
             let username: String
             let email: String

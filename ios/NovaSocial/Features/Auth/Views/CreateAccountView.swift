@@ -109,17 +109,6 @@ struct CreateAccountView: View {
                                 .animation(.easeInOut(duration: 0.2), value: confirmPassword.isEmpty)
                         }
 
-                        // INVITE CODE Label (只在输入框为空时显示)
-                        if inviteCode.isEmpty {
-                            Text("INVITE CODE")
-                                .font(Font.custom("Helvetica Neue", size: 12).weight(.light))
-                                .lineSpacing(20)
-                                .foregroundColor(.white)
-                                .offset(x: -121.50, y: 118)
-                                .transition(.opacity)
-                                .animation(.easeInOut(duration: 0.2), value: inviteCode.isEmpty)
-                        }
-
                         // SHOW button for PASSWORD
                         Text(showPassword ? "HIDE" : "SHOW")
                             .font(Font.custom("Helvetica Neue", size: 12).weight(.light))
@@ -187,18 +176,6 @@ struct CreateAccountView: View {
                                     .stroke(.white, lineWidth: 0.20)
                             )
                             .offset(x: 0, y: 49.50)
-
-                        // Invite Code Input Field
-                        Rectangle()
-                            .foregroundColor(.clear)
-                            .frame(width: 343, height: 49)
-                            .cornerRadius(6)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 6)
-                                    .inset(by: 0.20)
-                                    .stroke(.white, lineWidth: 0.20)
-                            )
-                            .offset(x: 0, y: 118.50)
                     }
 
                     Group {
@@ -267,17 +244,6 @@ struct CreateAccountView: View {
                             }
                         }
                         .offset(x: 0, y: 49.50)
-
-                        // Invite Code field
-                        TextField("", text: $inviteCode)
-                            .foregroundColor(.white)
-                            .font(Font.custom("Helvetica Neue", size: 14))
-                            .padding(.horizontal, 16)
-                            .frame(width: 343, height: 49)
-                            .autocapitalization(.allCharacters)
-                            .autocorrectionDisabled()
-                            .offset(x: 0, y: 118.50)
-                            .accessibilityIdentifier("inviteCodeTextField")
 
                         // Sign up Button
                         Button(action: {
@@ -417,6 +383,10 @@ struct CreateAccountView: View {
 
                 Spacer()
             }
+            .contentShape(Rectangle())
+            .onTapGesture {
+                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+            }
         }
     }
 
@@ -428,30 +398,49 @@ struct CreateAccountView: View {
         isLoading = true
         errorMessage = nil
 
+        let trimmedUsername = username.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
+        let finalInviteCode = inviteCode.isEmpty ? "NOVATEST" : inviteCode
+
+        #if DEBUG
+        print("[CreateAccountView] Starting registration")
+        print("[CreateAccountView] Username: \(trimmedUsername)")
+        print("[CreateAccountView] Email: \(trimmedEmail)")
+        print("[CreateAccountView] Invite Code: \(finalInviteCode)")
+        #endif
+
         do {
             _ = try await authManager.register(
-                username: username.trimmingCharacters(in: .whitespacesAndNewlines),
-                email: email.trimmingCharacters(in: .whitespacesAndNewlines),
+                username: trimmedUsername,
+                email: trimmedEmail,
                 password: password,
                 displayName: displayName.isEmpty ? username : displayName,
-                inviteCode: inviteCode.isEmpty ? "NOVA2025TEST" : inviteCode
+                inviteCode: finalInviteCode
             )
+            #if DEBUG
+            print("[CreateAccountView] Registration successful!")
+            #endif
             // Success - Navigate to home page
             await MainActor.run {
                 currentPage = .home
             }
         } catch {
+            #if DEBUG
+            print("[CreateAccountView] Registration error: \(error)")
+            print("[CreateAccountView] Error type: \(type(of: error))")
+            print("[CreateAccountView] Error description: \(error.localizedDescription)")
+            #endif
+
             // Provide user-friendly error messages
             if error.localizedDescription.contains("409") || error.localizedDescription.contains("already exists") {
                 errorMessage = "Username or email already exists. Please try another."
             } else if error.localizedDescription.contains("network") || error.localizedDescription.contains("connection") {
                 errorMessage = "Network error. Please check your connection."
+            } else if error.localizedDescription.contains("invite") || error.localizedDescription.contains("code") {
+                errorMessage = "Invalid invite code. Please contact support."
             } else {
-                errorMessage = "Registration failed. Please try again."
+                errorMessage = "Registration failed: \(error.localizedDescription)"
             }
-            #if DEBUG
-            print("[CreateAccountView] Registration error: \(error)")
-            #endif
         }
 
         isLoading = false

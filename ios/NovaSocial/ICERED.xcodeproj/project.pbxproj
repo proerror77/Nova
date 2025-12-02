@@ -20,7 +20,6 @@
 		33A5FB652C0009D96FB844A5 /* CommunicationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4665602C144B266807588223 /* CommunicationService.swift */; };
 		3DB7A7D8B8AABE2D2B5E9F30 /* ProfileSettingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA030D4D06E717B5C40967BE /* ProfileSettingView.swift */; };
 		3F6648708367596A84E3227F /* FeedPostCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = A657E4D4D9CECEAE742EC4F7 /* FeedPostCard.swift */; };
-		3F9AF5D38B3BE095A987F3B4 /* NotificationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E15BEB981BECF002DACF86E /* NotificationView.swift */; };
 		45D7CF62B70956001C70B101 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA1551A659F460A621C63645 /* HomeView.swift */; };
 		4A09C7CE82196707BAB194FB /* SocialService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0DC01C12BC58AA2D98CDC03F /* SocialService.swift */; };
 		5BFEC787522ED006544C8E92 /* IdentityService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E726662A13B99E2BE8109CE4 /* IdentityService.swift */; };
@@ -29,8 +28,6 @@
 		66EFE70500BB7EF714EAAC32 /* ContentService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FA7AA7E22A29086861F985F /* ContentService.swift */; };
 		6919D3922DBD5EBE2C2E3912 /* FeedViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE75D478ADD2861381600DFB /* FeedViewModel.swift */; };
 		6AA9EFC925E3EBA8CC533592 /* LocationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B846FFEC4EDF48BBAC2449C /* LocationView.swift */; };
-		6B199CE5A0EE522763C91F67 /* StartGroupChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D2AE1050C6673E6CDEE76CD /* StartGroupChatView.swift */; };
-		638674e7023c72f06b4cbd24 /* GroupChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = c305a0ac26e55adeed024b77 /* GroupChatView.swift */; };
 		6BDA39BD6F2A0B9ECF7AA1F3 /* ContentModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71B032CF9FD0BCD3724E31EB /* ContentModels.swift */; };
 		780124131B160D8EE47456B9 /* App.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0393038DC4D72E8421D1B35 /* App.swift */; };
 		798BD538D3CE05BE08542CF8 /* DevicesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 539767459F07A98D4EFC00A8 /* DevicesView.swift */; };
@@ -40,7 +37,6 @@
 		897C328B00A7B7A919E1CD8A /* API_INTEGRATION_README.md in Resources */ = {isa = PBXBuildFile; fileRef = B9C4CFAF123EE4E11450EE6E /* API_INTEGRATION_README.md */; };
 		8B53029B6B554F0C81155B40 /* ProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3458B914CACC60BDB462C58D /* ProfileView.swift */; };
 		8B8925BC9FAC9B30C397E33D /* NewPostView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55318219C3A650A6D7EC96E0 /* NewPostView.swift */; };
-		8C92AB9C4586EEC5BE24A9A7 /* AddFriendsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 75C0B0A17D8876583E4CC85C /* AddFriendsView.swift */; };
 		8E005900B23D00B64805FD85 /* DesignTokens.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDA5192B35945D0638208E85 /* DesignTokens.swift */; };
 		8E753B052918F9BBAA78BA50 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5F77721CA146200F98657F7 /* SettingsView.swift */; };
 		8F09936DEAE3749EBCFAB662 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 0CEC6778F7F6BAFBBBF847B9 /* Assets.xcassets */; };
@@ -52,13 +48,13 @@
 		AB5DF317C7D5976DC7227835 /* AccountsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EA4FC96E61E31607C63D686 /* AccountsView.swift */; };
 		AF450114DB4865087E55B26C /* FeedService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 64D93ADAC760BE1CCB6AFEA8 /* FeedService.swift */; };
 		BDC106FE62EE927E9254E802 /* NotificationModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2209DC0250249AF1C3BB7DA4 /* NotificationModels.swift */; };
-		C083A5BDD281AC1B35C99172 /* SearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE91F4052F01FE38EBE1170A /* SearchView.swift */; };
 		C227819EE09A07E77B0C448F /* AppPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 817F6537589781480741FFB5 /* AppPage.swift */; };
 		C82B6B2CD19D5A1EC755D09B /* UserService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29337E35C69E1124B0E50774 /* UserService.swift */; };
 		CB37E7011E14A06A0EBD08EB /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = CEB8BD0C8A93BBE1E9670B07 /* APIClient.swift */; };
 		CCAFF6E79E7ACB7CB46172FF /* GraphService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A242CA445BD03C224A4AAA2 /* GraphService.swift */; };
 		CDE6F3A1AA8B69AB2D9C0603 /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B4B2243943DAE524DAA9499B /* ChatView.swift */; };
 		CREATEACCOUNT001 /* CreateAccountView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CREATEACCOUNT002 /* CreateAccountView.swift */; };
+		CHATSERVICE001 /* ChatService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CHATSERVICE002 /* ChatService.swift */; };
 		D216B637243C8D833CF86F9B /* ProfileData.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC8A907430998B947546C97 /* ProfileData.swift */; };
 		D9010C810B0698935B15E119 /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15BE5EA996149A16BBC12B09 /* LoginView.swift */; };
 		DA25034A61BE32AED01A9B16 /* ICONS_MAPPING.md in Resources */ = {isa = PBXBuildFile; fileRef = C932A10966CC60CB5210880E /* ICONS_MAPPING.md */; };
@@ -68,13 +64,17 @@
 		E685ED5F9161C354B6B9998E /* SearchService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3EAA5060C5B9890ED58A464 /* SearchService.swift */; };
 		E7F8D1272D7C4673E8DAC22C /* ReportModal.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79AE620603A1ABD742C2254B /* ReportModal.swift */; };
 		EA1908EFF200B3981CAEDDB8 /* ConversationModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B7F29AF2BD2FC517E87B40A /* ConversationModels.swift */; };
-		F1EC16AC74BAE163D51D5ADF /* QRCodeScannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11B58E321CDB3D79E807514 /* QRCodeScannerView.swift */; };
 		F8F07FF6FE20AC20ECCB5BF2 /* APIError.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3880EF1CA343B17A09E2209E /* APIError.swift */; };
 		FFBE6F87D8D9D1645B5A0913 /* APIConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = E41CFF50904A2F54FD5621BF /* APIConfig.swift */; };
 		SPLASHVIEW001 /* SplashScreenView.swift in Sources */ = {isa = PBXBuildFile; fileRef = SPLASHVIEW002 /* SplashScreenView.swift */; };
 		WELCOMEVIEW001 /* WelcomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = WELCOMEVIEW002 /* WelcomeView.swift */; };
 		7F8BF36C87774F6FA10FC78D /* GenerateImage01View.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01DB89BF1F554C0AA4C14AAD /* GenerateImage01View.swift */; };
-		UITEST001 /* ICEREDUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = UITEST002 /* ICEREDUITests.swift */; };
+		A1B2C3D4E5F6789012345678 /* AddFriendsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1E2D3C4B5A69780C1234567 /* AddFriendsView.swift */; };
+		B2C3D4E5F67890123456789A /* GroupChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2D3C4B5A697801C23456789 /* GroupChatView.swift */; };
+		C3D4E5F6789012345678901B /* StartGroupChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3C4B5A697801C2345678901 /* StartGroupChatView.swift */; };
+		D4E5F6789012345678901BCD /* QRCodeScannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4B5A697801C234567890123 /* QRCodeScannerView.swift */; };
+		E5F67890123456789012BCDE /* NotificationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5A697801C23456789012345 /* NotificationView.swift */; };
+		F67890123456789012BCDEF0 /* SearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A697801C2345678901234567 /* SearchView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -99,18 +99,14 @@
 		3EBFE6879F150AA4EC08471A /* InviteFriendsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InviteFriendsView.swift; sourceTree = "<group>"; };
 		45DA960EAF1BBBBC18F81EC3 /* MessageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageView.swift; sourceTree = "<group>"; };
 		4665602C144B266807588223 /* CommunicationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommunicationService.swift; sourceTree = "<group>"; };
-		4D2AE1050C6673E6CDEE76CD /* StartGroupChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StartGroupChatView.swift; sourceTree = "<group>"; };
-		c305a0ac26e55adeed024b77 /* GroupChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupChatView.swift; sourceTree = "<group>"; };
 		539767459F07A98D4EFC00A8 /* DevicesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DevicesView.swift; sourceTree = "<group>"; };
 		55318219C3A650A6D7EC96E0 /* NewPostView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewPostView.swift; sourceTree = "<group>"; };
-		5E15BEB981BECF002DACF86E /* NotificationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationView.swift; sourceTree = "<group>"; };
 		5EA4FC96E61E31607C63D686 /* AccountsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountsView.swift; sourceTree = "<group>"; };
 		5FA7AA7E22A29086861F985F /* ContentService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentService.swift; sourceTree = "<group>"; };
 		64D93ADAC760BE1CCB6AFEA8 /* FeedService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedService.swift; sourceTree = "<group>"; };
 		6A242CA445BD03C224A4AAA2 /* GraphService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GraphService.swift; sourceTree = "<group>"; };
 		6B7F29AF2BD2FC517E87B40A /* ConversationModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationModels.swift; sourceTree = "<group>"; };
 		71B032CF9FD0BCD3724E31EB /* ContentModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentModels.swift; sourceTree = "<group>"; };
-		75C0B0A17D8876583E4CC85C /* AddFriendsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddFriendsView.swift; sourceTree = "<group>"; };
 		79AE620603A1ABD742C2254B /* ReportModal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReportModal.swift; sourceTree = "<group>"; };
 		817F6537589781480741FFB5 /* AppPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppPage.swift; sourceTree = "<group>"; };
 		935F737074559D05F95D4EF0 /* CommentSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommentSheetView.swift; sourceTree = "<group>"; };
@@ -122,7 +118,6 @@
 		B0393038DC4D72E8421D1B35 /* App.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App.swift; sourceTree = "<group>"; };
 		B4B2243943DAE524DAA9499B /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
 		B9C4CFAF123EE4E11450EE6E /* API_INTEGRATION_README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = API_INTEGRATION_README.md; sourceTree = "<group>"; };
-		BE91F4052F01FE38EBE1170A /* SearchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchView.swift; sourceTree = "<group>"; };
 		C258A7984F0CD3E9100A3EDC /* CarouselCardItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarouselCardItem.swift; sourceTree = "<group>"; };
 		C932A10966CC60CB5210880E /* ICONS_MAPPING.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = ICONS_MAPPING.md; sourceTree = "<group>"; };
 		CA030D4D06E717B5C40967BE /* ProfileSettingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileSettingView.swift; sourceTree = "<group>"; };
@@ -132,6 +127,7 @@
 		CE75D478ADD2861381600DFB /* FeedViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedViewModel.swift; sourceTree = "<group>"; };
 		CEB8BD0C8A93BBE1E9670B07 /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
 		CREATEACCOUNT002 /* CreateAccountView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateAccountView.swift; sourceTree = "<group>"; };
+		CHATSERVICE002 /* ChatService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatService.swift; sourceTree = "<group>"; };
 		D3EAA5060C5B9890ED58A464 /* SearchService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchService.swift; sourceTree = "<group>"; };
 		D49E279D9239481D8A58211F /* CommentCardItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommentCardItem.swift; sourceTree = "<group>"; };
 		D4B8234BED929FB978C1D102 /* DateExtension.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DateExtension.swift; sourceTree = "<group>"; };
@@ -144,38 +140,24 @@
 		E726662A13B99E2BE8109CE4 /* IdentityService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdentityService.swift; sourceTree = "<group>"; };
 		EA1551A659F460A621C63645 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
 		EBD7242399015D38E8A1EC8C /* BottomTabBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BottomTabBar.swift; sourceTree = "<group>"; };
-		F11B58E321CDB3D79E807514 /* QRCodeScannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QRCodeScannerView.swift; sourceTree = "<group>"; };
 		SPLASHVIEW002 /* SplashScreenView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SplashScreenView.swift; sourceTree = "<group>"; };
 		WELCOMEVIEW002 /* WelcomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeView.swift; sourceTree = "<group>"; };
 		01DB89BF1F554C0AA4C14AAD /* GenerateImage01View.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenerateImage01View.swift; sourceTree = "<group>"; };
-		UITEST002 /* ICEREDUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ICEREDUITests.swift; sourceTree = "<group>"; };
-		UITEST003 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		UITEST004 /* ICEREDUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ICEREDUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		F1E2D3C4B5A69780C1234567 /* AddFriendsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddFriendsView.swift; sourceTree = "<group>"; };
+		E2D3C4B5A697801C23456789 /* GroupChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupChatView.swift; sourceTree = "<group>"; };
+		D3C4B5A697801C2345678901 /* StartGroupChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StartGroupChatView.swift; sourceTree = "<group>"; };
+		C4B5A697801C234567890123 /* QRCodeScannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QRCodeScannerView.swift; sourceTree = "<group>"; };
+		B5A697801C23456789012345 /* NotificationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationView.swift; sourceTree = "<group>"; };
+		A697801C2345678901234567 /* SearchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
-		006151F28494FC036FCC99EF /* Views */ = {
-			isa = PBXGroup;
-			children = (
-				75C0B0A17D8876583E4CC85C /* AddFriendsView.swift */,
-			);
-			path = Views;
-			sourceTree = "<group>";
-		};
 		02A5BB6837251A426E7FC3B0 /* Graph */ = {
 			isa = PBXGroup;
 			children = (
 				6A242CA445BD03C224A4AAA2 /* GraphService.swift */,
 			);
 			path = Graph;
-			sourceTree = "<group>";
-		};
-		0343A16899A0A367949D493E /* Views */ = {
-			isa = PBXGroup;
-			children = (
-				F11B58E321CDB3D79E807514 /* QRCodeScannerView.swift */,
-			);
-			path = Views;
 			sourceTree = "<group>";
 		};
 		0CF78FB2E7A0750A45C6EA63 /* Views */ = {
@@ -224,27 +206,13 @@
 			path = Chat;
 			sourceTree = "<group>";
 		};
-		2F4594B2B14AE664BBCA5220 /* Views */ = {
-			isa = PBXGroup;
-			children = (
-				4D2AE1050C6673E6CDEE76CD /* StartGroupChatView.swift */,
-				c305a0ac26e55adeed024b77 /* GroupChatView.swift */,
-			);
-			path = Views;
-			sourceTree = "<group>";
-		};
 		30188A2E994C571943EC7EDF /* Features */ = {
 			isa = PBXGroup;
 			children = (
 				SPLASHGROUP001 /* Splash */,
 				C33CE8D38AC07ED4CAE8196A /* Auth */,
 				E38A78AF007C03E832DC0CDA /* Home */,
-				91EEF53CA9B004D13EF89FFB /* Notifications */,
-				B6770E5D79E6FAA2821FB47A /* Search */,
 				23D90C1C4206D55926A7DE18 /* Chat */,
-				7F95E4CD22DD4EDFCAF02160 /* AddFriends */,
-				4A1CE5D47117E3AB73018CE3 /* GroupChat */,
-				B5899182A0A95F282DBEC286 /* QRScanner */,
 				C4D9377AE46FE3A69C99E0E6 /* CreatePost */,
 				8D8AB230DC69647EC22A8EB9 /* Alice */,
 				16C2885A5BAACBDF5F06FD49 /* Profile */,
@@ -258,17 +226,11 @@
 			children = (
 				99C5067F8E29CAD08D236D49 /* Components */,
 				EA1551A659F460A621C63645 /* HomeView.swift */,
+				B5A697801C23456789012345 /* NotificationView.swift */,
 				02124441331C326D27EC0A72 /* RankingListView.swift */,
+				A697801C2345678901234567 /* SearchView.swift */,
 			);
 			path = Views;
-			sourceTree = "<group>";
-		};
-		4A1CE5D47117E3AB73018CE3 /* GroupChat */ = {
-			isa = PBXGroup;
-			children = (
-				2F4594B2B14AE664BBCA5220 /* Views */,
-			);
-			path = GroupChat;
 			sourceTree = "<group>";
 		};
 		4B00C33713233290733461B2 /* Social */ = {
@@ -298,8 +260,12 @@
 		537B1E34BAACB00A8A3B4412 /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				F1E2D3C4B5A69780C1234567 /* AddFriendsView.swift */,
 				B4B2243943DAE524DAA9499B /* ChatView.swift */,
+				E2D3C4B5A697801C23456789 /* GroupChatView.swift */,
 				45DA960EAF1BBBBC18F81EC3 /* MessageView.swift */,
+				C4B5A697801C234567890123 /* QRCodeScannerView.swift */,
+				D3C4B5A697801C2345678901 /* StartGroupChatView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -401,7 +367,6 @@
 			isa = PBXGroup;
 			children = (
 				1D3041E7FCC0ACD7F53D08BA /* ICERED.app */,
-				UITEST004 /* ICEREDUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -414,14 +379,6 @@
 				3880EF1CA343B17A09E2209E /* APIError.swift */,
 			);
 			path = Networking;
-			sourceTree = "<group>";
-		};
-		7F95E4CD22DD4EDFCAF02160 /* AddFriends */ = {
-			isa = PBXGroup;
-			children = (
-				006151F28494FC036FCC99EF /* Views */,
-			);
-			path = AddFriends;
 			sourceTree = "<group>";
 		};
 		81964BD8B3D4CD6D68503851 /* UI */ = {
@@ -473,14 +430,6 @@
 			path = Alice;
 			sourceTree = "<group>";
 		};
-		91EEF53CA9B004D13EF89FFB /* Notifications */ = {
-			isa = PBXGroup;
-			children = (
-				EB796057FC68D65358E5AF8B /* Views */,
-			);
-			path = Notifications;
-			sourceTree = "<group>";
-		};
 		944F1DB47089C67AD79B379A /* Views */ = {
 			isa = PBXGroup;
 			children = (
@@ -519,13 +468,20 @@
 			path = Communication;
 			sourceTree = "<group>";
 		};
+		CHATSERVICEGROUP /* Chat */ = {
+			isa = PBXGroup;
+			children = (
+				CHATSERVICE002 /* ChatService.swift */,
+			);
+			path = Chat;
+			sourceTree = "<group>";
+		};
 		A4D9DE00AA821932BE8D62A2 = {
 			isa = PBXGroup;
 			children = (
 				30188A2E994C571943EC7EDF /* Features */,
 				83156329836565A2778B94AC /* NovaSocial */,
 				565E49CEA7D25E6D91A52C2B /* Shared */,
-				UITESTGROUP001 /* ICEREDUITests */,
 				7C3FDB1C3B7BCF5AF8E3D483 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -546,14 +502,6 @@
 			path = ViewModels;
 			sourceTree = "<group>";
 		};
-		A90C5F8B5E3AFEF0F56E9835 /* Views */ = {
-			isa = PBXGroup;
-			children = (
-				BE91F4052F01FE38EBE1170A /* SearchView.swift */,
-			);
-			path = Views;
-			sourceTree = "<group>";
-		};
 		B29DD43393229D0953E20572 /* Modals */ = {
 			isa = PBXGroup;
 			children = (
@@ -571,22 +519,6 @@
 				WELCOMEVIEW002 /* WelcomeView.swift */,
 			);
 			path = Views;
-			sourceTree = "<group>";
-		};
-		B5899182A0A95F282DBEC286 /* QRScanner */ = {
-			isa = PBXGroup;
-			children = (
-				0343A16899A0A367949D493E /* Views */,
-			);
-			path = QRScanner;
-			sourceTree = "<group>";
-		};
-		B6770E5D79E6FAA2821FB47A /* Search */ = {
-			isa = PBXGroup;
-			children = (
-				A90C5F8B5E3AFEF0F56E9835 /* Views */,
-			);
-			path = Search;
 			sourceTree = "<group>";
 		};
 		C16D0147580A76D956974C8C /* Notification */ = {
@@ -627,6 +559,7 @@
 				4E85EECF31BEE6AC3820E20B /* Feed */,
 				E208F4762BA09D9DB85B836A /* Security */,
 				DBF089D6F321073A5A00AEED /* Auth */,
+				CHATSERVICEGROUP /* Chat */,
 				9BB40D4F675B1E0C8E8D63B8 /* Communication */,
 				6F8E7CD61F97ECE43F48E0E4 /* Content */,
 				02A5BB6837251A426E7FC3B0 /* Graph */,
@@ -673,14 +606,6 @@
 			path = Home;
 			sourceTree = "<group>";
 		};
-		EB796057FC68D65358E5AF8B /* Views */ = {
-			isa = PBXGroup;
-			children = (
-				5E15BEB981BECF002DACF86E /* NotificationView.swift */,
-			);
-			path = Views;
-			sourceTree = "<group>";
-		};
 		SPLASHGROUP001 /* Splash */ = {
 			isa = PBXGroup;
 			children = (
@@ -697,34 +622,7 @@
 			path = Views;
 			sourceTree = "<group>";
 		};
-		UITESTGROUP001 /* ICEREDUITests */ = {
-			isa = PBXGroup;
-			children = (
-				UITEST002 /* ICEREDUITests.swift */,
-				UITEST003 /* Info.plist */,
-			);
-			path = ICEREDUITests;
-			sourceTree = "<group>";
-		};
 /* End PBXGroup section */
-
-/* Begin PBXContainerItemProxy section */
-		UITESTPROXY001 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = 5E408F8D0DDC235DCAE790E7 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = ACADFBFE15FADF5A1AF04334;
-			remoteInfo = ICERED;
-		};
-/* End PBXContainerItemProxy section */
-
-/* Begin PBXTargetDependency section */
-		UITESTDEP001 /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = ACADFBFE15FADF5A1AF04334 /* ICERED */;
-			targetProxy = UITESTPROXY001 /* PBXContainerItemProxy */;
-		};
-/* End PBXTargetDependency section */
 
 /* Begin PBXNativeTarget section */
 		ACADFBFE15FADF5A1AF04334 /* ICERED */ = {
@@ -744,23 +642,6 @@
 			productName = ICERED;
 			productReference = 1D3041E7FCC0ACD7F53D08BA /* ICERED.app */;
 			productType = "com.apple.product-type.application";
-		};
-		UITESTTARGET001 /* ICEREDUITests */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = UITESTCONFIGLIST001 /* Build configuration list for PBXNativeTarget "ICEREDUITests" */;
-			buildPhases = (
-				UITESTSOURCES001 /* Sources */,
-				UITESTRESOURCES001 /* Resources */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-				UITESTDEP001 /* PBXTargetDependency */,
-			);
-			name = ICEREDUITests;
-			productName = ICEREDUITests;
-			productReference = UITEST004 /* ICEREDUITests.xctest */;
-			productType = "com.apple.product-type.bundle.ui-testing";
 		};
 /* End PBXNativeTarget section */
 
@@ -785,7 +666,6 @@
 			projectRoot = "";
 			targets = (
 				ACADFBFE15FADF5A1AF04334 /* ICERED */,
-				UITESTTARGET001 /* ICEREDUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -802,24 +682,9 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		UITESTRESOURCES001 /* Resources */ = {
-			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-		UITESTSOURCES001 /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				UITEST001 /* ICEREDUITests.swift in Sources */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 		2EB212114C3B8FD6E081C091 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -838,7 +703,6 @@
 				FFBE6F87D8D9D1645B5A0913 /* APIConfig.swift in Sources */,
 				F8F07FF6FE20AC20ECCB5BF2 /* APIError.swift in Sources */,
 				AB5DF317C7D5976DC7227835 /* AccountsView.swift in Sources */,
-				8C92AB9C4586EEC5BE24A9A7 /* AddFriendsView.swift in Sources */,
 				81DBF2635C69458C97BF413D /* AliceView.swift in Sources */,
 				7F8BF36C87774F6FA10FC78D /* GenerateImage01View.swift in Sources */,
 				780124131B160D8EE47456B9 /* App.swift in Sources */,
@@ -847,6 +711,7 @@
 				OAUTHSERVICE001 /* OAuthService.swift in Sources */,
 				63B22A9F26DFB37DE9D67ACD /* CarouselView.swift in Sources */,
 				CDE6F3A1AA8B69AB2D9C0603 /* ChatView.swift in Sources */,
+				CHATSERVICE001 /* ChatService.swift in Sources */,
 				33A5FB652C0009D96FB844A5 /* CommunicationService.swift in Sources */,
 				6BDA39BD6F2A0B9ECF7AA1F3 /* ContentModels.swift in Sources */,
 				66EFE70500BB7EF714EAAC32 /* ContentService.swift in Sources */,
@@ -866,20 +731,15 @@
 				DA5146CD4EA5529311C25F18 /* NavigationManager.swift in Sources */,
 				8B8925BC9FAC9B30C397E33D /* NewPostView.swift in Sources */,
 				BDC106FE62EE927E9254E802 /* NotificationModels.swift in Sources */,
-				3F9AF5D38B3BE095A987F3B4 /* NotificationView.swift in Sources */,
 				D216B637243C8D833CF86F9B /* ProfileData.swift in Sources */,
 				3DB7A7D8B8AABE2D2B5E9F30 /* ProfileSettingView.swift in Sources */,
 				8B53029B6B554F0C81155B40 /* ProfileView.swift in Sources */,
-				F1EC16AC74BAE163D51D5ADF /* QRCodeScannerView.swift in Sources */,
 				E7F8D1272D7C4673E8DAC22C /* ReportModal.swift in Sources */,
 				28DB49853F12862488ED815C /* SearchModels.swift in Sources */,
 				E685ED5F9161C354B6B9998E /* SearchService.swift in Sources */,
-				C083A5BDD281AC1B35C99172 /* SearchView.swift in Sources */,
 				8E753B052918F9BBAA78BA50 /* SettingsView.swift in Sources */,
 				947975D4CFDA4B870FE1DD42 /* SimpleCarouselView.swift in Sources */,
 				4A09C7CE82196707BAB194FB /* SocialService.swift in Sources */,
-				6B199CE5A0EE522763C91F67 /* StartGroupChatView.swift in Sources */,
-				638674e7023c72f06b4cbd24 /* GroupChatView.swift in Sources */,
 				0F11FE719B8F4B76047CA6BA /* ThankYouModal.swift in Sources */,
 				E5A9BFF109109BA9B0D167FF /* UserModels.swift in Sources */,
 				03790B19E7A59D67154C1C74 /* UserProfileView.swift in Sources */,
@@ -887,6 +747,12 @@
 				CREATEACCOUNT001 /* CreateAccountView.swift in Sources */,
 				WELCOMEVIEW001 /* WelcomeView.swift in Sources */,
 				SPLASHVIEW001 /* SplashScreenView.swift in Sources */,
+				A1B2C3D4E5F6789012345678 /* AddFriendsView.swift in Sources */,
+				B2C3D4E5F67890123456789A /* GroupChatView.swift in Sources */,
+				C3D4E5F6789012345678901B /* StartGroupChatView.swift in Sources */,
+				D4E5F6789012345678901BCD /* QRCodeScannerView.swift in Sources */,
+				E5F67890123456789012BCDE /* NotificationView.swift in Sources */,
+				F67890123456789012BCDEF0 /* SearchView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1058,58 +924,6 @@
 			};
 			name = Debug;
 		};
-		UITESTCONFIG001 /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				BUNDLE_LOADER = "$(TEST_HOST)";
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 94DTB4RN55;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = ICEREDUITests/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-					"@loader_path/Frameworks",
-				);
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.bruce.figmadesignapp.ICEREDUITests;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = iphoneos;
-				SWIFT_EMIT_LOC_STRINGS = NO;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_TARGET_NAME = ICERED;
-			};
-			name = Debug;
-		};
-		UITESTCONFIG002 /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				BUNDLE_LOADER = "$(TEST_HOST)";
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 94DTB4RN55;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = ICEREDUITests/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-					"@loader_path/Frameworks",
-				);
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.bruce.figmadesignapp.ICEREDUITests;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = iphoneos;
-				SWIFT_EMIT_LOC_STRINGS = NO;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_TARGET_NAME = ICERED;
-			};
-			name = Release;
-		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -1127,15 +941,6 @@
 			buildConfigurations = (
 				745621F622BA4F1283F1268F /* Debug */,
 				447C4692A7535B7D745B4C8A /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Debug;
-		};
-		UITESTCONFIGLIST001 /* Build configuration list for PBXNativeTarget "ICEREDUITests" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				UITESTCONFIG001 /* Debug */,
-				UITESTCONFIG002 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;

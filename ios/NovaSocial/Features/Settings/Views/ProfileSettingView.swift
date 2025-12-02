@@ -198,6 +198,10 @@ struct ProfileSettingView: View {
                         .padding(.horizontal, 12)
                     }
                 }
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                }
 
                 Spacer()
             }
