@@ -1,6 +1,25 @@
 import SwiftUI
 import PhotosUI
 
+// MARK: - Share Sheet Component
+
+/// iOS 原生分享面板组件
+struct ShareSheet: UIViewControllerRepresentable {
+    let items: [Any]
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        let controller = UIActivityViewController(
+            activityItems: items,
+            applicationActivities: nil
+        )
+        return controller
+    }
+
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {
+        // No update needed
+    }
+}
+
 struct ProfileView: View {
     @Binding var currentPage: AppPage
     // Use ObservedObject for shared singleton (not StateObject which implies ownership)
@@ -14,10 +33,22 @@ struct ProfileView: View {
     @State private var showCamera = false
     @State private var selectedImage: UIImage?
     @State private var showGenerateImage = false
+    @State private var showShareSheet = false
+    @State private var localAvatarImage: UIImage? = nil  // 本地选择的头像
+
 
     // Computed property for user display
     private var displayUser: UserProfile? {
         authManager.currentUser ?? profileData.userProfile
+    }
+
+    // 分享内容
+    private var shareItems: [Any] {
+        guard let userId = displayUser?.id else { return [] }
+        let username = displayUser?.username ?? "user"
+        let shareUrl = URL(string: "https://nova.social/user/\(userId)") ?? URL(string: "https://nova.social")!
+        let shareText = "Check out \(username)'s profile on ICERED!"
+        return [shareText, shareUrl]
     }
 
     var body: some View {
@@ -46,6 +77,9 @@ struct ProfileView: View {
                 if let photoItem = newValue,
                    let data = try? await photoItem.loadTransferable(type: Data.self),
                    let image = UIImage(data: data) {
+                    // 立即显示选中的照片
+                    localAvatarImage = image
+                    // 后台上传到服务器
                     await profileData.uploadAvatar(image: image)
                 }
             }
@@ -58,72 +92,97 @@ struct ProfileView: View {
             Color.white
                 .ignoresSafeArea()
 
+            VStack(spacing: -240) {
+                // MARK: - 区域1：用户信息头部（独立高度控制）
+                userHeaderSection
+                    .frame(height: 600)  // 可独立调整此高度
+
+                // MARK: - 区域2：内容区域（独立高度控制）
+                contentSection
+            }
+            .overlay(alignment: .bottom) {
+                // MARK: - 底部导航栏
+                bottomNavigationBar
+            }
+
+            // MARK: - 照片选项弹窗
+            if showPhotoOptions {
+                photoOptionsModal
+            }
+        }
+        .ignoresSafeArea()
+        .task {
+            // Use current user from AuthenticationManager
+            if let userId = authManager.currentUser?.id {
+                await profileData.loadUserProfile(userId: userId)
+            }
+        }
+        .sheet(isPresented: $showNewPost) {
+            NewPostView(showNewPost: $showNewPost)
+        }
+        .sheet(isPresented: $showShareSheet) {
+            ShareSheet(items: shareItems)
+        }
+    }
+
+    // MARK: - 用户信息头部区域
+    private var userHeaderSection: some View {
+        ZStack(alignment: .top) {
+            // 背景图片
+            Image("Profile-background")
+                .resizable()
+                .scaledToFill()
+                .frame(maxWidth: .infinity)
+                .clipped()
+                .blur(radius: 20)
+                .overlay(
+                    Color.black.opacity(0.3)
+                )
+                .ignoresSafeArea(edges: .top)
+
             VStack(spacing: 0) {
-                // MARK: - 顶部背景区域
-                ZStack(alignment: .top) {
-                    // 背景图片
-                    Image("Account-background")
-                        .resizable()
-                        .scaledToFill()
-                        .frame(height: 500)
-                        .clipped()
-                        .blur(radius: 20)
-                        .overlay(
-                            Color.black.opacity(0.3)
-                        )
-                        .ignoresSafeArea(edges: .top)
+                // MARK: - 顶部导航栏
+                HStack {
+                    Spacer()
 
-                    VStack(spacing: 0) {
-                        // MARK: - 顶部导航栏
-                        HStack {
-                            // 左侧：用户名 + 下拉箭头
-                            HStack(spacing: 8) {
-                                Text(displayUser?.displayName ?? displayUser?.username ?? "User")
-                                    .font(.system(size: 20, weight: .medium))
-                                    .foregroundColor(.white)
-
-                                Image(systemName: "chevron.down")
-                                    .font(.system(size: 14))
-                                    .foregroundColor(.white)
-                            }
-
-                            Spacer()
-
-                            // 右侧：分享和设置图标
-                            HStack(spacing: 20) {
-                                Button(action: {
-                                    profileData.shareProfile()
-                                }) {
-                                    Image(systemName: "square.and.arrow.up")
-                                        .font(.system(size: 22))
-                                        .foregroundColor(.white)
-                                }
-
-                                Button(action: {
-                                    currentPage = .setting
-                                }) {
-                                    Image(systemName: "gearshape")
-                                        .font(.system(size: 22))
-                                        .foregroundColor(.white)
-                                }
-                            }
+                    // 右侧：分享和设置图标
+                    HStack(spacing: 20) {
+                        Button(action: {
+                            showShareSheet = true
+                        }) {
+                            Image(systemName: "square.and.arrow.up")
+                                .font(.system(size: 22))
+                                .foregroundColor(.white)
                         }
-                        .padding(.horizontal, 20)
-                        .padding(.top, 60)
-                        .padding(.bottom, 30)
+
+                        Button(action: {
+                            currentPage = .setting
+                        }) {
+                            Image(systemName: "gearshape")
+                                .font(.system(size: 22))
+                                .foregroundColor(.white)
+                        }
+                    }
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 125)
+                .padding(.bottom, 0)
 
                         // MARK: - 用户信息区域
                         VStack(spacing: 16) {
-                            // 头像
+                            // 头像（居中显示）
                             ZStack(alignment: .bottomTrailing) {
-                                // 外圈白色边框
-                                Circle()
-                                    .fill(Color.white)
-                                    .frame(width: 110, height: 110)
-
-                                // 头像图片
-                                if let avatarUrl = profileData.userProfile?.avatarUrl,
-                                   let url = URL(string: avatarUrl) {
+                                // 头像图片 - 优先显示本地选择的照片
+                                if let localImage = localAvatarImage {
+                                    // 显示本地选择的照片
+                                    Image(uiImage: localImage)
+                                        .resizable()
+                                        .scaledToFill()
+                                        .frame(width: 100, height: 100)
+                                        .clipShape(Circle())
+                                } else if let avatarUrl = profileData.userProfile?.avatarUrl,
+                                          let url = URL(string: avatarUrl) {
+                                    // 显示服务器上的头像
                                     AsyncImage(url: url) { image in
                                         image
                                             .resizable()
@@ -135,12 +194,13 @@ struct ProfileView: View {
                                     .frame(width: 100, height: 100)
                                     .clipShape(Circle())
                                 } else {
+                                    // 默认占位符
                                     Circle()
                                         .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
                                         .frame(width: 100, height: 100)
                                 }
 
-                                // 加号按钮
+                                // 加号按钮（右下角）
                                 PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
                                     ZStack {
                                         Circle()
@@ -152,8 +212,9 @@ struct ProfileView: View {
                                             .foregroundColor(.white)
                                     }
                                 }
-                                .offset(x: -5, y: -5)
+                                .offset(x: 0, y: 0)
                             }
+                            .frame(maxWidth: .infinity)  // 居中到整个页面
 
                             // 用户名
                             Text(displayUser?.displayName ?? displayUser?.username ?? "User")
@@ -210,7 +271,7 @@ struct ProfileView: View {
 
                                 // Posts
                                 VStack(spacing: 4) {
-                                    Text("Posts")
+                                    Text("Likes")
                                         .font(.system(size: 16))
                                         .foregroundColor(.white)
                                     Text("\(displayUser?.safePostCount ?? 0)")
@@ -220,7 +281,7 @@ struct ProfileView: View {
                                 .frame(maxWidth: .infinity)
                             }
                             .padding(.horizontal, 40)
-                            .padding(.top, 10)
+                            .padding(.top, 45)
 
                             // MARK: - 认证徽章
                             if displayUser?.safeIsVerified == true {
@@ -236,13 +297,16 @@ struct ProfileView: View {
                                 .padding(.top, 8)
                             }
                         }
-                        .padding(.bottom, 40)
+                        .padding(.bottom, 10)
                     }
                 }
-                .frame(height: 500)
+        }
 
-                // MARK: - 标签栏
-                VStack(spacing: 0) {
+    // MARK: - 内容区域
+    private var contentSection: some View {
+        VStack(spacing: 0) {
+            // MARK: - 标签栏
+            VStack(spacing: 0) {
                     HStack {
                         Spacer()
 
@@ -280,6 +344,7 @@ struct ProfileView: View {
                                     .foregroundColor(profileData.selectedTab == .liked ? Color(red: 0.82, green: 0.11, blue: 0.26) : .black)
                             }
                         }
+                        .frame(maxWidth: .infinity)  // 居中三个标签
 
                         Spacer()
 
@@ -332,10 +397,12 @@ struct ProfileView: View {
                         .frame(height: 100)
                 }
                 .background(Color(red: 0.96, green: 0.96, blue: 0.96))
-            }
-            .overlay(alignment: .bottom) {
-                // MARK: - 底部导航栏
-                HStack(spacing: -20) {
+        }
+    }
+
+    // MARK: - 底部导航栏
+    private var bottomNavigationBar: some View {
+        HStack(spacing: -20) {
                     // Home
                     VStack(spacing: 2) {
                         Image("home-icon-black")
@@ -393,28 +460,11 @@ struct ProfileView: View {
                             .font(.system(size: 9))
                     }
                     .frame(maxWidth: .infinity)
-                }
-                .frame(height: 60)
-                .padding(.bottom, 20)
-                .background(Color.white)
-                .border(Color(red: 0.74, green: 0.74, blue: 0.74), width: 0.5)
             }
-
-            // MARK: - 照片选项弹窗
-            if showPhotoOptions {
-                photoOptionsModal
-            }
-        }
-        .ignoresSafeArea()
-        .task {
-            // Use current user from AuthenticationManager
-            if let userId = authManager.currentUser?.id {
-                await profileData.loadUserProfile(userId: userId)
-            }
-        }
-        .sheet(isPresented: $showNewPost) {
-            NewPostView(showNewPost: $showNewPost)
-        }
+            .frame(height: 60)
+            .padding(.bottom, 20)
+            .background(Color.white)
+            .border(Color(red: 0.74, green: 0.74, blue: 0.74), width: 0.5)
     }
 
     // MARK: - 照片选项弹窗

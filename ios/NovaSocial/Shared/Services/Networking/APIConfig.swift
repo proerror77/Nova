@@ -114,11 +114,12 @@ struct APIConfig {
 
     // MARK: - Feed API
     struct Feed {
-        /// GET /api/v2/feed - 獲取用戶 Feed
+        /// GET /api/v2/feed - 獲取用戶 Feed (需要 JWT 認證)
         /// Query params: algo (ch|time), limit (1-100), cursor (pagination)
         static let getFeed = "/api/v2/feed"
-        /// GET /api/v2/feed/trending - 獲取熱門 Feed
-        static let getTrending = "/api/v2/feed/trending"
+        /// GET /api/v2/guest/feed/trending - 獲取熱門 Feed (無需認證，Guest Mode)
+        /// 注意：此端點與認證端點分離以避免 Actix-web 路由衝突
+        static let getTrending = "/api/v2/guest/feed/trending"
     }
 
     // MARK: - Poll API (投票榜單)

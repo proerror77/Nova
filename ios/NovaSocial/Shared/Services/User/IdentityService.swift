@@ -9,7 +9,7 @@ class IdentityService {
     // MARK: - Authentication
 
     /// Register a new user
-    func register(username: String, email: String, password: String, displayName: String, inviteCode: String = "NOVA2025TEST") async throws -> AuthResponse {
+    func register(username: String, email: String, password: String, displayName: String, inviteCode: String = "NOVATEST") async throws -> AuthResponse {
         struct RegisterRequest: Codable {
             let username: String
             let email: String
@@ -33,7 +33,7 @@ class IdentityService {
         )
 
         // Save token for subsequent requests
-        client.setAuthToken(response.token)
+        client.setAuthToken(response.accessToken)
 
         return response
     }
@@ -54,7 +54,7 @@ class IdentityService {
         )
 
         // Save token for subsequent requests
-        client.setAuthToken(response.token)
+        client.setAuthToken(response.accessToken)
 
         return response
     }
@@ -74,7 +74,7 @@ class IdentityService {
         )
 
         // Update token
-        client.setAuthToken(response.token)
+        client.setAuthToken(response.accessToken)
 
         return response
     }
@@ -130,13 +130,15 @@ class IdentityService {
 // MARK: - Request/Response Models
 
 struct AuthResponse: Codable {
-    let token: String
+    let accessToken: String
     let refreshToken: String?
+    let expiresIn: Int?
     let user: UserProfile
 
     enum CodingKeys: String, CodingKey {
-        case token
+        case accessToken = "access_token"
         case refreshToken = "refresh_token"
+        case expiresIn = "expires_in"
         case user
     }
 }

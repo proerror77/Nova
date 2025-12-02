@@ -55,57 +55,40 @@ class SocialService {
     }
 
     func deleteLike(postId: String, userId: String) async throws {
-        struct Request: Codable {
-            let post_id: String
-            let user_id: String
-        }
-
         struct Response: Codable {
             let success: Bool
         }
 
-        let request = Request(post_id: postId, user_id: userId)
         let _: Response = try await client.request(
-            endpoint: APIConfig.Social.deleteLike,
-            body: request
+            endpoint: APIConfig.Social.deleteLike(postId),
+            method: "DELETE"
         )
     }
 
     func getPostLikes(postId: String, limit: Int = 20, offset: Int = 0) async throws -> (userIds: [String], totalCount: Int) {
-        struct Request: Codable {
-            let post_id: String
-            let limit: Int
-            let offset: Int
-        }
-
         struct Response: Codable {
             let user_ids: [String]
             let total_count: Int
         }
 
-        let request = Request(post_id: postId, limit: limit, offset: offset)
-        let response: Response = try await client.request(
-            endpoint: APIConfig.Social.getLikes,
-            body: request
+        let response: Response = try await client.get(
+            endpoint: APIConfig.Social.getLikes(postId),
+            queryParams: [
+                "limit": String(limit),
+                "offset": String(offset)
+            ]
         )
 
         return (response.user_ids, response.total_count)
     }
 
     func checkUserLiked(postId: String, userId: String) async throws -> Bool {
-        struct Request: Codable {
-            let post_id: String
-            let user_id: String
-        }
-
         struct Response: Codable {
             let liked: Bool
         }
 
-        let request = Request(post_id: postId, user_id: userId)
-        let response: Response = try await client.request(
-            endpoint: APIConfig.Social.checkLiked,
-            body: request
+        let response: Response = try await client.get(
+            endpoint: APIConfig.Social.checkLiked(postId)
         )
 
         return response.liked
@@ -134,27 +117,20 @@ class SocialService {
     }
 
     func deleteComment(commentId: String, userId: String) async throws {
-        struct Request: Codable {
-            let comment_id: String
-            let user_id: String
-        }
-
         struct Response: Codable {
             let success: Bool
         }
 
-        let request = Request(comment_id: commentId, user_id: userId)
         let _: Response = try await client.request(
-            endpoint: APIConfig.Social.deleteComment,
-            body: request
+            endpoint: APIConfig.Social.deleteComment(commentId),
+            method: "DELETE"
         )
     }
 
     func getComments(postId: String, limit: Int = 20, offset: Int = 0) async throws -> (comments: [SocialComment], totalCount: Int) {
         let response: GetCommentsResponse = try await client.get(
-            endpoint: APIConfig.Social.getComments,
+            endpoint: APIConfig.Social.getComments(postId),
             queryParams: [
-                "post_id": postId,
                 "limit": String(limit),
                 "offset": String(offset)
             ]
@@ -182,18 +158,12 @@ class SocialService {
     }
 
     func getShareCount(postId: String) async throws -> Int {
-        struct Request: Codable {
-            let post_id: String
-        }
-
         struct Response: Codable {
             let count: Int
         }
 
-        let request = Request(post_id: postId)
-        let response: Response = try await client.request(
-            endpoint: APIConfig.Social.getShareCount,
-            body: request
+        let response: Response = try await client.get(
+            endpoint: APIConfig.Social.getShareCount(postId)
         )
 
         return response.count

@@ -17,7 +17,6 @@ struct MessageView: View {
     @State private var showAddOptionsMenu = false
     @State private var showQRScanner = false
     @State private var selectedUserName = "User"
-    @State private var selectedUserMessages: [ChatMessage] = []
     @State private var showImagePicker = false
     @State private var showCamera = false
     @State private var selectedImage: UIImage?
@@ -72,8 +71,12 @@ struct MessageView: View {
         ZStack {
             // 条件渲染：根据状态即时切换视图
             if showChat {
-                ChatView(showChat: $showChat, userName: selectedUserName, initialMessages: selectedUserMessages)
-                    .transition(.identity)
+                ChatView(
+                    showChat: $showChat,
+                    conversationId: "temp_conversation_\(selectedUserName)",
+                    userName: selectedUserName
+                )
+                .transition(.identity)
             } else if showNewPost {
                 NewPostView(showNewPost: $showNewPost)
                     .transition(.identity)
@@ -182,18 +185,6 @@ struct MessageView: View {
                                     currentPage = .alice
                                 } else {
                                     selectedUserName = userName
-                                    // 创建初始消息（只有真实消息才显示在 Chat 中）
-                                    if !convo.lastMessage.isEmpty && convo.lastMessage != "Now let's start chatting!" {
-                                        selectedUserMessages = [
-                                            ChatMessage(
-                                                text: convo.lastMessage,
-                                                isFromMe: false,
-                                                timestamp: Date()
-                                            )
-                                        ]
-                                    } else {
-                                        selectedUserMessages = []
-                                    }
                                     showChat = true
                                 }
                             }

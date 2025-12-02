@@ -29,6 +29,43 @@ class FeedService {
         return try await client.get(endpoint: APIConfig.Feed.getFeed, queryParams: queryParams)
     }
 
+    // MARK: - Guest Feed (No Authentication)
+
+    /// Fetch trending/guest feed for unauthenticated users
+    /// Uses /api/v2/feed/trending endpoint which doesn't require JWT
+    /// - Parameters:
+    ///   - limit: Number of posts to fetch (1-50, default 20)
+    ///   - cursor: Pagination cursor from previous response
+    /// - Returns: FeedResponse containing trending post IDs
+    func getTrendingFeed(limit: Int = 20, cursor: String? = nil) async throws -> FeedResponse {
+        var queryParams: [String: String] = [
+            "limit": String(min(max(limit, 1), 50))  // Guest feed has stricter limit (50 max)
+        ]
+
+        if let cursor = cursor {
+            queryParams["cursor"] = cursor
+        }
+
+        // Use public endpoint that doesn't require authentication
+        return try await client.get(endpoint: APIConfig.Feed.getTrending, queryParams: queryParams)
+    }
+
+    /// Fetch trending feed with full post details
+    func getTrendingFeedWithDetails(limit: Int = 20, cursor: String? = nil) async throws -> FeedWithDetailsResponse {
+        let feedResponse = try await getTrendingFeed(limit: limit, cursor: cursor)
+
+        // Convert raw posts to FeedPost objects
+        let feedPosts = feedResponse.posts.map { FeedPost(from: $0) }
+
+        return FeedWithDetailsResponse(
+            posts: feedPosts,
+            postIds: feedResponse.postIds,
+            cursor: feedResponse.cursor,
+            hasMore: feedResponse.hasMore,
+            totalCount: feedResponse.totalCount
+        )
+    }
+
     /// Fetch feed with full post details (combines feed + content service)
     func getFeedWithDetails(algo: FeedAlgorithm = .chronological, limit: Int = 20, cursor: String? = nil) async throws -> FeedWithDetailsResponse {
         let feedResponse = try await getFeed(algo: algo, limit: limit, cursor: cursor)

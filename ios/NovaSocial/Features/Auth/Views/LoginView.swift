@@ -161,19 +161,6 @@ struct LoginView: View {
                         .accessibilityIdentifier("createAccountButton")
                         .offset(x: 0, y: 265)
 
-                        // Skip Button - 跳过登录直接进入Home（临时登录模式）
-                        Button(action: {
-                            // 设置临时登录状态
-                            AuthenticationManager.shared.setGuestMode()
-                            currentPage = .home
-                        }) {
-                            Text("Skip")
-                                .font(Font.custom("Helvetica Neue", size: 14).weight(.light))
-                                .foregroundColor(Color(red: 0.77, green: 0.77, blue: 0.77))
-                                .underline()
-                        }
-                        .offset(x: 0, y: 330)
-
                         // Error Message
                         if let errorMessage = errorMessage {
                             Text(errorMessage)
@@ -284,6 +271,10 @@ struct LoginView: View {
 
                 Spacer()
             }
+            .contentShape(Rectangle())
+            .onTapGesture {
+                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+            }
         }
     }
 
@@ -296,14 +287,23 @@ struct LoginView: View {
         errorMessage = nil
 
         do {
-            // Use email for login in this new UI
-            let _ = try await authManager.login(
-                username: email,
+            _ = try await authManager.login(
+                username: email.trimmingCharacters(in: .whitespacesAndNewlines),
                 password: password
             )
             // Success - AuthenticationManager will update isAuthenticated
         } catch {
-            errorMessage = "Login failed: \(error.localizedDescription)"
+            // Provide user-friendly error messages
+            if error.localizedDescription.contains("401") || error.localizedDescription.contains("Unauthorized") {
+                errorMessage = "Invalid email or password. Please try again."
+            } else if error.localizedDescription.contains("network") || error.localizedDescription.contains("connection") {
+                errorMessage = "Network error. Please check your connection."
+            } else {
+                errorMessage = "Login failed. Please try again."
+            }
+            #if DEBUG
+            print("[LoginView] Login error: \(error)")
+            #endif
         }
 
         isLoading = false

@@ -86,6 +86,10 @@ struct GenerateImage01View: View {
                     }
                     .padding(.top, 16)
                 }
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                }
 
                 // MARK: - 底部输入区域
                 VStack(spacing: 0) {
