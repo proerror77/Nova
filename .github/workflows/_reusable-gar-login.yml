@@ -1,0 +1,55 @@
+name: Reusable Artifact Registry Login
+
+# Reusable workflow for GCP authentication + Artifact Registry login
+# Replaces _reusable-ecr-login.yml for GCP
+
+on:
+  workflow_call:
+    inputs:
+      gcp-region:
+        description: 'GCP Region for Artifact Registry'
+        required: false
+        type: string
+        default: 'asia-northeast1'
+      repository:
+        description: 'Artifact Registry repository name'
+        required: false
+        type: string
+        default: 'nova'
+    outputs:
+      registry:
+        description: 'Artifact Registry URL'
+        value: ${{ jobs.auth.outputs.registry }}
+
+jobs:
+  auth:
+    name: GCP + Artifact Registry Authentication
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      registry: ${{ steps.output.outputs.registry }}
+
+    steps:
+      - name: Authenticate to Google Cloud
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+          token_format: access_token
+
+      - name: Login to Artifact Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ inputs.gcp-region }}-docker.pkg.dev
+          username: oauth2accesstoken
+          password: ${{ steps.auth.outputs.access_token }}
+
+      - name: Set output
+        id: output
+        run: |
+          REGISTRY="${{ inputs.gcp-region }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ inputs.repository }}"
+          echo "registry=${REGISTRY}" >> "$GITHUB_OUTPUT"
+          echo "✅ Authenticated to Artifact Registry: ${REGISTRY}"

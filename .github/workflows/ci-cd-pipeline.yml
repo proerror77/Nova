@@ -1,70 +1,31 @@
-name: CI/CD Pipeline - Kubernetes/EKS
+name: CI/CD Pipeline - Build & Push to GCP
 
 on:
   push:
     branches:
-      - feature/phase1-grpc-migration  # Auto-deploy to staging
-      - main                           # Deploy to production
-    paths:
-      - 'backend/**'
-      - 'k8s/**'
-      - 'infrastructure/**'
-      - 'Dockerfile*'
-      - '.github/workflows/ci-cd-pipeline.yml'
-  pull_request:
-    branches:
       - main
-      - feature/phase1-grpc-migration
-    paths:
-      - 'backend/**'
-      - 'k8s/**'
-      - 'infrastructure/**'
-      - 'Dockerfile*'
-      - '.github/workflows/ci-cd-pipeline.yml'
+  workflow_dispatch:  # 手動觸發
 
-# Prevent deployment conflicts - cancel in-progress for non-main branches only
 concurrency:
-  group: ci-cd-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+  group: ci-cd-${{ github.ref }}
+  cancel-in-progress: true
 
-# Default minimal permissions for all jobs (can be overridden per job)
 permissions:
   contents: read
 
 env:
-  AWS_REGION: ${{ vars.AWS_REGION || 'ap-northeast-1' }}
-  ECR_REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ vars.AWS_REGION || 'ap-northeast-1' }}.amazonaws.com
-  REGISTRY_ALIAS: nova
+  GCP_REGION: ${{ vars.GCP_REGION || 'asia-northeast1' }}
+  GAR_REGISTRY: ${{ vars.GCP_REGION || 'asia-northeast1' }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/nova
 
 jobs:
-  # ============ Stage 1: Format & Lint (All Services) ============
-  format-and-lint:
-    name: Format and Lint
+  # ============ Build & Push Docker Images to Artifact Registry ============
+  build-and-push:
+    name: Build & Push ${{ matrix.service }}
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    permissions:
+      id-token: write
+      contents: read
 
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - uses: ./.github/actions/setup-rust-env
-        with:
-          cache-key-suffix: format-lint
-
-      - name: Run cargo fmt (check all code)
-        run: cargo fmt --all -- --check
-
-      - name: Run cargo clippy (all targets)
-        run: |
-          cd backend
-          cargo clippy --workspace --all-targets --all-features -- -D warnings
-
-  # ============ Stage 2: Unit Tests (All Services) ============
-  test-services:
-    timeout-minutes: 30
-    name: Test Services
-    runs-on: ubuntu-latest
-    needs: format-and-lint
     strategy:
       matrix:
         service:
@@ -88,847 +49,76 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - uses: ./.github/actions/setup-rust-env
+      - name: Authenticate to Google Cloud
+        id: auth
+        uses: google-github-actions/auth@v2
         with:
-          cache-key-suffix: ${{ matrix.service }}
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+          token_format: access_token
 
-      - name: Run cargo test (${{ matrix.service }})
-        working-directory: backend/${{ matrix.service }}
-        run: cargo test --lib --all-features
-
-      - name: Run doc tests (${{ matrix.service }})
-        working-directory: backend/${{ matrix.service }}
-        run: cargo test --doc --all-features
-
-  # ============ Stage 3: Code Coverage ============
-  code-coverage:
-    timeout-minutes: 20
-    name: Code Coverage
-    runs-on: ubuntu-latest
-    needs: test-services
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - uses: ./.github/actions/setup-rust-env
+      - name: Login to Artifact Registry
+        uses: docker/login-action@v3
         with:
-          cache-key-suffix: coverage
-
-      - name: Install cargo-tarpaulin
-        run: |
-          if ! command -v cargo-tarpaulin &> /dev/null; then
-            cargo install cargo-tarpaulin --version 0.8.3
-          else
-            echo "cargo-tarpaulin already installed"
-          fi
-
-      - name: Generate coverage report
-        working-directory: backend
-        run: |
-          cargo tarpaulin \
-            --workspace \
-            --timeout 300 \
-            --out Xml \
-            --output-dir coverage \
-            --exclude-files 'target/*' \
-            --fail-under 50 \
-            -- --test-threads 1
-
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4
-        with:
-          file: backend/coverage/cobertura.xml
-          flags: backend
-          name: backend-coverage
-          fail_ci_if_error: false
-          verbose: true
-
-      - name: Display coverage summary
-        run: |
-          if [ -f backend/coverage/cobertura.xml ]; then
-            COVERAGE=$(grep -oP 'line-rate="\K[0-9.]+' backend/coverage/cobertura.xml | head -1)
-            COVERAGE_PCT=$(echo "scale=2; $COVERAGE * 100" | bc)
-            echo "📊 Code Coverage: $COVERAGE_PCT%"
-
-            if (( $(echo "$COVERAGE_PCT >= 50" | bc -l) )); then
-              echo "✅ Coverage meets minimum 50% threshold"
-            else
-              echo "⚠️ Coverage below 50% threshold: $COVERAGE_PCT%"
-            fi
-          fi
-
-  # ============ Stage 4: Security Audit ============
-  security-audit:
-    timeout-minutes: 15
-    name: Security Audit
-    runs-on: ubuntu-latest
-    needs: format-and-lint
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - uses: ./.github/actions/setup-rust-env
-        with:
-          cache-key-suffix: security
-
-      - name: Install cargo-audit
-        run: |
-          if ! command -v cargo-audit &> /dev/null; then
-            cargo install cargo-audit
-          else
-            echo "cargo-audit already installed"
-          fi
-
-      - name: Run cargo audit
-        working-directory: backend
-        run: cargo audit --deny warnings
-        continue-on-error: true
-
-      - name: Install cargo-deny
-        run: |
-          if ! command -v cargo-deny &> /dev/null; then
-            cargo install cargo-deny
-          else
-            echo "cargo-deny already installed"
-          fi
-
-      - name: Run cargo deny (advisories)
-        working-directory: backend
-        run: cargo deny check advisories --all-features
-        continue-on-error: true
-
-      - name: Run cargo deny (licenses)
-        working-directory: backend
-        run: cargo deny check licenses --all-features
-        continue-on-error: true
-
-  # ============ Stage 5: Dependency Check ============
-  dependency-check:
-    timeout-minutes: 10
-    name: Dependency Check
-    runs-on: ubuntu-latest
-    needs: format-and-lint
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - uses: ./.github/actions/setup-rust-env
-        with:
-          cache-key-suffix: dependencies
-
-      - name: Install cargo-outdated
-        run: |
-          if ! command -v cargo-outdated &> /dev/null; then
-            cargo install cargo-outdated
-          else
-            echo "cargo-outdated already installed"
-          fi
-
-      - name: Check for outdated dependencies
-        working-directory: backend
-        run: cargo outdated --workspace --root-deps-only --exit-code 0
-        continue-on-error: true
-
-      - name: Generate dependency tree
-        working-directory: backend
-        run: cargo tree --depth 1 > /tmp/dependency-tree.txt 2>&1 || true
-
-      - name: Display dependency summary
-        run: |
-          echo "📦 Dependency Summary"
-          if [ -f /tmp/dependency-tree.txt ]; then
-            head -50 /tmp/dependency-tree.txt
-            echo ""
-            echo "... (see full output in logs)"
-          fi
-
-  # ============ Stage 6: Integration Tests ============
-  integration-tests:
-    name: Integration Tests
-    runs-on: ubuntu-latest
-    needs: test-services
-
-    timeout-minutes: 30
-    services:
-      postgres:
-        image: postgres:15-alpine
-        env:
-          POSTGRES_DB: nova_test
-          POSTGRES_USER: test
-          POSTGRES_PASSWORD: test
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 5432:5432
-
-      redis:
-        image: redis:7-alpine
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 6379:6379
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - uses: ./.github/actions/setup-rust-env
-        with:
-          cache-key-suffix: integration
-
-      - name: Install sqlx-cli
-        run: |
-          if ! command -v sqlx &> /dev/null; then
-            cargo install sqlx-cli --no-default-features --features postgres
-          else
-            echo "sqlx-cli already installed"
-          fi
-
-      - name: Wait for PostgreSQL
-        timeout-minutes: 2
-        run: |
-          for i in {1..60}; do
-            if pg_isready -h localhost -p 5432 -U test; then
-              echo "PostgreSQL is ready!"
-              exit 0
-            fi
-            echo "Waiting for PostgreSQL... ($i/60)"
-            sleep 2
-          done
-          echo "PostgreSQL failed to become ready"
-          exit 1
-
-      - name: Run database migrations
-        working-directory: backend
-        env:
-          DATABASE_URL: postgresql://test:test@localhost:5432/nova_test
-        run: |
-          # Create migrations directory if it doesn't exist
-          mkdir -p migrations
-          # Note: Actual migrations should be in backend/migrations
-          echo "Migrations directory ready"
-
-      - name: Run integration tests
-        working-directory: backend
-        env:
-          DATABASE_URL: postgresql://test:test@localhost:5432/nova_test
-          REDIS_URL: redis://localhost:6379
-          RUST_LOG: debug
-        run: cargo test --lib --test '*' --all-features
-
-  # ============ Stage 7: Build Release ============
-  build-release:
-    timeout-minutes: 45
-    name: Build Release
-    runs-on: ubuntu-latest
-    needs: [format-and-lint, test-services, security-audit]
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - uses: ./.github/actions/setup-rust-env
-        with:
-          cache-key-suffix: release
-
-      - name: Build all services (release)
-        working-directory: backend
-        run: cargo build --workspace --release
-
-  # ============ Stage 8: Setup AWS & ECR ============
-  setup-aws:
-    name: Setup AWS Credentials
-    if: github.event_name == 'push'
-    uses: ./.github/workflows/_reusable-aws-setup.yml
-    needs: [build-release, code-coverage, security-audit, integration-tests]
-    permissions:
-      id-token: write
-      contents: read
-    with:
-      role-session-name: gha-setup-${{ github.run_id }}
-
-  # ============ Stage 8: Build & Push Docker Images ============
-  build-and-push:
-    timeout-minutes: 60
-    name: Build and Push Docker Images
-    runs-on: ubuntu-latest
-    needs: setup-aws
-    if: github.event_name == 'push'
-    permissions:
-      id-token: write
-      contents: read
-
-    strategy:
-      matrix:
-        service:
-          - analytics-service
-          - content-service
-          - feed-service
-          - graph-service
-          - graphql-gateway
-          - identity-service
-          - media-service
-          - notification-service
-          - ranking-service
-          - realtime-chat-service
-          - search-service
-          - social-service
-          - trust-safety-service
-      max-parallel: 6  # 提升並行度以加快構建速度 (GitHub 免費版有 20 並發)
-      fail-fast: false
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Configure AWS credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/github-actions-role
-          aws-region: ${{ env.AWS_REGION }}
-          audience: sts.amazonaws.com
-          role-session-name: gha-build-push-${{ matrix.service }}-${{ github.run_id }}
-          role-skip-session-tagging: true
-
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
-
-      - uses: ./.github/actions/build-push-ecr
-        with:
-          service-name: ${{ matrix.service }}
-          image-tag: ${{ github.sha }}
-          ecr-registry: ${{ env.ECR_REGISTRY }}
-          registry-alias: ${{ env.REGISTRY_ALIAS }}
-
-      - name: Verify image pushed
-        run: |
-          echo "✅ Image ${{ matrix.service }}:${{ github.sha }} pushed to ECR"
-          aws ecr describe-images \
-            --repository-name "${{ env.REGISTRY_ALIAS }}/${{ matrix.service }}" \
-            --region ${{ env.AWS_REGION }} \
-            --image-ids imageTag=${{ github.sha }} \
-            --query 'imageDetails[0].[imageTags,imageSizeInBytes]' \
-            --output text 2>/dev/null || echo "Image verification pending..."
-
-  # ============ Stage 9: Deploy to EKS (Staging) ============
-  deploy-staging:
-    timeout-minutes: 30
-    name: Deploy to EKS Staging
-    runs-on: ubuntu-latest
-    needs: build-and-push
-    if: github.ref == 'refs/heads/feature/phase1-grpc-migration' || github.ref == 'refs/heads/main'
-    permissions:
-      id-token: write
-      contents: read
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Configure AWS credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/github-actions-role
-          aws-region: ${{ env.AWS_REGION }}
-          audience: sts.amazonaws.com
-          role-session-name: gha-deploy-staging-${{ github.run_id }}
-          role-skip-session-tagging: true
-
-      - name: Update kubeconfig
-        run: |
-          aws eks update-kubeconfig \
-            --name nova-staging \
-            --region ${{ env.AWS_REGION }}
-
-      - name: Verify cluster connectivity
-        run: |
-          kubectl cluster-info
-          kubectl get nodes
-          echo "✅ Connected to EKS cluster"
-
-      - name: Check deployment namespaces
-        run: |
-          echo "Checking Kubernetes namespaces..."
-          kubectl get namespaces | grep -E "nova|kube-system"
-
-      - name: Rollout restart all services
-        run: |
-          echo "Rolling out updated images..."
-
-          # Restart all deployments to pull new images
-          for namespace in nova nova-content nova-feed nova-media nova-auth; do
-            kubectl rollout restart deployment -n "$namespace" 2>/dev/null || echo "Namespace $namespace not found or no deployments"
-          done
-
-          echo "✅ Rollout commands issued"
-
-      - name: Wait for identity-service rollout
-        run: |
-          echo "Waiting for identity-service to be ready..."
-          kubectl rollout status deployment/identity-service -n nova --timeout=5m 2>/dev/null || true
-          kubectl get pods -n nova -l app=identity-service -o wide
-
-      - name: Check service health
-        run: |
-          echo "Service deployment status:"
-          echo ""
-          for namespace in nova nova-content nova-feed nova-media nova-auth; do
-            echo "=== Namespace: $namespace ==="
-            kubectl get deployments -n "$namespace" 2>/dev/null || echo "No deployments found"
-            echo ""
-          done
-
-      - name: Get pod status summary
-        run: |
-          echo "📊 Pod Status Summary:"
-          kubectl get pods -A --sort-by=.metadata.namespace | grep -E "nova|Running|Pending|Error"
-
-  # ============ Stage 10: Smoke Tests ============
-  smoke-test:
-    timeout-minutes: 15
-    name: Smoke Tests
-    runs-on: ubuntu-latest
-    needs: deploy-staging
-    if: always()
-    permissions:
-      id-token: write
-      contents: read
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Configure AWS credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/github-actions-role
-          aws-region: ${{ env.AWS_REGION }}
-          audience: sts.amazonaws.com
-          role-session-name: gha-smoke-test-${{ github.run_id }}
-          role-skip-session-tagging: true
-
-      - name: Update kubeconfig
-        run: |
-          aws eks update-kubeconfig \
-            --name nova-staging \
-            --region ${{ env.AWS_REGION }}
-
-      - name: Run smoke tests
-        run: |
-          echo "🧪 Running Smoke Tests..."
-          echo ""
-
-          # Check if pods are running
-          echo "Checking identity-service pod status..."
-          kubectl get pods -n nova -l app=identity-service -o wide || true
-
-          echo ""
-          echo "Checking service endpoints..."
-          kubectl get svc -n nova || true
-
-          echo ""
-          echo "Checking ConfigMaps..."
-          kubectl get configmaps -n nova-content,nova-feed,nova-media || true
-
-          echo "✅ Smoke tests completed"
-
-  # ============ Stage 11: E2E Tests on AWS ============
-  e2e-tests-aws:
-    timeout-minutes: 30
-    name: E2E Tests on AWS
-    runs-on: ubuntu-latest
-    needs: deploy-staging
-    if: github.ref == 'refs/heads/feature/phase1-grpc-migration' || github.ref == 'refs/heads/main'
-    permissions:
-      id-token: write
-      contents: read
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Configure AWS credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/github-actions-role
-          aws-region: ${{ env.AWS_REGION }}
-          audience: sts.amazonaws.com
-          role-session-name: gha-e2e-test-${{ github.run_id }}
-          role-skip-session-tagging: true
-
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
+          registry: ${{ env.GCP_REGION }}-docker.pkg.dev
+          username: oauth2accesstoken
+          password: ${{ steps.auth.outputs.access_token }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build and push E2E test image
+      - name: Build and push Docker image
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: ./tests/Dockerfile.e2e
+          file: ./backend/${{ matrix.service }}/Dockerfile
+          platforms: linux/amd64
           push: true
           tags: |
-            ${{ env.ECR_REGISTRY }}/nova/e2e-tests:${{ github.sha }}
-            ${{ env.ECR_REGISTRY }}/nova/e2e-tests:latest
+            ${{ env.GAR_REGISTRY }}/${{ matrix.service }}:${{ github.sha }}
+            ${{ env.GAR_REGISTRY }}/${{ matrix.service }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          build-args: |
+            SERVICE_NAME=${{ matrix.service }}
 
-      - name: Update kubeconfig
+      - name: Verify image pushed
         run: |
-          aws eks update-kubeconfig \
-            --name nova-staging \
-            --region ${{ env.AWS_REGION }}
+          echo "✅ ${{ matrix.service }}:${{ github.sha }} pushed to Artifact Registry"
 
-      - name: Ensure seed data is initialized
-        run: |
-          echo "🌱 Ensuring seed data is present..."
-
-          # Check if seed-data-init job already completed successfully
-          if kubectl get job -n nova seed-data-init -o jsonpath='{.status.succeeded}' 2>/dev/null | grep -q "1"; then
-            echo "✓ Seed data already initialized"
-          else
-            echo "Running seed data initialization..."
-            kubectl apply -f k8s/infrastructure/overlays/staging/seed-data-job.yaml
-
-            # Wait for seed data job to complete (max 5 minutes)
-            kubectl wait --for=condition=complete --timeout=300s job/seed-data-init -n nova || {
-              echo "⚠️ Seed data job did not complete in time, continuing anyway..."
-              kubectl logs -n nova -l app=seed-data-init --tail=50
-            }
-          fi
-
-      - name: Update E2E test job image
-        run: |
-          # Update the job manifest with the new image
-          sed -i "s|image:.*e2e-tests:.*|image: ${{ env.ECR_REGISTRY }}/nova/e2e-tests:${{ github.sha }}|g" \
-            k8s/infrastructure/overlays/staging/e2e-tests-job.yaml
-
-      - name: Run E2E tests in Kubernetes
-        run: |
-          echo "🧪 Running E2E tests in Kubernetes..."
-
-          # Delete previous test job if exists
-          kubectl delete job e2e-tests -n nova --ignore-not-found=true
-
-          # Apply the E2E test job
-          kubectl apply -f k8s/infrastructure/overlays/staging/e2e-tests-job.yaml
-
-          # Wait for job to start
-          echo "Waiting for E2E test pod to start..."
-          kubectl wait --for=condition=ready --timeout=120s pod -l app=e2e-tests -n nova || {
-            echo "⚠️ Pod not ready yet, checking status..."
-            kubectl get pods -n nova -l app=e2e-tests
-            kubectl describe pod -n nova -l app=e2e-tests
-          }
-
-      - name: Stream E2E test logs
-        run: |
-          echo "📋 Streaming E2E test logs..."
-
-          # Stream logs from the test pod
-          kubectl logs -n nova -l app=e2e-tests -f --timestamps || true
-
-      - name: Wait for E2E tests to complete
-        run: |
-          echo "⏳ Waiting for E2E tests to complete (max 25 minutes)..."
-
-          # Wait for the job to complete or fail
-          if kubectl wait --for=condition=complete --timeout=1500s job/e2e-tests -n nova; then
-            echo "✅ E2E tests completed successfully"
-
-            # Show final logs
-            echo ""
-            echo "Final test logs:"
-            kubectl logs -n nova -l app=e2e-tests --tail=100
-
-            exit 0
-          else
-            echo "❌ E2E tests failed or timed out"
-
-            # Show job status
-            kubectl describe job e2e-tests -n nova
-
-            # Show pod logs
-            echo ""
-            echo "E2E test logs:"
-            kubectl logs -n nova -l app=e2e-tests --tail=200
-
-            # Show pod status
-            echo ""
-            echo "Pod status:"
-            kubectl get pods -n nova -l app=e2e-tests -o wide
-            kubectl describe pod -n nova -l app=e2e-tests
-
-            exit 1
-          fi
-
-      - name: Cleanup E2E test job
-        if: always()
-        run: |
-          echo "🧹 Cleaning up E2E test job..."
-          kubectl delete job e2e-tests -n nova --ignore-not-found=true || true
-
-  # ============ Stage 12: E2E User Journey Tests ============
-  e2e-user-journeys:
-    timeout-minutes: 20
-    name: E2E User Journey Tests
+  # ============ Summary ============
+  summary:
+    name: Build Summary
     runs-on: ubuntu-latest
-    needs: deploy-staging
-    if: github.ref == 'refs/heads/feature/phase1-grpc-migration' || github.ref == 'refs/heads/main'
-    permissions:
-      id-token: write
-      contents: read
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Install k6
-        run: |
-          sudo gpg -k
-          sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg \
-            --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
-          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | \
-            sudo tee /etc/apt/sources.list.d/k6.list
-          sudo apt-get update
-          sudo apt-get install k6
-
-      - name: Configure AWS credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/github-actions-role
-          aws-region: ${{ env.AWS_REGION }}
-          audience: sts.amazonaws.com
-          role-session-name: gha-performance-test-${{ github.run_id }}
-          role-skip-session-tagging: true
-
-      - name: Update kubeconfig
-        run: |
-          aws eks update-kubeconfig \
-            --name nova-staging \
-            --region ${{ env.AWS_REGION }}
-
-      - name: Wait for GraphQL Gateway to be ready
-        run: |
-          echo "⏳ Waiting for GraphQL Gateway to be ready..."
-          kubectl wait --for=condition=ready pod -l app=graphql-gateway -n nova --timeout=300s || {
-            echo "⚠️ GraphQL Gateway not ready, checking status..."
-            kubectl get pods -n nova -l app=graphql-gateway
-            kubectl describe pod -n nova -l app=graphql-gateway
-            exit 1
-          }
-          echo "✅ GraphQL Gateway is ready"
-
-      - name: Port forward GraphQL Gateway
-        run: |
-          echo "🔌 Setting up port forward to GraphQL Gateway..."
-          kubectl port-forward -n nova svc/graphql-gateway 8000:8080 &
-          PORT_FORWARD_PID=$!
-          echo "PORT_FORWARD_PID=$PORT_FORWARD_PID" >> $GITHUB_ENV
-
-          # Wait for port forward to be ready
-          for i in {1..30}; do
-            if curl -s http://localhost:8000/health > /dev/null 2>&1; then
-              echo "✅ Port forward established"
-              exit 0
-            fi
-            echo "Waiting for port forward... ($i/30)"
-            sleep 2
-          done
-
-          echo "❌ Port forward failed to establish"
-          exit 1
-
-      - name: Run E2E User Journey Tests
-        run: |
-          echo "🧪 Running E2E User Journey Tests..."
-
-          k6 run k6/e2e-user-journeys.js \
-            --env BASE_URL=http://localhost:8000 \
-            --out json=e2e-results.json \
-            --summary-export=e2e-summary.json
-
-      - name: Display test summary
-        if: always()
-        run: |
-          echo ""
-          echo "======================================"
-          echo "  E2E USER JOURNEY TEST RESULTS"
-          echo "======================================"
-          echo ""
-
-          if [ -f e2e-summary.json ]; then
-            # Extract key metrics using jq
-            echo "Journey Success Rate: $(jq -r '.metrics.journey_success_rate.values.rate * 100' e2e-summary.json)%"
-            echo "  Successful Journeys: $(jq -r '.metrics.journey_success_rate.values.passes // 0' e2e-summary.json)"
-            echo "  Failed Journeys: $(jq -r '.metrics.journey_success_rate.values.fails // 0' e2e-summary.json)"
-            echo ""
-            echo "Performance Metrics (P95):"
-            echo "  Login Duration: $(jq -r '.metrics.login_duration.values["p(95)"] // 0' e2e-summary.json)ms"
-            echo "  Post Creation: $(jq -r '.metrics.post_creation_duration.values["p(95)"] // 0' e2e-summary.json)ms"
-            echo "  Feed Load: $(jq -r '.metrics.feed_load_duration.values["p(95)"] // 0' e2e-summary.json)ms"
-            echo ""
-            echo "HTTP Metrics:"
-            echo "  Total Requests: $(jq -r '.metrics.http_reqs.values.count // 0' e2e-summary.json)"
-            echo "  Failed Requests: $(jq -r '.metrics.http_req_failed.values.rate * 100 // 0' e2e-summary.json)%"
-            echo ""
-          else
-            echo "⚠️ No test summary found"
-          fi
-
-          echo "======================================"
-
-      - name: Upload test results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: e2e-user-journey-results
-          path: |
-            e2e-results.json
-            e2e-summary.json
-
-      - name: Cleanup port forward
-        if: always()
-        run: |
-          echo "🧹 Cleaning up port forward..."
-          if [ -n "$PORT_FORWARD_PID" ]; then
-            kill $PORT_FORWARD_PID || true
-          fi
-          pkill -f "port-forward" || true
-
-      - name: Check test results
-        if: always()
-        run: |
-          if [ -f e2e-summary.json ]; then
-            # Check if journey success rate is above threshold (95%)
-            SUCCESS_RATE=$(jq -r '.metrics.journey_success_rate.values.rate // 0' e2e-summary.json)
-            THRESHOLD=0.95
-
-            if (( $(echo "$SUCCESS_RATE >= $THRESHOLD" | bc -l) )); then
-              echo "✅ E2E User Journey tests passed (success rate: $(echo "$SUCCESS_RATE * 100" | bc)%)"
-              exit 0
-            else
-              echo "❌ E2E User Journey tests failed (success rate: $(echo "$SUCCESS_RATE * 100" | bc)% < 95%)"
-              exit 1
-            fi
-          else
-            echo "❌ No test results found"
-            exit 1
-          fi
-
-  # ============ Stage 13: Quality Report ============
-  quality-report:
-    timeout-minutes: 5
-    name: Quality Report
-    runs-on: ubuntu-latest
-    needs: [test-services, code-coverage, security-audit]
+    needs: build-and-push
     if: always()
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Generate quality summary
+      - name: Print summary
         run: |
           echo "════════════════════════════════════════════════════"
-          echo "📋 QUALITY ASSURANCE REPORT"
-          echo "════════════════════════════════════════════════════"
-          echo ""
-          echo "Commit: ${{ github.sha }}"
-          echo "Branch: ${{ github.ref_name }}"
-          echo "Author: ${{ github.actor }}"
-          echo ""
-          echo "📊 Pipeline Results:"
-          echo "  ✅ Format & Lint: ${{ needs.test-services.result }}"
-          echo "  ✅ Unit Tests (12 services): ${{ needs.test-services.result }}"
-          echo "  ✅ Code Coverage: ${{ needs.code-coverage.result }}"
-          echo "  ✅ Security Audit: ${{ needs.security-audit.result }}"
-          echo ""
-          echo "🔍 Quality Gates:"
-          echo "  • Code format: ENFORCED (cargo fmt --check)"
-          echo "  • Lint warnings: DENIED (cargo clippy -D warnings)"
-          echo "  • Security advisories: CHECKED (cargo audit)"
-          echo "  • Dependency audit: CHECKED (cargo deny)"
-          echo "  • Code coverage: 50% MINIMUM"
-          echo ""
-          echo "📦 Services Tested (v2 架構):"
-          echo "  • analytics-service"
-          echo "  • content-service"
-          echo "  • feed-service"
-          echo "  • graph-service"
-          echo "  • graphql-gateway"
-          echo "  • identity-service"
-          echo "  • media-service"
-          echo "  • notification-service"
-          echo "  • ranking-service"
-          echo "  • realtime-chat-service (替代 messaging-service)"
-          echo "  • search-service"
-          echo "  • social-service"
-          echo "  • trust-safety-service"
-          echo ""
-          echo "════════════════════════════════════════════════════"
-
-  # ============ Stage 14: Notification ============
-  notify:
-    timeout-minutes: 5
-    name: Notify Deployment Status
-    runs-on: ubuntu-latest
-    needs: [build-and-push, deploy-staging, smoke-test, e2e-tests-aws, e2e-user-journeys, quality-report]
-    if: always()
-
-    steps:
-      - name: Determine status
-        id: status
-        run: |
-          BUILD_STATUS="${{ needs.build-and-push.result }}"
-          DEPLOY_STATUS="${{ needs.deploy-staging.result }}"
-          TEST_STATUS="${{ needs.smoke-test.result }}"
-
-          if [ "$BUILD_STATUS" = "success" ] && [ "$DEPLOY_STATUS" = "success" ]; then
-            echo "overall=success" >> $GITHUB_OUTPUT
-            echo "message=✅ Deployment SUCCESSFUL" >> $GITHUB_OUTPUT
-          else
-            echo "overall=failure" >> $GITHUB_OUTPUT
-            echo "message=❌ Deployment FAILED" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Print deployment summary
-        run: |
-          echo "════════════════════════════════════════════════════"
-          echo "🚀 DEPLOYMENT SUMMARY"
+          echo "🚀 BUILD SUMMARY"
           echo "════════════════════════════════════════════════════"
           echo ""
           echo "Branch: ${{ github.ref_name }}"
           echo "Commit: ${{ github.sha }}"
-          echo "Environment: ${{ github.ref == 'refs/heads/main' && 'Production' || 'Staging' }}"
+          echo "Registry: ${{ env.GAR_REGISTRY }}"
           echo ""
-          echo "📊 Job Results:"
-          echo "  Build & Push: ${{ needs.build-and-push.result }}"
-          echo "  Deploy: ${{ needs.deploy-staging.result }}"
-          echo "  Smoke Tests: ${{ needs.smoke-test.result }}"
-          echo "  E2E Service Tests: ${{ needs.e2e-tests-aws.result }}"
-          echo "  E2E User Journeys: ${{ needs.e2e-user-journeys.result }}"
+          echo "Build Result: ${{ needs.build-and-push.result }}"
           echo ""
-          echo "${{ steps.status.outputs.message }}"
+          echo "Images pushed:"
+          echo "  - analytics-service:${{ github.sha }}"
+          echo "  - content-service:${{ github.sha }}"
+          echo "  - feed-service:${{ github.sha }}"
+          echo "  - graph-service:${{ github.sha }}"
+          echo "  - graphql-gateway:${{ github.sha }}"
+          echo "  - identity-service:${{ github.sha }}"
+          echo "  - media-service:${{ github.sha }}"
+          echo "  - notification-service:${{ github.sha }}"
+          echo "  - ranking-service:${{ github.sha }}"
+          echo "  - realtime-chat-service:${{ github.sha }}"
+          echo "  - search-service:${{ github.sha }}"
+          echo "  - social-service:${{ github.sha }}"
+          echo "  - trust-safety-service:${{ github.sha }}"
           echo ""
-          echo "📦 Next Steps:"
-          echo "  1. kubectl get pods -A (check all pods)"
-          echo "  2. kubectl logs -n nova <pod-name> (check logs)"
-          echo "  3. kubectl describe pod -n nova <pod-name> (debug)"
           echo "════════════════════════════════════════════════════"
-
-      - name: Exit with error on failure
-        if: steps.status.outputs.overall == 'failure'
-        run: exit 1

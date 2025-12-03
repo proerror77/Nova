@@ -1,0 +1,144 @@
+name: Reusable GKE Deployment
+
+# Reusable workflow for deploying services to GKE
+# Replaces _reusable-k8s-deploy.yml (AWS EKS version)
+
+on:
+  workflow_call:
+    inputs:
+      service-name:
+        description: 'Service name to deploy'
+        required: true
+        type: string
+      image-tag:
+        description: 'Container image tag'
+        required: true
+        type: string
+      namespace:
+        description: 'Kubernetes namespace'
+        required: true
+        type: string
+      gcp-region:
+        description: 'GCP Region'
+        required: false
+        type: string
+        default: 'asia-northeast1'
+      gke-cluster:
+        description: 'GKE cluster name'
+        required: false
+        type: string
+        default: 'nova-staging-gke'
+      repository:
+        description: 'Artifact Registry repository name'
+        required: false
+        type: string
+        default: 'nova'
+      rollout-timeout:
+        description: 'Rollout timeout (e.g., 5m, 10m)'
+        required: false
+        type: string
+        default: '5m'
+      health-check:
+        description: 'Perform health check after deployment'
+        required: false
+        type: boolean
+        default: true
+
+jobs:
+  deploy:
+    name: Deploy ${{ inputs.service-name }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+
+      - name: Install gke-gcloud-auth-plugin
+        run: |
+          gcloud components install gke-gcloud-auth-plugin --quiet 2>/dev/null || \
+          sudo apt-get install -y google-cloud-sdk-gke-gcloud-auth-plugin
+
+      - name: Get GKE credentials
+        run: |
+          gcloud container clusters get-credentials ${{ inputs.gke-cluster }} \
+            --region ${{ inputs.gcp-region }} \
+            --project ${{ vars.GCP_PROJECT_ID }}
+
+      - name: Deploy to GKE
+        run: |
+          SERVICE_NAME="${{ inputs.service-name }}"
+          REGISTRY="${{ inputs.gcp-region }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ inputs.repository }}"
+          IMAGE="${REGISTRY}/${SERVICE_NAME}:${{ inputs.image-tag }}"
+          NAMESPACE="${{ inputs.namespace }}"
+
+          echo "🚀 Deploying $SERVICE_NAME to $NAMESPACE"
+          echo "📦 Image: $IMAGE"
+
+          # Check if deployment exists
+          if kubectl get deployment "$SERVICE_NAME" -n $NAMESPACE &>/dev/null; then
+            echo "📦 Updating existing deployment"
+            kubectl set image deployment/"$SERVICE_NAME" \
+              "$SERVICE_NAME=$IMAGE" \
+              -n $NAMESPACE
+
+            echo "⏳ Waiting for rollout (timeout: ${{ inputs.rollout-timeout }})..."
+            kubectl rollout status deployment/"$SERVICE_NAME" -n $NAMESPACE --timeout=${{ inputs.rollout-timeout }}
+
+            echo "✅ $SERVICE_NAME deployed successfully!"
+            kubectl get pods -n $NAMESPACE -l app="$SERVICE_NAME" -o wide
+          else
+            echo "❌ Deployment $SERVICE_NAME not found in $NAMESPACE"
+            echo "Available deployments:"
+            kubectl get deployments -n $NAMESPACE
+            exit 1
+          fi
+
+      - name: Health check
+        if: inputs.health-check
+        run: |
+          SERVICE_NAME="${{ inputs.service-name }}"
+          NAMESPACE="${{ inputs.namespace }}"
+
+          echo "🏥 Health check for $SERVICE_NAME"
+
+          # Get pod status
+          kubectl get pods -n $NAMESPACE -l app="$SERVICE_NAME" -o wide
+
+          # Check for ready pods
+          READY_PODS=$(kubectl get pods -n $NAMESPACE -l app="$SERVICE_NAME" -o jsonpath='{.items[*].status.conditions[?(@.type=="Ready")].status}' | grep -o "True" | wc -l)
+
+          if [ "$READY_PODS" -gt 0 ]; then
+            echo "✅ $READY_PODS pod(s) ready"
+          else
+            echo "⚠️  No ready pods found"
+            kubectl describe pods -n $NAMESPACE -l app="$SERVICE_NAME" | tail -50
+            exit 1
+          fi
+
+      - name: Deployment summary
+        if: always()
+        run: |
+          echo "════════════════════════════════════════════════════"
+          echo "📊 Deployment Summary"
+          echo "════════════════════════════════════════════════════"
+          echo "Service: ${{ inputs.service-name }}"
+          echo "Image Tag: ${{ inputs.image-tag }}"
+          echo "Namespace: ${{ inputs.namespace }}"
+          echo "GKE Cluster: ${{ inputs.gke-cluster }}"
+          echo "Status: ${{ job.status }}"
+          echo "════════════════════════════════════════════════════"

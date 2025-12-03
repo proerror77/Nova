@@ -1,0 +1,45 @@
+name: Reusable GCP Authentication
+
+# Reusable workflow for GCP authentication using Workload Identity Federation
+# Replaces AWS OIDC authentication pattern
+
+on:
+  workflow_call:
+    inputs:
+      gcp-region:
+        description: 'GCP region'
+        required: false
+        type: string
+        default: 'asia-northeast1'
+    outputs:
+      project-id:
+        description: 'GCP Project ID'
+        value: ${{ jobs.auth.outputs.project-id }}
+
+jobs:
+  auth:
+    name: GCP Authentication
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      project-id: ${{ steps.auth.outputs.project_id }}
+
+    steps:
+      - name: Authenticate to Google Cloud
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+
+      - name: Verify authentication
+        run: |
+          gcloud auth list
+          echo "✅ Authenticated to GCP project: ${{ vars.GCP_PROJECT_ID }}"
