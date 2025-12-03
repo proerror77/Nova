@@ -16,9 +16,10 @@ class FeedViewModel: ObservableObject {
 
     // MARK: - Private Properties
 
-    private let feedService = FeedService()
-    private let contentService = ContentService()
-    private let socialService = SocialService()
+    private let feedService: FeedService
+    private let contentService: ContentService
+    private let socialService: SocialService
+    private let authManager: AuthenticationManager
     private var currentCursor: String?
     private var currentAlgorithm: FeedAlgorithm = .chronological
     private var currentUserId: String? {
@@ -29,8 +30,7 @@ class FeedViewModel: ObservableObject {
 
     /// Check if user is authenticated (has valid token and is not in guest mode)
     private var isAuthenticated: Bool {
-        let auth = AuthenticationManager.shared
-        return auth.isAuthenticated && !auth.isGuestMode
+        authManager.isAuthenticated && !authManager.isGuestMode
     }
 
     /// Load initial feed - uses Guest Feed (trending) when not authenticated
@@ -38,6 +38,18 @@ class FeedViewModel: ObservableObject {
     ///   - algorithm: Feed ranking algorithm
     ///   - isGuestFallback: Internal flag to indicate we already fell back to guest feed once.
     ///     This prevents infinite retry loops when even guest feed returns unauthorized.
+    init(
+        feedService: FeedService = FeedService(),
+        contentService: ContentService = ContentService(),
+        socialService: SocialService = SocialService(),
+        authManager: AuthenticationManager? = nil
+    ) {
+        self.feedService = feedService
+        self.contentService = contentService
+        self.socialService = socialService
+        self.authManager = authManager ?? AuthenticationManager.shared
+    }
+
     func loadFeed(
         algorithm: FeedAlgorithm = .chronological,
         isGuestFallback: Bool = false
@@ -86,7 +98,7 @@ class FeedViewModel: ObservableObject {
             //    - On failure, logout and retry once in guest mode.
             // 2) If already in guest mode or guest fallback, surface an error instead of looping.
             if case .unauthorized = apiError, isAuthenticated, !isGuestFallback {
-                let refreshed = await AuthenticationManager.shared.attemptTokenRefresh()
+                let refreshed = await authManager.attemptTokenRefresh()
                 if refreshed {
                     // Retry after token refresh
                     isLoading = false
@@ -97,7 +109,7 @@ class FeedViewModel: ObservableObject {
                     #if DEBUG
                     print("[Feed] Token refresh failed, falling back to guest feed")
                     #endif
-                    await AuthenticationManager.shared.logout()
+                    await authManager.logout()
                     // Reload as guest - this time mark as guest fallback to avoid infinite loop
                     isLoading = false
                     await loadFeed(algorithm: algorithm, isGuestFallback: true)

@@ -10,22 +10,57 @@ struct DesignTokens {
     static let accentLight = Color(red: 1, green: 0.78, blue: 0.78)
 
     /// Background Colors
-    static let backgroundColor = Color(red: 0.97, green: 0.96, blue: 0.96)
-    static let white = Color.white
-    static let cardBackground = Color.white
+    static let backgroundColor = Color.dynamic(
+        light: UIColor(red: 0.97, green: 0.96, blue: 0.96, alpha: 1.0),
+        dark: UIColor(red: 0.08, green: 0.08, blue: 0.09, alpha: 1.0)
+    )
+    static let surface = Color.dynamic(
+        light: UIColor.white,
+        dark: UIColor(red: 0.13, green: 0.13, blue: 0.14, alpha: 1.0)
+    )
+    static let cardBackground = surface
     static let overlayBackground = Color.black.opacity(0.4)
-    static let loadingBackground = Color(red: 0.95, green: 0.95, blue: 0.95)
+    static let loadingBackground = Color.dynamic(
+        light: UIColor(red: 0.95, green: 0.95, blue: 0.95, alpha: 1.0),
+        dark: UIColor(red: 0.18, green: 0.18, blue: 0.19, alpha: 1.0)
+    )
 
     /// Text Colors
-    static let textPrimary = Color(red: 0.25, green: 0.25, blue: 0.25)
-    static let textSecondary = Color(red: 0.53, green: 0.53, blue: 0.54)
-    static let textTertiary = Color(red: 0.32, green: 0.32, blue: 0.32)
-    static let textMuted = Color(red: 0.7, green: 0.7, blue: 0.7)
+    static let textPrimary = Color.dynamic(
+        light: UIColor(red: 0.25, green: 0.25, blue: 0.25, alpha: 1.0),
+        dark: UIColor(red: 0.87, green: 0.87, blue: 0.88, alpha: 1.0)
+    )
+    static let textSecondary = Color.dynamic(
+        light: UIColor(red: 0.53, green: 0.53, blue: 0.54, alpha: 1.0),
+        dark: UIColor(red: 0.68, green: 0.68, blue: 0.70, alpha: 1.0)
+    )
+    static let textTertiary = Color.dynamic(
+        light: UIColor(red: 0.32, green: 0.32, blue: 0.32, alpha: 1.0),
+        dark: UIColor(red: 0.76, green: 0.76, blue: 0.78, alpha: 1.0)
+    )
+    static let textMuted = Color.dynamic(
+        light: UIColor(red: 0.7, green: 0.7, blue: 0.7, alpha: 1.0),
+        dark: UIColor(red: 0.5, green: 0.5, blue: 0.52, alpha: 1.0)
+    )
     static let textOnAccent = Color.white
 
     /// UI Element Colors
-    static let borderColor = Color(red: 0.74, green: 0.74, blue: 0.74)
-    static let dividerColor = Color(red: 0.93, green: 0.93, blue: 0.93)
+    static let borderColor = Color.dynamic(
+        light: UIColor(red: 0.74, green: 0.74, blue: 0.74, alpha: 1.0),
+        dark: UIColor(red: 0.32, green: 0.32, blue: 0.33, alpha: 1.0)
+    )
+    static let dividerColor = Color.dynamic(
+        light: UIColor(red: 0.93, green: 0.93, blue: 0.93, alpha: 1.0),
+        dark: UIColor(red: 0.24, green: 0.24, blue: 0.25, alpha: 1.0)
+    )
+    static let tileBackground = Color.dynamic(
+        light: UIColor(red: 0.85, green: 0.85, blue: 0.85, alpha: 1.0),
+        dark: UIColor(red: 0.17, green: 0.17, blue: 0.18, alpha: 1.0)
+    )
+    static let tileSeparator = Color.dynamic(
+        light: UIColor(red: 0.91, green: 0.91, blue: 0.91, alpha: 1.0),
+        dark: UIColor(red: 0.24, green: 0.24, blue: 0.25, alpha: 1.0)
+    )
     static let placeholderColor = Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50)
     static let avatarPlaceholder = Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50)
     static let indicatorActive = Color(red: 0.82, green: 0.11, blue: 0.26)
@@ -75,4 +110,12 @@ struct DesignTokens {
     static let fontLarge: CGFloat = 16
     static let fontTitle: CGFloat = 18
     static let fontHeadline: CGFloat = 22
+}
+
+private extension Color {
+    static func dynamic(light: UIColor, dark: UIColor) -> Color {
+        Color(UIColor { trait in
+            trait.userInterfaceStyle == .dark ? dark : light
+        })
+    }
 }

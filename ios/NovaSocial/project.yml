@@ -21,7 +21,7 @@ targets:
     resources:
       - Assets.xcassets
     settings:
-      PRODUCT_BUNDLE_IDENTIFIER: com.bruce.figmadesignapp
+      PRODUCT_BUNDLE_IDENTIFIER: com.novasocial.icered
       CODE_SIGN_STYLE: Manual
       CODE_SIGN_IDENTITY: ""
       PROVISIONING_PROFILE: ""

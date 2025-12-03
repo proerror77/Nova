@@ -107,17 +107,35 @@ class AuthenticationManager: ObservableObject {
             location: nil,
             isVerified: false,
             isPrivate: false,
+            isBanned: false,
             followerCount: 0,
             followingCount: 0,
             postCount: 0,
             createdAt: nil,
             updatedAt: nil,
-            deletedAt: nil
+            deletedAt: nil,
+            firstName: nil,
+            lastName: nil,
+            dateOfBirth: nil,
+            gender: nil
         )
         self.authToken = "guest_token"
 
         #if DEBUG
         print("[Auth] Guest mode enabled")
+        #endif
+    }
+
+    // MARK: - Profile Update
+
+    /// Update cached current user profile
+    func updateCurrentUser(_ user: UserProfile) {
+        self.currentUser = user
+        // Optionally persist user ID if changed
+        _ = keychain.save(user.id, for: .userId)
+
+        #if DEBUG
+        print("[Auth] Current user updated: \(user.username)")
         #endif
     }
 
@@ -186,12 +204,17 @@ class AuthenticationManager: ObservableObject {
                 location: nil,
                 isVerified: false,
                 isPrivate: false,
+                isBanned: false,
                 followerCount: 0,
                 followingCount: 0,
                 postCount: 0,
                 createdAt: nil,
                 updatedAt: nil,
-                deletedAt: nil
+                deletedAt: nil,
+                firstName: nil,
+                lastName: nil,
+                dateOfBirth: nil,
+                gender: nil
             )
         }
 

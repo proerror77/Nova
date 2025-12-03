@@ -6,29 +6,37 @@ struct BottomTabBar: View {
     @Binding var currentPage: AppPage
     @Binding var showPhotoOptions: Bool
 
+    private var isHome: Bool { currentPage == .home }
+    private var isMessage: Bool { currentPage == .message }
+    private var isAccount: Bool { currentPage == .account }
+    private var isAlice: Bool { currentPage == .alice }
+
     var body: some View {
         HStack(spacing: -20) {
             // Home
             VStack(spacing: 2) {
-                Image("home-icon")
+                Image(isHome ? "home-icon" : "home-icon-black")
                     .resizable()
                     .scaledToFit()
                     .frame(width: 32, height: 22)
                 Text("Home")
                     .font(.system(size: DesignTokens.fontCaption, weight: .medium))
-                    .foregroundColor(DesignTokens.accentColor)
+                    .foregroundColor(isHome ? DesignTokens.accentColor : .black)
             }
             .frame(maxWidth: .infinity)
+            .onTapGesture {
+                currentPage = .home
+            }
 
             // Message
             VStack(spacing: DesignTokens.spacing4) {
-                Image("Message-icon-black")
+                Image(isMessage ? "Message-icon-red" : "Message-icon-black")
                     .resizable()
                     .scaledToFit()
                     .frame(width: 22, height: 22)
                 Text("Message")
                     .font(.system(size: DesignTokens.fontCaption))
-                    .foregroundColor(.black)
+                    .foregroundColor(isMessage ? DesignTokens.accentColor : .black)
             }
             .frame(maxWidth: .infinity)
             .onTapGesture {
@@ -44,6 +52,11 @@ struct BottomTabBar: View {
                     .resizable()
                     .scaledToFit()
                     .frame(width: 44, height: 44)
+                    .overlay(
+                        Circle()
+                            .stroke(DesignTokens.accentColor, lineWidth: isAlice ? 2 : 0)
+                    )
+                    .opacity(isAlice ? 1.0 : 0.8)
                 Text("")
                     .font(.system(size: DesignTokens.fontCaption))
             }
@@ -58,6 +71,11 @@ struct BottomTabBar: View {
                     .resizable()
                     .scaledToFit()
                     .frame(width: 44, height: 44)
+                    .overlay(
+                        Circle()
+                            .stroke(DesignTokens.accentColor, lineWidth: isAccount ? 2 : 0)
+                    )
+                    .opacity(isAccount ? 1.0 : 0.8)
                 Text("")
                     .font(.system(size: DesignTokens.fontCaption))
             }

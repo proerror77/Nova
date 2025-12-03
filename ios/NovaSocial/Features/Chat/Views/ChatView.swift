@@ -133,7 +133,8 @@ struct LocationMessageView: View {
         )
 
         VStack(spacing: 4) {
-            Map(coordinateRegion: .constant(region))
+            // iOS 17+ new Map initializer with content builder (no annotations needed here)
+            Map(initialPosition: .region(region)) { }
                 .frame(width: 180, height: 120)
                 .cornerRadius(12)
                 .disabled(true)
@@ -639,7 +640,7 @@ struct ChatView: View {
             messages = response.messages.map { ChatMessage(from: $0, currentUserId: currentUserId) }
 
             // 3. 连接WebSocket接收实时消息
-            chatService.onMessageReceived = { [weak chatService] newMessage in
+            chatService.onMessageReceived = { newMessage in
                 Task { @MainActor in
                     // 避免重复添加（如果消息已存在）
                     guard !self.messages.contains(where: { $0.id == newMessage.id }) else { return }

@@ -158,6 +158,14 @@ struct APIConfig {
         static func getProfile(_ id: String) -> String { "/api/v2/users/\(id)" }
     }
 
+    // MARK: - User Settings API
+    struct Settings {
+        /// GET /api/v2/users/{id}/settings 獲取用戶設定
+        static func getSettings(_ userId: String) -> String { "/api/v2/users/\(userId)/settings" }
+        /// PUT /api/v2/users/{id}/settings 更新用戶設定
+        static func updateSettings(_ userId: String) -> String { "/api/v2/users/\(userId)/settings" }
+    }
+
     // MARK: - Friends & Social Graph API
     struct Friends {
         static let searchUsers = "/api/v2/search/users"  // GET 搜索用戶 ?q={query}

@@ -16,14 +16,14 @@ struct AccountsView: View {
                     }) {
                         Image(systemName: "chevron.left")
                             .font(.system(size: 20))
-                            .foregroundColor(.black)
+                            .foregroundColor(DesignTokens.textPrimary)
                     }
 
                     Spacer()
 
                     Text("Accounts")
                         .font(.system(size: 24, weight: .medium))
-                        .foregroundColor(.black)
+                        .foregroundColor(DesignTokens.textPrimary)
 
                     Spacer()
 
@@ -37,7 +37,7 @@ struct AccountsView: View {
 
                 // 分隔线
                 Rectangle()
-                    .fill(Color(red: 0.74, green: 0.74, blue: 0.74))
+                    .fill(DesignTokens.borderColor)
                     .frame(height: 0.5)
 
                 ScrollView {
@@ -49,7 +49,7 @@ struct AccountsView: View {
                             HStack {
                                 Text("Create alias account")
                                     .font(.system(size: 18, weight: .medium))
-                                    .foregroundColor(Color(red: 0.82, green: 0.13, blue: 0.25))
+                                    .foregroundColor(DesignTokens.accentColor)
 
                                 Spacer()
                             }
@@ -60,7 +60,7 @@ struct AccountsView: View {
                         .cornerRadius(6)
                         .overlay(
                             RoundedRectangle(cornerRadius: 6)
-                                .stroke(Color(red: 0.68, green: 0.68, blue: 0.68), lineWidth: 0.5)
+                                .stroke(DesignTokens.borderColor, lineWidth: 0.5)
                         )
                         .padding(.horizontal, 12)
                         .padding(.top, 20)
@@ -68,7 +68,7 @@ struct AccountsView: View {
                         // MARK: - 说明文字
                         Text("Alias account is an anonymous account.\nOne person can have one alias.")
                             .font(.system(size: 12))
-                            .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
+                            .foregroundColor(DesignTokens.textPrimary)
                             .multilineTextAlignment(.center)
                             .padding(.horizontal, 20)
 
@@ -92,11 +92,11 @@ struct AccountsView: View {
                                 VStack(alignment: .leading, spacing: 5) {
                                     Text("Account_one")
                                         .font(.system(size: 19, weight: .medium))
-                                        .foregroundColor(.black)
+                                        .foregroundColor(DesignTokens.textPrimary)
 
                                     Text("Primary account")
                                         .font(.system(size: 15))
-                                        .foregroundColor(Color(red: 0.54, green: 0.54, blue: 0.54))
+                                        .foregroundColor(DesignTokens.textSecondary)
                                 }
 
                                 Spacer()
@@ -104,16 +104,16 @@ struct AccountsView: View {
                                 // 右箭头
                                 Image(systemName: "chevron.right")
                                     .font(.system(size: 14))
-                                    .foregroundColor(.gray)
+                                    .foregroundColor(DesignTokens.textMuted)
                             }
                             .padding(.horizontal, 20)
                             .padding(.vertical, 16)
                         }
-                        .background(Color.white)
+                        .background(DesignTokens.surface)
                         .cornerRadius(6)
                         .overlay(
                             RoundedRectangle(cornerRadius: 6)
-                                .stroke(Color(red: 0.68, green: 0.68, blue: 0.68), lineWidth: 0.5)
+                                .stroke(DesignTokens.borderColor, lineWidth: 0.5)
                         )
                         .padding(.horizontal, 12)
                         .padding(.top, 10)

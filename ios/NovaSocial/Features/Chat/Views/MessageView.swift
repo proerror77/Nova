@@ -158,7 +158,7 @@ struct MessageView: View {
     private var messageContent: some View {
         ZStack {
             // MARK: - 背景色
-            Color(red: 0.97, green: 0.96, blue: 0.96)
+            DesignTokens.backgroundColor
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
@@ -166,9 +166,9 @@ struct MessageView: View {
                 HStack {
                     Spacer()
 
-                    Text("Message")
+                    Text(LocalizedStringKey("Message"))
                         .font(Font.custom("Helvetica Neue", size: 24).weight(.medium))
-                        .foregroundColor(.black)
+                        .foregroundColor(DesignTokens.textPrimary)
 
                     Spacer()
 
@@ -183,130 +183,124 @@ struct MessageView: View {
                 }
                 .frame(height: DesignTokens.topBarHeight)
                 .padding(.horizontal, 16)
-                .background(Color.white)
+                .background(DesignTokens.surface)
 
                 // MARK: - 顶部分割线
                 Divider()
                     .frame(height: 0.5)
-                    .background(Color(red: 0.74, green: 0.74, blue: 0.74))
+                    .background(DesignTokens.dividerColor)
 
                 // MARK: - 搜索框
                 HStack(spacing: 10) {
                     Image(systemName: "magnifyingglass")
                         .font(.system(size: 15))
-                        .foregroundColor(Color(red: 0.69, green: 0.68, blue: 0.68))
+                        .foregroundColor(DesignTokens.textSecondary)
 
-                    Text("Search")
+                    Text(LocalizedStringKey("Search"))
                         .font(Font.custom("Helvetica Neue", size: 15))
-                        .foregroundColor(Color(red: 0.69, green: 0.68, blue: 0.68))
+                        .foregroundColor(DesignTokens.textSecondary)
 
                     Spacer()
                 }
                 .padding(EdgeInsets(top: 6, leading: 12, bottom: 6, trailing: 12))
                 .frame(height: 32)
-                .background(Color(red: 0.89, green: 0.88, blue: 0.87))
+                .background(DesignTokens.tileBackground)
                 .cornerRadius(32)
                 .padding(EdgeInsets(top: 12, leading: 18, bottom: 16, trailing: 18))
 
                 // MARK: - 消息列表
                 ScrollView {
                     VStack(spacing: 2) {
-                        ForEach(conversations.indices, id: \.self) { index in
-                            let convo = conversations[index]
-                            MessageListItem(
-                                name: convo.userName,
-                                messagePreview: convo.lastMessage,
-                                time: convo.time,
-                                unreadCount: convo.unreadCount,
-                                showMessagePreview: true, // 总是显示消息预览
-                                showTimeAndBadge: convo.hasUnread
-                            )
-                            .onTapGesture {
-                                let userName = convo.userName
-                                // alice 跳转到 Alice 页面，其他用户跳转到 Chat 页面
-                                if userName.lowercased() == "alice" {
-                                    currentPage = .alice
-                                } else {
-                                    selectedUserName = userName
-                                    showChat = true
+                        // 加载状态
+                        if isLoading {
+                            VStack(spacing: 16) {
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle())
+                                    .scaleEffect(1.2)
+                                Text(LocalizedStringKey("Loading messages..."))
+                                    .font(Font.custom("Helvetica Neue", size: 14))
+                                    .foregroundColor(DesignTokens.textSecondary)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.top, 60)
+                        }
+                        // 错误状态
+                        else if let error = errorMessage {
+                            VStack(spacing: 16) {
+                                Image(systemName: "exclamationmark.triangle")
+                                    .font(.system(size: 40))
+                                    .foregroundColor(DesignTokens.accentColor)
+                                Text(error)
+                                    .font(Font.custom("Helvetica Neue", size: 14))
+                                    .foregroundColor(DesignTokens.textSecondary)
+                                Button(action: {
+                                    Task {
+                                        await loadConversations()
+                                    }
+                                }) {
+                                Text(LocalizedStringKey("Retry"))
+                                        .font(Font.custom("Helvetica Neue", size: 14).weight(.medium))
+                                        .foregroundColor(DesignTokens.textOnAccent)
+                                        .padding(.horizontal, 24)
+                                        .padding(.vertical, 8)
+                                        .background(DesignTokens.accentColor)
+                                        .cornerRadius(20)
                                 }
                             }
+                            .frame(maxWidth: .infinity)
+                            .padding(.top, 60)
+                        }
+                        // 空状态
+                        else if conversations.isEmpty {
+                            VStack(spacing: 16) {
+                                Image(systemName: "message")
+                                    .font(.system(size: 40))
+                                    .foregroundColor(DesignTokens.textSecondary)
+                                Text(LocalizedStringKey("No messages yet"))
+                                    .font(Font.custom("Helvetica Neue", size: 16).weight(.medium))
+                                    .foregroundColor(DesignTokens.textSecondary)
+                                Text(LocalizedStringKey("Start a conversation with friends"))
+                                    .font(Font.custom("Helvetica Neue", size: 14))
+                                    .foregroundColor(DesignTokens.textSecondary)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.top, 60)
+                        }
+                        // 会话列表
+                        else {
+                            ForEach(conversations) { convo in
+                                MessageListItem(
+                                    name: convo.userName,
+                                    messagePreview: convo.lastMessage,
+                                    time: convo.time,
+                                    unreadCount: convo.unreadCount,
+                                    showMessagePreview: true,
+                                    showTimeAndBadge: convo.hasUnread
+                                )
+                                .onTapGesture {
+                                    // alice 跳转到 Alice 页面，其他用户跳转到 Chat 页面
+                                    if convo.userName.lowercased() == "alice" {
+                                        currentPage = .alice
+                                    } else {
+                                        selectedConversationId = convo.id
+                                        selectedUserName = convo.userName
+                                        showChat = true
+                                    }
+                                }
 
-                            if index < conversations.count - 1 {
-                                Divider()
-                                    .frame(height: 0.25)
-                                    .background(Color(red: 0.74, green: 0.74, blue: 0.74))
+                                if convo.id != conversations.last?.id {
+                                    Divider()
+                                        .frame(height: 0.25)
+                                        .background(DesignTokens.borderColor)
+                                }
                             }
                         }
                     }
                 }
-                .padding(.bottom, -43)
-
-                // MARK: - 底部导航栏
-                HStack(spacing: -20) {
-                    // Home
-                    VStack(spacing: 2) {
-                        Image("home-icon-black")
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 32, height: 22)
-                        Text("Home")
-                            .font(.system(size: 9, weight: .medium))
-                            .foregroundColor(.black)
-                    }
-                     .frame(maxWidth: .infinity)
-                     .onTapGesture {
-                         currentPage = .home
-                     }
-
-                    // Message (高亮状态)
-                    VStack(spacing: 4) {
-                        Image("Message-icon-red")
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 22, height: 22)
-                        Text("Message")
-                            .font(.system(size: 9))
-                            .foregroundColor(Color(red: 0.87, green: 0.11, blue: 0.26))
-                    }
-                    .frame(maxWidth: .infinity)
-
-                    // New Post
-                    NewPostButtonComponent(showNewPost: $showPhotoOptions)
-
-                    // Alice
-                    VStack(spacing: -12) {
-                        Image("alice-button-off")
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 44, height: 44)
-                        Text("")
-                            .font(.system(size: 9))
-                    }
-                    .frame(maxWidth: .infinity)
-                    .onTapGesture {
-                        currentPage = .alice
-                    }
-
-                    // Account
-                    VStack(spacing: -12) {
-                        Image("Account-button-off")
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 44, height: 44)
-                        Text("")
-                            .font(.system(size: 9))
-                    }
-                    .frame(maxWidth: .infinity)
-                    .onTapGesture {
-                        currentPage = .account
-                    }
-                }
-                .frame(height: 60)
-                .padding(.bottom, 20)
-                .background(Color.white)
-                .border(Color(red: 0.74, green: 0.74, blue: 0.74), width: 0.5)
-                .offset(y: 35)
+                .padding(.bottom, DesignTokens.bottomBarHeight + DesignTokens.spacing12)
+            }
+            .safeAreaInset(edge: .bottom) {
+                BottomTabBar(currentPage: $currentPage, showPhotoOptions: $showPhotoOptions)
             }
         }
     }
@@ -335,7 +329,7 @@ struct MessageView: View {
                     Rectangle()
                         .foregroundColor(.clear)
                         .frame(width: 56, height: 7)
-                        .background(Color(red: 0.82, green: 0.11, blue: 0.26))
+                        .background(DesignTokens.accentColor)
                         .cornerRadius(3.50)
                         .offset(x: -0.50, y: -120.50)
 
@@ -344,9 +338,9 @@ struct MessageView: View {
                         showPhotoOptions = false
                         showImagePicker = true
                     }) {
-                        Text("Choose Photo")
+                    Text(LocalizedStringKey("Choose Photo"))
                             .font(Font.custom("Helvetica Neue", size: 18).weight(.medium))
-                            .foregroundColor(Color(red: 0.18, green: 0.18, blue: 0.18))
+                            .foregroundColor(DesignTokens.textPrimary)
                     }
                     .offset(x: 0, y: -79)
 
@@ -355,9 +349,9 @@ struct MessageView: View {
                         showPhotoOptions = false
                         showCamera = true
                     }) {
-                        Text("Take Photo")
+                    Text(LocalizedStringKey("Take Photo"))
                             .font(Font.custom("Helvetica Neue", size: 18).weight(.medium))
-                            .foregroundColor(Color(red: 0.18, green: 0.18, blue: 0.18))
+                            .foregroundColor(DesignTokens.textPrimary)
                     }
                     .offset(x: 0.50, y: -21)
 
@@ -366,9 +360,9 @@ struct MessageView: View {
                         showPhotoOptions = false
                         showGenerateImage = true
                     }) {
-                        Text("Generate image")
+                    Text(LocalizedStringKey("Generate image"))
                             .font(Font.custom("Helvetica Neue", size: 18).weight(.medium))
-                            .foregroundColor(Color(red: 0.18, green: 0.18, blue: 0.18))
+                            .foregroundColor(DesignTokens.textPrimary)
                     }
                     .offset(x: 0, y: 37)
 
@@ -376,7 +370,7 @@ struct MessageView: View {
                     Button(action: {
                         showPhotoOptions = false
                     }) {
-                        Text("Cancel")
+                    Text(LocalizedStringKey("Cancel"))
                             .font(Font.custom("Helvetica Neue", size: 18).weight(.medium))
                             .lineSpacing(20)
                             .foregroundColor(.black)
@@ -389,7 +383,7 @@ struct MessageView: View {
                         .frame(width: 375, height: 0)
                         .overlay(
                             Rectangle()
-                                .stroke(Color(red: 0.93, green: 0.93, blue: 0.93), lineWidth: 3)
+                                .stroke(DesignTokens.dividerColor, lineWidth: 3)
                         )
                         .offset(x: 0, y: 75)
                     Rectangle()
@@ -397,7 +391,7 @@ struct MessageView: View {
                         .frame(width: 375, height: 0)
                         .overlay(
                             Rectangle()
-                                .stroke(Color(red: 0.77, green: 0.77, blue: 0.77), lineWidth: 0.20)
+                                .stroke(DesignTokens.textMuted, lineWidth: 0.20)
                         )
                         .offset(x: 0, y: -50)
                     Rectangle()
@@ -405,7 +399,7 @@ struct MessageView: View {
                         .frame(width: 375, height: 0)
                         .overlay(
                             Rectangle()
-                                .stroke(Color(red: 0.77, green: 0.77, blue: 0.77), lineWidth: 0.20)
+                                .stroke(DesignTokens.textMuted, lineWidth: 0.20)
                         )
                         .offset(x: 0, y: 8)
                 }
@@ -449,7 +443,7 @@ struct MessageView: View {
                                         .resizable()
                                         .scaledToFit()
                                         .frame(width: 28, height: 28)
-                                    Text("Add Friends")
+                                    Text(LocalizedStringKey("Add Friends"))
                                         .font(Font.custom("Helvetica Neue", size: 14))
                                         .foregroundColor(.black)
                                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -461,7 +455,7 @@ struct MessageView: View {
 
                             Divider()
                                 .frame(height: 0.20)
-                                .background(Color(red: 0.77, green: 0.77, blue: 0.77))
+                                .background(DesignTokens.textMuted)
                                 .padding(.horizontal, 16)
 
                             // Start Group Chat
@@ -474,7 +468,7 @@ struct MessageView: View {
                                         .resizable()
                                         .scaledToFit()
                                         .frame(width: 28, height: 28)
-                                    Text("Start Group Chat")
+                                    Text(LocalizedStringKey("Start Group Chat"))
                                         .font(Font.custom("Helvetica Neue", size: 14))
                                         .foregroundColor(.black)
                                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -486,7 +480,7 @@ struct MessageView: View {
 
                             Divider()
                                 .frame(height: 0.20)
-                                .background(Color(red: 0.77, green: 0.77, blue: 0.77))
+                                .background(DesignTokens.textMuted)
                                 .padding(.horizontal, 16)
 
                             // Scan QR Code
@@ -499,7 +493,7 @@ struct MessageView: View {
                                         .resizable()
                                         .scaledToFit()
                                         .frame(width: 28, height: 28)
-                                    Text("Scan QR Code")
+                                    Text(LocalizedStringKey("Scan QR Code"))
                                         .font(Font.custom("Helvetica Neue", size: 14))
                                         .foregroundColor(.black)
                                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -554,7 +548,7 @@ struct MessageListItem: View {
                 // 消息预览 - 使用动态消息
                 Text(messagePreview)
                     .font(Font.custom("Helvetica Neue", size: 15))
-                    .foregroundColor(Color(red: 0.54, green: 0.54, blue: 0.54))
+                    .foregroundColor(DesignTokens.textSecondary)
                     .opacity(showMessagePreview ? 1 : 0)
             }
 
@@ -565,14 +559,14 @@ struct MessageListItem: View {
                 VStack(alignment: .trailing, spacing: 6) {
                     Text(time)
                         .font(Font.custom("Helvetica Neue", size: 13))
-                        .foregroundColor(Color(red: 0.65, green: 0.65, blue: 0.65))
+                        .foregroundColor(DesignTokens.textMuted)
 
                     ZStack {
                         Circle()
-                            .fill(Color(red: 0.82, green: 0.11, blue: 0.26))
+                            .fill(DesignTokens.accentColor)
                             .frame(width: 17, height: 17)
 
-                        Text("\(unreadCount)")
+                        Text(LocalizedStringKey("\(unreadCount)"))
                             .font(Font.custom("Helvetica Neue", size: 12).weight(.medium))
                             .foregroundColor(.white)
                     }
@@ -581,7 +575,7 @@ struct MessageListItem: View {
         }
         .padding(EdgeInsets(top: 13, leading: 18, bottom: 13, trailing: 18))
         .frame(height: 80)
-        .background(Color(red: 0.97, green: 0.96, blue: 0.96))
+        .background(DesignTokens.backgroundColor)
     }
 }
 

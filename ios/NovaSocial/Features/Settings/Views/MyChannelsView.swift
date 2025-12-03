@@ -6,7 +6,7 @@ struct MyChannelsView: View {
 
     var body: some View {
         ZStack {
-            Color(red: 0.97, green: 0.97, blue: 0.97)
+            DesignTokens.backgroundColor
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
@@ -17,14 +17,14 @@ struct MyChannelsView: View {
                     }) {
                         Image(systemName: "chevron.left")
                             .font(.system(size: 20))
-                            .foregroundColor(.black)
+                            .foregroundColor(DesignTokens.textPrimary)
                     }
 
                     Spacer()
 
-                    Text("My Channels")
+                    Text(LocalizedStringKey("My_Channels_Title"))
                         .font(.system(size: 24, weight: .medium))
-                        .foregroundColor(.black)
+                        .foregroundColor(DesignTokens.textPrimary)
 
                     Spacer()
 
@@ -34,53 +34,53 @@ struct MyChannelsView: View {
                 }
                 .frame(height: DesignTokens.topBarHeight)
                 .padding(.horizontal, 20)
-                .background(Color.white)
+                .background(DesignTokens.surface)
 
                 // 分隔线
                 Rectangle()
-                    .fill(Color(red: 0.74, green: 0.74, blue: 0.74))
+                    .fill(DesignTokens.borderColor)
                     .frame(height: 0.5)
 
                 ScrollView {
                     VStack(alignment: .leading, spacing: 20) {
                         // MARK: - Sports & Outdoor Activities
                         ChannelCategory(
-                            title: "Sports & Outdoor Activities",
+                            title: NSLocalizedString("Sports_Outdoor", comment: ""),
                             channels: ["Sports", "Tennis", "American Football", "Football", "Snowboarding", "Automotive", "Camping"],
                             selectedChannels: $selectedChannels
                         )
 
                         // MARK: - Science & Education
                         ChannelCategory(
-                            title: "Science & Education",
+                            title: NSLocalizedString("Science_Education", comment: ""),
                             channels: ["Astronomy", "Astrology", "Health", "Society"],
                             selectedChannels: $selectedChannels
                         )
 
                         // MARK: - Business & Finance
                         ChannelCategory(
-                            title: "Business & Finance",
+                            title: NSLocalizedString("Business_Finance", comment: ""),
                             channels: ["Business", "Stocks", "Wealth", "Crypto", "NFT"],
                             selectedChannels: $selectedChannels
                         )
 
                         // MARK: - Art & Culture
                         ChannelCategory(
-                            title: "Art & Culture",
+                            title: NSLocalizedString("Art_Culture", comment: ""),
                             channels: ["Art", "Photography", "Craftsmanship", "Culture", "Music", "Fashion"],
                             selectedChannels: $selectedChannels
                         )
 
                         // MARK: - Technology & Digital
                         ChannelCategory(
-                            title: "Technology & Digital",
+                            title: NSLocalizedString("Technology_Digital", comment: ""),
                             channels: ["Tech", "AI", "Gaming", "Software"],
                             selectedChannels: $selectedChannels
                         )
 
                         // MARK: - Lifestyle & Travel
                         ChannelCategory(
-                            title: "Lifestyle & Travel",
+                            title: NSLocalizedString("Lifestyle_Travel", comment: ""),
                             channels: ["Travel", "Food", "Charity"],
                             selectedChannels: $selectedChannels
                         )
@@ -97,17 +97,17 @@ struct MyChannelsView: View {
             VStack {
                 Spacer()
 
-                Button(action: {
+                    Button(action: {
                     // TODO: 保存选择的频道
                 }) {
-                    Text("Choose Channels")
+                    Text(LocalizedStringKey("Choose Channels"))
                         .font(.system(size: 14, weight: .medium))
                         .foregroundColor(.white)
                         .frame(maxWidth: .infinity)
                         .frame(height: 30)
                 }
                 .frame(width: 343)
-                .background(Color(red: 0.82, green: 0.13, blue: 0.25))
+                .background(DesignTokens.accentColor)
                 .cornerRadius(36)
                 .padding(.bottom, 40)
             }
@@ -124,9 +124,9 @@ struct ChannelCategory: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             // 分类标题
-            Text(title)
-                .font(.system(size: 16, weight: .bold))
-                .foregroundColor(.black)
+	            Text(title)
+	                .font(.system(size: 16, weight: .bold))
+	                .foregroundColor(DesignTokens.textPrimary)
                 .padding(.leading, 4)
 
             // 频道标签网格
@@ -164,21 +164,21 @@ struct SelectableChannelTag: View {
                 // Plus 图标
                 Image(systemName: "plus")
                     .font(.system(size: 11, weight: .medium))
-                    .foregroundColor(isSelected ? Color(red: 0.82, green: 0.13, blue: 0.25) : Color(red: 0.38, green: 0.37, blue: 0.37))
+                    .foregroundColor(isSelected ? DesignTokens.accentColor : DesignTokens.textPrimary)
 
                 Text(name)
                     .font(.system(size: 12))
-                    .foregroundColor(isSelected ? Color(red: 0.82, green: 0.13, blue: 0.25) : Color(red: 0.38, green: 0.37, blue: 0.37))
+                    .foregroundColor(isSelected ? DesignTokens.accentColor : DesignTokens.textPrimary)
             }
             .padding(.horizontal, 55)
             .padding(.vertical, 4)
             .frame(height: 30)
         }
-        .background(isSelected ? Color(red: 1, green: 0.78, blue: 0.78) : Color.white)
+        .background(isSelected ? DesignTokens.accentLight : DesignTokens.surface)
         .cornerRadius(6)
         .overlay(
             RoundedRectangle(cornerRadius: 6)
-                .stroke(isSelected ? Color(red: 0.82, green: 0.13, blue: 0.25) : Color(red: 0.68, green: 0.68, blue: 0.68), lineWidth: 0.5)
+                .stroke(isSelected ? DesignTokens.accentColor : DesignTokens.borderColor, lineWidth: 0.5)
         )
     }
 }
