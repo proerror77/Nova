@@ -373,7 +373,7 @@ impl RealtimeChatService for RealtimeChatServiceImpl {
         };
 
         let rows = sqlx::query(
-            "SELECT id, sender_id, content, created_at FROM messages WHERE conversation_id = $1 AND ($2::timestamptz IS NULL OR created_at < $2) ORDER BY created_at DESC LIMIT $3",
+            "SELECT id, sender_id, content, content_encrypted, content_nonce, encryption_version, created_at FROM messages WHERE conversation_id = $1 AND ($2::timestamptz IS NULL OR created_at < $2) ORDER BY created_at DESC LIMIT $3",
         )
         .bind(conversation_id)
         .bind(before_ts)
@@ -390,8 +390,24 @@ impl RealtimeChatService for RealtimeChatServiceImpl {
             let mid: Uuid = row.try_get("id").unwrap_or_default();
             let sender: Uuid = row.try_get("sender_id").unwrap_or_default();
             let content: String = row.try_get("content").unwrap_or_default();
+            let content_encrypted: Option<Vec<u8>> = row.try_get("content_encrypted").ok();
+            let content_nonce: Option<Vec<u8>> = row.try_get("content_nonce").ok();
+            let encryption_version: i32 = row.try_get("encryption_version").unwrap_or(0);
             let created_at: chrono::DateTime<chrono::Utc> =
                 row.try_get("created_at").unwrap_or_else(|_| Utc::now());
+
+            // For E2EE messages, encode encrypted content as base64 with nonce prepended
+            let encrypted_content = if let (Some(ciphertext), Some(nonce)) =
+                (content_encrypted, content_nonce)
+            {
+                use base64::Engine;
+                // Format: base64(nonce || ciphertext) for client to parse
+                let mut combined = nonce;
+                combined.extend(ciphertext);
+                base64::engine::general_purpose::STANDARD.encode(&combined)
+            } else {
+                String::new()
+            };
 
             messages.push(Message {
                 id: mid.to_string(),
@@ -403,8 +419,12 @@ impl RealtimeChatService for RealtimeChatServiceImpl {
                 location: None,
                 created_at: created_at.timestamp(),
                 updated_at: created_at.timestamp(),
-                status: "sent".into(),
-                encrypted_content: String::new(),
+                status: if encryption_version > 0 {
+                    "encrypted".into()
+                } else {
+                    "sent".into()
+                },
+                encrypted_content,
                 ephemeral_public_key: String::new(),
                 reply_to_message_id: String::new(),
             });
