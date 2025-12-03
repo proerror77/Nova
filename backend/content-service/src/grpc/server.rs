@@ -195,7 +195,7 @@ impl ContentService for ContentServiceImpl {
         // Step 6: Load media URLs from post_images for posts that don't yet have media_urls.
         let media_rows = sqlx::query(
             r#"
-            SELECT post_id, url
+            SELECT post_id, size_variant, url
             FROM post_images
             WHERE post_id = ANY($1::uuid[])
               AND status = 'completed'
@@ -213,9 +213,16 @@ impl ContentService for ContentServiceImpl {
 
         let mut media_map: std::collections::HashMap<Uuid, Vec<String>> =
             std::collections::HashMap::new();
+        let mut thumb_map: std::collections::HashMap<Uuid, Vec<String>> =
+            std::collections::HashMap::new();
         for row in media_rows {
             let post_id: Uuid = row.get("post_id");
+            let variant: String = row.get("size_variant");
             let url: String = row.get("url");
+            if variant == "thumbnail" {
+                thumb_map.entry(post_id).or_default().push(url.clone());
+            }
+            // Keep all variants for backward compatibility; thumbnail_urls will be separated.
             media_map.entry(post_id).or_default().push(url);
         }
 
@@ -227,12 +234,15 @@ impl ContentService for ContentServiceImpl {
             .filter_map(|id| {
                 all_posts.get(id).map(|post| {
                     let mut media_urls = post.media_urls.clone().unwrap_or_default();
-                    let mut thumbnail_urls = media_urls.clone();
+                    let mut thumbnail_urls = thumb_map.get(id).cloned().unwrap_or_default();
                     if media_urls.is_empty() {
                         if let Some(urls) = media_map.get(id) {
                             media_urls = urls.clone();
-                            thumbnail_urls = media_urls.clone();
                         }
+                    }
+
+                    if thumbnail_urls.is_empty() {
+                        thumbnail_urls = media_urls.clone();
                     }
 
                     Post {
