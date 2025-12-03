@@ -518,6 +518,7 @@ commonAnnotations:
 # ========================================
 resources:
 - ../../base
+- thumb-migrate-job.yaml
 # grpc-services.yaml - 移除: Service 已在 microservices 中定义，用 patch 方式修改端口
 - postgres-pvc-gp3.yaml
 - pgbouncer-userlist-patch.yaml
