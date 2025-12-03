@@ -152,6 +152,7 @@ impl recommendation_service_server::RecommendationService for RecommendationServ
                             share_count: post.share_count,
                             media_urls: post.media_urls.clone(),
                             media_type: post.media_type.clone(),
+                            thumbnail_urls: post.thumbnail_urls.clone(),
                         })
                         .collect(),
                     next_cursor: cached.cursor.unwrap_or_default(),
@@ -226,6 +227,7 @@ impl recommendation_service_server::RecommendationService for RecommendationServ
                     share_count: post.share_count,
                     media_urls: post.media_urls.clone(),
                     media_type: post.media_type.clone(),
+                    thumbnail_urls: post.thumbnail_urls.clone(),
                 })
                 .collect(),
             next_cursor: "".to_string(),
@@ -415,7 +417,10 @@ impl RecommendationServiceImpl {
                 counts
             }
             Err(e) => {
-                warn!("Failed to fetch social counts (continuing with zeros): {}", e);
+                warn!(
+                    "Failed to fetch social counts (continuing with zeros): {}",
+                    e
+                );
                 std::collections::HashMap::new()
             }
         };
@@ -435,11 +440,13 @@ impl RecommendationServiceImpl {
                 // Fallback: if this is an image post but media_urls is empty, inject a default URL.
                 let mut media_urls = post.media_urls.clone();
                 let media_type = post.media_type.clone();
-                if media_urls.is_empty()
-                    && media_type == "image"
-                    && !default_image_url.is_empty()
-                {
+                let mut thumbnail_urls = post.thumbnail_urls.clone();
+                if media_urls.is_empty() && media_type == "image" && !default_image_url.is_empty() {
                     media_urls = vec![default_image_url.clone()];
+                }
+
+                if thumbnail_urls.is_empty() {
+                    thumbnail_urls = media_urls.clone();
                 }
 
                 CachedFeedPost {
@@ -453,11 +460,15 @@ impl RecommendationServiceImpl {
                     share_count: counts.map(|c| c.share_count as u32).unwrap_or(0),
                     media_urls,
                     media_type,
+                    thumbnail_urls,
                 }
             })
             .collect();
 
-        info!("Fetched {} posts from content-service with social stats", posts.len());
+        info!(
+            "Fetched {} posts from content-service with social stats",
+            posts.len()
+        );
         Ok(posts)
     }
 }

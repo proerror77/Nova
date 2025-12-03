@@ -105,6 +105,7 @@ struct FeedPostRaw: Codable {
     let commentCount: Int?
     let shareCount: Int?
     let mediaUrls: [String]?
+    let thumbnailUrls: [String]?
     let mediaType: String?
 }
 
@@ -145,12 +146,21 @@ struct FeedPost: Identifiable, Codable {
     let authorAvatar: String?
     let content: String
     let mediaUrls: [String]
+    let thumbnailUrls: [String]
     let createdAt: Date
     let likeCount: Int
     let commentCount: Int
     let shareCount: Int
     let isLiked: Bool
     let isBookmarked: Bool
+
+    /// Prefer thumbnails for list performance; fall back to originals when missing.
+    var displayMediaUrls: [String] {
+        if !thumbnailUrls.isEmpty {
+            return thumbnailUrls
+        }
+        return mediaUrls
+    }
 
     /// Create FeedPost from raw backend response
     init(from raw: FeedPostRaw) {
@@ -160,6 +170,7 @@ struct FeedPost: Identifiable, Codable {
         self.authorAvatar = nil
         self.content = raw.content
         self.mediaUrls = raw.mediaUrls ?? []
+        self.thumbnailUrls = raw.thumbnailUrls ?? self.mediaUrls
         self.createdAt = Date(timeIntervalSince1970: Double(raw.createdAt))
         self.likeCount = raw.likeCount ?? 0
         self.commentCount = raw.commentCount ?? 0
@@ -170,7 +181,7 @@ struct FeedPost: Identifiable, Codable {
 
     // Keep existing init for Codable conformance
     init(id: String, authorId: String, authorName: String, authorAvatar: String?,
-         content: String, mediaUrls: [String], createdAt: Date,
+        content: String, mediaUrls: [String], createdAt: Date,
          likeCount: Int, commentCount: Int, shareCount: Int,
          isLiked: Bool, isBookmarked: Bool) {
         self.id = id
@@ -179,6 +190,7 @@ struct FeedPost: Identifiable, Codable {
         self.authorAvatar = authorAvatar
         self.content = content
         self.mediaUrls = mediaUrls
+        self.thumbnailUrls = mediaUrls
         self.createdAt = createdAt
         self.likeCount = likeCount
         self.commentCount = commentCount
