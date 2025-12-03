@@ -171,6 +171,11 @@ message UpdateUserProfileRequest {
   optional string cover_photo_url = 5;
   optional string location = 6;
   optional bool private_account = 7;
+  // Extended profile fields
+  optional string first_name = 8;
+  optional string last_name = 9;
+  optional string date_of_birth = 10;  // ISO 8601 date format (YYYY-MM-DD)
+  optional string gender = 11;         // male, female, other, prefer_not_to_say
 }
 
 message UserProfile {
@@ -185,6 +190,11 @@ message UserProfile {
   bool private_account = 9;
   int64 created_at = 10;
   int64 updated_at = 11;
+  // Extended profile fields
+  optional string first_name = 12;
+  optional string last_name = 13;
+  optional string date_of_birth = 14;  // ISO 8601 date format (YYYY-MM-DD)
+  optional string gender = 15;         // male, female, other, prefer_not_to_say
 }
 
 message UpdateUserProfileResponse {

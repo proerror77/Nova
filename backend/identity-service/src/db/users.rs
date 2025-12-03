@@ -1,7 +1,8 @@
 /// User database operations for identity-service
 use crate::error::{IdentityError, Result};
+use crate::models::user::Gender;
 use crate::models::User;
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDate, Utc};
 use serde_json::json;
 use sqlx::{PgPool, Postgres, Transaction};
 use uuid::Uuid;
@@ -18,6 +19,11 @@ pub struct UserProfileRecord {
     pub cover_photo_url: Option<String>,
     pub location: Option<String>,
     pub private_account: bool,
+    // Extended profile fields
+    pub first_name: Option<String>,
+    pub last_name: Option<String>,
+    pub date_of_birth: Option<NaiveDate>,
+    pub gender: Option<Gender>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -31,6 +37,11 @@ pub struct UpdateUserProfileFields {
     pub cover_photo_url: Option<String>,
     pub location: Option<String>,
     pub private_account: Option<bool>,
+    // Extended profile fields
+    pub first_name: Option<String>,
+    pub last_name: Option<String>,
+    pub date_of_birth: Option<NaiveDate>,
+    pub gender: Option<Gender>,
 }
 
 /// Find user by email (excluding soft-deleted users)
@@ -116,6 +127,10 @@ pub async fn get_user_profile(pool: &PgPool, user_id: Uuid) -> Result<Option<Use
             cover_photo_url,
             location,
             COALESCE(private_account, FALSE) AS private_account,
+            first_name,
+            last_name,
+            date_of_birth,
+            gender,
             created_at,
             updated_at
         FROM users
@@ -147,7 +162,11 @@ pub async fn update_user_profile(
             cover_photo_url = COALESCE($5, cover_photo_url),
             location = COALESCE($6, location),
             private_account = COALESCE($7, private_account),
-            updated_at = $8
+            first_name = COALESCE($8, first_name),
+            last_name = COALESCE($9, last_name),
+            date_of_birth = COALESCE($10, date_of_birth),
+            gender = COALESCE($11, gender),
+            updated_at = $12
         WHERE id = $1
         RETURNING
             id,
@@ -159,6 +178,10 @@ pub async fn update_user_profile(
             cover_photo_url,
             location,
             COALESCE(private_account, FALSE) AS private_account,
+            first_name,
+            last_name,
+            date_of_birth,
+            gender,
             created_at,
             updated_at
         "#,
@@ -170,6 +193,10 @@ pub async fn update_user_profile(
     .bind(fields.cover_photo_url)
     .bind(fields.location)
     .bind(fields.private_account)
+    .bind(fields.first_name)
+    .bind(fields.last_name)
+    .bind(fields.date_of_birth)
+    .bind(fields.gender)
     .bind(now)
     .fetch_one(pool)
     .await

@@ -66,6 +66,21 @@ message User {
   google.protobuf.Timestamp created_at = 16;
   google.protobuf.Timestamp updated_at = 17;
   google.protobuf.Timestamp deleted_at = 18;  // Soft delete
+
+  // Extended profile fields
+  string first_name = 19;         // User's first name
+  string last_name = 20;          // User's last name
+  string date_of_birth = 21;      // ISO 8601 date (YYYY-MM-DD)
+  Gender gender = 22;             // User's gender
+}
+
+// -------- Gender Enum --------
+enum Gender {
+  GENDER_UNSPECIFIED = 0;
+  GENDER_MALE = 1;
+  GENDER_FEMALE = 2;
+  GENDER_OTHER = 3;
+  GENDER_PREFER_NOT_TO_SAY = 4;
 }
 
 // -------- Settings Model --------
@@ -125,6 +140,10 @@ message UpdateProfileRequest {
   google.protobuf.StringValue website = 6;
   google.protobuf.StringValue location = 7;
   google.protobuf.BoolValue is_private = 8;
+  google.protobuf.StringValue first_name = 9;
+  google.protobuf.StringValue last_name = 10;
+  google.protobuf.StringValue date_of_birth = 11;  // ISO 8601 date (YYYY-MM-DD)
+  Gender gender = 12;
 }
 
 message UpdateProfileResponse {

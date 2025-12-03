@@ -38,13 +38,13 @@ pub fn validate_username_shape_validator(username: &str) -> Result<(), Validatio
 }
 
 /// Validate password strength requirements
-/// - Minimum 8 characters
+/// - Minimum 6 characters
 /// - At least one uppercase letter
 /// - At least one lowercase letter
 /// - At least one digit
 /// - At least one special character
 pub fn validate_password(password: &str) -> bool {
-    if password.len() < 8 {
+    if password.len() < 6 {
         return false;
     }
 

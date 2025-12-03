@@ -32,6 +32,11 @@ message UserProfile {
   int64 created_at = 15;             // Unix timestamp (seconds)
   int64 updated_at = 16;             // Unix timestamp (seconds)
   int64 deleted_at = 17;             // Unix timestamp (seconds) (soft delete)
+  // Extended profile fields
+  string first_name = 18;             // First name (optional)
+  string last_name = 19;              // Last name (optional)
+  string date_of_birth = 20;          // Date of birth (ISO 8601 YYYY-MM-DD, optional)
+  string gender = 21;                 // Gender (male, female, other, prefer_not_to_say)
 }
 
 // Message: User settings and preferences
@@ -97,6 +102,11 @@ message UpdateUserProfileRequest {
   string website = 6;                 // Optional
   string location = 7;                // Optional
   bool is_private = 8;                // Optional
+  // Extended profile fields
+  string first_name = 9;              // Optional
+  string last_name = 10;              // Optional
+  string date_of_birth = 11;          // Optional (ISO 8601 YYYY-MM-DD)
+  string gender = 12;                 // Optional (male, female, other, prefer_not_to_say)
 }
 
 message UpdateUserProfileResponse {
