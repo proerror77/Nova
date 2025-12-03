@@ -2,10 +2,11 @@
 -- Tracks when messages are recalled and by whom for compliance and debugging
 
 -- Up
+-- Note: recalled_by FK removed - users table is in separate database (identity-service)
 CREATE TABLE IF NOT EXISTS message_recalls (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   message_id UUID NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
-  recalled_by UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  recalled_by UUID NOT NULL,
   recall_reason TEXT,
   recalled_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
