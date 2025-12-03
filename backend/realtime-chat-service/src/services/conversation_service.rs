@@ -123,13 +123,12 @@ impl ConversationService {
         // constraints (e.g., password_hash). Assume provided user IDs already exist
         // and let FK constraints enforce integrity.
 
-        // Insert conversation using user-service schema
-        // conversations(id, conversation_type, created_by)
+        // Insert conversation
+        // conversations(id, kind, member_count, privacy_mode)
         sqlx::query(
-            "INSERT INTO conversations (id, conversation_type, created_by) VALUES ($1, 'direct', $2)",
+            "INSERT INTO conversations (id, kind, member_count, privacy_mode) VALUES ($1, 'direct'::conversation_type, 2, 'strict_e2e'::privacy_mode)",
         )
         .bind(id)
-        .bind(initiator)
         .execute(&mut *tx)
         .await
         .map_err(|e| {
@@ -446,7 +445,7 @@ impl ConversationService {
         sqlx::query(
             r#"
             INSERT INTO conversations (id, kind, name, description, avatar_url, member_count, privacy_mode, admin_key_version)
-            VALUES ($1, 'group', $2, $3, $4, $5, $6, 1)
+            VALUES ($1, 'group', $2, $3, $4, $5, $6::privacy_mode, 1)
             "#
         )
         .bind(conversation_id)
