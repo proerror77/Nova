@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 // MARK: - Design Tokens
 /// 统一的设计规范，供所有页面使用
@@ -117,5 +118,51 @@ private extension Color {
         Color(UIColor { trait in
             trait.userInterfaceStyle == .dark ? dark : light
         })
+    }
+}
+
+// MARK: - Theme Manager
+/// 全局主題管理（深色 / 淺色）
+final class ThemeManager: ObservableObject {
+    static let shared = ThemeManager()
+
+    @Published private(set) var isDarkMode: Bool
+
+    private let userDefaultsKey = "ICERED_Theme_IsDarkMode"
+
+    private init() {
+        if let stored = UserDefaults.standard.object(forKey: userDefaultsKey) as? Bool {
+            self.isDarkMode = stored
+        } else {
+            self.isDarkMode = false
+        }
+
+        applyAppearance()
+    }
+
+    /// 套用主題並持久化到 UserDefaults
+    func apply(isDarkMode: Bool) {
+        guard self.isDarkMode != isDarkMode else { return }
+        self.isDarkMode = isDarkMode
+        UserDefaults.standard.set(isDarkMode, forKey: userDefaultsKey)
+        applyAppearance()
+    }
+
+    /// SwiftUI 用來控制全局 ColorScheme
+    var colorScheme: ColorScheme? {
+        isDarkMode ? .dark : .light
+    }
+
+    /// 對整個 App 的 UIWindow 套用深色 / 淺色樣式，
+    /// 確保使用 UIColor 動態色的地方也能跟著切換。
+    private func applyAppearance() {
+        DispatchQueue.main.async {
+            for scene in UIApplication.shared.connectedScenes {
+                guard let windowScene = scene as? UIWindowScene else { continue }
+                for window in windowScene.windows {
+                    window.overrideUserInterfaceStyle = self.isDarkMode ? .dark : .light
+                }
+            }
+        }
     }
 }

@@ -138,6 +138,11 @@ struct SettingsView: View {
                                 .stroke(DesignTokens.borderColor, lineWidth: 0.5)
                         )
                         .padding(.horizontal, 12)
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            guard !viewModel.isSavingDarkMode else { return }
+                            viewModel.isDarkMode.toggle()
+                        }
 
                         // MARK: - Sign Out
                         Button(action: {

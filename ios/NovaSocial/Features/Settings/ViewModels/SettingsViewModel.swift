@@ -10,59 +10,39 @@ final class SettingsViewModel: ObservableObject {
 
     private let authManager: AuthenticationManager
     private let userService: UserService
+    private let themeManager: ThemeManager
 
     init(
         authManager: AuthenticationManager? = nil,
-        userService: UserService? = nil
+        userService: UserService? = nil,
+        themeManager: ThemeManager? = nil
     ) {
         self.authManager = authManager ?? AuthenticationManager.shared
         self.userService = userService ?? UserService.shared
+        self.themeManager = themeManager ?? ThemeManager.shared
+        self.isDarkMode = self.themeManager.isDarkMode
     }
 
     func onAppear() {
-        Task { await loadSettings() }
+        // 對於 iOS UI，深色模式只需讀取本機 ThemeManager 狀態，
+        // 不強依賴後端設定。
+        isDarkMode = themeManager.isDarkMode
     }
 
     func loadSettings() async {
-        guard let userId = authManager.currentUser?.id,
-              !authManager.isGuestMode else { return }
-
+        // 保留函式簽名給未來擴充使用，但目前深色模式偏好只依賴本機 ThemeManager。
         isLoading = true
         errorMessage = nil
-
-        do {
-            let settings = try await userService.getSettings(userId: userId)
-            userSettings = settings
-            isDarkMode = settings.safeDarkMode
-        } catch {
-            // Keep current state if loading fails
-            errorMessage = NSLocalizedString("Failed to load settings", comment: "")
-            #if DEBUG
-            print("[Settings] Failed to load settings: \(error)")
-            #endif
-        }
-
+        isDarkMode = themeManager.isDarkMode
         isLoading = false
     }
 
     func updateDarkMode(enabled: Bool) async {
-        guard let userId = authManager.currentUser?.id,
-              !authManager.isGuestMode else { return }
-
         isSavingDarkMode = true
         errorMessage = nil
 
-        do {
-            let updatedSettings = try await userService.updateDarkMode(userId: userId, enabled: enabled)
-            userSettings = updatedSettings
-        } catch {
-            // Revert on failure
-            isDarkMode = !enabled
-            errorMessage = NSLocalizedString("Failed to update dark mode", comment: "")
-            #if DEBUG
-            print("[Settings] Failed to update dark mode: \(error)")
-            #endif
-        }
+        // iOS UI 只需要調整 App 本身的顏色模式，不需要依賴後端。
+        themeManager.apply(isDarkMode: enabled)
 
         isSavingDarkMode = false
     }

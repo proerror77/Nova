@@ -160,10 +160,13 @@ struct APIConfig {
 
     // MARK: - User Settings API
     struct Settings {
-        /// GET /api/v2/users/{id}/settings 獲取用戶設定
-        static func getSettings(_ userId: String) -> String { "/api/v2/users/\(userId)/settings" }
-        /// PUT /api/v2/users/{id}/settings 更新用戶設定
-        static func updateSettings(_ userId: String) -> String { "/api/v2/users/\(userId)/settings" }
+        /// GET /api/v2/auth/users/{id}/settings 獲取用戶設定
+        /// NOTE: HTTP 網關目前將使用者設定掛在 auth-service 之下，
+        /// 對應 backend/proto/services/auth_service.proto GetUserSettings。
+        /// 如果之後遷移到 user-service，請同步更新為 /api/v2/users/{id}/settings。
+        static func getSettings(_ userId: String) -> String { "/api/v2/auth/users/\(userId)/settings" }
+        /// PUT /api/v2/auth/users/{id}/settings 更新用戶設定
+        static func updateSettings(_ userId: String) -> String { "/api/v2/auth/users/\(userId)/settings" }
     }
 
     // MARK: - Friends & Social Graph API
