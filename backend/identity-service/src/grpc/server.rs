@@ -121,11 +121,35 @@ impl AuthService for IdentityServiceServer {
         }
 
         // 3. Check if user already exists
-        if db::users::find_by_email(&self.db, &req.email)
+        if let Some(existing) = db::users::find_by_email(&self.db, &req.email)
             .await
             .map_err(to_status)?
-            .is_some()
         {
+            // If password matches an existing account, treat this as idempotent
+            // registration and simply return a fresh token pair instead of an error.
+            if verify_password(&req.password, &existing.password_hash).map_err(to_status)? {
+                let tokens = generate_token_pair(
+                    existing.id,
+                    &existing.email,
+                    &existing.username,
+                )
+                .map_err(anyhow_to_status)?;
+
+                info!(
+                    user_id = %existing.id,
+                    email = %existing.email,
+                    "Idempotent register: user already exists, returning new token pair"
+                );
+
+                return Ok(Response::new(RegisterResponse {
+                    user_id: existing.id.to_string(),
+                    token: tokens.access_token,
+                    refresh_token: tokens.refresh_token,
+                    expires_in: tokens.expires_in,
+                }));
+            }
+
+            // Different password: keep existing behavior and surface already-exists error.
             return Err(Status::already_exists("Email already registered"));
         }
 

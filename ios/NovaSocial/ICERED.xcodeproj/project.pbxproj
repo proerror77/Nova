@@ -17,6 +17,7 @@
 		OAUTHSERVICE001 /* OAuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = OAUTHSERVICE002 /* OAuthService.swift */; };
 		28DB49853F12862488ED815C /* SearchModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09440F16B1285584BC291E21 /* SearchModels.swift */; };
 		29C1101849EFBA03D41D8D53 /* ProfileView.swift.backup in Resources */ = {isa = PBXBuildFile; fileRef = 23217D4428E93D1A447D9CD0 /* ProfileView.swift.backup */; };
+		7F1E2D3C4B5A697887766554 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 6F1E2D3C4B5A697887766554 /* Localizable.strings */; };
 		2C1AE65CD1BCEE877390EA52 /* CommentSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 935F737074559D05F95D4EF0 /* CommentSheetView.swift */; };
 		30D1CB05B4B8E0DF2394DA20 /* MediaService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B53881EFE11477A9FE157D2 /* MediaService.swift */; };
 		33A5FB652C0009D96FB844A5 /* CommunicationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4665602C144B266807588223 /* CommunicationService.swift */; };
@@ -97,6 +98,7 @@
 		1D3041E7FCC0ACD7F53D08BA /* ICERED.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ICERED.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		1F2AEFDFBC28D0D641DE1964 /* .gitattributes */ = {isa = PBXFileReference; lastKnownFileType = text; path = .gitattributes; sourceTree = "<group>"; };
 		6C5B4A3D2E1F0A9B8C7D6E5F /* FormRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FormRow.swift; sourceTree = "<group>"; };
+		6F1E2D3C4B5A697887766554 /* Localizable.strings */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = Localizable.strings; path = en.lproj/Localizable.strings; sourceTree = "<group>"; };
 		2209DC0250249AF1C3BB7DA4 /* NotificationModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationModels.swift; sourceTree = "<group>"; };
 		23217D4428E93D1A447D9CD0 /* ProfileView.swift.backup */ = {isa = PBXFileReference; lastKnownFileType = text; path = ProfileView.swift.backup; sourceTree = "<group>"; };
 		28B434DE97D0F186DE9CEE60 /* PhotoOptionsModal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoOptionsModal.swift; sourceTree = "<group>"; };
@@ -512,6 +514,7 @@
 				B0393038DC4D72E8421D1B35 /* App.swift */,
 				817F6537589781480741FFB5 /* AppPage.swift */,
 				0CEC6778F7F6BAFBBBF847B9 /* Assets.xcassets */,
+				6F1E2D3C4B5A697887766554 /* Localizable.strings */,
 				C932A10966CC60CB5210880E /* ICONS_MAPPING.md */,
 			);
 			name = NovaSocial;
@@ -869,6 +872,7 @@
 				8F09936DEAE3749EBCFAB662 /* Assets.xcassets in Resources */,
 				DA25034A61BE32AED01A9B16 /* ICONS_MAPPING.md in Resources */,
 				29C1101849EFBA03D41D8D53 /* ProfileView.swift.backup in Resources */,
+				7F1E2D3C4B5A697887766554 /* Localizable.strings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
