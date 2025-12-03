@@ -19,8 +19,8 @@ COPY Cargo.toml Cargo.lock ./
 # Copy full backend workspace to satisfy workspace members
 COPY backend ./backend
 
-# Build media-service
-RUN cargo build --release -p media-service --bin media-service
+# Build media-service binaries (main server + thumbnail migrator)
+RUN cargo build --release -p media-service --bin media-service --bin thumb-migrate
 
 # Runtime stage
 FROM debian:bookworm-slim AS runtime
@@ -37,8 +37,9 @@ RUN useradd -m -u 1001 -s /bin/bash appuser
 
 WORKDIR /app
 
-# Copy binary and migrations
+# Copy binaries
 COPY --from=builder /app/target/release/media-service /app/media-service
+COPY --from=builder /app/target/release/thumb-migrate /app/thumb-migrate
 
 # Adjust ownership
 RUN chown -R appuser:appuser /app
