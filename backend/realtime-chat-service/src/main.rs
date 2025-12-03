@@ -1,6 +1,7 @@
 use actix_web::{web, App, HttpServer};
 use crypto_core::jwt as core_jwt;
 use grpc_clients::AuthClient;
+use grpc_tls::mtls::{MtlsClientConfig, TlsConfigPaths};
 use realtime_chat_service::{
     config, db, error, grpc, handlers, logging,
     nova::realtime_chat::v1::realtime_chat_service_server::RealtimeChatServiceServer,
@@ -9,8 +10,8 @@ use realtime_chat_service::{
     services::{
         encryption::EncryptionService,
         key_exchange::KeyExchangeService,
-        olm_service::{AccountEncryptionKey, OlmService},
         megolm_service::MegolmService,
+        olm_service::{AccountEncryptionKey, OlmService},
     },
     state::AppState,
     websocket::streams::{start_streams_listener, StreamsConfig},
@@ -18,6 +19,7 @@ use realtime_chat_service::{
 use redis_utils::{RedisPool, SentinelConfig};
 use std::env;
 use std::net::SocketAddr;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::task::JoinHandle;
@@ -74,7 +76,9 @@ async fn main() -> Result<(), error::AppError> {
             let olm = Arc::new(OlmService::new(db.clone(), encryption_key));
             let megolm = Arc::new(MegolmService::new(
                 db.clone(),
-                realtime_chat_service::services::megolm_service::AccountEncryptionKey::new(key_bytes),
+                realtime_chat_service::services::megolm_service::AccountEncryptionKey::new(
+                    key_bytes,
+                ),
             ));
             tracing::info!("✅ E2EE services (Olm/Megolm) initialized");
             (Some(olm), Some(megolm))
@@ -88,21 +92,72 @@ async fn main() -> Result<(), error::AppError> {
         }
     };
 
-    // Initialize AuthClient (identity-service only - lazy connection)
-    tracing::info!("Initializing Auth gRPC client (lazy connection)");
+    // Initialize AuthClient (identity-service with mTLS)
+    tracing::info!("Initializing Auth gRPC client");
     let identity_service_url = env::var("GRPC_IDENTITY_SERVICE_URL")
-        .unwrap_or_else(|_| "http://identity-service:50051".to_string());
+        .unwrap_or_else(|_| "https://identity-service:50051".to_string());
 
-    let identity_channel = Endpoint::from_shared(identity_service_url.clone())
-        .map_err(|e| error::AppError::Config(format!("Invalid identity service URL: {}", e)))?
-        .connect_timeout(Duration::from_secs(10))
-        .timeout(Duration::from_secs(30))
-        .tcp_keepalive(Some(Duration::from_secs(60)))
-        .http2_keep_alive_interval(Duration::from_secs(30))
-        .keep_alive_timeout(Duration::from_secs(10))
-        .connect_lazy(); // Lazy connection - won't block startup
+    // Build mTLS client config if certificates are available
+    let auth_client = {
+        let use_mtls = identity_service_url.starts_with("https://");
 
-    let auth_client = Arc::new(AuthClient::new(identity_channel));
+        let mut endpoint = Endpoint::from_shared(identity_service_url.clone())
+            .map_err(|e| error::AppError::Config(format!("Invalid identity service URL: {}", e)))?
+            .connect_timeout(Duration::from_secs(10))
+            .timeout(Duration::from_secs(30))
+            .tcp_keepalive(Some(Duration::from_secs(60)))
+            .http2_keep_alive_interval(Duration::from_secs(30))
+            .keep_alive_timeout(Duration::from_secs(10));
+
+        if use_mtls {
+            // Load mTLS client configuration from environment/paths
+            // realtime-chat-service uses same certs for both server and client auth
+            let ca_cert_path = env::var("GRPC_CA_CERT_PATH")
+                .unwrap_or_else(|_| "/etc/grpc/certs/ca.crt".to_string());
+            let server_cert_path = env::var("GRPC_SERVER_CERT_PATH")
+                .unwrap_or_else(|_| "/etc/grpc/certs/server.crt".to_string());
+            let server_key_path = env::var("GRPC_SERVER_KEY_PATH")
+                .unwrap_or_else(|_| "/etc/grpc/certs/server.key".to_string());
+
+            let tls_paths = TlsConfigPaths {
+                ca_cert_path: PathBuf::from(&ca_cert_path),
+                server_cert_path: PathBuf::from(&server_cert_path),
+                server_key_path: PathBuf::from(&server_key_path),
+                // Use server cert as client cert (same identity for internal services)
+                client_cert_path: Some(PathBuf::from(&server_cert_path)),
+                client_key_path: Some(PathBuf::from(&server_key_path)),
+            };
+
+            // Extract domain name from URL for TLS verification
+            let domain_name = identity_service_url
+                .replace("https://", "")
+                .split(':')
+                .next()
+                .unwrap_or("identity-service")
+                .to_string();
+
+            match MtlsClientConfig::from_paths(tls_paths, domain_name).await {
+                Ok(mtls_config) => {
+                    let tls_config = mtls_config.build_client_tls().map_err(|e| {
+                        error::AppError::StartServer(format!("Failed to build mTLS client config: {}", e))
+                    })?;
+                    endpoint = endpoint.tls_config(tls_config).map_err(|e| {
+                        error::AppError::StartServer(format!("Failed to configure TLS: {}", e))
+                    })?;
+                    tracing::info!("✅ mTLS client configured for identity-service");
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        error = %e,
+                        "Failed to load mTLS client config, falling back to plaintext (dev only)"
+                    );
+                }
+            }
+        }
+
+        let channel = endpoint.connect_lazy();
+        Arc::new(AuthClient::new(channel))
+    };
     tracing::info!("✅ Auth gRPC client initialized (will connect on first use)");
 
     let state = AppState {
@@ -228,7 +283,7 @@ async fn main() -> Result<(), error::AppError> {
             .service(
                 web::scope("/api/v2")
                     .configure(handlers::e2ee::configure)
-                    .configure(routes::relationships::configure)
+                    .configure(routes::relationships::configure),
             )
             .route("/health", web::get().to(|| async { "OK" }))
     })

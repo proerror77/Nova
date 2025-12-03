@@ -59,7 +59,9 @@ impl ConversationService {
         for user_id in [initiator, recipient] {
             let exists = auth_client.user_exists(user_id).await.map_err(|e| {
                 tracing::error!(user_id = %user_id, error = %e, "auth-service user_exists failed");
-                crate::error::AppError::StartServer(format!("validate user: {e}"))
+                crate::error::AppError::ServiceUnavailable(format!(
+                    "Failed to check user existence via auth-service: {e}"
+                ))
             })?;
             if !exists {
                 return Err(crate::error::AppError::BadRequest(format!(
@@ -70,7 +72,9 @@ impl ConversationService {
         }
 
         // Check if conversation already exists between these users
-        if let Some(existing_id) = Self::find_existing_direct_conversation(db, initiator, recipient).await? {
+        if let Some(existing_id) =
+            Self::find_existing_direct_conversation(db, initiator, recipient).await?
+        {
             return Ok(existing_id);
         }
 
@@ -413,7 +417,9 @@ impl ConversationService {
         for user_id in &all_members {
             let exists = auth_client.user_exists(*user_id).await.map_err(|e| {
                 tracing::error!(user_id = %user_id, error = %e, "auth-service user_exists failed");
-                crate::error::AppError::StartServer(format!("validate user: {e}"))
+                crate::error::AppError::ServiceUnavailable(format!(
+                    "Failed to check user existence via auth-service: {e}"
+                ))
             })?;
             if !exists {
                 return Err(crate::error::AppError::BadRequest(format!(
