@@ -282,11 +282,9 @@ pub async fn validate_invite_code(
 
     let mut auth_client = clients.auth_client();
 
-    let request = tonic::Request::new(
-        crate::clients::proto::auth::ValidateInviteRequest {
-            code: query.code.clone(),
-        },
-    );
+    let request = tonic::Request::new(crate::clients::proto::auth::ValidateInviteRequest {
+        code: query.code.clone(),
+    });
 
     match auth_client.validate_invite(request).await {
         Ok(response) => {

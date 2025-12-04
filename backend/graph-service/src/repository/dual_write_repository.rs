@@ -289,7 +289,10 @@ impl DualWriteRepository {
                 );
                 tracing::warn!("neo4j_query_failure{{operation=\"get_blocked_users\"}}");
 
-                let result = self.postgres.get_blocked_users(user_id, limit, offset).await?;
+                let result = self
+                    .postgres
+                    .get_blocked_users(user_id, limit, offset)
+                    .await?;
                 tracing::warn!("postgres_query_fallback{{operation=\"get_blocked_users\"}}");
                 Ok(result)
             }

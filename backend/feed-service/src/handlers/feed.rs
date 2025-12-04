@@ -9,7 +9,9 @@ use crate::error::{AppError, Result};
 use crate::grpc::clients::{ContentServiceClient, GraphServiceClient};
 use crate::middleware::jwt_auth::UserId;
 use crate::models::FeedResponse;
-use grpc_clients::nova::content_service::v2::{ContentStatus, GetUserPostsRequest, ListRecentPostsRequest};
+use grpc_clients::nova::content_service::v2::{
+    ContentStatus, GetUserPostsRequest, ListRecentPostsRequest,
+};
 use grpc_clients::nova::graph_service::v2::GetFollowingRequest;
 
 #[derive(Debug, Deserialize)]
@@ -254,10 +256,7 @@ pub async fn get_guest_feed(
     let limit = query.limit.min(50).max(1); // Stricter limit for guest feed
     let offset = query.decode_cursor()?;
 
-    info!(
-        "Guest feed request: limit={} offset={}",
-        limit, offset
-    );
+    info!("Guest feed request: limit={} offset={}", limit, offset);
 
     // Fetch global/recent posts - no user exclusion for guest mode
     let request_limit = ((limit as usize).saturating_add(offset)).min(200) as i32;
