@@ -23,9 +23,11 @@
 //! serde_json = "1.0"
 //! ```
 
+// TODO: Upgrade to aes-gcm 0.11 when stable (uses hybrid-array instead of generic-array)
+#[allow(deprecated)]
 use aes_gcm::{
-    aead::{Aead, KeyInit},
-    Aes256Gcm, Nonce,
+    aead::{generic_array::GenericArray, Aead, KeyInit},
+    Aes256Gcm,
 };
 use sqlx::{PgPool, Row};
 use std::sync::Arc;
@@ -707,7 +709,7 @@ impl OlmService {
         let mut nonce_bytes = [0u8; 12];
         getrandom::getrandom(&mut nonce_bytes)
             .map_err(|e| OlmError::Encryption(format!("RNG failure: {}", e)))?;
-        let nonce = Nonce::from_slice(&nonce_bytes);
+        let nonce = GenericArray::from_slice(&nonce_bytes);
 
         let ciphertext = cipher
             .encrypt(nonce, data)
@@ -718,17 +720,17 @@ impl OlmService {
 
     /// Decrypt pickle using AES-256-GCM
     fn decrypt_pickle(&self, ciphertext: &[u8], nonce: &[u8]) -> Result<Vec<u8>, OlmError> {
-        if nonce.len() != 12 {
-            return Err(OlmError::Decryption(format!(
+        let nonce_array: [u8; 12] = nonce.try_into().map_err(|_| {
+            OlmError::Decryption(format!(
                 "Invalid nonce length: expected 12, got {}",
                 nonce.len()
-            )));
-        }
+            ))
+        })?;
 
         let cipher = Aes256Gcm::new_from_slice(&self.encryption_key.0)
             .map_err(|e| OlmError::Decryption(e.to_string()))?;
 
-        let nonce = Nonce::from_slice(nonce);
+        let nonce = GenericArray::from_slice(&nonce_array);
 
         cipher
             .decrypt(nonce, ciphertext)

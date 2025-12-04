@@ -17,9 +17,11 @@
 //! - Session keys never stored in plaintext
 //! - Pickle encryption at rest using AES-256-GCM
 
+// TODO: Upgrade to aes-gcm 0.11 when stable (uses hybrid-array instead of generic-array)
+#[allow(deprecated)]
 use aes_gcm::{
-    aead::{Aead, KeyInit},
-    Aes256Gcm, Nonce,
+    aead::{generic_array::GenericArray, Aead, KeyInit},
+    Aes256Gcm,
 };
 use sqlx::{PgPool, Row};
 use std::sync::Arc;
@@ -689,7 +691,7 @@ impl MegolmService {
         let mut nonce_bytes = [0u8; 12];
         getrandom::getrandom(&mut nonce_bytes)
             .map_err(|e| MegolmError::Encryption(e.to_string()))?;
-        let nonce: &Nonce = (&nonce_bytes).into();
+        let nonce = GenericArray::from_slice(&nonce_bytes);
 
         let ciphertext = cipher
             .encrypt(nonce, data)
@@ -703,7 +705,10 @@ impl MegolmService {
         let cipher = Aes256Gcm::new_from_slice(&self.encryption_key.0)
             .map_err(|e| MegolmError::Decryption(e.to_string()))?;
 
-        let nonce = Nonce::from_slice(nonce);
+        let nonce_array: [u8; 12] = nonce
+            .try_into()
+            .map_err(|_| MegolmError::Decryption("Invalid nonce length".to_string()))?;
+        let nonce = GenericArray::from_slice(&nonce_array);
 
         cipher
             .decrypt(nonce, ciphertext)
