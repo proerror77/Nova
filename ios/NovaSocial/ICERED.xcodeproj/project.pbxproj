@@ -1079,6 +1079,9 @@
 				CHATSERVICE001 /* ChatService.swift in Sources */,
 				KEYBOARDEXT001 /* KeyboardExtension.swift in Sources */,
 				SHARESHEET001 /* ShareSheet.swift in Sources */,
+				E2EESERVICE001 /* E2EEService.swift in Sources */,
+				E2EEMODELS001 /* E2EEModels.swift in Sources */,
+				CRYPTOCORE001 /* CryptoCore.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

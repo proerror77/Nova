@@ -684,6 +684,7 @@ impl MegolmService {
     }
 
     /// Encrypt a pickle using AES-256-GCM
+    #[allow(deprecated)]
     fn encrypt_pickle(&self, data: &[u8]) -> Result<(Vec<u8>, Vec<u8>), MegolmError> {
         let cipher = Aes256Gcm::new_from_slice(&self.encryption_key.0)
             .map_err(|e| MegolmError::Encryption(e.to_string()))?;
@@ -701,6 +702,7 @@ impl MegolmService {
     }
 
     /// Decrypt a pickle using AES-256-GCM
+    #[allow(deprecated)]
     fn decrypt_pickle(&self, ciphertext: &[u8], nonce: &[u8]) -> Result<Vec<u8>, MegolmError> {
         let cipher = Aes256Gcm::new_from_slice(&self.encryption_key.0)
             .map_err(|e| MegolmError::Decryption(e.to_string()))?;
