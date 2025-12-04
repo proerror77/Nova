@@ -72,19 +72,17 @@ spec:
                   key: CLICKHOUSE_PASSWORD
                   optional: true
           livenessProbe:
-            exec:
-              command:
-                - /bin/sh
-                - -c
-                - "pgrep analytics-service"
+            httpGet:
+              path: /health
+              port: 8000
             initialDelaySeconds: 30
             periodSeconds: 30
+            timeoutSeconds: 5
           readinessProbe:
-            exec:
-              command:
-                - /bin/sh
-                - -c
-                - "pgrep analytics-service"
+            httpGet:
+              path: /health
+              port: 8000
             initialDelaySeconds: 10
             periodSeconds: 10
+            timeoutSeconds: 5
       restartPolicy: Always
