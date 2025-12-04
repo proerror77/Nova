@@ -302,20 +302,31 @@ final class E2EEService {
         #endif
     }
 
-    /// Derive conversation-specific encryption key
-    /// Temporary solution - should use proper session keys per user/device
+    /// Derive conversation-specific encryption key using HKDF
+    /// Uses HKDF-SHA256 with proper salt and info for cryptographic key derivation
+    /// Temporary solution - should use proper session keys per user/device in production
     private func deriveConversationKey(conversationId: UUID) throws -> Data {
         guard let identity = deviceIdentity else {
             throw E2EEError.notInitialized
         }
 
-        // Simple derivation: SHA256(secret_key || conversation_id)
-        var hasher = SHA256Hasher()
-        hasher.update(data: identity.secretKey)
-        hasher.update(data: conversationId.uuidString.data(using: .utf8)!)
-        let hash = hasher.finalize()
+        // Use HKDF (HMAC-based Key Derivation Function) for secure key derivation
+        // - IKM (Input Key Material): device secret key
+        // - Salt: device ID (provides domain separation)
+        // - Info: conversation ID (context binding)
+        let ikm = SymmetricKey(data: identity.secretKey)
+        let salt = identity.deviceId.data(using: .utf8)!
+        let info = "conversation:\(conversationId.uuidString)".data(using: .utf8)!
 
-        return Data(hash)
+        // Derive 32-byte key using HKDF-SHA256
+        let derivedKey = HKDF<SHA256>.deriveKey(
+            inputKeyMaterial: ikm,
+            salt: salt,
+            info: info,
+            outputByteCount: 32
+        )
+
+        return derivedKey.withUnsafeBytes { Data($0) }
     }
 
     // MARK: - Keychain Storage
@@ -364,19 +375,5 @@ final class E2EEService {
         #if DEBUG
         print("[E2EEService] Saved device identity to keychain")
         #endif
-    }
-}
-
-// MARK: - SHA256 Helper
-
-private struct SHA256Hasher {
-    private var hasher = CryptoKit.SHA256()
-
-    mutating func update(data: Data) {
-        hasher.update(data: data)
-    }
-
-    func finalize() -> CryptoKit.SHA256.Digest {
-        return hasher.finalize()
     }
 }

@@ -93,10 +93,14 @@ class AuthenticationManager: ObservableObject {
     // MARK: - Guest Mode (临时登录)
 
     /// 设置访客模式，允许用户跳过登录浏览应用
+    /// Note: Guest mode has limited access - no write operations allowed
     func setGuestMode() {
+        // Generate unique guest ID for this session
+        let guestSessionId = UUID().uuidString.prefix(8)
+
         self.isAuthenticated = true
         self.currentUser = UserProfile(
-            id: "guest",
+            id: "guest_\(guestSessionId)",
             username: "Guest",
             email: nil,
             displayName: "Guest User",
@@ -119,10 +123,12 @@ class AuthenticationManager: ObservableObject {
             dateOfBirth: nil,
             gender: nil
         )
-        self.authToken = "guest_token"
+        // Guest mode: no auth token - API calls will be rejected for protected endpoints
+        // This is intentional - guests can only access public read-only endpoints
+        self.authToken = nil
 
         #if DEBUG
-        print("[Auth] Guest mode enabled")
+        print("[Auth] Guest mode enabled (session: \(guestSessionId))")
         #endif
     }
 
@@ -141,7 +147,7 @@ class AuthenticationManager: ObservableObject {
 
     /// 检查是否为访客模式
     var isGuestMode: Bool {
-        currentUser?.id == "guest"
+        currentUser?.id.hasPrefix("guest_") == true
     }
 
     // MARK: - Registration
