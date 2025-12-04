@@ -2,8 +2,9 @@ import SwiftUI
 
 @main
 struct ICEREDApp: App {
-    // ObservedObject for singleton - App doesn't own it, just observes it
-    @ObservedObject private var authManager = AuthenticationManager.shared
+    // App 持有全局认证状态，并下发 EnvironmentObject
+    @StateObject private var authManager = AuthenticationManager.shared
+    @StateObject private var themeManager = ThemeManager.shared
     @State private var currentPage: AppPage
 
     // Check if running in UI testing mode
@@ -110,6 +111,9 @@ struct ICEREDApp: App {
                 }
             }
             .animation(.none, value: currentPage)
+            .environmentObject(authManager)
+            .environmentObject(themeManager)
+            .preferredColorScheme(themeManager.colorScheme)
         }
     }
 }

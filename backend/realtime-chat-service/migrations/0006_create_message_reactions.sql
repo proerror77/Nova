@@ -3,8 +3,9 @@
 -- Primary key ensures one reaction type per user per message
 
 -- Up
+-- Note: user_id FK removed - users table is in separate database (identity-service)
 CREATE TABLE IF NOT EXISTS message_reactions (
-  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL,
   message_id UUID NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
   reaction TEXT NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),

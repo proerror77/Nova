@@ -11,8 +11,8 @@ use utoipa_swagger_ui::SwaggerUi;
 
 use recommendation_service::config::Config;
 use recommendation_service::handlers::{
-    get_feed, get_model_info, get_recommendations, rank_candidates, semantic_search,
-    FeedHandlerState, RecommendationHandlerState,
+    get_feed, get_guest_feed, get_model_info, get_recommendations, rank_candidates,
+    semantic_search, FeedHandlerState, RecommendationHandlerState,
 };
 use tracing::info;
 
@@ -380,6 +380,10 @@ async fn main() -> io::Result<()> {
             .service(get_model_info)
             .service(rank_candidates)
             .service(semantic_search)
+            // Guest feed - public endpoint at /api/v2/guest/feed/trending (NO authentication)
+            // Separated from authenticated feed to avoid Actix-web scope conflicts
+            .service(web::scope("/api/v2/guest/feed").service(get_guest_feed))
+            // Authenticated feed - requires JWT at /api/v2/feed
             .service(
                 web::scope("/api/v2/feed")
                     .wrap(JwtAuthMiddleware)

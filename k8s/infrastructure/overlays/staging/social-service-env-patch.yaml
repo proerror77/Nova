@@ -1,0 +1,69 @@
+# Social Service 环境变量配置 - Staging
+# 包含完整的 mTLS 服务端配置
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: social-service
+spec:
+  template:
+    spec:
+      containers:
+      - name: social-service
+        env:
+        # ============================================================
+        # 服务基础配置
+        # ============================================================
+        - name: RUST_LOG
+          value: "info,social_service=debug"
+        - name: SERVICE_NAME
+          value: "social-service"
+        - name: SERVER_HOST
+          value: "0.0.0.0"
+        - name: PORT
+          value: "8006"
+        - name: SERVER_PORT
+          value: "8006"
+        - name: GRPC_PORT
+          value: "50052"
+
+        # ============================================================
+        # 数据库和消息队列配置
+        # ============================================================
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: social-service-secret
+              key: database-url
+        - name: REDIS_URL
+          valueFrom:
+            configMapKeyRef:
+              name: social-service-configmap
+              key: redis-url
+        - name: KAFKA_BROKERS
+          valueFrom:
+            configMapKeyRef:
+              name: social-service-configmap
+              key: kafka-brokers
+
+        # ============================================================
+        # mTLS 服务端配置 (作为 gRPC Server)
+        # ============================================================
+        - name: GRPC_SERVER_CERT_PATH
+          value: "/etc/nova/certs/server.crt"
+        - name: GRPC_SERVER_KEY_PATH
+          value: "/etc/nova/certs/server.key"
+        - name: GRPC_CA_CERT_PATH
+          value: "/etc/nova/certs/ca.crt"
+        - name: GRPC_REQUIRE_CLIENT_CERT
+          value: "true"
+
+        volumeMounts:
+        - name: grpc-mtls-shared
+          mountPath: /etc/nova/certs
+          readOnly: true
+
+      volumes:
+      - name: grpc-mtls-shared
+        secret:
+          secretName: grpc-mtls-shared

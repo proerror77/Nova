@@ -218,12 +218,17 @@ class ProfileData {
             location: "China",
             isVerified: true,
             isPrivate: false,
+            isBanned: false,
             followerCount: 3021,
             followingCount: 1500,
             postCount: 245,
             createdAt: Int64(Date().timeIntervalSince1970 - 365*24*60*60),
             updatedAt: Int64(Date().timeIntervalSince1970),
-            deletedAt: nil
+            deletedAt: nil,
+            firstName: "Bruce",
+            lastName: "Li",
+            dateOfBirth: "1990-01-15",
+            gender: .male
         )
         return data
     }

@@ -31,7 +31,7 @@ images:
   # Tier 1: Foundation
   - name: nova/identity-service
     newName: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/identity-service
-    newTag: 178b5cc3
+    newTag: 11c8a077-202512031705
 
   # Tier 3: Content Platform
   - name: nova/content-service

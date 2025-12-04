@@ -20,8 +20,8 @@ metadata:
   name: content-service
 spec:
   selector:
-    app: nova
-    component: content-service
+    app: content-service
+    tier: backend
 ---
 apiVersion: v1
 kind: Service
@@ -29,8 +29,8 @@ metadata:
   name: feed-service
 spec:
   selector:
-    app: nova
-    component: feed-service
+    app: feed-service
+    tier: backend
 ---
 apiVersion: v1
 kind: Service
@@ -38,13 +38,13 @@ metadata:
   name: media-service
 spec:
   selector:
-    app: nova
-    component: media-service
+    app: media-service
+    tier: backend
 apiVersion: v1
 kind: Service
 metadata:
   name: search-service
 spec:
   selector:
-    app: nova
-    component: search-service
+    app: search-service
+    tier: backend

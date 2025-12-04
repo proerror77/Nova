@@ -59,7 +59,9 @@ impl ConversationService {
         for user_id in [initiator, recipient] {
             let exists = auth_client.user_exists(user_id).await.map_err(|e| {
                 tracing::error!(user_id = %user_id, error = %e, "auth-service user_exists failed");
-                crate::error::AppError::StartServer(format!("validate user: {e}"))
+                crate::error::AppError::ServiceUnavailable(format!(
+                    "Failed to check user existence via auth-service: {e}"
+                ))
             })?;
             if !exists {
                 return Err(crate::error::AppError::BadRequest(format!(
@@ -70,7 +72,9 @@ impl ConversationService {
         }
 
         // Check if conversation already exists between these users
-        if let Some(existing_id) = Self::find_existing_direct_conversation(db, initiator, recipient).await? {
+        if let Some(existing_id) =
+            Self::find_existing_direct_conversation(db, initiator, recipient).await?
+        {
             return Ok(existing_id);
         }
 
@@ -119,13 +123,12 @@ impl ConversationService {
         // constraints (e.g., password_hash). Assume provided user IDs already exist
         // and let FK constraints enforce integrity.
 
-        // Insert conversation using user-service schema
-        // conversations(id, conversation_type, created_by)
+        // Insert conversation
+        // conversations(id, kind, member_count, privacy_mode)
         sqlx::query(
-            "INSERT INTO conversations (id, conversation_type, created_by) VALUES ($1, 'direct', $2)",
+            "INSERT INTO conversations (id, kind, member_count, privacy_mode) VALUES ($1, 'direct'::conversation_type, 2, 'strict_e2e'::privacy_mode)",
         )
         .bind(id)
-        .bind(initiator)
         .execute(&mut *tx)
         .await
         .map_err(|e| {
@@ -413,7 +416,9 @@ impl ConversationService {
         for user_id in &all_members {
             let exists = auth_client.user_exists(*user_id).await.map_err(|e| {
                 tracing::error!(user_id = %user_id, error = %e, "auth-service user_exists failed");
-                crate::error::AppError::StartServer(format!("validate user: {e}"))
+                crate::error::AppError::ServiceUnavailable(format!(
+                    "Failed to check user existence via auth-service: {e}"
+                ))
             })?;
             if !exists {
                 return Err(crate::error::AppError::BadRequest(format!(
@@ -440,7 +445,7 @@ impl ConversationService {
         sqlx::query(
             r#"
             INSERT INTO conversations (id, kind, name, description, avatar_url, member_count, privacy_mode, admin_key_version)
-            VALUES ($1, 'group', $2, $3, $4, $5, $6, 1)
+            VALUES ($1, 'group', $2, $3, $4, $5, $6::privacy_mode, 1)
             "#
         )
         .bind(conversation_id)

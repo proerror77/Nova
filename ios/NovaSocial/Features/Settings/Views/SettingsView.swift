@@ -2,44 +2,43 @@ import SwiftUI
 
 struct SettingsView: View {
     @Binding var currentPage: AppPage
-    @State private var isDarkMode = false
-    @StateObject private var authManager = AuthenticationManager.shared
+    @StateObject private var viewModel = SettingsViewModel()
 
     var body: some View {
         ZStack {
-            Color.white
+            DesignTokens.backgroundColor
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
-                // MARK: - 顶部导航栏
+                // MARK: - Top Navigation Bar
                 HStack {
                     Button(action: {
                         currentPage = .account
                     }) {
                         Image(systemName: "chevron.left")
                             .font(.system(size: 20))
-                            .foregroundColor(.black)
+                            .foregroundColor(DesignTokens.textPrimary)
                     }
 
                     Spacer()
 
-                    Text("Settings")
+                    Text(LocalizedStringKey("Settings"))
                         .font(.system(size: 24, weight: .medium))
-                        .foregroundColor(.black)
+                        .foregroundColor(DesignTokens.textPrimary)
 
                     Spacer()
 
-                    // 占位，保持标题居中
+                    // Placeholder for centering title
                     Color.clear
                         .frame(width: 20)
                 }
                 .frame(height: DesignTokens.topBarHeight)
                 .padding(.horizontal, 20)
-                .background(Color.white)
+                .background(DesignTokens.surface)
 
                 ScrollView {
                     VStack(spacing: 16) {
-                        // MARK: - 第一组设置项
+                        // MARK: - First Settings Group
                         VStack(spacing: 0) {
                             SettingsRow(
                                 icon: "person.2",
@@ -98,11 +97,11 @@ struct SettingsView: View {
                                 }
                             )
                         }
-                        .background(Color.white)
+                        .background(DesignTokens.surface)
                         .cornerRadius(6)
                         .overlay(
                             RoundedRectangle(cornerRadius: 6)
-                                .stroke(Color(red: 0.68, green: 0.68, blue: 0.68), lineWidth: 0.5)
+                                .stroke(DesignTokens.borderColor, lineWidth: 0.5)
                         )
                         .padding(.horizontal, 12)
 
@@ -110,54 +109,67 @@ struct SettingsView: View {
                         HStack {
                             Image(systemName: "moon.fill")
                                 .font(.system(size: 18))
-                                .foregroundColor(Color(red: 0.82, green: 0.11, blue: 0.26))
+                                .foregroundColor(DesignTokens.accentColor)
                                 .frame(width: 24)
 
-                            Text("Dark Mode")
+                            Text(LocalizedStringKey("Dark Mode"))
                                 .font(.system(size: 14, weight: .medium))
-                                .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
+                                .foregroundColor(DesignTokens.textPrimary)
 
                             Spacer()
 
-                            Toggle("", isOn: $isDarkMode)
-                                .labelsHidden()
+                            if viewModel.isSavingDarkMode {
+                                ProgressView()
+                                    .scaleEffect(0.8)
+                            } else {
+                                Toggle("", isOn: $viewModel.isDarkMode)
+                                    .labelsHidden()
+                                    .onChange(of: viewModel.isDarkMode) { _, newValue in
+                                        Task { await viewModel.updateDarkMode(enabled: newValue) }
+                                    }
+                            }
                         }
                         .padding(.horizontal, 20)
                         .padding(.vertical, 16)
-                        .background(Color.white)
+                        .background(DesignTokens.surface)
                         .cornerRadius(6)
                         .overlay(
                             RoundedRectangle(cornerRadius: 6)
-                                .stroke(Color(red: 0.68, green: 0.68, blue: 0.68), lineWidth: 0.5)
+                                .stroke(DesignTokens.borderColor, lineWidth: 0.5)
                         )
                         .padding(.horizontal, 12)
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            guard !viewModel.isSavingDarkMode else { return }
+                            viewModel.isDarkMode.toggle()
+                        }
 
                         // MARK: - Sign Out
                         Button(action: {
                             Task {
-                                await authManager.logout()
+                                await viewModel.logout()
                             }
                         }) {
                             HStack {
                                 Image(systemName: "rectangle.portrait.and.arrow.right")
                                     .font(.system(size: 18))
-                                    .foregroundColor(Color(red: 0.82, green: 0.11, blue: 0.26))
+                                    .foregroundColor(DesignTokens.accentColor)
                                     .frame(width: 24)
 
-                                Text("Sign Out")
+                                Text(LocalizedStringKey("Sign Out"))
                                     .font(.system(size: 14, weight: .medium))
-                                    .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
+                                    .foregroundColor(DesignTokens.textPrimary)
 
                                 Spacer()
                             }
                             .padding(.horizontal, 20)
                             .padding(.vertical, 16)
                         }
-                        .background(Color.white)
+                        .background(DesignTokens.surface)
                         .cornerRadius(6)
                         .overlay(
                             RoundedRectangle(cornerRadius: 6)
-                                .stroke(Color(red: 0.68, green: 0.68, blue: 0.68), lineWidth: 0.5)
+                                .stroke(DesignTokens.borderColor, lineWidth: 0.5)
                         )
                         .padding(.horizontal, 12)
                     }
@@ -167,40 +179,20 @@ struct SettingsView: View {
                 Spacer()
             }
         }
-    }
-}
-
-// MARK: - 设置行组件
-struct SettingsRow: View {
-    let icon: String
-    let title: String
-    var showChevron: Bool = false
-    var action: (() -> Void)? = nil
-
-    var body: some View {
-        Button(action: {
-            action?()
-        }) {
-            HStack(spacing: 16) {
-                Image(systemName: icon)
-                    .font(.system(size: 18))
-                    .foregroundColor(Color(red: 0.82, green: 0.11, blue: 0.26))
-                    .frame(width: 24)
-
-                Text(title)
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
-
-                Spacer()
-
-                if showChevron {
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 12))
-                        .foregroundColor(Color.gray.opacity(0.5))
-                }
+        .overlay(alignment: .top) {
+            if let error = viewModel.errorMessage {
+                Text(LocalizedStringKey(error))
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(Color.red.opacity(0.9))
+                    .cornerRadius(12)
+                    .padding(.top, 12)
             }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 16)
+        }
+        .onAppear {
+            viewModel.onAppear()
         }
     }
 }

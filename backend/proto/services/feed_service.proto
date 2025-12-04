@@ -63,6 +63,7 @@ message FeedPost {
   uint32 share_count = 8;
   repeated string media_urls = 9;  // URLs of attached media (images/videos)
   string media_type = 10;  // Type of media: "image", "video", "none"
+  repeated string thumbnail_urls = 11; // URLs of thumbnails (if available)
 }
 
 // GetFeedResponse contains the personalized feed

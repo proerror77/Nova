@@ -137,19 +137,28 @@ pub async fn update_profile(
     );
 
     let mut auth_client: AuthServiceClient<_> = clients.auth_client();
+
+    // Build display_name from first_name + last_name if provided
+    let display_name = match (&req.first_name, &req.last_name) {
+        (Some(f), Some(l)) => Some(format!("{} {}", f, l)),
+        (Some(f), None) => Some(f.clone()),
+        (None, Some(l)) => Some(l.clone()),
+        (None, None) => None,
+    };
+
     let update_req = UpdateUserProfileRequest {
         user_id: user_id.to_string(),
-        display_name: req.first_name.clone().map(|f| {
-            req.last_name
-                .clone()
-                .map(|l| format!("{} {}", f, l))
-                .unwrap_or(f)
-        }),
+        display_name,
         bio: req.bio.clone(),
         avatar_url: None,
         cover_photo_url: None,
         location: req.location.clone(),
         private_account: None,
+        // Extended profile fields
+        first_name: req.first_name.clone(),
+        last_name: req.last_name.clone(),
+        date_of_birth: req.date_of_birth.clone(),
+        gender: req.gender.clone(),
     };
 
     let resp = auth_client
@@ -169,13 +178,13 @@ pub async fn update_profile(
                     id: p.user_id,
                     username: p.username,
                     email: p.email.unwrap_or_default(),
-                    first_name: None,
-                    last_name: None,
+                    first_name: p.first_name,
+                    last_name: p.last_name,
                     avatar_url: p.avatar_url,
                     bio: p.bio,
                     location: p.location,
-                    date_of_birth: None,
-                    gender: None,
+                    date_of_birth: p.date_of_birth,
+                    gender: p.gender,
                     website: None,
                     created_at: p.created_at,
                     updated_at: p.updated_at,
@@ -215,6 +224,10 @@ pub async fn upload_avatar(
             cover_photo_url: None,
             location: None,
             private_account: None,
+            first_name: None,
+            last_name: None,
+            date_of_birth: None,
+            gender: None,
         };
 
         return match auth_client

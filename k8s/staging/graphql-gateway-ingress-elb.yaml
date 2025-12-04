@@ -29,6 +29,7 @@ spec:
   rules:
   - http:
       paths:
+      # GraphQL & core API entrypoints
       - backend:
           service:
             name: graphql-gateway
@@ -50,6 +51,18 @@ spec:
               number: 8080
         path: /health
         pathType: Exact
+
+      # Guest feed (unauthenticated) - route directly to feed-service
+      # This ensures /api/v2/guest/feed/trending is NOT blocked by GraphQL JWT middleware.
+      - backend:
+          service:
+            name: feed-service
+            port:
+              number: 8084
+        path: /api/v2/guest/feed
+        pathType: Prefix
+
+      # All other /api/v2 traffic goes through GraphQL Gateway (requires JWT)
       - backend:
           service:
             name: graphql-gateway

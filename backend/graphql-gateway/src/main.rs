@@ -269,6 +269,11 @@ async fn main() -> std::io::Result<()> {
                 web::post().to(rest_api::refresh_token),
             )
             .route("/api/v2/auth/logout", web::post().to(rest_api::logout))
+            // Invite code validation (public endpoint - no auth required)
+            .route(
+                "/api/v2/auth/invites/validate",
+                web::get().to(rest_api::validate_invite_code),
+            )
             .service(rest_api::get_conversations)
             .service(rest_api::get_messages)
             .service(rest_api::create_conversation)
@@ -286,6 +291,11 @@ async fn main() -> std::io::Result<()> {
             .route(
                 "/api/v2/feed/trending",
                 web::get().to(rest_api::get_trending_feed),
+            )
+            // Guest Feed API (unauthenticated trending feed)
+            .route(
+                "/api/v2/guest/feed/trending",
+                web::get().to(rest_api::get_guest_trending_feed),
             )
             // ✅ Content API (Posts)
             .route(

@@ -1,9 +1,10 @@
 -- Realtime location sharing support
 -- Allows users to share their location with conversations (1:1 or groups)
 
+-- Note: user_id FK removed - users table is in separate database (identity-service)
 CREATE TABLE IF NOT EXISTS user_locations (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL,
     conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
 
     -- Location data (WGS84 coordinates)
@@ -55,9 +56,10 @@ CREATE INDEX IF NOT EXISTS idx_user_locations_active
     WHERE is_active = true AND deleted_at IS NULL;
 
 -- Location sharing audit log
+-- Note: user_id FK removed - users table is in separate database (identity-service)
 CREATE TABLE IF NOT EXISTS location_share_events (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL,
     conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
 
     -- Event type: started, updated, stopped
@@ -87,9 +89,10 @@ CREATE INDEX IF NOT EXISTS idx_location_share_events_conversation
     ON location_share_events(conversation_id, created_at DESC);
 
 -- Table for location access permissions (future: fine-grained controls)
+-- Note: user_id FK removed - users table is in separate database (identity-service)
 CREATE TABLE IF NOT EXISTS location_permissions (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL,
 
     -- Who can see this user's location
     allow_conversations BOOLEAN NOT NULL DEFAULT true,  -- Can share in conversations

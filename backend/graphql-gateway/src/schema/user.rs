@@ -19,6 +19,11 @@ pub struct UserProfile {
     pub created_at: String,
     pub is_verified: bool,
     pub is_private: bool,
+    // Extended profile fields
+    pub first_name: Option<String>,
+    pub last_name: Option<String>,
+    pub date_of_birth: Option<String>,
+    pub gender: Option<String>,
 }
 
 impl From<crate::clients::proto::user::UserProfile> for UserProfile {
@@ -47,6 +52,27 @@ impl From<crate::clients::proto::user::UserProfile> for UserProfile {
             created_at,
             is_verified: profile.is_verified,
             is_private: profile.is_private,
+            // Extended profile fields
+            first_name: if profile.first_name.is_empty() {
+                None
+            } else {
+                Some(profile.first_name)
+            },
+            last_name: if profile.last_name.is_empty() {
+                None
+            } else {
+                Some(profile.last_name)
+            },
+            date_of_birth: if profile.date_of_birth.is_empty() {
+                None
+            } else {
+                Some(profile.date_of_birth)
+            },
+            gender: if profile.gender.is_empty() {
+                None
+            } else {
+                Some(profile.gender)
+            },
         }
     }
 }

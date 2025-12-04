@@ -19,6 +19,8 @@ pub struct InviteCode {
     pub redeemed_by: Option<Uuid>,
     pub redeemed_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
+    #[sqlx(default)]
+    pub reusable: bool,
 }
 
 /// Invite quota information
@@ -97,13 +99,12 @@ pub async fn get_invite_quota(pool: &PgPool, user_id: Uuid) -> Result<InviteQuot
     .map_err(|e| IdentityError::Database(e.to_string()))?
     .ok_or_else(|| IdentityError::UserNotFound)?;
 
-    let used = sqlx::query_scalar::<_, i64>(
-        "SELECT COUNT(*) FROM invite_codes WHERE issuer_user_id = $1",
-    )
-    .bind(user_id)
-    .fetch_one(pool)
-    .await
-    .map_err(|e| IdentityError::Database(e.to_string()))? as i32;
+    let used =
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM invite_codes WHERE issuer_user_id = $1")
+            .bind(user_id)
+            .fetch_one(pool)
+            .await
+            .map_err(|e| IdentityError::Database(e.to_string()))? as i32;
 
     Ok(InviteQuota {
         total_quota: user.invite_quota,
@@ -134,7 +135,8 @@ pub async fn create_invite(
     }
 
     // Default expiry: 30 days
-    let expiry = expires_at.unwrap_or_else(|| Utc::now() + Duration::days(DEFAULT_INVITE_EXPIRY_DAYS));
+    let expiry =
+        expires_at.unwrap_or_else(|| Utc::now() + Duration::days(DEFAULT_INVITE_EXPIRY_DAYS));
     let mut attempts = 0;
     loop {
         let code = generate_code();
@@ -170,6 +172,30 @@ pub async fn create_invite(
 
 pub async fn redeem_invite(pool: &PgPool, code: &str, new_user_id: Uuid) -> Result<bool> {
     let now = Utc::now();
+
+    // Check if this is a reusable invite code (e.g., NOVATEST)
+    // Reusable codes can be used unlimited times and don't get marked as redeemed
+    let reusable_check = sqlx::query_scalar::<_, bool>(
+        r#"
+        SELECT EXISTS(
+            SELECT 1 FROM invite_codes
+            WHERE code = $1
+              AND reusable = TRUE
+              AND expires_at > $2
+        )
+        "#,
+    )
+    .bind(code)
+    .bind(now)
+    .fetch_one(pool)
+    .await
+    .map_err(|e| IdentityError::Database(e.to_string()))?;
+
+    if reusable_check {
+        return Ok(true);
+    }
+
+    // Standard single-use invite code: mark as redeemed
     let updated = sqlx::query(
         r#"
         UPDATE invite_codes
@@ -283,12 +309,13 @@ pub async fn validate_invite(pool: &PgPool, code: &str) -> Result<InviteValidati
     struct InviteWithIssuer {
         expires_at: DateTime<Utc>,
         redeemed_at: Option<DateTime<Utc>>,
+        reusable: bool,
         username: String,
     }
 
     let result = sqlx::query_as::<_, InviteWithIssuer>(
         r#"
-        SELECT ic.expires_at, ic.redeemed_at, u.username
+        SELECT ic.expires_at, ic.redeemed_at, ic.reusable, u.username
         FROM invite_codes ic
         JOIN users u ON u.id = ic.issuer_user_id
         WHERE ic.code = $1
@@ -307,7 +334,8 @@ pub async fn validate_invite(pool: &PgPool, code: &str) -> Result<InviteValidati
             error: Some("not_found".into()),
         }),
         Some(invite) => {
-            if invite.redeemed_at.is_some() {
+            // Reusable codes ignore the redeemed_at check
+            if !invite.reusable && invite.redeemed_at.is_some() {
                 Ok(InviteValidation {
                     is_valid: false,
                     issuer_username: Some(invite.username),

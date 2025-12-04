@@ -5,13 +5,13 @@ metadata:
 spec:
   selector:
     matchLabels:
-      app: nova
-      component: content-service
+      app: content-service
   template:
     metadata:
       labels:
-        app: nova
+        app: content-service
         component: content-service
+        tier: backend
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -20,13 +20,13 @@ metadata:
 spec:
   selector:
     matchLabels:
-      app: nova
-      component: feed-service
+      app: feed-service
   template:
     metadata:
       labels:
-        app: nova
+        app: feed-service
         component: feed-service
+        tier: backend
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -35,13 +35,13 @@ metadata:
 spec:
   selector:
     matchLabels:
-      app: nova
-      component: media-service
+      app: media-service
   template:
     metadata:
       labels:
-        app: nova
+        app: media-service
         component: media-service
+        tier: backend
 apiVersion: apps/v1
 kind: Deployment
 metadata:

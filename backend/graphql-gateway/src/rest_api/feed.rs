@@ -271,6 +271,60 @@ pub async fn get_trending_feed(
     }
 }
 
+/// GET /api/v2/guest/feed/trending
+///
+/// Public trending feed for unauthenticated (guest) users.
+/// Uses feed-service gRPC with a synthetic "guest" user_id and the "trending" algorithm.
+/// This returns the same `GetFeedResponse` shape as authenticated feed endpoints,
+/// but does not require a JWT.
+pub async fn get_guest_trending_feed(
+    clients: web::Data<ServiceClients>,
+    query: web::Query<FeedQueryParams>,
+) -> Result<HttpResponse> {
+    // Synthetic guest user ID used only for caching/metrics in feed-service.
+    // Use a distinct ID to avoid clashing with any previous cached entries.
+    let user_id = "guest_trending".to_string();
+
+    let mut feed_client = clients.feed_client();
+    let grpc_request = tonic::Request::new(ProtoGetFeedRequest {
+        user_id,
+        limit: query.limit.unwrap_or(20).min(100),
+        cursor: query.cursor.clone().unwrap_or_default(),
+        algorithm: "trending".to_string(),
+    });
+
+    match feed_client.get_feed(grpc_request).await {
+        Ok(resp) => {
+            let inner = resp.into_inner();
+            Ok(HttpResponse::Ok().json(GetFeedResponse {
+                posts: inner
+                    .posts
+                    .into_iter()
+                    .map(|p| FeedPost {
+                        id: p.id,
+                        user_id: p.user_id,
+                        content: p.content,
+                        created_at: p.created_at,
+                        ranking_score: p.ranking_score,
+                        like_count: p.like_count,
+                        comment_count: p.comment_count,
+                        share_count: p.share_count,
+                        media_urls: p.media_urls,
+                        media_type: p.media_type,
+                    })
+                    .collect(),
+                next_cursor: if inner.next_cursor.is_empty() {
+                    None
+                } else {
+                    Some(inner.next_cursor)
+                },
+                has_more: inner.has_more,
+            }))
+        }
+        Err(e) => Ok(HttpResponse::ServiceUnavailable().body(e.to_string())),
+    }
+}
+
 #[derive(Debug, serde::Deserialize)]
 pub struct FeedQueryParams {
     pub limit: Option<u32>,

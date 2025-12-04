@@ -1,0 +1,62 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: media-thumb-migrate
+  namespace: nova-staging
+  labels:
+    app: media-thumb-migrate
+    job-type: thumbnail-backfill
+  annotations:
+    description: "One-shot job to backfill image thumbnails into post_images for feed"
+spec:
+  ttlSecondsAfterFinished: 3600
+  backoffLimit: 1
+  template:
+    metadata:
+      labels:
+        app: media-thumb-migrate
+        job-type: thumbnail-backfill
+    spec:
+      restartPolicy: Never
+      serviceAccountName: default
+      containers:
+      - name: thumb-migrate
+        # 注意：使用 :thumbs tag，包含 thumb-migrate binary
+        image: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/media-service:thumbs
+        imagePullPolicy: IfNotPresent
+        command:
+        - /app/thumb-migrate
+        env:
+        # post_images 表在 nova_content 数据库 (content-service)
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: nova-db-credentials
+              key: content-db-url
+        # S3 / 对象存储配置（从 nova-s3-credentials Secret 获取）
+        - name: S3_BUCKET
+          valueFrom:
+            secretKeyRef:
+              name: nova-s3-credentials
+              key: S3_BUCKET
+        - name: AWS_REGION
+          valueFrom:
+            secretKeyRef:
+              name: nova-s3-credentials
+              key: AWS_REGION
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: nova-s3-credentials
+              key: AWS_ACCESS_KEY_ID
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: nova-s3-credentials
+              key: AWS_SECRET_ACCESS_KEY
+        - name: AWS_SESSION_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: nova-s3-credentials
+              key: AWS_SESSION_TOKEN
+

@@ -104,7 +104,7 @@ impl AppError {
             AppError::AlreadyRecalled => 410,        // 410 Gone
             AppError::VersionConflict { .. } => 409, // 409 Conflict
             AppError::RecallWindowExpired { .. } | AppError::EditWindowExpired { .. } => 403,
-            AppError::ServiceUnavailable(_) => 503,  // 503 Service Unavailable
+            AppError::ServiceUnavailable(_) => 503, // 503 Service Unavailable
             AppError::Database(_) | AppError::GrpcClient(_) | AppError::Internal => 500,
             _ => 500,
         }

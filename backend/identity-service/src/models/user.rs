@@ -1,8 +1,40 @@
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
-use sqlx::FromRow;
+use sqlx::{FromRow, Type};
 use uuid::Uuid;
 use validator::Validate;
+
+/// Gender enum matching database gender_type
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[sqlx(type_name = "gender_type", rename_all = "snake_case")]
+#[serde(rename_all = "snake_case")]
+pub enum Gender {
+    Male,
+    Female,
+    Other,
+    PreferNotToSay,
+}
+
+impl Gender {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Gender::Male => "male",
+            Gender::Female => "female",
+            Gender::Other => "other",
+            Gender::PreferNotToSay => "prefer_not_to_say",
+        }
+    }
+
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s.to_lowercase().as_str() {
+            "male" => Some(Gender::Male),
+            "female" => Some(Gender::Female),
+            "other" => Some(Gender::Other),
+            "prefer_not_to_say" | "prefernotosay" => Some(Gender::PreferNotToSay),
+            _ => None,
+        }
+    }
+}
 
 /// User model - core identity entity
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
@@ -29,6 +61,11 @@ pub struct User {
     pub cover_photo_url: Option<String>,
     pub location: Option<String>,
     pub private_account: bool,
+    // Extended profile fields
+    pub first_name: Option<String>,
+    pub last_name: Option<String>,
+    pub date_of_birth: Option<NaiveDate>,
+    pub gender: Option<Gender>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub deleted_at: Option<DateTime<Utc>>,

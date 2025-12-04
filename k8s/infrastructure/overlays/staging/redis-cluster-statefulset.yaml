@@ -168,7 +168,7 @@ metadata:
     app: redis-cluster
 spec:
   serviceName: redis-cluster-headless
-  replicas: 3
+  replicas: 1
   selector:
     matchLabels:
       app: redis-cluster
@@ -288,7 +288,7 @@ spec:
     spec:
       accessModes:
       - ReadWriteOnce
-      storageClassName: gp3
+      storageClassName: standard-rwo
       resources:
         requests:
           storage: 10Gi
@@ -307,7 +307,7 @@ kind: ConfigMap
 metadata:
   name: redis-exporter-config
   namespace: nova-staging
-spec:
+data:
   redis-exporter.sh: |
     #!/bin/sh
     # Simple redis-exporter sidecar can be added if needed

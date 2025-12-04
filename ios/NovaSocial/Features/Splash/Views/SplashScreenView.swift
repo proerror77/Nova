@@ -7,7 +7,7 @@ struct SplashScreenView: View {
     var body: some View {
         ZStack {
             // 背景色
-            Color(red: 0.87, green: 0.11, blue: 0.26)
+            DesignTokens.accentColor
                 .ignoresSafeArea()
 
             // ICERED 文字

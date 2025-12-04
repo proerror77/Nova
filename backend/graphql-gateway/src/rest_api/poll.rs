@@ -1,10 +1,18 @@
-// Poll endpoints are stub implementations pending social-service integration
-#![allow(unused_variables, dead_code)]
+// Poll endpoints - connected to social-service gRPC
 
 use actix_web::{delete, get, post, web, HttpMessage, HttpRequest, HttpResponse};
 use serde::{Deserialize, Serialize};
-use tracing::info;
+use tonic::Request;
+use tracing::{error, info};
 
+use crate::clients::proto::social::{
+    AddPollCandidateRequest as GrpcAddPollCandidateRequest, CheckPollVotedRequest,
+    ClosePollRequest as GrpcClosePollRequest, CreatePollCandidateInput,
+    CreatePollRequest as GrpcCreatePollRequest, DeletePollRequest as GrpcDeletePollRequest,
+    GetActivePollsRequest, GetPollRankingsRequest, GetPollRequest as GrpcGetPollRequest,
+    GetTrendingPollsRequest, RemovePollCandidateRequest as GrpcRemovePollCandidateRequest,
+    UnvotePollRequest as GrpcUnvotePollRequest, VoteOnPollRequest as GrpcVoteOnPollRequest,
+};
 use crate::clients::ServiceClients;
 use crate::middleware::jwt::AuthenticatedUser;
 
@@ -143,12 +151,118 @@ pub async fn create_poll(
 
     info!("Creating poll for user {}: {}", user_id, body.title);
 
-    // TODO: Call social-service gRPC (Poll functionality is integrated into social-service)
-    // For now, return a mock response indicating the feature is not yet implemented
-    HttpResponse::NotImplemented().json(serde_json::json!({
-        "error": "Poll feature not yet deployed",
-        "message": "The poll feature in social-service is being set up. Please try again later."
-    }))
+    let body = body.into_inner();
+
+    // Parse ends_at timestamp if provided
+    let ends_at = body.ends_at.as_ref().and_then(|s| {
+        chrono::DateTime::parse_from_rfc3339(s)
+            .ok()
+            .map(|dt| pbjson_types::Timestamp {
+                seconds: dt.timestamp(),
+                nanos: dt.timestamp_subsec_nanos() as i32,
+            })
+    });
+
+    // Convert candidate inputs to gRPC format
+    let initial_candidates: Vec<CreatePollCandidateInput> = body
+        .candidates
+        .into_iter()
+        .map(|c| CreatePollCandidateInput {
+            name: c.name,
+            avatar_url: c.avatar_url.unwrap_or_default(),
+            description: c.description.unwrap_or_default(),
+            user_id: c.user_id.unwrap_or_default(),
+        })
+        .collect();
+
+    let req = GrpcCreatePollRequest {
+        title: body.title,
+        description: body.description.unwrap_or_default(),
+        cover_image_url: body.cover_image_url.unwrap_or_default(),
+        poll_type: body.poll_type.unwrap_or_else(|| "ranking".to_string()),
+        tags: body.tags.unwrap_or_default(),
+        ends_at,
+        initial_candidates,
+    };
+
+    // Create request with user_id in metadata
+    let mut grpc_req = Request::new(req);
+    grpc_req
+        .metadata_mut()
+        .insert("x-user-id", user_id.parse().unwrap());
+
+    match clients
+        .call_social(|| {
+            let mut social = clients.social_client();
+            let r = grpc_req;
+            async move { social.create_poll(r).await }
+        })
+        .await
+    {
+        Ok(resp) => {
+            let poll = match resp.poll {
+                Some(p) => PollResponse {
+                    id: p.id,
+                    title: p.title,
+                    description: p.description,
+                    cover_image_url: p.cover_image_url,
+                    creator_id: p.creator_id,
+                    poll_type: p.poll_type,
+                    status: p.status,
+                    total_votes: p.total_votes,
+                    candidate_count: p.candidate_count,
+                    tags: p.tags,
+                    created_at: p
+                        .created_at
+                        .map(|ts| {
+                            chrono::DateTime::from_timestamp(ts.seconds, ts.nanos as u32)
+                                .map(|dt| dt.to_rfc3339())
+                                .unwrap_or_default()
+                        })
+                        .unwrap_or_default(),
+                    ends_at: p.ends_at.map(|ts| {
+                        chrono::DateTime::from_timestamp(ts.seconds, ts.nanos as u32)
+                            .map(|dt| dt.to_rfc3339())
+                            .unwrap_or_default()
+                    }),
+                },
+                None => {
+                    return HttpResponse::InternalServerError()
+                        .json(serde_json::json!({"error": "Poll creation failed"}))
+                }
+            };
+
+            let candidates: Vec<CandidateResponse> = resp
+                .candidates
+                .into_iter()
+                .map(|c| CandidateResponse {
+                    id: c.id,
+                    name: c.name,
+                    avatar_url: c.avatar_url,
+                    description: c.description,
+                    user_id: if c.user_id.is_empty() {
+                        None
+                    } else {
+                        Some(c.user_id)
+                    },
+                    vote_count: c.vote_count,
+                    rank: c.rank,
+                    rank_change: c.rank_change,
+                    vote_percentage: c.vote_percentage,
+                })
+                .collect();
+
+            HttpResponse::Created().json(serde_json::json!({
+                "poll": poll,
+                "candidates": candidates
+            }))
+        }
+        Err(e) => {
+            error!("create_poll failed: {}", e);
+            HttpResponse::ServiceUnavailable()
+                .json(serde_json::json!({"error": "Failed to create poll"}))
+        }
+    }
 }
 
 /// GET /api/v2/polls/{poll_id} - Get poll details
@@ -159,17 +273,98 @@ pub async fn get_poll(
     clients: web::Data<ServiceClients>,
     query: web::Query<GetPollQuery>,
 ) -> HttpResponse {
-    let user_id = http_req
+    let _user_id = http_req
         .extensions()
         .get::<AuthenticatedUser>()
         .map(|u| u.0.to_string());
 
-    info!("Getting poll: {}", poll_id);
+    let poll_id_str = poll_id.into_inner();
+    info!("Getting poll: {}", poll_id_str);
 
-    // TODO: Call social-service gRPC GetPoll
-    HttpResponse::NotImplemented().json(serde_json::json!({
-        "error": "Poll feature not yet deployed"
-    }))
+    let q = query.into_inner();
+    let req = GrpcGetPollRequest {
+        poll_id: poll_id_str,
+        include_candidates: q.include_candidates.unwrap_or(true),
+    };
+
+    match clients
+        .call_social(|| {
+            let mut social = clients.social_client();
+            async move { social.get_poll(req).await }
+        })
+        .await
+    {
+        Ok(resp) => {
+            let poll = match resp.poll {
+                Some(p) => PollResponse {
+                    id: p.id,
+                    title: p.title,
+                    description: p.description,
+                    cover_image_url: p.cover_image_url,
+                    creator_id: p.creator_id,
+                    poll_type: p.poll_type,
+                    status: p.status,
+                    total_votes: p.total_votes,
+                    candidate_count: p.candidate_count,
+                    tags: p.tags,
+                    created_at: p
+                        .created_at
+                        .map(|ts| {
+                            chrono::DateTime::from_timestamp(ts.seconds, ts.nanos as u32)
+                                .map(|dt| dt.to_rfc3339())
+                                .unwrap_or_default()
+                        })
+                        .unwrap_or_default(),
+                    ends_at: p.ends_at.map(|ts| {
+                        chrono::DateTime::from_timestamp(ts.seconds, ts.nanos as u32)
+                            .map(|dt| dt.to_rfc3339())
+                            .unwrap_or_default()
+                    }),
+                },
+                None => {
+                    return HttpResponse::NotFound()
+                        .json(serde_json::json!({"error": "Poll not found"}))
+                }
+            };
+
+            let candidates: Vec<CandidateResponse> = resp
+                .candidates
+                .into_iter()
+                .map(|c| CandidateResponse {
+                    id: c.id,
+                    name: c.name,
+                    avatar_url: c.avatar_url,
+                    description: c.description,
+                    user_id: if c.user_id.is_empty() {
+                        None
+                    } else {
+                        Some(c.user_id)
+                    },
+                    vote_count: c.vote_count,
+                    rank: c.rank,
+                    rank_change: c.rank_change,
+                    vote_percentage: c.vote_percentage,
+                })
+                .collect();
+
+            let my_voted = if resp.my_voted_candidate_id.is_empty() {
+                None
+            } else {
+                Some(resp.my_voted_candidate_id)
+            };
+
+            HttpResponse::Ok().json(GetPollResponse {
+                poll,
+                candidates,
+                my_voted_candidate_id: my_voted,
+            })
+        }
+        Err(e) => {
+            error!("get_poll failed: {}", e);
+            HttpResponse::ServiceUnavailable()
+                .json(serde_json::json!({"error": "Failed to fetch poll"}))
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -192,15 +387,68 @@ pub async fn vote_on_poll(
         }
     };
 
+    let poll_id_str = poll_id.into_inner();
+    let candidate_id = body.into_inner().candidate_id;
+
     info!(
         "User {} voting on poll {} for candidate {}",
-        user_id, poll_id, body.candidate_id
+        user_id, poll_id_str, candidate_id
     );
 
-    // TODO: Call social-service gRPC VoteOnPoll
-    HttpResponse::NotImplemented().json(serde_json::json!({
-        "error": "Poll feature not yet deployed"
-    }))
+    let req = GrpcVoteOnPollRequest {
+        poll_id: poll_id_str,
+        candidate_id,
+    };
+
+    // Create request with user_id in metadata
+    let mut grpc_req = Request::new(req);
+    grpc_req
+        .metadata_mut()
+        .insert("x-user-id", user_id.parse().unwrap());
+
+    match clients
+        .call_social(|| {
+            let mut social = clients.social_client();
+            let r = grpc_req;
+            async move { social.vote_on_poll(r).await }
+        })
+        .await
+    {
+        Ok(resp) => {
+            let updated_candidate = resp.updated_candidate.map(|c| CandidateResponse {
+                id: c.id,
+                name: c.name,
+                avatar_url: c.avatar_url,
+                description: c.description,
+                user_id: if c.user_id.is_empty() {
+                    None
+                } else {
+                    Some(c.user_id)
+                },
+                vote_count: c.vote_count,
+                rank: c.rank,
+                rank_change: c.rank_change,
+                vote_percentage: c.vote_percentage,
+            });
+
+            HttpResponse::Ok().json(serde_json::json!({
+                "success": resp.success,
+                "updated_candidate": updated_candidate,
+                "total_votes": resp.total_votes
+            }))
+        }
+        Err(e) => {
+            let err_str = e.to_string();
+            if err_str.contains("already voted") || err_str.contains("AlreadyExists") {
+                HttpResponse::Conflict()
+                    .json(serde_json::json!({"error": "Already voted on this poll"}))
+            } else {
+                error!("vote_on_poll failed: {}", e);
+                HttpResponse::ServiceUnavailable()
+                    .json(serde_json::json!({"error": "Failed to vote"}))
+            }
+        }
+    }
 }
 
 /// DELETE /api/v2/polls/{poll_id}/vote - Unvote
@@ -217,12 +465,37 @@ pub async fn unvote(
         }
     };
 
-    info!("User {} unvoting from poll {}", user_id, poll_id);
+    let poll_id_str = poll_id.into_inner();
+    info!("User {} unvoting from poll {}", user_id, poll_id_str);
 
-    // TODO: Call social-service gRPC (unvote not yet implemented)
-    HttpResponse::NotImplemented().json(serde_json::json!({
-        "error": "Poll feature not yet deployed"
-    }))
+    let req = GrpcUnvotePollRequest {
+        poll_id: poll_id_str,
+    };
+
+    // Create request with user_id in metadata
+    let mut grpc_req = Request::new(req);
+    grpc_req
+        .metadata_mut()
+        .insert("x-user-id", user_id.parse().unwrap());
+
+    match clients
+        .call_social(|| {
+            let mut social = clients.social_client();
+            let r = grpc_req;
+            async move { social.unvote_poll(r).await }
+        })
+        .await
+    {
+        Ok(resp) => HttpResponse::Ok().json(serde_json::json!({
+            "success": resp.success,
+            "total_votes": resp.total_votes
+        })),
+        Err(e) => {
+            error!("unvote failed: {}", e);
+            HttpResponse::ServiceUnavailable()
+                .json(serde_json::json!({"error": "Failed to unvote"}))
+        }
+    }
 }
 
 /// GET /api/v2/polls/{poll_id}/voted - Check if user voted
@@ -239,10 +512,50 @@ pub async fn check_voted(
         }
     };
 
-    // TODO: Call social-service gRPC CheckPollVoted
-    HttpResponse::NotImplemented().json(serde_json::json!({
-        "error": "Poll feature not yet deployed"
-    }))
+    let poll_id_str = poll_id.into_inner();
+    info!("Checking if user {} voted on poll {}", user_id, poll_id_str);
+
+    let req = CheckPollVotedRequest {
+        poll_id: poll_id_str,
+    };
+
+    // Create request with user_id in metadata
+    let mut grpc_req = Request::new(req);
+    grpc_req
+        .metadata_mut()
+        .insert("x-user-id", user_id.parse().unwrap());
+
+    match clients
+        .call_social(|| {
+            let mut social = clients.social_client();
+            let r = grpc_req;
+            async move { social.check_poll_voted(r).await }
+        })
+        .await
+    {
+        Ok(resp) => {
+            let voted_at = resp.voted_at.map(|ts| {
+                chrono::DateTime::from_timestamp(ts.seconds, ts.nanos as u32)
+                    .map(|dt| dt.to_rfc3339())
+                    .unwrap_or_default()
+            });
+
+            HttpResponse::Ok().json(CheckVotedResponse {
+                has_voted: resp.has_voted,
+                voted_candidate_id: if resp.voted_candidate_id.is_empty() {
+                    None
+                } else {
+                    Some(resp.voted_candidate_id)
+                },
+                voted_at,
+            })
+        }
+        Err(e) => {
+            error!("check_voted failed: {}", e);
+            HttpResponse::ServiceUnavailable()
+                .json(serde_json::json!({"error": "Failed to check vote status"}))
+        }
+    }
 }
 
 /// GET /api/v2/polls/{poll_id}/rankings - Get poll rankings
@@ -252,12 +565,56 @@ pub async fn get_rankings(
     clients: web::Data<ServiceClients>,
     query: web::Query<PaginationQuery>,
 ) -> HttpResponse {
-    info!("Getting rankings for poll: {}", poll_id);
+    let poll_id_str = poll_id.into_inner();
+    info!("Getting rankings for poll: {}", poll_id_str);
 
-    // TODO: Call social-service gRPC GetPollRankings
-    HttpResponse::NotImplemented().json(serde_json::json!({
-        "error": "Poll feature not yet deployed"
-    }))
+    let q = query.into_inner();
+    let req = GetPollRankingsRequest {
+        poll_id: poll_id_str,
+        limit: q.limit.unwrap_or(20),
+        offset: q.offset.unwrap_or(0),
+    };
+
+    match clients
+        .call_social(|| {
+            let mut social = clients.social_client();
+            async move { social.get_poll_rankings(req).await }
+        })
+        .await
+    {
+        Ok(resp) => {
+            let rankings: Vec<CandidateResponse> = resp
+                .rankings
+                .into_iter()
+                .map(|c| CandidateResponse {
+                    id: c.id,
+                    name: c.name,
+                    avatar_url: c.avatar_url,
+                    description: c.description,
+                    user_id: if c.user_id.is_empty() {
+                        None
+                    } else {
+                        Some(c.user_id)
+                    },
+                    vote_count: c.vote_count,
+                    rank: c.rank,
+                    rank_change: c.rank_change,
+                    vote_percentage: c.vote_percentage,
+                })
+                .collect();
+
+            HttpResponse::Ok().json(RankingsResponse {
+                rankings,
+                total_candidates: resp.total_candidates,
+                total_votes: resp.total_votes,
+            })
+        }
+        Err(e) => {
+            error!("get_rankings failed: {}", e);
+            HttpResponse::ServiceUnavailable()
+                .json(serde_json::json!({"error": "Failed to fetch rankings"}))
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -274,43 +631,65 @@ pub async fn get_trending_polls(
 ) -> HttpResponse {
     info!("Getting trending polls");
 
-    // TODO: Call social-service gRPC GetTrendingPolls
-    // For now, return mock data for UI development
-    let mock_polls = vec![PollSummaryResponse {
-        id: "00000000-0000-0000-0000-000000000001".to_string(),
-        title: "Hottest Banker".to_string(),
-        cover_image_url: "https://images.unsplash.com/photo-1560472355-536de3962603".to_string(),
-        poll_type: "ranking".to_string(),
-        status: "active".to_string(),
-        total_votes: 12543,
-        candidate_count: 5,
-        top_candidates: vec![
-            CandidatePreviewResponse {
-                id: "1".to_string(),
-                name: "Alex Chen".to_string(),
-                avatar_url: "https://randomuser.me/api/portraits/men/1.jpg".to_string(),
-                rank: 1,
-            },
-            CandidatePreviewResponse {
-                id: "2".to_string(),
-                name: "Sarah Johnson".to_string(),
-                avatar_url: "https://randomuser.me/api/portraits/women/2.jpg".to_string(),
-                rank: 2,
-            },
-            CandidatePreviewResponse {
-                id: "3".to_string(),
-                name: "Michael Wang".to_string(),
-                avatar_url: "https://randomuser.me/api/portraits/men/3.jpg".to_string(),
-                rank: 3,
-            },
-        ],
-        tags: vec!["finance".to_string(), "trending".to_string()],
-        ends_at: None,
-    }];
+    let q = query.into_inner();
+    let tags: Vec<String> = q
+        .tags
+        .map(|t| t.split(',').map(|s| s.trim().to_string()).collect())
+        .unwrap_or_default();
 
-    HttpResponse::Ok().json(serde_json::json!({
-        "polls": mock_polls
-    }))
+    let req = GetTrendingPollsRequest {
+        limit: q.limit.unwrap_or(10),
+        tags,
+    };
+
+    match clients
+        .call_social(|| {
+            let mut social = clients.social_client();
+            async move { social.get_trending_polls(req).await }
+        })
+        .await
+    {
+        Ok(resp) => {
+            // Convert gRPC response to REST response format
+            let polls: Vec<PollSummaryResponse> = resp
+                .polls
+                .into_iter()
+                .map(|p| PollSummaryResponse {
+                    id: p.id,
+                    title: p.title,
+                    cover_image_url: p.cover_image_url,
+                    poll_type: p.poll_type,
+                    status: p.status,
+                    total_votes: p.total_votes,
+                    candidate_count: p.candidate_count,
+                    top_candidates: p
+                        .top_candidates
+                        .into_iter()
+                        .map(|c| CandidatePreviewResponse {
+                            id: c.id,
+                            name: c.name,
+                            avatar_url: c.avatar_url,
+                            rank: c.rank,
+                        })
+                        .collect(),
+                    tags: p.tags,
+                    ends_at: p.ends_at.map(|ts| {
+                        chrono::DateTime::from_timestamp(ts.seconds, ts.nanos as u32)
+                            .map(|dt| dt.to_rfc3339())
+                            .unwrap_or_default()
+                    }),
+                })
+                .collect();
+
+            HttpResponse::Ok().json(serde_json::json!({ "polls": polls }))
+        }
+        Err(e) => {
+            error!("get_trending_polls failed: {}", e);
+            HttpResponse::ServiceUnavailable().json(serde_json::json!({
+                "error": "Failed to fetch trending polls"
+            }))
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -327,10 +706,75 @@ pub async fn get_active_polls(
 ) -> HttpResponse {
     info!("Getting active polls");
 
-    // TODO: Call social-service gRPC (active polls endpoint)
-    HttpResponse::NotImplemented().json(serde_json::json!({
-        "error": "Poll feature not yet deployed"
-    }))
+    let q = query.into_inner();
+    let tags: Vec<String> = q
+        .tags
+        .map(|t| t.split(',').map(|s| s.trim().to_string()).collect())
+        .unwrap_or_default();
+
+    // Parse cursor as offset (simple implementation)
+    let offset = q
+        .cursor
+        .as_ref()
+        .and_then(|c| c.parse::<i32>().ok())
+        .unwrap_or(0);
+
+    let req = GetActivePollsRequest {
+        limit: q.limit.unwrap_or(20),
+        offset,
+        tags,
+    };
+
+    match clients
+        .call_social(|| {
+            let mut social = clients.social_client();
+            async move { social.get_active_polls(req).await }
+        })
+        .await
+    {
+        Ok(resp) => {
+            let polls: Vec<PollSummaryResponse> = resp
+                .polls
+                .into_iter()
+                .map(|p| PollSummaryResponse {
+                    id: p.id,
+                    title: p.title,
+                    cover_image_url: p.cover_image_url,
+                    poll_type: p.poll_type,
+                    status: p.status,
+                    total_votes: p.total_votes,
+                    candidate_count: p.candidate_count,
+                    top_candidates: p
+                        .top_candidates
+                        .into_iter()
+                        .map(|c| CandidatePreviewResponse {
+                            id: c.id,
+                            name: c.name,
+                            avatar_url: c.avatar_url,
+                            rank: c.rank,
+                        })
+                        .collect(),
+                    tags: p.tags,
+                    ends_at: p.ends_at.map(|ts| {
+                        chrono::DateTime::from_timestamp(ts.seconds, ts.nanos as u32)
+                            .map(|dt| dt.to_rfc3339())
+                            .unwrap_or_default()
+                    }),
+                })
+                .collect();
+
+            HttpResponse::Ok().json(serde_json::json!({
+                "polls": polls,
+                "total": resp.total
+            }))
+        }
+        Err(e) => {
+            error!("get_active_polls failed: {}", e);
+            HttpResponse::ServiceUnavailable().json(serde_json::json!({
+                "error": "Failed to fetch active polls"
+            }))
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -355,12 +799,67 @@ pub async fn add_candidate(
         }
     };
 
-    info!("User {} adding candidate to poll {}", user_id, poll_id);
+    let poll_id_str = poll_id.into_inner();
+    let body = body.into_inner();
+    info!("User {} adding candidate to poll {}", user_id, poll_id_str);
 
-    // TODO: Call social-service gRPC (add candidate not yet implemented)
-    HttpResponse::NotImplemented().json(serde_json::json!({
-        "error": "Poll feature not yet deployed"
-    }))
+    let req = GrpcAddPollCandidateRequest {
+        poll_id: poll_id_str,
+        name: body.name,
+        avatar_url: body.avatar_url.unwrap_or_default(),
+        description: body.description.unwrap_or_default(),
+        user_id: body.user_id.unwrap_or_default(),
+    };
+
+    // Create request with user_id in metadata
+    let mut grpc_req = Request::new(req);
+    grpc_req
+        .metadata_mut()
+        .insert("x-user-id", user_id.parse().unwrap());
+
+    match clients
+        .call_social(|| {
+            let mut social = clients.social_client();
+            let r = grpc_req;
+            async move { social.add_poll_candidate(r).await }
+        })
+        .await
+    {
+        Ok(resp) => {
+            let candidate = resp.candidate.map(|c| CandidateResponse {
+                id: c.id,
+                name: c.name,
+                avatar_url: c.avatar_url,
+                description: c.description,
+                user_id: if c.user_id.is_empty() {
+                    None
+                } else {
+                    Some(c.user_id)
+                },
+                vote_count: c.vote_count,
+                rank: c.rank,
+                rank_change: c.rank_change,
+                vote_percentage: c.vote_percentage,
+            });
+
+            HttpResponse::Created().json(serde_json::json!({
+                "candidate": candidate
+            }))
+        }
+        Err(e) => {
+            let err_str = e.to_string();
+            if err_str.contains("permission") || err_str.contains("PermissionDenied") {
+                HttpResponse::Forbidden()
+                    .json(serde_json::json!({"error": "Only poll creator can add candidates"}))
+            } else if err_str.contains("not found") || err_str.contains("NotFound") {
+                HttpResponse::NotFound().json(serde_json::json!({"error": "Poll not found"}))
+            } else {
+                error!("add_candidate failed: {}", e);
+                HttpResponse::ServiceUnavailable()
+                    .json(serde_json::json!({"error": "Failed to add candidate"}))
+            }
+        }
+    }
 }
 
 /// DELETE /api/v2/polls/{poll_id}/candidates/{candidate_id} - Remove candidate
@@ -383,10 +882,40 @@ pub async fn remove_candidate(
         user_id, candidate_id, poll_id
     );
 
-    // TODO: Call social-service gRPC (remove candidate not yet implemented)
-    HttpResponse::NotImplemented().json(serde_json::json!({
-        "error": "Poll feature not yet deployed"
-    }))
+    let req = GrpcRemovePollCandidateRequest {
+        poll_id,
+        candidate_id,
+    };
+
+    let mut grpc_req = Request::new(req);
+    grpc_req
+        .metadata_mut()
+        .insert("x-user-id", user_id.parse().unwrap());
+
+    match clients
+        .call_social(|| {
+            let mut social = clients.social_client();
+            let r = grpc_req;
+            async move { social.remove_poll_candidate(r).await }
+        })
+        .await
+    {
+        Ok(_) => HttpResponse::NoContent().finish(),
+        Err(e) => {
+            let err_str = e.to_string();
+            if err_str.contains("permission") || err_str.contains("PermissionDenied") {
+                HttpResponse::Forbidden()
+                    .json(serde_json::json!({"error": "Only poll creator can remove candidates"}))
+            } else if err_str.contains("not found") || err_str.contains("NotFound") {
+                HttpResponse::NotFound()
+                    .json(serde_json::json!({"error": "Poll or candidate not found"}))
+            } else {
+                error!("remove_candidate failed: {}", e);
+                HttpResponse::ServiceUnavailable()
+                    .json(serde_json::json!({"error": "Failed to remove candidate"}))
+            }
+        }
+    }
 }
 
 /// POST /api/v2/polls/{poll_id}/close - Close poll
@@ -403,12 +932,41 @@ pub async fn close_poll(
         }
     };
 
-    info!("User {} closing poll {}", user_id, poll_id);
+    let poll_id_str = poll_id.into_inner();
+    info!("User {} closing poll {}", user_id, poll_id_str);
 
-    // TODO: Call social-service gRPC (close poll not yet implemented)
-    HttpResponse::NotImplemented().json(serde_json::json!({
-        "error": "Poll feature not yet deployed"
-    }))
+    let req = GrpcClosePollRequest {
+        poll_id: poll_id_str,
+    };
+
+    let mut grpc_req = Request::new(req);
+    grpc_req
+        .metadata_mut()
+        .insert("x-user-id", user_id.parse().unwrap());
+
+    match clients
+        .call_social(|| {
+            let mut social = clients.social_client();
+            let r = grpc_req;
+            async move { social.close_poll(r).await }
+        })
+        .await
+    {
+        Ok(_) => HttpResponse::Ok().json(serde_json::json!({"success": true})),
+        Err(e) => {
+            let err_str = e.to_string();
+            if err_str.contains("permission") || err_str.contains("PermissionDenied") {
+                HttpResponse::Forbidden()
+                    .json(serde_json::json!({"error": "Only poll creator can close the poll"}))
+            } else if err_str.contains("not found") || err_str.contains("NotFound") {
+                HttpResponse::NotFound().json(serde_json::json!({"error": "Poll not found"}))
+            } else {
+                error!("close_poll failed: {}", e);
+                HttpResponse::ServiceUnavailable()
+                    .json(serde_json::json!({"error": "Failed to close poll"}))
+            }
+        }
+    }
 }
 
 /// DELETE /api/v2/polls/{poll_id} - Delete poll
@@ -425,10 +983,39 @@ pub async fn delete_poll(
         }
     };
 
-    info!("User {} deleting poll {}", user_id, poll_id);
+    let poll_id_str = poll_id.into_inner();
+    info!("User {} deleting poll {}", user_id, poll_id_str);
 
-    // TODO: Call social-service gRPC (delete poll not yet implemented)
-    HttpResponse::NotImplemented().json(serde_json::json!({
-        "error": "Poll feature not yet deployed"
-    }))
+    let req = GrpcDeletePollRequest {
+        poll_id: poll_id_str,
+    };
+
+    let mut grpc_req = Request::new(req);
+    grpc_req
+        .metadata_mut()
+        .insert("x-user-id", user_id.parse().unwrap());
+
+    match clients
+        .call_social(|| {
+            let mut social = clients.social_client();
+            let r = grpc_req;
+            async move { social.delete_poll(r).await }
+        })
+        .await
+    {
+        Ok(_) => HttpResponse::NoContent().finish(),
+        Err(e) => {
+            let err_str = e.to_string();
+            if err_str.contains("permission") || err_str.contains("PermissionDenied") {
+                HttpResponse::Forbidden()
+                    .json(serde_json::json!({"error": "Only poll creator can delete the poll"}))
+            } else if err_str.contains("not found") || err_str.contains("NotFound") {
+                HttpResponse::NotFound().json(serde_json::json!({"error": "Poll not found"}))
+            } else {
+                error!("delete_poll failed: {}", e);
+                HttpResponse::ServiceUnavailable()
+                    .json(serde_json::json!({"error": "Failed to delete poll"}))
+            }
+        }
+    }
 }

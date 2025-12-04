@@ -44,13 +44,13 @@ struct WelcomeView: View {
                                 color: Color(red: 0, green: 0, blue: 0, opacity: 0.25), radius: 4, y: 4
                             )
 
-                        Text("Icered is invite only")
+                        Text(LocalizedStringKey("Icered_invite_only"))
                             .font(Font.custom("Inter", size: 24).weight(.bold))
                             .lineSpacing(45.29)
                             .foregroundColor(Color(red: 0.87, green: 0.11, blue: 0.26))
                             .offset(x: 1, y: -143.50)
 
-                        Text("lf you have an invite code, enter it below.")
+                        Text(LocalizedStringKey("Invite_hint"))
                             .font(Font.custom("Helvetica Neue", size: 14).weight(.light))
                             .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
                             .offset(x: 0.50, y: -120)
@@ -92,7 +92,7 @@ struct WelcomeView: View {
                                         .progressViewStyle(CircularProgressViewStyle(tint: .white))
                                         .scaleEffect(0.8)
                                 }
-                                Text("Done")
+                                Text(LocalizedStringKey("Done"))
                                     .font(Font.custom("Helvetica Neue", size: 16).weight(.medium))
                                     .lineSpacing(20)
                                     .foregroundColor(.white)
@@ -105,7 +105,7 @@ struct WelcomeView: View {
                         .offset(x: 0, y: -2.50)
 
                         HStack(spacing: 0) {
-                            Text("Notify me when access opens")
+                            Text(LocalizedStringKey("Notify_me_when_access_opens"))
                                 .font(Font.custom("Helvetica Neue", size: 14).weight(.light))
                                 .lineSpacing(20)
                                 .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
@@ -114,7 +114,7 @@ struct WelcomeView: View {
 
                         // Error Message
                         if let errorMessage = errorMessage {
-                            Text(errorMessage)
+                            Text(LocalizedStringKey(errorMessage))
                                 .font(Font.custom("Helvetica Neue", size: 12))
                                 .foregroundColor(.red)
                                 .multilineTextAlignment(.center)
@@ -154,9 +154,13 @@ struct WelcomeView: View {
             print("[WelcomeView] Base URL: \(APIConfig.current.baseURL)")
             #endif
 
+            // Note: APIClient uses .convertFromSnakeCase, so property names
+            // will automatically map from snake_case (is_valid -> isValid)
             struct ValidateResponse: Codable {
-                let valid: Bool
-                let message: String?
+                let isValid: Bool
+                let issuerUsername: String?
+                let expiresAt: Int64?
+                let error: String?
             }
 
             let response: ValidateResponse = try await client.request(
@@ -165,17 +169,17 @@ struct WelcomeView: View {
             )
 
             #if DEBUG
-            print("[WelcomeView] API response - valid: \(response.valid), message: \(response.message ?? "nil")")
+            print("[WelcomeView] API response - isValid: \(response.isValid), issuer: \(response.issuerUsername ?? "nil"), error: \(response.error ?? "nil")")
             #endif
 
-            if response.valid {
+            if response.isValid {
                 // Valid invite code - navigate to login
                 await MainActor.run {
                     currentPage = .login
                 }
             } else {
                 // Invalid invite code
-                errorMessage = response.message ?? "Invalid invite code. Please try again."
+                errorMessage = response.error ?? "Invalid_invite_code_generic"
             }
         } catch {
             // Handle network errors
@@ -186,9 +190,9 @@ struct WelcomeView: View {
             #endif
 
             if error.localizedDescription.contains("network") || error.localizedDescription.contains("connection") {
-                errorMessage = "Network error. Please check your connection."
+                errorMessage = "Network_error"
             } else {
-                errorMessage = "Invalid invite code. Please try again."
+                errorMessage = "Invalid_invite_code_generic"
             }
         }
 

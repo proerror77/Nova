@@ -24,7 +24,6 @@ pub enum WsInboundEvent {
     // ============================================================
     // E2EE Events (End-to-End Encryption)
     // ============================================================
-
     /// Request to-device messages for this device (key sharing, verification, etc.)
     #[serde(rename = "get_to_device_messages")]
     GetToDeviceMessages {
@@ -35,9 +34,7 @@ pub enum WsInboundEvent {
 
     /// Acknowledge receipt of a to-device message
     #[serde(rename = "ack_to_device_message")]
-    AckToDeviceMessage {
-        message_id: String,
-    },
+    AckToDeviceMessage { message_id: String },
 
     /// Request room keys for a conversation (when joining late or after device rotation)
     #[serde(rename = "request_room_keys")]
@@ -86,7 +83,6 @@ pub enum WsOutboundEvent {
     // ============================================================
     // E2EE Events (End-to-End Encryption)
     // ============================================================
-
     /// New to-device message arrived (key sharing, verification, etc.)
     #[serde(rename = "to_device_message")]
     ToDeviceMessage {

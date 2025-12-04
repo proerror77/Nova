@@ -1,6 +1,7 @@
 # GraphQL Gateway Service URL patches for staging
-# Fix: Configure correct service URLs for gRPC connections with mTLS
+# Configure correct service URLs for gRPC connections with mTLS
 # IMPORTANT: Use GRPC_* prefix for URLs read by grpc-clients library
+
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -14,36 +15,46 @@ spec:
         # ============================================================
         # gRPC Service URLs (GRPC_* prefix required by grpc-clients lib)
         # All internal services use https:// for mTLS
+        # 端口配置与 staging 集群实际运行一致
         # ============================================================
+
         # Feed service - gRPC port 9084 with mTLS
         - name: GRPC_FEED_SERVICE_URL
           value: "https://feed-service.nova-staging.svc.cluster.local:9084"
-        # Content service - gRPC port 50051 with mTLS
+
+        # Content service - gRPC port 9080 with mTLS
         - name: GRPC_CONTENT_SERVICE_URL
-          value: "https://content-service.nova-staging.svc.cluster.local:50051"
-        # Search service - gRPC port 50057 with mTLS
+          value: "https://content-service.nova-staging.svc.cluster.local:9080"
+
+        # Search service - HTTP only (no gRPC in staging)
         - name: GRPC_SEARCH_SERVICE_URL
-          value: "https://search-service.nova-staging.svc.cluster.local:50057"
-        # Media service - gRPC port 50051 with mTLS
+          value: "http://search-service.nova-staging.svc.cluster.local:8086"
+
+        # Media service - gRPC port 9082 with mTLS
         - name: GRPC_MEDIA_SERVICE_URL
-          value: "https://media-service.nova-staging.svc.cluster.local:50051"
+          value: "https://media-service.nova-staging.svc.cluster.local:9082"
+
         # Identity service - gRPC port 50051 with mTLS
         - name: GRPC_IDENTITY_SERVICE_URL
           value: "https://identity-service.nova-staging.svc.cluster.local:50051"
-        # Social service - gRPC port 9006 with mTLS
+
+        # Social service - gRPC port 50052 with mTLS
         - name: GRPC_SOCIAL_SERVICE_URL
-          value: "https://social-service.nova-staging.svc.cluster.local:9006"
-        # Chat service - gRPC port 9085 with mTLS
+          value: "https://social-service.nova-staging.svc.cluster.local:50052"
+
+        # Chat service - gRPC port 9095 with mTLS
         - name: GRPC_CHAT_SERVICE_URL
-          value: "https://realtime-chat-service.nova-staging.svc.cluster.local:9085"
+          value: "https://realtime-chat-service.nova-staging.svc.cluster.local:9095"
+
         # ============================================================
         # Legacy environment variables (for backward compatibility)
         # Used by notification/graph services not yet in GrpcConfig
         # ============================================================
         - name: NOTIFICATION_SERVICE_URL
-          value: "http://notification-service.nova-staging.svc.cluster.local:50051"
+          value: "http://notification-service.nova-staging.svc.cluster.local:9093"
         - name: GRAPH_SERVICE_URL
-          value: "http://graph-service.nova-staging.svc.cluster.local:50051"
+          value: "http://graph-service.nova-staging.svc.cluster.local:9080"
+
         # ============================================================
         # TLS/mTLS Configuration
         # Certificate SAN: *.nova-staging.svc.cluster.local (wildcard)
@@ -59,10 +70,12 @@ spec:
           value: "/etc/nova/certs/client.crt"
         - name: GRPC_TLS_CLIENT_KEY_PATH
           value: "/etc/nova/certs/client.key"
+
         volumeMounts:
         - name: grpc-mtls-shared
           mountPath: /etc/nova/certs
           readOnly: true
+
       volumes:
       - name: grpc-mtls-shared
         secret:

@@ -303,6 +303,39 @@ patches:
     name: turn-server
 
     version: v1
+- patch: |-
+    - op: remove
+      path: /spec/template/spec/containers/0/env/0
+    - op: add
+      path: /spec/template/spec/containers/0/env/0
+      value:
+        name: KAFKA_BROKERS
+        valueFrom:
+          configMapKeyRef:
+            name: nova-config
+            key: KAFKA_BROKERS
+  target:
+    group: apps
+    kind: Deployment
+    name: analytics-service
+
+    version: v1
+- patch: |-
+    - op: replace
+      path: /spec/template/spec/containers/0/ports
+      value:
+        - name: http
+          containerPort: 8086
+          protocol: TCP
+        - name: grpc
+          containerPort: 50057
+          protocol: TCP
+  target:
+    group: apps
+    kind: Deployment
+    name: search-service
+
+    version: v1
 # search-service ports now defined in grpc-services.yaml (gRPC:50057, HTTP:8086)
 - path: configmap-patch.yaml
 - path: deployment-images-patch.yaml
@@ -328,6 +361,66 @@ patches:
 - path: service-redis-env-patch.yaml
 - path: grpc-tls-env-patch.yaml
 - path: graphql-gateway-env-patch.yaml
+- path: social-service-env-patch.yaml
+- path: patch-deployment-selectors.yaml
+- path: patch-analytics-kafka-env.yaml
+- path: patch-search-service-ports.yaml
+- patch: |-
+    apiVersion: networking.k8s.io/v1
+    kind: Ingress
+    metadata:
+      name: nova-api-gateway
+    $patch: delete
+  target:
+    group: networking.k8s.io
+    version: v1
+    kind: Ingress
+    name: nova-api-gateway
+- patch: |-
+    apiVersion: cert-manager.io/v1
+    kind: Certificate
+    metadata:
+      name: nova-api-gateway-tls
+    $patch: delete
+  target:
+    group: cert-manager.io
+    version: v1
+    kind: Certificate
+    name: nova-api-gateway-tls
+- patch: |-
+    apiVersion: cert-manager.io/v1
+    kind: ClusterIssuer
+    metadata:
+      name: nova-ca-issuer
+    $patch: delete
+  target:
+    group: cert-manager.io
+    version: v1
+    kind: ClusterIssuer
+    name: nova-ca-issuer
+- patch: |-
+    apiVersion: v1
+    kind: Service
+    metadata:
+      name: turn-server
+    spec:
+      ports:
+        - name: stun-udp
+          port: 3478
+          targetPort: 3478
+          protocol: UDP
+        - name: turn-udp-alt
+          port: 3479
+          targetPort: 3479
+          protocol: UDP
+        - name: turn-tcp
+          port: 3478
+          targetPort: 3478
+          protocol: TCP
+  target:
+    version: v1
+    kind: Service
+    name: turn-server
 
 # (migrated to strategic merge patches per service to avoid jsonpatch parent missing)
 
@@ -425,6 +518,8 @@ commonAnnotations:
 # ========================================
 resources:
 - ../../base
+- thumb-migrate-job.yaml
+# grpc-services.yaml - 移除: Service 已在 microservices 中定义，用 patch 方式修改端口
 - postgres-pvc-gp3.yaml
 - pgbouncer-userlist-patch.yaml
 - clickhouse-pvc.yaml

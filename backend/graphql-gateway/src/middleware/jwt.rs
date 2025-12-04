@@ -74,7 +74,7 @@ where
         let method = req.method().to_string();
         let path = req.path().to_string();
 
-        // Skip auth for health check, metrics, and public auth endpoints
+        // Skip auth for health check, metrics, and selected public endpoints
         let public_paths = [
             "/health",
             "/health/circuit-breakers",
@@ -82,6 +82,10 @@ where
             "/api/v2/auth/register",
             "/api/v2/auth/login",
             "/api/v2/auth/refresh",
+            // Guest feed (unauthenticated trending feed for mobile clients)
+            "/api/v2/guest/feed/trending",
+            // Invite code validation (pre-registration check, no auth required)
+            "/api/v2/auth/invites/validate",
         ];
 
         if public_paths.contains(&req.path()) {

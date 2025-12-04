@@ -19,7 +19,7 @@ struct LoginView: View {
     @State private var passwordError: String?
 
     // Access global AuthenticationManager
-    private let authManager = AuthenticationManager.shared
+    @EnvironmentObject private var authManager: AuthenticationManager
 
     var body: some View {
         ZStack {
@@ -52,7 +52,7 @@ struct LoginView: View {
                             .offset(x: 0, y: -290)
 
                         // Welcome Text
-                        Text("Welcome to Icered—for the masters of the universe.")
+                        Text(LocalizedStringKey("Welcome_Title"))
                             .font(Font.custom("Helvetica Neue", size: 16).weight(.thin))
                             .lineSpacing(20)
                             .foregroundColor(.white)
@@ -63,7 +63,7 @@ struct LoginView: View {
                         // Labels removed - placeholder text provides field hints
 
                         // Forgot password
-                        Text("Forgot password?")
+                        Text(LocalizedStringKey("Forgot_Password"))
                             .font(Font.custom("Helvetica Neue", size: 10).weight(.light))
                             .lineSpacing(20)
                             .foregroundColor(Color(red: 0.77, green: 0.77, blue: 0.77))
@@ -73,7 +73,7 @@ struct LoginView: View {
                             }
 
                         // SHOW/HIDE password toggle
-                        Text(showPassword ? "HIDE" : "SHOW")
+                        Text(showPassword ? LocalizedStringKey("Hide") : LocalizedStringKey("Show"))
                             .font(Font.custom("Helvetica Neue", size: 12).weight(.light))
                             .lineSpacing(20)
                             .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
@@ -93,7 +93,7 @@ struct LoginView: View {
                                     ProgressView()
                                         .progressViewStyle(CircularProgressViewStyle(tint: .white))
                                 }
-                                Text("Sign In")
+                                Text(LocalizedStringKey("Sign_In"))
                                     .font(Font.custom("Helvetica Neue", size: 16).weight(.medium))
                                     .lineSpacing(20)
                                     .foregroundColor(.white)
@@ -145,7 +145,7 @@ struct LoginView: View {
                             currentPage = .createAccount
                         }) {
                             HStack(spacing: 8) {
-                                Text("Create An Account")
+                                Text(LocalizedStringKey("Create_An_Account"))
                                     .font(Font.custom("Helvetica Neue", size: 16).weight(.medium))
                                     .lineSpacing(20)
                                     .foregroundColor(.white)
@@ -163,7 +163,7 @@ struct LoginView: View {
 
                         // Error Message
                         if let errorMessage = errorMessage {
-                            Text(errorMessage)
+                                Text(LocalizedStringKey(errorMessage))
                                 .font(Font.custom("Helvetica Neue", size: 12))
                                 .foregroundColor(.red)
                                 .multilineTextAlignment(.center)
@@ -186,7 +186,7 @@ struct LoginView: View {
                                             .stroke(emailError != nil ? Color.red : .white, lineWidth: emailError != nil ? 1 : 0.20)
                                     )
 
-                                TextField("", text: $email, prompt: Text("Enter your email").foregroundColor(Color.white.opacity(0.4)))
+                                TextField("", text: $email, prompt: Text(LocalizedStringKey("Enter_your_email")).foregroundColor(Color.white.opacity(0.4)))
                                     .foregroundColor(.white)
                                     .font(Font.custom("Helvetica Neue", size: 14))
                                     .padding(.horizontal, 16)
@@ -201,7 +201,7 @@ struct LoginView: View {
                             .frame(width: 343, height: 49)
 
                             // Inline error for email - fixed height to prevent layout shift
-                            Text(emailError ?? " ")
+                            Text(LocalizedStringKey(emailError ?? " "))
                                 .font(Font.custom("Helvetica Neue", size: 11))
                                 .foregroundColor(Color(red: 1, green: 0.4, blue: 0.4))
                                 .padding(.leading, 4)
@@ -223,7 +223,7 @@ struct LoginView: View {
                                     )
 
                                 if showPassword {
-                                    TextField("", text: $password, prompt: Text("Enter your password").foregroundColor(Color.white.opacity(0.4)))
+                                    TextField("", text: $password, prompt: Text(LocalizedStringKey("Enter_your_password")).foregroundColor(Color.white.opacity(0.4)))
                                         .foregroundColor(.white)
                                         .font(Font.custom("Helvetica Neue", size: 14))
                                         .padding(.horizontal, 16)
@@ -232,7 +232,7 @@ struct LoginView: View {
                                         .autocorrectionDisabled()
                                         .accessibilityIdentifier("loginPasswordTextField")
                                 } else {
-                                    SecureField("", text: $password, prompt: Text("Enter your password").foregroundColor(Color.white.opacity(0.4)))
+                                    SecureField("", text: $password, prompt: Text(LocalizedStringKey("Enter_your_password")).foregroundColor(Color.white.opacity(0.4)))
                                         .foregroundColor(.white)
                                         .font(Font.custom("Helvetica Neue", size: 14))
                                         .padding(.horizontal, 16)
@@ -243,7 +243,7 @@ struct LoginView: View {
                             .frame(width: 343, height: 49)
 
                             // Inline error for password - fixed height to prevent layout shift
-                            Text(passwordError ?? " ")
+                            Text(LocalizedStringKey(passwordError ?? " "))
                                 .font(Font.custom("Helvetica Neue", size: 11))
                                 .foregroundColor(Color(red: 1, green: 0.4, blue: 0.4))
                                 .padding(.leading, 4)
@@ -295,11 +295,11 @@ struct LoginView: View {
         } catch {
             // Provide user-friendly error messages
             if error.localizedDescription.contains("401") || error.localizedDescription.contains("Unauthorized") {
-                errorMessage = "Invalid email or password. Please try again."
+                errorMessage = "Invalid_email_or_password"
             } else if error.localizedDescription.contains("network") || error.localizedDescription.contains("connection") {
-                errorMessage = "Network error. Please check your connection."
+                errorMessage = "Network_error"
             } else {
-                errorMessage = "Login failed. Please try again."
+                errorMessage = "Login_failed"
             }
             #if DEBUG
             print("[LoginView] Login error: \(error)")
@@ -334,18 +334,18 @@ struct LoginView: View {
     private func validateLogin() -> Bool {
         let trimmedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        if trimmedEmail.isEmpty {
-            errorMessage = "Please enter your email"
+            if trimmedEmail.isEmpty {
+                errorMessage = "Please_enter_your_email"
             return false
         }
 
-        if !isValidEmail(trimmedEmail) {
-            errorMessage = "Please enter a valid email address"
+            if !isValidEmail(trimmedEmail) {
+                errorMessage = "Please_enter_a_valid_email"
             return false
         }
 
-        if password.isEmpty {
-            errorMessage = "Please enter your password"
+            if password.isEmpty {
+                errorMessage = "Please_enter_your_password"
             return false
         }
 
@@ -359,7 +359,7 @@ struct LoginView: View {
         if trimmed.isEmpty {
             emailError = nil  // Don't show error for empty field until submit
         } else if !isValidEmail(trimmed) {
-            emailError = "Invalid email format"
+            emailError = "Invalid_email_format"
         } else {
             emailError = nil
         }
@@ -378,4 +378,5 @@ struct LoginView: View {
 
 #Preview {
     LoginView(currentPage: .constant(.login))
+        .environmentObject(AuthenticationManager.shared)
 }

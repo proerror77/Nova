@@ -197,10 +197,9 @@ impl EmailService {
                     IdentityError::Internal(format!("Failed to build HTML email message: {}", e))
                 })?;
 
-            transport
-                .send(email)
-                .await
-                .map_err(|e| IdentityError::Internal(format!("Failed to send HTML email: {}", e)))?;
+            transport.send(email).await.map_err(|e| {
+                IdentityError::Internal(format!("Failed to send HTML email: {}", e))
+            })?;
             info!(subject, "HTML email sent successfully");
         } else {
             info!(

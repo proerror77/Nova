@@ -3,6 +3,9 @@ name = "crypto-core"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+crate-type = ["rlib", "staticlib"]
+
 [dependencies]
 rand = { workspace = true }
 serde = { version = "1", features = ["derive"] }

@@ -479,7 +479,10 @@ impl TrustSafetyService for TrustSafetyServiceImpl {
             .map(|r| trust_safety::UserReport {
                 id: r.id.to_string(),
                 reporter_user_id: r.reporter_user_id.to_string(),
-                reported_user_id: r.reported_user_id.map(|id| id.to_string()).unwrap_or_default(),
+                reported_user_id: r
+                    .reported_user_id
+                    .map(|id| id.to_string())
+                    .unwrap_or_default(),
                 reported_content_id: r.reported_content_id.unwrap_or_default(),
                 reported_content_type: r.reported_content_type.unwrap_or_default(),
                 report_type: string_to_report_type(&r.report_type),
@@ -554,9 +557,10 @@ impl TrustSafetyService for TrustSafetyServiceImpl {
         };
 
         let report_id = if !req.report_id.is_empty() {
-            Some(Uuid::parse_str(&req.report_id).map_err(|e| {
-                Status::invalid_argument(format!("Invalid report_id: {}", e))
-            })?)
+            Some(
+                Uuid::parse_str(&req.report_id)
+                    .map_err(|e| Status::invalid_argument(format!("Invalid report_id: {}", e)))?,
+            )
         } else {
             None
         };
@@ -691,17 +695,19 @@ impl TrustSafetyService for TrustSafetyServiceImpl {
             .map_err(|e| Status::invalid_argument(format!("Invalid banned_by: {}", e)))?;
 
         let warning_id = if !req.warning_id.is_empty() {
-            Some(Uuid::parse_str(&req.warning_id).map_err(|e| {
-                Status::invalid_argument(format!("Invalid warning_id: {}", e))
-            })?)
+            Some(
+                Uuid::parse_str(&req.warning_id)
+                    .map_err(|e| Status::invalid_argument(format!("Invalid warning_id: {}", e)))?,
+            )
         } else {
             None
         };
 
         let report_id = if !req.report_id.is_empty() {
-            Some(Uuid::parse_str(&req.report_id).map_err(|e| {
-                Status::invalid_argument(format!("Invalid report_id: {}", e))
-            })?)
+            Some(
+                Uuid::parse_str(&req.report_id)
+                    .map_err(|e| Status::invalid_argument(format!("Invalid report_id: {}", e)))?,
+            )
         } else {
             None
         };

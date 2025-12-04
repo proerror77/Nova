@@ -1,0 +1,40 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: content-service
+spec:
+  template:
+    metadata:
+      labels:
+        tier: backend
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: feed-service
+spec:
+  template:
+    metadata:
+      labels:
+        tier: backend
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: media-service
+spec:
+  template:
+    metadata:
+      labels:
+        tier: backend
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: search-service
+spec:
+  template:
+    metadata:
+      labels:
+        app: search-service
+        tier: backend

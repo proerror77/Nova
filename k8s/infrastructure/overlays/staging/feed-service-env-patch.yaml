@@ -1,3 +1,6 @@
+# Feed Service 环境变量配置 - Staging
+# 包含完整的 mTLS 配置与服务依赖
+
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -8,24 +11,83 @@ spec:
       containers:
       - name: feed-service
         env:
+        # ============================================================
+        # 服务端口配置
+        # ============================================================
         - name: APP_PORT
           value: "8084"
         - name: SERVER_PORT
           value: "8084"
+
+        # ============================================================
+        # Kafka 配置
+        # ============================================================
         - name: KAFKA_BOOTSTRAP_SERVERS
           valueFrom:
             configMapKeyRef:
               name: nova-config
               key: KAFKA_BROKERS
-        # content-service 對 feed-service 非硬依賴，降級為 Tier1 避免啟動時 CrashLoop
-        - name: GRPC_CONTENT_SERVICE_TIER
-          value: "1"
-        # identity-service 在啟動時可能尚未就緒，降級 tier 避免 CrashLoop
-        - name: GRPC_IDENTITY_SERVICE_TIER
-          value: "1"
-        # graph-service gRPC URL (mTLS enabled)
+
+        # ============================================================
+        # gRPC 服务 URL 配置 (mTLS)
+        # ============================================================
+        - name: GRPC_IDENTITY_SERVICE_URL
+          value: "http://identity-service:50051"
+        - name: GRPC_SOCIAL_SERVICE_URL
+          value: "https://social-service.nova-staging.svc.cluster.local:50052"
+        - name: GRPC_RANKING_SERVICE_URL
+          value: "http://ranking-service:9011"
+        - name: GRPC_CONTENT_SERVICE_URL
+          value: "https://content-service.nova-staging.svc.cluster.local:9080"
         - name: GRPC_GRAPH_SERVICE_URL
           value: "https://graph-service.nova-staging.svc.cluster.local:9080"
-        # graph-service 非必要依賴，降級 tier 避免啟動時 CrashLoop
+        - name: REDIS_URL
+          value: "redis://redis.nova-staging.svc.cluster.local:6379"
+
+        # ============================================================
+        # gRPC 服务 Tier 配置 (非硬依赖，避免启动 CrashLoop)
+        # ============================================================
+        - name: GRPC_CONTENT_SERVICE_TIER
+          value: "1"
+        - name: GRPC_IDENTITY_SERVICE_TIER
+          value: "1"
         - name: GRPC_GRAPH_SERVICE_TIER
           value: "1"
+
+        # ============================================================
+        # mTLS 配置
+        # ============================================================
+        - name: GRPC_TLS_DOMAIN_NAME
+          value: "content-service.nova-staging.svc.cluster.local"
+        - name: GRPC_TLS_ENABLED
+          value: "true"
+        - name: GRPC_TLS_CA_CERT_PATH
+          value: "/etc/nova/certs/ca.crt"
+        - name: GRPC_TLS_CLIENT_CERT_PATH
+          value: "/etc/nova/certs/client.crt"
+        - name: GRPC_TLS_CLIENT_KEY_PATH
+          value: "/etc/nova/certs/client.key"
+        - name: GRPC_SERVER_CERT_PATH
+          value: "/etc/nova/certs/server.crt"
+        - name: GRPC_SERVER_KEY_PATH
+          value: "/etc/nova/certs/server.key"
+        - name: GRPC_CLIENT_CA_CERT_PATH
+          value: "/etc/nova/certs/ca.crt"
+        - name: GRPC_REQUIRE_CLIENT_CERT
+          value: "true"
+
+        # ============================================================
+        # Staging 专用配置
+        # ============================================================
+        - name: FEED_DEFAULT_IMAGE_URL
+          value: "https://picsum.photos/seed/nova-feed/800/600"
+
+        volumeMounts:
+        - name: grpc-mtls-shared
+          mountPath: /etc/nova/certs
+          readOnly: true
+
+      volumes:
+      - name: grpc-mtls-shared
+        secret:
+          secretName: grpc-mtls-shared

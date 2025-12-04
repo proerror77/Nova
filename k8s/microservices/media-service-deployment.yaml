@@ -63,7 +63,11 @@ spec:
             name: media-service-config
         - secretRef:
             name: media-service-secret
-        image: nova/media-service
+        - secretRef:
+            name: nova-gcs-credentials
+        - secretRef:
+            name: media-service-jwt
+        image: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/media-service:latest
         livenessProbe:
           failureThreshold: 3
           httpGet:

@@ -178,9 +178,6 @@ services:
       - ./backend/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./backend/nginx/conf.d:/etc/nginx/conf.d:ro
       - ./backend/certs:/etc/nginx/certs:ro
-    depends_on:
-      - content-service
-      - media-service
     networks:
       - nova
 

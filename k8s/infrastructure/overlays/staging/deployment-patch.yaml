@@ -39,6 +39,7 @@ kind: Deployment
 metadata:
   name: feed-service
 spec:
+  replicas: 1
   template:
     spec:
       containers:
@@ -146,6 +147,7 @@ kind: Deployment
 metadata:
   name: identity-service
 spec:
+  replicas: 1
   template:
     spec:
       containers:
@@ -155,6 +157,10 @@ spec:
           value: "nova/staging/nova-jwt-keys"
         - name: AWS_REGION
           value: "ap-northeast-1"
+        # Global non-expiring invite code for staging QA
+        # NOTE: Do NOT set in production.
+        - name: GLOBAL_TEST_INVITE_CODE
+          value: "NOVATEST"
         imagePullPolicy: Always
         resources:
           requests:

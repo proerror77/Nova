@@ -251,4 +251,280 @@ impl PollRepository {
 
         Ok(candidate)
     }
+
+    /// Create a new poll with optional initial candidates
+    pub async fn create_poll(
+        &self,
+        creator_id: Uuid,
+        title: String,
+        description: Option<String>,
+        cover_image_url: Option<String>,
+        poll_type: String,
+        tags: Vec<String>,
+        ends_at: Option<chrono::DateTime<chrono::Utc>>,
+        initial_candidates: Vec<CreateCandidateInput>,
+    ) -> Result<(Poll, Vec<PollCandidate>)> {
+        let mut tx = self.pool.begin().await?;
+
+        // Create poll
+        let poll = sqlx::query_as::<_, Poll>(
+            r#"
+            INSERT INTO polls (creator_id, title, description, cover_image_url, poll_type, tags, ends_at, status, candidate_count)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, 'active', $8)
+            RETURNING id, title, description, cover_image_url, creator_id, poll_type,
+                      status, total_votes, candidate_count, tags, created_at, updated_at,
+                      ends_at, is_deleted
+            "#,
+        )
+        .bind(creator_id)
+        .bind(&title)
+        .bind(&description)
+        .bind(&cover_image_url)
+        .bind(&poll_type)
+        .bind(&tags)
+        .bind(ends_at)
+        .bind(initial_candidates.len() as i32)
+        .fetch_one(&mut *tx)
+        .await?;
+
+        // Insert initial candidates
+        let mut candidates = Vec::with_capacity(initial_candidates.len());
+        for (idx, input) in initial_candidates.into_iter().enumerate() {
+            let candidate = sqlx::query_as::<_, PollCandidate>(
+                r#"
+                INSERT INTO poll_candidates (poll_id, name, avatar_url, description, user_id, position)
+                VALUES ($1, $2, $3, $4, $5, $6)
+                RETURNING id, poll_id, name, avatar_url, description, user_id,
+                          vote_count, position, created_at, is_deleted
+                "#,
+            )
+            .bind(poll.id)
+            .bind(&input.name)
+            .bind(&input.avatar_url)
+            .bind(&input.description)
+            .bind(input.user_id)
+            .bind((idx + 1) as i32)
+            .fetch_one(&mut *tx)
+            .await?;
+            candidates.push(candidate);
+        }
+
+        tx.commit().await?;
+        Ok((poll, candidates))
+    }
+
+    /// Unvote (remove vote) from a poll
+    pub async fn unvote(&self, poll_id: Uuid, user_id: Uuid) -> Result<bool> {
+        // Get existing vote to find candidate_id
+        let vote = sqlx::query_as::<_, PollVote>(
+            r#"
+            SELECT id, poll_id, candidate_id, user_id, created_at
+            FROM poll_votes
+            WHERE poll_id = $1 AND user_id = $2
+            "#,
+        )
+        .bind(poll_id)
+        .bind(user_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        if vote.is_none() {
+            return Ok(false);
+        }
+
+        let vote = vote.unwrap();
+
+        // Delete vote and update counts
+        let mut tx = self.pool.begin().await?;
+
+        sqlx::query("DELETE FROM poll_votes WHERE id = $1")
+            .bind(vote.id)
+            .execute(&mut *tx)
+            .await?;
+
+        // Decrement candidate vote count
+        sqlx::query(
+            "UPDATE poll_candidates SET vote_count = vote_count - 1 WHERE id = $1 AND vote_count > 0",
+        )
+        .bind(vote.candidate_id)
+        .execute(&mut *tx)
+        .await?;
+
+        // Decrement poll total votes
+        sqlx::query("UPDATE polls SET total_votes = total_votes - 1 WHERE id = $1 AND total_votes > 0")
+            .bind(poll_id)
+            .execute(&mut *tx)
+            .await?;
+
+        tx.commit().await?;
+        Ok(true)
+    }
+
+    /// Add a candidate to a poll
+    pub async fn add_candidate(
+        &self,
+        poll_id: Uuid,
+        name: String,
+        avatar_url: Option<String>,
+        description: Option<String>,
+        user_id: Option<Uuid>,
+    ) -> Result<PollCandidate> {
+        let mut tx = self.pool.begin().await?;
+
+        // Get next position
+        let next_position: i32 = sqlx::query_scalar(
+            "SELECT COALESCE(MAX(position), 0) + 1 FROM poll_candidates WHERE poll_id = $1",
+        )
+        .bind(poll_id)
+        .fetch_one(&mut *tx)
+        .await?;
+
+        let candidate = sqlx::query_as::<_, PollCandidate>(
+            r#"
+            INSERT INTO poll_candidates (poll_id, name, avatar_url, description, user_id, position)
+            VALUES ($1, $2, $3, $4, $5, $6)
+            RETURNING id, poll_id, name, avatar_url, description, user_id,
+                      vote_count, position, created_at, is_deleted
+            "#,
+        )
+        .bind(poll_id)
+        .bind(&name)
+        .bind(&avatar_url)
+        .bind(&description)
+        .bind(user_id)
+        .bind(next_position)
+        .fetch_one(&mut *tx)
+        .await?;
+
+        // Update poll candidate count
+        sqlx::query("UPDATE polls SET candidate_count = candidate_count + 1 WHERE id = $1")
+            .bind(poll_id)
+            .execute(&mut *tx)
+            .await?;
+
+        tx.commit().await?;
+        Ok(candidate)
+    }
+
+    /// Remove a candidate from a poll (soft delete)
+    pub async fn remove_candidate(&self, poll_id: Uuid, candidate_id: Uuid) -> Result<bool> {
+        let mut tx = self.pool.begin().await?;
+
+        let result = sqlx::query(
+            "UPDATE poll_candidates SET is_deleted = TRUE WHERE id = $1 AND poll_id = $2 AND is_deleted = FALSE",
+        )
+        .bind(candidate_id)
+        .bind(poll_id)
+        .execute(&mut *tx)
+        .await?;
+
+        if result.rows_affected() > 0 {
+            // Update poll candidate count
+            sqlx::query(
+                "UPDATE polls SET candidate_count = candidate_count - 1 WHERE id = $1 AND candidate_count > 0",
+            )
+            .bind(poll_id)
+            .execute(&mut *tx)
+            .await?;
+        }
+
+        tx.commit().await?;
+        Ok(result.rows_affected() > 0)
+    }
+
+    /// Close a poll (set status to 'closed')
+    pub async fn close_poll(&self, poll_id: Uuid, creator_id: Uuid) -> Result<bool> {
+        let result = sqlx::query(
+            "UPDATE polls SET status = 'closed', updated_at = NOW() WHERE id = $1 AND creator_id = $2 AND status = 'active'",
+        )
+        .bind(poll_id)
+        .bind(creator_id)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(result.rows_affected() > 0)
+    }
+
+    /// Delete a poll (soft delete)
+    pub async fn delete_poll(&self, poll_id: Uuid, creator_id: Uuid) -> Result<bool> {
+        let result = sqlx::query(
+            "UPDATE polls SET is_deleted = TRUE, updated_at = NOW() WHERE id = $1 AND creator_id = $2 AND is_deleted = FALSE",
+        )
+        .bind(poll_id)
+        .bind(creator_id)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(result.rows_affected() > 0)
+    }
+
+    /// Get active polls with pagination
+    pub async fn get_active_polls(
+        &self,
+        limit: i32,
+        offset: i32,
+        tags: Option<Vec<String>>,
+    ) -> Result<(Vec<Poll>, i32)> {
+        let (polls, total) = if let Some(tags) = tags {
+            let polls = sqlx::query_as::<_, Poll>(
+                r#"
+                SELECT id, title, description, cover_image_url, creator_id, poll_type,
+                       status, total_votes, candidate_count, tags, created_at, updated_at,
+                       ends_at, is_deleted
+                FROM polls
+                WHERE status = 'active' AND is_deleted = FALSE AND tags && $1
+                ORDER BY created_at DESC
+                LIMIT $2 OFFSET $3
+                "#,
+            )
+            .bind(&tags)
+            .bind(limit)
+            .bind(offset)
+            .fetch_all(&self.pool)
+            .await?;
+
+            let total: i64 = sqlx::query_scalar(
+                "SELECT COUNT(*) FROM polls WHERE status = 'active' AND is_deleted = FALSE AND tags && $1",
+            )
+            .bind(&tags)
+            .fetch_one(&self.pool)
+            .await?;
+
+            (polls, total as i32)
+        } else {
+            let polls = sqlx::query_as::<_, Poll>(
+                r#"
+                SELECT id, title, description, cover_image_url, creator_id, poll_type,
+                       status, total_votes, candidate_count, tags, created_at, updated_at,
+                       ends_at, is_deleted
+                FROM polls
+                WHERE status = 'active' AND is_deleted = FALSE
+                ORDER BY created_at DESC
+                LIMIT $1 OFFSET $2
+                "#,
+            )
+            .bind(limit)
+            .bind(offset)
+            .fetch_all(&self.pool)
+            .await?;
+
+            let total: i64 = sqlx::query_scalar(
+                "SELECT COUNT(*) FROM polls WHERE status = 'active' AND is_deleted = FALSE",
+            )
+            .fetch_one(&self.pool)
+            .await?;
+
+            (polls, total as i32)
+        };
+
+        Ok((polls, total))
+    }
+}
+
+/// Input for creating a candidate
+pub struct CreateCandidateInput {
+    pub name: String,
+    pub avatar_url: Option<String>,
+    pub description: Option<String>,
+    pub user_id: Option<Uuid>,
 }

@@ -65,19 +65,19 @@ struct APIConfig {
 
     struct Social {
         // MARK: - Likes
-        static let createLike = "/api/v2/social/likes"
-        static func deleteLike(_ postId: String) -> String { "/api/v2/social/likes/\(postId)" }
+        static let createLike = "/api/v2/social/like"
+        static func deleteLike(_ postId: String) -> String { "/api/v2/social/unlike/\(postId)" }
         static func getLikes(_ postId: String) -> String { "/api/v2/social/likes/\(postId)" }
-        static func checkLiked(_ postId: String) -> String { "/api/v2/social/likes/\(postId)/check" }
+        static func checkLiked(_ postId: String) -> String { "/api/v2/social/check-liked/\(postId)" }
 
         // MARK: - Comments
-        static let createComment = "/api/v2/social/comments"
-        static func deleteComment(_ commentId: String) -> String { "/api/v2/social/comments/\(commentId)" }
+        static let createComment = "/api/v2/social/comment"
+        static func deleteComment(_ commentId: String) -> String { "/api/v2/social/comment/\(commentId)" }
         static func getComments(_ postId: String) -> String { "/api/v2/social/comments/\(postId)" }
 
         // MARK: - Shares
-        static let createShare = "/api/v2/social/shares"
-        static func getShareCount(_ postId: String) -> String { "/api/v2/social/shares/\(postId)/count" }
+        static let createShare = "/api/v2/social/share"
+        static func getShareCount(_ postId: String) -> String { "/api/v2/social/shares/count/\(postId)" }
 
         // MARK: - Batch Operations
         static let batchGetStats = "/api/v2/social/stats/batch"
@@ -121,11 +121,12 @@ struct APIConfig {
 
     // MARK: - Feed API
     struct Feed {
-        /// GET /api/v2/feed - 獲取用戶 Feed
+        /// GET /api/v2/feed - 獲取用戶 Feed (需要 JWT 認證)
         /// Query params: algo (ch|time), limit (1-100), cursor (pagination)
         static let getFeed = "/api/v2/feed"
-        /// GET /api/v2/feed/trending - 獲取熱門 Feed
-        static let getTrending = "/api/v2/feed/trending"
+        /// GET /api/v2/guest/feed/trending - 獲取熱門 Feed (無需認證，Guest Mode)
+        /// 注意：此端點與認證端點分離以避免 Actix-web 路由衝突
+        static let getTrending = "/api/v2/guest/feed/trending"
     }
 
     // MARK: - Poll API (投票榜單)
@@ -164,20 +165,15 @@ struct APIConfig {
         static func getProfile(_ id: String) -> String { "/api/v2/users/\(id)" }
     }
 
-    // MARK: - Search API
-    struct Search {
-        /// GET /api/v2/search - Global search across all content types
-        static let searchAll = "/api/v2/search"
-        /// GET /api/v2/search/users - Search users only
-        static let searchUsers = "/api/v2/search/users"
-        /// GET /api/v2/search/content - Search posts/content only
-        static let searchContent = "/api/v2/search/content"
-        /// GET /api/v2/search/hashtags - Search hashtags only
-        static let searchHashtags = "/api/v2/search/hashtags"
-        /// GET /api/v2/search/suggestions - Get autocomplete suggestions
-        static let getSuggestions = "/api/v2/search/suggestions"
-        /// GET /api/v2/search/trending - Get trending topics/hashtags
-        static let getTrending = "/api/v2/search/trending"
+    // MARK: - User Settings API
+    struct Settings {
+        /// GET /api/v2/auth/users/{id}/settings 獲取用戶設定
+        /// NOTE: HTTP 網關目前將使用者設定掛在 auth-service 之下，
+        /// 對應 backend/proto/services/auth_service.proto GetUserSettings。
+        /// 如果之後遷移到 user-service，請同步更新為 /api/v2/users/{id}/settings。
+        static func getSettings(_ userId: String) -> String { "/api/v2/auth/users/\(userId)/settings" }
+        /// PUT /api/v2/auth/users/{id}/settings 更新用戶設定
+        static func updateSettings(_ userId: String) -> String { "/api/v2/auth/users/\(userId)/settings" }
     }
 
     // MARK: - Friends & Social Graph API
@@ -235,52 +231,34 @@ struct APIConfig {
     // MARK: - Chat & Messaging API (Realtime Chat Service :8085)
     struct Chat {
         // MARK: - Conversations
-        /// POST /conversations - Create new conversation (DM or group)
-        static let createConversation = "/conversations"
-        /// GET /conversations - List all conversations
-        static let getConversations = "/conversations"
-        /// GET /conversations/{id} - Get conversation details
-        static func getConversation(_ id: String) -> String { "/conversations/\(id)" }
-        /// PUT /conversations/{id} - Update conversation
-        static func updateConversation(_ id: String) -> String { "/conversations/\(id)" }
+        static let createGroupChat = "/api/v2/chat/groups/create"  // POST 創建群組
+        static let getConversations = "/api/v2/chat/conversations"  // GET 獲取對話列表
+        static let createConversation = "/api/v2/chat/conversations"  // POST 創建對話
+        /// GET /api/v2/chat/conversations/{id} 獲取群組詳情
+        static func getConversation(_ id: String) -> String { "/api/v2/chat/conversations/\(id)" }
 
         // MARK: - Messages
-        /// POST /conversations/{id}/messages - Send message
-        static func sendMessage(_ conversationId: String) -> String {
-            "/conversations/\(conversationId)/messages"
-        }
-        /// GET /conversations/{id}/messages - Get message history
-        static func getMessages(_ conversationId: String) -> String {
-            "/conversations/\(conversationId)/messages"
-        }
-        /// PUT /messages/{id} - Edit message
-        static func editMessage(_ messageId: String) -> String { "/messages/\(messageId)" }
-        /// DELETE /messages/{id} - Delete message
-        static func deleteMessage(_ messageId: String) -> String { "/messages/\(messageId)" }
-        /// POST /conversations/{cid}/messages/{mid}/recall - Recall message
+        /// POST /api/v2/chat/messages 發送消息（conversation_id 在 body 中）
+        static let sendMessage = "/api/v2/chat/messages"
+        /// GET /api/v2/chat/messages 獲取消息歷史（使用 conversation_id 查詢參數）
+        static let getMessages = "/api/v2/chat/messages"
+        /// PUT /api/v2/chat/messages/{id} 編輯消息
+        static func editMessage(_ messageId: String) -> String { "/api/v2/chat/messages/\(messageId)" }
+        /// DELETE /api/v2/chat/messages/{id} 刪除消息
+        static func deleteMessage(_ messageId: String) -> String { "/api/v2/chat/messages/\(messageId)" }
+        /// POST /api/v2/chat/conversations/{conversationId}/messages/{messageId}/recall 撤回消息
         static func recallMessage(conversationId: String, messageId: String) -> String {
-            "/conversations/\(conversationId)/messages/\(messageId)/recall"
+            "/api/v2/chat/conversations/\(conversationId)/messages/\(messageId)/recall"
         }
 
         // MARK: - Groups
-        /// POST /groups - Create group chat
-        static let createGroup = "/groups"
-        /// POST /conversations/{id}/members - Add group member
-        static func addMember(_ conversationId: String) -> String {
-            "/conversations/\(conversationId)/members"
-        }
-        /// DELETE /conversations/{id}/members/{uid} - Remove group member
-        static func removeMember(conversationId: String, userId: String) -> String {
-            "/conversations/\(conversationId)/members/\(userId)"
-        }
-        /// PUT /conversations/{id}/members/{uid}/role - Update member role
-        static func updateMemberRole(conversationId: String, userId: String) -> String {
-            "/conversations/\(conversationId)/members/\(userId)/role"
-        }
+        static let getGroupDetails = "/api/v2/chat/groups"  // TODO: 後端尚未提供
+        static let addGroupMembers = "/api/v2/chat/groups/members/add"  // POST 添加群組成員
+        static let removeGroupMembers = "/api/v2/chat/groups/members/remove"  // DELETE 移除群組成員
 
         // MARK: - WebSocket
-        /// WebSocket /ws - Real-time messaging
-        static let websocket = "/ws"
+        /// WebSocket 連接端點
+        static let websocket = "/ws/chat"
     }
 
     // MARK: - Relationships & Privacy API (realtime-chat-service)
@@ -305,6 +283,50 @@ struct APIConfig {
         static func acceptMessageRequest(_ requestId: String) -> String { "/api/v2/message-requests/\(requestId)/accept" }
         /// POST /api/v2/message-requests/{id}/reject 拒絕訊息請求
         static func rejectMessageRequest(_ requestId: String) -> String { "/api/v2/message-requests/\(requestId)/reject" }
+    }
+
+    // MARK: - Search API
+    struct Search {
+        /// GET /api/v2/search - 通用搜索
+        static let search = "/api/v2/search"
+        static let searchAll = "/api/v2/search"  // Alias for SearchService
+        /// GET /api/v2/search/users - 搜索用戶
+        static let users = "/api/v2/search/users"
+        static let searchUsers = "/api/v2/search/users"  // Alias for SearchService
+        /// GET /api/v2/search/posts - 搜索貼文
+        static let posts = "/api/v2/search/posts"
+        static let searchContent = "/api/v2/search/posts"  // Alias for SearchService
+        /// GET /api/v2/search/tags - 搜索標籤
+        static let tags = "/api/v2/search/tags"
+        static let searchHashtags = "/api/v2/search/tags"  // Alias for SearchService
+        /// GET /api/v2/search/suggestions - 搜索建議
+        static let suggestions = "/api/v2/search/suggestions"
+        static let getSuggestions = "/api/v2/search/suggestions"  // Alias for SearchService
+        /// GET /api/v2/search/trending - 熱門搜索
+        static let trending = "/api/v2/search/trending"
+        static let getTrending = "/api/v2/search/trending"  // Alias for SearchService
+    }
+
+    // MARK: - E2EE (End-to-End Encryption) API
+    struct E2EE {
+        /// POST /api/v2/e2ee/devices - Register device for E2EE
+        static let registerDevice = "/api/v2/e2ee/devices"
+        /// POST /api/v2/e2ee/keys/upload - Upload one-time prekeys
+        static let uploadKeys = "/api/v2/e2ee/keys/upload"
+        /// POST /api/v2/e2ee/keys/claim - Claim one-time keys from other devices
+        static let claimKeys = "/api/v2/e2ee/keys/claim"
+        /// POST /api/v2/e2ee/keys/query - Query device keys for users
+        static let queryKeys = "/api/v2/e2ee/keys/query"
+        /// GET /api/v2/e2ee/to-device - Get pending to-device messages
+        static let toDeviceMessages = "/api/v2/e2ee/to-device"
+        /// DELETE /api/v2/e2ee/to-device/{message_id} - Acknowledge to-device message
+        static func ackToDeviceMessage(_ messageId: String) -> String {
+            "/api/v2/e2ee/to-device/\(messageId)"
+        }
+        /// POST /api/v2/e2ee/messages - Send pre-encrypted E2EE message
+        static let sendMessage = "/api/v2/e2ee/messages"
+        /// GET /api/v2/e2ee/messages - Get E2EE messages for conversation
+        static let getMessages = "/api/v2/e2ee/messages"
     }
 
     // MARK: - Service Ports (for direct gRPC access if needed)

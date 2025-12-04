@@ -1,39 +1,42 @@
 import Foundation
 
 // MARK: - User Service
-// Handles user profile operations via UserService backend
+// Handles user profile and settings operations via graphql-gateway/user-service backend
 
 class UserService {
+    static let shared = UserService()
     private let client = APIClient.shared
+
+    private init() {}
 
     // MARK: - User Profile
 
     /// Get user profile by ID
     func getUser(userId: String) async throws -> UserProfile {
-        // TODO: Implement gRPC call to UserService.GetUser
-        // Example:
-        // let request = GetUserRequest(user_id: userId)
-        // let response: GetUserResponse = try await client.request(endpoint: "/user/get", body: request)
-        // return UserProfile(
-        //     id: response.user.id,
-        //     username: response.user.username,
-        //     email: response.user.email,
-        //     displayName: response.user.display_name,
-        //     bio: response.user.bio,
-        //     avatarUrl: response.user.avatar_url,
-        //     coverUrl: response.user.cover_url,
-        //     website: response.user.website,
-        //     location: response.user.location,
-        //     isVerified: response.user.is_verified,
-        //     isPrivate: response.user.is_private,
-        //     followerCount: response.user.follower_count,
-        //     followingCount: response.user.following_count,
-        //     postCount: response.user.post_count,
-        //     createdAt: response.user.created_at,
-        //     updatedAt: response.user.updated_at,
-        //     deletedAt: response.user.deleted_at
-        // )
-        throw APIError.notFound
+        struct GetUserResponse: Codable {
+            let user: UserProfile
+        }
+
+        let response: GetUserResponse = try await client.request(
+            endpoint: APIConfig.Profile.getProfile(userId),
+            method: "GET"
+        )
+
+        return response.user
+    }
+
+    /// Get user profile by username
+    func getUserByUsername(_ username: String) async throws -> UserProfile {
+        struct GetUserResponse: Codable {
+            let user: UserProfile
+        }
+
+        let response: GetUserResponse = try await client.request(
+            endpoint: "/api/v2/users/username/\(username)",
+            method: "GET"
+        )
+
+        return response.user
     }
 
     /// Update user profile
@@ -44,57 +47,145 @@ class UserService {
         avatarUrl: String? = nil,
         coverUrl: String? = nil,
         website: String? = nil,
-        location: String? = nil
+        location: String? = nil,
+        isPrivate: Bool? = nil,
+        firstName: String? = nil,
+        lastName: String? = nil,
+        dateOfBirth: String? = nil,
+        gender: Gender? = nil
     ) async throws -> UserProfile {
-        // TODO: Implement gRPC call to UserService.UpdateProfile
-        // Example:
-        // let request = UpdateProfileRequest(
-        //     user_id: userId,
-        //     display_name: displayName,
-        //     bio: bio,
-        //     avatar_url: avatarUrl,
-        //     cover_url: coverUrl,
-        //     website: website,
-        //     location: location
-        // )
-        // let response: UpdateProfileResponse = try await client.request(endpoint: "/user/update", body: request)
-        // return /* map proto User to UserProfile */
-        throw APIError.notFound
+        struct UpdateProfileResponse: Codable {
+            let user: UserProfile
+        }
+
+        let request = UpdateUserProfileRequest(
+            userId: userId,
+            displayName: displayName,
+            bio: bio,
+            avatarUrl: avatarUrl,
+            coverUrl: coverUrl,
+            website: website,
+            location: location,
+            isPrivate: isPrivate,
+            firstName: firstName,
+            lastName: lastName,
+            dateOfBirth: dateOfBirth,
+            gender: gender?.rawValue
+        )
+
+        let response: UpdateProfileResponse = try await client.request(
+            endpoint: APIConfig.Profile.updateProfile(userId),
+            method: "PUT",
+            body: request
+        )
+
+        return response.user
     }
 
     // MARK: - Settings
 
     /// Get user settings
     func getSettings(userId: String) async throws -> UserSettings {
-        // TODO: Implement gRPC call to UserService.GetSettings
-        throw APIError.notFound
+        struct GetSettingsResponse: Codable {
+            let settings: UserSettings
+        }
+
+        let response: GetSettingsResponse = try await client.request(
+            endpoint: APIConfig.Settings.getSettings(userId),
+            method: "GET"
+        )
+
+        return response.settings
     }
 
     /// Update user settings
     func updateSettings(
         userId: String,
-        notificationsEnabled: Bool? = nil,
-        privateAccount: Bool? = nil,
+        emailNotifications: Bool? = nil,
+        pushNotifications: Bool? = nil,
+        marketingEmails: Bool? = nil,
+        timezone: String? = nil,
         language: String? = nil,
-        theme: String? = nil
-    ) async throws {
-        // TODO: Implement gRPC call to UserService.UpdateSettings
-        throw APIError.notFound
+        darkMode: Bool? = nil,
+        privacyLevel: PrivacyLevel? = nil,
+        allowMessages: Bool? = nil,
+        showOnlineStatus: Bool? = nil
+    ) async throws -> UserSettings {
+        struct UpdateSettingsResponse: Codable {
+            let settings: UserSettings
+        }
+
+        let request = UpdateSettingsRequest(
+            userId: userId,
+            emailNotifications: emailNotifications,
+            pushNotifications: pushNotifications,
+            marketingEmails: marketingEmails,
+            timezone: timezone,
+            language: language,
+            darkMode: darkMode,
+            privacyLevel: privacyLevel?.rawValue,
+            allowMessages: allowMessages,
+            showOnlineStatus: showOnlineStatus
+        )
+
+        let response: UpdateSettingsResponse = try await client.request(
+            endpoint: APIConfig.Settings.updateSettings(userId),
+            method: "PUT",
+            body: request
+        )
+
+        return response.settings
     }
 
-    // MARK: - Authentication (Future: should move to IdentityService)
-
-    /// Logout user
-    func logout() async throws {
-        // TODO: This should be in IdentityService
-        // For now, just clear local tokens
-        // await AuthManager.shared.clearTokens()
+    /// Convenience method to update dark mode only
+    func updateDarkMode(userId: String, enabled: Bool) async throws -> UserSettings {
+        return try await updateSettings(userId: userId, darkMode: enabled)
     }
 
-    /// Delete account
-    func deleteAccount(userId: String) async throws -> Bool {
-        // TODO: This should be in IdentityService
-        // Implement account deletion
-        throw APIError.notFound
+    // MARK: - Search Users
+
+    /// Search users by query
+    func searchUsers(query: String, limit: Int = 20, offset: Int = 0) async throws -> [UserProfile] {
+        struct SearchUsersResponse: Codable {
+            let users: [UserProfile]
+            let totalCount: Int?
+            let hasMore: Bool?
+
+            enum CodingKeys: String, CodingKey {
+                case users
+                case totalCount = "total_count"
+                case hasMore = "has_more"
+            }
+        }
+
+        let response: SearchUsersResponse = try await client.request(
+            endpoint: "\(APIConfig.Search.users)?q=\(query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query)&limit=\(limit)&offset=\(offset)",
+            method: "GET"
+        )
+
+        return response.users
+    }
+
+    // MARK: - Account Deletion
+
+    /// Request account deletion
+    func deleteAccount(userId: String, reason: String? = nil) async throws {
+        struct DeleteAccountRequest: Codable {
+            let userId: String
+            let reason: String?
+
+            enum CodingKeys: String, CodingKey {
+                case userId = "user_id"
+                case reason
+            }
+        }
+
+        let request = DeleteAccountRequest(userId: userId, reason: reason)
+
+        _ = try await client.request(
+            endpoint: "/api/v2/users/\(userId)",
+            method: "DELETE",
+            body: request
+        ) as EmptyResponse
     }
 }

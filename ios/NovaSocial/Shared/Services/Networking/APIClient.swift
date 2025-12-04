@@ -4,6 +4,7 @@ import Foundation
 
 /// Base HTTP client for all API requests
 /// Handles authentication, JSON encoding/decoding, and error handling
+/// Automatically refreshes expired tokens on 401 responses
 class APIClient {
     static let shared = APIClient()
 
@@ -94,7 +95,8 @@ class APIClient {
     }
 
     /// Execute request and handle response
-    private func executeRequest<T: Decodable>(_ request: URLRequest) async throws -> T {
+    /// Automatically attempts token refresh on 401 and retries once
+    private func executeRequest<T: Decodable>(_ request: URLRequest, isRetry: Bool = false) async throws -> T {
         do {
             let (data, response) = try await session.data(for: request)
 
@@ -112,6 +114,33 @@ class APIClient {
             case 200...299:
                 return try decodeResponse(data)
             case 401:
+                // Attempt token refresh on 401, but only once to prevent infinite loops
+                if !isRetry {
+                    #if DEBUG
+                    print("[API] 401 received, attempting token refresh...")
+                    #endif
+
+                    let refreshSucceeded = await AuthenticationManager.shared.attemptTokenRefresh()
+
+                    if refreshSucceeded {
+                        #if DEBUG
+                        print("[API] Token refreshed, retrying request...")
+                        #endif
+
+                        // Rebuild request with new token
+                        var retryRequest = request
+                        if let newToken = authToken {
+                            retryRequest.setValue("Bearer \(newToken)", forHTTPHeaderField: "Authorization")
+                        }
+
+                        // Retry with isRetry=true to prevent infinite loop
+                        return try await executeRequest(retryRequest, isRetry: true)
+                    }
+                }
+
+                #if DEBUG
+                print("[API] Token refresh failed or already retried, throwing unauthorized")
+                #endif
                 throw APIError.unauthorized
             case 404:
                 throw APIError.notFound

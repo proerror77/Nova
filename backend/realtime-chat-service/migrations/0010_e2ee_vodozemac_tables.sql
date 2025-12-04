@@ -4,6 +4,7 @@
 
 -- 1. User devices for multi-device E2EE
 -- Tracks all devices associated with a user for E2EE key management
+-- Note: user_id FK removed - users table is in separate database (identity-service)
 CREATE TABLE IF NOT EXISTS user_devices (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL,
@@ -23,10 +24,7 @@ CREATE TABLE IF NOT EXISTS user_devices (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 
     -- Uniqueness constraint per user
-    CONSTRAINT unique_user_device UNIQUE (user_id, device_id),
-    -- Foreign key to users table (if it exists in this service)
-    CONSTRAINT fk_user_devices_user_id FOREIGN KEY (user_id)
-        REFERENCES users(id) ON DELETE CASCADE
+    CONSTRAINT unique_user_device UNIQUE (user_id, device_id)
 );
 
 CREATE INDEX idx_user_devices_user_id ON user_devices(user_id);

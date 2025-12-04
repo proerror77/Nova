@@ -8,6 +8,10 @@ rust-version.workspace = true
 name = "media-service"
 path = "src/main.rs"
 
+[[bin]]
+name = "thumb-migrate"
+path = "src/bin/thumb_migrate.rs"
+
 [lib]
 name = "media_service"
 path = "src/lib.rs"

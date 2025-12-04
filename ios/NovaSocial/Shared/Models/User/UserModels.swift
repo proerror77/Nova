@@ -1,7 +1,7 @@
 import Foundation
 
 // MARK: - User Profile Models
-// Matches: backend/proto/services/user_service.proto
+// Matches: backend/proto/services_v2/user_service.proto
 
 struct UserProfile: Codable, Identifiable {
     let id: String
@@ -15,6 +15,7 @@ struct UserProfile: Codable, Identifiable {
     let location: String?
     let isVerified: Bool?
     let isPrivate: Bool?
+    let isBanned: Bool?
     let followerCount: Int?
     let followingCount: Int?
     let postCount: Int?
@@ -22,9 +23,16 @@ struct UserProfile: Codable, Identifiable {
     let updatedAt: Int64?
     let deletedAt: Int64?
 
-    // Make fields that may be missing from API optional with defaults
+    // Extended profile fields (for profile settings)
+    let firstName: String?
+    let lastName: String?
+    let dateOfBirth: String?  // ISO 8601 date format (YYYY-MM-DD)
+    let gender: Gender?
+
+    // Safe accessors with defaults
     var safeIsVerified: Bool { isVerified ?? false }
     var safeIsPrivate: Bool { isPrivate ?? false }
+    var safeIsBanned: Bool { isBanned ?? false }
     var safeFollowerCount: Int { followerCount ?? 0 }
     var safeFollowingCount: Int { followingCount ?? 0 }
     var safePostCount: Int { postCount ?? 0 }
@@ -41,27 +49,70 @@ struct UserProfile: Codable, Identifiable {
         case location
         case isVerified = "is_verified"
         case isPrivate = "is_private"
+        case isBanned = "is_banned"
         case followerCount = "follower_count"
         case followingCount = "following_count"
         case postCount = "post_count"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
         case deletedAt = "deleted_at"
+        case firstName = "first_name"
+        case lastName = "last_name"
+        case dateOfBirth = "date_of_birth"
+        case gender
     }
 }
 
+// MARK: - Gender Enum
+enum Gender: String, Codable, CaseIterable {
+    case male = "male"
+    case female = "female"
+    case other = "other"
+    case preferNotToSay = "prefer_not_to_say"
+
+    var displayName: String {
+        switch self {
+        case .male: return "Male"
+        case .female: return "Female"
+        case .other: return "Other"
+        case .preferNotToSay: return "Prefer not to say"
+        }
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        let rawValue = try container.decode(String.self)
+        self = Gender(rawValue: rawValue.lowercased()) ?? .preferNotToSay
+    }
+}
+
+// MARK: - User Settings Model
+// Matches: backend/proto/services_v2/user_service.proto UserSettings
+
 struct UserSettings: Codable {
     let userId: String
-    let emailNotifications: Bool
-    let pushNotifications: Bool
-    let marketingEmails: Bool
-    let timezone: String
-    let language: String
-    let darkMode: Bool
-    let privacyLevel: String
-    let allowMessages: Bool
-    let createdAt: Int64
-    let updatedAt: Int64
+    let emailNotifications: Bool?
+    let pushNotifications: Bool?
+    let marketingEmails: Bool?
+    let timezone: String?
+    let language: String?
+    let darkMode: Bool?
+    let privacyLevel: PrivacyLevel?
+    let allowMessages: Bool?
+    let showOnlineStatus: Bool?
+    let createdAt: Int64?
+    let updatedAt: Int64?
+
+    // Safe accessors with defaults
+    var safeEmailNotifications: Bool { emailNotifications ?? true }
+    var safePushNotifications: Bool { pushNotifications ?? true }
+    var safeMarketingEmails: Bool { marketingEmails ?? false }
+    var safeTimezone: String { timezone ?? "UTC" }
+    var safeLanguage: String { language ?? "en" }
+    var safeDarkMode: Bool { darkMode ?? false }
+    var safePrivacyLevel: PrivacyLevel { privacyLevel ?? .public }
+    var safeAllowMessages: Bool { allowMessages ?? true }
+    var safeShowOnlineStatus: Bool { showOnlineStatus ?? true }
 
     enum CodingKeys: String, CodingKey {
         case userId = "user_id"
@@ -73,8 +124,33 @@ struct UserSettings: Codable {
         case darkMode = "dark_mode"
         case privacyLevel = "privacy_level"
         case allowMessages = "allow_messages"
+        case showOnlineStatus = "show_online_status"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
+    }
+}
+
+// MARK: - Privacy Level Enum
+// Matches: backend/proto/services_v2/user_service.proto PrivacyLevel
+enum PrivacyLevel: String, Codable, CaseIterable {
+    case unspecified = "unspecified"
+    case `public` = "public"
+    case `private` = "private"
+    case friendsOnly = "friends_only"
+
+    var displayName: String {
+        switch self {
+        case .unspecified: return "Default"
+        case .public: return "Public"
+        case .private: return "Private"
+        case .friendsOnly: return "Friends Only"
+        }
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        let rawValue = try container.decode(String.self)
+        self = PrivacyLevel(rawValue: rawValue.lowercased()) ?? .public
     }
 }
 
@@ -102,13 +178,17 @@ struct UserRelationship: Codable, Identifiable {
 
 struct UpdateUserProfileRequest: Codable {
     let userId: String
-    let displayName: String?
-    let bio: String?
-    let avatarUrl: String?
-    let coverUrl: String?
-    let website: String?
-    let location: String?
-    let isPrivate: Bool?
+    var displayName: String?
+    var bio: String?
+    var avatarUrl: String?
+    var coverUrl: String?
+    var website: String?
+    var location: String?
+    var isPrivate: Bool?
+    var firstName: String?
+    var lastName: String?
+    var dateOfBirth: String?
+    var gender: String?
 
     enum CodingKeys: String, CodingKey {
         case userId = "user_id"
@@ -119,5 +199,38 @@ struct UpdateUserProfileRequest: Codable {
         case website
         case location
         case isPrivate = "is_private"
+        case firstName = "first_name"
+        case lastName = "last_name"
+        case dateOfBirth = "date_of_birth"
+        case gender
+    }
+}
+
+// MARK: - Update Settings Request
+// Matches: backend/proto/services_v2/user_service.proto UpdateSettingsRequest
+
+struct UpdateSettingsRequest: Codable {
+    let userId: String
+    var emailNotifications: Bool?
+    var pushNotifications: Bool?
+    var marketingEmails: Bool?
+    var timezone: String?
+    var language: String?
+    var darkMode: Bool?
+    var privacyLevel: String?
+    var allowMessages: Bool?
+    var showOnlineStatus: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case userId = "user_id"
+        case emailNotifications = "email_notifications"
+        case pushNotifications = "push_notifications"
+        case marketingEmails = "marketing_emails"
+        case timezone
+        case language
+        case darkMode = "dark_mode"
+        case privacyLevel = "privacy_level"
+        case allowMessages = "allow_messages"
+        case showOnlineStatus = "show_online_status"
     }
 }

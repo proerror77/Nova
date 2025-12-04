@@ -1,29 +1,10 @@
 import SwiftUI
 import PhotosUI
 
-// MARK: - Share Sheet Component
-
-/// iOS 原生分享面板组件
-struct ShareSheet: UIViewControllerRepresentable {
-    let items: [Any]
-
-    func makeUIViewController(context: Context) -> UIActivityViewController {
-        let controller = UIActivityViewController(
-            activityItems: items,
-            applicationActivities: nil
-        )
-        return controller
-    }
-
-    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {
-        // No update needed
-    }
-}
-
 struct ProfileView: View {
     @Binding var currentPage: AppPage
-    // Use ObservedObject for shared singleton (not StateObject which implies ownership)
-    @ObservedObject private var authManager = AuthenticationManager.shared
+    // 全局认证状态从上层注入
+    @EnvironmentObject private var authManager: AuthenticationManager
     @State private var profileData = ProfileData()
     @State private var showNewPost = false
     @State private var showSetting = false
@@ -89,7 +70,7 @@ struct ProfileView: View {
     // MARK: - Profile 主内容
     private var profileContent: some View {
         ZStack {
-            Color.white
+            DesignTokens.backgroundColor
                 .ignoresSafeArea()
 
             VStack(spacing: -240) {
@@ -189,14 +170,14 @@ struct ProfileView: View {
                                             .scaledToFill()
                                     } placeholder: {
                                         Circle()
-                                            .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
+                                            .fill(DesignTokens.avatarPlaceholder)
                                     }
                                     .frame(width: 100, height: 100)
                                     .clipShape(Circle())
                                 } else {
                                     // 默认占位符
                                     Circle()
-                                        .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
+                                        .fill(DesignTokens.avatarPlaceholder)
                                         .frame(width: 100, height: 100)
                                 }
 
@@ -204,7 +185,7 @@ struct ProfileView: View {
                                 PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
                                     ZStack {
                                         Circle()
-                                            .fill(Color(red: 0.82, green: 0.11, blue: 0.26))
+                                            .fill(DesignTokens.accentColor)
                                             .frame(width: 32, height: 32)
 
                                         Image(systemName: "plus")
@@ -236,10 +217,10 @@ struct ProfileView: View {
                             }
 
                             // MARK: - 统计数据
-                            HStack(spacing: 0) {
+                                HStack(spacing: 0) {
                                 // Following
                                 VStack(spacing: 4) {
-                                    Text("Following")
+                                    Text(LocalizedStringKey("Following"))
                                         .font(.system(size: 16))
                                         .foregroundColor(.white)
                                     Text("\(displayUser?.safeFollowingCount ?? 0)")
@@ -255,7 +236,7 @@ struct ProfileView: View {
 
                                 // Followers
                                 VStack(spacing: 4) {
-                                    Text("Followers")
+                                    Text(LocalizedStringKey("Followers"))
                                         .font(.system(size: 16))
                                         .foregroundColor(.white)
                                     Text("\(displayUser?.safeFollowerCount ?? 0)")
@@ -271,7 +252,7 @@ struct ProfileView: View {
 
                                 // Posts
                                 VStack(spacing: 4) {
-                                    Text("Likes")
+                                    Text(LocalizedStringKey("Likes"))
                                         .font(.system(size: 16))
                                         .foregroundColor(.white)
                                     Text("\(displayUser?.safePostCount ?? 0)")
@@ -290,7 +271,7 @@ struct ProfileView: View {
                                         .font(.system(size: 20))
                                         .foregroundColor(.blue)
 
-                                    Text("Verified Icered Partner")
+                                    Text(LocalizedStringKey("Verified_partner"))
                                         .font(.system(size: 16))
                                         .foregroundColor(.white)
                                 }
@@ -317,9 +298,9 @@ struct ProfileView: View {
                                     await profileData.loadContent(for: .posts)
                                 }
                             }) {
-                                Text("Posts")
+                                Text(LocalizedStringKey("Posts_tab"))
                                     .font(.system(size: 16, weight: .bold))
-                                    .foregroundColor(profileData.selectedTab == .posts ? Color(red: 0.82, green: 0.11, blue: 0.26) : .black)
+                                    .foregroundColor(profileData.selectedTab == .posts ? DesignTokens.accentColor : DesignTokens.textPrimary)
                             }
 
                             Button(action: {
@@ -328,9 +309,9 @@ struct ProfileView: View {
                                     await profileData.loadContent(for: .saved)
                                 }
                             }) {
-                                Text("Saved")
+                                Text(LocalizedStringKey("Saved_tab"))
                                     .font(.system(size: 16, weight: .bold))
-                                    .foregroundColor(profileData.selectedTab == .saved ? Color(red: 0.82, green: 0.11, blue: 0.26) : .black)
+                                    .foregroundColor(profileData.selectedTab == .saved ? DesignTokens.accentColor : DesignTokens.textPrimary)
                             }
 
                             Button(action: {
@@ -339,9 +320,9 @@ struct ProfileView: View {
                                     await profileData.loadContent(for: .liked)
                                 }
                             }) {
-                                Text("Liked")
+                                Text(LocalizedStringKey("Liked_tab"))
                                     .font(.system(size: 16, weight: .bold))
-                                    .foregroundColor(profileData.selectedTab == .liked ? Color(red: 0.82, green: 0.11, blue: 0.26) : .black)
+                                    .foregroundColor(profileData.selectedTab == .liked ? DesignTokens.accentColor : DesignTokens.textPrimary)
                             }
                         }
                         .frame(maxWidth: .infinity)  // 居中三个标签
@@ -355,7 +336,7 @@ struct ProfileView: View {
                         }) {
                             Image(systemName: "magnifyingglass")
                                 .font(.system(size: 20))
-                                .foregroundColor(.black)
+                                .foregroundColor(DesignTokens.textPrimary)
                         }
                         .padding(.trailing, 20)
                     }
@@ -364,7 +345,7 @@ struct ProfileView: View {
 
                     // 分隔线
                     Rectangle()
-                        .fill(Color(red: 0.74, green: 0.74, blue: 0.74))
+                        .fill(DesignTokens.borderColor)
                         .frame(height: 0.5)
                 }
 
@@ -396,7 +377,7 @@ struct ProfileView: View {
                     Color.clear
                         .frame(height: 100)
                 }
-                .background(Color(red: 0.96, green: 0.96, blue: 0.96))
+                .background(DesignTokens.backgroundColor)
         }
     }
 
@@ -463,8 +444,8 @@ struct ProfileView: View {
             }
             .frame(height: 60)
             .padding(.bottom, 20)
-            .background(Color.white)
-            .border(Color(red: 0.74, green: 0.74, blue: 0.74), width: 0.5)
+            .background(DesignTokens.surface)
+            .border(DesignTokens.borderColor, width: 0.5)
     }
 
     // MARK: - 照片选项弹窗
@@ -491,7 +472,7 @@ struct ProfileView: View {
                     Rectangle()
                         .foregroundColor(.clear)
                         .frame(width: 56, height: 7)
-                        .background(Color(red: 0.82, green: 0.11, blue: 0.26))
+                        .background(DesignTokens.accentColor)
                         .cornerRadius(3.50)
                         .offset(x: -0.50, y: -120.50)
 
@@ -502,7 +483,7 @@ struct ProfileView: View {
                     }) {
                         Text("Choose Photo")
                             .font(Font.custom("Helvetica Neue", size: 18).weight(.medium))
-                            .foregroundColor(Color(red: 0.18, green: 0.18, blue: 0.18))
+                            .foregroundColor(DesignTokens.textPrimary)
                     }
                     .offset(x: 0, y: -79)
 
@@ -513,7 +494,7 @@ struct ProfileView: View {
                     }) {
                         Text("Take Photo")
                             .font(Font.custom("Helvetica Neue", size: 18).weight(.medium))
-                            .foregroundColor(Color(red: 0.18, green: 0.18, blue: 0.18))
+                            .foregroundColor(DesignTokens.textPrimary)
                     }
                     .offset(x: 0.50, y: -21)
 
@@ -524,7 +505,7 @@ struct ProfileView: View {
                     }) {
                         Text("Generate image")
                             .font(Font.custom("Helvetica Neue", size: 18).weight(.medium))
-                            .foregroundColor(Color(red: 0.18, green: 0.18, blue: 0.18))
+                            .foregroundColor(DesignTokens.textPrimary)
                     }
                     .offset(x: 0, y: 37)
 
@@ -545,7 +526,7 @@ struct ProfileView: View {
                         .frame(width: 375, height: 0)
                         .overlay(
                             Rectangle()
-                                .stroke(Color(red: 0.93, green: 0.93, blue: 0.93), lineWidth: 3)
+                                .stroke(DesignTokens.dividerColor, lineWidth: 3)
                         )
                         .offset(x: 0, y: 75)
                     Rectangle()
@@ -553,7 +534,7 @@ struct ProfileView: View {
                         .frame(width: 375, height: 0)
                         .overlay(
                             Rectangle()
-                                .stroke(Color(red: 0.77, green: 0.77, blue: 0.77), lineWidth: 0.20)
+                                .stroke(DesignTokens.textMuted, lineWidth: 0.20)
                         )
                         .offset(x: 0, y: -50)
                     Rectangle()
@@ -561,7 +542,7 @@ struct ProfileView: View {
                         .frame(width: 375, height: 0)
                         .overlay(
                             Rectangle()
-                                .stroke(Color(red: 0.77, green: 0.77, blue: 0.77), lineWidth: 0.20)
+                                .stroke(DesignTokens.textMuted, lineWidth: 0.20)
                         )
                         .offset(x: 0, y: 8)
                 }
@@ -604,7 +585,7 @@ struct PostGridCard: View {
             // 顶部用户信息
             HStack(spacing: 8) {
                 Circle()
-                    .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
+                    .fill(DesignTokens.avatarPlaceholder)
                     .frame(width: 24, height: 24)
 
                 VStack(alignment: .leading, spacing: 2) {
@@ -624,7 +605,7 @@ struct PostGridCard: View {
 
             // 图片占位符 - TODO: 当 Post 模型支持 mediaUrls 后加载真实图片
             Rectangle()
-                .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
+                .fill(DesignTokens.avatarPlaceholder)
                 .frame(height: 200)
                 .cornerRadius(8)
                 .padding(.horizontal, 12)
@@ -647,4 +628,5 @@ struct PostGridCard: View {
 
 #Preview {
     ProfileView(currentPage: .constant(.account))
+        .environmentObject(AuthenticationManager.shared)
 }

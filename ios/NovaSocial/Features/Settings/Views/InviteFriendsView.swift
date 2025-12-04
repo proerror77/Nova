@@ -6,7 +6,7 @@ struct InviteFriendsView: View {
 
     var body: some View {
         ZStack {
-            Color.white
+            DesignTokens.backgroundColor
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
@@ -17,14 +17,14 @@ struct InviteFriendsView: View {
                     }) {
                         Image(systemName: "chevron.left")
                             .font(.system(size: 20))
-                            .foregroundColor(.black)
+                            .foregroundColor(DesignTokens.textPrimary)
                     }
 
                     Spacer()
 
-                    Text("Invite Friends")
+                    Text(LocalizedStringKey("Invite_Friends_Title"))
                         .font(.system(size: 24, weight: .medium))
-                        .foregroundColor(.black)
+                        .foregroundColor(DesignTokens.textPrimary)
 
                     Spacer()
 
@@ -34,11 +34,11 @@ struct InviteFriendsView: View {
                 }
                 .frame(height: DesignTokens.topBarHeight)
                 .padding(.horizontal, 20)
-                .background(Color.white)
+                .background(DesignTokens.surface)
 
                 // 分隔线
                 Rectangle()
-                    .fill(Color(red: 0.74, green: 0.74, blue: 0.74))
+                    .fill(DesignTokens.borderColor)
                     .frame(height: 0.5)
 
                 VStack(spacing: 20) {
@@ -46,32 +46,32 @@ struct InviteFriendsView: View {
                     HStack {
                         Image(systemName: "magnifyingglass")
                             .font(.system(size: 16))
-                            .foregroundColor(Color(red: 0.69, green: 0.68, blue: 0.68))
+                            .foregroundColor(DesignTokens.textSecondary)
 
-                        TextField("Search people on Icered", text: $searchText)
+                        TextField(LocalizedStringKey("Search_people_on_Icered"), text: $searchText)
                             .font(.system(size: 15))
                             .foregroundColor(.black)
                     }
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)
                     .frame(height: 32)
-                    .background(Color(red: 0.89, green: 0.88, blue: 0.87))
+                    .background(DesignTokens.tileBackground)
                     .cornerRadius(32)
                     .padding(.horizontal, 12)
                     .padding(.top, 20)
 
                     // MARK: - 分享邀请链接按钮
-                    Button(action: {
+	                    Button(action: {
                         // TODO: 分享邀请链接
                     }) {
                         HStack(spacing: 24) {
                             Image(systemName: "square.and.arrow.up")
                                 .font(.system(size: 16))
-                                .foregroundColor(Color(red: 0.82, green: 0.11, blue: 0.26))
+                                .foregroundColor(DesignTokens.accentColor)
 
-                            Text("Share invitation link")
+	                            Text(LocalizedStringKey("Share_invitation_link"))
                                 .font(.system(size: 15))
-                                .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
+                                .foregroundColor(DesignTokens.textPrimary)
 
                             Spacer()
                         }
@@ -79,18 +79,18 @@ struct InviteFriendsView: View {
                         .padding(.vertical, 7)
                         .frame(height: 35)
                     }
-                    .background(Color.white)
+	                    .background(DesignTokens.surface)
                     .cornerRadius(23)
                     .overlay(
                         RoundedRectangle(cornerRadius: 23)
-                            .stroke(Color(red: 0.75, green: 0.75, blue: 0.75), lineWidth: 0.5)
+	                            .stroke(DesignTokens.borderColor, lineWidth: 0.5)
                     )
                     .padding(.horizontal, 12)
 
                     // MARK: - 剩余邀请次数
-                    Text("You have 3 invitations left.")
+	                    Text(LocalizedStringKey("Invitations_left"))
                         .font(.system(size: 12))
-                        .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
+                        .foregroundColor(DesignTokens.textPrimary)
                         .padding(.top, 5)
                 }
 

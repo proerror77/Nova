@@ -60,7 +60,10 @@ spec:
         - name: CDC_CONSUMER_ENABLED
           value: 'true'
         - name: KAFKA_BROKERS
-          value: 'kafka:9092'
+          valueFrom:
+            configMapKeyRef:
+              name: nova-config
+              key: KAFKA_BROKERS
         - name: CDC_TOPICS
           value: 'cdc.posts,cdc.follows,cdc.comments,cdc.likes'
         - name: CDC_CONSUMER_GROUP

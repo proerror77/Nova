@@ -2,13 +2,14 @@
 -- Supports multiple files per message with metadata tracking
 
 -- Up
+-- Note: uploaded_by FK removed - users table is in separate database (identity-service)
 CREATE TABLE IF NOT EXISTS message_attachments (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   message_id UUID NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
   file_url TEXT NOT NULL,
   file_type VARCHAR(255) NOT NULL,
   file_size BIGINT NOT NULL,
-  uploaded_by UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  uploaded_by UUID NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 

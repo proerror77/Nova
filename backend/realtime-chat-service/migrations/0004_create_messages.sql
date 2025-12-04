@@ -1,7 +1,8 @@
+-- Note: sender_id FK removed - users table is in separate database (identity-service)
 CREATE TABLE IF NOT EXISTS messages (
   id UUID PRIMARY KEY,
   conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
-  sender_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  sender_id UUID NOT NULL,
   encryption_version INT NOT NULL DEFAULT 1,
   content_encrypted BYTEA NOT NULL,
   content_nonce BYTEA NOT NULL,

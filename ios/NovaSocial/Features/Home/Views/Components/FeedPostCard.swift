@@ -23,7 +23,7 @@ struct FeedPostCard: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(post.authorName)
                         .font(.system(size: DesignTokens.fontMedium, weight: .semibold))
-                        .foregroundColor(.black)
+                        .foregroundColor(DesignTokens.textPrimary)
 
                     Text(post.createdAt.timeAgoDisplay())
                         .font(.system(size: DesignTokens.fontSmall))
@@ -35,7 +35,7 @@ struct FeedPostCard: View {
                 // Menu Button
                 Button(action: { showReportView = true }) {
                     Image(systemName: "ellipsis")
-                        .foregroundColor(.black)
+                        .foregroundColor(DesignTokens.textPrimary)
                         .font(.system(size: DesignTokens.fontMedium))
                         .contentShape(Rectangle())
                 }
@@ -45,9 +45,9 @@ struct FeedPostCard: View {
             .padding(.vertical, DesignTokens.spacing10)
 
             // MARK: - Post Images with Horizontal Swipe
-            if !post.mediaUrls.isEmpty {
+            if !post.displayMediaUrls.isEmpty {
                 TabView {
-                    ForEach(post.mediaUrls, id: \.self) { imageUrl in
+                    ForEach(post.displayMediaUrls, id: \.self) { imageUrl in
                         AsyncImage(url: URL(string: imageUrl)) { phase in
                             switch phase {
                             case .empty:
@@ -77,7 +77,7 @@ struct FeedPostCard: View {
                         .clipped()
                     }
                 }
-                .tabViewStyle(.page(indexDisplayMode: post.mediaUrls.count > 1 ? .automatic : .never))
+                .tabViewStyle(.page(indexDisplayMode: post.displayMediaUrls.count > 1 ? .automatic : .never))
                 .frame(height: 280)
                 .cornerRadius(DesignTokens.cardCornerRadius)
                 .padding(.horizontal, DesignTokens.spacing12)
@@ -88,7 +88,7 @@ struct FeedPostCard: View {
             HStack(spacing: DesignTokens.spacing4) {
                 Text(post.content)
                     .font(.system(size: DesignTokens.fontBody))
-                    .foregroundColor(.black)
+                    .foregroundColor(DesignTokens.textPrimary)
                     .lineLimit(3)
 
                 Spacer()
@@ -103,10 +103,10 @@ struct FeedPostCard: View {
                     HStack(spacing: DesignTokens.spacing6) {
                         Image(systemName: post.isLiked ? "arrowtriangle.up.fill" : "arrowtriangle.up")
                             .font(.system(size: DesignTokens.iconSmall))
-                            .foregroundColor(post.isLiked ? DesignTokens.accentColor : .black)
+                            .foregroundColor(post.isLiked ? DesignTokens.accentColor : DesignTokens.textPrimary)
                         Text("\(post.likeCount)")
                             .font(.system(size: DesignTokens.spacing12, weight: .bold))
-                            .foregroundColor(post.isLiked ? DesignTokens.accentColor : .black)
+                            .foregroundColor(post.isLiked ? DesignTokens.accentColor : DesignTokens.textPrimary)
                     }
                 }
                 .accessibilityLabel(post.isLiked ? "Unlike, \(post.likeCount) likes" : "Like, \(post.likeCount) likes")
@@ -115,10 +115,10 @@ struct FeedPostCard: View {
                 HStack(spacing: DesignTokens.spacing6) {
                     Image(systemName: "arrowtriangle.down")
                         .font(.system(size: DesignTokens.iconSmall))
-                        .foregroundColor(.black)
+                        .foregroundColor(DesignTokens.textPrimary)
                     Text("0")
                         .font(.system(size: DesignTokens.spacing12, weight: .bold))
-                        .foregroundColor(.black)
+                        .foregroundColor(DesignTokens.textPrimary)
                 }
 
                 // Comment button
@@ -126,10 +126,10 @@ struct FeedPostCard: View {
                     HStack(spacing: DesignTokens.spacing6) {
                         Image(systemName: "bubble.right")
                             .font(.system(size: DesignTokens.iconSmall))
-                            .foregroundColor(.black)
+                            .foregroundColor(DesignTokens.textPrimary)
                         Text("\(post.commentCount)")
                             .font(.system(size: DesignTokens.spacing12, weight: .bold))
-                            .foregroundColor(.black)
+                            .foregroundColor(DesignTokens.textPrimary)
                     }
                 }
                 .accessibilityLabel("Comments, \(post.commentCount)")
@@ -139,10 +139,10 @@ struct FeedPostCard: View {
                     HStack(spacing: DesignTokens.spacing6) {
                         Image(systemName: "square.and.arrow.up")
                             .font(.system(size: DesignTokens.iconSmall))
-                            .foregroundColor(.black)
+                            .foregroundColor(DesignTokens.textPrimary)
                         Text("\(post.shareCount)")
                             .font(.system(size: DesignTokens.spacing12, weight: .bold))
-                            .foregroundColor(.black)
+                            .foregroundColor(DesignTokens.textPrimary)
                     }
                 }
                 .accessibilityLabel("Share, \(post.shareCount) shares")
@@ -153,7 +153,7 @@ struct FeedPostCard: View {
                 Button(action: onBookmark) {
                     Image(systemName: post.isBookmarked ? "bookmark.fill" : "bookmark")
                         .font(.system(size: DesignTokens.spacing12))
-                        .foregroundColor(post.isBookmarked ? DesignTokens.accentColor : .black)
+                        .foregroundColor(post.isBookmarked ? DesignTokens.accentColor : DesignTokens.textPrimary)
                 }
                 .accessibilityLabel(post.isBookmarked ? "Remove bookmark" : "Bookmark")
             }

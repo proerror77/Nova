@@ -7,7 +7,7 @@ pub mod trending;
 pub use discover::{
     get_suggested_users, DiscoverHandlerState, SuggestedUsersResponse, UserWithScore,
 };
-pub use feed::{get_feed, FeedHandlerState, FeedQueryParams};
+pub use feed::{get_feed, get_guest_feed, FeedHandlerState, FeedQueryParams};
 pub use recommendation::{
     get_model_info, get_recommendations, rank_candidates, semantic_search, ModelInfoResponse,
     RankedPostResponse, RankingRequest, RankingResponse, RecommendationHandlerState,

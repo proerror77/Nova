@@ -2,10 +2,7 @@ use crate::{
     config::Config,
     redis_client::RedisClient,
     services::{
-        encryption::EncryptionService,
-        key_exchange::KeyExchangeService,
-        OlmService,
-        MegolmService,
+        encryption::EncryptionService, key_exchange::KeyExchangeService, MegolmService, OlmService,
     },
     websocket::ConnectionRegistry,
 };

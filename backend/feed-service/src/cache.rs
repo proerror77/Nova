@@ -384,6 +384,8 @@ pub struct CachedFeedPost {
     pub media_urls: Vec<String>,
     #[serde(default)]
     pub media_type: String,
+    #[serde(default)]
+    pub thumbnail_urls: Vec<String>,
 }
 
 /// Cached post metadata

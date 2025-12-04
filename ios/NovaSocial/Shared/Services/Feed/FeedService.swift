@@ -29,6 +29,43 @@ class FeedService {
         return try await client.get(endpoint: APIConfig.Feed.getFeed, queryParams: queryParams)
     }
 
+    // MARK: - Guest Feed (No Authentication)
+
+    /// Fetch trending/guest feed for unauthenticated users
+    /// Uses /api/v2/feed/trending endpoint which doesn't require JWT
+    /// - Parameters:
+    ///   - limit: Number of posts to fetch (1-50, default 20)
+    ///   - cursor: Pagination cursor from previous response
+    /// - Returns: FeedResponse containing trending post IDs
+    func getTrendingFeed(limit: Int = 20, cursor: String? = nil) async throws -> FeedResponse {
+        var queryParams: [String: String] = [
+            "limit": String(min(max(limit, 1), 50))  // Guest feed has stricter limit (50 max)
+        ]
+
+        if let cursor = cursor {
+            queryParams["cursor"] = cursor
+        }
+
+        // Use public endpoint that doesn't require authentication
+        return try await client.get(endpoint: APIConfig.Feed.getTrending, queryParams: queryParams)
+    }
+
+    /// Fetch trending feed with full post details
+    func getTrendingFeedWithDetails(limit: Int = 20, cursor: String? = nil) async throws -> FeedWithDetailsResponse {
+        let feedResponse = try await getTrendingFeed(limit: limit, cursor: cursor)
+
+        // Convert raw posts to FeedPost objects
+        let feedPosts = feedResponse.posts.map { FeedPost(from: $0) }
+
+        return FeedWithDetailsResponse(
+            posts: feedPosts,
+            postIds: feedResponse.postIds,
+            cursor: feedResponse.cursor,
+            hasMore: feedResponse.hasMore,
+            totalCount: feedResponse.totalCount
+        )
+    }
+
     /// Fetch feed with full post details (combines feed + content service)
     func getFeedWithDetails(algo: FeedAlgorithm = .chronological, limit: Int = 20, cursor: String? = nil) async throws -> FeedWithDetailsResponse {
         let feedResponse = try await getFeed(algo: algo, limit: limit, cursor: cursor)
@@ -68,6 +105,7 @@ struct FeedPostRaw: Codable {
     let commentCount: Int?
     let shareCount: Int?
     let mediaUrls: [String]?
+    let thumbnailUrls: [String]?
     let mediaType: String?
 }
 
@@ -108,12 +146,21 @@ struct FeedPost: Identifiable, Codable {
     let authorAvatar: String?
     let content: String
     let mediaUrls: [String]
+    let thumbnailUrls: [String]
     let createdAt: Date
     let likeCount: Int
     let commentCount: Int
     let shareCount: Int
     let isLiked: Bool
     let isBookmarked: Bool
+
+    /// Prefer thumbnails for list performance; fall back to originals when missing.
+    var displayMediaUrls: [String] {
+        if !thumbnailUrls.isEmpty {
+            return thumbnailUrls
+        }
+        return mediaUrls
+    }
 
     /// Create FeedPost from raw backend response
     init(from raw: FeedPostRaw) {
@@ -123,6 +170,7 @@ struct FeedPost: Identifiable, Codable {
         self.authorAvatar = nil
         self.content = raw.content
         self.mediaUrls = raw.mediaUrls ?? []
+        self.thumbnailUrls = raw.thumbnailUrls ?? self.mediaUrls
         self.createdAt = Date(timeIntervalSince1970: Double(raw.createdAt))
         self.likeCount = raw.likeCount ?? 0
         self.commentCount = raw.commentCount ?? 0
@@ -133,7 +181,7 @@ struct FeedPost: Identifiable, Codable {
 
     // Keep existing init for Codable conformance
     init(id: String, authorId: String, authorName: String, authorAvatar: String?,
-         content: String, mediaUrls: [String], createdAt: Date,
+        content: String, mediaUrls: [String], createdAt: Date,
          likeCount: Int, commentCount: Int, shareCount: Int,
          isLiked: Bool, isBookmarked: Bool) {
         self.id = id
@@ -142,6 +190,7 @@ struct FeedPost: Identifiable, Codable {
         self.authorAvatar = authorAvatar
         self.content = content
         self.mediaUrls = mediaUrls
+        self.thumbnailUrls = mediaUrls
         self.createdAt = createdAt
         self.likeCount = likeCount
         self.commentCount = commentCount

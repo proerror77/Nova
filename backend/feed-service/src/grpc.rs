@@ -152,6 +152,7 @@ impl recommendation_service_server::RecommendationService for RecommendationServ
                             share_count: post.share_count,
                             media_urls: post.media_urls.clone(),
                             media_type: post.media_type.clone(),
+                            thumbnail_urls: post.thumbnail_urls.clone(),
                         })
                         .collect(),
                     next_cursor: cached.cursor.unwrap_or_default(),
@@ -226,6 +227,7 @@ impl recommendation_service_server::RecommendationService for RecommendationServ
                     share_count: post.share_count,
                     media_urls: post.media_urls.clone(),
                     media_type: post.media_type.clone(),
+                    thumbnail_urls: post.thumbnail_urls.clone(),
                 })
                 .collect(),
             next_cursor: "".to_string(),
@@ -415,10 +417,18 @@ impl RecommendationServiceImpl {
                 counts
             }
             Err(e) => {
-                warn!("Failed to fetch social counts (continuing with zeros): {}", e);
+                warn!(
+                    "Failed to fetch social counts (continuing with zeros): {}",
+                    e
+                );
                 std::collections::HashMap::new()
             }
         };
+
+        // Determine default image URL for posts marked as `image` but missing media_urls.
+        // This is primarily used in staging/dev environments to ensure photos render even when
+        // media_urls were not backfilled correctly in content-service.
+        let default_image_url = std::env::var("FEED_DEFAULT_IMAGE_URL").unwrap_or_default();
 
         // Step 4: Convert to CachedFeedPost format with social stats
         let posts: Vec<CachedFeedPost> = get_response
@@ -427,6 +437,18 @@ impl RecommendationServiceImpl {
             .enumerate()
             .map(|(idx, post)| {
                 let counts = social_counts.get(&post.id);
+                // Fallback: if this is an image post but media_urls is empty, inject a default URL.
+                let mut media_urls = post.media_urls.clone();
+                let media_type = post.media_type.clone();
+                let mut thumbnail_urls = post.thumbnail_urls.clone();
+                if media_urls.is_empty() && media_type == "image" && !default_image_url.is_empty() {
+                    media_urls = vec![default_image_url.clone()];
+                }
+
+                if thumbnail_urls.is_empty() {
+                    thumbnail_urls = media_urls.clone();
+                }
+
                 CachedFeedPost {
                     id: post.id.clone(),
                     user_id: post.author_id,
@@ -436,13 +458,17 @@ impl RecommendationServiceImpl {
                     like_count: counts.map(|c| c.like_count as u32).unwrap_or(0),
                     comment_count: counts.map(|c| c.comment_count as u32).unwrap_or(0),
                     share_count: counts.map(|c| c.share_count as u32).unwrap_or(0),
-                    media_urls: post.media_urls,
-                    media_type: post.media_type,
+                    media_urls,
+                    media_type,
+                    thumbnail_urls,
                 }
             })
             .collect();
 
-        info!("Fetched {} posts from content-service with social stats", posts.len());
+        info!(
+            "Fetched {} posts from content-service with social stats",
+            posts.len()
+        );
         Ok(posts)
     }
 }

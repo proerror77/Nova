@@ -4,11 +4,12 @@
 #
 # Key Configuration Parameters:
 # - Pool Mode: transaction (optimal for microservices)
-# - Max Client Connections: 500 (total across 2 replicas = 250 each)
-# - Default Pool Size: 50 (actual PostgreSQL connections per replica)
-# - Min Pool Size: 10 (keep-alive connections)
+# - Max Client Connections: 500
+# - Default Pool Size: 20 (actual PostgreSQL connections per pool)
+# - Auth Type: any (trust clients in cluster, pgbouncer handles backend auth)
 #
 # This ConfigMap is mounted read-only into PgBouncer pods
+# Last updated: 2025-12-03
 ##############################################################################
 
 apiVersion: v1
@@ -23,84 +24,95 @@ metadata:
 data:
   pgbouncer.ini: |
     ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-    ;; PgBouncer Configuration (Kubernetes)
-    ;; Auto-generated from ConfigMap - do not edit directly
+    ;; PgBouncer Configuration - Optimized for Nova
+    ;; Last updated: 2025-12-03
     ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
     [databases]
-    ; Main Nova database
-    ; All microservices connect through this pool
-    nova = host=postgres-service port=5432 dbname=nova pool_size=25 min_pool_size=5
+    ;; Per-service databases with optimized pool sizes
+    ;; Uses forced user/password to handle backend SCRAM-SHA-256 auth
+    nova = host=postgres port=5432 dbname=nova user=nova password=nova pool_size=25
+    nova_auth = host=postgres port=5432 dbname=nova_auth user=nova password=nova pool_size=15
+    nova_identity = host=postgres port=5432 dbname=nova_identity user=nova password=nova pool_size=15
+    nova_content = host=postgres port=5432 dbname=nova_content user=nova password=nova pool_size=20
+    nova_feed = host=postgres port=5432 dbname=nova_feed user=nova password=nova pool_size=20
+    nova_social = host=postgres port=5432 dbname=nova_social user=nova password=nova pool_size=15
+    nova_realtime_chat = host=postgres port=5432 dbname=nova_realtime_chat user=nova password=nova pool_size=20
+    nova_graph = host=postgres port=5432 dbname=nova_graph user=nova password=nova pool_size=10
+    nova_media = host=postgres port=5432 dbname=nova_media user=nova password=nova pool_size=10
+    nova_notification = host=postgres port=5432 dbname=nova_notification user=nova password=nova pool_size=10
+    nova_search = host=postgres port=5432 dbname=nova_search user=nova password=nova pool_size=10
+    nova_analytics = host=postgres port=5432 dbname=nova_analytics user=nova password=nova pool_size=8
+    nova_messaging = host=postgres port=5432 dbname=nova_messaging user=nova password=nova pool_size=8
+    nova_streaming = host=postgres port=5432 dbname=nova_streaming user=nova password=nova pool_size=8
+    nova_trust_safety = host=postgres port=5432 dbname=nova_trust_safety user=nova password=nova pool_size=8
+    nova_user = host=postgres port=5432 dbname=nova_user user=nova password=nova pool_size=8
+    nova_ranking = host=postgres port=5432 dbname=nova_ranking user=nova password=nova pool_size=8
 
-    ; Health check database for monitoring
-    pgbouncer = host=postgres-service port=5432 dbname=postgres pool_size=2
+    ;; Admin database for stats (no forced user - uses admin from userlist)
+    pgbouncer = host=postgres port=5432 dbname=postgres pool_size=2
+
+    ;; Wildcard for auto-discovery
+    * = host=postgres port=5432 user=nova password=nova pool_size=5
 
     [pgbouncer]
-
-    ;;; NETWORKING
     listen_addr = 0.0.0.0
     listen_port = 6432
-    listen_backlog = 1024
+    listen_backlog = 2048
+    unix_socket_dir = /tmp
 
-    ;;; BACKEND CONNECTION SETTINGS
+    ;;; AUTHENTICATION
+    ;; Trust clients within cluster - pgbouncer handles backend auth
+    auth_type = any
+    auth_file = /etc/pgbouncer/userlist.txt
+
+    ;;; POOL SETTINGS
+    pool_mode = transaction
+    max_client_conn = 500
+    default_pool_size = 20
+    min_pool_size = 2
+    reserve_pool_size = 5
+    reserve_pool_timeout = 5
+    max_db_connections = 100
+    max_user_connections = 100
+
+    ;;; SERVER SETTINGS
     server_connect_timeout = 15
     server_lifetime = 3600
     server_idle_timeout = 600
-    server_idle_in_transaction_session_timeout = 0
     server_check_delay = 30
     server_check_query = SELECT 1
+    server_login_retry = 15
 
-    ;;; CLIENT CONNECTION LIMITS
-    ; Note: These are per-replica limits
-    ; Total = 250 (per pod) × 2 (replicas) = 500
-    max_client_conn = 250
-    min_pool_size = 5
-    default_pool_size = 25
-    reserve_pool_size = 3
-    reserve_pool_timeout = 3
-    max_db_connections = 50
-    max_user_connections = 50
-
-    ;;; POOL MANAGEMENT
-    pool_mode = transaction
-    connection_lifetime = 3600
-
-    ;;; AUTHENTICATION
-    auth_type = scram-sha-256
-    auth_file = /etc/pgbouncer/userlist.txt
-    auth_user = nobody
+    ;;; TIMEOUTS
+    query_timeout = 300
+    query_wait_timeout = 120
+    client_idle_timeout = 900
+    client_login_timeout = 60
 
     ;;; LOGGING
-    syslog_facility = LOCAL0
-    syslog = 0
-    logfile = /var/log/pgbouncer/pgbouncer.log
-    verbose = 2
     log_connections = 1
     log_disconnections = 1
     log_pooler_errors = 1
-    log_client_events = 1
-    log_server_events = 1
-    syslog_prefix = "pgbouncer"
-    application_name = pgbouncer
+    verbose = 1
+    stats_period = 60
 
-    ;;; TIMEOUTS
-    query_timeout = 60
-    query_wait_timeout = 120
-    client_idle_timeout = 900
-    login_timeout = 15
-    server_connect_timeout = 15
+    ;;; ADMIN
+    admin_users = admin
+    stats_users = admin,stats_user
 
     ;;; PERFORMANCE
     pkt_buf = 4096
-    max_clientaddr_conn = 0
+    disable_pqexec = 0
+    ignore_startup_parameters = extra_float_digits,application_name,options
+    tcp_keepalive = 1
+    tcp_keepidle = 60
+    tcp_keepintvl = 10
+    tcp_keepcnt = 6
 
-    ;;; SECURITY
-    ssl = disable
-    disable_pqexec = 1
-
-    ;;; ADMIN INTERFACE
-    admin_users = admin
-    stats_users = admin, stats_user
-
-    ;;; CONSOLE
-    console_login = on
+  pg_hba.conf: |
+    # TYPE  DATABASE        USER            ADDRESS                 METHOD
+    # Trust connections from within the cluster (10.x.x.x)
+    host    pgbouncer       admin           0.0.0.0/0               scram-sha-256
+    host    all             all             10.0.0.0/8              trust
+    host    all             all             0.0.0.0/0               scram-sha-256

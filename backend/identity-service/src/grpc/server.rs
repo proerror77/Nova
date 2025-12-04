@@ -121,11 +121,31 @@ impl AuthService for IdentityServiceServer {
         }
 
         // 3. Check if user already exists
-        if db::users::find_by_email(&self.db, &req.email)
+        if let Some(existing) = db::users::find_by_email(&self.db, &req.email)
             .await
             .map_err(to_status)?
-            .is_some()
         {
+            // If password matches an existing account, treat this as idempotent
+            // registration and simply return a fresh token pair instead of an error.
+            if verify_password(&req.password, &existing.password_hash).map_err(to_status)? {
+                let tokens = generate_token_pair(existing.id, &existing.email, &existing.username)
+                    .map_err(anyhow_to_status)?;
+
+                info!(
+                    user_id = %existing.id,
+                    email = %existing.email,
+                    "Idempotent register: user already exists, returning new token pair"
+                );
+
+                return Ok(Response::new(RegisterResponse {
+                    user_id: existing.id.to_string(),
+                    token: tokens.access_token,
+                    refresh_token: tokens.refresh_token,
+                    expires_in: tokens.expires_in,
+                }));
+            }
+
+            // Different password: keep existing behavior and surface already-exists error.
             return Err(Status::already_exists("Email already registered"));
         }
 
@@ -763,6 +783,31 @@ impl AuthService for IdentityServiceServer {
         let user_id = Uuid::parse_str(&req.user_id)
             .map_err(|_| Status::invalid_argument("Invalid user ID format"))?;
 
+        // Parse date_of_birth if provided
+        let date_of_birth = req.date_of_birth.as_ref().and_then(|d| {
+            chrono::NaiveDate::parse_from_str(d, "%Y-%m-%d")
+                .map_err(|e| {
+                    warn!(user_id = %user_id, error = %e, "Invalid date_of_birth format");
+                    e
+                })
+                .ok()
+        });
+
+        // Parse gender if provided
+        let gender = req
+            .gender
+            .as_ref()
+            .and_then(|g| match g.to_lowercase().as_str() {
+                "male" => Some(crate::models::user::Gender::Male),
+                "female" => Some(crate::models::user::Gender::Female),
+                "other" => Some(crate::models::user::Gender::Other),
+                "prefer_not_to_say" => Some(crate::models::user::Gender::PreferNotToSay),
+                _ => {
+                    warn!(user_id = %user_id, gender = %g, "Invalid gender value");
+                    None
+                }
+            });
+
         // Update profile fields
         let fields = db::users::UpdateUserProfileFields {
             display_name: req.display_name,
@@ -771,6 +816,11 @@ impl AuthService for IdentityServiceServer {
             cover_photo_url: req.cover_photo_url,
             location: req.location,
             private_account: req.private_account,
+            // Extended profile fields
+            first_name: req.first_name,
+            last_name: req.last_name,
+            date_of_birth,
+            gender,
         };
 
         db::users::update_user_profile(&self.db, user_id, fields)
@@ -796,6 +846,16 @@ impl AuthService for IdentityServiceServer {
                 private_account: user.private_account,
                 created_at: user.created_at.timestamp(),
                 updated_at: user.updated_at.timestamp(),
+                // Extended profile fields
+                first_name: user.first_name.clone(),
+                last_name: user.last_name.clone(),
+                date_of_birth: user.date_of_birth.map(|d| d.format("%Y-%m-%d").to_string()),
+                gender: user.gender.map(|g| match g {
+                    crate::models::user::Gender::Male => "male".to_string(),
+                    crate::models::user::Gender::Female => "female".to_string(),
+                    crate::models::user::Gender::Other => "other".to_string(),
+                    crate::models::user::Gender::PreferNotToSay => "prefer_not_to_say".to_string(),
+                }),
             }),
             error: None,
         }))

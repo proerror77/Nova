@@ -2,10 +2,11 @@
 -- Migration: 0016_create_video_call_support
 
 -- Call sessions table (one call per session)
+-- Note: initiator_id FK removed - users table is in separate database (identity-service)
 CREATE TABLE IF NOT EXISTS call_sessions (
     id UUID PRIMARY KEY,
     conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
-    initiator_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    initiator_id UUID NOT NULL,
     status VARCHAR(20) DEFAULT 'ringing' NOT NULL,
     COMMENT ON COLUMN call_sessions.status IS 'ringing, connected, ended, failed',
 
@@ -38,10 +39,11 @@ CREATE TABLE IF NOT EXISTS call_sessions (
 COMMENT ON TABLE call_sessions IS 'Video call sessions - each row represents one complete call';
 
 -- Call participants table (tracks who participated)
+-- Note: user_id FK removed - users table is in separate database (identity-service)
 CREATE TABLE IF NOT EXISTS call_participants (
     id UUID PRIMARY KEY,
     call_id UUID NOT NULL REFERENCES call_sessions(id) ON DELETE CASCADE,
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL,
 
     -- Participation timing
     joined_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,

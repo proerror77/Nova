@@ -60,9 +60,9 @@ impl PostService {
         let post = sqlx::query_as::<_, Post>(
             r#"
             SELECT id, user_id, content, caption, media_key, media_type, media_urls, status,
-                   created_at, updated_at, deleted_at, soft_delete
+                   created_at, updated_at, deleted_at, soft_delete::text AS soft_delete
             FROM posts
-            WHERE id = $1 AND soft_delete IS NULL
+            WHERE id = $1 AND deleted_at IS NULL
             "#,
         )
         .bind(post_id)
@@ -88,9 +88,9 @@ impl PostService {
         let posts = sqlx::query_as::<_, Post>(
             r#"
             SELECT id, user_id, content, caption, media_key, media_type, media_urls, status,
-                   created_at, updated_at, deleted_at, soft_delete
+                   created_at, updated_at, deleted_at, soft_delete::text AS soft_delete
             FROM posts
-            WHERE user_id = $1 AND soft_delete IS NULL
+            WHERE user_id = $1 AND deleted_at IS NULL
             ORDER BY created_at DESC
             LIMIT $2 OFFSET $3
             "#,
@@ -127,7 +127,7 @@ impl PostService {
                 'published'
             )
             RETURNING id, user_id, content, caption, media_key, media_type, media_urls, status,
-                      created_at, updated_at, deleted_at, soft_delete
+                      created_at, updated_at, deleted_at, soft_delete::text AS soft_delete
             "#,
         )
         .bind(user_id)
@@ -169,7 +169,7 @@ impl PostService {
             r#"
             UPDATE posts
             SET status = $1, updated_at = NOW()
-            WHERE id = $2 AND user_id = $3 AND soft_delete IS NULL
+            WHERE id = $2 AND user_id = $3 AND deleted_at IS NULL
             "#,
         )
         .bind(status)
@@ -211,8 +211,8 @@ impl PostService {
         let result = sqlx::query(
             r#"
             UPDATE posts
-            SET soft_delete = NOW()
-            WHERE id = $1 AND user_id = $2 AND soft_delete IS NULL
+            SET deleted_at = NOW()
+            WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL
             "#,
         )
         .bind(post_id)

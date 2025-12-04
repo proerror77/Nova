@@ -16,14 +16,14 @@ struct DevicesView: View {
                     }) {
                         Image(systemName: "chevron.left")
                             .font(.system(size: 20))
-                            .foregroundColor(.black)
+                            .foregroundColor(DesignTokens.textPrimary)
                     }
 
                     Spacer()
 
                     Text("Devices")
                         .font(.system(size: 24, weight: .medium))
-                        .foregroundColor(.black)
+                        .foregroundColor(DesignTokens.textPrimary)
 
                     Spacer()
 
@@ -37,7 +37,7 @@ struct DevicesView: View {
 
                 // 分隔线
                 Rectangle()
-                    .fill(Color(red: 0.74, green: 0.74, blue: 0.74))
+                    .fill(DesignTokens.borderColor)
                     .frame(height: 0.5)
 
                 ScrollView {
@@ -80,12 +80,12 @@ struct DeviceCard: View {
                 // 设备图标
                 ZStack {
                     RoundedRectangle(cornerRadius: 8)
-                        .stroke(Color(red: 0.82, green: 0.11, blue: 0.26), lineWidth: 2)
+                        .stroke(DesignTokens.accentColor, lineWidth: 2)
                         .frame(width: 50, height: 50)
 
                     Image(systemName: icon)
                         .font(.system(size: 24))
-                        .foregroundColor(Color(red: 0.82, green: 0.11, blue: 0.26))
+                        .foregroundColor(DesignTokens.accentColor)
                 }
 
                 // 设备信息
@@ -96,7 +96,7 @@ struct DeviceCard: View {
 
                     Text(lastActive)
                         .font(.system(size: 12))
-                        .foregroundColor(Color(red: 0.54, green: 0.54, blue: 0.54))
+                        .foregroundColor(DesignTokens.textSecondary)
                 }
 
                 Spacer()
@@ -113,7 +113,7 @@ struct DeviceCard: View {
         .cornerRadius(6)
         .overlay(
             RoundedRectangle(cornerRadius: 6)
-                .stroke(Color(red: 0.68, green: 0.68, blue: 0.68), lineWidth: 0.5)
+                .stroke(DesignTokens.borderColor, lineWidth: 0.5)
         )
     }
 }
