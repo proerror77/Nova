@@ -11,7 +11,9 @@ use crate::domain::models::{
     CandidatePreview as CandidatePreviewModel, CandidateWithRank, Comment as CommentModel,
     Like as LikeModel, Poll as PollModel, PollCandidate as PollCandidateModel, Share as ShareModel,
 };
-use crate::repository::{CommentRepository, LikeRepository, PollRepository, ShareRepository};
+use crate::repository::{
+    polls::CreateCandidateInput, CommentRepository, LikeRepository, PollRepository, ShareRepository,
+};
 use crate::services::{CounterService, FollowService};
 use transactional_outbox::{OutboxEvent, OutboxRepository};
 
@@ -646,6 +648,301 @@ impl SocialService for SocialServiceImpl {
                 .map(|v| v.candidate_id.to_string())
                 .unwrap_or_default(),
             voted_at: vote.map(|v| to_ts(v.created_at)).flatten(),
+        }))
+    }
+
+    async fn create_poll(
+        &self,
+        request: Request<CreatePollRequest>,
+    ) -> Result<Response<CreatePollResponse>, Status> {
+        // Get user_id from request metadata
+        let user_id = request
+            .metadata()
+            .get("x-user-id")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|s| Uuid::parse_str(s).ok())
+            .ok_or_else(|| Status::unauthenticated("User ID required"))?;
+
+        let req = request.into_inner();
+
+        if req.title.is_empty() {
+            return Err(Status::invalid_argument("Title is required"));
+        }
+
+        let ends_at = req.ends_at.map(|ts| {
+            chrono::DateTime::from_timestamp(ts.seconds, ts.nanos as u32)
+                .unwrap_or_else(chrono::Utc::now)
+        });
+
+        let initial_candidates: Vec<CreateCandidateInput> = req
+            .initial_candidates
+            .into_iter()
+            .map(|c| CreateCandidateInput {
+                name: c.name,
+                avatar_url: if c.avatar_url.is_empty() {
+                    None
+                } else {
+                    Some(c.avatar_url)
+                },
+                description: if c.description.is_empty() {
+                    None
+                } else {
+                    Some(c.description)
+                },
+                user_id: if c.user_id.is_empty() {
+                    None
+                } else {
+                    Uuid::parse_str(&c.user_id).ok()
+                },
+            })
+            .collect();
+
+        let repo = self.poll_repo();
+        let (poll, candidates) = repo
+            .create_poll(
+                user_id,
+                req.title,
+                if req.description.is_empty() {
+                    None
+                } else {
+                    Some(req.description)
+                },
+                if req.cover_image_url.is_empty() {
+                    None
+                } else {
+                    Some(req.cover_image_url)
+                },
+                if req.poll_type.is_empty() {
+                    "ranking".to_string()
+                } else {
+                    req.poll_type
+                },
+                req.tags,
+                ends_at,
+                initial_candidates,
+            )
+            .await
+            .map_err(|e| Status::internal(format!("Failed to create poll: {}", e)))?;
+
+        Ok(Response::new(CreatePollResponse {
+            poll: Some(to_proto_poll(poll)),
+            candidates: candidates
+                .into_iter()
+                .enumerate()
+                .map(|(idx, c)| to_proto_candidate_with_rank(c, (idx + 1) as i32, 0))
+                .collect(),
+        }))
+    }
+
+    async fn unvote_poll(
+        &self,
+        request: Request<UnvotePollRequest>,
+    ) -> Result<Response<UnvotePollResponse>, Status> {
+        let user_id = request
+            .metadata()
+            .get("x-user-id")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|s| Uuid::parse_str(s).ok())
+            .ok_or_else(|| Status::unauthenticated("User ID required"))?;
+
+        let req = request.into_inner();
+        let poll_id = parse_uuid(&req.poll_id, "poll_id")?;
+
+        let repo = self.poll_repo();
+        let success = repo
+            .unvote(poll_id, user_id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to unvote: {}", e)))?;
+
+        let poll = repo.get_poll(poll_id).await.ok().flatten();
+        let total_votes = poll.map(|p| p.total_votes).unwrap_or(0);
+
+        Ok(Response::new(UnvotePollResponse {
+            success,
+            total_votes,
+        }))
+    }
+
+    async fn add_poll_candidate(
+        &self,
+        request: Request<AddPollCandidateRequest>,
+    ) -> Result<Response<AddPollCandidateResponse>, Status> {
+        let user_id = request
+            .metadata()
+            .get("x-user-id")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|s| Uuid::parse_str(s).ok())
+            .ok_or_else(|| Status::unauthenticated("User ID required"))?;
+
+        let req = request.into_inner();
+        let poll_id = parse_uuid(&req.poll_id, "poll_id")?;
+
+        if req.name.is_empty() {
+            return Err(Status::invalid_argument("Candidate name is required"));
+        }
+
+        // Check if user is poll creator
+        let repo = self.poll_repo();
+        let poll = repo
+            .get_poll(poll_id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to get poll: {}", e)))?
+            .ok_or_else(|| Status::not_found("Poll not found"))?;
+
+        if poll.creator_id != user_id {
+            return Err(Status::permission_denied("Only poll creator can add candidates"));
+        }
+
+        let candidate_user_id = if req.user_id.is_empty() {
+            None
+        } else {
+            Some(parse_uuid(&req.user_id, "user_id")?)
+        };
+
+        let candidate = repo
+            .add_candidate(
+                poll_id,
+                req.name,
+                if req.avatar_url.is_empty() {
+                    None
+                } else {
+                    Some(req.avatar_url)
+                },
+                if req.description.is_empty() {
+                    None
+                } else {
+                    Some(req.description)
+                },
+                candidate_user_id,
+            )
+            .await
+            .map_err(|e| Status::internal(format!("Failed to add candidate: {}", e)))?;
+
+        Ok(Response::new(AddPollCandidateResponse {
+            candidate: Some(to_proto_candidate_with_rank(candidate, 0, poll.total_votes)),
+        }))
+    }
+
+    async fn remove_poll_candidate(
+        &self,
+        request: Request<RemovePollCandidateRequest>,
+    ) -> Result<Response<Empty>, Status> {
+        let user_id = request
+            .metadata()
+            .get("x-user-id")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|s| Uuid::parse_str(s).ok())
+            .ok_or_else(|| Status::unauthenticated("User ID required"))?;
+
+        let req = request.into_inner();
+        let poll_id = parse_uuid(&req.poll_id, "poll_id")?;
+        let candidate_id = parse_uuid(&req.candidate_id, "candidate_id")?;
+
+        // Check if user is poll creator
+        let repo = self.poll_repo();
+        let poll = repo
+            .get_poll(poll_id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to get poll: {}", e)))?
+            .ok_or_else(|| Status::not_found("Poll not found"))?;
+
+        if poll.creator_id != user_id {
+            return Err(Status::permission_denied(
+                "Only poll creator can remove candidates",
+            ));
+        }
+
+        repo.remove_candidate(poll_id, candidate_id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to remove candidate: {}", e)))?;
+
+        Ok(Response::new(Empty {}))
+    }
+
+    async fn close_poll(&self, request: Request<ClosePollRequest>) -> Result<Response<Empty>, Status> {
+        let user_id = request
+            .metadata()
+            .get("x-user-id")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|s| Uuid::parse_str(s).ok())
+            .ok_or_else(|| Status::unauthenticated("User ID required"))?;
+
+        let req = request.into_inner();
+        let poll_id = parse_uuid(&req.poll_id, "poll_id")?;
+
+        let repo = self.poll_repo();
+        let closed = repo
+            .close_poll(poll_id, user_id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to close poll: {}", e)))?;
+
+        if !closed {
+            return Err(Status::not_found(
+                "Poll not found or you don't have permission to close it",
+            ));
+        }
+
+        Ok(Response::new(Empty {}))
+    }
+
+    async fn delete_poll(
+        &self,
+        request: Request<DeletePollRequest>,
+    ) -> Result<Response<Empty>, Status> {
+        let user_id = request
+            .metadata()
+            .get("x-user-id")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|s| Uuid::parse_str(s).ok())
+            .ok_or_else(|| Status::unauthenticated("User ID required"))?;
+
+        let req = request.into_inner();
+        let poll_id = parse_uuid(&req.poll_id, "poll_id")?;
+
+        let repo = self.poll_repo();
+        let deleted = repo
+            .delete_poll(poll_id, user_id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to delete poll: {}", e)))?;
+
+        if !deleted {
+            return Err(Status::not_found(
+                "Poll not found or you don't have permission to delete it",
+            ));
+        }
+
+        Ok(Response::new(Empty {}))
+    }
+
+    async fn get_active_polls(
+        &self,
+        request: Request<GetActivePollsRequest>,
+    ) -> Result<Response<GetActivePollsResponse>, Status> {
+        let req = request.into_inner();
+        let limit = sanitize_limit(req.limit, 1, 50, 20);
+        let offset = req.offset.max(0);
+        let tags = if req.tags.is_empty() {
+            None
+        } else {
+            Some(req.tags)
+        };
+
+        let repo = self.poll_repo();
+        let (polls, total) = repo
+            .get_active_polls(limit, offset, tags)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to get active polls: {}", e)))?;
+
+        // Get top candidates for each poll
+        let mut summaries = Vec::with_capacity(polls.len());
+        for poll in polls {
+            let top_candidates = repo.get_top_candidates(poll.id, 3).await.unwrap_or_default();
+            summaries.push(to_proto_poll_summary(poll, top_candidates));
+        }
+
+        Ok(Response::new(GetActivePollsResponse {
+            polls: summaries,
+            total,
         }))
     }
 
