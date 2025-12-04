@@ -1,0 +1,90 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cdc-consumer
+  labels:
+    app: cdc-consumer
+    component: data-pipeline
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cdc-consumer
+  template:
+    metadata:
+      labels:
+        app: cdc-consumer
+        component: data-pipeline
+    spec:
+      serviceAccountName: analytics-service
+      containers:
+        - name: cdc-consumer
+          image: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/analytics-service:latest
+          command: ["/app/analytics-service"]
+          args: ["--mode", "cdc-consumer"]
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          envFrom:
+            - configMapRef:
+                name: analytics-service-config
+            - secretRef:
+                name: analytics-service-secret
+                optional: true
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  key: analytics-db-url
+                  name: nova-db-credentials
+            - name: CDC_CONSUMER_ENABLED
+              value: "true"
+            - name: RUST_LOG
+              value: "info,analytics_service::services::cdc=debug"
+            - name: KAFKA_BROKERS
+              valueFrom:
+                configMapKeyRef:
+                  key: KAFKA_BROKERS
+                  name: nova-config
+            - name: CDC_CONSUMER_GROUP
+              value: "nova-cdc-consumer-v1"
+            - name: CDC_TOPICS
+              value: "cdc.posts,cdc.follows,cdc.comments,cdc.likes"
+            - name: CDC_MAX_CONCURRENT_INSERTS
+              value: "10"
+            - name: CLICKHOUSE_URL
+              value: "http://clickhouse:8123"
+            - name: CLICKHOUSE_DATABASE
+              value: "analytics"
+            - name: CLICKHOUSE_USER
+              valueFrom:
+                secretKeyRef:
+                  key: CLICKHOUSE_USER
+                  name: nova-clickhouse-credentials
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: nova-clickhouse-credentials
+                  key: CLICKHOUSE_PASSWORD
+                  optional: true
+          livenessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - "pgrep analytics-service"
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          readinessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - "pgrep analytics-service"
+            initialDelaySeconds: 10
+            periodSeconds: 10
+      restartPolicy: Always

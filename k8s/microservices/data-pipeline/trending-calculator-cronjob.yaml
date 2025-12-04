@@ -1,0 +1,226 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: trending-calculator
+  labels:
+    app: trending-calculator
+    component: data-pipeline
+spec:
+  # Run every 10 minutes
+  schedule: "*/10 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 180
+      template:
+        metadata:
+          labels:
+            app: trending-calculator
+            component: data-pipeline
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: trending-calculator
+              image: postgres:15-alpine
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  set -e
+
+                  echo "=== Trending Calculator Job Started ==="
+
+                  # Install redis-cli
+                  apk add --no-cache redis > /dev/null 2>&1
+
+                  echo "Fetching trending posts from PostgreSQL..."
+
+                  # Query PostgreSQL for posts with engagement metrics
+                  TRENDING_POSTS=$(PGPASSWORD="$POSTGRES_PASSWORD" psql -h "$POSTGRES_HOST" -U "$POSTGRES_USER" -d nova_content -t -A -F',' -c "
+                    SELECT
+                      p.id::text,
+                      COALESCE(l.like_count, 0) * 1 + COALESCE(c.comment_count, 0) * 2 as score
+                    FROM posts p
+                    LEFT JOIN (
+                      SELECT post_id, COUNT(*) as like_count
+                      FROM likes
+                      WHERE created_at > NOW() - INTERVAL '24 hours'
+                      GROUP BY post_id
+                    ) l ON l.post_id = p.id
+                    LEFT JOIN (
+                      SELECT post_id, COUNT(*) as comment_count
+                      FROM comments
+                      WHERE created_at > NOW() - INTERVAL '24 hours'
+                      GROUP BY post_id
+                    ) c ON c.post_id = p.id
+                    WHERE p.status = 'published'
+                      AND p.created_at > NOW() - INTERVAL '7 days'
+                    ORDER BY score DESC
+                    LIMIT 500
+                  " 2>/dev/null || echo "")
+
+                  if [ -z "$TRENDING_POSTS" ]; then
+                    echo "No trending posts found, using recent published posts..."
+                    TRENDING_POSTS=$(PGPASSWORD="$POSTGRES_PASSWORD" psql -h "$POSTGRES_HOST" -U "$POSTGRES_USER" -d nova_content -t -A -F',' -c "
+                      SELECT id::text, 1 as score
+                      FROM posts
+                      WHERE status = 'published'
+                      ORDER BY created_at DESC
+                      LIMIT 100
+                    " 2>/dev/null || echo "")
+                  fi
+
+                  if [ -z "$TRENDING_POSTS" ]; then
+                    echo "WARNING: No posts found at all. Skipping Redis update."
+                    exit 0
+                  fi
+
+                  echo "Writing trending posts to Redis..."
+
+                  # Clear existing trending data and write new
+                  redis-cli -h "$REDIS_HOST" DEL trending:posts:1h trending:posts:24h 2>/dev/null || true
+
+                  # Write to Redis sorted set
+                  echo "$TRENDING_POSTS" | while IFS=',' read -r post_id score; do
+                    [ -z "$post_id" ] && continue
+                    redis-cli -h "$REDIS_HOST" ZADD trending:posts:1h "$score" "$post_id" > /dev/null
+                    redis-cli -h "$REDIS_HOST" ZADD trending:posts:24h "$score" "$post_id" > /dev/null
+                  done
+
+                  # Set TTL on trending keys (2 hours for 1h, 25 hours for 24h)
+                  redis-cli -h "$REDIS_HOST" EXPIRE trending:posts:1h 7200
+                  redis-cli -h "$REDIS_HOST" EXPIRE trending:posts:24h 90000
+
+                  # Verify
+                  COUNT_1H=$(redis-cli -h "$REDIS_HOST" ZCARD trending:posts:1h)
+                  COUNT_24H=$(redis-cli -h "$REDIS_HOST" ZCARD trending:posts:24h)
+
+                  echo "=== Trending Calculator Job Completed ==="
+                  echo "  trending:posts:1h  = $COUNT_1H posts"
+                  echo "  trending:posts:24h = $COUNT_24H posts"
+              resources:
+                requests:
+                  cpu: "100m"
+                  memory: "128Mi"
+                limits:
+                  cpu: "500m"
+                  memory: "256Mi"
+              env:
+                - name: REDIS_HOST
+                  value: "redis"
+                - name: POSTGRES_HOST
+                  value: "postgres"
+                - name: POSTGRES_USER
+                  value: "nova"
+                - name: POSTGRES_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: postgres-secret
+                      key: password
+                      optional: true
+---
+# User interests calculator (for personalized recommendations)
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: user-interests-calculator
+  labels:
+    app: user-interests
+    component: data-pipeline
+spec:
+  # Run every 30 minutes
+  schedule: "*/30 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 300
+      template:
+        metadata:
+          labels:
+            app: user-interests
+            component: data-pipeline
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: interests-calculator
+              image: postgres:15-alpine
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  set -e
+
+                  echo "=== User Interests Calculator Job Started ==="
+
+                  apk add --no-cache redis > /dev/null 2>&1
+
+                  # Get users with recent activity and their interests based on liked/commented posts
+                  echo "Calculating user interests from engagement data..."
+
+                  # For each active user, extract interests from their liked posts' hashtags
+                  ACTIVE_USERS=$(PGPASSWORD="$POSTGRES_PASSWORD" psql -h "$POSTGRES_HOST" -U "$POSTGRES_USER" -d nova_content -t -A -c "
+                    SELECT DISTINCT user_id::text
+                    FROM likes
+                    WHERE created_at > NOW() - INTERVAL '7 days'
+                    LIMIT 1000
+                  " 2>/dev/null || echo "")
+
+                  if [ -z "$ACTIVE_USERS" ]; then
+                    echo "No active users found. Skipping."
+                    exit 0
+                  fi
+
+                  USER_COUNT=0
+                  echo "$ACTIVE_USERS" | while read -r user_id; do
+                    [ -z "$user_id" ] && continue
+
+                    # Get hashtags from posts this user liked
+                    INTERESTS=$(PGPASSWORD="$POSTGRES_PASSWORD" psql -h "$POSTGRES_HOST" -U "$POSTGRES_USER" -d nova_content -t -A -c "
+                      SELECT DISTINCT unnest(p.hashtags)
+                      FROM likes l
+                      JOIN posts p ON p.id = l.post_id
+                      WHERE l.user_id = '$user_id'
+                        AND p.hashtags IS NOT NULL
+                        AND array_length(p.hashtags, 1) > 0
+                      LIMIT 20
+                    " 2>/dev/null || echo "")
+
+                    if [ -n "$INTERESTS" ]; then
+                      # Clear old interests and set new ones
+                      redis-cli -h "$REDIS_HOST" DEL "user:${user_id}:interests" > /dev/null
+                      echo "$INTERESTS" | while read -r tag; do
+                        [ -n "$tag" ] && redis-cli -h "$REDIS_HOST" SADD "user:${user_id}:interests" "$tag" > /dev/null
+                      done
+                      redis-cli -h "$REDIS_HOST" EXPIRE "user:${user_id}:interests" 604800  # 7 days TTL
+                      USER_COUNT=$((USER_COUNT + 1))
+                    fi
+                  done
+
+                  echo "=== User Interests Calculator Job Completed ==="
+                  echo "  Processed users with interests updates"
+              resources:
+                requests:
+                  cpu: "100m"
+                  memory: "128Mi"
+                limits:
+                  cpu: "500m"
+                  memory: "256Mi"
+              env:
+                - name: REDIS_HOST
+                  value: "redis"
+                - name: POSTGRES_HOST
+                  value: "postgres"
+                - name: POSTGRES_USER
+                  value: "nova"
+                - name: POSTGRES_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: postgres-secret
+                      key: password
+                      optional: true

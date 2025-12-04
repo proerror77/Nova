@@ -1,0 +1,103 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: feed-candidates-refresh
+  labels:
+    app: feed-etl
+    component: data-pipeline
+spec:
+  # Run every 5 minutes
+  schedule: "*/5 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 300
+      template:
+        metadata:
+          labels:
+            app: feed-etl
+            component: data-pipeline
+        spec:
+          serviceAccountName: content-service
+          restartPolicy: OnFailure
+          containers:
+            - name: feed-etl
+              image: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/content-service:latest
+              command: ["/app/content-service"]
+              args: ["--mode", "feed-refresh"]
+              resources:
+                requests:
+                  cpu: "200m"
+                  memory: "512Mi"
+                limits:
+                  cpu: "1000m"
+                  memory: "1Gi"
+              env:
+                - name: RUST_LOG
+                  value: "info,content_service::jobs=debug"
+                - name: CLICKHOUSE_URL
+                  value: "http://clickhouse.nova-staging.svc.cluster.local:8123"
+                - name: CLICKHOUSE_DATABASE
+                  value: "default"
+                - name: CLICKHOUSE_USER
+                  value: "default"
+                - name: CLICKHOUSE_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: clickhouse-secret
+                      key: password
+                      optional: true
+                - name: CLICKHOUSE_QUERY_TIMEOUT_MS
+                  value: "120000"
+---
+# Manual trigger job for initial data load
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: feed-candidates-initial-load
+  labels:
+    app: feed-etl
+    component: data-pipeline
+spec:
+  backoffLimit: 3
+  activeDeadlineSeconds: 600
+  template:
+    metadata:
+      labels:
+        app: feed-etl
+        component: data-pipeline
+    spec:
+      serviceAccountName: content-service
+      restartPolicy: OnFailure
+      containers:
+        - name: feed-etl
+          image: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/content-service:latest
+          command: ["/app/content-service"]
+          args: ["--mode", "feed-refresh"]
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "1Gi"
+            limits:
+              cpu: "2000m"
+              memory: "2Gi"
+          env:
+            - name: RUST_LOG
+              value: "info,content_service::jobs=debug"
+            - name: CLICKHOUSE_URL
+              value: "http://clickhouse.nova-staging.svc.cluster.local:8123"
+            - name: CLICKHOUSE_DATABASE
+              value: "default"
+            - name: CLICKHOUSE_USER
+              value: "default"
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: clickhouse-secret
+                  key: password
+                  optional: true
+            - name: CLICKHOUSE_QUERY_TIMEOUT_MS
+              value: "300000"
