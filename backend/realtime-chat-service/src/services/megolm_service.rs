@@ -689,7 +689,7 @@ impl MegolmService {
         let mut nonce_bytes = [0u8; 12];
         getrandom::getrandom(&mut nonce_bytes)
             .map_err(|e| MegolmError::Encryption(e.to_string()))?;
-        let nonce = Nonce::from_slice(&nonce_bytes);
+        let nonce: &Nonce = (&nonce_bytes).into();
 
         let ciphertext = cipher
             .encrypt(nonce, data)

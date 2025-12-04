@@ -52,8 +52,8 @@ impl RealtimeChatService for RealtimeChatServiceImpl {
             .first()
             .ok_or_else(|| Status::invalid_argument("missing participant ids"))?;
 
-        let conversation_id = match ConversationType::from_i32(req.conversation_type) {
-            Some(ConversationType::Group) => ConversationService::create_group_conversation(
+        let conversation_id = match ConversationType::try_from(req.conversation_type) {
+            Ok(ConversationType::Group) => ConversationService::create_group_conversation(
                 &self.state.db,
                 &self.state.auth_client,
                 creator_id,

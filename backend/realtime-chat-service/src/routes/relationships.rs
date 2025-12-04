@@ -64,13 +64,9 @@ pub async fn block_user(
     user: User,
     body: web::Json<BlockUserRequest>,
 ) -> Result<HttpResponse, AppError> {
-    let blocked = RelationshipService::block_user(
-        &state.db,
-        user.id,
-        body.user_id,
-        body.reason.clone(),
-    )
-    .await?;
+    let blocked =
+        RelationshipService::block_user(&state.db, user.id, body.user_id, body.reason.clone())
+            .await?;
 
     if blocked {
         Ok(HttpResponse::Created().json(serde_json::json!({
@@ -145,7 +141,8 @@ pub async fn get_relationship(
     path: web::Path<Uuid>,
 ) -> Result<HttpResponse, AppError> {
     let target_id = path.into_inner();
-    let status = RelationshipService::get_relationship_status(&state.db, user.id, target_id).await?;
+    let status =
+        RelationshipService::get_relationship_status(&state.db, user.id, target_id).await?;
 
     Ok(HttpResponse::Ok().json(RelationshipResponse {
         is_following: status.is_following,

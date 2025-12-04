@@ -14,6 +14,7 @@ use crate::error::AppError;
 use crate::middleware::guards::User;
 use crate::state::AppState;
 use actix_web::{delete, get, post, web, HttpRequest, HttpResponse};
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use tracing::{debug, info, instrument, warn};
@@ -144,13 +145,13 @@ pub struct ToDeviceQuery {
 // Handler Functions
 // ============================================================================
 
-/// POST /api/v1/e2ee/devices - Register a new device
+/// POST /api/v2/e2ee/devices - Register a new device
 ///
 /// Creates a new Olm account for this device with Curve25519 identity key.
 /// Returns the public identity key for establishing E2EE sessions.
 #[utoipa::path(
     post,
-    path = "/api/v1/e2ee/devices",
+    path = "/api/v2/e2ee/devices",
     request_body = RegisterDeviceRequest,
     responses(
         (status = 200, description = "Device registered", body = RegisterDeviceResponse),
@@ -167,11 +168,10 @@ pub async fn register_device(
     body: web::Json<RegisterDeviceRequest>,
 ) -> Result<HttpResponse, AppError> {
     // Get OlmService (vodozemac-based)
-    let olm = state.olm_service.as_ref()
-        .ok_or_else(|| {
-            warn!("E2EE not available - OLM_ACCOUNT_KEY not configured");
-            AppError::ServiceUnavailable("E2EE service not configured".to_string())
-        })?;
+    let olm = state.olm_service.as_ref().ok_or_else(|| {
+        warn!("E2EE not available - OLM_ACCOUNT_KEY not configured");
+        AppError::ServiceUnavailable("E2EE service not configured".to_string())
+    })?;
 
     // Create Olm account (generates Curve25519 + Ed25519 keypairs)
     let device_keys = olm
@@ -195,13 +195,13 @@ pub async fn register_device(
     }))
 }
 
-/// POST /api/v1/e2ee/keys/upload - Upload one-time prekeys
+/// POST /api/v2/e2ee/keys/upload - Upload one-time prekeys
 ///
 /// Generates Curve25519 one-time keys for session establishment.
 /// These enable asynchronous key agreement (recipient offline).
 #[utoipa::path(
     post,
-    path = "/api/v1/e2ee/keys/upload",
+    path = "/api/v2/e2ee/keys/upload",
     request_body = UploadKeysRequest,
     responses(
         (status = 200, description = "Keys uploaded", body = UploadKeysResponse),
@@ -220,7 +220,9 @@ pub async fn upload_keys(
 ) -> Result<HttpResponse, AppError> {
     let device_id = extract_device_id(&req)?;
 
-    let olm = state.olm_service.as_ref()
+    let olm = state
+        .olm_service
+        .as_ref()
         .ok_or_else(|| AppError::ServiceUnavailable("E2EE service not configured".to_string()))?;
 
     // Generate and store one-time keys
@@ -251,13 +253,13 @@ pub async fn upload_keys(
     }))
 }
 
-/// POST /api/v1/e2ee/keys/claim - Claim one-time keys from other devices
+/// POST /api/v2/e2ee/keys/claim - Claim one-time keys from other devices
 ///
 /// Retrieves one-time prekeys for establishing sessions with target devices.
 /// Each key can only be claimed once (single-use prekeys).
 #[utoipa::path(
     post,
-    path = "/api/v1/e2ee/keys/claim",
+    path = "/api/v2/e2ee/keys/claim",
     request_body = ClaimKeysRequest,
     responses(
         (status = 200, description = "Keys claimed", body = ClaimKeysResponse),
@@ -276,7 +278,9 @@ pub async fn claim_keys(
 ) -> Result<HttpResponse, AppError> {
     let our_device_id = extract_device_id(&req)?;
 
-    let olm = state.olm_service.as_ref()
+    let olm = state
+        .olm_service
+        .as_ref()
         .ok_or_else(|| AppError::ServiceUnavailable("E2EE service not configured".to_string()))?;
 
     let mut result: HashMap<String, HashMap<String, ClaimedKey>> = HashMap::new();
@@ -290,7 +294,10 @@ pub async fn claim_keys(
 
         for target_device_id in device_ids {
             // Claim one-time key from target device
-            match olm.claim_one_time_key(target_device_id, &our_device_id).await {
+            match olm
+                .claim_one_time_key(target_device_id, &our_device_id)
+                .await
+            {
                 Ok((key_id, one_time_key)) => {
                     // Get device's identity keys
                     let device_keys = olm
@@ -298,7 +305,10 @@ pub async fn claim_keys(
                         .await
                         .map_err(|e| AppError::Database(e.to_string()))?;
 
-                    if let Some(device) = device_keys.iter().find(|d| d.device_id == *target_device_id) {
+                    if let Some(device) = device_keys
+                        .iter()
+                        .find(|d| d.device_id == *target_device_id)
+                    {
                         user_keys.insert(
                             target_device_id.clone(),
                             ClaimedKey {
@@ -339,13 +349,13 @@ pub async fn claim_keys(
     }))
 }
 
-/// POST /api/v1/e2ee/keys/query - Query device keys for users
+/// POST /api/v2/e2ee/keys/query - Query device keys for users
 ///
 /// Returns all registered devices and their identity keys for specified users.
 /// Used for device discovery before initiating encrypted conversations.
 #[utoipa::path(
     post,
-    path = "/api/v1/e2ee/keys/query",
+    path = "/api/v2/e2ee/keys/query",
     request_body = QueryKeysRequest,
     responses(
         (status = 200, description = "Device keys", body = QueryKeysResponse),
@@ -361,7 +371,9 @@ pub async fn query_keys(
     user: User,
     body: web::Json<QueryKeysRequest>,
 ) -> Result<HttpResponse, AppError> {
-    let olm = state.olm_service.as_ref()
+    let olm = state
+        .olm_service
+        .as_ref()
         .ok_or_else(|| AppError::ServiceUnavailable("E2EE service not configured".to_string()))?;
 
     let mut result: HashMap<String, Vec<DeviceKeyInfo>> = HashMap::new();
@@ -397,7 +409,7 @@ pub async fn query_keys(
     }))
 }
 
-/// GET /api/v1/e2ee/to-device - Get pending to-device messages
+/// GET /api/v2/e2ee/to-device - Get pending to-device messages
 ///
 /// Retrieves encrypted messages sent directly to this device (not conversation).
 /// Used for key negotiation, device verification, and out-of-band signaling.
@@ -405,7 +417,7 @@ pub async fn query_keys(
 /// **Note**: Requires implementing to-device message storage in database.
 #[utoipa::path(
     get,
-    path = "/api/v1/e2ee/to-device",
+    path = "/api/v2/e2ee/to-device",
     params(
         ("since" = Option<String>, Query, description = "Batch token for pagination"),
         ("limit" = Option<i32>, Query, description = "Max messages to return")
@@ -418,9 +430,9 @@ pub async fn query_keys(
     tag = "E2EE"
 )]
 #[get("/to-device")]
-#[instrument(skip(_state, req), fields(user_id = %user.id))]
+#[instrument(skip(state, req), fields(user_id = %user.id))]
 pub async fn get_to_device_messages(
-    _state: web::Data<AppState>,
+    state: web::Data<AppState>,
     user: User,
     req: HttpRequest,
     query: web::Query<ToDeviceQuery>,
@@ -428,27 +440,51 @@ pub async fn get_to_device_messages(
     let device_id = extract_device_id(&req)?;
     let limit = query.limit.unwrap_or(100).min(1000);
 
-    // TODO: Implement to-device message retrieval from database
-    warn!(
-        user_id = %user.id,
+    let olm = state
+        .olm_service
+        .as_ref()
+        .ok_or_else(|| AppError::ServiceUnavailable("E2EE service not configured".to_string()))?;
+
+    // Retrieve pending to-device messages
+    let messages = olm
+        .get_to_device_messages(user.id, &device_id, limit)
+        .await
+        .map_err(|e| {
+            warn!(error = %e, "Failed to get to-device messages");
+            AppError::Database(e.to_string())
+        })?;
+
+    // Convert to response format
+    let response_messages: Vec<ToDeviceMessage> = messages
+        .into_iter()
+        .map(|m| ToDeviceMessage {
+            id: m.id.to_string(),
+            sender_user_id: m.sender_user_id.to_string(),
+            sender_device_id: m.sender_device_id,
+            message_type: m.message_type,
+            content: base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &m.content),
+            created_at: m.created_at.to_rfc3339(),
+        })
+        .collect();
+
+    debug!(
         device_id = %device_id,
-        limit,
-        "To-device message retrieval not yet implemented"
+        message_count = response_messages.len(),
+        "Retrieved to-device messages"
     );
 
-    // Placeholder: Return empty list
     Ok(HttpResponse::Ok().json(ToDeviceMessagesResponse {
-        messages: Vec::new(),
-        next_batch: None,
+        messages: response_messages,
+        next_batch: None, // TODO: Implement pagination with cursor
     }))
 }
 
-/// DELETE /api/v1/e2ee/to-device/{message_id} - Acknowledge message receipt
+/// DELETE /api/v2/e2ee/to-device/{message_id} - Acknowledge message receipt
 ///
 /// Marks a to-device message as delivered and removes it from the queue.
 #[utoipa::path(
     delete,
-    path = "/api/v1/e2ee/to-device/{message_id}",
+    path = "/api/v2/e2ee/to-device/{message_id}",
     params(
         ("message_id" = String, Path, description = "Message ID to acknowledge")
     ),
@@ -460,23 +496,42 @@ pub async fn get_to_device_messages(
     tag = "E2EE"
 )]
 #[delete("/to-device/{message_id}")]
-#[instrument(skip(_state), fields(user_id = %user.id, message_id = %message_id))]
+#[instrument(skip(state, req), fields(user_id = %user.id, message_id = %message_id))]
 pub async fn ack_to_device_message(
-    _state: web::Data<AppState>,
+    state: web::Data<AppState>,
     user: User,
+    req: HttpRequest,
     message_id: web::Path<String>,
 ) -> Result<HttpResponse, AppError> {
+    let device_id = extract_device_id(&req)?;
     let msg_uuid = Uuid::parse_str(&message_id)
         .map_err(|_| AppError::BadRequest("Invalid message ID".to_string()))?;
 
-    // TODO: Implement message acknowledgment
-    warn!(
-        user_id = %user.id,
-        message_id = %msg_uuid,
-        "To-device message acknowledgment not yet implemented"
-    );
+    let olm = state
+        .olm_service
+        .as_ref()
+        .ok_or_else(|| AppError::ServiceUnavailable("E2EE service not configured".to_string()))?;
 
-    Ok(HttpResponse::NoContent().finish())
+    // Delete the to-device message (only if it belongs to this user/device)
+    let deleted = olm
+        .delete_to_device_message(msg_uuid, user.id, &device_id)
+        .await
+        .map_err(|e| {
+            warn!(error = %e, "Failed to delete to-device message");
+            AppError::Database(e.to_string())
+        })?;
+
+    if deleted {
+        debug!(
+            message_id = %msg_uuid,
+            device_id = %device_id,
+            "To-device message acknowledged and deleted"
+        );
+        Ok(HttpResponse::NoContent().finish())
+    } else {
+        // Message not found or doesn't belong to this user/device
+        Err(AppError::NotFound)
+    }
 }
 
 // ============================================================================
@@ -489,25 +544,409 @@ fn extract_device_id(req: &HttpRequest) -> Result<String, AppError> {
         .get("X-Device-ID")
         .and_then(|h| h.to_str().ok())
         .map(|s| s.to_string())
-        .ok_or_else(|| {
-            AppError::BadRequest("Missing X-Device-ID header".to_string())
-        })
+        .ok_or_else(|| AppError::BadRequest("Missing X-Device-ID header".to_string()))
 }
 
 // ============================================================================
 // Route Configuration
 // ============================================================================
 
+/// GET /api/v2/e2ee/keys/{user_id} - Get device keys for a specific user
+///
+/// Returns all registered devices and their identity keys for the specified user.
+#[utoipa::path(
+    get,
+    path = "/api/v2/e2ee/keys/{user_id}",
+    params(
+        ("user_id" = String, Path, description = "User ID to query device keys for")
+    ),
+    responses(
+        (status = 200, description = "Device keys", body = QueryKeysResponse),
+        (status = 401, description = "Unauthorized"),
+        (status = 500, description = "Internal error")
+    ),
+    tag = "E2EE"
+)]
+#[get("/keys/{user_id}")]
+#[instrument(skip(state), fields(user_id = %user.id, target_user_id = %user_id))]
+pub async fn get_user_device_keys(
+    state: web::Data<AppState>,
+    user: User,
+    user_id: web::Path<String>,
+) -> Result<HttpResponse, AppError> {
+    let target_user_id = Uuid::parse_str(&user_id)
+        .map_err(|_| AppError::BadRequest("Invalid user ID".to_string()))?;
+
+    let olm = state
+        .olm_service
+        .as_ref()
+        .ok_or_else(|| AppError::ServiceUnavailable("E2EE service not configured".to_string()))?;
+
+    // Get all device keys for this user
+    let device_keys = olm
+        .get_device_keys(target_user_id)
+        .await
+        .map_err(|e| AppError::Database(e.to_string()))?;
+
+    let devices: Vec<DeviceKeyInfo> = device_keys
+        .into_iter()
+        .map(|dk| DeviceKeyInfo {
+            device_id: dk.device_id,
+            device_name: None, // TODO: Fetch from user_devices table
+            identity_key: dk.identity_key.to_base64(),
+            signing_key: dk.signing_key.to_base64(),
+            verified: false, // TODO: Implement cross-signing verification
+        })
+        .collect();
+
+    debug!(
+        target_user_id = %target_user_id,
+        device_count = devices.len(),
+        "Retrieved device keys for user"
+    );
+
+    Ok(HttpResponse::Ok().json(QueryKeysResponse {
+        device_keys: [(user_id.to_string(), devices)].into_iter().collect(),
+    }))
+}
+
+/// GET /api/v2/e2ee/one-time-key-count - Get remaining one-time key count for current device
+///
+/// Returns the number of unclaimed one-time keys available for the current device.
+/// Clients should monitor this and upload more keys when count is low (< 10).
+#[utoipa::path(
+    get,
+    path = "/api/v2/e2ee/one-time-key-count",
+    responses(
+        (status = 200, description = "One-time key count", body = inline(i64)),
+        (status = 401, description = "Unauthorized"),
+        (status = 400, description = "Missing X-Device-ID header"),
+        (status = 500, description = "Internal error")
+    ),
+    tag = "E2EE"
+)]
+#[get("/one-time-key-count")]
+#[instrument(skip(state, req), fields(user_id = %user.id))]
+pub async fn get_one_time_key_count(
+    state: web::Data<AppState>,
+    user: User,
+    req: HttpRequest,
+) -> Result<HttpResponse, AppError> {
+    let device_id = extract_device_id(&req)?;
+
+    let olm = state
+        .olm_service
+        .as_ref()
+        .ok_or_else(|| AppError::ServiceUnavailable("E2EE service not configured".to_string()))?;
+
+    let count = olm
+        .get_one_time_key_count(&device_id)
+        .await
+        .map_err(|e| AppError::Database(e.to_string()))?;
+
+    debug!(
+        device_id = %device_id,
+        count,
+        "Retrieved one-time key count"
+    );
+
+    Ok(HttpResponse::Ok().json(serde_json::json!({
+        "count": count
+    })))
+}
+
+/// POST /api/v2/e2ee/messages - Send a pre-encrypted E2EE message
+///
+/// Client sends a message encrypted with Megolm (group) or Olm (1:1).
+/// Server stores the encrypted blob without decryption capabilities.
+/// This is TRUE E2EE - the server is blind to message content.
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct SendE2EEMessageRequest {
+    /// Conversation ID to send message to
+    pub conversation_id: Uuid,
+    /// Base64-encoded Megolm ciphertext
+    pub ciphertext: String,
+    /// Megolm session ID
+    pub session_id: String,
+    /// Message index in Megolm ratchet
+    pub message_index: u32,
+    /// Sender's device ID
+    pub device_id: String,
+    /// Message type: 0=text, 1=image, 2=audio, 3=video, 4=file
+    #[serde(rename = "type")]
+    pub message_type: i32,
+    /// Optional: reply to another message
+    pub reply_to_message_id: Option<Uuid>,
+    /// Optional: idempotency key for deduplication
+    pub idempotency_key: Option<String>,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct SendE2EEMessageResponse {
+    /// Message ID (server-generated UUID)
+    pub id: Uuid,
+    /// Conversation ID
+    pub conversation_id: Uuid,
+    /// Sender user ID
+    pub sender_id: Uuid,
+    /// Message creation timestamp
+    pub created_at: DateTime<Utc>,
+    /// Sequence number for ordering
+    pub sequence_number: i64,
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/v2/e2ee/messages",
+    request_body = SendE2EEMessageRequest,
+    responses(
+        (status = 200, description = "Message sent", body = SendE2EEMessageResponse),
+        (status = 401, description = "Unauthorized - not authenticated"),
+        (status = 403, description = "Forbidden - not a member of conversation"),
+        (status = 400, description = "Bad request - invalid data"),
+        (status = 500, description = "Internal error")
+    ),
+    tag = "E2EE"
+)]
+#[post("/messages")]
+#[instrument(skip(state, body), fields(user_id = %user.id, conversation_id = %body.conversation_id))]
+pub async fn send_e2ee_message(
+    state: web::Data<AppState>,
+    user: User,
+    body: web::Json<SendE2EEMessageRequest>,
+) -> Result<HttpResponse, AppError> {
+    use crate::services::e2ee_message_service::{E2eeMessageService, SendE2eeMessageRequest};
+
+    // Validate inputs
+    if body.ciphertext.is_empty() {
+        return Err(AppError::BadRequest("Ciphertext cannot be empty".into()));
+    }
+    if body.session_id.is_empty() {
+        return Err(AppError::BadRequest("Session ID cannot be empty".into()));
+    }
+    if body.device_id.is_empty() {
+        return Err(AppError::BadRequest("Device ID cannot be empty".into()));
+    }
+
+    // Map message type to string (for database storage)
+    let message_type_str = match body.message_type {
+        0 => Some("text".to_string()),
+        1 => Some("image".to_string()),
+        2 => Some("audio".to_string()),
+        3 => Some("video".to_string()),
+        4 => Some("file".to_string()),
+        _ => None, // Unknown types stored as NULL
+    };
+
+    // Create request for E2EE message service
+    let request = SendE2eeMessageRequest {
+        conversation_id: body.conversation_id,
+        sender_device_id: body.device_id.clone(),
+        session_id: body.session_id.clone(),
+        ciphertext: body.ciphertext.clone(),
+        message_index: body.message_index,
+        message_type: message_type_str,
+        idempotency_key: body.idempotency_key.clone(),
+    };
+
+    // Store encrypted message (service validates membership)
+    let message = E2eeMessageService::store_message(&state.db, user.id, request)
+        .await
+        .map_err(|e| {
+            warn!(error = %e, "Failed to store E2EE message");
+            match e {
+                crate::services::e2ee_message_service::E2eeMessageError::Unauthorized(_) => {
+                    AppError::Forbidden
+                }
+                crate::services::e2ee_message_service::E2eeMessageError::Database(db_err) => {
+                    AppError::Database(db_err.to_string())
+                }
+                _ => AppError::StartServer(format!("Failed to store message: {}", e)),
+            }
+        })?;
+
+    // TODO: Broadcast via WebSocket to conversation members
+    // This requires integrating with the WebSocket room system
+
+    info!(
+        message_id = %message.id,
+        conversation_id = %message.conversation_id,
+        sender_id = %message.sender_id,
+        session_id = %message.session_id,
+        "E2EE message stored successfully"
+    );
+
+    Ok(HttpResponse::Ok().json(SendE2EEMessageResponse {
+        id: message.id,
+        conversation_id: message.conversation_id,
+        sender_id: message.sender_id,
+        created_at: message.created_at,
+        sequence_number: message.sequence_number,
+    }))
+}
+
+/// POST /api/v2/e2ee/room-keys/share - Share Megolm room keys with devices
+///
+/// Distributes encrypted room keys to target devices for group E2EE.
+/// The room key is encrypted for each recipient device using Olm sessions.
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct ShareRoomKeysRequest {
+    /// Conversation/room ID this key is for
+    pub room_id: String,
+    /// Session ID of the Megolm session
+    pub session_id: String,
+    /// Map of user_id -> device_id -> encrypted_room_key
+    pub room_keys: HashMap<String, HashMap<String, String>>,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct ShareRoomKeysResponse {
+    pub shared_with: Vec<String>,
+    pub failed: Vec<String>,
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/v2/e2ee/room-keys/share",
+    request_body = ShareRoomKeysRequest,
+    responses(
+        (status = 200, description = "Room keys shared", body = ShareRoomKeysResponse),
+        (status = 401, description = "Unauthorized"),
+        (status = 500, description = "Internal error")
+    ),
+    tag = "E2EE"
+)]
+#[post("/room-keys/share")]
+#[instrument(skip(state, req, body), fields(user_id = %user.id))]
+pub async fn share_room_keys(
+    state: web::Data<AppState>,
+    user: User,
+    req: HttpRequest,
+    body: web::Json<ShareRoomKeysRequest>,
+) -> Result<HttpResponse, AppError> {
+    let sender_device_id = extract_device_id(&req)?;
+
+    let olm = state
+        .olm_service
+        .as_ref()
+        .ok_or_else(|| AppError::ServiceUnavailable("E2EE service not configured".to_string()))?;
+
+    // Validate room_id format (UUID)
+    let _room_uuid = Uuid::parse_str(&body.room_id)
+        .map_err(|_| AppError::BadRequest("Invalid room_id format".to_string()))?;
+
+    let mut shared_with: Vec<String> = Vec::new();
+    let mut failed: Vec<String> = Vec::new();
+
+    // Iterate through user -> device -> encrypted_room_key structure
+    for (user_id_str, devices) in &body.room_keys {
+        let recipient_user_id = match Uuid::parse_str(user_id_str) {
+            Ok(id) => id,
+            Err(_) => {
+                warn!(user_id = %user_id_str, "Invalid user ID format in room key share request");
+                for device_id in devices.keys() {
+                    failed.push(format!("{}:{}", user_id_str, device_id));
+                }
+                continue;
+            }
+        };
+
+        for (device_id, encrypted_room_key) in devices {
+            // Decode the encrypted room key from base64
+            let key_bytes = match base64::Engine::decode(
+                &base64::engine::general_purpose::STANDARD,
+                encrypted_room_key,
+            ) {
+                Ok(bytes) => bytes,
+                Err(e) => {
+                    warn!(
+                        device_id = %device_id,
+                        error = %e,
+                        "Failed to decode encrypted room key from base64"
+                    );
+                    failed.push(format!("{}:{}", user_id_str, device_id));
+                    continue;
+                }
+            };
+
+            // Create to-device message content with room key info
+            // The content is the encrypted room key along with metadata
+            let message_content = serde_json::json!({
+                "room_id": body.room_id,
+                "session_id": body.session_id,
+                "encrypted_key": encrypted_room_key,
+            });
+            let content_bytes = serde_json::to_vec(&message_content)
+                .unwrap_or_else(|_| key_bytes.clone());
+
+            // Store as to-device message for the target device
+            match olm
+                .store_to_device_message(
+                    user.id,
+                    &sender_device_id,
+                    recipient_user_id,
+                    device_id,
+                    "m.room_key",  // Matrix-style message type for room keys
+                    &content_bytes,
+                )
+                .await
+            {
+                Ok(msg_id) => {
+                    debug!(
+                        message_id = %msg_id,
+                        recipient_user = %recipient_user_id,
+                        recipient_device = %device_id,
+                        room_id = %body.room_id,
+                        "Stored room key to-device message"
+                    );
+                    shared_with.push(format!("{}:{}", user_id_str, device_id));
+                }
+                Err(e) => {
+                    warn!(
+                        error = %e,
+                        recipient_user = %recipient_user_id,
+                        recipient_device = %device_id,
+                        "Failed to store room key to-device message"
+                    );
+                    failed.push(format!("{}:{}", user_id_str, device_id));
+                }
+            }
+        }
+    }
+
+    info!(
+        room_id = %body.room_id,
+        session_id = %body.session_id,
+        shared_count = shared_with.len(),
+        failed_count = failed.len(),
+        "Room key sharing completed"
+    );
+
+    Ok(HttpResponse::Ok().json(ShareRoomKeysResponse {
+        shared_with,
+        failed,
+    }))
+}
+
 /// Configure E2EE routes
 ///
-/// Mount this at `/api/v1/e2ee` scope in main.rs
+/// Mount this at `/api/v2/e2ee` scope in main.rs
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(
         web::scope("/e2ee")
+            // Device registration
             .service(register_device)
+            // Key management
             .service(upload_keys)
             .service(claim_keys)
             .service(query_keys)
+            .service(get_user_device_keys)
+            .service(get_one_time_key_count)
+            // Room key sharing
+            .service(share_room_keys)
+            // E2EE messages
+            .service(send_e2ee_message)
+            // To-device messaging
             .service(get_to_device_messages)
             .service(ack_to_device_message),
     );

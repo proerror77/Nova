@@ -13,9 +13,9 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::{PgPool, Row};
-use uuid::Uuid;
 use thiserror::Error;
 use tracing::{debug, info, instrument};
+use uuid::Uuid;
 
 #[derive(Debug, Error)]
 pub enum E2eeMessageError {
@@ -81,10 +81,11 @@ impl E2eeMessageService {
         let id = Uuid::new_v4();
 
         // Verify sender is a member of the conversation
-        let is_member = Self::is_conversation_member(db, request.conversation_id, sender_id).await?;
+        let is_member =
+            Self::is_conversation_member(db, request.conversation_id, sender_id).await?;
         if !is_member {
             return Err(E2eeMessageError::Unauthorized(
-                "Sender is not a member of this conversation".into()
+                "Sender is not a member of this conversation".into(),
             ));
         }
 
@@ -180,7 +181,7 @@ impl E2eeMessageService {
         let is_member = Self::is_conversation_member(db, conversation_id, user_id).await?;
         if !is_member {
             return Err(E2eeMessageError::Unauthorized(
-                "User is not a member of this conversation".into()
+                "User is not a member of this conversation".into(),
             ));
         }
 
@@ -234,10 +235,18 @@ impl E2eeMessageService {
                 id: row.get("id"),
                 conversation_id: row.get("conversation_id"),
                 sender_id: row.get("sender_id"),
-                sender_device_id: row.get::<Option<String>, _>("sender_device_id").unwrap_or_default(),
-                session_id: row.get::<Option<String>, _>("megolm_session_id").unwrap_or_default(),
-                ciphertext: row.get::<Option<String>, _>("megolm_ciphertext").unwrap_or_default(),
-                message_index: row.get::<Option<i32>, _>("megolm_message_index").unwrap_or(0) as u32,
+                sender_device_id: row
+                    .get::<Option<String>, _>("sender_device_id")
+                    .unwrap_or_default(),
+                session_id: row
+                    .get::<Option<String>, _>("megolm_session_id")
+                    .unwrap_or_default(),
+                ciphertext: row
+                    .get::<Option<String>, _>("megolm_ciphertext")
+                    .unwrap_or_default(),
+                message_index: row
+                    .get::<Option<i32>, _>("megolm_message_index")
+                    .unwrap_or(0) as u32,
                 sequence_number: row.get("sequence_number"),
                 created_at: row.get("created_at"),
                 message_type: row.get("message_type"),
@@ -265,7 +274,7 @@ impl E2eeMessageService {
         let is_member = Self::is_conversation_member(db, conversation_id, user_id).await?;
         if !is_member {
             return Err(E2eeMessageError::Unauthorized(
-                "User is not a member of this conversation".into()
+                "User is not a member of this conversation".into(),
             ));
         }
 
@@ -298,10 +307,18 @@ impl E2eeMessageService {
                 id: row.get("id"),
                 conversation_id: row.get("conversation_id"),
                 sender_id: row.get("sender_id"),
-                sender_device_id: row.get::<Option<String>, _>("sender_device_id").unwrap_or_default(),
-                session_id: row.get::<Option<String>, _>("megolm_session_id").unwrap_or_default(),
-                ciphertext: row.get::<Option<String>, _>("megolm_ciphertext").unwrap_or_default(),
-                message_index: row.get::<Option<i32>, _>("megolm_message_index").unwrap_or(0) as u32,
+                sender_device_id: row
+                    .get::<Option<String>, _>("sender_device_id")
+                    .unwrap_or_default(),
+                session_id: row
+                    .get::<Option<String>, _>("megolm_session_id")
+                    .unwrap_or_default(),
+                ciphertext: row
+                    .get::<Option<String>, _>("megolm_ciphertext")
+                    .unwrap_or_default(),
+                message_index: row
+                    .get::<Option<i32>, _>("megolm_message_index")
+                    .unwrap_or(0) as u32,
                 sequence_number: row.get("sequence_number"),
                 created_at: row.get("created_at"),
                 message_type: row.get("message_type"),

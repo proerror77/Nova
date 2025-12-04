@@ -188,7 +188,7 @@ impl OlmService {
             VALUES ($1, $2, $3, $4, $5)
             ON CONFLICT (device_id) DO UPDATE SET
                 last_seen_at = NOW()
-            "#
+            "#,
         )
         .bind(user_id)
         .bind(device_id)
@@ -207,7 +207,7 @@ impl OlmService {
                 pickled_account = $2,
                 pickle_nonce = $3,
                 updated_at = NOW()
-            "#
+            "#,
         )
         .bind(device_id)
         .bind(&encrypted_pickle)
@@ -267,7 +267,7 @@ impl OlmService {
                 VALUES ($1, $2, $3)
                 ON CONFLICT (device_id, key_id) DO NOTHING
                 RETURNING id
-                "#
+                "#,
             )
             .bind(device_id)
             .bind(key_id.to_base64())
@@ -292,7 +292,7 @@ impl OlmService {
             UPDATE olm_accounts
             SET uploaded_otk_count = uploaded_otk_count + $1, updated_at = NOW()
             WHERE device_id = $2
-            "#
+            "#,
         )
         .bind(stored_count as i32)
         .bind(device_id)
@@ -341,7 +341,7 @@ impl OlmService {
                 FOR UPDATE SKIP LOCKED
             )
             RETURNING key_id, public_key
-            "#
+            "#,
         )
         .bind(claimer_device_id)
         .bind(target_device_id)
@@ -433,8 +433,7 @@ impl OlmService {
 
         // Save updated account (one-time key removed)
         let mut tx = self.pool.begin().await?;
-        self.save_account(our_device_id, &account, &mut tx)
-            .await?;
+        self.save_account(our_device_id, &account, &mut tx).await?;
         tx.commit().await?;
 
         // Save new session
@@ -466,9 +465,7 @@ impl OlmService {
         their_identity_key: &Curve25519PublicKey,
         plaintext: &[u8],
     ) -> Result<OlmMessage, OlmError> {
-        let mut session = self
-            .load_session(our_device_id, their_identity_key)
-            .await?;
+        let mut session = self.load_session(our_device_id, their_identity_key).await?;
 
         let message = session.encrypt(plaintext);
 
@@ -502,9 +499,7 @@ impl OlmService {
         their_identity_key: &Curve25519PublicKey,
         message: &OlmMessage,
     ) -> Result<Vec<u8>, OlmError> {
-        let mut session = self
-            .load_session(our_device_id, their_identity_key)
-            .await?;
+        let mut session = self.load_session(our_device_id, their_identity_key).await?;
 
         let plaintext = session
             .decrypt(message)
@@ -534,7 +529,7 @@ impl OlmService {
             SELECT device_id, identity_key, signing_key
             FROM user_devices
             WHERE user_id = $1
-            "#
+            "#,
         )
         .bind(user_id)
         .fetch_all(&self.pool)
@@ -569,7 +564,7 @@ impl OlmService {
             r#"
             SELECT COUNT(*) as count FROM olm_one_time_keys
             WHERE device_id = $1 AND NOT claimed
-            "#
+            "#,
         )
         .bind(device_id)
         .fetch_one(&self.pool)
@@ -590,7 +585,7 @@ impl OlmService {
             SELECT pickled_account, pickle_nonce
             FROM olm_accounts
             WHERE device_id = $1
-            "#
+            "#,
         )
         .bind(device_id)
         .fetch_optional(&self.pool)
@@ -624,7 +619,7 @@ impl OlmService {
             UPDATE olm_accounts
             SET pickled_account = $1, pickle_nonce = $2, updated_at = NOW()
             WHERE device_id = $3
-            "#
+            "#,
         )
         .bind(&encrypted)
         .bind(&nonce)
@@ -648,7 +643,7 @@ impl OlmService {
             SELECT pickled_session, pickle_nonce
             FROM olm_sessions
             WHERE our_device_id = $1 AND their_identity_key = $2
-            "#
+            "#,
         )
         .bind(our_device_id)
         .bind(&their_key_b64)
@@ -660,8 +655,9 @@ impl OlmService {
         let pickle_nonce: Vec<u8> = row.get("pickle_nonce");
 
         let decrypted = self.decrypt_pickle(&pickled_session, &pickle_nonce)?;
-        let pickle: SessionPickle = serde_json::from_slice(&decrypted)
-            .map_err(|e| OlmError::PickleError(format!("Failed to deserialize session pickle: {}", e)))?;
+        let pickle: SessionPickle = serde_json::from_slice(&decrypted).map_err(|e| {
+            OlmError::PickleError(format!("Failed to deserialize session pickle: {}", e))
+        })?;
 
         Ok(Session::from_pickle(pickle))
     }
@@ -674,8 +670,9 @@ impl OlmService {
         session: &Session,
     ) -> Result<(), OlmError> {
         let pickled = session.pickle();
-        let pickle_bytes = serde_json::to_vec(&pickled)
-            .map_err(|e| OlmError::PickleError(format!("Failed to serialize session pickle: {}", e)))?;
+        let pickle_bytes = serde_json::to_vec(&pickled).map_err(|e| {
+            OlmError::PickleError(format!("Failed to serialize session pickle: {}", e))
+        })?;
         let (encrypted, nonce) = self.encrypt_pickle(&pickle_bytes)?;
         let their_key_b64 = their_identity_key.to_base64();
 
@@ -736,6 +733,262 @@ impl OlmService {
         cipher
             .decrypt(nonce, ciphertext)
             .map_err(|e| OlmError::Decryption(format!("AES-GCM decryption failed: {}", e)))
+    }
+}
+
+// ========================================================================
+// To-device message methods
+// ========================================================================
+
+/// Record for to-device messages returned from database
+#[derive(Debug, Clone)]
+pub struct ToDeviceMessageRecord {
+    pub id: Uuid,
+    pub sender_user_id: Uuid,
+    pub sender_device_id: String,
+    pub message_type: String,
+    pub content: Vec<u8>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+}
+
+impl OlmService {
+    /// Store a to-device message in the queue
+    ///
+    /// To-device messages are used for:
+    /// - Room key sharing (m.room_key)
+    /// - Device verification (m.key.verification.*)
+    /// - Out-of-band signaling
+    ///
+    /// Messages are delivered on next sync and deleted after acknowledgment.
+    #[instrument(skip(self, content))]
+    pub async fn store_to_device_message(
+        &self,
+        sender_user_id: Uuid,
+        sender_device_id: &str,
+        recipient_user_id: Uuid,
+        recipient_device_id: &str,
+        message_type: &str,
+        content: &[u8],
+    ) -> Result<Uuid, OlmError> {
+        let row = sqlx::query(
+            r#"
+            INSERT INTO to_device_messages (
+                sender_user_id, sender_device_id,
+                recipient_user_id, recipient_device_id,
+                message_type, content
+            )
+            VALUES ($1, $2, $3, $4, $5, $6)
+            RETURNING id
+            "#,
+        )
+        .bind(sender_user_id)
+        .bind(sender_device_id)
+        .bind(recipient_user_id)
+        .bind(recipient_device_id)
+        .bind(message_type)
+        .bind(content)
+        .fetch_one(&self.pool)
+        .await?;
+
+        let id: Uuid = row.get("id");
+
+        info!(
+            message_id = %id,
+            sender_user = %sender_user_id,
+            recipient_user = %recipient_user_id,
+            message_type = %message_type,
+            "Stored to-device message"
+        );
+
+        Ok(id)
+    }
+
+    /// Get pending to-device messages for a device
+    ///
+    /// Returns undelivered messages in chronological order.
+    /// Messages are NOT deleted by this call - use `mark_messages_delivered`
+    /// after the client acknowledges receipt.
+    #[instrument(skip(self))]
+    pub async fn get_to_device_messages(
+        &self,
+        recipient_user_id: Uuid,
+        recipient_device_id: &str,
+        limit: i32,
+    ) -> Result<Vec<ToDeviceMessageRecord>, OlmError> {
+        let rows = sqlx::query(
+            r#"
+            SELECT id, sender_user_id, sender_device_id, message_type, content, created_at
+            FROM to_device_messages
+            WHERE recipient_user_id = $1
+              AND recipient_device_id = $2
+              AND NOT delivered
+              AND expires_at > NOW()
+            ORDER BY created_at ASC
+            LIMIT $3
+            "#,
+        )
+        .bind(recipient_user_id)
+        .bind(recipient_device_id)
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let messages: Vec<ToDeviceMessageRecord> = rows
+            .into_iter()
+            .map(|row| ToDeviceMessageRecord {
+                id: row.get("id"),
+                sender_user_id: row.get("sender_user_id"),
+                sender_device_id: row.get("sender_device_id"),
+                message_type: row.get("message_type"),
+                content: row.get("content"),
+                created_at: row.get("created_at"),
+            })
+            .collect();
+
+        debug!(
+            recipient_user = %recipient_user_id,
+            recipient_device = %recipient_device_id,
+            count = messages.len(),
+            "Retrieved to-device messages"
+        );
+
+        Ok(messages)
+    }
+
+    /// Mark to-device messages as delivered
+    ///
+    /// Called after the client acknowledges receipt. Marks messages as delivered
+    /// (soft delete for audit) rather than hard deleting.
+    #[instrument(skip(self))]
+    pub async fn mark_messages_delivered(&self, message_ids: &[Uuid]) -> Result<usize, OlmError> {
+        if message_ids.is_empty() {
+            return Ok(0);
+        }
+
+        let result = sqlx::query(
+            r#"
+            UPDATE to_device_messages
+            SET delivered = true, delivered_at = NOW()
+            WHERE id = ANY($1) AND NOT delivered
+            "#,
+        )
+        .bind(message_ids)
+        .execute(&self.pool)
+        .await?;
+
+        let count = result.rows_affected() as usize;
+
+        debug!(
+            message_count = message_ids.len(),
+            marked = count,
+            "Marked to-device messages as delivered"
+        );
+
+        Ok(count)
+    }
+
+    /// Delete a specific to-device message (for acknowledgment endpoint)
+    ///
+    /// Used when a client explicitly acknowledges a single message.
+    #[instrument(skip(self))]
+    pub async fn delete_to_device_message(
+        &self,
+        message_id: Uuid,
+        recipient_user_id: Uuid,
+        recipient_device_id: &str,
+    ) -> Result<bool, OlmError> {
+        let result = sqlx::query(
+            r#"
+            UPDATE to_device_messages
+            SET delivered = true, delivered_at = NOW()
+            WHERE id = $1
+              AND recipient_user_id = $2
+              AND recipient_device_id = $3
+              AND NOT delivered
+            "#,
+        )
+        .bind(message_id)
+        .bind(recipient_user_id)
+        .bind(recipient_device_id)
+        .execute(&self.pool)
+        .await?;
+
+        let deleted = result.rows_affected() > 0;
+
+        if deleted {
+            debug!(message_id = %message_id, "Acknowledged to-device message");
+        } else {
+            debug!(message_id = %message_id, "To-device message not found or already acknowledged");
+        }
+
+        Ok(deleted)
+    }
+
+    /// Store room key for group E2EE
+    ///
+    /// Called when sharing Megolm session keys with new conversation members.
+    /// The exported_key should be Olm-encrypted for the target device.
+    #[instrument(skip(self, exported_key))]
+    pub async fn store_room_key(
+        &self,
+        room_id: Uuid,
+        session_id: &str,
+        for_device_id: &str,
+        exported_key: &[u8],
+        from_index: i32,
+    ) -> Result<Uuid, OlmError> {
+        let row = sqlx::query(
+            r#"
+            INSERT INTO room_key_history (room_id, session_id, for_device_id, exported_key, from_index)
+            VALUES ($1, $2, $3, $4, $5)
+            ON CONFLICT (for_device_id, session_id) DO UPDATE SET
+                exported_key = $4,
+                from_index = LEAST(room_key_history.from_index, $5)
+            RETURNING id
+            "#,
+        )
+        .bind(room_id)
+        .bind(session_id)
+        .bind(for_device_id)
+        .bind(exported_key)
+        .bind(from_index)
+        .fetch_one(&self.pool)
+        .await?;
+
+        let id: Uuid = row.get("id");
+
+        debug!(
+            room_id = %room_id,
+            session_id = %session_id,
+            for_device = %for_device_id,
+            "Stored room key in history"
+        );
+
+        Ok(id)
+    }
+
+    /// Cleanup expired to-device messages
+    ///
+    /// Call periodically (e.g., daily cron) to remove stale messages.
+    /// Returns the number of messages deleted.
+    #[instrument(skip(self))]
+    pub async fn cleanup_expired_messages(&self) -> Result<usize, OlmError> {
+        let result = sqlx::query(
+            r#"
+            DELETE FROM to_device_messages
+            WHERE expires_at < NOW() OR delivered = true
+            "#,
+        )
+        .execute(&self.pool)
+        .await?;
+
+        let count = result.rows_affected() as usize;
+
+        if count > 0 {
+            info!(deleted = count, "Cleaned up expired/delivered to-device messages");
+        }
+
+        Ok(count)
     }
 }
 

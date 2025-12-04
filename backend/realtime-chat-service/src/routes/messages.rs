@@ -897,7 +897,7 @@ pub async fn get_audio_presigned_url(
     let expiration_secs = 3600u64;
 
     // Build AWS SDK config (region + optional custom endpoint)
-    let sdk_cfg = aws_config::from_env()
+    let sdk_cfg = aws_config::defaults(aws_config::BehaviorVersion::latest())
         .region(Region::new(state.config.s3.region.clone()))
         .load()
         .await;

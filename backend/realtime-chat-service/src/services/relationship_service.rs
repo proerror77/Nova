@@ -87,7 +87,11 @@ impl RelationshipServiceV2 {
         }
 
         // 1. Check if sender is blocked by recipient (via graph-service)
-        if self.graph_client.is_blocked(recipient_id, sender_id).await? {
+        if self
+            .graph_client
+            .is_blocked(recipient_id, sender_id)
+            .await?
+        {
             return Ok(CanMessageResult::Blocked);
         }
 
@@ -99,7 +103,11 @@ impl RelationshipServiceV2 {
             "nobody" => Ok(CanMessageResult::NotAllowed),
             "followers" => {
                 // Sender must be following recipient (via graph-service)
-                if self.graph_client.is_following(sender_id, recipient_id).await? {
+                if self
+                    .graph_client
+                    .is_following(sender_id, recipient_id)
+                    .await?
+                {
                     Ok(CanMessageResult::Allowed)
                 } else {
                     Ok(CanMessageResult::NeedToFollow)
@@ -132,13 +140,22 @@ impl RelationshipServiceV2 {
     }
 
     /// Check if user_a follows user_b (via graph-service)
-    pub async fn is_following(&self, follower_id: Uuid, following_id: Uuid) -> Result<bool, AppError> {
-        self.graph_client.is_following(follower_id, following_id).await
+    pub async fn is_following(
+        &self,
+        follower_id: Uuid,
+        following_id: Uuid,
+    ) -> Result<bool, AppError> {
+        self.graph_client
+            .is_following(follower_id, following_id)
+            .await
     }
 
     /// Check if two users are mutual followers (via graph-service)
     pub async fn are_mutuals(&self, user_a: Uuid, user_b: Uuid) -> Result<bool, AppError> {
-        let (are_mutuals, _, _) = self.graph_client.are_mutual_followers(user_a, user_b).await?;
+        let (are_mutuals, _, _) = self
+            .graph_client
+            .are_mutual_followers(user_a, user_b)
+            .await?;
         Ok(are_mutuals)
     }
 
@@ -164,7 +181,7 @@ impl RelationshipServiceV2 {
             is_following: user_follows_target,
             is_followed_by: target_follows_user,
             is_mutual: user_follows_target && target_follows_user,
-            is_blocked: target_blocked_user, // target blocked user
+            is_blocked: target_blocked_user,  // target blocked user
             is_blocking: user_blocked_target, // user blocked target
         })
     }
@@ -300,16 +317,17 @@ impl RelationshipService {
         db: &Pool<Postgres>,
         user_id: Uuid,
     ) -> Result<DmSettings, AppError> {
-        let result: Option<(String,)> = sqlx::query_as(
-            "SELECT dm_permission FROM user_settings WHERE user_id = $1",
-        )
-        .bind(user_id)
-        .fetch_optional(db)
-        .await
-        .map_err(|e| AppError::Database(format!("get_dm_settings failed: {}", e)))?;
+        let result: Option<(String,)> =
+            sqlx::query_as("SELECT dm_permission FROM user_settings WHERE user_id = $1")
+                .bind(user_id)
+                .fetch_optional(db)
+                .await
+                .map_err(|e| AppError::Database(format!("get_dm_settings failed: {}", e)))?;
 
         Ok(DmSettings {
-            dm_permission: result.map(|(p,)| p).unwrap_or_else(|| "mutuals".to_string()),
+            dm_permission: result
+                .map(|(p,)| p)
+                .unwrap_or_else(|| "mutuals".to_string()),
         })
     }
 
@@ -378,14 +396,12 @@ impl RelationshipService {
         blocker_id: Uuid,
         blocked_id: Uuid,
     ) -> Result<bool, AppError> {
-        let result = sqlx::query(
-            "DELETE FROM blocks WHERE blocker_id = $1 AND blocked_id = $2",
-        )
-        .bind(blocker_id)
-        .bind(blocked_id)
-        .execute(db)
-        .await
-        .map_err(|e| AppError::Database(format!("unblock_user failed: {}", e)))?;
+        let result = sqlx::query("DELETE FROM blocks WHERE blocker_id = $1 AND blocked_id = $2")
+            .bind(blocker_id)
+            .bind(blocked_id)
+            .execute(db)
+            .await
+            .map_err(|e| AppError::Database(format!("unblock_user failed: {}", e)))?;
 
         Ok(result.rows_affected() > 0)
     }
