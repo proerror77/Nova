@@ -701,6 +701,7 @@ impl OlmService {
     /// Encrypt pickle using AES-256-GCM
     ///
     /// SECURITY: Uses randomly generated nonce for each encryption
+    #[allow(deprecated)]
     fn encrypt_pickle(&self, data: &[u8]) -> Result<(Vec<u8>, Vec<u8>), OlmError> {
         let cipher = Aes256Gcm::new_from_slice(&self.encryption_key.0)
             .map_err(|e| OlmError::Encryption(e.to_string()))?;
@@ -719,6 +720,7 @@ impl OlmService {
     }
 
     /// Decrypt pickle using AES-256-GCM
+    #[allow(deprecated)]
     fn decrypt_pickle(&self, ciphertext: &[u8], nonce: &[u8]) -> Result<Vec<u8>, OlmError> {
         let nonce_array: [u8; 12] = nonce.try_into().map_err(|_| {
             OlmError::Decryption(format!(
