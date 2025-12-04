@@ -25,6 +25,27 @@ final class ChatService {
     /// WebSocket连接状态变化回调
     @MainActor var onConnectionStatusChanged: ((Bool) -> Void)?
 
+    /// E2EE Service for client-side encryption
+    /// Note: Optional because E2EE may not be initialized (requires device registration)
+    private let e2eeService: E2EEService?
+
+    /// Keychain for device ID storage
+    private let keychain = KeychainService.shared
+
+    // MARK: - Initialization
+
+    init() {
+        // Try to initialize E2EE service
+        do {
+            self.e2eeService = try E2EEService()
+        } catch {
+            #if DEBUG
+            print("[ChatService] E2EE not available: \(error)")
+            #endif
+            self.e2eeService = nil
+        }
+    }
+
     // MARK: - REST API - Messages
 
     /// 发送消息到指定会话
@@ -44,6 +65,7 @@ final class ChatService {
         replyToId: String? = nil
     ) async throws -> Message {
         let request = SendMessageRequest(
+            conversationId: conversationId,
             content: content,
             type: type,
             mediaUrl: mediaUrl,
@@ -51,7 +73,7 @@ final class ChatService {
         )
 
         let message: Message = try await client.request(
-            endpoint: APIConfig.Chat.sendMessage(conversationId),
+            endpoint: APIConfig.Chat.sendMessage,
             method: "POST",
             body: request
         )
@@ -75,13 +97,17 @@ final class ChatService {
         limit: Int = 50,
         cursor: String? = nil
     ) async throws -> GetMessagesResponse {
-        var queryParams: [String: String] = ["limit": "\(limit)"]
+        var queryParams: [String: String] = [
+            "conversation_id": conversationId,
+            "limit": "\(limit)"
+        ]
         if let cursor = cursor {
-            queryParams["cursor"] = cursor
+            // Backend uses before_message_id for pagination
+            queryParams["before_message_id"] = cursor
         }
 
         let response: GetMessagesResponse = try await client.get(
-            endpoint: APIConfig.Chat.getMessages(conversationId),
+            endpoint: APIConfig.Chat.getMessages,
             queryParams: queryParams
         )
 
@@ -208,6 +234,166 @@ final class ChatService {
         )
 
         return conversation
+    }
+
+    // MARK: - E2EE Messaging
+
+    /// Send an E2EE encrypted message via REST API
+    /// - Parameters:
+    ///   - conversationId: 会话ID
+    ///   - content: 消息内容（明文）
+    ///   - type: 消息类型
+    ///   - replyToId: 回复的消息ID
+    /// - Returns: 发送后的消息对象
+    /// - Note: 使用 Megolm 群组加密（当前为简化版本，等待 vodozemac FFI 集成）
+    @MainActor
+    func sendEncryptedMessage(
+        conversationId: String,
+        content: String,
+        type: ChatMessageType = .text,
+        replyToId: String? = nil
+    ) async throws -> Message {
+        guard let e2ee = e2eeService else {
+            throw ChatError.e2eeNotAvailable
+        }
+
+        // Get device ID from E2EE service
+        // Device ID is stored in DeviceIdentity in keychain as JSON
+        guard let deviceIdentityJSON = keychain.get(.e2eeDeviceIdentity),
+              let identityData = deviceIdentityJSON.data(using: .utf8) else {
+            throw ChatError.noDeviceId
+        }
+
+        // Decode device identity to get device ID
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        guard let deviceIdentity = try? decoder.decode(DeviceIdentityWrapper.self, from: identityData) else {
+            throw ChatError.noDeviceId
+        }
+
+        let deviceId = deviceIdentity.deviceId
+
+        // Convert conversationId to UUID
+        guard let conversationUUID = UUID(uuidString: conversationId) else {
+            throw ChatError.invalidConversationId
+        }
+
+        // Encrypt content using simple conversation-based encryption
+        // TODO: Replace with Megolm group encryption when vodozemac FFI is available
+        let encrypted = try await e2ee.encryptMessage(
+            for: conversationUUID,
+            plaintext: content
+        )
+
+        // Build E2EE message request
+        let messageTypeInt: Int
+        switch type {
+        case .text: messageTypeInt = 0
+        case .image: messageTypeInt = 1
+        case .video: messageTypeInt = 2
+        case .audio: messageTypeInt = 3
+        case .file: messageTypeInt = 4
+        case .location: messageTypeInt = 5
+        }
+
+        let request = SendE2EEMessageRequest(
+            conversationId: conversationId,
+            ciphertext: encrypted.ciphertext,
+            nonce: encrypted.nonce,
+            sessionId: "simple-session-\(conversationId)", // Temporary session ID
+            messageIndex: 0, // TODO: Implement proper message index tracking
+            deviceId: deviceId,
+            messageType: messageTypeInt,
+            replyToMessageId: replyToId
+        )
+
+        #if DEBUG
+        print("[ChatService] Sending E2EE message via REST API")
+        #endif
+
+        // Send to E2EE endpoint via REST API
+        let response: SendE2EEMessageResponse = try await client.request(
+            endpoint: APIConfig.E2EE.sendMessage,
+            method: "POST",
+            body: request
+        )
+
+        #if DEBUG
+        print("[ChatService] E2EE message sent: \(response.id), sequence: \(response.sequenceNumber)")
+        #endif
+
+        // Convert response to Message object
+        // Note: The response only contains metadata; content is encrypted on server
+        return Message(
+            id: response.id,
+            conversationId: response.conversationId,
+            senderId: response.senderId,
+            content: "", // Content is encrypted, not returned by server
+            type: type,
+            createdAt: response.createdAt,
+            status: .sent,
+            // E2EE metadata
+            encryptedContent: encrypted.ciphertext,
+            nonce: encrypted.nonce,
+            sessionId: request.sessionId,
+            senderDeviceId: deviceId,
+            encryptionVersion: 2 // Client-side Megolm E2EE
+        )
+    }
+
+    /// Decrypt a received E2EE message
+    /// - Parameter message: 接收到的消息（可能加密）
+    /// - Returns: 解密后的明文内容（如果消息未加密，返回原始内容）
+    func decryptMessage(_ message: Message) async throws -> String {
+        // Check if message is encrypted
+        guard let encryptionVersion = message.encryptionVersion,
+              encryptionVersion == 2,
+              let encryptedContent = message.encryptedContent,
+              let nonce = message.nonce,
+              let sessionId = message.sessionId else {
+            // Not an E2EE message, return plaintext
+            return message.content
+        }
+
+        guard let e2ee = e2eeService else {
+            throw ChatError.e2eeNotAvailable
+        }
+
+        // Convert conversationId to UUID
+        guard let conversationUUID = UUID(uuidString: message.conversationId) else {
+            throw ChatError.invalidConversationId
+        }
+
+        // TODO: When Megolm is available, use proper session-based decryption
+        // For now, use simple conversation-based decryption
+        let encryptedMessage = EncryptedMessage(
+            ciphertext: encryptedContent,
+            nonce: nonce,
+            deviceId: message.senderDeviceId ?? ""
+        )
+
+        let plaintext = try await e2ee.decryptMessage(
+            encryptedMessage,
+            conversationId: conversationUUID
+        )
+
+        #if DEBUG
+        print("[ChatService] Decrypted message: \(message.id)")
+        #endif
+
+        return plaintext
+    }
+
+    /// Get device ID from keychain
+    /// - Returns: Device ID if available
+    private func getDeviceId() -> String? {
+        // Parse device identity JSON to extract device ID
+        guard let identityJSON = keychain.get(.e2eeDeviceIdentity),
+              let identityData = identityJSON.data(using: .utf8),
+              let identity = try? JSONDecoder().decode(DeviceIdentity.self, from: identityData) else {
+            return nil
+        }
+        return identity.deviceId
     }
 
     // MARK: - WebSocket - Real-time Messaging
@@ -339,4 +525,15 @@ final class ChatService {
         // 简单取消WebSocket任务，不调用@MainActor方法
         webSocketTask?.cancel(with: .goingAway, reason: nil)
     }
+}
+
+// MARK: - Helper Types
+
+/// Wrapper for decoding DeviceIdentity from keychain
+/// Matches the DeviceIdentity struct stored by E2EEService
+private struct DeviceIdentityWrapper: Codable {
+    let deviceId: String
+    let publicKey: Data
+    let secretKey: Data
+    let createdAt: Date
 }

@@ -86,6 +86,15 @@
 		CHATSERVICE001 /* ChatService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CHATSERVICE002 /* ChatService.swift */; };
 		KEYBOARDEXT001 /* KeyboardExtension.swift in Sources */ = {isa = PBXBuildFile; fileRef = KEYBOARDEXT002 /* KeyboardExtension.swift */; };
 		SHARESHEET001 /* ShareSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = SHARESHEET002 /* ShareSheet.swift */; };
+		UNITTEST001 /* MockURLProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = UNITTEST002 /* MockURLProtocol.swift */; };
+		UNITTEST003 /* TestFixtures.swift in Sources */ = {isa = PBXBuildFile; fileRef = UNITTEST004 /* TestFixtures.swift */; };
+		UNITTEST005 /* APIClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = UNITTEST006 /* APIClientTests.swift */; };
+		UNITTEST007 /* ErrorHandlingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = UNITTEST008 /* ErrorHandlingTests.swift */; };
+		UNITTEST009 /* AuthenticationManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = UNITTEST010 /* AuthenticationManagerTests.swift */; };
+		UNITTEST011 /* IdentityServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = UNITTEST012 /* IdentityServiceTests.swift */; };
+		E2EESERVICE001 /* E2EEService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2EESERVICE002 /* E2EEService.swift */; };
+		E2EEMODELS001 /* E2EEModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2EEMODELS002 /* E2EEModels.swift */; };
+		CRYPTOCORE001 /* CryptoCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = CRYPTOCORE002 /* CryptoCore.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -173,6 +182,17 @@
 		4B3F75C30A5F4A7AA5C0FE2C /* GenderPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenderPickerView.swift; sourceTree = "<group>"; };
 		8D7A2BC6C4F1482F9E7D9B4A /* LocationPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationPickerView.swift; sourceTree = "<group>"; };
 		7A6B5C4D3E2F4A1B9C8D7E6F /* DateOfBirthPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DateOfBirthPickerView.swift; sourceTree = "<group>"; };
+		UNITTEST002 /* MockURLProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockURLProtocol.swift; sourceTree = "<group>"; };
+		UNITTEST004 /* TestFixtures.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestFixtures.swift; sourceTree = "<group>"; };
+		UNITTEST006 /* APIClientTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClientTests.swift; sourceTree = "<group>"; };
+		UNITTEST008 /* ErrorHandlingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ErrorHandlingTests.swift; sourceTree = "<group>"; };
+		UNITTEST010 /* AuthenticationManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthenticationManagerTests.swift; sourceTree = "<group>"; };
+		UNITTEST012 /* IdentityServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdentityServiceTests.swift; sourceTree = "<group>"; };
+		UNITTEST013 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		UNITTEST014 /* ICEREDTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ICEREDTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		E2EESERVICE002 /* E2EEService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = E2EEService.swift; sourceTree = "<group>"; };
+		E2EEMODELS002 /* E2EEModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = E2EEModels.swift; sourceTree = "<group>"; };
+		CRYPTOCORE002 /* CryptoCore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CryptoCore.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -388,6 +408,7 @@
 			isa = PBXGroup;
 			children = (
 				6B7F29AF2BD2FC517E87B40A /* ConversationModels.swift */,
+				E2EEMODELS002 /* E2EEModels.swift */,
 			);
 			path = Chat;
 			sourceTree = "<group>";
@@ -465,6 +486,7 @@
 			children = (
 				1D3041E7FCC0ACD7F53D08BA /* ICERED.app */,
 				UITEST004 /* ICEREDUITests.xctest */,
+				UNITTEST014 /* ICEREDTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -589,6 +611,7 @@
 				83156329836565A2778B94AC /* NovaSocial */,
 				565E49CEA7D25E6D91A52C2B /* Shared */,
 				UITESTGROUP001 /* ICEREDUITests */,
+				UNITTESTGROUP001 /* Tests */,
 				7C3FDB1C3B7BCF5AF8E3D483 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -733,6 +756,8 @@
 			isa = PBXGroup;
 			children = (
 				3E3708D4D59DBF11CF77C3DF /* KeychainService.swift */,
+				E2EESERVICE002 /* E2EEService.swift */,
+				CRYPTOCORE002 /* CryptoCore.swift */,
 			);
 			path = Security;
 			sourceTree = "<group>";
@@ -779,9 +804,62 @@
 			path = ICEREDUITests;
 			sourceTree = "<group>";
 		};
+		UNITTESTGROUP001 /* Tests */ = {
+			isa = PBXGroup;
+			children = (
+				UNITTESTGROUP002 /* UnitTests */,
+			);
+			path = Tests;
+			sourceTree = "<group>";
+		};
+		UNITTESTGROUP002 /* UnitTests */ = {
+			isa = PBXGroup;
+			children = (
+				UNITTESTGROUP003 /* Mocks */,
+				UNITTESTGROUP004 /* Networking */,
+				UNITTESTGROUP005 /* Services */,
+				UNITTEST013 /* Info.plist */,
+			);
+			path = UnitTests;
+			sourceTree = "<group>";
+		};
+		UNITTESTGROUP003 /* Mocks */ = {
+			isa = PBXGroup;
+			children = (
+				UNITTEST002 /* MockURLProtocol.swift */,
+				UNITTEST004 /* TestFixtures.swift */,
+			);
+			path = Mocks;
+			sourceTree = "<group>";
+		};
+		UNITTESTGROUP004 /* Networking */ = {
+			isa = PBXGroup;
+			children = (
+				UNITTEST006 /* APIClientTests.swift */,
+				UNITTEST008 /* ErrorHandlingTests.swift */,
+			);
+			path = Networking;
+			sourceTree = "<group>";
+		};
+		UNITTESTGROUP005 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				UNITTEST010 /* AuthenticationManagerTests.swift */,
+				UNITTEST012 /* IdentityServiceTests.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXContainerItemProxy section */
+		UNITTESTPROXY001 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 5E408F8D0DDC235DCAE790E7 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = ACADFBFE15FADF5A1AF04334;
+			remoteInfo = ICERED;
+		};
 		UITESTPROXY001 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 5E408F8D0DDC235DCAE790E7 /* Project object */;
@@ -792,6 +870,11 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXTargetDependency section */
+		UNITTESTDEP001 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = ACADFBFE15FADF5A1AF04334 /* ICERED */;
+			targetProxy = UNITTESTPROXY001 /* PBXContainerItemProxy */;
+		};
 		UITESTDEP001 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = ACADFBFE15FADF5A1AF04334 /* ICERED */;
@@ -835,6 +918,23 @@
 			productReference = UITEST004 /* ICEREDUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
+		UNITTESTTARGET001 /* ICEREDTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = UNITTESTCONFIGLIST001 /* Build configuration list for PBXNativeTarget "ICEREDTests" */;
+			buildPhases = (
+				UNITTESTSOURCES001 /* Sources */,
+				UNITTESTRESOURCES001 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				UNITTESTDEP001 /* PBXTargetDependency */,
+			);
+			name = ICEREDTests;
+			productName = ICEREDTests;
+			productReference = UNITTEST014 /* ICEREDTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -859,6 +959,7 @@
 			targets = (
 				ACADFBFE15FADF5A1AF04334 /* ICERED */,
 				UITESTTARGET001 /* ICEREDUITests */,
+				UNITTESTTARGET001 /* ICEREDTests */,
 			);
 		};
 /* End PBXProject section */
@@ -877,6 +978,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		UITESTRESOURCES001 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		UNITTESTRESOURCES001 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -971,6 +1079,19 @@
 				CHATSERVICE001 /* ChatService.swift in Sources */,
 				KEYBOARDEXT001 /* KeyboardExtension.swift in Sources */,
 				SHARESHEET001 /* ShareSheet.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		UNITTESTSOURCES001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				UNITTEST001 /* MockURLProtocol.swift in Sources */,
+				UNITTEST003 /* TestFixtures.swift in Sources */,
+				UNITTEST005 /* APIClientTests.swift in Sources */,
+				UNITTEST007 /* ErrorHandlingTests.swift in Sources */,
+				UNITTEST009 /* AuthenticationManagerTests.swift in Sources */,
+				UNITTEST011 /* IdentityServiceTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1206,6 +1327,58 @@
 			};
 			name = Release;
 		};
+		UNITTESTCONFIG001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 94DTB4RN55;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Tests/UnitTests/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.novasocial.icered.ICEREDTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ICERED.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/ICERED";
+			};
+			name = Debug;
+		};
+		UNITTESTCONFIG002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 94DTB4RN55;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Tests/UnitTests/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.novasocial.icered.ICEREDTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ICERED.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/ICERED";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -1232,6 +1405,15 @@
 			buildConfigurations = (
 				UITESTCONFIG001 /* Debug */,
 				UITESTCONFIG002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		UNITTESTCONFIGLIST001 /* Build configuration list for PBXNativeTarget "ICEREDTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				UNITTESTCONFIG001 /* Debug */,
+				UNITTESTCONFIG002 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;

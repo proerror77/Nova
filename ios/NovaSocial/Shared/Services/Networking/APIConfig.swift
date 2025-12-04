@@ -226,10 +226,10 @@ struct APIConfig {
         static let createGroupChat = "/api/v2/chat/groups/create"  // POST 創建群組
         static let getConversations = "/api/v2/chat/conversations"  // GET 獲取對話列表
         static let createConversation = "/api/v2/chat/conversations"  // POST 創建對話
-        /// POST /api/v2/chat/conversations/{id}/messages 發送消息
-        static func sendMessage(_ conversationId: String) -> String { "/api/v2/chat/conversations/\(conversationId)/messages" }
-        /// GET /api/v2/chat/conversations/{id}/messages 獲取消息歷史
-        static func getMessages(_ conversationId: String) -> String { "/api/v2/chat/conversations/\(conversationId)/messages" }
+        /// POST /api/v2/chat/messages 發送消息（conversation_id 在 body 中）
+        static let sendMessage = "/api/v2/chat/messages"
+        /// GET /api/v2/chat/messages 獲取消息歷史（使用 conversation_id 查詢參數）
+        static let getMessages = "/api/v2/chat/messages"
         /// GET /api/v2/chat/conversations/{id} 獲取群組詳情
         static func getConversation(_ id: String) -> String { "/api/v2/chat/conversations/\(id)" }
         /// PUT /api/v2/chat/messages/{id} 編輯消息
@@ -292,6 +292,28 @@ struct APIConfig {
         /// GET /api/v2/search/trending - 熱門搜索
         static let trending = "/api/v2/search/trending"
         static let getTrending = "/api/v2/search/trending"  // Alias for SearchService
+    }
+
+    // MARK: - E2EE (End-to-End Encryption) API
+    struct E2EE {
+        /// POST /api/v2/e2ee/devices - Register device for E2EE
+        static let registerDevice = "/api/v2/e2ee/devices"
+        /// POST /api/v2/e2ee/keys/upload - Upload one-time prekeys
+        static let uploadKeys = "/api/v2/e2ee/keys/upload"
+        /// POST /api/v2/e2ee/keys/claim - Claim one-time keys from other devices
+        static let claimKeys = "/api/v2/e2ee/keys/claim"
+        /// POST /api/v2/e2ee/keys/query - Query device keys for users
+        static let queryKeys = "/api/v2/e2ee/keys/query"
+        /// GET /api/v2/e2ee/to-device - Get pending to-device messages
+        static let toDeviceMessages = "/api/v2/e2ee/to-device"
+        /// DELETE /api/v2/e2ee/to-device/{message_id} - Acknowledge to-device message
+        static func ackToDeviceMessage(_ messageId: String) -> String {
+            "/api/v2/e2ee/to-device/\(messageId)"
+        }
+        /// POST /api/v2/e2ee/messages - Send pre-encrypted E2EE message
+        static let sendMessage = "/api/v2/e2ee/messages"
+        /// GET /api/v2/e2ee/messages - Get E2EE messages for conversation
+        static let getMessages = "/api/v2/e2ee/messages"
     }
 
     // MARK: - Service Ports (for direct gRPC access if needed)

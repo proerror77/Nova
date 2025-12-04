@@ -18,6 +18,7 @@ final class KeychainService {
         case authToken = "auth_token"
         case refreshToken = "refresh_token"
         case userId = "user_id"
+        case e2eeDeviceIdentity = "e2ee_device_identity"
     }
 
     // MARK: - Public Methods
@@ -78,7 +79,7 @@ final class KeychainService {
 
     /// Clear all stored values
     func clearAll() {
-        for key in [Key.authToken, Key.refreshToken, Key.userId] {
+        for key in [Key.authToken, Key.refreshToken, Key.userId, Key.e2eeDeviceIdentity] {
             delete(key)
         }
     }
