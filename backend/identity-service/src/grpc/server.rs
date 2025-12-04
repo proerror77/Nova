@@ -128,12 +128,8 @@ impl AuthService for IdentityServiceServer {
             // If password matches an existing account, treat this as idempotent
             // registration and simply return a fresh token pair instead of an error.
             if verify_password(&req.password, &existing.password_hash).map_err(to_status)? {
-                let tokens = generate_token_pair(
-                    existing.id,
-                    &existing.email,
-                    &existing.username,
-                )
-                .map_err(anyhow_to_status)?;
+                let tokens = generate_token_pair(existing.id, &existing.email, &existing.username)
+                    .map_err(anyhow_to_status)?;
 
                 info!(
                     user_id = %existing.id,
@@ -798,8 +794,10 @@ impl AuthService for IdentityServiceServer {
         });
 
         // Parse gender if provided
-        let gender = req.gender.as_ref().and_then(|g| {
-            match g.to_lowercase().as_str() {
+        let gender = req
+            .gender
+            .as_ref()
+            .and_then(|g| match g.to_lowercase().as_str() {
                 "male" => Some(crate::models::user::Gender::Male),
                 "female" => Some(crate::models::user::Gender::Female),
                 "other" => Some(crate::models::user::Gender::Other),
@@ -808,8 +806,7 @@ impl AuthService for IdentityServiceServer {
                     warn!(user_id = %user_id, gender = %g, "Invalid gender value");
                     None
                 }
-            }
-        });
+            });
 
         // Update profile fields
         let fields = db::users::UpdateUserProfileFields {

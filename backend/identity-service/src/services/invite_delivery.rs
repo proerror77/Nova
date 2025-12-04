@@ -133,14 +133,9 @@ impl InviteDeliveryService {
             }
             "link" => {
                 // Just generate link, record delivery
-                let delivery = invitations::record_invite_delivery(
-                    &self.db,
-                    invite.id,
-                    "link",
-                    None,
-                    None,
-                )
-                .await?;
+                let delivery =
+                    invitations::record_invite_delivery(&self.db, invite.id, "link", None, None)
+                        .await?;
 
                 Ok(SendInviteResult {
                     success: true,
@@ -165,9 +160,8 @@ impl InviteDeliveryService {
         recipient: Option<&str>,
         message: &str,
     ) -> Result<SendInviteResult> {
-        let phone = recipient.ok_or_else(|| {
-            IdentityError::Validation("Phone number required for SMS".into())
-        })?;
+        let phone = recipient
+            .ok_or_else(|| IdentityError::Validation("Phone number required for SMS".into()))?;
 
         // Validate phone format (basic check)
         if !phone.starts_with('+') || phone.len() < 10 {
@@ -176,9 +170,10 @@ impl InviteDeliveryService {
             ));
         }
 
-        let sns = self.sns_client.as_ref().ok_or_else(|| {
-            IdentityError::Internal("SMS service not configured".into())
-        })?;
+        let sns = self
+            .sns_client
+            .as_ref()
+            .ok_or_else(|| IdentityError::Internal("SMS service not configured".into()))?;
 
         // Send SMS via AWS SNS
         let result = sns
@@ -258,9 +253,8 @@ impl InviteDeliveryService {
         inviter_name: Option<&str>,
         invite_url: &str,
     ) -> Result<SendInviteResult> {
-        let email = recipient.ok_or_else(|| {
-            IdentityError::Validation("Email address required".into())
-        })?;
+        let email =
+            recipient.ok_or_else(|| IdentityError::Validation("Email address required".into()))?;
 
         let subject = match inviter_name {
             Some(name) => format!("{} invited you to join Nova!", name),

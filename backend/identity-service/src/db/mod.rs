@@ -9,5 +9,5 @@ pub mod user_settings;
 pub mod users;
 
 // Re-export commonly used types
-pub use users::{UpdateUserProfileFields, UserProfileRecord};
 pub use user_settings::{UpdateUserSettingsFields, UserSettingsRecord};
+pub use users::{UpdateUserProfileFields, UserProfileRecord};
