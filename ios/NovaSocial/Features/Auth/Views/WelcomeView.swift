@@ -189,11 +189,11 @@ struct WelcomeView: View {
             print("[WelcomeView] Error type: \(type(of: error))")
             #endif
 
-                if error.localizedDescription.contains("network") || error.localizedDescription.contains("connection") {
-                    errorMessage = "Network_error"
-                } else {
-                    errorMessage = "Invalid_invite_code_generic"
-                }
+            if error.localizedDescription.contains("network") || error.localizedDescription.contains("connection") {
+                errorMessage = "Network_error"
+            } else {
+                errorMessage = "Invalid_invite_code_generic"
+            }
         }
 
         isLoading = false

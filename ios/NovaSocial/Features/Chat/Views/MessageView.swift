@@ -238,7 +238,7 @@ struct MessageView: View {
                                         await loadConversations()
                                     }
                                 }) {
-                                Text(LocalizedStringKey("Retry"))
+                                    Text(LocalizedStringKey("Retry"))
                                         .font(Font.custom("Helvetica Neue", size: 14).weight(.medium))
                                         .foregroundColor(DesignTokens.textOnAccent)
                                         .padding(.horizontal, 24)

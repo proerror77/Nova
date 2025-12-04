@@ -4,17 +4,23 @@ struct NotificationView: View {
     @Binding var showNotification: Bool
     @State private var showChat = false
     @State private var selectedUserName = ""
+    @State private var selectedConversationId = ""
 
     var body: some View {
         ZStack {
             // 条件渲染：根据状态切换视图
             if showChat {
+<<<<<<<< HEAD:ios/NovaSocial/Features/Home/Views/NotificationView.swift
                 ChatView(
                     showChat: $showChat,
                     conversationId: "temp_conversation_\(selectedUserName)",  // TODO: 使用真实conversation ID
                     userName: selectedUserName
                 )
                 .transition(.identity)
+========
+                ChatView(showChat: $showChat, conversationId: selectedConversationId, userName: selectedUserName)
+                    .transition(.identity)
+>>>>>>>> origin/main:ios/NovaSocial/Features/Notifications/Views/NotificationView.swift
             } else {
                 notificationContent
             }
@@ -79,6 +85,8 @@ struct NotificationView: View {
                                 buttonType: .message,
                                 onMessageTap: {
                                     selectedUserName = "Ethan Miller"
+                                    // TODO: Get actual conversation ID from API
+                                    selectedConversationId = "notification_conv_ethan_miller"
                                     showChat = true
                                 }
                             )

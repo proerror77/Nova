@@ -102,7 +102,7 @@ struct ProfileView: View {
             NewPostView(showNewPost: $showNewPost)
         }
         .sheet(isPresented: $showShareSheet) {
-            NovaShareSheet(items: shareItems)
+            ShareSheet(items: shareItems)
         }
     }
 
@@ -444,7 +444,7 @@ struct ProfileView: View {
             }
             .frame(height: 60)
             .padding(.bottom, 20)
-                        .background(DesignTokens.surface)
+            .background(DesignTokens.surface)
             .border(DesignTokens.borderColor, width: 0.5)
     }
 

@@ -64,15 +64,22 @@ struct APIConfig {
     }
 
     struct Social {
+        // MARK: - Likes
         static let createLike = "/api/v2/social/like"
         static func deleteLike(_ postId: String) -> String { "/api/v2/social/unlike/\(postId)" }
         static func getLikes(_ postId: String) -> String { "/api/v2/social/likes/\(postId)" }
         static func checkLiked(_ postId: String) -> String { "/api/v2/social/check-liked/\(postId)" }
+
+        // MARK: - Comments
         static let createComment = "/api/v2/social/comment"
         static func deleteComment(_ commentId: String) -> String { "/api/v2/social/comment/\(commentId)" }
         static func getComments(_ postId: String) -> String { "/api/v2/social/comments/\(postId)" }
+
+        // MARK: - Shares
         static let createShare = "/api/v2/social/share"
         static func getShareCount(_ postId: String) -> String { "/api/v2/social/shares/count/\(postId)" }
+
+        // MARK: - Batch Operations
         static let batchGetStats = "/api/v2/social/stats/batch"
     }
 
@@ -221,17 +228,20 @@ struct APIConfig {
         static let referrals = "/api/v2/auth/referrals"  // GET 獲取推薦人和被推薦人列表
     }
 
-    // MARK: - Chat & Messaging API
+    // MARK: - Chat & Messaging API (Realtime Chat Service :8085)
     struct Chat {
+        // MARK: - Conversations
         static let createGroupChat = "/api/v2/chat/groups/create"  // POST 創建群組
         static let getConversations = "/api/v2/chat/conversations"  // GET 獲取對話列表
         static let createConversation = "/api/v2/chat/conversations"  // POST 創建對話
+        /// GET /api/v2/chat/conversations/{id} 獲取群組詳情
+        static func getConversation(_ id: String) -> String { "/api/v2/chat/conversations/\(id)" }
+
+        // MARK: - Messages
         /// POST /api/v2/chat/messages 發送消息（conversation_id 在 body 中）
         static let sendMessage = "/api/v2/chat/messages"
         /// GET /api/v2/chat/messages 獲取消息歷史（使用 conversation_id 查詢參數）
         static let getMessages = "/api/v2/chat/messages"
-        /// GET /api/v2/chat/conversations/{id} 獲取群組詳情
-        static func getConversation(_ id: String) -> String { "/api/v2/chat/conversations/\(id)" }
         /// PUT /api/v2/chat/messages/{id} 編輯消息
         static func editMessage(_ messageId: String) -> String { "/api/v2/chat/messages/\(messageId)" }
         /// DELETE /api/v2/chat/messages/{id} 刪除消息
@@ -240,12 +250,15 @@ struct APIConfig {
         static func recallMessage(conversationId: String, messageId: String) -> String {
             "/api/v2/chat/conversations/\(conversationId)/messages/\(messageId)/recall"
         }
-        /// WebSocket 連接端點
-        static let websocket = "/ws/chat"
-        /// 未實作的群組成員相關端點預留，避免誤調 404
+
+        // MARK: - Groups
         static let getGroupDetails = "/api/v2/chat/groups"  // TODO: 後端尚未提供
         static let addGroupMembers = "/api/v2/chat/groups/members/add"  // POST 添加群組成員
         static let removeGroupMembers = "/api/v2/chat/groups/members/remove"  // DELETE 移除群組成員
+
+        // MARK: - WebSocket
+        /// WebSocket 連接端點
+        static let websocket = "/ws/chat"
     }
 
     // MARK: - Relationships & Privacy API (realtime-chat-service)
