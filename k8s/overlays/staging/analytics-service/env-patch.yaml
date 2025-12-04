@@ -10,3 +10,5 @@ spec:
           env:
             - name: GRPC_TLS_ENABLED
               value: "true"
+            - name: GRPC_SERVER_CERT_PATH
+              value: "/etc/grpc/certs/server.crt"

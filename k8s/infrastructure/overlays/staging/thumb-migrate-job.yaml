@@ -21,19 +21,18 @@ spec:
       serviceAccountName: default
       containers:
       - name: thumb-migrate
-        # 注意：需要与 media-service 使用的镜像保持一致；
-        # 更新 media-service 镜像时，请同步更新此处或改为相同 tag。
-        image: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/media-service@sha256:74783644c0f930475746c32ba2b8d8cb6e614e4712c2c7e2249b09871c5a8420
+        # 注意：使用 :thumbs tag，包含 thumb-migrate binary
+        image: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/media-service:thumbs
         imagePullPolicy: IfNotPresent
         command:
         - /app/thumb-migrate
         env:
-        # 媒体服务使用的数据库（nova_media）
+        # post_images 表在 nova_content 数据库 (content-service)
         - name: DATABASE_URL
           valueFrom:
             secretKeyRef:
               name: nova-db-credentials
-              key: media-db-url
+              key: content-db-url
         # S3 / 对象存储配置（从 nova-s3-credentials Secret 获取）
         - name: S3_BUCKET
           valueFrom:
