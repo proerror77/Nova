@@ -48,7 +48,6 @@ jobs:
 
     outputs:
       image-tag: ${{ steps.meta.outputs.tag }}
-      image-full: ${{ steps.meta.outputs.image }}
 
     steps:
       - name: Checkout repository
@@ -134,7 +133,11 @@ jobs:
 
       - name: Update image in deployment
         run: |
-          sed -i "s|image: .*graphql-gateway:.*|image: ${{ needs.build-and-push.outputs.image-full }}|g" k8s/graphql-gateway/deployment.yaml
+          IMAGE_TAG="${{ needs.build-and-push.outputs.image-tag }}"
+          FULL_IMAGE="${{ env.ECR_REGISTRY }}/${{ env.SERVICE_NAME }}:${IMAGE_TAG}"
+          echo "Updating deployment with image: ${FULL_IMAGE}"
+          sed -i "s|image: .*graphql-gateway:.*|image: ${FULL_IMAGE}|g" k8s/graphql-gateway/deployment.yaml
+          grep "image:" k8s/graphql-gateway/deployment.yaml
 
       - name: Apply Kubernetes manifests
         run: |
@@ -166,7 +169,7 @@ jobs:
       - name: Deployment summary
         run: |
           echo "🚀 GraphQL Gateway deployed successfully!"
-          echo "Image: ${{ needs.build-and-push.outputs.image-full }}"
+          echo "Image Tag: ${{ needs.build-and-push.outputs.image-tag }}"
           echo "Namespace: nova-staging"
           echo ""
           echo "To access the gateway:"
@@ -284,7 +287,7 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Build & Push" >> $GITHUB_STEP_SUMMARY
           echo "- Status: ${{ needs.build-and-push.result }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Image: \`${{ needs.build-and-push.outputs.image-full }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Tag: \`${{ needs.build-and-push.outputs.image-tag }}\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Deploy to Kubernetes" >> $GITHUB_STEP_SUMMARY
           echo "- Status: ${{ needs.deploy-to-k8s.result }}" >> $GITHUB_STEP_SUMMARY
