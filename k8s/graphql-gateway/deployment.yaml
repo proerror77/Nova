@@ -72,7 +72,7 @@ metadata:
     app: graphql-gateway
     component: gateway
 spec:
-  replicas: 3
+  replicas: 1
   selector:
     matchLabels:
       app: graphql-gateway
@@ -119,11 +119,11 @@ spec:
               key: jwt-public-key
         resources:
           requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
             memory: "256Mi"
             cpu: "250m"
-          limits:
-            memory: "512Mi"
-            cpu: "500m"
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:
@@ -185,8 +185,8 @@ spec:
     apiVersion: apps/v1
     kind: Deployment
     name: graphql-gateway
-  minReplicas: 3
-  maxReplicas: 10
+  minReplicas: 1
+  maxReplicas: 3
   metrics:
   - type: Resource
     resource:
@@ -208,7 +208,7 @@ metadata:
   name: graphql-gateway-pdb
   namespace: nova-staging
 spec:
-  minAvailable: 2
+  minAvailable: 0
   selector:
     matchLabels:
       app: graphql-gateway
