@@ -8,6 +8,14 @@ struct AliceModel: Identifiable {
     let isSelected: Bool
 }
 
+// MARK: - Alice Chat Message Data Structure
+struct AliceChatMessage: Identifiable {
+    let id = UUID()
+    let content: String
+    let isUser: Bool
+    let timestamp: Date = Date()
+}
+
 struct AliceView: View {
     @Binding var currentPage: AppPage
     @State private var showPhotoOptions = false
@@ -17,15 +25,23 @@ struct AliceView: View {
     @State private var selectedImage: UIImage?
     @State private var showGenerateImage = false
     @State private var showNewPost = false
-    @State private var selectedModel = "alice 5.1 Fast"
+    @State private var selectedModel = "gpt-4o-all"
+
+    // MARK: - Chat States
+    @State private var messages: [AliceChatMessage] = []
+    @State private var inputText = ""
+    @State private var isWaitingForResponse = false
+    @State private var errorMessage: String?
+
+    // MARK: - AI Service
+    private let aliceService = AliceService.shared
 
     // MARK: - Model Data
     private let aliceModels: [AliceModel] = [
-        AliceModel(name: "alice 5.1 Fast", description: "fast reply", isSelected: true),
-        AliceModel(name: "alice 4 mini", description: "fast reply", isSelected: false),
-        AliceModel(name: "alice 4.1", description: "fast reply", isSelected: false),
-        AliceModel(name: "alice 4.1 Thinking", description: "fast reply", isSelected: false),
-        AliceModel(name: "alice", description: "fast reply", isSelected: false)
+        AliceModel(name: "gpt-4o-all", description: "Most capable model", isSelected: true),
+        AliceModel(name: "gpt-4o", description: "GPT-4 optimized", isSelected: false),
+        AliceModel(name: "gpt-4", description: "GPT-4 standard", isSelected: false),
+        AliceModel(name: "gpt-3.5-turbo", description: "Fast and efficient", isSelected: false)
     ]
 
     var body: some View {
@@ -83,7 +99,48 @@ struct AliceView: View {
 
                 Divider()
 
-                Spacer()
+                // MARK: - 聊天消息区域
+                if messages.isEmpty {
+                    // 空状态 - 显示中间图标
+                    VStack {
+                        Spacer()
+                        Image("alice-center-icon")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 100, height: 100)
+                        Spacer()
+                    }
+                } else {
+                    // 聊天消息列表
+                    ScrollViewReader { proxy in
+                        ScrollView {
+                            LazyVStack(spacing: 16) {
+                                ForEach(messages) { message in
+                                    AliceChatMessageView(message: message)
+                                        .id(message.id)
+                                }
+
+                                if isWaitingForResponse {
+                                    HStack {
+                                        ProgressView()
+                                            .padding(.leading, 16)
+                                        Spacer()
+                                    }
+                                }
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.top, 16)
+                            .padding(.bottom, 16)
+                        }
+                        .onChange(of: messages.count) { _, _ in
+                            if let lastMessage = messages.last {
+                                withAnimation {
+                                    proxy.scrollTo(lastMessage.id, anchor: .bottom)
+                                }
+                            }
+                        }
+                    }
+                }
 
                 // MARK: - 底部固定区域（按钮组 + 输入框）
                 VStack(spacing: 6) {
@@ -131,10 +188,23 @@ struct AliceView: View {
                         Image(systemName: "plus")
                             .font(.system(size: 20, weight: .medium))
                             .foregroundColor(.black)
-                        Text("Ask any questions")
+
+                        TextField("Ask any questions", text: $inputText)
                             .font(Font.custom("Inter", size: 16))
-                            .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
-                        Spacer()
+                            .foregroundColor(.black)
+                            .submitLabel(.send)
+                            .onSubmit {
+                                sendMessage()
+                            }
+
+                        if !inputText.isEmpty {
+                            Button(action: sendMessage) {
+                                Image("Send-Icon")
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(width: 24, height: 24)
+                            }
+                        }
                     }
                     .padding(.horizontal, 20)
                     .frame(height: 52)
@@ -151,19 +221,6 @@ struct AliceView: View {
 
                 // MARK: - 底部导航栏
                 BottomTabBar(currentPage: $currentPage, showPhotoOptions: $showPhotoOptions)
-            }
-
-            // MARK: - 中间独立图标框架
-            VStack {
-                Spacer()
-                    .frame(height: 280)
-
-                Image("alice-center-icon")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 100, height: 100)
-
-                Spacer()
             }
 
             // MARK: - 模型选择器弹窗
@@ -192,6 +249,68 @@ struct AliceView: View {
         }
     }
 
+    // MARK: - Send Message Function
+    private func sendMessage() {
+        let trimmedText = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedText.isEmpty else { return }
+
+        // 添加用户消息
+        let userMessage = AliceChatMessage(content: trimmedText, isUser: true)
+        messages.append(userMessage)
+
+        // 清空输入框
+        inputText = ""
+
+        // 清除之前的错误
+        errorMessage = nil
+
+        // 显示等待状态
+        isWaitingForResponse = true
+
+        // 调用真实的 AI API
+        Task {
+            do {
+                // 构建对话历史
+                let chatMessages = messages.map { msg in
+                    AIChatMessage(
+                        role: msg.isUser ? "user" : "assistant",
+                        content: msg.content
+                    )
+                }
+
+                // 调用 API
+                let response = try await aliceService.sendMessage(
+                    messages: chatMessages,
+                    model: selectedModel
+                )
+
+                await MainActor.run {
+                    isWaitingForResponse = false
+
+                    // 添加 AI 响应
+                    let aiMessage = AliceChatMessage(content: response, isUser: false)
+                    messages.append(aiMessage)
+                }
+            } catch {
+                await MainActor.run {
+                    isWaitingForResponse = false
+                    errorMessage = error.localizedDescription
+
+                    // 显示错误消息
+                    let errorMsg = AliceChatMessage(
+                        content: "抱歉，我遇到了一个错误：\(error.localizedDescription)\n\n请稍后重试。",
+                        isUser: false
+                    )
+                    messages.append(errorMsg)
+
+                    #if DEBUG
+                    print("[AliceView] Error: \(error)")
+                    #endif
+                }
+            }
+        }
+    }
+
     // MARK: - 模型选择器弹窗
     private var modelSelectorModal: some View {
         ZStack {
@@ -214,7 +333,7 @@ struct AliceView: View {
                 Spacer()
                     .frame(height: 140)
 
-                VStack(spacing: 0) {
+                VStack(spacing: 4) {
                     ForEach(aliceModels) { model in
                         ModelRowView(
                             model: model,
@@ -226,16 +345,53 @@ struct AliceView: View {
                         )
                     }
                 }
-                .frame(width: 199)
+                .padding(.vertical, 8)
+                .frame(width: 280)
                 .background(Color.white)
-                .cornerRadius(16)
-                .shadow(color: Color(red: 0, green: 0, blue: 0, opacity: 0.25), radius: 4.70)
+                .cornerRadius(20)
+                .shadow(color: Color(red: 0, green: 0, blue: 0, opacity: 0.15), radius: 12, x: 0, y: 4)
 
                 Spacer()
             }
         }
     }
 
+}
+
+// MARK: - Alice Chat Message View Component
+struct AliceChatMessageView: View {
+    let message: AliceChatMessage
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            if message.isUser {
+                Spacer()
+                // 用户消息气泡
+                Text(message.content)
+                    .font(Font.custom("Helvetica Neue", size: 14))
+                    .foregroundColor(.black)
+                    .padding(EdgeInsets(top: 10, leading: 13, bottom: 10, trailing: 13))
+                    .background(Color.white)
+                    .cornerRadius(43)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 43)
+                            .inset(by: 0.50)
+                            .stroke(Color(red: 0.75, green: 0.75, blue: 0.75), lineWidth: 0.50)
+                    )
+                    .frame(maxWidth: 249, alignment: .trailing)
+            } else {
+                // AI响应消息
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(message.content)
+                        .font(Font.custom("Helvetica Neue", size: 14))
+                        .foregroundColor(.black)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                Spacer()
+            }
+        }
+    }
 }
 
 // MARK: - Model Row Component
@@ -246,23 +402,150 @@ struct ModelRowView: View {
 
     var body: some View {
         Button(action: onSelect) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(model.name)
-                    .font(Font.custom("Helvetica Neue", size: 16))
-                    .foregroundColor(.black)
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(model.name)
+                        .font(Font.custom("Helvetica Neue", size: 16))
+                        .foregroundColor(.black)
 
-                Text(model.description)
-                    .font(Font.custom("Helvetica Neue", size: 14))
-                    .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
+                    Text(model.description)
+                        .font(Font.custom("Helvetica Neue", size: 14))
+                        .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                if isSelected {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(Color(red: 0.87, green: 0.11, blue: 0.26))
+                }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
-            .background(isSelected ? Color(red: 0.91, green: 0.91, blue: 0.91) : Color.clear)
-            .cornerRadius(14)
+            .background(isSelected ? Color(red: 0.95, green: 0.95, blue: 0.95) : Color.clear)
+            .cornerRadius(12)
             .padding(.horizontal, 6)
         }
         .buttonStyle(PlainButtonStyle())
+    }
+}
+
+// MARK: - Alice AI Service (Inline)
+// 临时将服务代码放在这里，避免添加新文件到项目
+
+@Observable
+final class AliceService {
+    static let shared = AliceService()
+
+    private let baseURL = "https://api.tu-zi.com/v1"
+    private let apiKey = "sk-LSb5xpmhRwdGsHcywQWtwjdpPnlzRs7pvadlUVZhUFau4u6W"
+
+    private init() {}
+
+    @MainActor
+    func sendMessage(
+        messages: [AIChatMessage],
+        model: String = "gpt-4o-all"
+    ) async throws -> String {
+        guard let url = URL(string: "\(baseURL)/chat/completions") else {
+            throw AliceError.invalidURL
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        let requestBody = ChatCompletionRequest(
+            model: model,
+            messages: messages
+        )
+
+        let encoder = JSONEncoder()
+        encoder.keyEncodingStrategy = .convertToSnakeCase
+        request.httpBody = try encoder.encode(requestBody)
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw AliceError.invalidResponse
+        }
+
+        guard httpResponse.statusCode == 200 else {
+            if let errorResponse = try? JSONDecoder().decode(AIErrorResponse.self, from: data) {
+                throw AliceError.apiError(errorResponse.error.message)
+            }
+            throw AliceError.httpError(httpResponse.statusCode)
+        }
+
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        let completionResponse = try decoder.decode(ChatCompletionResponse.self, from: data)
+
+        guard let firstChoice = completionResponse.choices.first else {
+            throw AliceError.emptyResponse
+        }
+
+        return firstChoice.message.content
+    }
+}
+
+// MARK: - AI Data Models
+
+struct AIChatMessage: Codable, Sendable {
+    let role: String
+    let content: String
+}
+
+struct ChatCompletionRequest: Codable, Sendable {
+    let model: String
+    let messages: [AIChatMessage]
+}
+
+struct ChatCompletionResponse: Codable, Sendable {
+    let id: String
+    let object: String
+    let created: Int
+    let model: String
+    let choices: [Choice]
+
+    struct Choice: Codable, Sendable {
+        let index: Int
+        let message: AIChatMessage
+        let finishReason: String?
+    }
+}
+
+struct AIErrorResponse: Codable, Sendable {
+    let error: ErrorDetail
+
+    struct ErrorDetail: Codable, Sendable {
+        let message: String
+        let type: String?
+        let code: String?
+    }
+}
+
+enum AliceError: LocalizedError {
+    case invalidURL
+    case invalidResponse
+    case httpError(Int)
+    case apiError(String)
+    case emptyResponse
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidURL:
+            return "Invalid API URL"
+        case .invalidResponse:
+            return "Invalid response from server"
+        case .httpError(let code):
+            return "HTTP error: \(code)"
+        case .apiError(let message):
+            return "API error: \(message)"
+        case .emptyResponse:
+            return "Empty response from server"
+        }
     }
 }
 

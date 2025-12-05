@@ -1,6 +1,6 @@
 import SwiftUI
 
-struct StartGroupChatView: View {
+struct NewChatView: View {
     @Binding var currentPage: AppPage
     @State private var selectedContacts: Set<Int> = []
 
@@ -25,7 +25,7 @@ struct StartGroupChatView: View {
 
                     Spacer()
 
-                    Text("Start Group Chat")
+                    Text("New Chat")
                         .font(Font.custom("Helvetica Neue", size: 24).weight(.medium))
                         .foregroundColor(.black)
 
@@ -191,5 +191,5 @@ struct ContactRow: View {
 }
 
 #Preview {
-    StartGroupChatView(currentPage: .constant(.startGroupChat))
+    NewChatView(currentPage: .constant(.newChat))
 }

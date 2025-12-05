@@ -374,10 +374,10 @@ struct MessageView: View {
                                 .background(DesignTokens.textMuted)
                                 .padding(.horizontal, 16)
 
-                            // Start Group Chat
+                            // New Chat
                             Button(action: {
                                 showAddOptionsMenu = false
-                                currentPage = .startGroupChat
+                                currentPage = .newChat
                             }) {
                                 HStack(alignment: .center, spacing: 16) {
                                     Image("GroupChat")
