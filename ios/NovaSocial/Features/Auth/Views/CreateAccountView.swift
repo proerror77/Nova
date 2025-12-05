@@ -18,20 +18,28 @@ struct CreateAccountView: View {
     @State private var showPassword = false
     @State private var showConfirmPassword = false
 
+    // MARK: - Focus State
+    @FocusState private var focusedField: Field?
+
+    enum Field {
+        case email
+        case username
+        case password
+        case confirmPassword
+    }
+
     // Access global AuthenticationManager
     @EnvironmentObject private var authManager: AuthenticationManager
 
     var body: some View {
         ZStack {
-            // Background Image
-            GeometryReader { geometry in
-                Image("Login-Background")
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: geometry.size.width, height: geometry.size.height)
-                    .clipped()
-            }
-            .edgesIgnoringSafeArea(.all)
+            // Background Image - Fixed size to prevent scaling when keyboard appears
+            Image("Login-Background")
+                .resizable()
+                .scaledToFill()
+                .frame(width: UIScreen.main.bounds.width, height: UIScreen.main.bounds.height)
+                .clipped()
+                .ignoresSafeArea(.all)
 
             // Dark overlay to dim the background
             Color.black
@@ -65,49 +73,6 @@ struct CreateAccountView: View {
                             // TODO: Handle photo picker
                         }
 
-                        // EMAIL Label (只在输入框为空时显示)
-                        if email.isEmpty {
-                            Text(LocalizedStringKey("Email_Label"))
-                                .font(Font.custom("Helvetica Neue", size: 12).weight(.light))
-                                .lineSpacing(20)
-                                .foregroundColor(.white)
-                                .offset(x: -139.50, y: -158)
-                                .transition(.opacity)
-                                .animation(.easeInOut(duration: 0.2), value: email.isEmpty)
-                        }
-
-                        // USERNAME Label (只在输入框为空时显示)
-                        if username.isEmpty {
-                            Text(LocalizedStringKey("Username_Label"))
-                                .font(Font.custom("Helvetica Neue", size: 12).weight(.light))
-                                .lineSpacing(20)
-                                .foregroundColor(.white)
-                                .offset(x: -124.50, y: -89)
-                                .transition(.opacity)
-                                .animation(.easeInOut(duration: 0.2), value: username.isEmpty)
-                        }
-
-                        // PASSWORD Label (只在输入框为空时显示)
-                        if password.isEmpty {
-                            Text(LocalizedStringKey("Password_Label"))
-                                .font(Font.custom("Helvetica Neue", size: 12).weight(.light))
-                                .lineSpacing(20)
-                                .foregroundColor(.white)
-                                .offset(x: -123.50, y: -20)
-                                .transition(.opacity)
-                                .animation(.easeInOut(duration: 0.2), value: password.isEmpty)
-                        }
-
-                        // CONFIRM PASSWORD Label (只在输入框为空时显示)
-                        if confirmPassword.isEmpty {
-                            Text(LocalizedStringKey("Confirm_Password_Label"))
-                                .font(Font.custom("Helvetica Neue", size: 12).weight(.light))
-                                .lineSpacing(20)
-                                .foregroundColor(.white)
-                                .offset(x: -95.50, y: 49)
-                                .transition(.opacity)
-                                .animation(.easeInOut(duration: 0.2), value: confirmPassword.isEmpty)
-                        }
 
                         // SHOW button for PASSWORD
                         Text(showPassword ? "HIDE" : "SHOW")
@@ -116,7 +81,14 @@ struct CreateAccountView: View {
                             .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
                             .offset(x: 138.50, y: -20)
                             .onTapGesture {
+                                let wasFocused = focusedField == .password
                                 showPassword.toggle()
+                                if wasFocused {
+                                    // Maintain focus after toggle
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                        focusedField = .password
+                                    }
+                                }
                             }
 
                         // SHOW button for CONFIRM PASSWORD
@@ -126,7 +98,14 @@ struct CreateAccountView: View {
                             .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
                             .offset(x: 138.50, y: 49)
                             .onTapGesture {
+                                let wasFocused = focusedField == .confirmPassword
                                 showConfirmPassword.toggle()
+                                if wasFocused {
+                                    // Maintain focus after toggle
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                        focusedField = .confirmPassword
+                                    }
+                                }
                             }
 
                         // Email Input Field
@@ -180,7 +159,7 @@ struct CreateAccountView: View {
 
                     Group {
                         // Text fields for input
-                        TextField("", text: $email, prompt: Text(LocalizedStringKey("Enter_your_email")).foregroundColor(Color.white.opacity(0.4)))
+                        TextField("", text: $email, prompt: Text("Enter your email").foregroundColor(Color.white.opacity(0.4)))
                             .foregroundColor(.white)
                             .font(Font.custom("Helvetica Neue", size: 14))
                             .padding(.horizontal, 16)
@@ -191,7 +170,7 @@ struct CreateAccountView: View {
                             .offset(x: 0, y: -157.50)
                             .accessibilityIdentifier("emailTextField")
 
-                        TextField("", text: $username)
+                        TextField("", text: $username, prompt: Text("Your Username").foregroundColor(Color.white.opacity(0.4)))
                             .foregroundColor(.white)
                             .font(Font.custom("Helvetica Neue", size: 14))
                             .padding(.horizontal, 16)
@@ -204,7 +183,7 @@ struct CreateAccountView: View {
                         // Password field
                         ZStack {
                             if showPassword {
-                                TextField("", text: $password)
+                                TextField("", text: $password, prompt: Text("Enter your password").foregroundColor(Color.white.opacity(0.4)))
                                     .foregroundColor(.white)
                                     .font(Font.custom("Helvetica Neue", size: 14))
                                     .padding(.horizontal, 16)
@@ -212,21 +191,26 @@ struct CreateAccountView: View {
                                     .autocapitalization(.none)
                                     .autocorrectionDisabled()
                                     .accessibilityIdentifier("passwordTextField")
+                                    .focused($focusedField, equals: .password)
+                                    .id("password_visible")
                             } else {
-                                SecureField("", text: $password)
+                                SecureField("", text: $password, prompt: Text("Enter your password").foregroundColor(Color.white.opacity(0.4)))
                                     .foregroundColor(.white)
                                     .font(Font.custom("Helvetica Neue", size: 14))
                                     .padding(.horizontal, 16)
                                     .frame(width: 343, height: 49)
                                     .accessibilityIdentifier("passwordTextField")
+                                    .focused($focusedField, equals: .password)
+                                    .id("password_secure")
                             }
                         }
                         .offset(x: 0, y: -19.50)
+                        .animation(.none, value: showPassword)
 
                         // Confirm Password field
                         ZStack {
                             if showConfirmPassword {
-                                TextField("", text: $confirmPassword)
+                                TextField("", text: $confirmPassword, prompt: Text("Confirm your password").foregroundColor(Color.white.opacity(0.4)))
                                     .foregroundColor(.white)
                                     .font(Font.custom("Helvetica Neue", size: 14))
                                     .padding(.horizontal, 16)
@@ -234,16 +218,21 @@ struct CreateAccountView: View {
                                     .autocapitalization(.none)
                                     .autocorrectionDisabled()
                                     .accessibilityIdentifier("confirmPasswordTextField")
+                                    .focused($focusedField, equals: .confirmPassword)
+                                    .id("confirmPassword_visible")
                             } else {
-                                SecureField("", text: $confirmPassword)
+                                SecureField("", text: $confirmPassword, prompt: Text("Confirm your password").foregroundColor(Color.white.opacity(0.4)))
                                     .foregroundColor(.white)
                                     .font(Font.custom("Helvetica Neue", size: 14))
                                     .padding(.horizontal, 16)
                                     .frame(width: 343, height: 49)
                                     .accessibilityIdentifier("confirmPasswordTextField")
+                                    .focused($focusedField, equals: .confirmPassword)
+                                    .id("confirmPassword_secure")
                             }
                         }
                         .offset(x: 0, y: 49.50)
+                        .animation(.none, value: showConfirmPassword)
 
                         // Sign up Button
                         Button(action: {
@@ -388,6 +377,7 @@ struct CreateAccountView: View {
                 UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
             }
         }
+        .ignoresSafeArea(.keyboard)
     }
 
     // MARK: - Actions

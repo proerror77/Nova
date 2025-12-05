@@ -48,15 +48,10 @@ struct BottomTabBar: View {
 
             // Alice
             VStack(spacing: -12) {
-                Image("alice-button-off")
+                Image(isAlice ? "alice-button-on" : "alice-button-off")
                     .resizable()
                     .scaledToFit()
                     .frame(width: 44, height: 44)
-                    .overlay(
-                        Circle()
-                            .stroke(DesignTokens.accentColor, lineWidth: isAlice ? 2 : 0)
-                    )
-                    .opacity(isAlice ? 1.0 : 0.8)
                 Text("")
                     .font(.system(size: DesignTokens.fontCaption))
             }
@@ -67,15 +62,10 @@ struct BottomTabBar: View {
 
             // Account
             VStack(spacing: -12) {
-                Image("Account-button-off")
+                Image(isAccount ? "Account-button-on" : "Account-button-off")
                     .resizable()
                     .scaledToFit()
                     .frame(width: 44, height: 44)
-                    .overlay(
-                        Circle()
-                            .stroke(DesignTokens.accentColor, lineWidth: isAccount ? 2 : 0)
-                    )
-                    .opacity(isAccount ? 1.0 : 0.8)
                 Text("")
                     .font(.system(size: DesignTokens.fontCaption))
             }
@@ -85,9 +75,13 @@ struct BottomTabBar: View {
             }
         }
         .frame(height: DesignTokens.bottomBarHeight)
-        .padding(.bottom, 20)
-        .background(DesignTokens.cardBackground)
+        .padding(.bottom, 30) // ← 调整底部留白
+        .background(
+            DesignTokens.cardBackground
+                .ignoresSafeArea(edges: .bottom)
+        )
         .border(DesignTokens.borderColor, width: 0.5)
+        .offset(y: 40) // ← 调整整体垂直位置：负值向上，正值向下
     }
 }
 
@@ -119,5 +113,17 @@ struct NewPostButtonComponent: View {
                 isPressed = false
             }
         }
+    }
+}
+
+// MARK: - Preview
+
+#Preview {
+    VStack {
+        Spacer()
+        BottomTabBar(
+            currentPage: .constant(.home),
+            showPhotoOptions: .constant(false)
+        )
     }
 }

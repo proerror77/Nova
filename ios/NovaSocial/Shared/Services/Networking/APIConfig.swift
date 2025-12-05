@@ -64,22 +64,15 @@ struct APIConfig {
     }
 
     struct Social {
-        // MARK: - Likes
         static let createLike = "/api/v2/social/like"
         static func deleteLike(_ postId: String) -> String { "/api/v2/social/unlike/\(postId)" }
         static func getLikes(_ postId: String) -> String { "/api/v2/social/likes/\(postId)" }
         static func checkLiked(_ postId: String) -> String { "/api/v2/social/check-liked/\(postId)" }
-
-        // MARK: - Comments
         static let createComment = "/api/v2/social/comment"
         static func deleteComment(_ commentId: String) -> String { "/api/v2/social/comment/\(commentId)" }
         static func getComments(_ postId: String) -> String { "/api/v2/social/comments/\(postId)" }
-
-        // MARK: - Shares
         static let createShare = "/api/v2/social/share"
         static func getShareCount(_ postId: String) -> String { "/api/v2/social/shares/count/\(postId)" }
-
-        // MARK: - Batch Operations
         static let batchGetStats = "/api/v2/social/stats/batch"
     }
 
@@ -124,6 +117,12 @@ struct APIConfig {
         /// GET /api/v2/feed - 獲取用戶 Feed (需要 JWT 認證)
         /// Query params: algo (ch|time), limit (1-100), cursor (pagination)
         static let getFeed = "/api/v2/feed"
+        /// GET /api/v2/feed/user/{user_id} - 獲取特定用戶的 Feed
+        static func getUserFeed(_ userId: String) -> String { "/api/v2/feed/user/\(userId)" }
+        /// GET /api/v2/feed/explore - 探索 Feed (發現新內容)
+        static let getExplore = "/api/v2/feed/explore"
+        /// GET /api/v2/feed/trending - 熱門 Feed
+        static let getTrendingFeed = "/api/v2/feed/trending"
         /// GET /api/v2/guest/feed/trending - 獲取熱門 Feed (無需認證，Guest Mode)
         /// 注意：此端點與認證端點分離以避免 Actix-web 路由衝突
         static let getTrending = "/api/v2/guest/feed/trending"
@@ -228,16 +227,18 @@ struct APIConfig {
         static let referrals = "/api/v2/auth/referrals"  // GET 獲取推薦人和被推薦人列表
     }
 
-    // MARK: - Chat & Messaging API (Realtime Chat Service :8085)
+    // MARK: - Chat & Messaging API
     struct Chat {
-        // MARK: - Conversations
+        // Conversations
         static let createGroupChat = "/api/v2/chat/groups/create"  // POST 創建群組
         static let getConversations = "/api/v2/chat/conversations"  // GET 獲取對話列表
         static let createConversation = "/api/v2/chat/conversations"  // POST 創建對話
-        /// GET /api/v2/chat/conversations/{id} 獲取群組詳情
+        /// GET /api/v2/chat/conversations/{id} 獲取會話詳情
         static func getConversation(_ id: String) -> String { "/api/v2/chat/conversations/\(id)" }
+        /// PUT /api/v2/chat/conversations/{id} 更新會話資訊（名稱、頭像等）
+        static func updateConversation(_ id: String) -> String { "/api/v2/chat/conversations/\(id)" }
 
-        // MARK: - Messages
+        // Messages
         /// POST /api/v2/chat/messages 發送消息（conversation_id 在 body 中）
         static let sendMessage = "/api/v2/chat/messages"
         /// GET /api/v2/chat/messages 獲取消息歷史（使用 conversation_id 查詢參數）
@@ -251,12 +252,59 @@ struct APIConfig {
             "/api/v2/chat/conversations/\(conversationId)/messages/\(messageId)/recall"
         }
 
-        // MARK: - Groups
-        static let getGroupDetails = "/api/v2/chat/groups"  // TODO: 後端尚未提供
-        static let addGroupMembers = "/api/v2/chat/groups/members/add"  // POST 添加群組成員
-        static let removeGroupMembers = "/api/v2/chat/groups/members/remove"  // DELETE 移除群組成員
+        // Reactions
+        /// POST /messages/{id}/reactions 添加表情回應
+        static func addReaction(_ messageId: String) -> String { "/messages/\(messageId)/reactions" }
+        /// GET /messages/{id}/reactions 獲取消息的所有表情回應
+        static func getReactions(_ messageId: String) -> String { "/messages/\(messageId)/reactions" }
+        /// DELETE /messages/{mid}/reactions/{rid} 刪除表情回應
+        static func deleteReaction(messageId: String, reactionId: String) -> String {
+            "/messages/\(messageId)/reactions/\(reactionId)"
+        }
 
-        // MARK: - WebSocket
+        // Group Management
+        static let createGroup = "/groups"  // POST 創建群組
+        /// POST /conversations/{id}/members 添加群組成員
+        static func addGroupMembers(_ conversationId: String) -> String {
+            "/conversations/\(conversationId)/members"
+        }
+        /// DELETE /conversations/{id}/members/{uid} 移除群組成員
+        static func removeGroupMember(conversationId: String, userId: String) -> String {
+            "/conversations/\(conversationId)/members/\(userId)"
+        }
+        /// PUT /conversations/{id}/members/{uid}/role 更新成員角色
+        static func updateMemberRole(conversationId: String, userId: String) -> String {
+            "/conversations/\(conversationId)/members/\(userId)/role"
+        }
+
+        // Voice/Video Calls
+        /// POST /conversations/{id}/calls 發起通話
+        static func initiateCall(_ conversationId: String) -> String {
+            "/conversations/\(conversationId)/calls"
+        }
+        /// POST /calls/{id}/answer 接聽通話
+        static func answerCall(_ callId: String) -> String { "/calls/\(callId)/answer" }
+        /// POST /calls/{id}/reject 拒絕通話
+        static func rejectCall(_ callId: String) -> String { "/calls/\(callId)/reject" }
+        /// POST /calls/{id}/end 結束通話
+        static func endCall(_ callId: String) -> String { "/calls/\(callId)/end" }
+        /// POST /calls/ice-candidate 發送 ICE candidate
+        static let sendIceCandidate = "/calls/ice-candidate"
+        /// GET /calls/ice-servers 獲取 TURN/STUN 服務器配置
+        static let getIceServers = "/calls/ice-servers"
+
+        // Location Sharing
+        /// POST /conversations/{id}/location 分享位置
+        static func shareLocation(_ conversationId: String) -> String {
+            "/conversations/\(conversationId)/location"
+        }
+        /// DELETE /conversations/{id}/location 停止分享位置
+        static func stopSharingLocation(_ conversationId: String) -> String {
+            "/conversations/\(conversationId)/location"
+        }
+        /// GET /nearby-users 獲取附近用戶
+        static let getNearbyUsers = "/nearby-users"
+
         /// WebSocket 連接端點
         static let websocket = "/ws/chat"
     }

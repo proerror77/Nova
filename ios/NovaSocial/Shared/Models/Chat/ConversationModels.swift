@@ -246,6 +246,75 @@ struct SendE2EEMessageResponse: Codable, Sendable {
     }
 }
 
+// MARK: - Message Reactions
+
+/// Represents a reaction to a message (emoji reaction)
+struct MessageReaction: Identifiable, Codable, Sendable {
+    let id: String
+    let messageId: String
+    let userId: String
+    let emoji: String  // e.g., "👍", "❤️", "😂"
+    let createdAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case messageId = "message_id"
+        case userId = "user_id"
+        case emoji
+        case createdAt = "created_at"
+    }
+}
+
+/// Request to add a reaction to a message
+struct AddReactionRequest: Codable, Sendable {
+    let emoji: String
+}
+
+/// Response when getting reactions for a message
+struct GetReactionsResponse: Codable, Sendable {
+    let reactions: [MessageReaction]
+    let totalCount: Int
+
+    enum CodingKeys: String, CodingKey {
+        case reactions
+        case totalCount = "total_count"
+    }
+}
+
+// MARK: - Group Management
+
+/// Request to add members to a group conversation
+struct AddGroupMembersRequest: Codable, Sendable {
+    let userIds: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case userIds = "user_ids"
+    }
+}
+
+/// Request to update a member's role in a group
+struct UpdateMemberRoleRequest: Codable, Sendable {
+    let role: GroupMemberRole
+}
+
+/// Group member role
+enum GroupMemberRole: String, Codable, Sendable {
+    case owner = "owner"
+    case admin = "admin"
+    case member = "member"
+}
+
+/// Request to update conversation details
+struct UpdateConversationRequest: Codable, Sendable {
+    let name: String?
+    let avatarUrl: String?
+
+    enum CodingKeys: String, CodingKey {
+        case name
+        case avatarUrl = "avatar_url"
+    }
+}
+
 // MARK: - Chat Errors
 
 enum ChatError: LocalizedError {

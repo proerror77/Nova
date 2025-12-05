@@ -81,6 +81,94 @@ class FeedService {
             totalCount: feedResponse.totalCount
         )
     }
+
+    // MARK: - User Feed
+
+    /// Fetch a specific user's feed (their posts)
+    /// - Parameters:
+    ///   - userId: The user ID whose feed to fetch
+    ///   - limit: Number of posts to fetch (1-100, default 20)
+    ///   - cursor: Pagination cursor from previous response
+    /// - Returns: FeedResponse containing the user's posts
+    func getUserFeed(userId: String, limit: Int = 20, cursor: String? = nil) async throws -> FeedResponse {
+        var queryParams: [String: String] = [
+            "limit": String(min(max(limit, 1), 100))
+        ]
+
+        if let cursor = cursor {
+            queryParams["cursor"] = cursor
+        }
+
+        return try await client.get(endpoint: APIConfig.Feed.getUserFeed(userId), queryParams: queryParams)
+    }
+
+    /// Fetch user feed with full post details
+    func getUserFeedWithDetails(userId: String, limit: Int = 20, cursor: String? = nil) async throws -> FeedWithDetailsResponse {
+        let feedResponse = try await getUserFeed(userId: userId, limit: limit, cursor: cursor)
+
+        let feedPosts = feedResponse.posts.map { FeedPost(from: $0) }
+
+        return FeedWithDetailsResponse(
+            posts: feedPosts,
+            postIds: feedResponse.postIds,
+            cursor: feedResponse.cursor,
+            hasMore: feedResponse.hasMore,
+            totalCount: feedResponse.totalCount
+        )
+    }
+
+    // MARK: - Explore Feed
+
+    /// Fetch explore feed for discovering new content
+    /// - Parameters:
+    ///   - limit: Number of posts to fetch (1-100, default 20)
+    ///   - cursor: Pagination cursor from previous response
+    /// - Returns: FeedResponse containing explore/discovery posts
+    func getExploreFeed(limit: Int = 20, cursor: String? = nil) async throws -> FeedResponse {
+        var queryParams: [String: String] = [
+            "limit": String(min(max(limit, 1), 100))
+        ]
+
+        if let cursor = cursor {
+            queryParams["cursor"] = cursor
+        }
+
+        return try await client.get(endpoint: APIConfig.Feed.getExplore, queryParams: queryParams)
+    }
+
+    /// Fetch explore feed with full post details
+    func getExploreFeedWithDetails(limit: Int = 20, cursor: String? = nil) async throws -> FeedWithDetailsResponse {
+        let feedResponse = try await getExploreFeed(limit: limit, cursor: cursor)
+
+        let feedPosts = feedResponse.posts.map { FeedPost(from: $0) }
+
+        return FeedWithDetailsResponse(
+            posts: feedPosts,
+            postIds: feedResponse.postIds,
+            cursor: feedResponse.cursor,
+            hasMore: feedResponse.hasMore,
+            totalCount: feedResponse.totalCount
+        )
+    }
+
+    // MARK: - Authenticated Trending Feed
+
+    /// Fetch trending feed (requires authentication)
+    /// - Parameters:
+    ///   - limit: Number of posts to fetch (1-100, default 20)
+    ///   - cursor: Pagination cursor from previous response
+    /// - Returns: FeedResponse containing trending posts
+    func getAuthenticatedTrendingFeed(limit: Int = 20, cursor: String? = nil) async throws -> FeedResponse {
+        var queryParams: [String: String] = [
+            "limit": String(min(max(limit, 1), 100))
+        ]
+
+        if let cursor = cursor {
+            queryParams["cursor"] = cursor
+        }
+
+        return try await client.get(endpoint: APIConfig.Feed.getTrendingFeed, queryParams: queryParams)
+    }
 }
 
 // MARK: - Feed Algorithm

@@ -18,20 +18,26 @@ struct LoginView: View {
     @State private var emailError: String?
     @State private var passwordError: String?
 
+    // MARK: - Focus State
+    @FocusState private var focusedField: Field?
+
+    enum Field {
+        case email
+        case password
+    }
+
     // Access global AuthenticationManager
     @EnvironmentObject private var authManager: AuthenticationManager
 
     var body: some View {
         ZStack {
-            // Background Image
-            GeometryReader { geometry in
-                Image("Login-Background")
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: geometry.size.width, height: geometry.size.height)
-                    .clipped()
-            }
-            .edgesIgnoringSafeArea(.all)
+            // Background Image - Fixed size to prevent scaling when keyboard appears
+            Image("Login-Background")
+                .resizable()
+                .scaledToFill()
+                .frame(width: UIScreen.main.bounds.width, height: UIScreen.main.bounds.height)
+                .clipped()
+                .ignoresSafeArea(.all)
 
             // Dark overlay to dim the background
             Color.black
@@ -77,7 +83,7 @@ struct LoginView: View {
                             .font(Font.custom("Helvetica Neue", size: 12).weight(.light))
                             .lineSpacing(20)
                             .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
-                            .offset(x: 138.50, y: -1)
+                            .offset(x: 138.50, y: -10)
                             .onTapGesture {
                                 showPassword.toggle()
                             }
@@ -118,9 +124,10 @@ struct LoginView: View {
                                         .progressViewStyle(CircularProgressViewStyle(tint: .black))
                                 } else {
                                     // Google Logo
-                                    Image(systemName: "g.circle.fill")
-                                        .font(.system(size: 20))
-                                        .foregroundColor(.red)
+                                    Image("GoogleLogo")
+                                        .resizable()
+                                        .scaledToFit()
+                                        .frame(width: 20, height: 20)
                                 }
                                 Text("Continue with Google")
                                     .font(Font.custom("Helvetica Neue", size: 16).weight(.medium))
@@ -194,11 +201,16 @@ struct LoginView: View {
                                     .keyboardType(.emailAddress)
                                     .autocorrectionDisabled()
                                     .accessibilityIdentifier("loginEmailTextField")
+                                    .focused($focusedField, equals: .email)
                                     .onChange(of: email) { _, newValue in
                                         validateEmailRealtime(newValue)
                                     }
                             }
                             .frame(width: 343, height: 49)
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                focusedField = .email
+                            }
 
                             // Inline error for email - fixed height to prevent layout shift
                             Text(LocalizedStringKey(emailError ?? " "))
@@ -231,6 +243,7 @@ struct LoginView: View {
                                         .autocapitalization(.none)
                                         .autocorrectionDisabled()
                                         .accessibilityIdentifier("loginPasswordTextField")
+                                        .focused($focusedField, equals: .password)
                                 } else {
                                     SecureField("", text: $password, prompt: Text(LocalizedStringKey("Enter_your_password")).foregroundColor(Color.white.opacity(0.4)))
                                         .foregroundColor(.white)
@@ -238,9 +251,14 @@ struct LoginView: View {
                                         .padding(.horizontal, 16)
                                         .padding(.trailing, 60)
                                         .accessibilityIdentifier("loginPasswordTextField")
+                                        .focused($focusedField, equals: .password)
                                 }
                             }
                             .frame(width: 343, height: 49)
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                focusedField = .password
+                            }
 
                             // Inline error for password - fixed height to prevent layout shift
                             Text(LocalizedStringKey(passwordError ?? " "))
@@ -276,6 +294,7 @@ struct LoginView: View {
                 UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
             }
         }
+        .ignoresSafeArea(.keyboard)
     }
 
     // MARK: - Actions

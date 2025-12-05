@@ -3,19 +3,31 @@ import PhotosUI
 
 struct NewPostView: View {
     @Binding var showNewPost: Bool
+    var initialImage: UIImage? = nil  // 从PhotoOptionsModal传入的图片
+    var onPostSuccess: (() -> Void)? = nil  // 成功发布后的回调
+    @EnvironmentObject private var authManager: AuthenticationManager
     @State private var postText: String = ""
     @State private var inviteAlice: Bool = false
     @State private var showPhotoPicker = false
     @State private var showCamera = false
     @State private var selectedPhotos: [PhotosPickerItem] = []
     @State private var selectedImages: [UIImage] = []
+    @State private var isPosting = false
+    @State private var postError: String?
     @FocusState private var isTextFieldFocused: Bool
+
+    // Services
+    private let mediaService = MediaService()
+    private let contentService = ContentService()
 
     var body: some View {
         ZStack {
-            // 背景色
+            // 背景色 - 点击可收起键盘
             Color(red: 0.97, green: 0.97, blue: 0.97)
                 .ignoresSafeArea()
+                .onTapGesture {
+                    hideKeyboard()
+                }
 
             VStack(spacing: 0) {
                 // MARK: - 顶部导航栏（与其他页面一致）
@@ -83,23 +95,36 @@ struct NewPostView: View {
                         .padding(.horizontal, 16)
                         .padding(.top, 24)
 
-                        // MARK: - 图片预览区
-                        HStack(spacing: 20) {
+                        // MARK: - 图片预览区 (4:3 竖图比例)
+                        HStack(alignment: .top, spacing: 20) {
                             if selectedImages.count > 0 {
-                                ForEach(0..<min(selectedImages.count, 2), id: \.self) { index in
-                                    Image(uiImage: selectedImages[index])
-                                        .resizable()
-                                        .scaledToFill()
-                                        .frame(width: 100, height: 100)
-                                        .cornerRadius(10)
-                                        .clipped()
-                                }
-                            } else {
-                                // 占位图片1 - 黑色半透明 + Preview 标签
+                                // 显示选中的图片 - 4:3竖图比例 (width:height = 3:4)
+                                Image(uiImage: selectedImages[0])
+                                    .resizable()
+                                    .scaledToFill()
+                                    .frame(width: 100, height: 133) // 3:4 比例
+                                    .cornerRadius(10)
+                                    .clipped()
+
+                                // 第二个位置：灰色加号框（添加更多图片）
                                 ZStack {
                                     Rectangle()
                                         .foregroundColor(.clear)
-                                        .frame(width: 100, height: 100)
+                                        .frame(width: 100, height: 133)
+                                        .background(Color(red: 0.91, green: 0.91, blue: 0.91))
+                                        .cornerRadius(10)
+
+                                    // 加号
+                                    Image(systemName: "plus")
+                                        .font(.system(size: 30, weight: .light))
+                                        .foregroundColor(.white)
+                                }
+                            } else {
+                                // 占位图片1 - 黑色半透明 + Preview 标签 (4:3竖图)
+                                ZStack {
+                                    Rectangle()
+                                        .foregroundColor(.clear)
+                                        .frame(width: 100, height: 133)
                                         .background(Color(red: 0, green: 0, blue: 0).opacity(0.20))
                                         .cornerRadius(10)
 
@@ -120,28 +145,18 @@ struct NewPostView: View {
                                     }
                                 }
 
-                                // 占位图片2 - 灰色 + 加号
+                                // 占位图片2 - 灰色 + 加号 (4:3竖图)
                                 ZStack {
                                     Rectangle()
                                         .foregroundColor(.clear)
-                                        .frame(width: 100, height: 100)
+                                        .frame(width: 100, height: 133)
                                         .background(Color(red: 0.91, green: 0.91, blue: 0.91))
                                         .cornerRadius(10)
 
-                                    // X 型加号
-                                    ZStack {
-                                        Rectangle()
-                                            .foregroundColor(.clear)
-                                            .frame(width: 44, height: 0)
-                                            .overlay(Rectangle().stroke(.white, lineWidth: 1.50))
-
-                                        Rectangle()
-                                            .foregroundColor(.clear)
-                                            .frame(width: 44, height: 0)
-                                            .overlay(Rectangle().stroke(.white, lineWidth: 1.50))
-                                            .rotationEffect(.degrees(90))
-                                    }
-                                    .frame(width: 44, height: 44)
+                                    // 加号
+                                    Image(systemName: "plus")
+                                        .font(.system(size: 30, weight: .light))
+                                        .foregroundColor(.white)
                                 }
                             }
                         }
@@ -306,24 +321,44 @@ struct NewPostView: View {
                         }
                     }
                 }
+                .scrollDismissesKeyboard(.interactively) // 滑动时自动收起键盘
                 .contentShape(Rectangle())
                 .onTapGesture {
-                    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                    hideKeyboard()
+                }
+
+                // MARK: - Error Message
+                if let error = postError {
+                    Text(error)
+                        .font(.system(size: 12))
+                        .foregroundColor(.red)
+                        .padding(.horizontal, 16)
+                        .padding(.top, 8)
                 }
 
                 // MARK: - Post 按钮
                 Button(action: {
-                    // Post action
+                    Task {
+                        await submitPost()
+                    }
                 }) {
-                    Text("Post")
-                        .font(Font.custom("Helvetica Neue", size: 16).weight(.medium))
-                        .lineSpacing(20)
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 46)
-                        .background(Color(red: 0.87, green: 0.11, blue: 0.26))
-                        .cornerRadius(31.50)
+                    HStack {
+                        if isPosting {
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                .scaleEffect(0.8)
+                        }
+                        Text(isPosting ? "Posting..." : "Post")
+                            .font(Font.custom("Helvetica Neue", size: 16).weight(.medium))
+                            .lineSpacing(20)
+                            .foregroundColor(.white)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 46)
+                    .background(canPost ? Color(red: 0.87, green: 0.11, blue: 0.26) : Color.gray)
+                    .cornerRadius(31.50)
                 }
+                .disabled(!canPost || isPosting)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 16)
                 .background(Color(red: 0.97, green: 0.97, blue: 0.97))
@@ -342,6 +377,156 @@ struct NewPostView: View {
                         selectedImages.append(image)
                     }
                 }
+            }
+        }
+        .onAppear {
+            // 如果有初始图片，添加到selectedImages
+            if let image = initialImage, selectedImages.isEmpty {
+                selectedImages = [image]
+            }
+        }
+    }
+
+    // MARK: - 是否可以发布
+    private var canPost: Bool {
+        !postText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !selectedImages.isEmpty
+    }
+
+    // MARK: - 收起键盘
+    private func hideKeyboard() {
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+    }
+
+    // MARK: - 调整图片大小以优化上传
+    private func resizeImageForUpload(_ image: UIImage, maxDimension: CGFloat = 1024) -> UIImage {
+        let size = image.size
+
+        // 如果图片已经足够小，直接返回
+        if size.width <= maxDimension && size.height <= maxDimension {
+            return image
+        }
+
+        // 计算缩放比例
+        let ratio = min(maxDimension / size.width, maxDimension / size.height)
+        let newSize = CGSize(width: size.width * ratio, height: size.height * ratio)
+
+        // 使用 UIGraphicsImageRenderer 进行高质量缩放
+        let renderer = UIGraphicsImageRenderer(size: newSize)
+        return renderer.image { _ in
+            image.draw(in: CGRect(origin: .zero, size: newSize))
+        }
+    }
+
+    // MARK: - 提交帖子
+    private func submitPost() async {
+        guard canPost else { return }
+        guard let userId = authManager.currentUser?.id else {
+            postError = "Please login first"
+            return
+        }
+
+        isPosting = true
+        postError = nil
+
+        do {
+            // Step 1: 上传图片 (如果有，带重试逻辑)
+            var mediaUrls: [String] = []
+            for image in selectedImages {
+                // 先调整图片大小再压缩，避免上传过大的文件
+                let resizedImage = resizeImageForUpload(image)
+                if let imageData = resizedImage.jpegData(compressionQuality: 0.3) {
+                    #if DEBUG
+                    print("[NewPost] Uploading image: \(imageData.count / 1024) KB")
+                    #endif
+
+                    // 重试逻辑处理 503 错误
+                    var mediaUrl: String?
+                    var lastError: Error?
+
+                    for attempt in 1...3 {
+                        do {
+                            mediaUrl = try await mediaService.uploadImage(
+                                imageData: imageData,
+                                filename: "post_\(UUID().uuidString).jpg"
+                            )
+                            break  // 成功则跳出循环
+                        } catch let error as APIError {
+                            lastError = error
+                            if case .serverError(let statusCode, _) = error, statusCode == 503 {
+                                #if DEBUG
+                                print("[NewPost] Image upload attempt \(attempt) failed with 503, retrying in \(attempt * 2)s...")
+                                #endif
+                                if attempt < 3 {
+                                    try await Task.sleep(nanoseconds: UInt64(attempt) * 2_000_000_000)  // 2s, 4s delay
+                                    continue
+                                }
+                            }
+                            throw error
+                        }
+                    }
+
+                    guard let uploadedUrl = mediaUrl else {
+                        throw lastError ?? APIError.serverError(statusCode: 503, message: "Image upload failed")
+                    }
+
+                    mediaUrls.append(uploadedUrl)
+                    #if DEBUG
+                    print("[NewPost] Uploaded image: \(uploadedUrl)")
+                    #endif
+                }
+            }
+
+            // Step 2: 创建帖子 (带重试逻辑处理 503 错误)
+            let content = postText.trimmingCharacters(in: .whitespacesAndNewlines)
+            var post: Post?
+            var lastError: Error?
+
+            for attempt in 1...3 {
+                do {
+                    post = try await contentService.createPost(
+                        creatorId: userId,
+                        content: content.isEmpty ? " " : content,  // 至少需要空格
+                        mediaUrls: mediaUrls.isEmpty ? nil : mediaUrls
+                    )
+                    break  // 成功则跳出循环
+                } catch let error as APIError {
+                    lastError = error
+                    if case .serverError(let statusCode, _) = error, statusCode == 503 {
+                        #if DEBUG
+                        print("[NewPost] Attempt \(attempt) failed with 503, retrying...")
+                        #endif
+                        if attempt < 3 {
+                            try await Task.sleep(nanoseconds: UInt64(attempt) * 1_000_000_000)  // 1s, 2s delay
+                            continue
+                        }
+                    }
+                    throw error
+                }
+            }
+
+            guard let createdPost = post else {
+                throw lastError ?? APIError.serverError(statusCode: 503, message: "Service unavailable")
+            }
+
+            #if DEBUG
+            print("[NewPost] Created post: \(createdPost.id)")
+            #endif
+
+            // Step 3: 成功后关闭页面并触发刷新回调
+            await MainActor.run {
+                isPosting = false
+                showNewPost = false
+                // 调用成功回调，通知 HomeView 刷新 Feed
+                onPostSuccess?()
+            }
+
+        } catch {
+            #if DEBUG
+            print("[NewPost] Error: \(error)")
+            #endif
+            await MainActor.run {
+                isPosting = false
+                postError = "Failed to create post: \(error.localizedDescription)"
             }
         }
     }
@@ -389,4 +574,5 @@ struct ImagePicker: UIViewControllerRepresentable {
 #Preview {
     @Previewable @State var showNewPost = true
     NewPostView(showNewPost: $showNewPost)
+        .environmentObject(AuthenticationManager.shared)
 }

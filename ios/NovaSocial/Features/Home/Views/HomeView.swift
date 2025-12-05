@@ -31,8 +31,17 @@ struct HomeView: View {
                 SearchView(showSearch: $showSearch)
                     .transition(.identity)
             } else if showNewPost {
-                NewPostView(showNewPost: $showNewPost)
-                    .transition(.identity)
+                NewPostView(
+                    showNewPost: $showNewPost,
+                    initialImage: selectedImage,
+                    onPostSuccess: {
+                        // Post 成功后刷新 Feed
+                        Task {
+                            await feedViewModel.refresh()
+                        }
+                    }
+                )
+                .transition(.identity)
             } else if showGenerateImage {
                 GenerateImage01View(showGenerateImage: $showGenerateImage)
                     .transition(.identity)
@@ -52,6 +61,9 @@ struct HomeView: View {
                     },
                     onGenerateImage: {
                         showGenerateImage = true
+                    },
+                    onWrite: {
+                        showNewPost = true
                     }
                 )
             }
@@ -74,6 +86,12 @@ struct HomeView: View {
         }
         .sheet(isPresented: $showCamera) {
             ImagePicker(sourceType: .camera, selectedImage: $selectedImage)
+        }
+        .onChange(of: selectedImage) { oldValue, newValue in
+            // 选择/拍摄照片后，自动跳转到NewPostView
+            if newValue != nil {
+                showNewPost = true
+            }
         }
         .onAppear {
             // Load feed when view appears
@@ -295,18 +313,6 @@ struct HomeView: View {
                             }
                             .frame(height: 320)
 
-                            // MARK: - 分页指示点
-                            HStack(spacing: DesignTokens.spacing8) {
-                                Circle()
-                                    .fill(DesignTokens.indicatorActive)
-                                    .frame(width: DesignTokens.spacing6, height: DesignTokens.spacing6)
-
-                                ForEach(0..<4, id: \.self) { _ in
-                                    Circle()
-                                        .fill(DesignTokens.indicatorInactive)
-                                        .frame(width: DesignTokens.spacing6, height: DesignTokens.spacing6)
-                                }
-                            }
                         }
                         .padding(.vertical, DesignTokens.spacing16)
                         .padding(.horizontal)
@@ -314,11 +320,14 @@ struct HomeView: View {
                     .refreshable {
                         await feedViewModel.refresh()
                     }
-                    .padding(.bottom, DesignTokens.bottomBarHeight + DesignTokens.spacing12)
+
+                    // MARK: - ScrollView 下方间距
+                    Color.clear
+                        .frame(height: 0) // ← 调整 ScrollView 下方的间距
                 }
                 .safeAreaInset(edge: .bottom) {
                     BottomTabBar(currentPage: $currentPage, showPhotoOptions: $showPhotoOptions)
-                        .padding(.top, 4)
+                        .padding(.top, 80)
                 }
             }
         }
@@ -329,3 +338,4 @@ struct HomeView: View {
     HomeView(currentPage: .constant(.home))
         .environmentObject(AuthenticationManager.shared)
 }
+
