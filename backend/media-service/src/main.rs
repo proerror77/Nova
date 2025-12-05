@@ -11,6 +11,7 @@ use media_service::handlers;
 use media_service::kafka::events::MediaEventsProducer;
 use media_service::middleware;
 use media_service::openapi::ApiDoc;
+use media_service::services::video::s3::get_s3_client;
 use media_service::services::ReelTranscodePipeline;
 use media_service::Config;
 use redis_utils::{RedisPool, SentinelConfig};
@@ -141,6 +142,23 @@ async fn main() -> io::Result<()> {
     let media_cache = Arc::new(MediaCache::with_manager(redis_pool.manager(), None));
     let media_cache_http = media_cache.clone();
 
+    // Initialize S3 client for presigned URL generation
+    let s3_client = match get_s3_client(&config.s3).await {
+        Ok(client) => Arc::new(client),
+        Err(e) => {
+            tracing::error!("S3 client initialization failed: {:#}", e);
+            eprintln!("ERROR: Failed to initialize S3 client: {}", e);
+            std::process::exit(1);
+        }
+    };
+    let s3_config = Arc::new(config.s3.clone());
+    let cdn_url = std::env::var("CDN_URL").unwrap_or_else(|_| "http://localhost".to_string());
+
+    info!(
+        "S3 client initialized (bucket={}, region={})",
+        config.s3.bucket, config.s3.region
+    );
+
     // Initialize Kafka producer for media events (e.g., MediaUploaded)
     let media_events_producer =
         MediaEventsProducer::new(&config.kafka.brokers, &config.kafka.events_topic).map_err(
@@ -246,12 +264,21 @@ async fn main() -> io::Result<()> {
 
     // gRPC server task
     let db_pool_grpc = db_pool.clone();
-    let cache_grpc = media_cache.clone();
+    let s3_client_grpc = s3_client.clone();
+    let s3_config_grpc = s3_config.clone();
+    let cdn_url_grpc = cdn_url.clone();
     tasks.spawn(async move {
         tracing::info!("gRPC server is running");
-        media_service::grpc::start_grpc_server(grpc_addr, db_pool_grpc, cache_grpc, grpc_shutdown)
-            .await
-            .map_err(|e| io::Error::other(format!("{}", e)))
+        media_service::grpc::start_grpc_server(
+            grpc_addr,
+            db_pool_grpc,
+            s3_client_grpc,
+            s3_config_grpc,
+            cdn_url_grpc,
+            grpc_shutdown,
+        )
+        .await
+        .map_err(|e| io::Error::other(format!("{}", e)))
     });
 
     let mut first_error: Option<io::Error> = None;

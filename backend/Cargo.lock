@@ -5303,6 +5303,7 @@ dependencies = [
  "once_cell",
  "prometheus",
  "prost 0.13.5",
+ "prost-types 0.13.5",
  "rdkafka",
  "redis 0.25.4",
  "redis-utils",
