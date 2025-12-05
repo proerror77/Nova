@@ -1,7 +1,19 @@
+use crate::rest_api::graph::{
+    check_is_following, follow_user, get_my_followers, get_my_following, get_user_followers,
+    get_user_following, unfollow_user,
+};
+use crate::rest_api::notifications::{
+    get_notifications, mark_all_notifications_read, mark_notification_read,
+};
 use crate::rest_api::poll::{
     add_candidate, check_voted, close_poll, create_poll, delete_poll, get_active_polls, get_poll,
     get_rankings, get_trending_polls, remove_candidate, unvote, vote_on_poll,
 };
+use crate::rest_api::search::{
+    get_suggestions, get_trending_topics, search_all, search_content, search_hashtags,
+    search_users_full,
+};
+use crate::rest_api::settings::{get_settings, update_settings};
 use crate::rest_api::social_likes::{
     check_liked, create_comment, create_like, create_share, delete_comment, delete_comment_v2,
     delete_like, get_comments, get_likes, get_share_count,
@@ -274,6 +286,19 @@ async fn main() -> std::io::Result<()> {
                 "/api/v2/auth/invites/validate",
                 web::get().to(rest_api::validate_invite_code),
             )
+            // ✅ Identity/Password Management API
+            .route(
+                "/api/v2/identity/password/change",
+                web::post().to(rest_api::identity::change_password),
+            )
+            .route(
+                "/api/v2/identity/password/reset/request",
+                web::post().to(rest_api::identity::request_password_reset),
+            )
+            .route(
+                "/api/v2/identity/password/reset",
+                web::post().to(rest_api::identity::reset_password),
+            )
             .service(rest_api::get_conversations)
             .service(rest_api::get_messages)
             .service(rest_api::create_conversation)
@@ -329,6 +354,21 @@ async fn main() -> std::io::Result<()> {
                 web::post().to(rest_api::upload_avatar),
             )
             .service(rest_api::upload_media)
+            .service(rest_api::media::get_media)
+            .service(rest_api::media::complete_upload)
+            .service(rest_api::media::get_user_media)
+            .service(rest_api::media::get_streaming_url)
+            .service(rest_api::media::get_download_url)
+            .service(rest_api::media::delete_media)
+            // ✅ Chat API (conversations, messages)
+            .service(rest_api::chat::get_conversations)
+            .service(rest_api::chat::send_chat_message)
+            .service(rest_api::chat::get_messages)
+            .service(rest_api::chat::create_conversation)
+            .route(
+                "/api/v2/chat/conversations/{id}",
+                web::get().to(rest_api::chat::get_conversation_by_id),
+            )
             // ✅ Alice AI Assistant API
             .route("/api/v2/alice/status", web::get().to(rest_api::get_status))
             .route("/api/v2/alice/chat", web::post().to(rest_api::send_message))
@@ -428,6 +468,58 @@ async fn main() -> std::io::Result<()> {
             .service(remove_candidate)
             .service(close_poll)
             .service(delete_poll)
+            // ✅ Graph API (Follow/Unfollow)
+            .route(
+                "/api/v2/graph/following",
+                web::get().to(get_my_following),
+            )
+            .route(
+                "/api/v2/graph/following/{user_id}",
+                web::get().to(get_user_following),
+            )
+            .route(
+                "/api/v2/graph/followers",
+                web::get().to(get_my_followers),
+            )
+            .route(
+                "/api/v2/graph/followers/{user_id}",
+                web::get().to(get_user_followers),
+            )
+            .route(
+                "/api/v2/graph/follow",
+                web::post().to(follow_user),
+            )
+            .route(
+                "/api/v2/graph/follow/{user_id}",
+                web::delete().to(unfollow_user),
+            )
+            .route(
+                "/api/v2/graph/is-following/{user_id}",
+                web::get().to(check_is_following),
+            )
+            // ✅ Notifications API
+            .route(
+                "/api/v2/notifications",
+                web::get().to(get_notifications),
+            )
+            .route(
+                "/api/v2/notifications/read/{id}",
+                web::post().to(mark_notification_read),
+            )
+            .route(
+                "/api/v2/notifications/read-all",
+                web::post().to(mark_all_notifications_read),
+            )
+            // ✅ Search API (content, users, hashtags, trending)
+            .route("/api/v2/search", web::get().to(search_all))
+            .route("/api/v2/search/content", web::get().to(search_content))
+            .route("/api/v2/search/users-full", web::get().to(search_users_full))
+            .route("/api/v2/search/hashtags", web::get().to(search_hashtags))
+            .route("/api/v2/search/suggestions", web::get().to(get_suggestions))
+            .route("/api/v2/search/trending", web::get().to(get_trending_topics))
+            // ✅ User Settings API
+            .route("/api/v2/settings", web::get().to(get_settings))
+            .route("/api/v2/settings", web::put().to(update_settings))
     })
     .bind(&bind_addr)?
     .run()

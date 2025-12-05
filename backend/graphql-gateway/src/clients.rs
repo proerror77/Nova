@@ -26,8 +26,16 @@ pub mod common {
 
 // Proto module definitions from build.rs
 pub mod proto {
+    // Both auth_service.proto and identity_service.proto are compiled together
+    // auth_service.proto: AuthService (settings, channels, invites, login, etc.)
+    // identity_service.proto: IdentityService (password management)
     pub mod auth {
         tonic::include_proto!("nova.identity_service.v2");
+    }
+
+    // Identity service v1 (password management)
+    pub mod identity {
+        tonic::include_proto!("nova.identity.v1");
     }
 
     // user module removed - user-service is deprecated
@@ -67,6 +75,7 @@ pub mod proto {
 }
 
 use proto::auth::auth_service_client::AuthServiceClient;
+use proto::identity::identity_service_client::IdentityServiceClient;
 use proto::chat::realtime_chat_service_client::RealtimeChatServiceClient;
 use proto::content::content_service_client::ContentServiceClient;
 use proto::feed::recommendation_service_client::RecommendationServiceClient;
@@ -328,6 +337,11 @@ impl ServiceClients {
     /// Creating multiple clients is cheap (just clones an Arc<Channel>).
     pub fn auth_client(&self) -> AuthServiceClient<Channel> {
         AuthServiceClient::new((*self.auth_channel).clone())
+    }
+
+    /// Create a new IdentityServiceClient for password management operations
+    pub fn identity_client(&self) -> IdentityServiceClient<Channel> {
+        IdentityServiceClient::new((*self.auth_channel).clone())
     }
 
     /// Execute auth service call with circuit breaker protection
