@@ -4,8 +4,10 @@ use crate::services::video::s3::generate_presigned_url;
 use aws_sdk_s3::Client as S3Client;
 use chrono::Utc;
 use sqlx::PgPool;
+use std::fs;
 use std::sync::Arc;
 use tokio::sync::broadcast;
+use tonic::transport::{Certificate, Identity, ServerTlsConfig};
 use tonic::{Request, Response, Status};
 use uuid::Uuid;
 
@@ -655,7 +657,17 @@ pub async fn start_grpc_server(
 
     let service = MediaServiceImpl::new(db_pool, s3_client, s3_config, cdn_url);
 
-    Server::builder()
+    let mut server_builder = Server::builder();
+
+    if let Some(tls_config) = load_server_tls_config()? {
+        server_builder = server_builder.tls_config(tls_config)?;
+    } else {
+        tracing::warn!(
+            "gRPC server TLS is DISABLED; enable GRPC_TLS_ENABLED=true for staging/production"
+        );
+    }
+
+    server_builder
         .add_service(MediaServiceServer::new(service))
         .serve_with_shutdown(addr, async move {
             let _ = shutdown.recv().await;
@@ -663,4 +675,48 @@ pub async fn start_grpc_server(
         .await?;
 
     Ok(())
+}
+
+fn load_server_tls_config() -> Result<Option<ServerTlsConfig>, Box<dyn std::error::Error>> {
+    let tls_enabled = std::env::var("GRPC_TLS_ENABLED")
+        .map(|v| matches!(v.as_str(), "1" | "true" | "TRUE"))
+        .unwrap_or(false);
+
+    if !tls_enabled {
+        return Ok(None);
+    }
+
+    let cert_path = std::env::var("GRPC_SERVER_CERT_PATH")
+        .map_err(|_| "GRPC_SERVER_CERT_PATH is required when GRPC_TLS_ENABLED=true")?;
+    let key_path = std::env::var("GRPC_SERVER_KEY_PATH")
+        .map_err(|_| "GRPC_SERVER_KEY_PATH is required when GRPC_TLS_ENABLED=true")?;
+
+    let server_cert = fs::read(&cert_path)
+        .map_err(|e| format!("Failed to read server cert {}: {}", cert_path, e))?;
+    let server_key = fs::read(&key_path)
+        .map_err(|e| format!("Failed to read server key {}: {}", key_path, e))?;
+
+    let mut tls_config =
+        ServerTlsConfig::new().identity(Identity::from_pem(server_cert, server_key));
+
+    let require_client_cert = std::env::var("GRPC_REQUIRE_CLIENT_CERT")
+        .map(|v| matches!(v.as_str(), "1" | "true" | "TRUE"))
+        .unwrap_or(false);
+
+    if require_client_cert {
+        let ca_path = std::env::var("GRPC_CLIENT_CA_CERT_PATH")
+            .or_else(|_| std::env::var("GRPC_TLS_CA_CERT_PATH"))
+            .map_err(|_| {
+                "GRPC_CLIENT_CA_CERT_PATH (or GRPC_TLS_CA_CERT_PATH) is required when GRPC_REQUIRE_CLIENT_CERT=true"
+            })?;
+        let ca_cert = fs::read(&ca_path)
+            .map_err(|e| format!("Failed to read client CA cert {}: {}", ca_path, e))?;
+
+        tls_config = tls_config.client_ca_root(Certificate::from_pem(ca_cert));
+        tracing::info!("gRPC server mTLS enabled (client cert required)");
+    } else {
+        tracing::info!("gRPC server TLS enabled (server cert only)");
+    }
+
+    Ok(Some(tls_config))
 }
