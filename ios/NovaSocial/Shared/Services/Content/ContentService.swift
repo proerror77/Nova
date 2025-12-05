@@ -24,17 +24,25 @@ class ContentService {
         )
     }
 
-    func createPost(creatorId: String, content: String) async throws -> Post {
+    func createPost(creatorId: String, content: String, mediaUrls: [String]? = nil) async throws -> Post {
         struct Request: Codable {
             let creator_id: String
             let content: String
+            let media_urls: [String]?
+            let media_type: String?
         }
 
         struct Response: Codable {
             let post: Post
         }
 
-        let request = Request(creator_id: creatorId, content: content)
+        let mediaType = mediaUrls?.isEmpty == false ? "image" : nil
+        let request = Request(
+            creator_id: creatorId,
+            content: content,
+            media_urls: mediaUrls,
+            media_type: mediaType
+        )
         let response: Response = try await client.request(
             endpoint: APIConfig.Content.createPost,
             body: request

@@ -130,17 +130,18 @@ class IdentityService {
 // MARK: - Request/Response Models
 
 struct AuthResponse: Codable {
-    let accessToken: String
+    let token: String
     let refreshToken: String?
-    let expiresIn: Int?
     let user: UserProfile
 
     enum CodingKeys: String, CodingKey {
-        case accessToken = "access_token"
+        case token
         case refreshToken = "refresh_token"
-        case expiresIn = "expires_in"
         case user
     }
+
+    // Compatibility accessor for code expecting accessToken
+    var accessToken: String { token }
 }
 
 struct UserProfileUpdate: Codable {

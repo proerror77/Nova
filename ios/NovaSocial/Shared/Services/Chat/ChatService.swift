@@ -236,6 +236,36 @@ final class ChatService {
         return conversation
     }
 
+    /// 更新会话信息（名称、头像等）
+    /// - Parameters:
+    ///   - conversationId: 会话ID
+    ///   - name: 新的会话名称（可选）
+    ///   - avatarUrl: 新的头像URL（可选）
+    /// - Returns: 更新后的会话对象
+    @MainActor
+    func updateConversation(
+        conversationId: String,
+        name: String? = nil,
+        avatarUrl: String? = nil
+    ) async throws -> Conversation {
+        let request = UpdateConversationRequest(
+            name: name,
+            avatarUrl: avatarUrl
+        )
+
+        let conversation: Conversation = try await client.request(
+            endpoint: APIConfig.Chat.updateConversation(conversationId),
+            method: "PUT",
+            body: request
+        )
+
+        #if DEBUG
+        print("[ChatService] Conversation updated: \(conversationId)")
+        #endif
+
+        return conversation
+    }
+
     // MARK: - E2EE Messaging
 
     /// Send an E2EE encrypted message via REST API
@@ -519,11 +549,423 @@ final class ChatService {
         }
     }
 
+    // MARK: - Message Reactions
+
+    /// 添加表情回应到消息
+    /// - Parameters:
+    ///   - messageId: 消息ID
+    ///   - emoji: 表情符号（如 "👍", "❤️", "😂"）
+    /// - Returns: 创建的表情回应对象
+    @MainActor
+    func addReaction(messageId: String, emoji: String) async throws -> MessageReaction {
+        let request = AddReactionRequest(emoji: emoji)
+
+        let reaction: MessageReaction = try await client.request(
+            endpoint: APIConfig.Chat.addReaction(messageId),
+            method: "POST",
+            body: request
+        )
+
+        #if DEBUG
+        print("[ChatService] Reaction added: \(emoji) to message \(messageId)")
+        #endif
+
+        return reaction
+    }
+
+    /// 获取消息的所有表情回应
+    /// - Parameter messageId: 消息ID
+    /// - Returns: 表情回应列表响应
+    @MainActor
+    func getReactions(messageId: String) async throws -> GetReactionsResponse {
+        let response: GetReactionsResponse = try await client.get(
+            endpoint: APIConfig.Chat.getReactions(messageId)
+        )
+
+        #if DEBUG
+        print("[ChatService] Fetched \(response.reactions.count) reactions for message \(messageId)")
+        #endif
+
+        return response
+    }
+
+    /// 删除表情回应
+    /// - Parameters:
+    ///   - messageId: 消息ID
+    ///   - reactionId: 表情回应ID
+    @MainActor
+    func deleteReaction(messageId: String, reactionId: String) async throws {
+        struct EmptyResponse: Codable {}
+
+        let _: EmptyResponse = try await client.request(
+            endpoint: APIConfig.Chat.deleteReaction(messageId: messageId, reactionId: reactionId),
+            method: "DELETE"
+        )
+
+        #if DEBUG
+        print("[ChatService] Reaction deleted: \(reactionId)")
+        #endif
+    }
+
+    // MARK: - Group Management
+
+    /// 添加成员到群组会话
+    /// - Parameters:
+    ///   - conversationId: 会话ID
+    ///   - userIds: 要添加的用户ID列表
+    @MainActor
+    func addGroupMembers(conversationId: String, userIds: [String]) async throws {
+        struct Response: Codable {
+            let success: Bool
+        }
+
+        let request = AddGroupMembersRequest(userIds: userIds)
+
+        let _: Response = try await client.request(
+            endpoint: APIConfig.Chat.addGroupMembers(conversationId),
+            method: "POST",
+            body: request
+        )
+
+        #if DEBUG
+        print("[ChatService] Added \(userIds.count) members to conversation \(conversationId)")
+        #endif
+    }
+
+    /// 从群组会话中移除成员
+    /// - Parameters:
+    ///   - conversationId: 会话ID
+    ///   - userId: 要移除的用户ID
+    @MainActor
+    func removeGroupMember(conversationId: String, userId: String) async throws {
+        struct EmptyResponse: Codable {}
+
+        let _: EmptyResponse = try await client.request(
+            endpoint: APIConfig.Chat.removeGroupMember(conversationId: conversationId, userId: userId),
+            method: "DELETE"
+        )
+
+        #if DEBUG
+        print("[ChatService] Removed member \(userId) from conversation \(conversationId)")
+        #endif
+    }
+
+    /// 更新群组成员角色
+    /// - Parameters:
+    ///   - conversationId: 会话ID
+    ///   - userId: 用户ID
+    ///   - role: 新角色（owner/admin/member）
+    @MainActor
+    func updateMemberRole(conversationId: String, userId: String, role: GroupMemberRole) async throws {
+        struct Response: Codable {
+            let success: Bool
+        }
+
+        let request = UpdateMemberRoleRequest(role: role)
+
+        let _: Response = try await client.request(
+            endpoint: APIConfig.Chat.updateMemberRole(conversationId: conversationId, userId: userId),
+            method: "PUT",
+            body: request
+        )
+
+        #if DEBUG
+        print("[ChatService] Updated role for user \(userId) to \(role.rawValue)")
+        #endif
+    }
+
+    // MARK: - Voice/Video Calls (WebRTC)
+
+    /// 发起语音或视频通话
+    /// - Parameters:
+    ///   - conversationId: 会话ID
+    ///   - isVideo: 是否为视频通话
+    /// - Returns: 通话ID和相关信息
+    @MainActor
+    func initiateCall(conversationId: String, isVideo: Bool) async throws -> CallResponse {
+        struct Request: Codable {
+            let isVideo: Bool
+
+            enum CodingKeys: String, CodingKey {
+                case isVideo = "is_video"
+            }
+        }
+
+        let request = Request(isVideo: isVideo)
+
+        let response: CallResponse = try await client.request(
+            endpoint: APIConfig.Chat.initiateCall(conversationId),
+            method: "POST",
+            body: request
+        )
+
+        #if DEBUG
+        print("[ChatService] Call initiated: \(response.callId), video: \(isVideo)")
+        #endif
+
+        return response
+    }
+
+    /// 接听通话
+    /// - Parameter callId: 通话ID
+    @MainActor
+    func answerCall(callId: String) async throws {
+        struct EmptyRequest: Codable {}
+        struct Response: Codable {
+            let success: Bool
+        }
+
+        let _: Response = try await client.request(
+            endpoint: APIConfig.Chat.answerCall(callId),
+            method: "POST",
+            body: EmptyRequest()
+        )
+
+        #if DEBUG
+        print("[ChatService] Call answered: \(callId)")
+        #endif
+    }
+
+    /// 拒绝通话
+    /// - Parameter callId: 通话ID
+    @MainActor
+    func rejectCall(callId: String) async throws {
+        struct EmptyRequest: Codable {}
+        struct Response: Codable {
+            let success: Bool
+        }
+
+        let _: Response = try await client.request(
+            endpoint: APIConfig.Chat.rejectCall(callId),
+            method: "POST",
+            body: EmptyRequest()
+        )
+
+        #if DEBUG
+        print("[ChatService] Call rejected: \(callId)")
+        #endif
+    }
+
+    /// 结束通话
+    /// - Parameter callId: 通话ID
+    @MainActor
+    func endCall(callId: String) async throws {
+        struct EmptyRequest: Codable {}
+        struct Response: Codable {
+            let success: Bool
+        }
+
+        let _: Response = try await client.request(
+            endpoint: APIConfig.Chat.endCall(callId),
+            method: "POST",
+            body: EmptyRequest()
+        )
+
+        #if DEBUG
+        print("[ChatService] Call ended: \(callId)")
+        #endif
+    }
+
+    /// 发送 ICE candidate（WebRTC连接建立）
+    /// - Parameters:
+    ///   - callId: 通话ID
+    ///   - candidate: ICE candidate 数据
+    @MainActor
+    func sendIceCandidate(callId: String, candidate: String) async throws {
+        struct Request: Codable {
+            let callId: String
+            let candidate: String
+
+            enum CodingKeys: String, CodingKey {
+                case callId = "call_id"
+                case candidate
+            }
+        }
+
+        struct Response: Codable {
+            let success: Bool
+        }
+
+        let request = Request(callId: callId, candidate: candidate)
+
+        let _: Response = try await client.request(
+            endpoint: APIConfig.Chat.sendIceCandidate,
+            method: "POST",
+            body: request
+        )
+
+        #if DEBUG
+        print("[ChatService] ICE candidate sent for call \(callId)")
+        #endif
+    }
+
+    /// 获取 TURN/STUN 服务器配置（用于 WebRTC）
+    /// - Returns: ICE 服务器配置列表
+    @MainActor
+    func getIceServers() async throws -> IceServersResponse {
+        let response: IceServersResponse = try await client.get(
+            endpoint: APIConfig.Chat.getIceServers
+        )
+
+        #if DEBUG
+        print("[ChatService] Fetched \(response.iceServers.count) ICE servers")
+        #endif
+
+        return response
+    }
+
+    // MARK: - Location Sharing
+
+    /// 分享当前位置到会话
+    /// - Parameters:
+    ///   - conversationId: 会话ID
+    ///   - latitude: 纬度
+    ///   - longitude: 经度
+    ///   - accuracy: 精度（米）
+    @MainActor
+    func shareLocation(
+        conversationId: String,
+        latitude: Double,
+        longitude: Double,
+        accuracy: Double? = nil
+    ) async throws {
+        struct Request: Codable {
+            let latitude: Double
+            let longitude: Double
+            let accuracy: Double?
+        }
+
+        struct Response: Codable {
+            let success: Bool
+        }
+
+        let request = Request(latitude: latitude, longitude: longitude, accuracy: accuracy)
+
+        let _: Response = try await client.request(
+            endpoint: APIConfig.Chat.shareLocation(conversationId),
+            method: "POST",
+            body: request
+        )
+
+        #if DEBUG
+        print("[ChatService] Location shared: \(latitude), \(longitude)")
+        #endif
+    }
+
+    /// 停止分享位置
+    /// - Parameter conversationId: 会话ID
+    @MainActor
+    func stopSharingLocation(conversationId: String) async throws {
+        struct EmptyResponse: Codable {}
+
+        let _: EmptyResponse = try await client.request(
+            endpoint: APIConfig.Chat.stopSharingLocation(conversationId),
+            method: "DELETE"
+        )
+
+        #if DEBUG
+        print("[ChatService] Stopped sharing location for conversation \(conversationId)")
+        #endif
+    }
+
+    /// 获取附近的用户
+    /// - Parameters:
+    ///   - latitude: 当前纬度
+    ///   - longitude: 当前经度
+    ///   - radius: 搜索半径（米，默认1000米）
+    /// - Returns: 附近用户列表
+    @MainActor
+    func getNearbyUsers(
+        latitude: Double,
+        longitude: Double,
+        radius: Int = 1000
+    ) async throws -> NearbyUsersResponse {
+        let response: NearbyUsersResponse = try await client.get(
+            endpoint: APIConfig.Chat.getNearbyUsers,
+            queryParams: [
+                "latitude": String(latitude),
+                "longitude": String(longitude),
+                "radius": String(radius)
+            ]
+        )
+
+        #if DEBUG
+        print("[ChatService] Found \(response.users.count) nearby users")
+        #endif
+
+        return response
+    }
+
     // MARK: - Cleanup
 
     deinit {
         // 简单取消WebSocket任务，不调用@MainActor方法
         webSocketTask?.cancel(with: .goingAway, reason: nil)
+    }
+}
+
+// MARK: - Call Response Models
+
+/// Response from initiating a call
+struct CallResponse: Codable, Sendable {
+    let callId: String
+    let conversationId: String
+    let initiatorId: String
+    let isVideo: Bool
+    let createdAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case callId = "call_id"
+        case conversationId = "conversation_id"
+        case initiatorId = "initiator_id"
+        case isVideo = "is_video"
+        case createdAt = "created_at"
+    }
+}
+
+/// ICE server configuration for WebRTC
+struct IceServer: Codable, Sendable {
+    let urls: [String]
+    let username: String?
+    let credential: String?
+}
+
+/// Response containing ICE servers configuration
+struct IceServersResponse: Codable, Sendable {
+    let iceServers: [IceServer]
+
+    enum CodingKeys: String, CodingKey {
+        case iceServers = "ice_servers"
+    }
+}
+
+// MARK: - Location Response Models
+
+/// Nearby user information
+struct NearbyUser: Codable, Sendable {
+    let userId: String
+    let username: String
+    let displayName: String
+    let avatarUrl: String?
+    let distance: Double  // Distance in meters
+
+    enum CodingKeys: String, CodingKey {
+        case userId = "user_id"
+        case username
+        case displayName = "display_name"
+        case avatarUrl = "avatar_url"
+        case distance
+    }
+}
+
+/// Response containing nearby users
+struct NearbyUsersResponse: Codable, Sendable {
+    let users: [NearbyUser]
+    let totalCount: Int
+
+    enum CodingKeys: String, CodingKey {
+        case users
+        case totalCount = "total_count"
     }
 }
 

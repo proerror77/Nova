@@ -5,7 +5,7 @@ import UIKit
 
 /// iOS 原生分享面板组件
 /// 使用 UIActivityViewController 实现系统级分享功能
-struct ShareSheet: UIViewControllerRepresentable {
+struct NovaShareSheet: UIViewControllerRepresentable {
     let items: [Any]
 
     func makeUIViewController(context: Context) -> UIActivityViewController {
@@ -30,7 +30,7 @@ extension View {
     ///   - items: 要分享的内容数组
     func shareSheet(isPresented: Binding<Bool>, items: [Any]) -> some View {
         self.sheet(isPresented: isPresented) {
-            ShareSheet(items: items)
+            NovaShareSheet(items: items)
         }
     }
 }

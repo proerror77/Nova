@@ -115,7 +115,7 @@ struct MessageView: View {
                 )
                 .transition(.identity)
             } else if showNewPost {
-                NewPostView(showNewPost: $showNewPost)
+                NewPostView(showNewPost: $showNewPost, initialImage: selectedImage)
                     .transition(.identity)
             } else if showGenerateImage {
                 GenerateImage01View(showGenerateImage: $showGenerateImage)
@@ -126,7 +126,21 @@ struct MessageView: View {
 
             // MARK: - 照片选项弹窗
             if showPhotoOptions {
-                photoOptionsModal
+                PhotoOptionsModal(
+                    isPresented: $showPhotoOptions,
+                    onChoosePhoto: {
+                        showImagePicker = true
+                    },
+                    onTakePhoto: {
+                        showCamera = true
+                    },
+                    onGenerateImage: {
+                        showGenerateImage = true
+                    },
+                    onWrite: {
+                        showNewPost = true
+                    }
+                )
             }
 
             // MARK: - 添加选项菜单弹窗
@@ -145,6 +159,12 @@ struct MessageView: View {
         }
         .sheet(isPresented: $showCamera) {
             ImagePicker(sourceType: .camera, selectedImage: $selectedImage)
+        }
+        .onChange(of: selectedImage) { oldValue, newValue in
+            // 选择/拍摄照片后，自动跳转到NewPostView
+            if newValue != nil {
+                showNewPost = true
+            }
         }
         .onAppear {
             // 页面显示时加载会话列表
@@ -238,7 +258,7 @@ struct MessageView: View {
                                         await loadConversations()
                                     }
                                 }) {
-                                    Text(LocalizedStringKey("Retry"))
+                                Text(LocalizedStringKey("Retry"))
                                         .font(Font.custom("Helvetica Neue", size: 14).weight(.medium))
                                         .foregroundColor(DesignTokens.textOnAccent)
                                         .padding(.horizontal, 24)
@@ -301,110 +321,6 @@ struct MessageView: View {
             }
             .safeAreaInset(edge: .bottom) {
                 BottomTabBar(currentPage: $currentPage, showPhotoOptions: $showPhotoOptions)
-            }
-        }
-    }
-
-    // MARK: - 照片选项弹窗
-    private var photoOptionsModal: some View {
-        ZStack {
-            // 半透明背景遮罩
-            Color.black.opacity(0.4)
-                .ignoresSafeArea()
-                .onTapGesture {
-                    showPhotoOptions = false
-                }
-
-            // 弹窗内容
-            VStack {
-                Spacer()
-
-                ZStack() {
-                    Rectangle()
-                        .foregroundColor(.clear)
-                        .frame(width: 375, height: 270)
-                        .background(.white)
-                        .cornerRadius(11)
-                        .offset(x: 0, y: 0)
-                    Rectangle()
-                        .foregroundColor(.clear)
-                        .frame(width: 56, height: 7)
-                        .background(DesignTokens.accentColor)
-                        .cornerRadius(3.50)
-                        .offset(x: -0.50, y: -120.50)
-
-                    // Choose Photo
-                    Button(action: {
-                        showPhotoOptions = false
-                        showImagePicker = true
-                    }) {
-                    Text(LocalizedStringKey("Choose Photo"))
-                            .font(Font.custom("Helvetica Neue", size: 18).weight(.medium))
-                            .foregroundColor(DesignTokens.textPrimary)
-                    }
-                    .offset(x: 0, y: -79)
-
-                    // Take Photo
-                    Button(action: {
-                        showPhotoOptions = false
-                        showCamera = true
-                    }) {
-                    Text(LocalizedStringKey("Take Photo"))
-                            .font(Font.custom("Helvetica Neue", size: 18).weight(.medium))
-                            .foregroundColor(DesignTokens.textPrimary)
-                    }
-                    .offset(x: 0.50, y: -21)
-
-                    // Generate image
-                    Button(action: {
-                        showPhotoOptions = false
-                        showGenerateImage = true
-                    }) {
-                    Text(LocalizedStringKey("Generate image"))
-                            .font(Font.custom("Helvetica Neue", size: 18).weight(.medium))
-                            .foregroundColor(DesignTokens.textPrimary)
-                    }
-                    .offset(x: 0, y: 37)
-
-                    // Cancel
-                    Button(action: {
-                        showPhotoOptions = false
-                    }) {
-                    Text(LocalizedStringKey("Cancel"))
-                            .font(Font.custom("Helvetica Neue", size: 18).weight(.medium))
-                            .lineSpacing(20)
-                            .foregroundColor(.black)
-                    }
-                    .offset(x: -0.50, y: 105)
-
-                    // 分隔线
-                    Rectangle()
-                        .foregroundColor(.clear)
-                        .frame(width: 375, height: 0)
-                        .overlay(
-                            Rectangle()
-                                .stroke(DesignTokens.dividerColor, lineWidth: 3)
-                        )
-                        .offset(x: 0, y: 75)
-                    Rectangle()
-                        .foregroundColor(.clear)
-                        .frame(width: 375, height: 0)
-                        .overlay(
-                            Rectangle()
-                                .stroke(DesignTokens.textMuted, lineWidth: 0.20)
-                        )
-                        .offset(x: 0, y: -50)
-                    Rectangle()
-                        .foregroundColor(.clear)
-                        .frame(width: 375, height: 0)
-                        .overlay(
-                            Rectangle()
-                                .stroke(DesignTokens.textMuted, lineWidth: 0.20)
-                        )
-                        .offset(x: 0, y: 8)
-                }
-                .frame(width: 375, height: 270)
-                .padding(.bottom, 50)
             }
         }
     }

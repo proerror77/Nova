@@ -7,6 +7,7 @@ struct PhotoOptionsModal: View {
     var onChoosePhoto: () -> Void = {}
     var onTakePhoto: () -> Void = {}
     var onGenerateImage: () -> Void = {}
+    var onWrite: () -> Void = {}
 
     var body: some View {
         ZStack {
@@ -22,93 +23,122 @@ struct PhotoOptionsModal: View {
                 Spacer()
 
                 ZStack {
-                    Rectangle()
-                        .foregroundColor(.clear)
-                        .frame(width: 375, height: 270)
-                        .background(DesignTokens.cardBackground)
-                        .cornerRadius(11)
-                        .offset(x: 0, y: 0)
+                    Group {
+                        // 背景 - 独立控制上下边距
+                        DesignTokens.cardBackground
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 356) // ← 基础高度
+                            .cornerRadius(16)
+                            .offset(y: 20) // ← 正数=底部增加，负数=顶部增加
 
-                    Rectangle()
-                        .foregroundColor(.clear)
-                        .frame(width: 56, height: 7)
-                        .background(DesignTokens.accentColor)
-                        .cornerRadius(3.50)
-                        .offset(x: -0.50, y: -120.50)
+                        // 顶部红色指示条
+                        Rectangle()
+                            .foregroundColor(.clear)
+                            .frame(width: 56, height: 4)
+                            .background(Color(red: 0.82, green: 0.11, blue: 0.26))
+                            .cornerRadius(3.50)
+                            .offset(x: 0, y: -145)
 
-                    // Choose Photo
-                    Button(action: {
-                        onChoosePhoto()
-                        isPresented = false
-                    }) {
-                        Text("Choose Photo")
-                            .font(Font.custom("Helvetica Neue", size: DesignTokens.fontTitle).weight(.medium))
-                            .foregroundColor(Color(red: 0.18, green: 0.18, blue: 0.18))
-                    }
-                    .offset(x: 0, y: -79)
+                        // Choose Photo
+                        Button(action: {
+                            onChoosePhoto()
+                            isPresented = false
+                        }) {
+                            Text("Choose Photo")
+                                .font(Font.custom("Helvetica Neue", size: 18).weight(.medium))
+                                .foregroundColor(Color(red: 0.18, green: 0.18, blue: 0.18))
+                        }
+                        .offset(x: 0, y: -110)
 
-                    // Take Photo
-                    Button(action: {
-                        onTakePhoto()
-                        isPresented = false
-                    }) {
-                        Text("Take Photo")
-                            .font(Font.custom("Helvetica Neue", size: DesignTokens.fontTitle).weight(.medium))
-                            .foregroundColor(Color(red: 0.18, green: 0.18, blue: 0.18))
-                    }
-                    .offset(x: 0.50, y: -21)
-
-                    // Generate image
-                    Button(action: {
-                        onGenerateImage()
-                        isPresented = false
-                    }) {
-                        Text("Generate image")
-                            .font(Font.custom("Helvetica Neue", size: DesignTokens.fontTitle).weight(.medium))
-                            .foregroundColor(Color(red: 0.18, green: 0.18, blue: 0.18))
-                    }
-                    .offset(x: 0, y: 37)
-
-                    // Cancel
-                    Button(action: {
-                        isPresented = false
-                    }) {
-                        Text("Cancel")
-                            .font(Font.custom("Helvetica Neue", size: DesignTokens.fontTitle).weight(.medium))
-                            .lineSpacing(20)
-                            .foregroundColor(.black)
-                    }
-                    .offset(x: -0.50, y: 105)
-
-                    // Dividers
-                    Rectangle()
-                        .foregroundColor(.clear)
-                        .frame(width: 375, height: 0)
-                        .overlay(
-                            Rectangle()
-                                .stroke(DesignTokens.dividerColor, lineWidth: 3)
-                        )
-                        .offset(x: 0, y: 75)
-                    Rectangle()
-                        .foregroundColor(.clear)
-                        .frame(width: 375, height: 0)
-                        .overlay(
-                            Rectangle()
-                                .stroke(Color(red: 0.77, green: 0.77, blue: 0.77), lineWidth: 0.20)
-                        )
+                        // Take Photo
+                        Button(action: {
+                            onTakePhoto()
+                            isPresented = false
+                        }) {
+                            Text("Take Photo")
+                                .font(Font.custom("Helvetica Neue", size: 18).weight(.medium))
+                                .foregroundColor(Color(red: 0.18, green: 0.18, blue: 0.18))
+                        }
                         .offset(x: 0, y: -50)
-                    Rectangle()
-                        .foregroundColor(.clear)
-                        .frame(width: 375, height: 0)
-                        .overlay(
-                            Rectangle()
-                                .stroke(Color(red: 0.77, green: 0.77, blue: 0.77), lineWidth: 0.20)
-                        )
-                        .offset(x: 0, y: 8)
+
+                        // Generate Image
+                        Button(action: {
+                            onGenerateImage()
+                            isPresented = false
+                        }) {
+                            Text("Generate Image")
+                                .font(Font.custom("Helvetica Neue", size: 18).weight(.medium))
+                                .foregroundColor(Color(red: 0.18, green: 0.18, blue: 0.18))
+                        }
+                        .offset(x: 0, y: 10)
+
+                        // Write
+                        Button(action: {
+                            onWrite()
+                            isPresented = false
+                        }) {
+                            Text("Write")
+                                .font(Font.custom("Helvetica Neue", size: 18).weight(.medium))
+                                .foregroundColor(.black)
+                        }
+                        .offset(x: 0, y: 70)
+
+                    }
+
+                    // 分隔线
+                    Group {
+                        Rectangle()
+                            .fill(Color(red: 0.77, green: 0.77, blue: 0.77))
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 0.5)
+                            .offset(x: 0, y: -80)
+
+                        Rectangle()
+                            .fill(Color(red: 0.77, green: 0.77, blue: 0.77))
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 0.5)
+                            .offset(x: 0, y: -20)
+
+                        Rectangle()
+                            .fill(Color(red: 0.77, green: 0.77, blue: 0.77))
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 0.5)
+                            .offset(x: 0, y: 40)
+
+                        // Cancel 上方分隔线
+                        Rectangle()
+                            .fill(Color(red: 0.93, green: 0.93, blue: 0.93))
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 6)
+                            .offset(x: 0, y: 100)
+
+                        // Cancel
+                        Button(action: {
+                            isPresented = false
+                        }) {
+                            Text("Cancel")
+                                .font(Font.custom("Helvetica Neue", size: 18).weight(.medium))
+                                .foregroundColor(.black)
+                        }
+                        .offset(x: 0, y: 132)
+                    }
                 }
-                .frame(width: 375, height: 270)
-                .padding(.bottom, 50)
+                .frame(maxWidth: .infinity)
+                .frame(height: 335)
+                .padding(.bottom, -20)
             }
         }
     }
+}
+
+// MARK: - Preview
+
+#Preview {
+    PhotoOptionsModal(
+        isPresented: .constant(true),
+        onChoosePhoto: {},
+        onTakePhoto: {},
+        onGenerateImage: {},
+        onWrite: {}
+    )
 }

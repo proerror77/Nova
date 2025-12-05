@@ -16,6 +16,7 @@ struct AliceView: View {
     @State private var showCamera = false
     @State private var selectedImage: UIImage?
     @State private var showGenerateImage = false
+    @State private var showNewPost = false
     @State private var selectedModel = "alice 5.1 Fast"
 
     // MARK: - Model Data
@@ -30,19 +31,29 @@ struct AliceView: View {
     var body: some View {
         ZStack {
             // 条件渲染：根据状态切换视图
-            if showGenerateImage {
+            if showNewPost {
+                NewPostView(showNewPost: $showNewPost, initialImage: selectedImage)
+                    .transition(.identity)
+            } else if showGenerateImage {
                 GenerateImage01View(showGenerateImage: $showGenerateImage)
                     .transition(.identity)
             } else {
                 aliceContent
             }
         }
+        .animation(.none, value: showNewPost)
         .animation(.none, value: showGenerateImage)
         .sheet(isPresented: $showImagePicker) {
             ImagePicker(sourceType: .photoLibrary, selectedImage: $selectedImage)
         }
         .sheet(isPresented: $showCamera) {
             ImagePicker(sourceType: .camera, selectedImage: $selectedImage)
+        }
+        .onChange(of: selectedImage) { oldValue, newValue in
+            // 选择/拍摄照片后，自动跳转到NewPostView
+            if newValue != nil {
+                showNewPost = true
+            }
         }
     }
 
@@ -139,73 +150,7 @@ struct AliceView: View {
                 .padding(.bottom, -25)
 
                 // MARK: - 底部导航栏
-                HStack(spacing: -20) {
-                    // Home
-                    VStack(spacing: 2) {
-                        Image("home-icon-black")
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 32, height: 22)
-                        Text("Home")
-                            .font(.system(size: 9, weight: .medium))
-                            .foregroundColor(.black)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .onTapGesture {
-                        currentPage = .home
-                    }
-
-                    // Message
-                    VStack(spacing: 4) {
-                        Image("Message-icon-black")
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 22, height: 22)
-                        Text("Message")
-                            .font(.system(size: 9))
-                            .foregroundColor(.black)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .onTapGesture {
-                        currentPage = .message
-                    }
-
-                    // New Post (中间按钮)
-                    NewPostButtonComponent(showNewPost: $showPhotoOptions)
-
-                    // Alice (当前页面 - 高亮)
-                    VStack(spacing: -12) {
-                        Image("alice-button-on")
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 44, height: 44)
-                        Text("")
-                            .font(.system(size: 9))
-                    }
-                    .frame(maxWidth: .infinity)
-
-                    // Account
-                    VStack(spacing: -12) {
-                        Image("Account-button-off")
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 44, height: 44)
-                        Text("")
-                            .font(.system(size: 9))
-                    }
-                    .frame(maxWidth: .infinity)
-                    .onTapGesture {
-                        currentPage = .account
-                    }
-                }
-                .frame(height: 60)
-                .padding(.bottom, 20)
-                .background(Color.white)
-                .overlay(
-                    Rectangle()
-                        .stroke(Color(red: 0.77, green: 0.77, blue: 0.77), lineWidth: 0.20)
-                )
-                .offset(y: 35)
+                BottomTabBar(currentPage: $currentPage, showPhotoOptions: $showPhotoOptions)
             }
 
             // MARK: - 中间独立图标框架
@@ -228,7 +173,21 @@ struct AliceView: View {
 
             // MARK: - 照片选项弹窗
             if showPhotoOptions {
-                photoOptionsModal
+                PhotoOptionsModal(
+                    isPresented: $showPhotoOptions,
+                    onChoosePhoto: {
+                        showImagePicker = true
+                    },
+                    onTakePhoto: {
+                        showCamera = true
+                    },
+                    onGenerateImage: {
+                        showGenerateImage = true
+                    },
+                    onWrite: {
+                        showNewPost = true
+                    }
+                )
             }
         }
     }
@@ -277,109 +236,6 @@ struct AliceView: View {
         }
     }
 
-    // MARK: - 照片选项弹窗
-    private var photoOptionsModal: some View {
-        ZStack {
-            // 半透明背景遮罩
-            Color.black.opacity(0.4)
-                .ignoresSafeArea()
-                .onTapGesture {
-                    showPhotoOptions = false
-                }
-
-            // 弹窗内容
-            VStack {
-                Spacer()
-
-                ZStack() {
-                    Rectangle()
-                        .foregroundColor(.clear)
-                        .frame(width: 375, height: 270)
-                        .background(.white)
-                        .cornerRadius(11)
-                        .offset(x: 0, y: 0)
-                    Rectangle()
-                        .foregroundColor(.clear)
-                        .frame(width: 56, height: 7)
-                        .background(Color(red: 0.82, green: 0.11, blue: 0.26))
-                        .cornerRadius(3.50)
-                        .offset(x: -0.50, y: -120.50)
-
-                    // Choose Photo
-                    Button(action: {
-                        showPhotoOptions = false
-                        showImagePicker = true
-                    }) {
-                        Text("Choose Photo")
-                            .font(Font.custom("Helvetica Neue", size: 18).weight(.medium))
-                            .foregroundColor(Color(red: 0.18, green: 0.18, blue: 0.18))
-                    }
-                    .offset(x: 0, y: -79)
-
-                    // Take Photo
-                    Button(action: {
-                        showPhotoOptions = false
-                        showCamera = true
-                    }) {
-                        Text("Take Photo")
-                            .font(Font.custom("Helvetica Neue", size: 18).weight(.medium))
-                            .foregroundColor(Color(red: 0.18, green: 0.18, blue: 0.18))
-                    }
-                    .offset(x: 0.50, y: -21)
-
-                    // Generate image
-                    Button(action: {
-                        showPhotoOptions = false
-                        showGenerateImage = true
-                    }) {
-                        Text("Generate image")
-                            .font(Font.custom("Helvetica Neue", size: 18).weight(.medium))
-                            .foregroundColor(Color(red: 0.18, green: 0.18, blue: 0.18))
-                    }
-                    .offset(x: 0, y: 37)
-
-                    // Cancel
-                    Button(action: {
-                        showPhotoOptions = false
-                    }) {
-                        Text("Cancel")
-                            .font(Font.custom("Helvetica Neue", size: 18).weight(.medium))
-                            .lineSpacing(20)
-                            .foregroundColor(.black)
-                    }
-                    .offset(x: -0.50, y: 105)
-
-                    // 分隔线
-                    Rectangle()
-                        .foregroundColor(.clear)
-                        .frame(width: 375, height: 0)
-                        .overlay(
-                            Rectangle()
-                                .stroke(Color(red: 0.93, green: 0.93, blue: 0.93), lineWidth: 3)
-                        )
-                        .offset(x: 0, y: 75)
-                    Rectangle()
-                        .foregroundColor(.clear)
-                        .frame(width: 375, height: 0)
-                        .overlay(
-                            Rectangle()
-                                .stroke(Color(red: 0.77, green: 0.77, blue: 0.77), lineWidth: 0.20)
-                        )
-                        .offset(x: 0, y: -50)
-                    Rectangle()
-                        .foregroundColor(.clear)
-                        .frame(width: 375, height: 0)
-                        .overlay(
-                            Rectangle()
-                                .stroke(Color(red: 0.77, green: 0.77, blue: 0.77), lineWidth: 0.20)
-                        )
-                        .offset(x: 0, y: 8)
-                }
-                .frame(width: 375, height: 270)
-                .padding(.bottom, 50)
-            }
-        }
-    }
 }
 
 // MARK: - Model Row Component
