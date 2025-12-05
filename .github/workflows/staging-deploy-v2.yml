@@ -1,17 +1,23 @@
-name: Staging Deploy V2 (Using Reusable Workflows)
+name: Staging Deploy V2 [DEPRECATED]
 
-# Simplified version using reusable workflows
-# Reduces ~350 lines to ~100 lines while maintaining functionality
+# ⚠️  DEPRECATED: 此工作流已被 staging-deploy-incremental.yml 取代
+# 保留此文件仅供参考，不再自动触发
+# 使用新的增量部署工作流以获得更好的性能和可靠性
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - 'backend/**'
-      - 'k8s/**'
-      - '.github/workflows/staging-deploy-v2.yml'
+  # push:
+  #   branches:
+  #     - main
+  #   paths:
+  #     - 'backend/**'
+  #     - 'k8s/**'
+  #     - '.github/workflows/staging-deploy-v2.yml'
   workflow_dispatch:
+    inputs:
+      confirm:
+        description: '⚠️  此工作流已弃用，请使用 staging-deploy-incremental.yml'
+        type: boolean
+        required: true
 
 # Prevent concurrent staging deployments
 concurrency:

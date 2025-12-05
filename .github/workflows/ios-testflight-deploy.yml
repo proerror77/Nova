@@ -1,0 +1,330 @@
+name: iOS Deploy to TestFlight
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'ios/**'
+      - '.github/workflows/ios-testflight-deploy.yml'
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      deployment_environment:
+        description: 'Deploy to TestFlight (beta) or Production (release)'
+        required: true
+        default: 'beta'
+        type: choice
+        options:
+          - beta
+          - release
+
+concurrency:
+  group: ios-deploy-${{ github.ref }}
+  cancel-in-progress: false  # Never cancel deployments
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  XCODE_VERSION: "16.0"
+  FASTLANE_USER: ${{ secrets.APPSTORE_EMAIL }}
+  FASTLANE_PASSWORD: ${{ secrets.APPSTORE_PASSWORD }}
+  MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+  CI: true
+
+jobs:
+  # ==================== PRE-DEPLOYMENT CHECKS ====================
+  pre-deploy:
+    name: Pre-Deployment Validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate secrets
+        run: |
+          echo "Checking required secrets..."
+          [[ -n "${{ secrets.APPSTORE_EMAIL }}" ]] && echo "✅ APPSTORE_EMAIL" || exit 1
+          [[ -n "${{ secrets.APPSTORE_PASSWORD }}" ]] && echo "✅ APPSTORE_PASSWORD" || exit 1
+          [[ -n "${{ secrets.MATCH_PASSWORD }}" ]] && echo "✅ MATCH_PASSWORD" || exit 1
+          echo ""
+          echo "All required secrets are configured"
+
+      - name: Validate trigger
+        run: |
+          if [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" != "refs/heads/main" ]]; then
+            echo "❌ Deployments only allowed from main branch"
+            exit 1
+          fi
+          echo "✅ Valid deployment trigger"
+
+  # ==================== BUILD FOR DISTRIBUTION ====================
+  build-for-distribution:
+    name: Build & Sign for Distribution
+    runs-on: macos-latest
+    needs: pre-deploy
+    outputs:
+      build_number: ${{ steps.build_info.outputs.build_number }}
+      version: ${{ steps.build_info.outputs.version }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Select Xcode
+        run: sudo xcode-select --switch /Applications/Xcode_16.0.app
+
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.0'
+          bundler-cache: true
+
+      - name: Setup Fastlane
+        working-directory: ios/NovaSocial
+        run: |
+          gem install fastlane
+          echo "Fastlane version: $(fastlane --version)"
+
+      - name: Install Fastlane dependencies
+        working-directory: ios/NovaSocial
+        run: |
+          fastlane match appstore --readonly --verbose || echo "Note: Could not fetch match certs, using CI signing"
+
+      - name: Get build information
+        id: build_info
+        working-directory: ios/NovaSocial
+        run: |
+          # Extract version from Info.plist or project.yml
+          VERSION=$(grep -A 1 "MARKETING_VERSION" project.yml | tail -1 | sed 's/.*: //' | tr -d ' ')
+          BUILD_NUMBER=$(git rev-list --count HEAD)
+
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "build_number=$BUILD_NUMBER" >> $GITHUB_OUTPUT
+
+          echo "📦 Build Information:"
+          echo "   Version: $VERSION"
+          echo "   Build: $BUILD_NUMBER"
+
+      - name: Increment build number
+        working-directory: ios/NovaSocial
+        run: |
+          BUILD_NUMBER=$(git rev-list --count HEAD)
+          agvtool new-version -all $BUILD_NUMBER || true
+          echo "✅ Build number set to $BUILD_NUMBER"
+
+      - name: Build archive
+        working-directory: ios/NovaSocial
+        run: |
+          xcodebuild -archivePath "build/ICERED.xcarchive" \
+            -scheme ICERED \
+            -configuration Release \
+            -derivedDataPath "build/DerivedData" \
+            -destination 'generic/platform=iOS' \
+            archive 2>&1 | tee build-archive.log
+
+      - name: Validate archive
+        working-directory: ios/NovaSocial
+        run: |
+          if [ -d "build/ICERED.xcarchive" ]; then
+            echo "✅ Archive created successfully"
+            du -sh "build/ICERED.xcarchive"
+          else
+            echo "❌ Archive creation failed"
+            exit 1
+          fi
+
+      - name: Export IPA
+        working-directory: ios/NovaSocial
+        run: |
+          xcodebuild -exportArchive \
+            -archivePath "build/ICERED.xcarchive" \
+            -exportPath "build/export" \
+            -exportOptionsPlist "fastlane/ExportOptions.plist" 2>&1 | tee export.log
+
+      - name: Verify IPA
+        working-directory: ios/NovaSocial
+        run: |
+          if [ -f "build/export/ICERED.ipa" ]; then
+            echo "✅ IPA exported successfully"
+            ls -lh "build/export/ICERED.ipa"
+          else
+            echo "❌ IPA export failed"
+            exit 1
+          fi
+
+      - name: Upload IPA as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: icered-ipa-${{ github.run_id }}
+          path: ios/NovaSocial/build/export/ICERED.ipa
+          retention-days: 7
+
+      - name: Upload build logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs-${{ github.run_id }}
+          path: ios/NovaSocial/*.log
+          retention-days: 7
+
+  # ==================== TESTFLIGHT UPLOAD ====================
+  deploy-testflight:
+    name: Deploy to TestFlight
+    runs-on: macos-latest
+    needs: [pre-deploy, build-for-distribution]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment:
+      name: TestFlight
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.0'
+          bundler-cache: true
+
+      - name: Download IPA
+        uses: actions/download-artifact@v4
+        with:
+          name: icered-ipa-${{ github.run_id }}
+          path: ./
+
+      - name: Install Fastlane
+        run: |
+          gem install fastlane
+          gem install spaceship
+
+      - name: Upload to TestFlight
+        run: |
+          fastlane deliver \
+            --ipa ICERED.ipa \
+            --skip_package_validation true \
+            --skip_screenshot_review_information true \
+            --skip_app_version_update true \
+            --automatic_release false \
+            --precheck_include_in_app_purchases false \
+            --force true \
+            --beta true \
+            --distribute_external false \
+            --changelog "Automated build from CI/CD pipeline"
+
+      - name: Notify TestFlight upload
+        if: success()
+        run: |
+          echo "✅ Successfully uploaded to TestFlight"
+          echo "📱 Version: ${{ needs.build-for-distribution.outputs.version }}"
+          echo "🔨 Build: ${{ needs.build-for-distribution.outputs.build_number }}"
+          echo "⏰ Timestamp: $(date -u +'%Y-%m-%d %H:%M:%S UTC')"
+
+      - name: Notify upload failure
+        if: failure()
+        run: |
+          echo "❌ TestFlight upload failed"
+          echo "Please check the logs above for details"
+          exit 1
+
+  # ==================== SLACK NOTIFICATION ====================
+  notify:
+    name: Notify Team
+    runs-on: ubuntu-latest
+    needs: [build-for-distribution, deploy-testflight]
+    if: always()
+    steps:
+      - name: Prepare notification
+        id: notify_data
+        run: |
+          if [ "${{ needs.deploy-testflight.result }}" == "success" ]; then
+            STATUS="✅ SUCCESS"
+            COLOR="good"
+          else
+            STATUS="❌ FAILED"
+            COLOR="danger"
+          fi
+
+          echo "status=$STATUS" >> $GITHUB_OUTPUT
+          echo "color=$COLOR" >> $GITHUB_OUTPUT
+
+      - name: Send Slack notification
+        if: secrets.SLACK_WEBHOOK != ''
+        uses: slackapi/slack-github-action@v1
+        with:
+          webhook-url: ${{ secrets.SLACK_WEBHOOK }}
+          payload: |
+            {
+              "blocks": [
+                {
+                  "type": "header",
+                  "text": {
+                    "type": "plain_text",
+                    "text": "${{ steps.notify_data.outputs.status }} iOS TestFlight Deployment"
+                  }
+                },
+                {
+                  "type": "section",
+                  "fields": [
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Version:*\n${{ needs.build-for-distribution.outputs.version }}"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Build:*\n${{ needs.build-for-distribution.outputs.build_number }}"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Branch:*\n${{ github.ref_name }}"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Commit:*\n<${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}|${{ github.sha }}>"
+                    }
+                  ]
+                },
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*Author:* ${{ github.actor }}\n*Time:* <!date^${{ github.event.head_commit.timestamp }}^{date_num} {time_secs}|${{ github.event.head_commit.timestamp }}>"
+                  }
+                },
+                {
+                  "type": "actions",
+                  "elements": [
+                    {
+                      "type": "button",
+                      "text": {
+                        "type": "plain_text",
+                        "text": "View Workflow"
+                      },
+                      "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+                    },
+                    {
+                      "type": "button",
+                      "text": {
+                        "type": "plain_text",
+                        "text": "TestFlight"
+                      },
+                      "url": "https://testflight.apple.com"
+                    }
+                  ]
+                }
+              ]
+            }
+
+      - name: Print summary
+        run: |
+          echo "════════════════════════════════════════"
+          echo "📱 iOS TestFlight Deployment Summary"
+          echo "════════════════════════════════════════"
+          echo ""
+          echo "Status:      ${{ steps.notify_data.outputs.status }}"
+          echo "Version:     ${{ needs.build-for-distribution.outputs.version }}"
+          echo "Build:       ${{ needs.build-for-distribution.outputs.build_number }}"
+          echo "Branch:      ${{ github.ref_name }}"
+          echo "Commit:      ${{ github.sha }}"
+          echo "Author:      ${{ github.actor }}"
+          echo ""
+          echo "════════════════════════════════════════"

@@ -1,10 +1,19 @@
-name: CI/CD Pipeline - Build & Push to GCP
+name: CI/CD Pipeline - Build & Push to GCP [DEPRECATED]
+
+# ⚠️  DEPRECATED: 全量构建已被增量构建取代
+# 使用 gcp-build-incremental.yml 获得更好的性能
+# 此工作流保留仅供手动触发全量构建
 
 on:
-  push:
-    branches:
-      - main
-  workflow_dispatch:  # 手動觸發
+  # push:
+  #   branches:
+  #     - main
+  workflow_dispatch:
+    inputs:
+      confirm_full_rebuild:
+        description: '确认执行全量构建（所有 13 个服务）'
+        type: boolean
+        required: true
 
 concurrency:
   group: ci-cd-${{ github.ref }}

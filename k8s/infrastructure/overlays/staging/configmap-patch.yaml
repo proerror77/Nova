@@ -5,4 +5,5 @@ metadata:
 data:
   APP_ENV: staging
   CLICKHOUSE_URL: "http://clickhouse:8123"
+  CLICKHOUSE_DATABASE: "default"
   CLOUDFRONT_URL: "https://cdn.example.com"

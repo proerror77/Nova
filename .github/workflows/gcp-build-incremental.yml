@@ -1,0 +1,220 @@
+name: GCP Build (Incremental)
+
+# 增量构建：只构建变更的服务
+# 推送到 Google Artifact Registry
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'backend/**'
+      - '.github/workflows/gcp-build-incremental.yml'
+  workflow_dispatch:
+    inputs:
+      force_all:
+        description: 'Force rebuild all services'
+        type: boolean
+        default: false
+      services:
+        description: 'Specific services to build (comma-separated)'
+        type: string
+        default: ''
+
+concurrency:
+  group: gcp-build-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  GCP_REGION: ${{ vars.GCP_REGION || 'asia-northeast1' }}
+  GAR_REGISTRY: ${{ vars.GCP_REGION || 'asia-northeast1' }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/nova
+
+jobs:
+  # ============================================================
+  # Phase 1: 检测变更
+  # ============================================================
+  detect-changes:
+    name: Detect Changes
+    runs-on: ubuntu-latest
+    outputs:
+      has_changes: ${{ steps.detect.outputs.has_changes }}
+      changed_services: ${{ steps.detect.outputs.changed_services }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect changed services
+        id: detect
+        run: |
+          set -e
+
+          # 手动指定的服务
+          if [ -n "${{ inputs.services }}" ]; then
+            echo "📋 Manual service selection: ${{ inputs.services }}"
+            SERVICES=$(echo "${{ inputs.services }}" | tr ',' '\n' | jq -R -s -c 'split("\n") | map(select(. != ""))')
+            echo "changed_services=$SERVICES" >> "$GITHUB_OUTPUT"
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # 强制全量构建
+          if [ "${{ inputs.force_all }}" == "true" ]; then
+            echo "🔄 Force all services rebuild"
+            ALL_SERVICES='["analytics-service","content-service","feed-service","graph-service","graphql-gateway","identity-service","media-service","notification-service","ranking-service","realtime-chat-service","search-service","social-service","trust-safety-service"]'
+            echo "changed_services=$ALL_SERVICES" >> "$GITHUB_OUTPUT"
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # 获取变更文件
+          if [ "${{ github.event_name }}" == "push" ]; then
+            BASE_SHA="${{ github.event.before }}"
+            HEAD_SHA="${{ github.sha }}"
+          else
+            BASE_SHA=$(git rev-parse HEAD~1)
+            HEAD_SHA=$(git rev-parse HEAD)
+          fi
+
+          echo "📊 Comparing $BASE_SHA..$HEAD_SHA"
+          CHANGED_FILES=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" 2>/dev/null || git diff --name-only HEAD~1 HEAD)
+
+          # 检查共享库是否变更
+          if echo "$CHANGED_FILES" | grep -qE '^backend/(libs|common|proto)/'; then
+            echo "⚠️  Shared libraries changed - rebuilding all services"
+            ALL_SERVICES='["analytics-service","content-service","feed-service","graph-service","graphql-gateway","identity-service","media-service","notification-service","ranking-service","realtime-chat-service","search-service","social-service","trust-safety-service"]'
+            echo "changed_services=$ALL_SERVICES" >> "$GITHUB_OUTPUT"
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # 检测变更的服务
+          CHANGED_SERVICES=$(echo "$CHANGED_FILES" | \
+            grep '^backend/' | \
+            cut -d'/' -f2 | \
+            sort -u | \
+            grep -E '^(analytics|content|feed|graph|graphql|identity|media|notification|ranking|realtime-chat|search|social|trust-safety)-service$' || true)
+
+          if [ -z "$CHANGED_SERVICES" ]; then
+            echo "✅ No service changes detected"
+            echo "changed_services=[]" >> "$GITHUB_OUTPUT"
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "📦 Changed services:"
+            echo "$CHANGED_SERVICES"
+            SERVICES_JSON=$(echo "$CHANGED_SERVICES" | jq -R -s -c 'split("\n") | map(select(. != ""))')
+            echo "changed_services=$SERVICES_JSON" >> "$GITHUB_OUTPUT"
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  # ============================================================
+  # Phase 2: 构建变更的服务
+  # ============================================================
+  build-and-push:
+    name: Build ${{ matrix.service }}
+    needs: detect-changes
+    if: needs.detect-changes.outputs.has_changes == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+
+    strategy:
+      matrix:
+        service: ${{ fromJson(needs.detect-changes.outputs.changed_services) }}
+      max-parallel: 6
+      fail-fast: false
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+          token_format: access_token
+
+      - name: Login to Artifact Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.GCP_REGION }}-docker.pkg.dev
+          username: oauth2accesstoken
+          password: ${{ steps.auth.outputs.access_token }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./backend/${{ matrix.service }}/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ env.GAR_REGISTRY }}/${{ matrix.service }}:${{ github.sha }}
+            ${{ env.GAR_REGISTRY }}/${{ matrix.service }}:latest
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
+          build-args: |
+            SERVICE_NAME=${{ matrix.service }}
+
+      - name: Verify image pushed
+        run: |
+          echo "✅ ${{ matrix.service }}:${{ github.sha }} pushed to Artifact Registry"
+
+  # ============================================================
+  # No Changes
+  # ============================================================
+  no-changes:
+    name: No Changes
+    needs: detect-changes
+    if: needs.detect-changes.outputs.has_changes == 'false'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Report no changes
+        run: |
+          echo "════════════════════════════════════════════════════"
+          echo "✅ NO SERVICE CHANGES DETECTED"
+          echo "════════════════════════════════════════════════════"
+          echo ""
+          echo "Commit: ${{ github.sha }}"
+          echo "Branch: ${{ github.ref_name }}"
+          echo ""
+          echo "No backend service files were changed."
+          echo "Skipping build."
+          echo "════════════════════════════════════════════════════"
+
+  # ============================================================
+  # Summary
+  # ============================================================
+  summary:
+    name: Build Summary
+    runs-on: ubuntu-latest
+    needs: [detect-changes, build-and-push]
+    if: always() && needs.detect-changes.outputs.has_changes == 'true'
+
+    steps:
+      - name: Print summary
+        run: |
+          echo "════════════════════════════════════════════════════"
+          echo "🚀 INCREMENTAL BUILD SUMMARY"
+          echo "════════════════════════════════════════════════════"
+          echo ""
+          echo "Branch: ${{ github.ref_name }}"
+          echo "Commit: ${{ github.sha }}"
+          echo "Registry: ${{ env.GAR_REGISTRY }}"
+          echo ""
+          echo "Build Result: ${{ needs.build-and-push.result }}"
+          echo ""
+          echo "Services Built: ${{ needs.detect-changes.outputs.changed_services }}"
+          echo ""
+          echo "════════════════════════════════════════════════════"

@@ -36,7 +36,8 @@ fn map_status(status: &str) -> i32 {
 }
 
 fn convert_post_to_proto(post: &DbPost) -> Post {
-    let thumbnails = post.media_urls.clone().unwrap_or_default();
+    let media_urls: Vec<String> = post.media_urls.0.clone();
+    let thumbnails = media_urls.clone();
 
     Post {
         id: post.id.to_string(),
@@ -47,7 +48,7 @@ fn convert_post_to_proto(post: &DbPost) -> Post {
         deleted_at: post.deleted_at.map(|d| d.timestamp()).unwrap_or(0),
         status: map_status(post.status.as_str()),
         media_ids: vec![],
-        media_urls: post.media_urls.clone().unwrap_or_default(),
+        media_urls,
         media_type: post.media_type.clone(),
         thumbnail_urls: thumbnails,
     }
@@ -233,7 +234,7 @@ impl ContentService for ContentServiceImpl {
             .iter()
             .filter_map(|id| {
                 all_posts.get(id).map(|post| {
-                    let mut media_urls = post.media_urls.clone().unwrap_or_default();
+                    let mut media_urls: Vec<String> = post.media_urls.0.clone();
                     let mut thumbnail_urls = thumb_map.get(id).cloned().unwrap_or_default();
                     if media_urls.is_empty() {
                         if let Some(urls) = media_map.get(id) {

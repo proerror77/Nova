@@ -59,7 +59,7 @@ actix-web-actors = "4.3"
 tokio = { version = "1.36", features = ["full"] }
 
 # Database
-sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "postgres", "uuid", "chrono", "migrate"] }
+sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "postgres", "uuid", "chrono", "migrate", "json"] }
 
 # Redis
 redis = { version = "0.25", features = ["tokio-comp", "connection-manager", "streams"] }
