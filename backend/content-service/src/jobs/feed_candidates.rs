@@ -227,7 +227,27 @@ LIMIT 1000
 "#;
 
 const INSERT_FEED_CANDIDATES_AFFINITY: &str = r#"
-WITH affinity_edges AS (
+INSERT INTO {table}
+SELECT
+    affinity.user_id AS user_id,
+    p.id AS post_id,
+    p.user_id AS author_id,
+    ifNull(likes.likes_count, 0) AS likes,
+    ifNull(comments.comments_count, 0) AS comments,
+    toUInt32(0) AS shares,
+    greatest(
+        toUInt32(ifNull(likes.likes_count, 0)) * 5 +
+        toUInt32(ifNull(comments.comments_count, 0)) * 10 + 10,
+        toUInt32(1)
+    ) AS impressions,
+    exp(-0.0025 * dateDiff('minute', p.created_at, now())) AS freshness_score,
+    log1p(ifNull(likes.likes_count, 0) + 2 * ifNull(comments.comments_count, 0)) AS engagement_score,
+    affinity.affinity_score AS affinity_score,
+    0.20 * freshness_score + 0.40 * engagement_score + 0.40 * affinity.affinity_score AS combined_score,
+    p.created_at,
+    now()
+FROM posts_cdc AS p
+INNER JOIN (
     SELECT
         interactions.viewer_id AS user_id,
         interactions.author_id AS author_id,
@@ -255,28 +275,7 @@ WITH affinity_edges AS (
     ) AS interactions
     GROUP BY interactions.viewer_id, interactions.author_id
     HAVING affinity_score > 0
-)
-INSERT INTO {table}
-SELECT
-    affinity.user_id AS user_id,
-    p.id AS post_id,
-    p.user_id AS author_id,
-    ifNull(likes.likes_count, 0) AS likes,
-    ifNull(comments.comments_count, 0) AS comments,
-    toUInt32(0) AS shares,
-    greatest(
-        toUInt32(ifNull(likes.likes_count, 0)) * 5 +
-        toUInt32(ifNull(comments.comments_count, 0)) * 10 + 10,
-        toUInt32(1)
-    ) AS impressions,
-    exp(-0.0025 * dateDiff('minute', p.created_at, now())) AS freshness_score,
-    log1p(ifNull(likes.likes_count, 0) + 2 * ifNull(comments.comments_count, 0)) AS engagement_score,
-    affinity.affinity_score AS affinity_score,
-    0.20 * freshness_score + 0.40 * engagement_score + 0.40 * affinity.affinity_score AS combined_score,
-    p.created_at,
-    now()
-FROM posts_cdc AS p
-INNER JOIN affinity_edges AS affinity
+) AS affinity
     ON affinity.author_id = p.user_id
 LEFT JOIN (
     SELECT post_id, count() AS likes_count
