@@ -83,6 +83,9 @@ struct LoginView: View {
                             .font(Font.custom("Helvetica Neue", size: 12).weight(.light))
                             .lineSpacing(20)
                             .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
+                            .padding(.horizontal, 30)
+                            .padding(.vertical, 24)
+                            .contentShape(Rectangle())
                             .offset(x: 138.50, y: -10)
                             .onTapGesture {
                                 showPassword.toggle()

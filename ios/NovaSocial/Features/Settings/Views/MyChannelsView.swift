@@ -2,7 +2,7 @@ import SwiftUI
 
 struct MyChannelsView: View {
     @Binding var currentPage: AppPage
-    @State private var selectedChannels: Set<String> = ["Camping", "Automotive", "NFT", "Crypto"]
+    @State private var selectedChannels: Set<String> = []
 
     var body: some View {
         ZStack {
@@ -169,9 +169,9 @@ struct SelectableChannelTag: View {
                 Text(name)
                     .font(.system(size: 12))
                     .foregroundColor(isSelected ? DesignTokens.accentColor : DesignTokens.textPrimary)
+                    .lineLimit(1)
             }
-            .padding(.horizontal, 55)
-            .padding(.vertical, 4)
+            .frame(maxWidth: .infinity)
             .frame(height: 30)
         }
         .background(isSelected ? DesignTokens.accentLight : DesignTokens.surface)

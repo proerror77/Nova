@@ -184,6 +184,10 @@ struct MessageView: View {
             VStack(spacing: 0) {
                 // MARK: - 顶部导航栏
                 HStack {
+                    // 左侧占位，保持标题居中
+                    Color.clear
+                        .frame(width: 24)
+
                     Spacer()
 
                     Text(LocalizedStringKey("Message"))

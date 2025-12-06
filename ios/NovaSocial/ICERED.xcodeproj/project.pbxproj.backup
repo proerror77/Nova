@@ -28,12 +28,13 @@
 		53334F68A850981DB3138827 /* DeviceService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1A84E538654823DADF86EB7 /* DeviceService.swift */; };
 		5BFEC787522ED006544C8E92 /* IdentityService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E726662A13B99E2BE8109CE4 /* IdentityService.swift */; };
 		5C6B3E02EAE744B2AC300C3C /* ProfileSettingViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6D6C3BD57F1411D9AA2C753 /* ProfileSettingViewModel.swift */; };
-		638674e7023c72f06b4cbd24 /* GroupChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = c305a0ac26e55adeed024b77 /* GroupChatView.swift */; };
+		'638674e7023c72f06b4cbd24' = {isa = PBXBuildFile; fileRef = c305a0ac26e55adeed024b77; };
 		63B22A9F26DFB37DE9D67ACD /* CarouselView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB74F32C6BC54E9B7DE38BDD /* CarouselView.swift */; };
 		6576A60D03D0AAD816B22C3F /* CarouselCardItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = C258A7984F0CD3E9100A3EDC /* CarouselCardItem.swift */; };
 		66EFE70500BB7EF714EAAC32 /* ContentService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FA7AA7E22A29086861F985F /* ContentService.swift */; };
 		6919D3922DBD5EBE2C2E3912 /* FeedViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE75D478ADD2861381600DFB /* FeedViewModel.swift */; };
 		6AA9EFC925E3EBA8CC533592 /* LocationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B846FFEC4EDF48BBAC2449C /* LocationView.swift */; };
+		6B199CE5A0EE522763C91F67 /* StartGroupChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D2AE1050C6673E6CDEE76CD /* StartGroupChatView.swift */; };
 		6BDA39BD6F2A0B9ECF7AA1F3 /* ContentModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71B032CF9FD0BCD3724E31EB /* ContentModels.swift */; };
 		780124131B160D8EE47456B9 /* App.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0393038DC4D72E8421D1B35 /* App.swift */; };
 		798BD538D3CE05BE08542CF8 /* DevicesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 539767459F07A98D4EFC00A8 /* DevicesView.swift */; };
@@ -70,16 +71,16 @@
 		CB37E7011E14A06A0EBD08EB /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = CEB8BD0C8A93BBE1E9670B07 /* APIClient.swift */; };
 		CCAFF6E79E7ACB7CB46172FF /* GraphService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A242CA445BD03C224A4AAA2 /* GraphService.swift */; };
 		CDE6F3A1AA8B69AB2D9C0603 /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B4B2243943DAE524DAA9499B /* ChatView.swift */; };
-		CHATSERVICE001 /* ChatService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CHATSERVICE002 /* ChatService.swift */; };
-		CREATEACCOUNT001 /* CreateAccountView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CREATEACCOUNT002 /* CreateAccountView.swift */; };
-		CRYPTOCORE001 /* CryptoCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = CRYPTOCORE002 /* CryptoCore.swift */; };
+		'CHATSERVICE001' = {isa = PBXBuildFile; fileRef = CHATSERVICE002; };
+		'CREATEACCOUNT001' = {isa = PBXBuildFile; fileRef = CREATEACCOUNT002; };
+		'CRYPTOCORE001' = {isa = PBXBuildFile; fileRef = CRYPTOCORE002; };
 		D216B637243C8D833CF86F9B /* ProfileData.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC8A907430998B947546C97 /* ProfileData.swift */; };
 		D9010C810B0698935B15E119 /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15BE5EA996149A16BBC12B09 /* LoginView.swift */; };
 		DA25034A61BE32AED01A9B16 /* ICONS_MAPPING.md in Resources */ = {isa = PBXBuildFile; fileRef = C932A10966CC60CB5210880E /* ICONS_MAPPING.md */; };
 		DA5146CD4EA5529311C25F18 /* NavigationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 960B958C1191BEE26AB350C8 /* NavigationManager.swift */; };
 		DEBF0012173C44A979FDB9F8 /* CommentCardItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = D49E279D9239481D8A58211F /* CommentCardItem.swift */; };
-		E2EEMODELS001 /* E2EEModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2EEMODELS002 /* E2EEModels.swift */; };
-		E2EESERVICE001 /* E2EEService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2EESERVICE002 /* E2EEService.swift */; };
+		'E2EEMODELS001' = {isa = PBXBuildFile; fileRef = E2EEMODELS002; };
+		'E2EESERVICE001' = {isa = PBXBuildFile; fileRef = E2EESERVICE002; };
 		E5A9BFF109109BA9B0D167FF /* UserModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = CAC8DD04D57185AC8872002E /* UserModels.swift */; };
 		E5C4A9D3B2F14E719C7A5B0F /* DateOfBirthPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A6B5C4D3E2F4A1B9C8D7E6F /* DateOfBirthPickerView.swift */; };
 		E685ED5F9161C354B6B9998E /* SearchService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3EAA5060C5B9890ED58A464 /* SearchService.swift */; };
@@ -88,29 +89,29 @@
 		F1EC16AC74BAE163D51D5ADF /* QRCodeScannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11B58E321CDB3D79E807514 /* QRCodeScannerView.swift */; };
 		F8F07FF6FE20AC20ECCB5BF2 /* APIError.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3880EF1CA343B17A09E2209E /* APIError.swift */; };
 		FFBE6F87D8D9D1645B5A0913 /* APIConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = E41CFF50904A2F54FD5621BF /* APIConfig.swift */; };
-		KEYBOARDEXT001 /* KeyboardExtension.swift in Sources */ = {isa = PBXBuildFile; fileRef = KEYBOARDEXT002 /* KeyboardExtension.swift */; };
-		OAUTHSERVICE001 /* OAuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = OAUTHSERVICE002 /* OAuthService.swift */; };
-		SHARESHEET001 /* ShareSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = SHARESHEET002 /* ShareSheet.swift */; };
-		SPLASHVIEW001 /* SplashScreenView.swift in Sources */ = {isa = PBXBuildFile; fileRef = SPLASHVIEW002 /* SplashScreenView.swift */; };
-		UITEST001 /* ICEREDUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = UITEST002 /* ICEREDUITests.swift */; };
-		UNITTEST001 /* MockURLProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = UNITTEST002 /* MockURLProtocol.swift */; };
-		UNITTEST003 /* TestFixtures.swift in Sources */ = {isa = PBXBuildFile; fileRef = UNITTEST004 /* TestFixtures.swift */; };
-		UNITTEST005 /* APIClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = UNITTEST006 /* APIClientTests.swift */; };
-		UNITTEST007 /* ErrorHandlingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = UNITTEST008 /* ErrorHandlingTests.swift */; };
-		UNITTEST009 /* AuthenticationManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = UNITTEST010 /* AuthenticationManagerTests.swift */; };
-		UNITTEST011 /* IdentityServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = UNITTEST012 /* IdentityServiceTests.swift */; };
-		WELCOMEVIEW001 /* WelcomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = WELCOMEVIEW002 /* WelcomeView.swift */; };
+		'KEYBOARDEXT001' = {isa = PBXBuildFile; fileRef = KEYBOARDEXT002; };
+		'OAUTHSERVICE001' = {isa = PBXBuildFile; fileRef = OAUTHSERVICE002; };
+		'SHARESHEET001' = {isa = PBXBuildFile; fileRef = SHARESHEET002; };
+		'SPLASHVIEW001' = {isa = PBXBuildFile; fileRef = SPLASHVIEW002; };
+		'UITEST001' = {isa = PBXBuildFile; fileRef = UITEST002; };
+		'UNITTEST001' = {isa = PBXBuildFile; fileRef = UNITTEST002; };
+		'UNITTEST003' = {isa = PBXBuildFile; fileRef = UNITTEST004; };
+		'UNITTEST005' = {isa = PBXBuildFile; fileRef = UNITTEST006; };
+		'UNITTEST007' = {isa = PBXBuildFile; fileRef = UNITTEST008; };
+		'UNITTEST009' = {isa = PBXBuildFile; fileRef = UNITTEST010; };
+		'UNITTEST011' = {isa = PBXBuildFile; fileRef = UNITTEST012; };
+		'WELCOMEVIEW001' = {isa = PBXBuildFile; fileRef = WELCOMEVIEW002; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
-		UITESTPROXY001 /* PBXContainerItemProxy */ = {
+		'UITESTPROXY001' = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 5E408F8D0DDC235DCAE790E7 /* Project object */;
 			proxyType = 1;
 			remoteGlobalIDString = ACADFBFE15FADF5A1AF04334;
 			remoteInfo = ICERED;
 		};
-		UNITTESTPROXY001 /* PBXContainerItemProxy */ = {
+		'UNITTESTPROXY001' = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 5E408F8D0DDC235DCAE790E7 /* Project object */;
 			proxyType = 1;
@@ -143,6 +144,7 @@
 		45DA960EAF1BBBBC18F81EC3 /* MessageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageView.swift; sourceTree = "<group>"; };
 		4665602C144B266807588223 /* CommunicationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommunicationService.swift; sourceTree = "<group>"; };
 		4B3F75C30A5F4A7AA5C0FE2C /* GenderPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenderPickerView.swift; sourceTree = "<group>"; };
+		4D2AE1050C6673E6CDEE76CD /* StartGroupChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StartGroupChatView.swift; sourceTree = "<group>"; };
 		539767459F07A98D4EFC00A8 /* DevicesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DevicesView.swift; sourceTree = "<group>"; };
 		55318219C3A650A6D7EC96E0 /* NewPostView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewPostView.swift; sourceTree = "<group>"; };
 		5E15BEB981BECF002DACF86E /* NotificationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationView.swift; sourceTree = "<group>"; };
@@ -180,9 +182,9 @@
 		CD6D59BF9871981B7FBA115D /* SimpleCarouselView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SimpleCarouselView.swift; sourceTree = "<group>"; };
 		CE75D478ADD2861381600DFB /* FeedViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedViewModel.swift; sourceTree = "<group>"; };
 		CEB8BD0C8A93BBE1E9670B07 /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
-		CHATSERVICE002 /* ChatService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatService.swift; sourceTree = "<group>"; };
-		CREATEACCOUNT002 /* CreateAccountView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateAccountView.swift; sourceTree = "<group>"; };
-		CRYPTOCORE002 /* CryptoCore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CryptoCore.swift; sourceTree = "<group>"; };
+		'CHATSERVICE002' = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatService.swift; sourceTree = "<group>"; };
+		'CREATEACCOUNT002' = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateAccountView.swift; sourceTree = "<group>"; };
+		'CRYPTOCORE002' = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CryptoCore.swift; sourceTree = "<group>"; };
 		D3EAA5060C5B9890ED58A464 /* SearchService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchService.swift; sourceTree = "<group>"; };
 		D49E279D9239481D8A58211F /* CommentCardItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommentCardItem.swift; sourceTree = "<group>"; };
 		D4B8234BED929FB978C1D102 /* DateExtension.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DateExtension.swift; sourceTree = "<group>"; };
@@ -190,8 +192,8 @@
 		DB6BA9F5A2B38332ACB7A915 /* UserProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserProfileView.swift; sourceTree = "<group>"; };
 		DB74F32C6BC54E9B7DE38BDD /* CarouselView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarouselView.swift; sourceTree = "<group>"; };
 		DDA5192B35945D0638208E85 /* DesignTokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignTokens.swift; sourceTree = "<group>"; };
-		E2EEMODELS002 /* E2EEModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = E2EEModels.swift; sourceTree = "<group>"; };
-		E2EESERVICE002 /* E2EEService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = E2EEService.swift; sourceTree = "<group>"; };
+		'E2EEMODELS002' = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = E2EEModels.swift; sourceTree = "<group>"; };
+		'E2EESERVICE002' = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = E2EEService.swift; sourceTree = "<group>"; };
 		E41CFF50904A2F54FD5621BF /* APIConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIConfig.swift; sourceTree = "<group>"; };
 		E5F77721CA146200F98657F7 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		E726662A13B99E2BE8109CE4 /* IdentityService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdentityService.swift; sourceTree = "<group>"; };
@@ -199,23 +201,23 @@
 		EBD7242399015D38E8A1EC8C /* BottomTabBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BottomTabBar.swift; sourceTree = "<group>"; };
 		F0CB7B8BA9D546D88AC8F75C /* SettingsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsViewModel.swift; sourceTree = "<group>"; };
 		F11B58E321CDB3D79E807514 /* QRCodeScannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QRCodeScannerView.swift; sourceTree = "<group>"; };
-		KEYBOARDEXT002 /* KeyboardExtension.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardExtension.swift; sourceTree = "<group>"; };
-		OAUTHSERVICE002 /* OAuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OAuthService.swift; sourceTree = "<group>"; };
-		SHARESHEET002 /* ShareSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareSheet.swift; sourceTree = "<group>"; };
-		SPLASHVIEW002 /* SplashScreenView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SplashScreenView.swift; sourceTree = "<group>"; };
-		UITEST002 /* ICEREDUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ICEREDUITests.swift; sourceTree = "<group>"; };
-		UITEST003 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		UITEST004 /* ICEREDUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ICEREDUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		UNITTEST002 /* MockURLProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockURLProtocol.swift; sourceTree = "<group>"; };
-		UNITTEST004 /* TestFixtures.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestFixtures.swift; sourceTree = "<group>"; };
-		UNITTEST006 /* APIClientTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClientTests.swift; sourceTree = "<group>"; };
-		UNITTEST008 /* ErrorHandlingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ErrorHandlingTests.swift; sourceTree = "<group>"; };
-		UNITTEST010 /* AuthenticationManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthenticationManagerTests.swift; sourceTree = "<group>"; };
-		UNITTEST012 /* IdentityServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdentityServiceTests.swift; sourceTree = "<group>"; };
-		UNITTEST013 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		UNITTEST014 /* ICEREDTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ICEREDTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		WELCOMEVIEW002 /* WelcomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeView.swift; sourceTree = "<group>"; };
-		c305a0ac26e55adeed024b77 /* GroupChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupChatView.swift; sourceTree = "<group>"; };
+		'KEYBOARDEXT002' = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardExtension.swift; sourceTree = "<group>"; };
+		'OAUTHSERVICE002' = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OAuthService.swift; sourceTree = "<group>"; };
+		'SHARESHEET002' = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareSheet.swift; sourceTree = "<group>"; };
+		'SPLASHVIEW002' = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SplashScreenView.swift; sourceTree = "<group>"; };
+		'UITEST002' = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ICEREDUITests.swift; sourceTree = "<group>"; };
+		'UITEST003' = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		'UITEST004' = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ICEREDUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		'UNITTEST002' = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockURLProtocol.swift; sourceTree = "<group>"; };
+		'UNITTEST004' = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestFixtures.swift; sourceTree = "<group>"; };
+		'UNITTEST006' = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClientTests.swift; sourceTree = "<group>"; };
+		'UNITTEST008' = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ErrorHandlingTests.swift; sourceTree = "<group>"; };
+		'UNITTEST010' = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthenticationManagerTests.swift; sourceTree = "<group>"; };
+		'UNITTEST012' = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdentityServiceTests.swift; sourceTree = "<group>"; };
+		'UNITTEST013' = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		'UNITTEST014' = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ICEREDTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		'WELCOMEVIEW002' = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeView.swift; sourceTree = "<group>"; };
+		'c305a0ac26e55adeed024b77' = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupChatView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -292,7 +294,8 @@
 		2F4594B2B14AE664BBCA5220 /* Views */ = {
 			isa = PBXGroup;
 			children = (
-				c305a0ac26e55adeed024b77 /* GroupChatView.swift */,
+				4D2AE1050C6673E6CDEE76CD /* StartGroupChatView.swift */,
+				c305a0ac26e55adeed024b77,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -300,7 +303,7 @@
 		30188A2E994C571943EC7EDF /* Features */ = {
 			isa = PBXGroup;
 			children = (
-				SPLASHGROUP001 /* Splash */,
+				SPLASHGROUP001,
 				C33CE8D38AC07ED4CAE8196A /* Auth */,
 				E38A78AF007C03E832DC0CDA /* Home */,
 				91EEF53CA9B004D13EF89FFB /* Notifications */,
@@ -392,7 +395,7 @@
 			isa = PBXGroup;
 			children = (
 				D4B8234BED929FB978C1D102 /* DateExtension.swift */,
-				KEYBOARDEXT002 /* KeyboardExtension.swift */,
+				KEYBOARDEXT002,
 			);
 			path = Extensions;
 			sourceTree = "<group>";
@@ -421,7 +424,7 @@
 			isa = PBXGroup;
 			children = (
 				6B7F29AF2BD2FC517E87B40A /* ConversationModels.swift */,
-				E2EEMODELS002 /* E2EEModels.swift */,
+				E2EEMODELS002,
 			);
 			path = Chat;
 			sourceTree = "<group>";
@@ -471,7 +474,7 @@
 				E4D20F2B21F1450E8FCA0C9E /* Settings */,
 				6D5C4B3A2F1E0D9C8B7A6F5E /* Forms */,
 				7B8C9D0E1F2A3B4C5D6E7F8A /* Pickers */,
-				SHARESHEET002 /* ShareSheet.swift */,
+				SHARESHEET002,
 			);
 			path = Components;
 			sourceTree = "<group>";
@@ -498,8 +501,8 @@
 			isa = PBXGroup;
 			children = (
 				1D3041E7FCC0ACD7F53D08BA /* ICERED.app */,
-				UITEST004 /* ICEREDUITests.xctest */,
-				UNITTEST014 /* ICEREDTests.xctest */,
+				UITEST004,
+				UNITTEST014,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -623,8 +626,8 @@
 				30188A2E994C571943EC7EDF /* Features */,
 				83156329836565A2778B94AC /* NovaSocial */,
 				565E49CEA7D25E6D91A52C2B /* Shared */,
-				UITESTGROUP001 /* ICEREDUITests */,
-				UNITTESTGROUP001 /* Tests */,
+				UITESTGROUP001,
+				UNITTESTGROUP001,
 				7C3FDB1C3B7BCF5AF8E3D483 /* Products */,
 				7C2745579CFC76D8101823D7 /* Shared/Models/User */,
 				EFDA40CAB15806CA5A92A283 /* Shared/Services/User */,
@@ -668,9 +671,9 @@
 		B2F098C27E7DBB050E34F6F6 /* Views */ = {
 			isa = PBXGroup;
 			children = (
-				CREATEACCOUNT002 /* CreateAccountView.swift */,
+				CREATEACCOUNT002,
 				15BE5EA996149A16BBC12B09 /* LoginView.swift */,
-				WELCOMEVIEW002 /* WelcomeView.swift */,
+				WELCOMEVIEW002,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -735,7 +738,7 @@
 		C652DC05CDF0383A5C43BEC2 /* Services */ = {
 			isa = PBXGroup;
 			children = (
-				CHATSERVICEGROUP /* Chat */,
+				CHATSERVICEGROUP,
 				4E85EECF31BEE6AC3820E20B /* Feed */,
 				E208F4762BA09D9DB85B836A /* Security */,
 				DBF089D6F321073A5A00AEED /* Auth */,
@@ -751,10 +754,10 @@
 			path = Services;
 			sourceTree = "<group>";
 		};
-		CHATSERVICEGROUP /* Chat */ = {
+		'CHATSERVICEGROUP' = {
 			isa = PBXGroup;
 			children = (
-				CHATSERVICE002 /* ChatService.swift */,
+				CHATSERVICE002,
 			);
 			path = Chat;
 			sourceTree = "<group>";
@@ -771,7 +774,7 @@
 			isa = PBXGroup;
 			children = (
 				2CA4EAE7640A871A5FE1F792 /* AuthenticationManager.swift */,
-				OAUTHSERVICE002 /* OAuthService.swift */,
+				OAUTHSERVICE002,
 			);
 			path = Auth;
 			sourceTree = "<group>";
@@ -780,8 +783,8 @@
 			isa = PBXGroup;
 			children = (
 				3E3708D4D59DBF11CF77C3DF /* KeychainService.swift */,
-				E2EESERVICE002 /* E2EEService.swift */,
-				CRYPTOCORE002 /* CryptoCore.swift */,
+				E2EESERVICE002,
+				CRYPTOCORE002,
 			);
 			path = Security;
 			sourceTree = "<group>";
@@ -819,73 +822,73 @@
 			name = Shared/Services/User;
 			sourceTree = "<group>";
 		};
-		SPLASHGROUP001 /* Splash */ = {
+		'SPLASHGROUP001' = {
 			isa = PBXGroup;
 			children = (
-				SPLASHVIEWSGROUP /* Views */,
+				SPLASHVIEWSGROUP,
 			);
 			path = Splash;
 			sourceTree = "<group>";
 		};
-		SPLASHVIEWSGROUP /* Views */ = {
+		'SPLASHVIEWSGROUP' = {
 			isa = PBXGroup;
 			children = (
-				SPLASHVIEW002 /* SplashScreenView.swift */,
+				SPLASHVIEW002,
 			);
 			path = Views;
 			sourceTree = "<group>";
 		};
-		UITESTGROUP001 /* ICEREDUITests */ = {
+		'UITESTGROUP001' = {
 			isa = PBXGroup;
 			children = (
-				UITEST002 /* ICEREDUITests.swift */,
-				UITEST003 /* Info.plist */,
+				UITEST002,
+				UITEST003,
 			);
 			path = ICEREDUITests;
 			sourceTree = "<group>";
 		};
-		UNITTESTGROUP001 /* Tests */ = {
+		'UNITTESTGROUP001' = {
 			isa = PBXGroup;
 			children = (
-				UNITTESTGROUP002 /* UnitTests */,
+				UNITTESTGROUP002,
 			);
 			path = Tests;
 			sourceTree = "<group>";
 		};
-		UNITTESTGROUP002 /* UnitTests */ = {
+		'UNITTESTGROUP002' = {
 			isa = PBXGroup;
 			children = (
-				UNITTESTGROUP003 /* Mocks */,
-				UNITTESTGROUP004 /* Networking */,
-				UNITTESTGROUP005 /* Services */,
-				UNITTEST013 /* Info.plist */,
+				UNITTESTGROUP003,
+				UNITTESTGROUP004,
+				UNITTESTGROUP005,
+				UNITTEST013,
 			);
 			path = UnitTests;
 			sourceTree = "<group>";
 		};
-		UNITTESTGROUP003 /* Mocks */ = {
+		'UNITTESTGROUP003' = {
 			isa = PBXGroup;
 			children = (
-				UNITTEST002 /* MockURLProtocol.swift */,
-				UNITTEST004 /* TestFixtures.swift */,
+				UNITTEST002,
+				UNITTEST004,
 			);
 			path = Mocks;
 			sourceTree = "<group>";
 		};
-		UNITTESTGROUP004 /* Networking */ = {
+		'UNITTESTGROUP004' = {
 			isa = PBXGroup;
 			children = (
-				UNITTEST006 /* APIClientTests.swift */,
-				UNITTEST008 /* ErrorHandlingTests.swift */,
+				UNITTEST006,
+				UNITTEST008,
 			);
 			path = Networking;
 			sourceTree = "<group>";
 		};
-		UNITTESTGROUP005 /* Services */ = {
+		'UNITTESTGROUP005' = {
 			isa = PBXGroup;
 			children = (
-				UNITTEST010 /* AuthenticationManagerTests.swift */,
-				UNITTEST012 /* IdentityServiceTests.swift */,
+				UNITTEST010,
+				UNITTEST012,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -911,38 +914,38 @@
 			productReference = 1D3041E7FCC0ACD7F53D08BA /* ICERED.app */;
 			productType = "com.apple.product-type.application";
 		};
-		UITESTTARGET001 /* ICEREDUITests */ = {
+		'UITESTTARGET001' = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = UITESTCONFIGLIST001 /* Build configuration list for PBXNativeTarget "ICEREDUITests" */;
+			buildConfigurationList = UITESTCONFIGLIST001;
 			buildPhases = (
-				UITESTSOURCES001 /* Sources */,
-				UITESTRESOURCES001 /* Resources */,
+				UITESTSOURCES001,
+				UITESTRESOURCES001,
 			);
 			buildRules = (
 			);
 			dependencies = (
-				UITESTDEP001 /* PBXTargetDependency */,
+				UITESTDEP001,
 			);
 			name = ICEREDUITests;
 			productName = ICEREDUITests;
-			productReference = UITEST004 /* ICEREDUITests.xctest */;
+			productReference = UITEST004;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
-		UNITTESTTARGET001 /* ICEREDTests */ = {
+		'UNITTESTTARGET001' = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = UNITTESTCONFIGLIST001 /* Build configuration list for PBXNativeTarget "ICEREDTests" */;
+			buildConfigurationList = UNITTESTCONFIGLIST001;
 			buildPhases = (
-				UNITTESTSOURCES001 /* Sources */,
-				UNITTESTRESOURCES001 /* Resources */,
+				UNITTESTSOURCES001,
+				UNITTESTRESOURCES001,
 			);
 			buildRules = (
 			);
 			dependencies = (
-				UNITTESTDEP001 /* PBXTargetDependency */,
+				UNITTESTDEP001,
 			);
 			name = ICEREDTests;
 			productName = ICEREDTests;
-			productReference = UNITTEST014 /* ICEREDTests.xctest */;
+			productReference = UNITTEST014;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
 /* End PBXNativeTarget section */
@@ -968,8 +971,8 @@
 			projectRoot = "";
 			targets = (
 				ACADFBFE15FADF5A1AF04334 /* ICERED */,
-				UITESTTARGET001 /* ICEREDUITests */,
-				UNITTESTTARGET001 /* ICEREDTests */,
+				UITESTTARGET001,
+				UNITTESTTARGET001,
 			);
 		};
 /* End PBXProject section */
@@ -987,14 +990,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		UITESTRESOURCES001 /* Resources */ = {
+		'UITESTRESOURCES001' = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		UNITTESTRESOURCES001 /* Resources */ = {
+		'UNITTESTRESOURCES001' = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -1028,7 +1031,7 @@
 				780124131B160D8EE47456B9 /* App.swift in Sources */,
 				C227819EE09A07E77B0C448F /* AppPage.swift in Sources */,
 				280EDC6FD4C376DD75D63CD7 /* AuthenticationManager.swift in Sources */,
-				OAUTHSERVICE001 /* OAuthService.swift in Sources */,
+				OAUTHSERVICE001,
 				63B22A9F26DFB37DE9D67ACD /* CarouselView.swift in Sources */,
 				CDE6F3A1AA8B69AB2D9C0603 /* ChatView.swift in Sources */,
 				33A5FB652C0009D96FB844A5 /* CommunicationService.swift in Sources */,
@@ -1069,45 +1072,46 @@
 				E5C4A9D3B2F14E719C7A5B0F /* DateOfBirthPickerView.swift in Sources */,
 				947975D4CFDA4B870FE1DD42 /* SimpleCarouselView.swift in Sources */,
 				4A09C7CE82196707BAB194FB /* SocialService.swift in Sources */,
-				638674e7023c72f06b4cbd24 /* GroupChatView.swift in Sources */,
+				6B199CE5A0EE522763C91F67 /* StartGroupChatView.swift in Sources */,
+				638674e7023c72f06b4cbd24,
 				0F11FE719B8F4B76047CA6BA /* ThankYouModal.swift in Sources */,
 				E5A9BFF109109BA9B0D167FF /* UserModels.swift in Sources */,
 				03790B19E7A59D67154C1C74 /* UserProfileView.swift in Sources */,
 				C82B6B2CD19D5A1EC755D09B /* UserService.swift in Sources */,
-				CREATEACCOUNT001 /* CreateAccountView.swift in Sources */,
-				WELCOMEVIEW001 /* WelcomeView.swift in Sources */,
-				SPLASHVIEW001 /* SplashScreenView.swift in Sources */,
-				CHATSERVICE001 /* ChatService.swift in Sources */,
-				KEYBOARDEXT001 /* KeyboardExtension.swift in Sources */,
-				SHARESHEET001 /* ShareSheet.swift in Sources */,
-				E2EESERVICE001 /* E2EEService.swift in Sources */,
-				E2EEMODELS001 /* E2EEModels.swift in Sources */,
-				CRYPTOCORE001 /* CryptoCore.swift in Sources */,
+				CREATEACCOUNT001,
+				WELCOMEVIEW001,
+				SPLASHVIEW001,
+				CHATSERVICE001,
+				KEYBOARDEXT001,
+				SHARESHEET001,
+				E2EESERVICE001,
+				E2EEMODELS001,
+				CRYPTOCORE001,
 				96FF4DA0BB157757827A9B6F /* DeviceModels.swift in Sources */,
 				82D34AD48948E77D4FA56AFC /* DeviceService.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		UITESTSOURCES001 /* Sources */ = {
+		'UITESTSOURCES001' = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				UITEST001 /* ICEREDUITests.swift in Sources */,
+				UITEST001,
 				15D14E8B91E35A7EB282BDA1 /* DeviceModels.swift in Sources */,
 				53334F68A850981DB3138827 /* DeviceService.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		UNITTESTSOURCES001 /* Sources */ = {
+		'UNITTESTSOURCES001' = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				UNITTEST001 /* MockURLProtocol.swift in Sources */,
-				UNITTEST003 /* TestFixtures.swift in Sources */,
-				UNITTEST005 /* APIClientTests.swift in Sources */,
-				UNITTEST007 /* ErrorHandlingTests.swift in Sources */,
-				UNITTEST009 /* AuthenticationManagerTests.swift in Sources */,
-				UNITTEST011 /* IdentityServiceTests.swift in Sources */,
+				UNITTEST001,
+				UNITTEST003,
+				UNITTEST005,
+				UNITTEST007,
+				UNITTEST009,
+				UNITTEST011,
 				8F03466989CAFFDA8F81490D /* DeviceModels.swift in Sources */,
 				95E7438E8FB732F0088B546C /* DeviceService.swift in Sources */,
 			);
@@ -1116,15 +1120,15 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
-		UITESTDEP001 /* PBXTargetDependency */ = {
+		'UITESTDEP001' = {
 			isa = PBXTargetDependency;
 			target = ACADFBFE15FADF5A1AF04334 /* ICERED */;
-			targetProxy = UITESTPROXY001 /* PBXContainerItemProxy */;
+			targetProxy = UITESTPROXY001;
 		};
-		UNITTESTDEP001 /* PBXTargetDependency */ = {
+		'UNITTESTDEP001' = {
 			isa = PBXTargetDependency;
 			target = ACADFBFE15FADF5A1AF04334 /* ICERED */;
-			targetProxy = UNITTESTPROXY001 /* PBXContainerItemProxy */;
+			targetProxy = UNITTESTPROXY001;
 		};
 /* End PBXTargetDependency section */
 
@@ -1306,7 +1310,7 @@
 			};
 			name = Debug;
 		};
-		UITESTCONFIG001 /* Debug */ = {
+		'UITESTCONFIG001' = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
@@ -1332,7 +1336,7 @@
 			};
 			name = Debug;
 		};
-		UITESTCONFIG002 /* Release */ = {
+		'UITESTCONFIG002' = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
@@ -1358,7 +1362,7 @@
 			};
 			name = Release;
 		};
-		UNITTESTCONFIG001 /* Debug */ = {
+		'UNITTESTCONFIG001' = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
@@ -1384,7 +1388,7 @@
 			};
 			name = Debug;
 		};
-		UNITTESTCONFIG002 /* Release */ = {
+		'UNITTESTCONFIG002' = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
@@ -1431,20 +1435,20 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
 		};
-		UITESTCONFIGLIST001 /* Build configuration list for PBXNativeTarget "ICEREDUITests" */ = {
+		'UITESTCONFIGLIST001' = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				UITESTCONFIG001 /* Debug */,
-				UITESTCONFIG002 /* Release */,
+				UITESTCONFIG001,
+				UITESTCONFIG002,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
 		};
-		UNITTESTCONFIGLIST001 /* Build configuration list for PBXNativeTarget "ICEREDTests" */ = {
+		'UNITTESTCONFIGLIST001' = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				UNITTESTCONFIG001 /* Debug */,
-				UNITTESTCONFIG002 /* Release */,
+				UNITTESTCONFIG001,
+				UNITTESTCONFIG002,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;

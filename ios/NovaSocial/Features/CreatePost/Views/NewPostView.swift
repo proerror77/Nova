@@ -546,7 +546,15 @@ struct NewPostView: View {
     // MARK: - 提交帖子
     private func submitPost() async {
         guard canPost else { return }
-        guard let userId = authManager.currentUser?.id else {
+
+        // 检查登录状态
+        guard authManager.isAuthenticated else {
+            postError = "Please login first"
+            return
+        }
+
+        // 获取用户ID - 优先使用 currentUser，如果为 nil 则使用 storedUserId
+        guard let userId = authManager.currentUser?.id ?? authManager.storedUserId else {
             postError = "Please login first"
             return
         }

@@ -26,7 +26,7 @@ final class E2EEService {
 
     init() {
         // Generate deterministic device ID from iOS device info
-        let deviceName = UIDevice.current.name
+        let _ = UIDevice.current.name
         let systemVersion = UIDevice.current.systemVersion
         let modelName = UIDevice.current.model
         let uuid = UIDevice.current.identifierForVendor?.uuidString ?? UUID().uuidString
@@ -182,7 +182,7 @@ final class E2EEService {
         guard let peerPublicKey = Data(base64: claimedKey.identityKey) else {
             throw E2EEError.invalidKey("Invalid peer public key encoding")
         }
-        guard let oneTimeKey = Data(base64: claimedKey.key) else {
+        guard Data(base64: claimedKey.key) != nil else {
             throw E2EEError.invalidKey("Invalid one-time key encoding")
         }
 
@@ -233,9 +233,10 @@ final class E2EEService {
             throw E2EEError.notInitialized
         }
 
+        let deviceName = await MainActor.run { UIDevice.current.name }
         let request = RegisterDeviceRequest(
             deviceId: identity.deviceId,
-            deviceName: UIDevice.current.name
+            deviceName: deviceName
         )
 
         // Add X-Device-ID header

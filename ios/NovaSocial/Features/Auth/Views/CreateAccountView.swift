@@ -1,4 +1,5 @@
 import SwiftUI
+import PhotosUI
 
 // MARK: - Create Account View
 
@@ -17,6 +18,8 @@ struct CreateAccountView: View {
     @State private var errorMessage: String?
     @State private var showPassword = false
     @State private var showConfirmPassword = false
+    @State private var selectedPhotoItem: PhotosPickerItem?
+    @State private var selectedAvatar: UIImage?
 
     // MARK: - Focus State
     @FocusState private var focusedField: Field?
@@ -30,6 +33,9 @@ struct CreateAccountView: View {
 
     // Access global AuthenticationManager
     @EnvironmentObject private var authManager: AuthenticationManager
+
+    // Access AvatarManager
+    @StateObject private var avatarManager = AvatarManager.shared
 
     var body: some View {
         ZStack {
@@ -52,26 +58,35 @@ struct CreateAccountView: View {
                 // Main Content
                 ZStack {
                     Group {
-                        // Profile Picture Circle
-                        Circle()
-                            .fill(Color(red: 0.77, green: 0.77, blue: 0.77))
-                            .frame(width: 136, height: 136)
-                            .offset(x: 0.50, y: -290)
-
-                        // Add Photo Button
+                        // Profile Picture Circle - 显示选择的头像或占位符
                         ZStack {
-                            Circle()
-                                .fill(Color(red: 0.87, green: 0.11, blue: 0.26))
-                                .frame(width: 35, height: 35)
+                            if let avatar = selectedAvatar {
+                                Image(uiImage: avatar)
+                                    .resizable()
+                                    .scaledToFill()
+                                    .frame(width: 136, height: 136)
+                                    .clipShape(Circle())
+                            } else {
+                                Circle()
+                                    .fill(Color(red: 0.77, green: 0.77, blue: 0.77))
+                                    .frame(width: 136, height: 136)
+                            }
+                        }
+                        .offset(x: 0.50, y: -290)
 
-                            Image(systemName: "plus")
-                                .font(.system(size: 18, weight: .medium))
-                                .foregroundColor(.white)
+                        // Add Photo Button - 使用 PhotosPicker
+                        PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
+                            ZStack {
+                                Circle()
+                                    .fill(Color(red: 0.87, green: 0.11, blue: 0.26))
+                                    .frame(width: 35, height: 35)
+
+                                Image(systemName: selectedAvatar != nil ? "checkmark" : "plus")
+                                    .font(.system(size: 18, weight: .medium))
+                                    .foregroundColor(.white)
+                            }
                         }
                         .offset(x: 48, y: -242.50)
-                        .onTapGesture {
-                            // TODO: Handle photo picker
-                        }
 
 
                         // SHOW button for PASSWORD
@@ -79,6 +94,9 @@ struct CreateAccountView: View {
                             .font(Font.custom("Helvetica Neue", size: 12).weight(.light))
                             .lineSpacing(20)
                             .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
+                            .padding(.horizontal, 30)
+                            .padding(.vertical, 24)
+                            .contentShape(Rectangle())
                             .offset(x: 138.50, y: -20)
                             .onTapGesture {
                                 let wasFocused = focusedField == .password
@@ -96,6 +114,9 @@ struct CreateAccountView: View {
                             .font(Font.custom("Helvetica Neue", size: 12).weight(.light))
                             .lineSpacing(20)
                             .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
+                            .padding(.horizontal, 30)
+                            .padding(.vertical, 24)
+                            .contentShape(Rectangle())
                             .offset(x: 138.50, y: 49)
                             .onTapGesture {
                                 let wasFocused = focusedField == .confirmPassword
@@ -378,6 +399,22 @@ struct CreateAccountView: View {
             }
         }
         .ignoresSafeArea(.keyboard)
+        .onChange(of: selectedPhotoItem) { oldValue, newValue in
+            Task {
+                if let photoItem = newValue,
+                   let data = try? await photoItem.loadTransferable(type: Data.self),
+                   let image = UIImage(data: data) {
+                    // 显示选择的头像
+                    selectedAvatar = image
+                    // 保存到 AvatarManager
+                    avatarManager.savePendingAvatar(image)
+
+                    #if DEBUG
+                    print("[CreateAccountView] 头像已选择并保存")
+                    #endif
+                }
+            }
+        }
     }
 
     // MARK: - Actions

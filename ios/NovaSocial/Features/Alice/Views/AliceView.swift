@@ -110,6 +110,10 @@ struct AliceView: View {
                             .frame(width: 100, height: 100)
                         Spacer()
                     }
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        hideKeyboard()
+                    }
                 } else {
                     // 聊天消息列表
                     ScrollViewReader { proxy in
@@ -131,6 +135,10 @@ struct AliceView: View {
                             .padding(.horizontal, 16)
                             .padding(.top, 16)
                             .padding(.bottom, 16)
+                        }
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            hideKeyboard()
                         }
                         .onChange(of: messages.count) { _, _ in
                             if let lastMessage = messages.last {
@@ -213,6 +221,7 @@ struct AliceView: View {
                     .overlay(
                         RoundedRectangle(cornerRadius: 26)
                             .inset(by: 0.50)
+
                             .stroke(Color(red: 0.77, green: 0.77, blue: 0.77), lineWidth: 0.50)
                     )
                     .padding(.horizontal, 16)
@@ -222,6 +231,7 @@ struct AliceView: View {
                 // MARK: - 底部导航栏
                 BottomTabBar(currentPage: $currentPage, showPhotoOptions: $showPhotoOptions)
             }
+            .ignoresSafeArea(.keyboard, edges: .bottom)
 
             // MARK: - 模型选择器弹窗
             if showModelSelector {
@@ -551,4 +561,11 @@ enum AliceError: LocalizedError {
 
 #Preview {
     AliceView(currentPage: .constant(.alice))
+}
+
+// MARK: - Keyboard Dismissal Extension
+extension View {
+    func hideKeyboard() {
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+    }
 }

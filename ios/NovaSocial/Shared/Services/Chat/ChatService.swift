@@ -35,15 +35,8 @@ final class ChatService {
     // MARK: - Initialization
 
     init() {
-        // Try to initialize E2EE service
-        do {
-            self.e2eeService = try E2EEService()
-        } catch {
-            #if DEBUG
-            print("[ChatService] E2EE not available: \(error)")
-            #endif
-            self.e2eeService = nil
-        }
+        // Initialize E2EE service
+        self.e2eeService = E2EEService()
     }
 
     // MARK: - REST API - Messages
@@ -380,7 +373,7 @@ final class ChatService {
               encryptionVersion == 2,
               let encryptedContent = message.encryptedContent,
               let nonce = message.nonce,
-              let sessionId = message.sessionId else {
+              let _ = message.sessionId else {
             // Not an E2EE message, return plaintext
             return message.content
         }
