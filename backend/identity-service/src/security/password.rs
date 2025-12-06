@@ -4,7 +4,6 @@ use argon2::{
     password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
     Argon2,
 };
-use zxcvbn::zxcvbn;
 
 /// Hash a password using Argon2id algorithm
 ///
@@ -71,16 +70,11 @@ pub fn verify_password(password: &str, password_hash: &str) -> Result<bool> {
     }
 }
 
-/// Validate password strength using composition rules and zxcvbn
+/// Validate password strength - simplified for development/testing
 ///
 /// ## Requirements
 ///
 /// - Minimum 6 characters
-/// - At least one uppercase letter
-/// - At least one lowercase letter
-/// - At least one digit
-/// - At least one special character
-/// - zxcvbn entropy score >= 2 (moderate - relaxed for testing)
 ///
 /// ## Arguments
 ///
@@ -90,51 +84,10 @@ pub fn verify_password(password: &str, password_hash: &str) -> Result<bool> {
 ///
 /// Returns `IdentityError::WeakPassword` with specific failure reason
 fn validate_password_strength(password: &str) -> Result<()> {
-    // Length check
+    // Length check only
     if password.len() < 6 {
         return Err(IdentityError::WeakPassword(
             "Password must be at least 6 characters".to_string(),
-        ));
-    }
-
-    // Composition checks
-    let has_uppercase = password.chars().any(|c| c.is_ascii_uppercase());
-    let has_lowercase = password.chars().any(|c| c.is_ascii_lowercase());
-    let has_digit = password.chars().any(|c| c.is_ascii_digit());
-    let has_special = password.chars().any(|c| !c.is_alphanumeric());
-
-    if !has_uppercase {
-        return Err(IdentityError::WeakPassword(
-            "Password must contain at least one uppercase letter".to_string(),
-        ));
-    }
-
-    if !has_lowercase {
-        return Err(IdentityError::WeakPassword(
-            "Password must contain at least one lowercase letter".to_string(),
-        ));
-    }
-
-    if !has_digit {
-        return Err(IdentityError::WeakPassword(
-            "Password must contain at least one digit".to_string(),
-        ));
-    }
-
-    if !has_special {
-        return Err(IdentityError::WeakPassword(
-            "Password must contain at least one special character".to_string(),
-        ));
-    }
-
-    // Entropy check using zxcvbn (relaxed to score >= 2 for testing)
-    let entropy = zxcvbn(password, &[]).map_err(|e| {
-        IdentityError::Internal(format!("Password entropy calculation failed: {}", e))
-    })?;
-
-    if entropy.score() < 2 {
-        return Err(IdentityError::WeakPassword(
-            "Password is too weak. Please use a stronger password with higher entropy.".to_string(),
         ));
     }
 
@@ -147,45 +100,34 @@ mod tests {
 
     #[test]
     fn test_hash_and_verify_valid_password() {
-        let password = "StrongP@ssw0rd!";
+        let password = "simplepass";
         let hash = hash_password(password).expect("should hash password successfully");
         assert!(verify_password(password, &hash).expect("should verify successfully"));
     }
 
     #[test]
     fn test_verify_wrong_password() {
-        let password = "StrongP@ssw0rd!";
+        let password = "password123";
         let hash = hash_password(password).expect("should hash password successfully");
-        assert!(!verify_password("WrongPassword123!", &hash).expect("verification should succeed"));
+        assert!(!verify_password("wrongpass", &hash).expect("verification should succeed"));
     }
 
     #[test]
     fn test_weak_password_too_short() {
-        let result = hash_password("Short1!");
+        let result = hash_password("short");
         assert!(matches!(result, Err(IdentityError::WeakPassword(_))));
     }
 
     #[test]
-    fn test_weak_password_no_uppercase() {
-        let result = hash_password("weakpassword123!");
-        assert!(matches!(result, Err(IdentityError::WeakPassword(_))));
-    }
-
-    #[test]
-    fn test_weak_password_no_digit() {
-        let result = hash_password("StrongPassword!");
-        assert!(matches!(result, Err(IdentityError::WeakPassword(_))));
-    }
-
-    #[test]
-    fn test_weak_password_no_special() {
-        let result = hash_password("StrongPassword123");
-        assert!(matches!(result, Err(IdentityError::WeakPassword(_))));
+    fn test_valid_simple_password() {
+        // Simple passwords are now allowed as long as they're 6+ characters
+        let result = hash_password("simple123");
+        assert!(result.is_ok());
     }
 
     #[test]
     fn test_different_hashes_for_same_password() {
-        let password = "StrongP@ssw0rd!";
+        let password = "testpass123";
         let hash1 = hash_password(password).expect("should hash successfully");
         let hash2 = hash_password(password).expect("should hash successfully");
         // Different salts should produce different hashes

@@ -511,7 +511,7 @@ struct CreateAccountView: View {
         }
 
         if !isStrongPassword(password) {
-            errorMessage = "Password must contain uppercase, lowercase, number, and special character (!@#$%)"
+            errorMessage = "Password must be at least 6 characters"
             return false
         }
 
@@ -534,27 +534,8 @@ struct CreateAccountView: View {
     }
 
     private func isStrongPassword(_ password: String) -> Bool {
-        // Check for at least one uppercase letter
-        let hasUppercase = password.range(of: "[A-Z]", options: .regularExpression) != nil
-
-        // Check for at least one lowercase letter
-        let hasLowercase = password.range(of: "[a-z]", options: .regularExpression) != nil
-
-        // Check for at least one number
-        let hasNumber = password.range(of: "[0-9]", options: .regularExpression) != nil
-
-        // Check for at least one special character
-        let hasSpecial = password.range(of: "[^A-Za-z0-9]", options: .regularExpression) != nil
-
-        // Check minimum length (relaxed to 6 for testing)
-        let hasMinLength = password.count >= 6
-
-        // Avoid common patterns that zxcvbn scores poorly
-        let hasCommonPattern = password.lowercased().contains("password") ||
-                               password.lowercased().contains("123456") ||
-                               password.lowercased().contains("qwerty")
-
-        return hasUppercase && hasLowercase && hasNumber && hasSpecial && hasMinLength && !hasCommonPattern
+        // Simplified validation - only check minimum length
+        return password.count >= 6
     }
 }
 
