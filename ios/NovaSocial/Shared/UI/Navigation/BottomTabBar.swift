@@ -122,7 +122,7 @@ struct BottomTabBar: View {
                     .foregroundColor(isAccount ? DesignTokens.accentColor : .black)
             }
             .frame(maxWidth: .infinity)
-            .offset(y: -3)
+            .offset(y: 0)
             .onTapGesture {
                 currentPage = .account
             }

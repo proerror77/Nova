@@ -4,7 +4,7 @@ import PhotosUI
 struct NewPostView: View {
     @Binding var showNewPost: Bool
     var initialImage: UIImage? = nil  // 从PhotoOptionsModal传入的图片
-    var onPostSuccess: (() -> Void)? = nil  // 成功发布后的回调
+    var onPostSuccess: ((Post) -> Void)? = nil  // 成功发布后的回调，传递创建的Post对象
     @EnvironmentObject private var authManager: AuthenticationManager
     @State private var postText: String = ""
     @State private var inviteAlice: Bool = false
@@ -64,16 +64,21 @@ struct NewPostView: View {
         .sheet(isPresented: $showCamera) {
             ImagePicker(sourceType: .camera, selectedImage: .constant(nil))
         }
-        .photosPicker(isPresented: $showPhotoPicker, selection: $selectedPhotos, maxSelectionCount: 10, matching: .images)
+        .photosPicker(isPresented: $showPhotoPicker, selection: $selectedPhotos, maxSelectionCount: 10 - selectedImages.count, matching: .images)
         .onChange(of: selectedPhotos) { oldValue, newValue in
             Task {
-                selectedImages = []
+                // 将新选择的照片添加到已有照片中（不清空）
                 for item in newValue {
+                    // 检查是否已达到最大数量
+                    guard selectedImages.count < 10 else { break }
+
                     if let data = try? await item.loadTransferable(type: Data.self),
                        let image = UIImage(data: data) {
                         selectedImages.append(image)
                     }
                 }
+                // 清空 selectedPhotos 以便下次继续选择
+                selectedPhotos = []
             }
         }
         .onAppear {
@@ -245,30 +250,12 @@ struct NewPostView: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(alignment: .top, spacing: 20) {
                 if selectedImages.isEmpty {
-                    // 预览占位符
-                    ZStack {
-                        Rectangle()
-                            .foregroundColor(.clear)
-                            .frame(width: 100, height: 133)
-                            .background(Color(red: 0, green: 0, blue: 0).opacity(0.20))
-                            .cornerRadius(10)
-
-                        VStack {
-                            Spacer()
-                            HStack {
-                                Text("Preview")
-                                    .font(Font.custom("Helvetica Neue", size: 10).weight(.medium))
-                                    .lineSpacing(20)
-                                    .foregroundColor(.white)
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 2)
-                                    .background(Color(red: 0.82, green: 0.13, blue: 0.25))
-                                    .cornerRadius(45)
-                                Spacer()
-                            }
-                            .padding(6)
-                        }
-                    }
+                    // 预览占位符（无文字）
+                    Rectangle()
+                        .foregroundColor(.clear)
+                        .frame(width: 100, height: 133)
+                        .background(Color(red: 0, green: 0, blue: 0).opacity(0.20))
+                        .cornerRadius(10)
                 }
 
                 // 显示所有选中的图片
@@ -642,22 +629,15 @@ struct NewPostView: View {
                 throw lastError ?? APIError.serverError(statusCode: 503, message: "Service unavailable")
             }
 
-            #if DEBUG
-            print("[NewPost] Created post: \(createdPost.id)")
-            #endif
-
             // Step 3: 成功后关闭页面并触发刷新回调
             await MainActor.run {
                 isPosting = false
                 showNewPost = false
-                // 调用成功回调，通知 HomeView 刷新 Feed
-                onPostSuccess?()
+                // 调用成功回调，将创建的Post传递给 HomeView
+                onPostSuccess?(createdPost)
             }
 
         } catch {
-            #if DEBUG
-            print("[NewPost] Error: \(error)")
-            #endif
             await MainActor.run {
                 isPosting = false
                 postError = "Failed to create post: \(error.localizedDescription)"

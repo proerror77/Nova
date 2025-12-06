@@ -45,7 +45,9 @@ struct LoginView: View {
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
-                Spacer()
+                // 使用固定高度替代Spacer，防止键盘推动布局
+                Color.clear
+                    .frame(height: max(0, (UIScreen.main.bounds.height - 812) / 2))
 
                 // Main Content
                 ZStack {
@@ -290,14 +292,17 @@ struct LoginView: View {
                 }
                 .frame(width: 375, height: 812)
 
-                Spacer()
+                // 使用固定高度替代Spacer，防止键盘推动布局
+                Color.clear
+                    .frame(height: max(0, (UIScreen.main.bounds.height - 812) / 2))
             }
             .contentShape(Rectangle())
             .onTapGesture {
                 UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
             }
         }
-        .ignoresSafeArea(.keyboard)
+        // 移除 .ignoresSafeArea(.keyboard) 防止页面随键盘浮动
+        .scrollDismissesKeyboard(.interactively)
     }
 
     // MARK: - Actions

@@ -76,27 +76,20 @@ class FeedViewModel: ObservableObject {
             self.currentCursor = response.cursor
             self.hasMore = response.hasMore
 
-            #if DEBUG
-            // Debug: Log raw response to check media_urls
-            for (index, rawPost) in response.posts.prefix(3).enumerated() {
-                print("[Feed] Post[\(index)] id=\(rawPost.id.prefix(8)), content=\(rawPost.content.prefix(20)), media_urls=\(rawPost.mediaUrls ?? []), media_type=\(rawPost.mediaType ?? "nil")")
-            }
-            #endif
+            // Convert raw posts to FeedPost objects directly
+            let allPosts = response.posts.map { FeedPost(from: $0) }
 
-            // Convert raw posts to FeedPost objects directly (no separate content-service call needed)
-            self.posts = response.posts.map { FeedPost(from: $0) }
+            // Client-side deduplication: Remove duplicate posts by ID
+            var seenIds = Set<String>()
+            self.posts = allPosts.filter { post in
+                guard !seenIds.contains(post.id) else { return false }
+                seenIds.insert(post.id)
+                return true
+            }
 
             self.error = nil
         } catch let apiError as APIError {
-            #if DEBUG
-            print("[Feed] API Error: \(apiError)")
-            #endif
-
-            // Handle unauthorized:
-            // 1) If currently authenticated and we have not yet fallen back to guest feed:
-            //    - Try token refresh once.
-            //    - On failure, logout and retry once in guest mode.
-            // 2) If already in guest mode or guest fallback, surface an error instead of looping.
+            // Handle unauthorized: try token refresh or fallback to guest mode
             if case .unauthorized = apiError, isAuthenticated, !isGuestFallback {
                 let refreshed = await authManager.attemptTokenRefresh()
                 if refreshed {
@@ -106,26 +99,19 @@ class FeedViewModel: ObservableObject {
                     return
                 } else {
                     // Token refresh failed - gracefully degrade to guest mode
-                    #if DEBUG
-                    print("[Feed] Token refresh failed, falling back to guest feed")
-                    #endif
                     await authManager.logout()
-                    // Reload as guest - this time mark as guest fallback to avoid infinite loop
                     isLoading = false
                     await loadFeed(algorithm: algorithm, isGuestFallback: true)
                     return
                 }
             } else {
-                // Guest feed or repeated unauthorized: show error and stop retrying
+                // Show error and stop retrying
                 self.error = apiError.localizedDescription
                 self.posts = []
             }
         } catch {
             self.error = "Failed to load feed: \(error.localizedDescription)"
             self.posts = []
-            #if DEBUG
-            print("[Feed] Error: \(error)")
-            #endif
         }
 
         isLoading = false
@@ -147,12 +133,14 @@ class FeedViewModel: ObservableObject {
 
             // Convert raw posts to FeedPost objects directly
             let newPosts = response.posts.map { FeedPost(from: $0) }
-            self.posts.append(contentsOf: newPosts)
+
+            // Client-side deduplication: Only add posts that aren't already in the feed
+            let existingIds = Set(self.posts.map { $0.id })
+            let uniqueNewPosts = newPosts.filter { !existingIds.contains($0.id) }
+            self.posts.append(contentsOf: uniqueNewPosts)
 
         } catch {
-            #if DEBUG
-            print("[Feed] Load more error: \(error)")
-            #endif
+            // Silently handle errors to avoid disrupting user experience
         }
 
         isLoadingMore = false
@@ -161,6 +149,29 @@ class FeedViewModel: ObservableObject {
     /// Refresh feed (pull-to-refresh)
     func refresh() async {
         await loadFeed(algorithm: currentAlgorithm)
+    }
+
+    /// Add a newly created post to the top of the feed (optimistic update)
+    /// This avoids the need to refresh the entire feed after posting
+    func addNewPost(_ post: Post) {
+        let feedPost = FeedPost(
+            id: post.id,
+            authorId: post.authorId,
+            authorName: "User \(post.authorId.prefix(8))",
+            authorAvatar: nil,
+            content: post.content,
+            mediaUrls: post.mediaUrls ?? [],
+            createdAt: post.createdDate,
+            likeCount: post.likeCount ?? 0,
+            commentCount: post.commentCount ?? 0,
+            shareCount: post.shareCount ?? 0,
+            isLiked: false,
+            isBookmarked: false
+        )
+
+        // Add to the top of the feed
+        self.posts.insert(feedPost, at: 0)
+        self.postIds.insert(post.id, at: 0)
     }
 
     /// Switch feed algorithm

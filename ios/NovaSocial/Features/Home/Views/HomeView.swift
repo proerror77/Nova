@@ -20,6 +20,7 @@ struct HomeView: View {
     @State private var showCamera = false
     @State private var selectedImage: UIImage?
     @State private var showGenerateImage = false
+    @State private var showWrite = false
 
     var body: some View {
         ZStack {
@@ -34,16 +35,17 @@ struct HomeView: View {
                 NewPostView(
                     showNewPost: $showNewPost,
                     initialImage: selectedImage,
-                    onPostSuccess: {
-                        // Post 成功后刷新 Feed
-                        Task {
-                            await feedViewModel.refresh()
-                        }
+                    onPostSuccess: { newPost in
+                        // Post 成功后直接添加到 Feed 顶部（优化版本，不需要重新加载整个feed）
+                        feedViewModel.addNewPost(newPost)
                     }
                 )
                 .transition(.identity)
             } else if showGenerateImage {
                 GenerateImage01View(showGenerateImage: $showGenerateImage)
+                    .transition(.identity)
+            } else if showWrite {
+                WriteView(showWrite: $showWrite)
                     .transition(.identity)
             } else {
                 homeContent
@@ -63,7 +65,7 @@ struct HomeView: View {
                         showGenerateImage = true
                     },
                     onWrite: {
-                        showNewPost = true
+                        showWrite = true
                     }
                 )
             }
@@ -72,6 +74,7 @@ struct HomeView: View {
         .animation(.none, value: showSearch)
         .animation(.none, value: showNewPost)
         .animation(.none, value: showGenerateImage)
+        .animation(.none, value: showWrite)
         .navigationBarBackButtonHidden(true)
         .sheet(isPresented: $showReportView) {
             ReportModal(isPresented: $showReportView, showThankYouView: $showThankYouView)

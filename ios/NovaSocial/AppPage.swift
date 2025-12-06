@@ -23,4 +23,5 @@ enum AppPage {
     case addFriends
     case newChat
     case groupChat
+    case write
 }

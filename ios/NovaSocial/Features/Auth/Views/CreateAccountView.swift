@@ -53,7 +53,9 @@ struct CreateAccountView: View {
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
-                Spacer()
+                // 使用固定高度替代Spacer，防止键盘推动布局
+                Color.clear
+                    .frame(height: max(0, (UIScreen.main.bounds.height - 812) / 2))
 
                 // Main Content
                 ZStack {
@@ -89,45 +91,51 @@ struct CreateAccountView: View {
                         .offset(x: 48, y: -242.50)
 
 
-                        // SHOW button for PASSWORD
-                        Text(showPassword ? "HIDE" : "SHOW")
-                            .font(Font.custom("Helvetica Neue", size: 12).weight(.light))
-                            .lineSpacing(20)
-                            .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
-                            .padding(.horizontal, 30)
-                            .padding(.vertical, 24)
-                            .contentShape(Rectangle())
-                            .offset(x: 138.50, y: -20)
-                            .onTapGesture {
-                                let wasFocused = focusedField == .password
+                        // SHOW button for PASSWORD - 优化点击响应
+                        Button(action: {
+                            // 直接切换显示状态，不需要延迟
+                            let wasFocused = focusedField == .password
+                            withAnimation(.none) {
                                 showPassword.toggle()
-                                if wasFocused {
-                                    // Maintain focus after toggle
-                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                                        focusedField = .password
-                                    }
-                                }
                             }
+                            // 如果之前有焦点，立即恢复焦点
+                            if wasFocused {
+                                focusedField = .password
+                            }
+                        }) {
+                            Text(showPassword ? "HIDE" : "SHOW")
+                                .font(Font.custom("Helvetica Neue", size: 12).weight(.light))
+                                .lineSpacing(20)
+                                .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
+                                .padding(.horizontal, 30)
+                                .padding(.vertical, 24)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .offset(x: 138.50, y: -20)
 
-                        // SHOW button for CONFIRM PASSWORD
-                        Text(showConfirmPassword ? "HIDE" : "SHOW")
-                            .font(Font.custom("Helvetica Neue", size: 12).weight(.light))
-                            .lineSpacing(20)
-                            .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
-                            .padding(.horizontal, 30)
-                            .padding(.vertical, 24)
-                            .contentShape(Rectangle())
-                            .offset(x: 138.50, y: 49)
-                            .onTapGesture {
-                                let wasFocused = focusedField == .confirmPassword
+                        // SHOW button for CONFIRM PASSWORD - 优化点击响应
+                        Button(action: {
+                            // 直接切换显示状态，不需要延迟
+                            let wasFocused = focusedField == .confirmPassword
+                            withAnimation(.none) {
                                 showConfirmPassword.toggle()
-                                if wasFocused {
-                                    // Maintain focus after toggle
-                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                                        focusedField = .confirmPassword
-                                    }
-                                }
                             }
+                            // 如果之前有焦点，立即恢复焦点
+                            if wasFocused {
+                                focusedField = .confirmPassword
+                            }
+                        }) {
+                            Text(showConfirmPassword ? "HIDE" : "SHOW")
+                                .font(Font.custom("Helvetica Neue", size: 12).weight(.light))
+                                .lineSpacing(20)
+                                .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
+                                .padding(.horizontal, 30)
+                                .padding(.vertical, 24)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .offset(x: 138.50, y: 49)
 
                         // Email Input Field
                         Rectangle()
@@ -201,8 +209,8 @@ struct CreateAccountView: View {
                             .offset(x: 0, y: -88.50)
                             .accessibilityIdentifier("usernameTextField")
 
-                        // Password field
-                        ZStack {
+                        // Password field - 优化版本，避免视图重建
+                        Group {
                             if showPassword {
                                 TextField("", text: $password, prompt: Text("Enter your password").foregroundColor(Color.white.opacity(0.4)))
                                     .foregroundColor(.white)
@@ -211,25 +219,24 @@ struct CreateAccountView: View {
                                     .frame(width: 343, height: 49)
                                     .autocapitalization(.none)
                                     .autocorrectionDisabled()
+                                    .textContentType(.password)
                                     .accessibilityIdentifier("passwordTextField")
                                     .focused($focusedField, equals: .password)
-                                    .id("password_visible")
                             } else {
                                 SecureField("", text: $password, prompt: Text("Enter your password").foregroundColor(Color.white.opacity(0.4)))
                                     .foregroundColor(.white)
                                     .font(Font.custom("Helvetica Neue", size: 14))
                                     .padding(.horizontal, 16)
                                     .frame(width: 343, height: 49)
+                                    .textContentType(.password)
                                     .accessibilityIdentifier("passwordTextField")
                                     .focused($focusedField, equals: .password)
-                                    .id("password_secure")
                             }
                         }
                         .offset(x: 0, y: -19.50)
-                        .animation(.none, value: showPassword)
 
-                        // Confirm Password field
-                        ZStack {
+                        // Confirm Password field - 优化版本，避免视图重建
+                        Group {
                             if showConfirmPassword {
                                 TextField("", text: $confirmPassword, prompt: Text("Confirm your password").foregroundColor(Color.white.opacity(0.4)))
                                     .foregroundColor(.white)
@@ -238,22 +245,21 @@ struct CreateAccountView: View {
                                     .frame(width: 343, height: 49)
                                     .autocapitalization(.none)
                                     .autocorrectionDisabled()
+                                    .textContentType(.password)
                                     .accessibilityIdentifier("confirmPasswordTextField")
                                     .focused($focusedField, equals: .confirmPassword)
-                                    .id("confirmPassword_visible")
                             } else {
                                 SecureField("", text: $confirmPassword, prompt: Text("Confirm your password").foregroundColor(Color.white.opacity(0.4)))
                                     .foregroundColor(.white)
                                     .font(Font.custom("Helvetica Neue", size: 14))
                                     .padding(.horizontal, 16)
                                     .frame(width: 343, height: 49)
+                                    .textContentType(.password)
                                     .accessibilityIdentifier("confirmPasswordTextField")
                                     .focused($focusedField, equals: .confirmPassword)
-                                    .id("confirmPassword_secure")
                             }
                         }
                         .offset(x: 0, y: 49.50)
-                        .animation(.none, value: showConfirmPassword)
 
                         // Sign up Button
                         Button(action: {
@@ -391,14 +397,17 @@ struct CreateAccountView: View {
                 }
                 .frame(width: 375, height: 812)
 
-                Spacer()
+                // 使用固定高度替代Spacer，防止键盘推动布局
+                Color.clear
+                    .frame(height: max(0, (UIScreen.main.bounds.height - 812) / 2))
             }
             .contentShape(Rectangle())
             .onTapGesture {
                 UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
             }
         }
-        .ignoresSafeArea(.keyboard)
+        // 移除 .ignoresSafeArea(.keyboard) 防止页面随键盘浮动
+        .scrollDismissesKeyboard(.interactively)
         .onChange(of: selectedPhotoItem) { oldValue, newValue in
             Task {
                 if let photoItem = newValue,

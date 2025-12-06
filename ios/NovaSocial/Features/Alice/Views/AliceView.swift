@@ -25,6 +25,7 @@ struct AliceView: View {
     @State private var selectedImage: UIImage?
     @State private var showGenerateImage = false
     @State private var showNewPost = false
+    @State private var showWrite = false
     @State private var selectedModel = "gpt-4o-all"
 
     // MARK: - Chat States
@@ -53,12 +54,16 @@ struct AliceView: View {
             } else if showGenerateImage {
                 GenerateImage01View(showGenerateImage: $showGenerateImage)
                     .transition(.identity)
+            } else if showWrite {
+                WriteView(showWrite: $showWrite)
+                    .transition(.identity)
             } else {
                 aliceContent
             }
         }
         .animation(.none, value: showNewPost)
         .animation(.none, value: showGenerateImage)
+        .animation(.none, value: showWrite)
         .sheet(isPresented: $showImagePicker) {
             ImagePicker(sourceType: .photoLibrary, selectedImage: $selectedImage)
         }
@@ -252,7 +257,7 @@ struct AliceView: View {
                         showGenerateImage = true
                     },
                     onWrite: {
-                        showNewPost = true
+                        showWrite = true
                     }
                 )
             }

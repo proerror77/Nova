@@ -23,6 +23,7 @@ struct MessageView: View {
     @State private var showCamera = false
     @State private var selectedImage: UIImage?
     @State private var showGenerateImage = false
+    @State private var showWrite = false
 
     // 会话预览数据 - 从API获取
     @State private var conversations: [ConversationPreview] = []
@@ -120,6 +121,9 @@ struct MessageView: View {
             } else if showGenerateImage {
                 GenerateImage01View(showGenerateImage: $showGenerateImage)
                     .transition(.identity)
+            } else if showWrite {
+                WriteView(showWrite: $showWrite)
+                    .transition(.identity)
             } else {
                 messageContent
             }
@@ -138,7 +142,7 @@ struct MessageView: View {
                         showGenerateImage = true
                     },
                     onWrite: {
-                        showNewPost = true
+                        showWrite = true
                     }
                 )
             }
@@ -151,6 +155,7 @@ struct MessageView: View {
         .animation(.none, value: showChat)
         .animation(.none, value: showNewPost)
         .animation(.none, value: showGenerateImage)
+        .animation(.none, value: showWrite)
         .sheet(isPresented: $showQRScanner) {
             QRCodeScannerView(isPresented: $showQRScanner)
         }

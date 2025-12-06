@@ -11,7 +11,7 @@ class MediaService {
 
     /// Response from /api/v2/media/upload endpoint
     struct UploadResponse: Codable {
-        let uploadId: String
+        let uploadId: String?  // 可选，因为服务器可能只返回 media_url
         let presignedUrl: String?
         let mediaUrl: String?
 
@@ -76,13 +76,21 @@ class MediaService {
 
         #if DEBUG
         print("[Media] Upload response - Status: \(httpResponse.statusCode), Size: \(data.count) bytes")
+        // 打印实际的 JSON 响应
+        if let jsonString = String(data: data, encoding: .utf8) {
+            print("[Media] Response JSON: \(jsonString)")
+        }
         #endif
 
         switch httpResponse.statusCode {
         case 200...299:
             let decoder = JSONDecoder()
-            decoder.keyDecodingStrategy = .convertFromSnakeCase
+            // 不使用 convertFromSnakeCase，因为我们有自定义的 CodingKeys
             let uploadResponse = try decoder.decode(UploadResponse.self, from: data)
+
+            #if DEBUG
+            print("[Media] Upload response decoded - mediaUrl: \(uploadResponse.mediaUrl ?? "nil"), presignedUrl: \(uploadResponse.presignedUrl ?? "nil"), uploadId: \(uploadResponse.uploadId ?? "nil")")
+            #endif
 
             // Return media URL if available, otherwise presigned URL
             if let mediaUrl = uploadResponse.mediaUrl, !mediaUrl.isEmpty {
@@ -91,8 +99,12 @@ class MediaService {
                 // If we got a presigned URL, we need to PUT the file there
                 try await uploadToPresignedUrl(presignedUrl, data: imageData)
                 return presignedUrl.components(separatedBy: "?").first ?? presignedUrl
+            } else if let uploadId = uploadResponse.uploadId, !uploadId.isEmpty {
+                return uploadId
             }
-            return uploadResponse.uploadId
+
+            // 如果所有字段都为空，抛出错误
+            throw APIError.serverError(statusCode: 200, message: "Upload response missing required fields (media_url, presigned_url, or upload_id)")
         case 401:
             throw APIError.unauthorized
         case 413:
@@ -140,7 +152,7 @@ class MediaService {
         switch httpResponse.statusCode {
         case 200...299:
             let decoder = JSONDecoder()
-            decoder.keyDecodingStrategy = .convertFromSnakeCase
+            // 不使用 convertFromSnakeCase，因为我们有自定义的 CodingKeys
             let uploadResponse = try decoder.decode(UploadResponse.self, from: data)
 
             if let mediaUrl = uploadResponse.mediaUrl, !mediaUrl.isEmpty {
@@ -148,8 +160,11 @@ class MediaService {
             } else if let presignedUrl = uploadResponse.presignedUrl, !presignedUrl.isEmpty {
                 try await uploadToPresignedUrl(presignedUrl, data: videoData)
                 return presignedUrl.components(separatedBy: "?").first ?? presignedUrl
+            } else if let uploadId = uploadResponse.uploadId, !uploadId.isEmpty {
+                return uploadId
             }
-            return uploadResponse.uploadId
+
+            throw APIError.serverError(statusCode: 200, message: "Upload response missing required fields (media_url, presigned_url, or upload_id)")
         case 401:
             throw APIError.unauthorized
         case 413:
@@ -162,7 +177,7 @@ class MediaService {
 
     // MARK: - Private Methods
 
-    /// Upload data to S3 presigned URL
+    /// Upload data to S3/GCS presigned URL
     private func uploadToPresignedUrl(_ presignedUrl: String, data: Data) async throws {
         guard let url = URL(string: presignedUrl) else {
             throw APIError.invalidURL
@@ -171,12 +186,25 @@ class MediaService {
         var request = URLRequest(url: url)
         request.httpMethod = "PUT"
         request.httpBody = data
+        // Google Cloud Storage presigned URLs 需要 Content-Type
+        request.setValue("image/jpeg", forHTTPHeaderField: "Content-Type")
+
+        #if DEBUG
+        print("[Media] Uploading to presigned URL, size: \(data.count / 1024) KB")
+        #endif
 
         let (_, response) = try await URLSession.shared.data(for: request)
 
-        guard let httpResponse = response as? HTTPURLResponse,
-              (200...299).contains(httpResponse.statusCode) else {
-            throw APIError.serverError(statusCode: 500, message: "Failed to upload to storage")
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw APIError.serverError(statusCode: 500, message: "Failed to upload to storage: Invalid response")
+        }
+
+        #if DEBUG
+        print("[Media] Presigned URL upload response: \(httpResponse.statusCode)")
+        #endif
+
+        guard (200...299).contains(httpResponse.statusCode) else {
+            throw APIError.serverError(statusCode: httpResponse.statusCode, message: "Failed to upload to storage: HTTP \(httpResponse.statusCode)")
         }
     }
 

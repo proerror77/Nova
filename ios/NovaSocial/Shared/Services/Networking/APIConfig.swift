@@ -61,6 +61,23 @@ struct APIConfig {
         static let follow = "/api/v2/graph/follow"
         static let unfollow = "/api/v2/graph/unfollow"
         static let isFollowing = "/api/v2/graph/is-following"
+        static let areMutuals = "/api/v2/graph/are-mutuals"
+        static let batchCheckFollowing = "/api/v2/graph/batch-check-following"
+
+        // Mute endpoints
+        static let mute = "/api/v2/graph/mute"
+        static func unmute(_ muteeId: String) -> String { "/api/v2/graph/mute/\(muteeId)" }
+        static func isMuted(_ muteeId: String) -> String { "/api/v2/graph/is-muted/\(muteeId)" }
+
+        // Block endpoints
+        static let block = "/api/v2/graph/block"
+        static func unblock(_ blockedId: String) -> String { "/api/v2/graph/block/\(blockedId)" }
+        static func isBlocked(_ blockedId: String) -> String { "/api/v2/graph/is-blocked/\(blockedId)" }
+        static let hasBlockBetween = "/api/v2/graph/has-block-between"
+        static func blockedUsers(_ userId: String) -> String { "/api/v2/graph/blocked/\(userId)" }
+
+        // Relationship status
+        static func relationship(_ userId: String) -> String { "/api/v2/graph/relationship/\(userId)" }
     }
 
     struct Social {
@@ -87,6 +104,10 @@ struct APIConfig {
         static func updatePost(_ id: String) -> String { "/api/v2/content/\(id)" }
         /// DELETE /api/v2/content/{id} - Delete post
         static func deletePost(_ id: String) -> String { "/api/v2/content/\(id)" }
+        /// GET /api/v2/posts/recent - Get recent posts
+        static let recentPosts = "/api/v2/posts/recent"
+        /// GET /api/v2/posts/trending - Get trending posts
+        static let trendingPosts = "/api/v2/posts/trending"
         // Legacy endpoints (deprecated)
         static let getPostLegacy = "/api/v2/content/post"
         static let postsByAuthor = "/api/v2/content/posts/author"
@@ -110,6 +131,20 @@ struct APIConfig {
         static let logout = "/api/v2/auth/logout"
         /// 單一用戶資料（包含 {id}）
         static func user(_ id: String) -> String { "/api/v2/users/\(id)" }
+
+        // Password Management
+        static let changePassword = "/api/v2/auth/change-password"
+        static let requestPasswordReset = "/api/v2/auth/request-password-reset"
+        static let resetPassword = "/api/v2/auth/reset-password"
+
+        // Token Management
+        static let verifyToken = "/api/v2/auth/verify-token"
+        static let revokeToken = "/api/v2/auth/revoke-token"
+        static let revokeAllTokens = "/api/v2/auth/revoke-all-tokens"
+
+        // Session Management
+        static func sessions(_ userId: String) -> String { "/api/v2/auth/sessions/\(userId)" }
+        static let verifyPassword = "/api/v2/auth/verify-password"
     }
 
     // MARK: - Feed API
@@ -126,6 +161,12 @@ struct APIConfig {
         /// GET /api/v2/guest/feed/trending - 獲取熱門 Feed (無需認證，Guest Mode)
         /// 注意：此端點與認證端點分離以避免 Actix-web 路由衝突
         static let getTrending = "/api/v2/guest/feed/trending"
+        /// GET /api/v2/feed/recommended-creators - 获取推荐创作者
+        static let getRecommendedCreators = "/api/v2/feed/recommended-creators"
+        /// POST /api/v2/feed/rank - 对帖子进行排序
+        static let rankPosts = "/api/v2/feed/rank"
+        /// POST /api/v2/feed/invalidate-cache - 清除信息流缓存
+        static let invalidateCache = "/api/v2/feed/invalidate-cache"
     }
 
     // MARK: - Poll API (投票榜單)
@@ -146,6 +187,14 @@ struct APIConfig {
         static func checkVoted(_ pollId: String) -> String { "/api/v2/polls/\(pollId)/voted" }
         /// GET /api/v2/polls/{id}/rankings - 獲取排名
         static func getRankings(_ pollId: String) -> String { "/api/v2/polls/\(pollId)/rankings" }
+        /// POST /api/v2/polls/{id}/candidates - 添加候選項
+        static func addCandidate(_ pollId: String) -> String { "/api/v2/polls/\(pollId)/candidates" }
+        /// DELETE /api/v2/polls/{id}/candidates/{candidateId} - 刪除候選項
+        static func removeCandidate(pollId: String, candidateId: String) -> String { "/api/v2/polls/\(pollId)/candidates/\(candidateId)" }
+        /// POST /api/v2/polls/{id}/close - 結束投票
+        static func closePoll(_ pollId: String) -> String { "/api/v2/polls/\(pollId)/close" }
+        /// DELETE /api/v2/polls/{id} - 刪除投票
+        static func deletePoll(_ pollId: String) -> String { "/api/v2/polls/\(pollId)" }
     }
 
     // MARK: - Alice AI Assistant API
@@ -225,6 +274,36 @@ struct APIConfig {
         static let validate = "/api/v2/auth/invites/validate"  // GET ?code=XXXXX
         // 推薦資訊
         static let referrals = "/api/v2/auth/referrals"  // GET 獲取推薦人和被推薦人列表
+    }
+
+    // MARK: - Notifications API
+    struct Notifications {
+        /// GET /api/v2/notifications - Get notifications list
+        static let getNotifications = "/api/v2/notifications"
+        /// GET /api/v2/notifications/{id} - Get single notification
+        static func getNotification(_ id: String) -> String { "/api/v2/notifications/\(id)" }
+        /// POST /api/v2/notifications - Create notification
+        static let createNotification = "/api/v2/notifications"
+        /// POST /api/v2/notifications/{id}/read - Mark notification as read
+        static func markRead(_ id: String) -> String { "/api/v2/notifications/\(id)/read" }
+        /// POST /api/v2/notifications/read-all - Mark all notifications as read
+        static let markAllRead = "/api/v2/notifications/read-all"
+        /// DELETE /api/v2/notifications/{id} - Delete notification
+        static func deleteNotification(_ id: String) -> String { "/api/v2/notifications/\(id)" }
+        /// GET /api/v2/notifications/unread-count - Get unread count
+        static let unreadCount = "/api/v2/notifications/unread-count"
+        /// GET /api/v2/notifications/stats - Get notification statistics
+        static let stats = "/api/v2/notifications/stats"
+        /// GET /api/v2/notifications/preferences - Get notification preferences
+        static let getPreferences = "/api/v2/notifications/preferences"
+        /// PUT /api/v2/notifications/preferences - Update notification preferences
+        static let updatePreferences = "/api/v2/notifications/preferences"
+        /// POST /api/v2/notifications/push-token - Register push token
+        static let registerPushToken = "/api/v2/notifications/push-token"
+        /// DELETE /api/v2/notifications/push-token/{token} - Unregister push token
+        static func unregisterPushToken(_ token: String) -> String { "/api/v2/notifications/push-token/\(token)" }
+        /// POST /api/v2/notifications/batch - Batch create notifications
+        static let batchCreate = "/api/v2/notifications/batch"
     }
 
     // MARK: - Chat & Messaging API

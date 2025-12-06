@@ -14,6 +14,7 @@ struct ProfileView: View {
     @State private var showCamera = false
     @State private var selectedImage: UIImage?
     @State private var showGenerateImage = false
+    @State private var showWrite = false
     @State private var showShareSheet = false
     @State private var localAvatarImage: UIImage? = nil  // 本地选择的头像
 
@@ -44,6 +45,9 @@ struct ProfileView: View {
             } else if showGenerateImage {
                 GenerateImage01View(showGenerateImage: $showGenerateImage)
                     .transition(.identity)
+            } else if showWrite {
+                WriteView(showWrite: $showWrite)
+                    .transition(.identity)
             } else if showSetting {
                 SettingsView(currentPage: $currentPage)
                     .transition(.identity)
@@ -53,6 +57,7 @@ struct ProfileView: View {
         }
         .animation(.none, value: showNewPost)
         .animation(.none, value: showGenerateImage)
+        .animation(.none, value: showWrite)
         .animation(.none, value: showSetting)
         .sheet(isPresented: $showImagePicker) {
             ImagePicker(sourceType: .photoLibrary, selectedImage: $selectedImage)
@@ -116,7 +121,7 @@ struct ProfileView: View {
                         showGenerateImage = true
                     },
                     onWrite: {
-                        showNewPost = true
+                        showWrite = true
                     }
                 )
             }

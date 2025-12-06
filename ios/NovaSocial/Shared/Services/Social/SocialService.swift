@@ -285,6 +285,126 @@ class SocialService {
             throw APIError.serverError(statusCode: httpResponse.statusCode, message: message)
         }
     }
+
+    // MARK: - Poll Management
+
+    /// Get active polls
+    func getActivePolls(limit: Int = 20) async throws -> [PollSummary] {
+        let response: TrendingPollsResponse = try await client.get(
+            endpoint: APIConfig.Poll.getActivePolls,
+            queryParams: ["limit": String(limit)]
+        )
+        return response.polls
+    }
+
+    /// Create a new poll
+    func createPoll(
+        title: String,
+        coverImageUrl: String? = nil,
+        pollType: String = "ranking",
+        tags: [String]? = nil,
+        endsAt: Date? = nil,
+        candidates: [PollCandidateInput]
+    ) async throws -> PollDetail {
+        struct Request: Codable {
+            let title: String
+            let coverImageUrl: String?
+            let pollType: String
+            let tags: [String]?
+            let endsAt: String?
+            let candidates: [PollCandidateInput]
+
+            enum CodingKeys: String, CodingKey {
+                case title
+                case coverImageUrl = "cover_image_url"
+                case pollType = "poll_type"
+                case tags
+                case endsAt = "ends_at"
+                case candidates
+            }
+        }
+
+        let request = Request(
+            title: title,
+            coverImageUrl: coverImageUrl,
+            pollType: pollType,
+            tags: tags,
+            endsAt: endsAt?.ISO8601Format(),
+            candidates: candidates
+        )
+
+        return try await client.request(
+            endpoint: APIConfig.Poll.createPoll,
+            method: "POST",
+            body: request
+        )
+    }
+
+    /// Get poll details
+    func getPoll(pollId: String) async throws -> PollDetail {
+        return try await client.get(endpoint: APIConfig.Poll.getPoll(pollId))
+    }
+
+    /// Unvote (remove vote from poll)
+    func unvoteOnPoll(pollId: String) async throws {
+        struct EmptyResponse: Codable {}
+        let _: EmptyResponse = try await client.request(
+            endpoint: APIConfig.Poll.unvote(pollId),
+            method: "DELETE"
+        )
+    }
+
+    /// Check if user has voted on a poll
+    func checkPollVoted(pollId: String) async throws -> Bool {
+        struct Response: Codable {
+            let voted: Bool
+            let candidateId: String?
+
+            enum CodingKeys: String, CodingKey {
+                case voted
+                case candidateId = "candidate_id"
+            }
+        }
+
+        let response: Response = try await client.get(endpoint: APIConfig.Poll.checkVoted(pollId))
+        return response.voted
+    }
+
+    /// Add a candidate to an existing poll
+    func addPollCandidate(pollId: String, candidate: PollCandidateInput) async throws -> PollCandidate {
+        return try await client.request(
+            endpoint: APIConfig.Poll.addCandidate(pollId),
+            method: "POST",
+            body: candidate
+        )
+    }
+
+    /// Remove a candidate from a poll
+    func removePollCandidate(pollId: String, candidateId: String) async throws {
+        struct EmptyResponse: Codable {}
+        let _: EmptyResponse = try await client.request(
+            endpoint: APIConfig.Poll.removeCandidate(pollId: pollId, candidateId: candidateId),
+            method: "DELETE"
+        )
+    }
+
+    /// Close a poll (end voting)
+    func closePoll(pollId: String) async throws {
+        struct EmptyResponse: Codable {}
+        let _: EmptyResponse = try await client.request(
+            endpoint: APIConfig.Poll.closePoll(pollId),
+            method: "POST"
+        )
+    }
+
+    /// Delete a poll
+    func deletePoll(pollId: String) async throws {
+        struct EmptyResponse: Codable {}
+        let _: EmptyResponse = try await client.request(
+            endpoint: APIConfig.Poll.deletePoll(pollId),
+            method: "DELETE"
+        )
+    }
 }
 
 // MARK: - Supporting Models
@@ -402,5 +522,51 @@ struct PollRankingsResponse: Codable {
         case rankings
         case totalCandidates = "total_candidates"
         case totalVotes = "total_votes"
+    }
+}
+
+/// Poll candidate input for creating polls
+struct PollCandidateInput: Codable {
+    let name: String
+    let avatarUrl: String?
+    let description: String?
+    let userId: String?
+
+    enum CodingKeys: String, CodingKey {
+        case name
+        case avatarUrl = "avatar_url"
+        case description
+        case userId = "user_id"
+    }
+}
+
+/// Detailed poll information
+struct PollDetail: Codable, Identifiable {
+    let id: String
+    let title: String
+    let coverImageUrl: String?
+    let pollType: String
+    let status: String
+    let totalVotes: Int64
+    let candidateCount: Int
+    let candidates: [PollCandidate]?
+    let tags: [String]?
+    let createdAt: Date
+    let endsAt: Date?
+    let closedAt: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case title
+        case status
+        case tags
+        case coverImageUrl = "cover_image_url"
+        case pollType = "poll_type"
+        case totalVotes = "total_votes"
+        case candidateCount = "candidate_count"
+        case candidates
+        case createdAt = "created_at"
+        case endsAt = "ends_at"
+        case closedAt = "closed_at"
     }
 }
