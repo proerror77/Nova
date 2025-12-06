@@ -45,9 +45,15 @@ spec:
       containers:
       - env:
         - name: GRPC_TLS_ENABLED
-          value: 'false'
+          value: 'true'
         - name: GRPC_TLS_DOMAIN_NAME
-          value: identity-service.nova-staging.svc.cluster.local
+          value: nova-grpc-services.nova-staging.svc.cluster.local
+        - name: GRPC_TLS_CA_CERT_PATH
+          value: /etc/nova/certs/ca.crt
+        - name: GRPC_TLS_CLIENT_CERT_PATH
+          value: /etc/nova/certs/client.crt
+        - name: GRPC_TLS_CLIENT_KEY_PATH
+          value: /etc/nova/certs/client.key
         - name: GRPC_SERVER_KEY_PATH
           value: /etc/nova/certs/server.key
         - name: APP_ENV
@@ -57,7 +63,17 @@ spec:
         - name: GRPC_CLIENT_CA_CERT_PATH
           value: /etc/nova/certs/ca.crt
         - name: GRPC_REQUIRE_CLIENT_CERT
-          value: 'false'
+          value: 'true'
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: nova-db-credentials
+              key: media-db-url
+        - name: REDIS_URL
+          valueFrom:
+            secretKeyRef:
+              name: nova-redis-credentials
+              key: REDIS_URL
         envFrom:
         - configMapRef:
             name: media-service-config

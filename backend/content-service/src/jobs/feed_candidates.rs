@@ -129,7 +129,7 @@ SELECT
     exp(-0.0025 * dateDiff('minute', p.created_at, now())) AS freshness_score,
     log1p(ifNull(likes.likes_count, 0) + 2 * ifNull(comments.comments_count, 0)) AS engagement_score,
     ifNull(affinity.affinity_score, 0.0) AS affinity_score,
-    0.35 * freshness_score + 0.40 * engagement_score + 0.25 * ifNull(affinity.affinity_score, 0.0) AS combined_score,
+    0.35 * exp(-0.0025 * dateDiff('minute', p.created_at, now())) + 0.40 * log1p(ifNull(likes.likes_count, 0) + 2 * ifNull(comments.comments_count, 0)) + 0.25 * ifNull(affinity.affinity_score, 0.0) AS combined_score,
     p.created_at,
     now()
 FROM posts_cdc AS p
@@ -158,21 +158,21 @@ LEFT JOIN (
     FROM (
         SELECT
             l.user_id AS viewer_id,
-            p.user_id AS author_id,
+            p2.user_id AS author_id,
             1.0 AS weight
         FROM likes_cdc AS l
-        INNER JOIN posts_cdc AS p
-            ON p.id = l.post_id
+        INNER JOIN posts_cdc AS p2
+            ON p2.id = l.post_id
         WHERE l.is_deleted = 0
           AND l.created_at >= now() - INTERVAL 90 DAY
         UNION ALL
         SELECT
             c.user_id AS viewer_id,
-            p.user_id AS author_id,
+            p2.user_id AS author_id,
             1.5 AS weight
         FROM comments_cdc AS c
-        INNER JOIN posts_cdc AS p
-            ON p.id = c.post_id
+        INNER JOIN posts_cdc AS p2
+            ON p2.id = c.post_id
         WHERE c.is_deleted = 0
           AND c.created_at >= now() - INTERVAL 90 DAY
     ) AS interactions
@@ -202,7 +202,7 @@ SELECT
     exp(-0.0025 * dateDiff('minute', p.created_at, now())) AS freshness_score,
     log1p(ifNull(likes.likes_count, 0) + 2 * ifNull(comments.comments_count, 0)) AS engagement_score,
     toFloat64(0) AS affinity_score,
-    0.50 * freshness_score + 0.50 * engagement_score AS combined_score,
+    0.50 * exp(-0.0025 * dateDiff('minute', p.created_at, now())) + 0.50 * log1p(ifNull(likes.likes_count, 0) + 2 * ifNull(comments.comments_count, 0)) AS combined_score,
     p.created_at,
     now()
 FROM posts_cdc AS p
@@ -243,7 +243,7 @@ SELECT
     exp(-0.0025 * dateDiff('minute', p.created_at, now())) AS freshness_score,
     log1p(ifNull(likes.likes_count, 0) + 2 * ifNull(comments.comments_count, 0)) AS engagement_score,
     affinity.affinity_score AS affinity_score,
-    0.20 * freshness_score + 0.40 * engagement_score + 0.40 * affinity.affinity_score AS combined_score,
+    0.20 * exp(-0.0025 * dateDiff('minute', p.created_at, now())) + 0.40 * log1p(ifNull(likes.likes_count, 0) + 2 * ifNull(comments.comments_count, 0)) + 0.40 * affinity.affinity_score AS combined_score,
     p.created_at,
     now()
 FROM posts_cdc AS p
@@ -255,21 +255,21 @@ INNER JOIN (
     FROM (
         SELECT
             l.user_id AS viewer_id,
-            p.user_id AS author_id,
+            p2.user_id AS author_id,
             1.0 AS weight
         FROM likes_cdc AS l
-        INNER JOIN posts_cdc AS p
-            ON p.id = l.post_id
+        INNER JOIN posts_cdc AS p2
+            ON p2.id = l.post_id
         WHERE l.is_deleted = 0
           AND l.created_at >= now() - INTERVAL 90 DAY
         UNION ALL
         SELECT
             c.user_id AS viewer_id,
-            p.user_id AS author_id,
+            p2.user_id AS author_id,
             1.5 AS weight
         FROM comments_cdc AS c
-        INNER JOIN posts_cdc AS p
-            ON p.id = c.post_id
+        INNER JOIN posts_cdc AS p2
+            ON p2.id = c.post_id
         WHERE c.is_deleted = 0
           AND c.created_at >= now() - INTERVAL 90 DAY
     ) AS interactions
