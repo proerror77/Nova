@@ -452,10 +452,17 @@ struct ModelRowView: View {
 final class AliceService {
     static let shared = AliceService()
 
-    private let baseURL = "https://api.tu-zi.com/v1"
-    private let apiKey = "sk-LSb5xpmhRwdGsHcywQWtwjdpPnlzRs7pvadlUVZhUFau4u6W"
+    private let baseURL: String
+    private let apiKey: String
 
-    private init() {}
+    private let apiClient = APIClient.shared
+
+    private init() {
+        // API requests are proxied through our backend
+        // Backend handles third-party AI provider authentication
+        self.baseURL = APIConfig.AI.baseURL
+        self.apiKey = ""  // Not used - backend manages API keys
+    }
 
     @MainActor
     func sendMessage(
@@ -468,7 +475,11 @@ final class AliceService {
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
-        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        // Use user's JWT token for authentication with our backend proxy
+        // Backend will then authenticate with the AI provider using server-side API keys
+        if let token = apiClient.getAuthToken() {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
         let requestBody = ChatCompletionRequest(

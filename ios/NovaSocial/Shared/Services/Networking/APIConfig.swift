@@ -204,6 +204,18 @@ struct APIConfig {
         static let voiceMode = "/api/v2/alice/voice"  // POST 語音模式
     }
 
+    // MARK: - AI Configuration (Backend Proxy)
+    /// AI requests are proxied through our backend to protect API keys
+    /// The backend handles authentication with third-party AI providers
+    struct AI {
+        /// Backend AI proxy endpoint - API key is handled server-side
+        static var baseURL: String {
+            "\(current.baseURL)/api/v2/ai"
+        }
+        /// Empty - API key is managed by backend, not exposed to client
+        static let apiKey = ""
+    }
+
     // MARK: - User Profile Settings API
     struct Profile {
         /// PUT /api/v2/users/{id} 更新用戶資料
