@@ -420,7 +420,9 @@ struct NewPostView: View {
     // MARK: - 提交帖子
     private func submitPost() async {
         guard canPost else { return }
-        guard let userId = authManager.currentUser?.id else {
+
+        // Try to get userId from currentUser first, fallback to storedUserId from Keychain
+        guard let userId = authManager.currentUser?.id ?? authManager.storedUserId else {
             postError = "Please login first"
             return
         }

@@ -25,26 +25,27 @@ class ContentService {
     }
 
     func createPost(creatorId: String, content: String, mediaUrls: [String]? = nil) async throws -> Post {
+        // Note: The graphql-gateway expects only 'content' in the request body
+        // It extracts user_id from the JWT token (AuthenticatedUser)
         struct Request: Codable {
-            let creator_id: String
             let content: String
-            let media_urls: [String]?
-            let media_type: String?
         }
 
         struct Response: Codable {
             let post: Post
         }
 
-        let mediaType = mediaUrls?.isEmpty == false ? "image" : nil
-        let request = Request(
-            creator_id: creatorId,
-            content: content,
-            media_urls: mediaUrls,
-            media_type: mediaType
-        )
+        // If there are media URLs, append them to content for now
+        // TODO: Update backend to support media_urls field
+        var finalContent = content
+        if let urls = mediaUrls, !urls.isEmpty {
+            finalContent = content + "\n\n" + urls.joined(separator: "\n")
+        }
+
+        let request = Request(content: finalContent)
         let response: Response = try await client.request(
             endpoint: APIConfig.Content.createPost,
+            method: "POST",
             body: request
         )
 

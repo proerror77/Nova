@@ -76,12 +76,15 @@ class MediaService {
 
         #if DEBUG
         print("[Media] Upload response - Status: \(httpResponse.statusCode), Size: \(data.count) bytes")
+        if let responseStr = String(data: data, encoding: .utf8) {
+            print("[Media] Upload response body: \(responseStr)")
+        }
         #endif
 
         switch httpResponse.statusCode {
         case 200...299:
+            // Note: Don't use .convertFromSnakeCase when CodingKeys already define snake_case mappings
             let decoder = JSONDecoder()
-            decoder.keyDecodingStrategy = .convertFromSnakeCase
             let uploadResponse = try decoder.decode(UploadResponse.self, from: data)
 
             // Return media URL if available, otherwise presigned URL
@@ -89,7 +92,8 @@ class MediaService {
                 return mediaUrl
             } else if let presignedUrl = uploadResponse.presignedUrl, !presignedUrl.isEmpty {
                 // If we got a presigned URL, we need to PUT the file there
-                try await uploadToPresignedUrl(presignedUrl, data: imageData)
+                // Content-Type must match what was used when generating the presigned URL
+                try await uploadToPresignedUrl(presignedUrl, data: imageData, contentType: "image/jpeg")
                 return presignedUrl.components(separatedBy: "?").first ?? presignedUrl
             }
             return uploadResponse.uploadId
@@ -139,14 +143,15 @@ class MediaService {
 
         switch httpResponse.statusCode {
         case 200...299:
+            // Note: Don't use .convertFromSnakeCase when CodingKeys already define snake_case mappings
             let decoder = JSONDecoder()
-            decoder.keyDecodingStrategy = .convertFromSnakeCase
             let uploadResponse = try decoder.decode(UploadResponse.self, from: data)
 
             if let mediaUrl = uploadResponse.mediaUrl, !mediaUrl.isEmpty {
                 return mediaUrl
             } else if let presignedUrl = uploadResponse.presignedUrl, !presignedUrl.isEmpty {
-                try await uploadToPresignedUrl(presignedUrl, data: videoData)
+                // Content-Type must match what was used when generating the presigned URL
+                try await uploadToPresignedUrl(presignedUrl, data: videoData, contentType: "video/mp4")
                 return presignedUrl.components(separatedBy: "?").first ?? presignedUrl
             }
             return uploadResponse.uploadId
@@ -162,8 +167,12 @@ class MediaService {
 
     // MARK: - Private Methods
 
-    /// Upload data to S3 presigned URL
-    private func uploadToPresignedUrl(_ presignedUrl: String, data: Data) async throws {
+    /// Upload data to S3/GCS presigned URL
+    /// - Parameters:
+    ///   - presignedUrl: The presigned URL from the server
+    ///   - data: The file data to upload
+    ///   - contentType: MIME type (must match what was used when generating presigned URL)
+    private func uploadToPresignedUrl(_ presignedUrl: String, data: Data, contentType: String = "image/jpeg") async throws {
         guard let url = URL(string: presignedUrl) else {
             throw APIError.invalidURL
         }
@@ -171,12 +180,32 @@ class MediaService {
         var request = URLRequest(url: url)
         request.httpMethod = "PUT"
         request.httpBody = data
+        // Content-Type MUST match what was specified when generating the presigned URL
+        // Otherwise S3/GCS will reject with signature mismatch
+        request.setValue(contentType, forHTTPHeaderField: "Content-Type")
+        request.setValue("\(data.count)", forHTTPHeaderField: "Content-Length")
+        request.timeoutInterval = 120  // 2 minutes for upload
 
-        let (_, response) = try await URLSession.shared.data(for: request)
+        #if DEBUG
+        print("[Media] Uploading to presigned URL: \(data.count / 1024) KB, Content-Type: \(contentType)")
+        #endif
 
-        guard let httpResponse = response as? HTTPURLResponse,
-              (200...299).contains(httpResponse.statusCode) else {
-            throw APIError.serverError(statusCode: 500, message: "Failed to upload to storage")
+        let (responseData, response) = try await uploadSession.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw APIError.invalidResponse
+        }
+
+        #if DEBUG
+        print("[Media] Presigned URL upload response: \(httpResponse.statusCode)")
+        if let responseStr = String(data: responseData, encoding: .utf8), !responseStr.isEmpty {
+            print("[Media] Response body: \(responseStr)")
+        }
+        #endif
+
+        guard (200...299).contains(httpResponse.statusCode) else {
+            let errorMessage = String(data: responseData, encoding: .utf8) ?? "Failed to upload to storage"
+            throw APIError.serverError(statusCode: httpResponse.statusCode, message: errorMessage)
         }
     }
 
@@ -202,8 +231,8 @@ class MediaService {
             throw APIError.invalidResponse
         }
 
+        // Note: Don't use .convertFromSnakeCase when CodingKeys already define snake_case mappings
         let decoder = JSONDecoder()
-        decoder.keyDecodingStrategy = .convertFromSnakeCase
         return try decoder.decode(UploadStatus.self, from: data)
     }
 
@@ -283,8 +312,8 @@ class MediaService {
             throw APIError.invalidResponse
         }
 
+        // Note: Don't use .convertFromSnakeCase when CodingKeys already define snake_case mappings
         let decoder = JSONDecoder()
-        decoder.keyDecodingStrategy = .convertFromSnakeCase
         let uploadResponse = try decoder.decode(Response.self, from: data)
 
         return uploadResponse.mediaUrl

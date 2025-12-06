@@ -62,20 +62,33 @@ pub async fn upload_media(
 
     let mut media_client: MediaServiceClient<_> = clients.media_client();
     let ext = filename.rsplit('.').next().map(|ext| ext.to_lowercase());
-    let media_type = match ext.as_deref() {
-        Some("jpg") | Some("jpeg") | Some("png") | Some("gif") | Some("webp") => {
-            MediaType::Image as i32
-        }
-        Some("mp4") | Some("mov") | Some("mkv") | Some("avi") => MediaType::Video as i32,
-        Some("mp3") | Some("wav") | Some("aac") => MediaType::Audio as i32,
-        _ => MediaType::Unspecified as i32,
+
+    // Infer MIME type from file extension for accurate presigned URL signing
+    // This ensures the Content-Type used when uploading matches the signature
+    let (media_type, mime_type) = match ext.as_deref() {
+        Some("jpg") | Some("jpeg") => (MediaType::Image as i32, "image/jpeg".to_string()),
+        Some("png") => (MediaType::Image as i32, "image/png".to_string()),
+        Some("gif") => (MediaType::Image as i32, "image/gif".to_string()),
+        Some("webp") => (MediaType::Image as i32, "image/webp".to_string()),
+        Some("heic") | Some("heif") => (MediaType::Image as i32, "image/heic".to_string()),
+        Some("mp4") => (MediaType::Video as i32, "video/mp4".to_string()),
+        Some("mov") => (MediaType::Video as i32, "video/quicktime".to_string()),
+        Some("mkv") => (MediaType::Video as i32, "video/x-matroska".to_string()),
+        Some("avi") => (MediaType::Video as i32, "video/x-msvideo".to_string()),
+        Some("webm") => (MediaType::Video as i32, "video/webm".to_string()),
+        Some("mp3") => (MediaType::Audio as i32, "audio/mpeg".to_string()),
+        Some("wav") => (MediaType::Audio as i32, "audio/wav".to_string()),
+        Some("aac") => (MediaType::Audio as i32, "audio/aac".to_string()),
+        Some("m4a") => (MediaType::Audio as i32, "audio/mp4".to_string()),
+        Some("ogg") => (MediaType::Audio as i32, "audio/ogg".to_string()),
+        _ => (MediaType::Unspecified as i32, "application/octet-stream".to_string()),
     };
 
     let req = InitiateUploadRequest {
         user_id,
         filename: filename.clone(),
         media_type,
-        mime_type: "application/octet-stream".to_string(),
+        mime_type,
         size_bytes: total_bytes as i64,
     };
 
