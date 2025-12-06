@@ -11,7 +11,7 @@ class MediaService {
 
     /// Response from /api/v2/media/upload endpoint
     struct UploadResponse: Codable {
-        let uploadId: String
+        let uploadId: String?  // 可选，因为服务器可能只返回 media_url
         let presignedUrl: String?
         let mediaUrl: String?
 
@@ -87,6 +87,10 @@ class MediaService {
             let decoder = JSONDecoder()
             let uploadResponse = try decoder.decode(UploadResponse.self, from: data)
 
+            #if DEBUG
+            print("[Media] Upload response decoded - mediaUrl: \(uploadResponse.mediaUrl ?? "nil"), presignedUrl: \(uploadResponse.presignedUrl ?? "nil"), uploadId: \(uploadResponse.uploadId ?? "nil")")
+            #endif
+
             // Return media URL if available, otherwise presigned URL
             if let mediaUrl = uploadResponse.mediaUrl, !mediaUrl.isEmpty {
                 return mediaUrl
@@ -95,8 +99,12 @@ class MediaService {
                 // Content-Type must match what was used when generating the presigned URL
                 try await uploadToPresignedUrl(presignedUrl, data: imageData, contentType: "image/jpeg")
                 return presignedUrl.components(separatedBy: "?").first ?? presignedUrl
+            } else if let uploadId = uploadResponse.uploadId, !uploadId.isEmpty {
+                return uploadId
             }
-            return uploadResponse.uploadId
+
+            // 如果所有字段都为空，抛出错误
+            throw APIError.serverError(statusCode: 200, message: "Upload response missing required fields (media_url, presigned_url, or upload_id)")
         case 401:
             throw APIError.unauthorized
         case 413:
@@ -153,8 +161,11 @@ class MediaService {
                 // Content-Type must match what was used when generating the presigned URL
                 try await uploadToPresignedUrl(presignedUrl, data: videoData, contentType: "video/mp4")
                 return presignedUrl.components(separatedBy: "?").first ?? presignedUrl
+            } else if let uploadId = uploadResponse.uploadId, !uploadId.isEmpty {
+                return uploadId
             }
-            return uploadResponse.uploadId
+
+            throw APIError.serverError(statusCode: 200, message: "Upload response missing required fields (media_url, presigned_url, or upload_id)")
         case 401:
             throw APIError.unauthorized
         case 413:

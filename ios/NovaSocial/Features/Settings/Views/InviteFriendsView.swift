@@ -3,6 +3,17 @@ import SwiftUI
 struct InviteFriendsView: View {
     @Binding var currentPage: AppPage
     @State private var searchText = ""
+    @State private var showShareSheet = false
+
+    // 邀请链接
+    private var invitationLink: String {
+        "https://icered.app/invite/your-invite-code"
+    }
+
+    // 分享内容
+    private var shareMessage: String {
+        "Join me on ICERED! \(invitationLink)"
+    }
 
     var body: some View {
         ZStack {
@@ -62,7 +73,7 @@ struct InviteFriendsView: View {
 
                     // MARK: - 分享邀请链接按钮
 	                    Button(action: {
-                        // TODO: 分享邀请链接
+                        showShareSheet = true
                     }) {
                         HStack(spacing: 24) {
                             Image(systemName: "square.and.arrow.up")
@@ -101,6 +112,7 @@ struct InviteFriendsView: View {
                 UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
             }
         }
+        .shareSheet(isPresented: $showShareSheet, items: [shareMessage])
     }
 }
 

@@ -176,8 +176,13 @@ class APIClient {
         } catch {
             #if DEBUG
             print("[API] Decoding error: \(error)")
-            // Don't log full JSON response - may contain sensitive user data
             print("[API] Response size: \(data.count) bytes")
+            print("[API] Expected type: \(T.self)")
+
+            // 打印 JSON 响应以帮助调试（仅在调试模式）
+            if let jsonString = String(data: data, encoding: .utf8) {
+                print("[API] Response JSON: \(jsonString.prefix(500))...")  // 限制长度避免过长
+            }
             #endif
             throw APIError.decodingError(error)
         }

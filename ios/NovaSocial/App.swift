@@ -98,8 +98,8 @@ struct ICEREDApp: App {
                     case .addFriends:
                         AddFriendsView(currentPage: $currentPage)
                             .transition(.identity)
-                    case .startGroupChat:
-                        StartGroupChatView(currentPage: $currentPage)
+                    case .newChat:
+                        MessageView(currentPage: $currentPage)
                             .transition(.identity)
                     case .groupChat:
                         GroupChatView(currentPage: $currentPage, groupName: "Group Chat")

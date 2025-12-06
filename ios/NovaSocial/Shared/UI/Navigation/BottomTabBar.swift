@@ -6,6 +6,10 @@ struct BottomTabBar: View {
     @Binding var currentPage: AppPage
     @Binding var showPhotoOptions: Bool
 
+    // 头像管理
+    @State private var avatarManager = AvatarManager.shared
+    @State private var authManager = AuthenticationManager.shared
+
     private var isHome: Bool { currentPage == .home }
     private var isMessage: Bool { currentPage == .message }
     private var isAccount: Bool { currentPage == .account }
@@ -14,14 +18,15 @@ struct BottomTabBar: View {
     var body: some View {
         HStack(spacing: -20) {
             // Home
-            VStack(spacing: 2) {
+            VStack(spacing: 3) {
                 Image(isHome ? "home-icon" : "home-icon-black")
                     .resizable()
                     .scaledToFit()
-                    .frame(width: 32, height: 22)
+                    .frame(width: 33, height: 23)
                 Text("Home")
                     .font(.system(size: DesignTokens.fontCaption, weight: .medium))
                     .foregroundColor(isHome ? DesignTokens.accentColor : .black)
+                    .offset(x: 0)
             }
             .frame(maxWidth: .infinity)
             .onTapGesture {
@@ -61,15 +66,63 @@ struct BottomTabBar: View {
             }
 
             // Account
-            VStack(spacing: -12) {
-                Image(isAccount ? "Account-button-on" : "Account-button-off")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 44, height: 44)
-                Text("")
+            VStack(spacing: 0) {
+                ZStack {
+                    // 背景圆圈
+                    Circle()
+                        .fill(isAccount ? Color(red: 0.87, green: 0.11, blue: 0.26) : Color.clear)
+                        .frame(width: 32, height: 32)
+
+                    // 头像
+                    if let pendingAvatar = avatarManager.pendingAvatar {
+                        // 优先显示待上传的头像
+                        Image(uiImage: pendingAvatar)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 26, height: 26)
+                            .clipShape(Circle())
+                    } else if let avatarUrl = authManager.currentUser?.avatarUrl,
+                              let url = URL(string: avatarUrl) {
+                        // 显示服务器头像
+                        AsyncImage(url: url) { phase in
+                            switch phase {
+                            case .success(let image):
+                                image
+                                    .resizable()
+                                    .scaledToFill()
+                                    .frame(width: 26, height: 26)
+                                    .clipShape(Circle())
+                            case .failure(_), .empty:
+                                // 加载失败或空状态，显示iOS默认联系人图标
+                                Image(systemName: "person.circle.fill")
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(width: 26, height: 26)
+                                    .foregroundColor(Color(red: 0.78, green: 0.78, blue: 0.78))
+                            @unknown default:
+                                Image(systemName: "person.circle.fill")
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(width: 26, height: 26)
+                                    .foregroundColor(Color(red: 0.78, green: 0.78, blue: 0.78))
+                            }
+                        }
+                    } else {
+                        // 默认iOS联系人图标（灰色）
+                        Image(systemName: "person.circle.fill")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 26, height: 26)
+                            .foregroundColor(Color(red: 0.78, green: 0.78, blue: 0.78))
+                    }
+                }
+
+                Text("Account")
                     .font(.system(size: DesignTokens.fontCaption))
+                    .foregroundColor(isAccount ? DesignTokens.accentColor : .black)
             }
             .frame(maxWidth: .infinity)
+            .offset(y: 0)
             .onTapGesture {
                 currentPage = .account
             }

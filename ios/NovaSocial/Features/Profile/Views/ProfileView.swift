@@ -14,8 +14,12 @@ struct ProfileView: View {
     @State private var showCamera = false
     @State private var selectedImage: UIImage?
     @State private var showGenerateImage = false
+    @State private var showWrite = false
     @State private var showShareSheet = false
     @State private var localAvatarImage: UIImage? = nil  // 本地选择的头像
+
+    // Access AvatarManager
+    @StateObject private var avatarManager = AvatarManager.shared
 
 
     // Computed property for user display
@@ -41,6 +45,9 @@ struct ProfileView: View {
             } else if showGenerateImage {
                 GenerateImage01View(showGenerateImage: $showGenerateImage)
                     .transition(.identity)
+            } else if showWrite {
+                WriteView(showWrite: $showWrite)
+                    .transition(.identity)
             } else if showSetting {
                 SettingsView(currentPage: $currentPage)
                     .transition(.identity)
@@ -50,6 +57,7 @@ struct ProfileView: View {
         }
         .animation(.none, value: showNewPost)
         .animation(.none, value: showGenerateImage)
+        .animation(.none, value: showWrite)
         .animation(.none, value: showSetting)
         .sheet(isPresented: $showImagePicker) {
             ImagePicker(sourceType: .photoLibrary, selectedImage: $selectedImage)
@@ -70,6 +78,8 @@ struct ProfileView: View {
                    let image = UIImage(data: data) {
                     // 立即显示选中的照片
                     localAvatarImage = image
+                    // 同时保存到 AvatarManager
+                    avatarManager.savePendingAvatar(image)
                     // 后台上传到服务器
                     await profileData.uploadAvatar(image: image)
                 }
@@ -111,7 +121,7 @@ struct ProfileView: View {
                         showGenerateImage = true
                     },
                     onWrite: {
-                        showNewPost = true
+                        showWrite = true
                     }
                 )
             }
@@ -174,9 +184,16 @@ struct ProfileView: View {
                         VStack(spacing: 16) {
                             // 头像（居中显示）
                             ZStack(alignment: .bottomTrailing) {
-                                // 头像图片 - 优先显示本地选择的照片
-                                if let localImage = localAvatarImage {
-                                    // 显示本地选择的照片
+                                // 头像图片 - 优先级：CreateAccount 选择的头像 > 本地选择 > 服务器头像 > 占位符
+                                if let pendingAvatar = avatarManager.pendingAvatar {
+                                    // 1. 优先显示 CreateAccount 页面选择的头像
+                                    Image(uiImage: pendingAvatar)
+                                        .resizable()
+                                        .scaledToFill()
+                                        .frame(width: 100, height: 100)
+                                        .clipShape(Circle())
+                                } else if let localImage = localAvatarImage {
+                                    // 2. 显示本地选择的照片
                                     Image(uiImage: localImage)
                                         .resizable()
                                         .scaledToFill()
@@ -184,7 +201,7 @@ struct ProfileView: View {
                                         .clipShape(Circle())
                                 } else if let avatarUrl = profileData.userProfile?.avatarUrl,
                                           let url = URL(string: avatarUrl) {
-                                    // 显示服务器上的头像
+                                    // 3. 显示服务器上的头像
                                     AsyncImage(url: url) { image in
                                         image
                                             .resizable()
@@ -196,7 +213,7 @@ struct ProfileView: View {
                                     .frame(width: 100, height: 100)
                                     .clipShape(Circle())
                                 } else {
-                                    // 默认占位符
+                                    // 4. 默认占位符
                                     Circle()
                                         .fill(DesignTokens.avatarPlaceholder)
                                         .frame(width: 100, height: 100)

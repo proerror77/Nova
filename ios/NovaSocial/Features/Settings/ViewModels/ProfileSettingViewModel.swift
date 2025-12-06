@@ -41,6 +41,7 @@ final class ProfileSettingViewModel: ObservableObject {
     private let authManager: AuthenticationManager
     private let userService: UserService
     private let mediaService: MediaService
+    private let avatarManager: AvatarManager
 
     init(
         authManager: AuthenticationManager? = nil,
@@ -50,6 +51,7 @@ final class ProfileSettingViewModel: ObservableObject {
         self.authManager = authManager ?? AuthenticationManager.shared
         self.userService = userService ?? UserService.shared
         self.mediaService = mediaService
+        self.avatarManager = AvatarManager.shared
     }
 
     var hasChanges: Bool {
@@ -81,6 +83,14 @@ final class ProfileSettingViewModel: ObservableObject {
                 applyUser(user)
             }
             errorMessage = NSLocalizedString("Failed to load profile", comment: "")
+        }
+
+        // 检查 AvatarManager 中是否有待上传的头像（来自注册页或Profile页）
+        if let pendingAvatar = avatarManager.getPendingAvatar() {
+            avatarImage = pendingAvatar
+            #if DEBUG
+            print("[ProfileSettingViewModel] 已加载来自 AvatarManager 的待上传头像")
+            #endif
         }
 
         isLoading = false
@@ -116,6 +126,15 @@ final class ProfileSettingViewModel: ObservableObject {
             authManager.updateCurrentUser(updatedUser)
             avatarUrl = updatedUser.avatarUrl
             avatarImage = nil
+
+            // 清除 AvatarManager 中的待上传头像（已成功上传）
+            if newAvatarUrl != nil {
+                avatarManager.clearPendingAvatar()
+                #if DEBUG
+                print("[ProfileSettingViewModel] 头像上传成功，已清除 AvatarManager 中的待上传头像")
+                #endif
+            }
+
             showSuccessMessage = true
         } catch {
             errorMessage = String(format: NSLocalizedString("Failed to save profile: %@", comment: ""), error.localizedDescription)
@@ -126,6 +145,11 @@ final class ProfileSettingViewModel: ObservableObject {
 
     func updateAvatarImage(_ image: UIImage) {
         avatarImage = image
+        // 同步更新到 AvatarManager，确保其他页面也能看到更新
+        avatarManager.savePendingAvatar(image)
+        #if DEBUG
+        print("[ProfileSettingViewModel] 已更新头像并同步到 AvatarManager")
+        #endif
     }
 
     func formatDateForDisplay(_ dateString: String) -> String {

@@ -5,28 +5,22 @@ import Foundation
 
 struct Post: Codable, Identifiable {
     let id: String
-    let creatorId: String
+    let authorId: String  // 改为 authorId 以匹配 convertFromSnakeCase
     let content: String
     let createdAt: Int64
     let updatedAt: Int64
+    let status: String?
     let mediaUrls: [String]?
     let mediaType: String?
     let likeCount: Int?
     let commentCount: Int?
     let shareCount: Int?
 
-    enum CodingKeys: String, CodingKey {
-        case id
-        case creatorId = "creator_id"
-        case content
-        case createdAt = "created_at"
-        case updatedAt = "updated_at"
-        case mediaUrls = "media_urls"
-        case mediaType = "media_type"
-        case likeCount = "like_count"
-        case commentCount = "comment_count"
-        case shareCount = "share_count"
-    }
+    // 便利属性，保持向后兼容
+    var creatorId: String { authorId }
+
+    // 移除 CodingKeys，让 convertFromSnakeCase 自动处理
+    // author_id -> authorId, created_at -> createdAt 等
 
     /// Convert timestamp to Date for display
     var createdDate: Date {

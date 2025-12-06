@@ -169,6 +169,80 @@ class FeedService {
 
         return try await client.get(endpoint: APIConfig.Feed.getTrendingFeed, queryParams: queryParams)
     }
+
+    // MARK: - Recommendations
+
+    /// Get recommended creators for the user to follow
+    func getRecommendedCreators(limit: Int = 20) async throws -> [RecommendedCreator] {
+        struct Response: Codable {
+            let creators: [RecommendedCreator]
+        }
+
+        let response: Response = try await client.get(
+            endpoint: APIConfig.Feed.getRecommendedCreators,
+            queryParams: ["limit": String(limit)]
+        )
+
+        return response.creators
+    }
+
+    /// Rank posts using feed-service ranking algorithm
+    func rankPosts(userId: String, posts: [String], context: RankingContext? = nil) async throws -> [RankedPost] {
+        struct Request: Codable {
+            let userId: String
+            let posts: [String]
+            let context: RankingContext?
+
+            enum CodingKeys: String, CodingKey {
+                case userId = "user_id"
+                case posts
+                case context
+            }
+        }
+
+        struct Response: Codable {
+            let rankedPosts: [RankedPost]
+
+            enum CodingKeys: String, CodingKey {
+                case rankedPosts = "ranked_posts"
+            }
+        }
+
+        let request = Request(userId: userId, posts: posts, context: context)
+
+        let response: Response = try await client.request(
+            endpoint: APIConfig.Feed.rankPosts,
+            method: "POST",
+            body: request
+        )
+
+        return response.rankedPosts
+    }
+
+    /// Invalidate feed cache for a user (e.g., after follow/unfollow)
+    func invalidateFeedCache(userId: String, eventType: String) async throws {
+        struct Request: Codable {
+            let userId: String
+            let eventType: String
+
+            enum CodingKeys: String, CodingKey {
+                case userId = "user_id"
+                case eventType = "event_type"
+            }
+        }
+
+        struct Response: Codable {
+            let success: Bool
+        }
+
+        let request = Request(userId: userId, eventType: eventType)
+
+        let _: Response = try await client.request(
+            endpoint: APIConfig.Feed.invalidateCache,
+            method: "POST",
+            body: request
+        )
+    }
 }
 
 // MARK: - Feed Algorithm
@@ -309,5 +383,58 @@ struct FeedPost: Identifiable, Codable {
             isLiked: isLiked ?? self.isLiked,
             isBookmarked: isBookmarked ?? self.isBookmarked
         )
+    }
+}
+
+// MARK: - Recommendation Models
+
+/// Recommended creator/user to follow
+struct RecommendedCreator: Codable, Identifiable {
+    let id: String  // user_id
+    let username: String
+    let displayName: String
+    let avatarUrl: String?
+    let bio: String?
+    let followerCount: Int
+    let isVerified: Bool
+    let relevanceScore: Double  // How relevant this creator is to the user (0.0 - 1.0)
+    let reason: String?  // Why this creator is recommended (e.g., "Popular in your network")
+
+    enum CodingKeys: String, CodingKey {
+        case id = "user_id"
+        case username
+        case displayName = "display_name"
+        case avatarUrl = "avatar_url"
+        case bio
+        case followerCount = "follower_count"
+        case isVerified = "is_verified"
+        case relevanceScore = "relevance_score"
+        case reason
+    }
+}
+
+/// Ranked post with scoring information
+struct RankedPost: Codable, Identifiable {
+    let id: String  // post_id
+    let score: Double  // Ranking score
+    let rank: Int?  // Position in ranked list
+
+    enum CodingKeys: String, CodingKey {
+        case id = "post_id"
+        case score
+        case rank
+    }
+}
+
+/// Context for ranking posts
+struct RankingContext: Codable {
+    let location: String?
+    let deviceType: String?
+    let timeOfDay: Int?  // Hour of day (0-23)
+
+    enum CodingKeys: String, CodingKey {
+        case location
+        case deviceType = "device_type"
+        case timeOfDay = "time_of_day"
     }
 }

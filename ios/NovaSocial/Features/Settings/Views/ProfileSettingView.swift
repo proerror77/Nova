@@ -69,18 +69,24 @@ struct ProfileSettingView: View {
                     ScrollView {
                         VStack(spacing: 20) {
                             // MARK: - Avatar
-                            ZStack {
-                                Circle()
-                                    .fill(DesignTokens.surface)
-                                    .frame(width: 124, height: 124)
-
-                                if let image = viewModel.avatarImage {
+                            ZStack(alignment: .bottomTrailing) {
+                                // 头像图片 - 优先级：AvatarManager 待上传头像 > 本地选择头像 > 服务器头像 > 占位符
+                                if let pendingAvatar = AvatarManager.shared.pendingAvatar {
+                                    // 1. 优先显示 AvatarManager 中的待上传头像
+                                    Image(uiImage: pendingAvatar)
+                                        .resizable()
+                                        .scaledToFill()
+                                        .frame(width: 120, height: 120)
+                                        .clipShape(Circle())
+                                } else if let image = viewModel.avatarImage {
+                                    // 2. 显示本地选择的头像
                                     Image(uiImage: image)
                                         .resizable()
                                         .scaledToFill()
                                         .frame(width: 120, height: 120)
                                         .clipShape(Circle())
                                 } else if let url = viewModel.avatarUrl, !url.isEmpty {
+                                    // 3. 显示服务器上的头像
                                     AsyncImage(url: URL(string: url)) { phase in
                                         switch phase {
                                         case .success(let image):
@@ -89,36 +95,36 @@ struct ProfileSettingView: View {
                                                 .scaledToFill()
                                         case .failure:
                                             Circle()
-                                                .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
+                                                .fill(DesignTokens.avatarPlaceholder)
                                         case .empty:
                                             ProgressView()
                                         @unknown default:
                                             Circle()
-                                                .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
+                                                .fill(DesignTokens.avatarPlaceholder)
                                         }
                                     }
                                     .frame(width: 120, height: 120)
                                     .clipShape(Circle())
                                 } else {
+                                    // 4. 默认占位符
                                     Circle()
-                                        .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
+                                        .fill(DesignTokens.avatarPlaceholder)
                                         .frame(width: 120, height: 120)
                                 }
 
+                                // 红色加号按钮（右下角）
                                 PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
-                                    Circle()
-                                        .fill(Color.clear)
-                                        .frame(width: 120, height: 120)
-                                        .overlay(
-                                            Image(systemName: "camera.fill")
-                                                .font(.system(size: 24))
-                                                .foregroundColor(.white.opacity(0.8))
-                                                .padding(8)
-                                                .background(Color.black.opacity(0.5))
-                                                .clipShape(Circle())
-                                                .offset(x: 40, y: 40)
-                                        )
+                                    ZStack {
+                                        Circle()
+                                            .fill(DesignTokens.accentColor)
+                                            .frame(width: 32, height: 32)
+
+                                        Image(systemName: "plus")
+                                            .font(.system(size: 14, weight: .bold))
+                                            .foregroundColor(.white)
+                                    }
                                 }
+                                .offset(x: 0, y: 0)
                             }
                             .padding(.top, 30)
 

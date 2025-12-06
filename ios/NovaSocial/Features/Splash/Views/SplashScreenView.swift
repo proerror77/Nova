@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SplashScreenView: View {
     @Binding var currentPage: AppPage
+    @EnvironmentObject private var authManager: AuthenticationManager
     @State private var isActive = false
 
     var body: some View {
@@ -18,10 +19,18 @@ struct SplashScreenView: View {
                 .kerning(8)
         }
         .task {
-            // 1.5秒后自动跳转到欢迎页面
+            // 1.5秒后检查登录状态并跳转
             do {
                 try await Task.sleep(for: .seconds(1.5))
-                currentPage = .welcome
+
+                // 检查是否已登录
+                if authManager.isAuthenticated {
+                    // 已登录，直接进入主页
+                    currentPage = .home
+                } else {
+                    // 未登录，跳转到欢迎页
+                    currentPage = .welcome
+                }
             } catch {
                 // Task cancelled
             }
