@@ -64,6 +64,16 @@ spec:
           value: /etc/nova/certs/ca.crt
         - name: GRPC_REQUIRE_CLIENT_CERT
           value: 'true'
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: nova-db-credentials
+              key: media-db-url
+        - name: REDIS_URL
+          valueFrom:
+            secretKeyRef:
+              name: nova-redis-credentials
+              key: REDIS_URL
         envFrom:
         - configMapRef:
             name: media-service-config
