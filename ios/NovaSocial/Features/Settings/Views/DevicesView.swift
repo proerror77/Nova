@@ -189,6 +189,8 @@ struct DeviceCard: View {
     }
 }
 
+// Previews disabled - DeviceModels.swift not added to project
+/*
 #Preview {
     DevicesView(currentPage: .constant(.setting))
 }
@@ -223,3 +225,4 @@ struct DeviceCard: View {
     }
     .padding()
 }
+*/
