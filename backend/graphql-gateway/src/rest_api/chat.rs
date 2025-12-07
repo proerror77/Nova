@@ -76,7 +76,33 @@ pub async fn send_chat_message(
         })
         .await
     {
-        Ok(resp) => HttpResponse::Ok().json(resp),
+        Ok(resp) => {
+            // Convert minimal gRPC response into full REST message payload expected by iOS
+            let ts = resp.timestamp.unwrap_or_else(|| Utc::now().timestamp());
+            let created_iso = timestamp_to_iso8601(ts);
+
+            let rest = RestMessage {
+                id: resp.message_id.clone(),
+                conversation_id: payload.conversation_id.clone(),
+                sender_id: user_id.clone(),
+                content: payload.content.clone(),
+                message_type: payload.message_type,
+                r#type: message_type_to_string(payload.message_type),
+                media_url: payload.media_url.clone(),
+                encrypted_content: String::new(),
+                reply_to_message_id: payload.reply_to_message_id.clone(),
+                status: resp.status.clone(),
+                created_at: created_iso.clone(),
+                updated_at: created_iso,
+            };
+
+            #[derive(Serialize)]
+            struct RestSendMessageResponse {
+                message: RestMessage,
+            }
+
+            HttpResponse::Ok().json(RestSendMessageResponse { message: rest })
+        }
         Err(e) => {
             warn!(%user_id, "send_message failed: {}", e);
             HttpResponse::ServiceUnavailable().finish()
@@ -118,7 +144,21 @@ pub async fn get_messages(
         })
         .await
     {
-        Ok(resp) => HttpResponse::Ok().json(resp),
+        Ok(resp) => {
+            let messages: Vec<RestMessage> =
+                resp.messages.into_iter().map(RestMessage::from).collect();
+
+            #[derive(Serialize)]
+            struct RestMessagesResponse {
+                messages: Vec<RestMessage>,
+                has_more: bool,
+            }
+
+            HttpResponse::Ok().json(RestMessagesResponse {
+                messages,
+                has_more: resp.has_more,
+            })
+        }
         Err(e) => {
             error!("get_messages failed: {}", e);
             HttpResponse::ServiceUnavailable().finish()
@@ -271,6 +311,25 @@ pub struct RestLastMessage {
     pub timestamp: String, // ISO8601
 }
 
+/// REST API message model (matches iOS Message model fields)
+#[derive(Debug, Serialize, Deserialize)]
+pub struct RestMessage {
+    pub id: String,
+    pub conversation_id: String,
+    pub sender_id: String,
+    pub content: String,
+    pub message_type: i32,
+    #[serde(rename = "type")]
+    pub r#type: String,
+    pub media_url: String,
+    #[serde(skip_serializing_if = "String::is_empty", default)]
+    pub encrypted_content: String,
+    pub reply_to_message_id: String,
+    pub status: String,
+    pub created_at: String, // ISO8601
+    pub updated_at: String, // ISO8601
+}
+
 /// Helper to convert Unix epoch timestamp (i64 seconds) to ISO8601 string
 fn timestamp_to_iso8601(ts: i64) -> String {
     let ts = if ts > 0 { ts } else { Utc::now().timestamp() };
@@ -287,6 +346,18 @@ fn conversation_type_to_string(t: i32) -> String {
         Ok(ConversationType::Direct) => "direct".to_string(),
         Ok(ConversationType::Group) => "group".to_string(),
         _ => "direct".to_string(), // default to direct
+    }
+}
+
+fn message_type_to_string(t: i32) -> String {
+    match t {
+        0 => "text".to_string(),
+        1 => "image".to_string(),
+        2 => "video".to_string(),
+        3 => "audio".to_string(),
+        4 => "file".to_string(),
+        5 => "location".to_string(),
+        _ => "text".to_string(),
     }
 }
 
@@ -325,6 +396,36 @@ impl From<crate::clients::proto::chat::Conversation> for RestConversation {
             updated_at: timestamp_to_iso8601(updated_ts),
             avatar_url: None, // Not present in this proto version
             unread_count: 0,  // Not present in this proto version
+        }
+    }
+}
+
+impl From<crate::clients::proto::chat::Message> for RestMessage {
+    fn from(msg: crate::clients::proto::chat::Message) -> Self {
+        let created_ts = if msg.created_at > 0 {
+            msg.created_at
+        } else {
+            Utc::now().timestamp()
+        };
+        let updated_ts = if msg.updated_at > 0 {
+            msg.updated_at
+        } else {
+            created_ts
+        };
+
+        RestMessage {
+            id: msg.id,
+            conversation_id: msg.conversation_id,
+            sender_id: msg.sender_id,
+            content: msg.content,
+            message_type: msg.message_type,
+            r#type: message_type_to_string(msg.message_type),
+            media_url: msg.media_url,
+            encrypted_content: msg.encrypted_content,
+            reply_to_message_id: msg.reply_to_message_id,
+            status: msg.status,
+            created_at: timestamp_to_iso8601(created_ts),
+            updated_at: timestamp_to_iso8601(updated_ts),
         }
     }
 }

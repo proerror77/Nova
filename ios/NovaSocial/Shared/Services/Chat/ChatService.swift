@@ -57,6 +57,14 @@ final class ChatService {
         mediaUrl: String? = nil,
         replyToId: String? = nil
     ) async throws -> Message {
+        struct SendMessageAPIResponse: Codable {
+            let id: String?
+            let messageId: String?
+            let conversationId: String?
+            let timestamp: TimeInterval?
+            let status: String?
+        }
+
         let request = SendMessageRequest(
             conversationId: conversationId,
             content: content,
@@ -65,10 +73,24 @@ final class ChatService {
             replyToId: replyToId
         )
 
-        let message: Message = try await client.request(
+        let response: SendMessageAPIResponse = try await client.request(
             endpoint: APIConfig.Chat.sendMessage,
             method: "POST",
             body: request
+        )
+
+        let messageId = response.id ?? response.messageId ?? UUID().uuidString
+        let createdAt = response.timestamp.map { Date(timeIntervalSince1970: $0) } ?? Date()
+        let senderId = AuthenticationManager.shared.currentUser?.id ?? ""
+
+        let message = Message(
+            id: messageId,
+            conversationId: conversationId,
+            senderId: senderId,
+            content: content,
+            type: type,
+            createdAt: createdAt,
+            status: .sent
         )
 
         #if DEBUG
@@ -206,15 +228,19 @@ final class ChatService {
     /// - Returns: 会话列表
     @MainActor
     func getConversations() async throws -> [Conversation] {
-        let conversations: [Conversation] = try await client.get(
-            endpoint: APIConfig.Chat.getConversations
-        )
+        print("🔍 [ChatService] getConversations() called")
 
-        #if DEBUG
-        print("[ChatService] Fetched \(conversations.count) conversations")
-        #endif
+        do {
+            let conversations: [Conversation] = try await client.get(
+                endpoint: APIConfig.Chat.getConversations
+            )
 
-        return conversations
+            print("✅ [ChatService] Fetched \(conversations.count) conversations")
+            return conversations
+        } catch {
+            print("❌ [ChatService] Failed to fetch conversations: \(error)")
+            throw error
+        }
     }
 
     /// 获取指定会话详情
@@ -434,6 +460,7 @@ final class ChatService {
         // 构建WebSocket URL
         let baseURL = APIConfig.current.baseURL.replacingOccurrences(of: "http://", with: "ws://")
                                                 .replacingOccurrences(of: "https://", with: "wss://")
+                                                .replacingOccurrences(of: "ws://34.104.179.123", with: "wss://34.104.179.123")
         guard let url = URL(string: "\(baseURL)\(APIConfig.Chat.websocket)") else {
             #if DEBUG
             print("[ChatService] WebSocket URL invalid")

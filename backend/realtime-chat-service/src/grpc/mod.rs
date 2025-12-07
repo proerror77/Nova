@@ -373,7 +373,7 @@ impl RealtimeChatService for RealtimeChatServiceImpl {
         };
 
         let rows = sqlx::query(
-            "SELECT id, sender_id, content, content_encrypted, content_nonce, encryption_version, created_at FROM messages WHERE conversation_id = $1 AND ($2::timestamptz IS NULL OR created_at < $2) ORDER BY created_at DESC LIMIT $3",
+            "SELECT id, sender_id, content, content_encrypted, content_nonce, encryption_version, created_at, updated_at, message_type, media_url, reply_to_message_id, status FROM messages WHERE conversation_id = $1 AND ($2::timestamptz IS NULL OR created_at < $2) ORDER BY created_at DESC LIMIT $3",
         )
         .bind(conversation_id)
         .bind(before_ts)
@@ -395,38 +395,53 @@ impl RealtimeChatService for RealtimeChatServiceImpl {
             let encryption_version: i32 = row.try_get("encryption_version").unwrap_or(0);
             let created_at: chrono::DateTime<chrono::Utc> =
                 row.try_get("created_at").unwrap_or_else(|_| Utc::now());
+            let updated_at: chrono::DateTime<chrono::Utc> =
+                row.try_get("updated_at").unwrap_or(created_at);
+            let message_type_str: Option<String> = row.try_get("message_type").unwrap_or(None);
+            let media_url: String = row.try_get("media_url").unwrap_or_default();
+            let reply_to_message_id: String =
+                row.try_get("reply_to_message_id").unwrap_or_default();
+            let status: String = row.try_get("status").unwrap_or_else(|_| "sent".into());
+
+            let message_type = match message_type_str.as_deref() {
+                Some("image") => MessageType::Image as i32,
+                Some("video") => MessageType::Video as i32,
+                Some("audio") => MessageType::Audio as i32,
+                Some("file") => MessageType::File as i32,
+                Some("location") => MessageType::Location as i32,
+                _ => MessageType::Text as i32,
+            };
 
             // For E2EE messages, encode encrypted content as base64 with nonce prepended
-            let encrypted_content = if let (Some(ciphertext), Some(nonce)) =
-                (content_encrypted, content_nonce)
-            {
-                use base64::Engine;
-                // Format: base64(nonce || ciphertext) for client to parse
-                let mut combined = nonce;
-                combined.extend(ciphertext);
-                base64::engine::general_purpose::STANDARD.encode(&combined)
-            } else {
-                String::new()
-            };
+            let encrypted_content =
+                if let (Some(ciphertext), Some(nonce)) = (content_encrypted, content_nonce) {
+                    use base64::Engine;
+                    // Format: base64(nonce || ciphertext) for client to parse
+                    let mut combined = nonce;
+                    combined.extend(ciphertext);
+                    base64::engine::general_purpose::STANDARD.encode(&combined)
+                } else {
+                    String::new()
+                };
 
             messages.push(Message {
                 id: mid.to_string(),
                 conversation_id: conversation_id.to_string(),
                 sender_id: sender.to_string(),
                 content,
-                message_type: MessageType::Text as i32,
-                media_url: String::new(),
+                message_type,
+                media_url,
                 location: None,
                 created_at: created_at.timestamp(),
-                updated_at: created_at.timestamp(),
+                updated_at: updated_at.timestamp(),
                 status: if encryption_version > 0 {
                     "encrypted".into()
                 } else {
-                    "sent".into()
+                    status
                 },
                 encrypted_content,
                 ephemeral_public_key: String::new(),
-                reply_to_message_id: String::new(),
+                reply_to_message_id,
             });
         }
 
