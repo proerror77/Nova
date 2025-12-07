@@ -273,14 +273,12 @@ pub struct RestLastMessage {
 
 /// Helper to convert Unix epoch timestamp (i64 seconds) to ISO8601 string
 fn timestamp_to_iso8601(ts: i64) -> String {
-    if ts > 0 {
-        Utc.timestamp_opt(ts, 0)
-            .single()
-            .map(|dt| dt.to_rfc3339())
-            .unwrap_or_else(|| Utc::now().to_rfc3339())
-    } else {
-        Utc::now().to_rfc3339()
-    }
+    let ts = if ts > 0 { ts } else { Utc::now().timestamp() };
+
+    Utc.timestamp_opt(ts, 0)
+        .single()
+        .map(|dt| dt.to_rfc3339())
+        .unwrap_or_else(|| Utc::now().to_rfc3339())
 }
 
 /// Convert gRPC ConversationType enum to string
@@ -295,6 +293,18 @@ fn conversation_type_to_string(t: i32) -> String {
 /// Convert gRPC Conversation to REST API format
 impl From<crate::clients::proto::chat::Conversation> for RestConversation {
     fn from(conv: crate::clients::proto::chat::Conversation) -> Self {
+        // Fail-safe: some older rows may have missing/zero timestamps; normalize to now()
+        let created_ts = if conv.created_at > 0 {
+            conv.created_at
+        } else {
+            Utc::now().timestamp()
+        };
+        let updated_ts = if conv.updated_at > 0 {
+            conv.updated_at
+        } else {
+            created_ts
+        };
+
         let last_message = conv.last_message.map(|msg| RestLastMessage {
             content: msg.content,
             sender_id: msg.sender_id,
@@ -311,10 +321,10 @@ impl From<crate::clients::proto::chat::Conversation> for RestConversation {
             },
             participants: conv.participant_ids,
             last_message,
-            created_at: timestamp_to_iso8601(conv.created_at),
-            updated_at: timestamp_to_iso8601(conv.updated_at),
+            created_at: timestamp_to_iso8601(created_ts),
+            updated_at: timestamp_to_iso8601(updated_ts),
             avatar_url: None, // Not present in this proto version
-            unread_count: 0,   // Not present in this proto version
+            unread_count: 0,  // Not present in this proto version
         }
     }
 }

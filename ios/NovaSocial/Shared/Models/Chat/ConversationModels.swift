@@ -25,6 +25,19 @@ struct Conversation: Identifiable, Codable, Sendable {
         case avatarUrl = "avatar_url"
         case unreadCount = "unread_count"
     }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        type = try container.decode(ConversationType.self, forKey: .type)
+        name = try container.decodeIfPresent(String.self, forKey: .name)
+        participants = try container.decodeIfPresent([String].self, forKey: .participants) ?? []
+        lastMessage = try container.decodeIfPresent(LastMessage.self, forKey: .lastMessage)
+        createdAt = try decodeFlexibleDate(container, key: .createdAt)
+        updatedAt = try decodeFlexibleDate(container, key: .updatedAt)
+        avatarUrl = try container.decodeIfPresent(String.self, forKey: .avatarUrl)
+        unreadCount = try container.decodeIfPresent(Int.self, forKey: .unreadCount) ?? 0
+    }
 }
 
 /// Conversation type
@@ -43,6 +56,13 @@ struct LastMessage: Codable, Sendable {
         case content
         case senderId = "sender_id"
         case timestamp
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        content = try container.decodeIfPresent(String.self, forKey: .content) ?? ""
+        senderId = try container.decodeIfPresent(String.self, forKey: .senderId) ?? ""
+        timestamp = try decodeFlexibleDate(container, key: .timestamp)
     }
 }
 
@@ -89,6 +109,25 @@ struct Message: Identifiable, Codable, Sendable {
         case nonce
         case sessionId = "session_id"
         case senderDeviceId = "sender_device_id"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        conversationId = try container.decode(String.self, forKey: .conversationId)
+        senderId = try container.decode(String.self, forKey: .senderId)
+        content = try container.decodeIfPresent(String.self, forKey: .content) ?? ""
+        type = try container.decode(ChatMessageType.self, forKey: .type)
+        createdAt = try decodeFlexibleDate(container, key: .createdAt)
+        isEdited = try container.decodeIfPresent(Bool.self, forKey: .isEdited) ?? false
+        isDeleted = try container.decodeIfPresent(Bool.self, forKey: .isDeleted) ?? false
+        mediaUrl = try container.decodeIfPresent(String.self, forKey: .mediaUrl)
+        replyToId = try container.decodeIfPresent(String.self, forKey: .replyToId)
+        encryptionVersion = try container.decodeIfPresent(Int.self, forKey: .encryptionVersion)
+        encryptedContent = try container.decodeIfPresent(String.self, forKey: .encryptedContent)
+        nonce = try container.decodeIfPresent(String.self, forKey: .nonce)
+        sessionId = try container.decodeIfPresent(String.self, forKey: .sessionId)
+        senderDeviceId = try container.decodeIfPresent(String.self, forKey: .senderDeviceId)
     }
 
     /// Convenience initializer for creating E2EE messages locally
@@ -244,6 +283,15 @@ struct SendE2EEMessageResponse: Codable, Sendable {
         case createdAt = "created_at"
         case sequenceNumber = "sequence_number"
     }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        conversationId = try container.decode(String.self, forKey: .conversationId)
+        senderId = try container.decode(String.self, forKey: .senderId)
+        createdAt = try decodeFlexibleDate(container, key: .createdAt)
+        sequenceNumber = try container.decode(Int64.self, forKey: .sequenceNumber)
+    }
 }
 
 // MARK: - Message Reactions
@@ -263,6 +311,83 @@ struct MessageReaction: Identifiable, Codable, Sendable {
         case emoji
         case createdAt = "created_at"
     }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        messageId = try container.decode(String.self, forKey: .messageId)
+        userId = try container.decode(String.self, forKey: .userId)
+        emoji = try container.decode(String.self, forKey: .emoji)
+        createdAt = try decodeFlexibleDate(container, key: .createdAt)
+    }
+}
+
+// MARK: - Flexible Date Decoding Helper
+
+/// Allows decoding dates from either ISO8601 strings or Unix epoch (seconds)
+private func decodeFlexibleDate<K: CodingKey>(_ container: KeyedDecodingContainer<K>, key: K) throws -> Date {
+    // If field is missing entirely, fall back to now to avoid blocking UI
+    if !container.contains(key) {
+#if DEBUG
+        print("[decodeFlexibleDate] key missing for \(key.stringValue); defaulting to now()")
+#endif
+        return Date()
+    }
+
+    if let seconds = try? container.decode(Double.self, forKey: key) {
+        return Date(timeIntervalSince1970: seconds)
+    }
+    var stringDecodeError: Error?
+    var dateString: String?
+    do {
+        dateString = try container.decode(String.self, forKey: key)
+    } catch {
+        stringDecodeError = error
+    }
+    if var dateString = dateString {
+#if DEBUG
+        print("[decodeFlexibleDate] raw value for \(key.stringValue): \(dateString)")
+#endif
+        // Clean up whitespace or duplicated timezone suffixes that occasionally appear from backend
+        dateString = dateString.trimmingCharacters(in: .whitespacesAndNewlines)
+        if dateString.hasSuffix("Z"), dateString.contains("+") {
+            dateString.removeLast() // Handle "+00:00Z" style strings
+        }
+
+        // Try ISO8601 with and without fractional seconds (explicitly keep timezone colon)
+        let iso = ISO8601DateFormatter()
+        iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds, .withColonSeparatorInTimeZone]
+        if let d = iso.date(from: dateString) {
+            return d
+        }
+        iso.formatOptions = [.withInternetDateTime, .withColonSeparatorInTimeZone]
+        if let d = iso.date(from: dateString) {
+            return d
+        }
+        // Fallback: common RFC3339 patterns with offset like "+00:00"
+        let formats = [
+            "yyyy-MM-dd'T'HH:mm:ssXXXXX",
+            "yyyy-MM-dd'T'HH:mm:ssZ",
+            "yyyy-MM-dd HH:mm:ss Z"
+        ]
+        for fmt in formats {
+            let df = DateFormatter()
+            df.locale = Locale(identifier: "en_US_POSIX")
+            df.timeZone = TimeZone(secondsFromGMT: 0)
+            df.dateFormat = fmt
+            if let d = df.date(from: dateString) {
+                return d
+            }
+        }
+    }
+#if DEBUG
+    if let stringDecodeError {
+        print("[decodeFlexibleDate] decode(String) error for \(key.stringValue): \(stringDecodeError)")
+    }
+    print("[decodeFlexibleDate] failed to parse value for \(key.stringValue)")
+#endif
+    // Fail-soft to avoid breaking UI when backend date format is unexpected
+    return Date()
 }
 
 /// Request to add a reaction to a message
