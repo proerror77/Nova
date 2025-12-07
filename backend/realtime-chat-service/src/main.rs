@@ -206,32 +206,55 @@ async fn main() -> Result<(), error::AppError> {
     let rest_state = state.clone();
     let rest_db = db.clone();
 
-    // gRPC server with mTLS
+    // Check if TLS is enabled via environment variable
+    let tls_enabled = env::var("GRPC_TLS_ENABLED")
+        .map(|v| v.to_lowercase() == "true" || v == "1")
+        .unwrap_or(false);
+
+    // gRPC server with optional mTLS
     let grpc_addr: SocketAddr = format!("0.0.0.0:{}", cfg.grpc_port)
         .parse()
         .map_err(|e| error::AppError::Config(format!("Invalid gRPC address: {e}")))?;
 
-    tracing::info!("Starting gRPC server with mTLS on {}", grpc_addr);
+    if tls_enabled {
+        tracing::info!("Starting gRPC server with mTLS on {}", grpc_addr);
+    } else {
+        tracing::warn!(
+            "gRPC server TLS is DISABLED on {}; enable GRPC_TLS_ENABLED=true for staging/production",
+            grpc_addr
+        );
+    }
 
     // Spawn gRPC server in background (gRPC futures ARE Send)
     let grpc_server_task = tokio::spawn(async move {
-        let tls_config = grpc_tls::mtls::load_mtls_server_config()
-            .await
-            .map_err(|e| error::AppError::StartServer(format!("mTLS config: {e}")))?;
-
         let (mut health_reporter, health_service) = tonic_health::server::health_reporter();
         health_reporter
             .set_serving::<RealtimeChatServiceServer<grpc::RealtimeChatServiceImpl>>()
             .await;
 
-        GrpcServer::builder()
-            .tls_config(tls_config)
-            .map_err(|e| error::AppError::StartServer(format!("TLS setup: {e}")))?
-            .add_service(grpc_server)
-            .add_service(health_service)
-            .serve(grpc_addr)
-            .await
-            .map_err(|e| error::AppError::StartServer(format!("run gRPC: {e}")))?;
+        if tls_enabled {
+            // Load mTLS config and start with TLS
+            let tls_config = grpc_tls::mtls::load_mtls_server_config()
+                .await
+                .map_err(|e| error::AppError::StartServer(format!("mTLS config: {e}")))?;
+
+            GrpcServer::builder()
+                .tls_config(tls_config)
+                .map_err(|e| error::AppError::StartServer(format!("TLS setup: {e}")))?
+                .add_service(grpc_server)
+                .add_service(health_service)
+                .serve(grpc_addr)
+                .await
+                .map_err(|e| error::AppError::StartServer(format!("run gRPC: {e}")))?;
+        } else {
+            // Start without TLS (development/testing only)
+            GrpcServer::builder()
+                .add_service(grpc_server)
+                .add_service(health_service)
+                .serve(grpc_addr)
+                .await
+                .map_err(|e| error::AppError::StartServer(format!("run gRPC: {e}")))?;
+        }
 
         Ok::<_, error::AppError>(())
     });
