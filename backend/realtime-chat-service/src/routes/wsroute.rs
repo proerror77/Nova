@@ -12,7 +12,7 @@ use actix_web_actors::ws;
 use serde::Deserialize;
 use sqlx::{Pool, Postgres};
 use std::time::{Duration, Instant};
-use tracing::error;
+use tracing::{error, warn};
 use uuid::Uuid;
 
 #[derive(Debug, Deserialize)]
@@ -561,11 +561,12 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsSession {
     }
 }
 
-// Token validation
+// Token validation: accept either ?token=... or Authorization: Bearer ...
+// Returns user_id from JWT claims for downstream validation
 async fn validate_ws_token(
     params: &WsParams,
     req: &HttpRequest,
-) -> Result<(), actix_web::http::StatusCode> {
+) -> Result<Uuid, actix_web::http::StatusCode> {
     let token = params.token.clone().or_else(|| {
         req.headers()
             .get(actix_web::http::header::AUTHORIZATION)
@@ -574,26 +575,30 @@ async fn validate_ws_token(
             .map(|s| s.to_string())
     });
 
-    match token {
+    let token = match token {
+        Some(t) => t,
         None => {
             error!("🚫 WebSocket connection REJECTED: No JWT token provided");
+            return Err(actix_web::http::StatusCode::UNAUTHORIZED);
+        }
+    };
+
+    match verify_jwt(&token).await {
+        Ok(claims) => {
+            tracing::debug!(
+                "✅ WebSocket authentication successful for user: {}",
+                claims.sub
+            );
+            Uuid::parse_str(&claims.sub)
+                .map_err(|_| actix_web::http::StatusCode::UNAUTHORIZED)
+        }
+        Err(e) => {
+            error!(
+                "🚫 WebSocket connection REJECTED: Invalid JWT token - {:?}",
+                e
+            );
             Err(actix_web::http::StatusCode::UNAUTHORIZED)
         }
-        Some(t) => verify_jwt(&t)
-            .await
-            .map(|claims| {
-                tracing::debug!(
-                    "✅ WebSocket authentication successful for user: {}",
-                    claims.sub
-                );
-            })
-            .map_err(|e| {
-                error!(
-                    "🚫 WebSocket connection REJECTED: Invalid JWT token - {:?}",
-                    e
-                );
-                actix_web::http::StatusCode::UNAUTHORIZED
-            }),
     }
 }
 
@@ -633,11 +638,30 @@ pub async fn ws_handler(
     state: web::Data<AppState>,
     query: web::Query<WsParams>,
 ) -> Result<HttpResponse, Error> {
-    let params = query.into_inner();
+    let mut params = query.into_inner();
 
-    // Authentication
-    if let Err(status) = validate_ws_token(&params, &req).await {
-        return Ok(HttpResponse::build(status).finish());
+    // Authentication: derive user_id from token if possible
+    let claims_user = match validate_ws_token(&params, &req).await {
+        Ok(uid) => Some(uid),
+        Err(status) => return Ok(HttpResponse::build(status).finish()),
+    };
+
+    if params.user_id.is_nil() {
+        if let Some(uid) = claims_user {
+            params.user_id = uid;
+        } else {
+            warn!("WebSocket missing user_id and could not derive from token");
+            return Ok(HttpResponse::Unauthorized().finish());
+        }
+    } else if let Some(uid) = claims_user {
+        // Optional: ensure query user_id matches token subject
+        if uid != params.user_id {
+            warn!(
+                "WebSocket user_id mismatch: token={} query={}",
+                uid, params.user_id
+            );
+            return Ok(HttpResponse::Unauthorized().finish());
+        }
     }
 
     // Authorization
