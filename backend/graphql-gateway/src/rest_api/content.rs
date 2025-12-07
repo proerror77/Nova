@@ -30,6 +30,10 @@ pub struct PostResponse {
     pub created_at: i64,
     pub updated_at: i64,
     pub status: String,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub media_urls: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub media_type: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -59,6 +63,8 @@ pub struct DeletePostResponse {
 #[derive(Debug, Deserialize)]
 pub struct CreatePostBody {
     pub content: String,
+    pub media_urls: Option<Vec<String>>,
+    pub media_type: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -111,6 +117,8 @@ pub async fn get_post(
                 created_at: p.created_at,
                 updated_at: p.updated_at,
                 status: status_to_string(p.status),
+                media_urls: p.media_urls,
+                media_type: if p.media_type.is_empty() { None } else { Some(p.media_type) },
             });
 
             info!(post_id = %post_id, found = grpc_response.found, "Post retrieved");
@@ -186,6 +194,8 @@ pub async fn get_user_posts(
                     created_at: p.created_at,
                     updated_at: p.updated_at,
                     status: status_to_string(p.status),
+                    media_urls: p.media_urls,
+                    media_type: if p.media_type.is_empty() { None } else { Some(p.media_type) },
                 })
                 .collect();
 
@@ -237,6 +247,14 @@ pub async fn create_post(
     let grpc_request = tonic::Request::new(CreatePostRequest {
         author_id: user_id.clone(),
         content: body.content.clone(),
+        media_urls: body.media_urls.clone().unwrap_or_default(),
+        media_type: body.media_type.clone().unwrap_or_else(|| {
+            if body.media_urls.as_ref().map(|urls| !urls.is_empty()).unwrap_or(false) {
+                "image".to_string()
+            } else {
+                "none".to_string()
+            }
+        }),
     });
 
     match content_client.create_post(grpc_request).await {
@@ -258,6 +276,8 @@ pub async fn create_post(
                         created_at: post.created_at,
                         updated_at: post.updated_at,
                         status: status_to_string(post.status),
+                        media_urls: post.media_urls,
+                        media_type: if post.media_type.is_empty() { None } else { Some(post.media_type) },
                     },
                 }))
             } else {
@@ -349,6 +369,8 @@ pub async fn update_post(
                         created_at: post.created_at,
                         updated_at: post.updated_at,
                         status: status_to_string(post.status),
+                        media_urls: post.media_urls,
+                        media_type: if post.media_type.is_empty() { None } else { Some(post.media_type) },
                     },
                 }))
             } else {

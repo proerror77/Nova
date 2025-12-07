@@ -171,6 +171,8 @@ impl ContentMutation {
         let request = tonic::Request::new(crate::clients::proto::content::CreatePostRequest {
             author_id,
             content,
+            media_urls: vec![],
+            media_type: String::new(),
         });
 
         let response = client

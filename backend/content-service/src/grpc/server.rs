@@ -77,11 +77,29 @@ impl ContentService for ContentServiceImpl {
             .map_err(|_| Status::invalid_argument("invalid author_id"))?;
 
         let post_service = PostService::with_cache(self.db_pool.clone(), self.cache.clone());
-        let image_key = format!("text-content-{}", Uuid::new_v4());
         let content = req.content.clone();
 
+        // Determine media type and key based on provided media_urls
+        let has_media = !req.media_urls.is_empty();
+        let media_type = if has_media {
+            if req.media_type.is_empty() { "image".to_string() } else { req.media_type.clone() }
+        } else {
+            "none".to_string()
+        };
+        let image_key = if has_media {
+            format!("media-{}", Uuid::new_v4())
+        } else {
+            format!("text-content-{}", Uuid::new_v4())
+        };
+
         let post = post_service
-            .create_post(author_id, Some(content.as_str()), &image_key, "text/plain")
+            .create_post_with_urls(
+                author_id,
+                Some(content.as_str()),
+                &image_key,
+                &media_type,
+                &req.media_urls,
+            )
             .await
             .map_err(|e| {
                 tracing::error!("create_post failed: {}", e);

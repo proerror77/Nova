@@ -40,6 +40,8 @@ message Post {
 message CreatePostRequest {
   string author_id = 1;
   string content = 2;
+  repeated string media_urls = 3;  // CDN URLs for attached media (images/videos)
+  string media_type = 4;           // Type of media: "image", "video", "none"
 }
 
 message CreatePostResponse {

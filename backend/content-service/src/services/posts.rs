@@ -112,8 +112,24 @@ impl PostService {
         media_key: &str,
         media_type: &str,
     ) -> Result<Post> {
+        self.create_post_with_urls(user_id, caption, media_key, media_type, &[])
+            .await
+    }
+
+    /// Create a new post with explicit media URLs
+    pub async fn create_post_with_urls(
+        &self,
+        user_id: Uuid,
+        caption: Option<&str>,
+        media_key: &str,
+        media_type: &str,
+        media_urls: &[String],
+    ) -> Result<Post> {
         // Start transaction for atomic post creation + event publishing
         let mut tx = self.pool.begin().await?;
+
+        // Serialize media_urls to JSON
+        let media_urls_json = serde_json::to_value(media_urls).unwrap_or_default();
 
         let post = sqlx::query_as::<_, Post>(
             r#"
@@ -123,7 +139,7 @@ impl PostService {
                 $2,
                 $3,
                 $4,
-                CASE WHEN $3 = 'text-only' THEN '[]'::jsonb ELSE jsonb_build_array($3) END,
+                CASE WHEN $5::jsonb = '[]'::jsonb AND $3 <> 'text-only' THEN jsonb_build_array($3) ELSE $5::jsonb END,
                 'published'
             )
             RETURNING id, user_id, content, caption, media_key, media_type, media_urls, status,
@@ -134,6 +150,7 @@ impl PostService {
         .bind(caption)
         .bind(media_key)
         .bind(media_type)
+        .bind(media_urls_json)
         .fetch_one(&mut *tx)
         .await?;
 
