@@ -4,9 +4,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let common_dir = "../proto";
     let third_party_dir = "../proto/third_party";
 
-    for proto in ["media_service.proto"] {
-        println!("cargo:rerun-if-changed={}/{}", services_v2_dir, proto);
-    }
+    // Single proto; avoid clippy::single-element-loop
+    println!(
+        "cargo:rerun-if-changed={}/media_service.proto",
+        services_v2_dir
+    );
 
     tonic_build::configure()
         .build_server(true)

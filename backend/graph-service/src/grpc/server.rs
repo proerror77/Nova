@@ -35,6 +35,7 @@ impl GraphServiceImpl {
         Self { repo, write_token }
     }
 
+    #[allow(clippy::result_large_err)]
     fn authorize_write<T>(&self, req: &Request<T>) -> Result<(), Status> {
         match &self.write_token {
             Some(expected) => {

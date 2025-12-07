@@ -146,7 +146,7 @@ impl GraphRepositoryTrait for CachedGraphRepository {
                     // Apply limit to cached results
                     let limited: Vec<Uuid> =
                         cached.user_ids.into_iter().take(limit as usize).collect();
-                    let has_more = (limit as i32) < cached.total_count;
+                    let has_more = limit < cached.total_count;
                     return Ok((limited, cached.total_count, has_more));
                 }
                 Ok(None) => {
@@ -190,7 +190,7 @@ impl GraphRepositoryTrait for CachedGraphRepository {
                     debug!(user = %user_id, "Cache HIT for following");
                     let limited: Vec<Uuid> =
                         cached.user_ids.into_iter().take(limit as usize).collect();
-                    let has_more = (limit as i32) < cached.total_count;
+                    let has_more = limit < cached.total_count;
                     return Ok((limited, cached.total_count, has_more));
                 }
                 Ok(None) => {

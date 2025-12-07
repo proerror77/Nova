@@ -24,19 +24,12 @@ impl Neo4jBackfill {
     pub async fn run(&self) -> Result<BackfillStats> {
         info!("Starting Neo4j backfill from PostgreSQL");
 
-        let mut stats = BackfillStats::default();
-
-        // Step 1: Migrate users
-        stats.users_migrated = self.backfill_users().await?;
-
-        // Step 2: Migrate follow relationships
-        stats.follows_migrated = self.backfill_follows().await?;
-
-        // Step 3: Migrate mutes (if exists)
-        stats.mutes_migrated = self.backfill_mutes().await.unwrap_or(0);
-
-        // Step 4: Migrate blocks (if exists)
-        stats.blocks_migrated = self.backfill_blocks().await.unwrap_or(0);
+        let stats = BackfillStats {
+            users_migrated: self.backfill_users().await?,
+            follows_migrated: self.backfill_follows().await?,
+            mutes_migrated: self.backfill_mutes().await.unwrap_or(0),
+            blocks_migrated: self.backfill_blocks().await.unwrap_or(0),
+        };
 
         // Step 5: Verify consistency
         self.verify_consistency(&stats).await?;
