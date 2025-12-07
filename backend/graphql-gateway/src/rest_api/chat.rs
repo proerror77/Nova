@@ -1,4 +1,6 @@
 use actix_web::{get, post, web, HttpMessage, HttpRequest, HttpResponse};
+use chrono::{TimeZone, Utc};
+use serde::{Deserialize, Serialize};
 use tracing::{error, warn};
 
 use crate::clients::proto::chat::ConversationType;
@@ -10,6 +12,7 @@ use crate::clients::ServiceClients;
 use crate::middleware::jwt::AuthenticatedUser;
 
 /// GET /api/v2/chat/conversations
+/// Returns an array of conversations (iOS-compatible format)
 #[get("/api/v2/chat/conversations")]
 pub async fn get_conversations(
     http_req: HttpRequest,
@@ -33,7 +36,17 @@ pub async fn get_conversations(
         })
         .await
     {
-        Ok(resp) => HttpResponse::Ok().json(resp),
+        Ok(resp) => {
+            // Transform gRPC response to REST API format (direct array)
+            // Note: call_chat already extracts inner response via into_inner()
+            let conversations: Vec<RestConversation> = resp
+                .conversations
+                .into_iter()
+                .map(RestConversation::from)
+                .collect();
+
+            HttpResponse::Ok().json(conversations)
+        }
         Err(e) => {
             error!("list_conversations failed: {}", e);
             HttpResponse::ServiceUnavailable().finish()
@@ -224,6 +237,84 @@ impl From<SendMessageBody> for SendMessageRequest {
             reply_to_message_id: body.reply_to_message_id,
             sender_id: body.sender_id.unwrap_or_default(),
             ..Default::default()
+        }
+    }
+}
+
+// ============================================================================
+// REST API Response Models (iOS-compatible)
+// ============================================================================
+
+/// REST API response for conversation (matches iOS Conversation model)
+#[derive(Debug, Serialize, Deserialize)]
+pub struct RestConversation {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub conversation_type: String, // "direct" or "group"
+    pub name: Option<String>,
+    pub participants: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_message: Option<RestLastMessage>,
+    pub created_at: String, // ISO8601
+    pub updated_at: String, // ISO8601
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub avatar_url: Option<String>,
+    #[serde(default)]
+    pub unread_count: i32,
+}
+
+/// Last message preview (matches iOS LastMessage model)
+#[derive(Debug, Serialize, Deserialize)]
+pub struct RestLastMessage {
+    pub content: String,
+    pub sender_id: String,
+    pub timestamp: String, // ISO8601
+}
+
+/// Helper to convert Unix epoch timestamp (i64 seconds) to ISO8601 string
+fn timestamp_to_iso8601(ts: i64) -> String {
+    if ts > 0 {
+        Utc.timestamp_opt(ts, 0)
+            .single()
+            .map(|dt| dt.to_rfc3339())
+            .unwrap_or_else(|| Utc::now().to_rfc3339())
+    } else {
+        Utc::now().to_rfc3339()
+    }
+}
+
+/// Convert gRPC ConversationType enum to string
+fn conversation_type_to_string(t: i32) -> String {
+    match ConversationType::try_from(t) {
+        Ok(ConversationType::Direct) => "direct".to_string(),
+        Ok(ConversationType::Group) => "group".to_string(),
+        _ => "direct".to_string(), // default to direct
+    }
+}
+
+/// Convert gRPC Conversation to REST API format
+impl From<crate::clients::proto::chat::Conversation> for RestConversation {
+    fn from(conv: crate::clients::proto::chat::Conversation) -> Self {
+        let last_message = conv.last_message.map(|msg| RestLastMessage {
+            content: msg.content,
+            sender_id: msg.sender_id,
+            timestamp: timestamp_to_iso8601(msg.created_at),
+        });
+
+        RestConversation {
+            id: conv.id,
+            conversation_type: conversation_type_to_string(conv.conversation_type),
+            name: if conv.name.is_empty() {
+                None
+            } else {
+                Some(conv.name)
+            },
+            participants: conv.participant_ids,
+            last_message,
+            created_at: timestamp_to_iso8601(conv.created_at),
+            updated_at: timestamp_to_iso8601(conv.updated_at),
+            avatar_url: None, // Not present in this proto version
+            unread_count: 0,   // Not present in this proto version
         }
     }
 }
