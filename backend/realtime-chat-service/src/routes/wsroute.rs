@@ -686,3 +686,14 @@ pub async fn ws_handler(
 
     Ok(resp)
 }
+
+/// Alias path to match mobile client expectation (`/ws/chat`)
+#[get("/ws/chat")]
+pub async fn ws_chat_alias(
+    req: HttpRequest,
+    stream: web::Payload,
+    state: web::Data<AppState>,
+    query: web::Query<WsParams>,
+) -> Result<HttpResponse, Error> {
+    ws_handler(req, stream, state, query).await
+}
