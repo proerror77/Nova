@@ -23,6 +23,8 @@ data:
   SEARCH_SERVICE_URL: "http://search-service.nova-staging.svc.cluster.local:50051"
   STREAMING_SERVICE_URL: "http://realtime-chat-service.nova-staging.svc.cluster.local:50051"
   MEDIA_SERVICE_URL: "http://media-service.nova-staging.svc.cluster.local:50051"
+  # Chat Service endpoint (required by grpc-clients library)
+  GRPC_CHAT_SERVICE_URL: "http://realtime-chat-service.nova-staging.svc.cluster.local:50051"
 
   # Database (value injected from AWS Secrets via ExternalSecrets)
   # Actual DATABASE_URL comes from graphql-gateway-db-credentials secret
@@ -111,12 +113,12 @@ spec:
           valueFrom:
             secretKeyRef:
               name: graphql-gateway-secret
-              key: jwt-private-key
+              key: JWT_PRIVATE_KEY_PEM
         - name: JWT_VALIDATION_KEY
           valueFrom:
             secretKeyRef:
               name: graphql-gateway-secret
-              key: jwt-public-key
+              key: JWT_PUBLIC_KEY_PEM
         resources:
           requests:
             memory: "128Mi"
