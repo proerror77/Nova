@@ -114,7 +114,8 @@ struct Message: Identifiable, Codable, Sendable {
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(String.self, forKey: .id)
-        conversationId = try container.decode(String.self, forKey: .conversationId)
+        // Backend有時缺少 conversation_id，容錯為空字串以免整個列表解碼失敗
+        conversationId = try container.decodeIfPresent(String.self, forKey: .conversationId) ?? ""
         senderId = try container.decode(String.self, forKey: .senderId)
         content = try container.decodeIfPresent(String.self, forKey: .content) ?? ""
         type = try container.decode(ChatMessageType.self, forKey: .type)
