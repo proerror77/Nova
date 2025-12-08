@@ -639,7 +639,7 @@ struct ChatView: View {
             // 2. 转换为UI消息
             messages = response.messages.map { ChatMessage(from: $0, currentUserId: currentUserId) }
 
-            // 3. 连接WebSocket接收实时消息
+            // 3. 连接WebSocket接收实时消息（绑定当前会话）
             chatService.onMessageReceived = { newMessage in
                 Task { @MainActor in
                     // 避免重复添加（如果消息已存在）
@@ -647,7 +647,7 @@ struct ChatView: View {
                     self.messages.append(ChatMessage(from: newMessage, currentUserId: self.currentUserId))
                 }
             }
-            chatService.connectWebSocket()
+            chatService.connectWebSocket(conversationId: conversationId)
 
             #if DEBUG
             print("[ChatView] Loaded \(messages.count) messages for conversation \(conversationId)")

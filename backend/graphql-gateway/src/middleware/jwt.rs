@@ -75,7 +75,7 @@ where
         let path = req.path().to_string();
 
         // Skip auth for health check, metrics, and selected public endpoints
-        let public_paths = [
+        let public_prefixes = [
             "/health",
             "/health/circuit-breakers",
             "/metrics",
@@ -88,7 +88,7 @@ where
             "/api/v2/auth/invites/validate",
         ];
 
-        if public_paths.contains(&req.path()) {
+        if public_prefixes.iter().any(|p| path.starts_with(p)) {
             let fut = self.service.call(req);
             return Box::pin(async move {
                 let res = fut.await?;

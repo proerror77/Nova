@@ -448,8 +448,8 @@ final class ChatService {
     // MARK: - WebSocket - Real-time Messaging
 
     /// 连接WebSocket以接收实时消息
-    /// ⚠️ 注意：需要先登录获取JWT token
-    func connectWebSocket() {
+    /// ⚠️ 注意：需要先登录获取JWT token，并传入当前会话 ID
+    func connectWebSocket(conversationId: String) {
         guard let token = client.getAuthToken() else {
             #if DEBUG
             print("[ChatService] WebSocket connection failed: No auth token")
@@ -457,10 +457,20 @@ final class ChatService {
             return
         }
 
+        guard let currentUserId = AuthenticationManager.shared.currentUser?.id else {
+            #if DEBUG
+            print("[ChatService] WebSocket connection failed: No current user id")
+            #endif
+            return
+        }
+
         // 构建WebSocket URL
         let baseURL = APIConfig.current.baseURL.replacingOccurrences(of: "https://", with: "ws://")
                                                 .replacingOccurrences(of: "http://", with: "ws://")
-        guard let url = URL(string: "\(baseURL)\(APIConfig.Chat.websocket)") else {
+        let path = APIConfig.Chat.websocket
+        let query = "?conversation_id=\(conversationId)&user_id=\(currentUserId)"
+
+        guard let url = URL(string: "\(baseURL)\(path)\(query)") else {
             #if DEBUG
             print("[ChatService] WebSocket URL invalid")
             #endif
