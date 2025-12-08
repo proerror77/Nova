@@ -189,9 +189,26 @@ impl ContentService for ContentServiceImpl {
         // Step 3: Fetch cache misses from database
         let mut db_posts = Vec::new();
         if !cache_misses.is_empty() {
-            db_posts = sqlx::query_as::<_, DbPost>(
-                "SELECT id, user_id, content, caption, media_key, media_type, media_urls, status, created_at, updated_at, deleted_at, soft_delete::text AS soft_delete \
-                 FROM posts WHERE deleted_at IS NULL AND id = ANY($1::uuid[])",
+            // Decode media_urls explicitly from JSONB to Vec<String> to avoid type mismatches on
+            // clusters where sqlx inferred TEXT[].
+            let rows = sqlx::query(
+                r#"
+                SELECT id,
+                       user_id,
+                       content,
+                       caption,
+                       media_key,
+                       media_type,
+                       media_urls,
+                       status,
+                       created_at,
+                       updated_at,
+                       deleted_at,
+                       soft_delete::text AS soft_delete
+                FROM posts
+                WHERE deleted_at IS NULL
+                  AND id = ANY($1::uuid[])
+                "#,
             )
             .bind(&cache_misses)
             .fetch_all(&self.db_pool)
@@ -200,6 +217,30 @@ impl ContentService for ContentServiceImpl {
                 tracing::error!("get_posts_by_ids db error: {}", e);
                 Status::internal("failed to fetch posts")
             })?;
+
+            db_posts = rows
+                .into_iter()
+                .map(|row| {
+                    let media_urls_value: serde_json::Value = row.get("media_urls");
+                    let media_urls_vec: Vec<String> =
+                        serde_json::from_value(media_urls_value).unwrap_or_default();
+
+                    DbPost {
+                        id: row.get("id"),
+                        user_id: row.get("user_id"),
+                        content: row.get("content"),
+                        caption: row.get("caption"),
+                        media_key: row.get("media_key"),
+                        media_type: row.get("media_type"),
+                        media_urls: sqlx::types::Json(media_urls_vec),
+                        status: row.get("status"),
+                        created_at: row.get("created_at"),
+                        updated_at: row.get("updated_at"),
+                        deleted_at: row.get("deleted_at"),
+                        soft_delete: row.get("soft_delete"),
+                    }
+                })
+                .collect();
 
             // Step 4: Batch cache the DB results for future requests
             if !db_posts.is_empty() {

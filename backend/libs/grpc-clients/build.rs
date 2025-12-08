@@ -41,6 +41,17 @@ fn main() {
         )
         .unwrap_or_else(|e| panic!("Failed to compile content_service v2: {}", e));
 
+    // v2 media-service proto (package nova.media.v1)
+    tonic_build::configure()
+        .build_server(false)
+        .build_client(true)
+        .compile_well_known_types(false)
+        .compile_protos(
+            &["../../proto/services_v2/media_service.proto"],
+            &["../../proto/services_v2", third_party],
+        )
+        .unwrap_or_else(|e| panic!("Failed to compile media_service v2: {}", e));
+
     // Compile social-service proto (from local proto directory)
     // Note: compile_well_known_types is needed for google.protobuf.Timestamp
     tonic_build::configure()

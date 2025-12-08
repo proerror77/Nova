@@ -52,11 +52,11 @@ pub mod nova {
         }
         pub use v2::*;
     }
-    pub mod media_service {
-        pub mod v2 {
-            tonic::include_proto!("nova.media_service.v2");
+    pub mod media {
+        pub mod v1 {
+            tonic::include_proto!("nova.media.v1");
         }
-        pub use v2::*;
+        pub use v1::*;
     }
     pub mod notification_service {
         pub mod v2 {
@@ -108,7 +108,7 @@ pub use nova::feed_service::recommendation_service_client::RecommendationService
 pub use nova::graph_service::graph_service_client::GraphServiceClient;
 /// Client types for all services
 pub use nova::identity_service::auth_service_client::AuthServiceClient;
-pub use nova::media_service::media_service_client::MediaServiceClient;
+pub use nova::media::media_service_client::MediaServiceClient;
 pub use nova::notification_service::notification_service_client::NotificationServiceClient;
 pub use nova::ranking_service::ranking_service_client::RankingServiceClient;
 pub use nova::search_service::search_service_client::SearchServiceClient;

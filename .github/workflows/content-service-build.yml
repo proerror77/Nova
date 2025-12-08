@@ -1,0 +1,45 @@
+name: content-service-build
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Image tag to push (e.g. staging-20251208-1)"
+        required: true
+        type: string
+
+env:
+  IMAGE_REGISTRY: asia-northeast1-docker.pkg.dev
+  IMAGE_REPO: banded-pad-479802-k9/nova/content-service
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up gcloud auth
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker $IMAGE_REGISTRY
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          push: true
+          tags: ${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_REPO }}:${{ inputs.image_tag }}
+          provenance: false
+          sbom: false

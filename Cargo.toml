@@ -38,6 +38,9 @@ members = [
     "backend/libs/idempotent-consumer",
     "backend/libs/transactional-outbox"
 ]
+exclude = [
+    "ios/NativeCrypto/vodozemac-ffi"
+]
 resolver = "2"
 
 [workspace.package]

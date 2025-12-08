@@ -1,3 +1,4 @@
+use std::env;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -21,13 +22,19 @@ const DEFAULT_REFRESH_INTERVAL: Duration = Duration::from_secs(300);
 pub struct FeedCandidateRefreshJob {
     ch_client: Arc<ClickHouseClient>,
     interval: Duration,
+    run_once: bool,
 }
 
 impl FeedCandidateRefreshJob {
     pub fn new(ch_client: Arc<ClickHouseClient>) -> Self {
+        let run_once = env::var("FEED_REFRESH_RUN_ONCE")
+            .map(|v| matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "yes"))
+            .unwrap_or(false);
+
         Self {
             ch_client,
             interval: DEFAULT_REFRESH_INTERVAL,
+            run_once,
         }
     }
 
@@ -39,6 +46,21 @@ impl FeedCandidateRefreshJob {
 
     /// Run the refresh loop. Intended to be spawned on the Tokio runtime.
     pub async fn run(self) {
+        if self.run_once {
+            info!("Feed candidate refresh job running in one-shot mode");
+            let result = self.refresh_all().await;
+            match result {
+                Ok(_) => {
+                    info!("Feed candidate one-shot refresh completed");
+                    std::process::exit(0);
+                }
+                Err(err) => {
+                    error!("Feed candidate one-shot refresh failed: {}", err);
+                    std::process::exit(1);
+                }
+            }
+        }
+
         let mut ticker = interval_at(Instant::now() + Duration::from_secs(5), self.interval);
         info!(
             "Feed candidate refresh job started (interval: {:?})",
