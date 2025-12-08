@@ -7,7 +7,7 @@ spec:
     spec:
       containers:
       - name: content-service
-        image: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/content-service:5cfa7462c5121f499be5a64ad5d32a3d69af6669
+        image: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/content-service:c24eff97f64c63a9d832a1cc882c547e4fde65ee
 ---
 apiVersion: apps/v1
 kind: Deployment
