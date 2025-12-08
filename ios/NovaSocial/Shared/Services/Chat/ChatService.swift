@@ -458,9 +458,8 @@ final class ChatService {
         }
 
         // 构建WebSocket URL
-        let baseURL = APIConfig.current.baseURL.replacingOccurrences(of: "http://", with: "ws://")
-                                                .replacingOccurrences(of: "https://", with: "wss://")
-                                                .replacingOccurrences(of: "ws://34.104.179.123", with: "wss://34.104.179.123")
+        let baseURL = APIConfig.current.baseURL.replacingOccurrences(of: "https://", with: "ws://")
+                                                .replacingOccurrences(of: "http://", with: "ws://")
         guard let url = URL(string: "\(baseURL)\(APIConfig.Chat.websocket)") else {
             #if DEBUG
             print("[ChatService] WebSocket URL invalid")
