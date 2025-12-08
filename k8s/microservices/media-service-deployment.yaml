@@ -64,6 +64,10 @@ spec:
           value: /etc/nova/certs/ca.crt
         - name: GRPC_REQUIRE_CLIENT_CERT
           value: 'true'
+        - name: GCS_BUCKET
+          value: nova-uploads
+        - name: GCS_SERVICE_ACCOUNT_JSON_PATH
+          value: /var/secrets/gcs/service-account.json
         - name: DATABASE_URL
           valueFrom:
             secretKeyRef:
@@ -137,6 +141,9 @@ spec:
         - mountPath: /etc/nova/certs
           name: grpc-mtls-shared
           readOnly: true
+        - mountPath: /var/secrets/gcs
+          name: gcs-sa
+          readOnly: true
       securityContext:
         fsGroup: 1000
         runAsNonRoot: false
@@ -151,3 +158,6 @@ spec:
         secret:
           defaultMode: 420
           secretName: grpc-mtls-shared
+      - name: gcs-sa
+        secret:
+          secretName: media-service-sa

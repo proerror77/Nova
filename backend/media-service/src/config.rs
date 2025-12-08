@@ -11,6 +11,7 @@ pub struct Config {
     pub cache: CacheConfig,
     pub kafka: KafkaConfig,
     pub s3: S3Config,
+    pub gcs: Option<GcsConfig>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -60,6 +61,21 @@ pub struct S3Config {
     pub endpoint: Option<String>,
 }
 
+#[derive(Clone, Debug, Deserialize)]
+pub struct GcsConfig {
+    pub bucket: String,
+    /// Service account JSON content (preferred), or a filesystem path to JSON.
+    /// If both are absent, GCS signing is disabled.
+    pub service_account_json: Option<String>,
+    pub service_account_json_path: Option<String>,
+    #[serde(default = "default_gcs_url_host")]
+    pub host: String,
+}
+
+fn default_gcs_url_host() -> String {
+    "storage.googleapis.com".to_string()
+}
+
 impl Config {
     /// Load configuration from environment variables
     pub fn from_env() -> Result<Self, Box<dyn std::error::Error>> {
@@ -100,6 +116,27 @@ impl Config {
                 access_key_id: std::env::var("AWS_ACCESS_KEY_ID").ok(),
                 secret_access_key: std::env::var("AWS_SECRET_ACCESS_KEY").ok(),
                 endpoint: std::env::var("S3_ENDPOINT").ok(),
+            },
+            gcs: {
+                // Enable GCS signing only when a bucket AND some form of service account JSON is provided.
+                let bucket = std::env::var("GCS_BUCKET").ok();
+                let sa_json = std::env::var("GCS_SERVICE_ACCOUNT_JSON").ok();
+                let sa_json_path = std::env::var("GCS_SERVICE_ACCOUNT_JSON_PATH").ok();
+                if let Some(bucket) = bucket {
+                    if sa_json.is_some() || sa_json_path.is_some() {
+                        Some(GcsConfig {
+                            bucket,
+                            service_account_json: sa_json,
+                            service_account_json_path: sa_json_path,
+                            host: std::env::var("GCS_HOST")
+                                .unwrap_or_else(|_| default_gcs_url_host()),
+                        })
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
             },
         })
     }

@@ -11,6 +11,7 @@ use media_service::handlers;
 use media_service::kafka::events::MediaEventsProducer;
 use media_service::middleware;
 use media_service::openapi::ApiDoc;
+use media_service::services::video::gcs::GcsSigner;
 use media_service::services::video::s3::get_s3_client;
 use media_service::services::ReelTranscodePipeline;
 use media_service::Config;
@@ -153,6 +154,25 @@ async fn main() -> io::Result<()> {
     };
     let s3_config = Arc::new(config.s3.clone());
     let cdn_url = std::env::var("CDN_URL").unwrap_or_else(|_| "http://localhost".to_string());
+    let (gcs_signer, gcs_bucket) = if let Some(gcs_cfg) = &config.gcs {
+        match GcsSigner::from_config(gcs_cfg) {
+            Ok(signer) => {
+                tracing::info!(
+                    "GCS signing enabled (bucket={}, host={})",
+                    gcs_cfg.bucket,
+                    gcs_cfg.host
+                );
+                (Some(Arc::new(signer)), Some(gcs_cfg.bucket.clone()))
+            }
+            Err(err) => {
+                tracing::warn!("GCS signing disabled due to config error: {err}");
+                (None, None)
+            }
+        }
+    } else {
+        tracing::info!("GCS signing not configured; falling back to S3 presign");
+        (None, None)
+    };
 
     info!(
         "S3 client initialized (bucket={}, region={})",
@@ -275,6 +295,8 @@ async fn main() -> io::Result<()> {
             s3_client_grpc,
             s3_config_grpc,
             cdn_url_grpc,
+            gcs_signer.clone(),
+            gcs_bucket.clone(),
             grpc_shutdown,
         )
         .await

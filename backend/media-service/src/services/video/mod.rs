@@ -1,3 +1,4 @@
+pub mod gcs;
 /// Video service module
 ///
 /// Provides video-related services migrated from video-service:
