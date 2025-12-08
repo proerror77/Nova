@@ -42,9 +42,9 @@ spec:
         - name: GRPC_SOCIAL_SERVICE_URL
           value: "https://social-service.nova-staging.svc.cluster.local:50052"
 
-        # Chat service - staging currently plaintext gRPC on 9095 (TLS disabled server-side)
+        # Chat service - gRPC on 9095 with mTLS (via grpc-mtls-shared)
         - name: GRPC_CHAT_SERVICE_URL
-          value: "http://realtime-chat-service.nova-staging.svc.cluster.local:9095"
+          value: "https://realtime-chat-service.nova-staging.svc.cluster.local:9095"
 
         # ============================================================
         # Legacy environment variables (for backward compatibility)
