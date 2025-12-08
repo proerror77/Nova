@@ -65,7 +65,7 @@ spec:
         - name: GRPC_REQUIRE_CLIENT_CERT
           value: 'true'
         - name: GCS_BUCKET
-          value: nova-uploads
+          value: nova-media-staging
         - name: GCS_SERVICE_ACCOUNT_JSON_PATH
           value: /var/secrets/gcs/service-account.json
         - name: DATABASE_URL
