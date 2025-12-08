@@ -1,0 +1,86 @@
+# Nova Social - Signal Protocol E2EE Integration
+# Run: cd ios/NovaSocial && pod install
+#
+# To enable full Signal Protocol (requires Rust toolchain):
+# 1. Install Rust: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+# 2. Uncomment the LibSignalClient pod below
+# 3. Run: pod install
+
+platform :ios, '15.0'
+use_frameworks!
+inhibit_all_warnings!
+
+target 'ICERED' do
+  # Signal Protocol - End-to-End Encryption
+  # Official libsignal-client from Signal Foundation
+  pod 'LibSignalClient', git: 'https://github.com/signalapp/libsignal.git', tag: 'v0.86.7'
+end
+
+post_install do |installer|
+  installer.pods_project.targets.each do |target|
+    target.build_configurations.each do |config|
+      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
+
+      # LibSignalClient requires special handling
+      if target.name == 'LibSignalClient'
+        config.build_settings['SWIFT_VERSION'] = '5.0'
+        config.build_settings['SWIFT_STRICT_CONCURRENCY'] = 'minimal'
+        # Disable BUILD_LIBRARY_FOR_DISTRIBUTION for LibSignalClient (causes linker issues)
+        config.build_settings['BUILD_LIBRARY_FOR_DISTRIBUTION'] = 'NO'
+        # Add prebuild checksum for libsignal-ffi
+        config.build_settings['LIBSIGNAL_FFI_PREBUILD_CHECKSUM'] = '32dc4930afedbdd51f54f327d38e77b8ddd698a2109f74ae0250a10a2756184b'
+      else
+        config.build_settings['BUILD_LIBRARY_FOR_DISTRIBUTION'] = 'YES'
+      end
+    end
+  end
+
+  # Patch xcconfig files directly for LibSignalClient
+  Dir.glob("#{installer.sandbox.root}/Target Support Files/LibSignalClient/*.xcconfig").each do |xcconfig_path|
+    xcconfig = File.read(xcconfig_path)
+    # Add prebuild checksum
+    xcconfig.gsub!(/LIBSIGNAL_FFI_PREBUILD_CHECKSUM\s*=\s*\n/, "LIBSIGNAL_FFI_PREBUILD_CHECKSUM = 32dc4930afedbdd51f54f327d38e77b8ddd698a2109f74ae0250a10a2756184b\n")
+    # Force Swift 5 language version
+    unless xcconfig.include?('SWIFT_VERSION')
+      xcconfig += "\nSWIFT_VERSION = 5.0\n"
+    end
+    # Add library search paths for all architectures of libsignal_ffi.a
+    # The conditional CARGO_BUILD_TARGET doesn't always resolve correctly, so add all paths
+    xcconfig.gsub!(
+      /(LIBRARY_SEARCH_PATHS\s*=\s*\$\(inherited\))/,
+      "\\1 \"$(LIBSIGNAL_FFI_TEMP_DIR)/target/aarch64-apple-ios-sim/release\" \"$(LIBSIGNAL_FFI_TEMP_DIR)/target/aarch64-apple-ios/release\" \"$(LIBSIGNAL_FFI_TEMP_DIR)/target/x86_64-apple-ios/release\""
+    )
+    File.write(xcconfig_path, xcconfig)
+  end
+
+  # Patch main app xcconfig to include SignalFfi module path
+  # This is required because the main app needs to find the SignalFfi module when importing LibSignalClient
+  Dir.glob("#{installer.sandbox.root}/Target Support Files/Pods-ICERED/*.xcconfig").each do |xcconfig_path|
+    xcconfig = File.read(xcconfig_path)
+    # Add SWIFT_INCLUDE_PATHS with SignalFfi module location
+    signalffi_path = "$(PODS_ROOT)/LibSignalClient/swift/Sources/SignalFfi"
+    unless xcconfig.include?('SWIFT_INCLUDE_PATHS')
+      xcconfig += "\nSWIFT_INCLUDE_PATHS = $(inherited) \"#{signalffi_path}\"\n"
+    end
+    File.write(xcconfig_path, xcconfig)
+  end
+
+  # Fix Swift 6 compatibility issue in LibSignalClient Aes256Gcm.swift
+  # Remove @inlinable from first init to avoid "let property may not be initialized directly" error
+  aes_gcm_path = "#{installer.sandbox.root}/LibSignalClient/swift/Sources/LibSignalClient/Aes256Gcm.swift"
+  if File.exist?(aes_gcm_path)
+    # Make file writable first
+    File.chmod(0644, aes_gcm_path)
+    content = File.read(aes_gcm_path)
+    # Remove @inlinable from the first memberwise init
+    content.gsub!(/(@inlinable\n\s+public init\(nonce: Data, ciphertext: Data, authenticationTag: Data\))/) do
+      $1.sub('@inlinable', '').strip.sub(/^\n\s*/, '')
+    end
+    # Fix the concatenated init to use self.init delegation
+    content.gsub!(
+      /self\.nonce = concatenated\.prefix\(Self\.nonceLength\)\n\s+self\.ciphertext = concatenated\.dropFirst\(Self\.nonceLength\)\.dropLast\(Self\.authenticationTagLength\)\n\s+self\.authenticationTag = concatenated\.suffix\(Self\.authenticationTagLength\)/,
+      "self.init(\n            nonce: concatenated.prefix(Self.nonceLength),\n            ciphertext: concatenated.dropFirst(Self.nonceLength).dropLast(Self.authenticationTagLength),\n            authenticationTag: concatenated.suffix(Self.authenticationTagLength)\n        )"
+    )
+    File.write(aes_gcm_path, content)
+  end
+end

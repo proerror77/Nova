@@ -11,6 +11,7 @@ pub mod message_service;
 pub mod offline_queue;
 pub mod olm_service;
 pub mod relationship_service;
+pub mod signal_service;
 
 // Re-export key types for convenience
 pub use e2ee_message_service::{
@@ -21,4 +22,7 @@ pub use megolm_service::{MegolmCiphertext, MegolmError, MegolmService, RoomKey};
 pub use olm_service::{AccountEncryptionKey, DeviceKeys, OlmError, OlmService};
 pub use relationship_service::{
     CanMessageResult, RelationshipService, RelationshipServiceV2, RelationshipStatus,
+};
+pub use signal_service::{
+    KyberPreKey, PreKey, PreKeyBundle, SignalDevice, SignalError, SignalService, SignedPreKey,
 };

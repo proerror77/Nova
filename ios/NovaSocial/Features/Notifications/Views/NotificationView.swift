@@ -5,12 +5,18 @@ struct NotificationView: View {
     @State private var showChat = false
     @State private var selectedUserName = ""
     @State private var selectedConversationId = ""
+    @State private var selectedRecipientUserId = ""
 
     var body: some View {
         ZStack {
             // 条件渲染：根据状态切换视图
             if showChat {
-                ChatView(showChat: $showChat, conversationId: selectedConversationId, userName: selectedUserName)
+                ChatView(
+                    showChat: $showChat,
+                    conversationId: selectedConversationId,
+                    recipientUserId: selectedRecipientUserId,
+                    userName: selectedUserName
+                )
                     .transition(.identity)
             } else {
                 notificationContent

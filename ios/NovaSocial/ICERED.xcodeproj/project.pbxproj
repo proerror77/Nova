@@ -10,6 +10,7 @@
 		03790B19E7A59D67154C1C74 /* UserProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB6BA9F5A2B38332ACB7A915 /* UserProfileView.swift */; };
 		0DE576B3DF62C46814220CF8 /* RankingListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02124441331C326D27EC0A72 /* RankingListView.swift */; };
 		0F11FE719B8F4B76047CA6BA /* ThankYouModal.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13853E573F5F9E4DAA1DFBA3 /* ThankYouModal.swift */; };
+		1FD56F2FBC7D2AE6493418B6 /* Pods_ICERED.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7CF1170AC48529B3FE80388A /* Pods_ICERED.framework */; };
 		23B21EC6989A36B1659044A4 /* MyChannelsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 95101A7961A664CCE5DAD132 /* MyChannelsView.swift */; };
 		280EDC6FD4C376DD75D63CD7 /* AuthenticationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2CA4EAE7640A871A5FE1F792 /* AuthenticationManager.swift */; };
 		28DB49853F12862488ED815C /* SearchModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09440F16B1285584BC291E21 /* SearchModels.swift */; };
@@ -72,6 +73,8 @@
 		DA25034A61BE32AED01A9B16 /* ICONS_MAPPING.md in Resources */ = {isa = PBXBuildFile; fileRef = C932A10966CC60CB5210880E /* ICONS_MAPPING.md */; };
 		DA5146CD4EA5529311C25F18 /* NavigationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 960B958C1191BEE26AB350C8 /* NavigationManager.swift */; };
 		DEBF0012173C44A979FDB9F8 /* CommentCardItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = D49E279D9239481D8A58211F /* CommentCardItem.swift */; };
+		DEVICEMODELS_BLD01 /* DeviceModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEVICEMODELS_REF01 /* DeviceModels.swift */; };
+		DEVICESERVICE_BLD1 /* DeviceService.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEVICESERVICE_REF1 /* DeviceService.swift */; };
 		E2EEMODELS001 /* E2EEModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2EEMODELS002 /* E2EEModels.swift */; };
 		E2EESERVICE001 /* E2EEService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2EESERVICE002 /* E2EEService.swift */; };
 		E5A9BFF109109BA9B0D167FF /* UserModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = CAC8DD04D57185AC8872002E /* UserModels.swift */; };
@@ -82,10 +85,14 @@
 		F1EC16AC74BAE163D51D5ADF /* QRCodeScannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11B58E321CDB3D79E807514 /* QRCodeScannerView.swift */; };
 		F8F07FF6FE20AC20ECCB5BF2 /* APIError.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3880EF1CA343B17A09E2209E /* APIError.swift */; };
 		FFBE6F87D8D9D1645B5A0913 /* APIConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = E41CFF50904A2F54FD5621BF /* APIConfig.swift */; };
+		FRIENDSSERVICE_BLD1 /* FriendsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = FRIENDSSERVICE_REF1 /* FriendsService.swift */; };
 		KEYBOARDEXT001 /* KeyboardExtension.swift in Sources */ = {isa = PBXBuildFile; fileRef = KEYBOARDEXT002 /* KeyboardExtension.swift */; };
 		OAUTHSERVICE001 /* OAuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = OAUTHSERVICE002 /* OAuthService.swift */; };
 		SHARESHEET001 /* ShareSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = SHARESHEET002 /* ShareSheet.swift */; };
+		SIGNALE2EE001 /* SignalE2EEService.swift in Sources */ = {isa = PBXBuildFile; fileRef = SIGNALE2EE002 /* SignalE2EEService.swift */; };
+		SIGNALSTORE001 /* SignalProtocolStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = SIGNALSTORE002 /* SignalProtocolStore.swift */; };
 		SPLASHVIEW001 /* SplashScreenView.swift in Sources */ = {isa = PBXBuildFile; fileRef = SPLASHVIEW002 /* SplashScreenView.swift */; };
+		STARTGROUPCHAT_BLD /* StartGroupChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = STARTGROUPCHAT_REF /* StartGroupChatView.swift */; };
 		UITEST001 /* ICEREDUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = UITEST002 /* ICEREDUITests.swift */; };
 		UNITTEST001 /* MockURLProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = UNITTEST002 /* MockURLProtocol.swift */; };
 		UNITTEST003 /* TestFixtures.swift in Sources */ = {isa = PBXBuildFile; fileRef = UNITTEST004 /* TestFixtures.swift */; };
@@ -95,10 +102,6 @@
 		UNITTEST011 /* IdentityServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = UNITTEST012 /* IdentityServiceTests.swift */; };
 		WELCOMEVIEW001 /* WelcomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = WELCOMEVIEW002 /* WelcomeView.swift */; };
 		WRITEVIEW_BUILD001 /* WriteView.swift in Sources */ = {isa = PBXBuildFile; fileRef = WRITEVIEW_FILEREF01 /* WriteView.swift */; };
-		DEVICEMODELS_BLD01 /* DeviceModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEVICEMODELS_REF01 /* DeviceModels.swift */; };
-		DEVICESERVICE_BLD1 /* DeviceService.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEVICESERVICE_REF1 /* DeviceService.swift */; };
-		FRIENDSSERVICE_BLD1 /* FriendsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = FRIENDSSERVICE_REF1 /* FriendsService.swift */; };
-		STARTGROUPCHAT_BLD /* StartGroupChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = STARTGROUPCHAT_REF /* StartGroupChatView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -133,6 +136,7 @@
 		28B434DE97D0F186DE9CEE60 /* PhotoOptionsModal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoOptionsModal.swift; sourceTree = "<group>"; };
 		29337E35C69E1124B0E50774 /* UserService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserService.swift; sourceTree = "<group>"; };
 		2CA4EAE7640A871A5FE1F792 /* AuthenticationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthenticationManager.swift; sourceTree = "<group>"; };
+		31261B163058CE7BAC324425 /* Pods-ICERED.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-ICERED.release.xcconfig"; path = "Target Support Files/Pods-ICERED/Pods-ICERED.release.xcconfig"; sourceTree = "<group>"; };
 		3458B914CACC60BDB462C58D /* ProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileView.swift; sourceTree = "<group>"; };
 		3880EF1CA343B17A09E2209E /* APIError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIError.swift; sourceTree = "<group>"; };
 		3B53881EFE11477A9FE157D2 /* MediaService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaService.swift; sourceTree = "<group>"; };
@@ -141,6 +145,7 @@
 		45DA960EAF1BBBBC18F81EC3 /* MessageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageView.swift; sourceTree = "<group>"; };
 		4665602C144B266807588223 /* CommunicationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommunicationService.swift; sourceTree = "<group>"; };
 		4B3F75C30A5F4A7AA5C0FE2C /* GenderPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenderPickerView.swift; sourceTree = "<group>"; };
+		4C782F8ED89D4CE7A297E2B6 /* Pods-ICERED.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-ICERED.debug.xcconfig"; path = "Target Support Files/Pods-ICERED/Pods-ICERED.debug.xcconfig"; sourceTree = "<group>"; };
 		539767459F07A98D4EFC00A8 /* DevicesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DevicesView.swift; sourceTree = "<group>"; };
 		55318219C3A650A6D7EC96E0 /* NewPostView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewPostView.swift; sourceTree = "<group>"; };
 		5E15BEB981BECF002DACF86E /* NotificationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationView.swift; sourceTree = "<group>"; };
@@ -155,6 +160,7 @@
 		75C0B0A17D8876583E4CC85C /* AddFriendsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddFriendsView.swift; sourceTree = "<group>"; };
 		79AE620603A1ABD742C2254B /* ReportModal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReportModal.swift; sourceTree = "<group>"; };
 		7A6B5C4D3E2F4A1B9C8D7E6F /* DateOfBirthPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DateOfBirthPickerView.swift; sourceTree = "<group>"; };
+		7CF1170AC48529B3FE80388A /* Pods_ICERED.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_ICERED.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		817F6537589781480741FFB5 /* AppPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppPage.swift; sourceTree = "<group>"; };
 		8D7A2BC6C4F1482F9E7D9B4A /* LocationPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationPickerView.swift; sourceTree = "<group>"; };
 		935F737074559D05F95D4EF0 /* CommentSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommentSheetView.swift; sourceTree = "<group>"; };
@@ -187,6 +193,8 @@
 		DB6BA9F5A2B38332ACB7A915 /* UserProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserProfileView.swift; sourceTree = "<group>"; };
 		DB74F32C6BC54E9B7DE38BDD /* CarouselView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarouselView.swift; sourceTree = "<group>"; };
 		DDA5192B35945D0638208E85 /* DesignTokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignTokens.swift; sourceTree = "<group>"; };
+		DEVICEMODELS_REF01 /* DeviceModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceModels.swift; sourceTree = "<group>"; };
+		DEVICESERVICE_REF1 /* DeviceService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceService.swift; sourceTree = "<group>"; };
 		E2EEMODELS002 /* E2EEModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = E2EEModels.swift; sourceTree = "<group>"; };
 		E2EESERVICE002 /* E2EEService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = E2EEService.swift; sourceTree = "<group>"; };
 		E41CFF50904A2F54FD5621BF /* APIConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIConfig.swift; sourceTree = "<group>"; };
@@ -196,10 +204,14 @@
 		EBD7242399015D38E8A1EC8C /* BottomTabBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BottomTabBar.swift; sourceTree = "<group>"; };
 		F0CB7B8BA9D546D88AC8F75C /* SettingsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsViewModel.swift; sourceTree = "<group>"; };
 		F11B58E321CDB3D79E807514 /* QRCodeScannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QRCodeScannerView.swift; sourceTree = "<group>"; };
+		FRIENDSSERVICE_REF1 /* FriendsService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FriendsService.swift; sourceTree = "<group>"; };
 		KEYBOARDEXT002 /* KeyboardExtension.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardExtension.swift; sourceTree = "<group>"; };
 		OAUTHSERVICE002 /* OAuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OAuthService.swift; sourceTree = "<group>"; };
 		SHARESHEET002 /* ShareSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareSheet.swift; sourceTree = "<group>"; };
+		SIGNALE2EE002 /* SignalE2EEService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignalE2EEService.swift; sourceTree = "<group>"; };
+		SIGNALSTORE002 /* SignalProtocolStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignalProtocolStore.swift; sourceTree = "<group>"; };
 		SPLASHVIEW002 /* SplashScreenView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SplashScreenView.swift; sourceTree = "<group>"; };
+		STARTGROUPCHAT_REF /* StartGroupChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StartGroupChatView.swift; sourceTree = "<group>"; };
 		UITEST002 /* ICEREDUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ICEREDUITests.swift; sourceTree = "<group>"; };
 		UITEST003 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		UITEST004 /* ICEREDUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ICEREDUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -212,13 +224,20 @@
 		UNITTEST013 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		UNITTEST014 /* ICEREDTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ICEREDTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		WELCOMEVIEW002 /* WelcomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeView.swift; sourceTree = "<group>"; };
-		c305a0ac26e55adeed024b77 /* GroupChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupChatView.swift; sourceTree = "<group>"; };
 		WRITEVIEW_FILEREF01 /* WriteView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WriteView.swift; sourceTree = "<group>"; };
-		DEVICEMODELS_REF01 /* DeviceModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceModels.swift; sourceTree = "<group>"; };
-		DEVICESERVICE_REF1 /* DeviceService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceService.swift; sourceTree = "<group>"; };
-		FRIENDSSERVICE_REF1 /* FriendsService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FriendsService.swift; sourceTree = "<group>"; };
-		STARTGROUPCHAT_REF /* StartGroupChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StartGroupChatView.swift; sourceTree = "<group>"; };
+		c305a0ac26e55adeed024b77 /* GroupChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupChatView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		A565297CC95E76173FD65B45 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				1FD56F2FBC7D2AE6493418B6 /* Pods_ICERED.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
 		006151F28494FC036FCC99EF /* Views */ = {
@@ -361,6 +380,14 @@
 				64D93ADAC760BE1CCB6AFEA8 /* FeedService.swift */,
 			);
 			path = Feed;
+			sourceTree = "<group>";
+		};
+		50E77DFA4F754FBA4E393CA9 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				7CF1170AC48529B3FE80388A /* Pods_ICERED.framework */,
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 		537B1E34BAACB00A8A3B4412 /* Views */ = {
@@ -624,6 +651,8 @@
 				UITESTGROUP001 /* ICEREDUITests */,
 				UNITTESTGROUP001 /* Tests */,
 				7C3FDB1C3B7BCF5AF8E3D483 /* Products */,
+				BC9ED2E3B9CD08410C901DAF /* Pods */,
+				50E77DFA4F754FBA4E393CA9 /* Frameworks */,
 			);
 			sourceTree = "<group>";
 		};
@@ -694,6 +723,16 @@
 				B6D6C3BD57F1411D9AA2C753 /* ProfileSettingViewModel.swift */,
 			);
 			path = ViewModels;
+			sourceTree = "<group>";
+		};
+		BC9ED2E3B9CD08410C901DAF /* Pods */ = {
+			isa = PBXGroup;
+			children = (
+				4C782F8ED89D4CE7A297E2B6 /* Pods-ICERED.debug.xcconfig */,
+				31261B163058CE7BAC324425 /* Pods-ICERED.release.xcconfig */,
+			);
+			name = Pods;
+			path = Pods;
 			sourceTree = "<group>";
 		};
 		C16D0147580A76D956974C8C /* Notification */ = {
@@ -778,6 +817,8 @@
 			children = (
 				3E3708D4D59DBF11CF77C3DF /* KeychainService.swift */,
 				E2EESERVICE002 /* E2EEService.swift */,
+				SIGNALE2EE002 /* SignalE2EEService.swift */,
+				SIGNALSTORE002 /* SignalProtocolStore.swift */,
 				CRYPTOCORE002 /* CryptoCore.swift */,
 			);
 			path = Security;
@@ -806,6 +847,14 @@
 				5E15BEB981BECF002DACF86E /* NotificationView.swift */,
 			);
 			path = Views;
+			sourceTree = "<group>";
+		};
+		FRIENDSSERVICEGROUP /* Friends */ = {
+			isa = PBXGroup;
+			children = (
+				FRIENDSSERVICE_REF1 /* FriendsService.swift */,
+			);
+			path = Friends;
 			sourceTree = "<group>";
 		};
 		SPLASHGROUP001 /* Splash */ = {
@@ -879,14 +928,6 @@
 			path = Services;
 			sourceTree = "<group>";
 		};
-		FRIENDSSERVICEGROUP /* Friends */ = {
-			isa = PBXGroup;
-			children = (
-				FRIENDSSERVICE_REF1 /* FriendsService.swift */,
-			);
-			path = Friends;
-			sourceTree = "<group>";
-		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -894,16 +935,17 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = F5808A3E8D4D395DBE49C1D7 /* Build configuration list for PBXNativeTarget "ICERED" */;
 			buildPhases = (
+				AFD143CB5B6DC4A24BDF7C7D /* [CP] Check Pods Manifest.lock */,
 				2EB212114C3B8FD6E081C091 /* Sources */,
 				8A56806E3EC1BE8ADF9A9794 /* Resources */,
+				A565297CC95E76173FD65B45 /* Frameworks */,
+				10EDAF3481FB6EF8D56970AB /* [CP] Embed Pods Frameworks */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 			);
 			name = ICERED;
-			packageProductDependencies = (
-			);
 			productName = ICERED;
 			productReference = 1D3041E7FCC0ACD7F53D08BA /* ICERED.app */;
 			productType = "com.apple.product-type.application";
@@ -961,6 +1003,7 @@
 			);
 			mainGroup = A4D9DE00AA821932BE8D62A2;
 			minimizedProjectReferenceProxies = 1;
+			productRefGroup = 7C3FDB1C3B7BCF5AF8E3D483 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -999,6 +1042,48 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		10EDAF3481FB6EF8D56970AB /* [CP] Embed Pods Frameworks */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+				"${PODS_ROOT}/Target Support Files/Pods-ICERED/Pods-ICERED-frameworks-${CONFIGURATION}-input-files.xcfilelist",
+			);
+			name = "[CP] Embed Pods Frameworks";
+			outputFileListPaths = (
+				"${PODS_ROOT}/Target Support Files/Pods-ICERED/Pods-ICERED-frameworks-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-ICERED/Pods-ICERED-frameworks.sh\"\n";
+			showEnvVarsInLog = 0;
+		};
+		AFD143CB5B6DC4A24BDF7C7D /* [CP] Check Pods Manifest.lock */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"${PODS_PODFILE_DIR_PATH}/Podfile.lock",
+				"${PODS_ROOT}/Manifest.lock",
+			);
+			name = "[CP] Check Pods Manifest.lock";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(DERIVED_FILE_DIR)/Pods-ICERED-checkManifestLockResult.txt",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "diff \"${PODS_PODFILE_DIR_PATH}/Podfile.lock\" \"${PODS_ROOT}/Manifest.lock\" > /dev/null\nif [ $? != 0 ] ; then\n    # print error to STDERR\n    echo \"error: The sandbox is not in sync with the Podfile.lock. Run 'pod install' or update your CocoaPods installation.\" >&2\n    exit 1\nfi\n# This output is used by Xcode 'outputs' to avoid re-running this script phase.\necho \"SUCCESS\" > \"${SCRIPT_OUTPUT_FILE_0}\"\n";
+			showEnvVarsInLog = 0;
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		2EB212114C3B8FD6E081C091 /* Sources */ = {
@@ -1083,6 +1168,8 @@
 				KEYBOARDEXT001 /* KeyboardExtension.swift in Sources */,
 				SHARESHEET001 /* ShareSheet.swift in Sources */,
 				E2EESERVICE001 /* E2EEService.swift in Sources */,
+				SIGNALE2EE001 /* SignalE2EEService.swift in Sources */,
+				SIGNALSTORE001 /* SignalProtocolStore.swift in Sources */,
 				E2EEMODELS001 /* E2EEModels.swift in Sources */,
 				CRYPTOCORE001 /* CryptoCore.swift in Sources */,
 			);
@@ -1127,6 +1214,7 @@
 /* Begin XCBuildConfiguration section */
 		447C4692A7535B7D745B4C8A /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 31261B163058CE7BAC324425 /* Pods-ICERED.release.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "Apple Development";
@@ -1155,6 +1243,7 @@
 		};
 		745621F622BA4F1283F1268F /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 4C782F8ED89D4CE7A297E2B6 /* Pods-ICERED.debug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "Apple Development";

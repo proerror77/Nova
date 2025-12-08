@@ -8,6 +8,7 @@ struct ConversationPreview: Identifiable {
     let time: String
     let unreadCount: Int
     let hasUnread: Bool
+    let participantIds: [String]  // 用于Signal加密
 }
 
 struct MessageView: View {
@@ -19,6 +20,7 @@ struct MessageView: View {
     @State private var showQRScanner = false
     @State private var selectedUserName = "User"
     @State private var selectedConversationId = ""
+    @State private var selectedRecipientUserId = ""
     @State private var showImagePicker = false
     @State private var showCamera = false
     @State private var selectedImage: UIImage?
@@ -61,7 +63,8 @@ struct MessageView: View {
                     lastMessage: lastMsg,
                     time: timeStr,
                     unreadCount: conv.unreadCount,
-                    hasUnread: conv.unreadCount > 0
+                    hasUnread: conv.unreadCount > 0,
+                    participantIds: conv.participants
                 )
             }
 
@@ -110,6 +113,7 @@ struct MessageView: View {
                 ChatView(
                     showChat: $showChat,
                     conversationId: selectedConversationId,
+                    recipientUserId: selectedRecipientUserId,
                     userName: selectedUserName
                 )
                 .transition(.identity)
@@ -311,6 +315,9 @@ struct MessageView: View {
                                     } else {
                                         selectedConversationId = convo.id
                                         selectedUserName = convo.userName
+                                        // 获取对方用户ID（排除当前用户）
+                                        let currentUserId = AuthenticationManager.shared.currentUser?.id ?? ""
+                                        selectedRecipientUserId = convo.participantIds.first { $0 != currentUserId } ?? ""
                                         showChat = true
                                     }
                                 }

@@ -339,6 +339,19 @@ class AuthenticationManager: ObservableObject {
         if let refreshToken = refreshToken {
             _ = keychain.save(refreshToken, for: .refreshToken)
         }
+
+        // Initialize Signal Protocol for E2EE messaging
+        do {
+            try await ChatService().initializeSignalProtocol(userId: user.id)
+            #if DEBUG
+            print("[Auth] Signal Protocol initialized for user: \(user.id)")
+            #endif
+        } catch {
+            // Log error but don't fail auth - Signal can be initialized later
+            #if DEBUG
+            print("[Auth] Failed to initialize Signal Protocol: \(error)")
+            #endif
+        }
     }
 }
 

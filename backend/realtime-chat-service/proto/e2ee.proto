@@ -1,0 +1,168 @@
+syntax = "proto3";
+
+package nova.realtime_chat.e2ee.v1;
+
+// E2EE Service - Device key management and Double Ratchet support
+service E2EEService {
+  // Register a new device and upload identity key
+  rpc RegisterDevice(RegisterDeviceRequest) returns (RegisterDeviceResponse);
+
+  // Upload pre-keys for this device
+  rpc UploadPreKeys(UploadPreKeysRequest) returns (UploadPreKeysResponse);
+
+  // Get pre-key bundle for establishing Olm session
+  rpc GetPreKeyBundle(GetPreKeyBundleRequest) returns (PreKeyBundle);
+
+  // Claim a one-time key (consumed after use)
+  rpc ClaimOneTimeKey(ClaimOneTimeKeyRequest) returns (OneTimeKeyResponse);
+
+  // List active devices for a user
+  rpc ListDevices(ListDevicesRequest) returns (ListDevicesResponse);
+
+  // Remove a device (revoke keys)
+  rpc RemoveDevice(RemoveDeviceRequest) returns (RemoveDeviceResponse);
+}
+
+// ============================================================================
+// Request/Response Messages
+// ============================================================================
+
+message RegisterDeviceRequest {
+  string user_id = 1;
+  string device_id = 2;           // Client-generated UUID
+  bytes identity_key = 3;          // Ed25519 public key (32 bytes)
+  string device_name = 4;          // Optional: "iPhone 15 Pro"
+  string platform = 5;             // "ios", "android", "web"
+}
+
+message RegisterDeviceResponse {
+  string device_id = 1;
+  int64 registered_at = 2;
+}
+
+message UploadPreKeysRequest {
+  string device_id = 1;
+  bytes signed_prekey = 2;               // Curve25519 public key
+  bytes signed_prekey_signature = 3;     // Signature by identity_key
+  repeated bytes one_time_keys = 4;      // Array of Curve25519 public keys (suggest 100)
+}
+
+message UploadPreKeysResponse {
+  int32 uploaded_count = 1;              // Number of one-time keys uploaded
+  int32 remaining_count = 2;             // Total available one-time keys
+}
+
+message GetPreKeyBundleRequest {
+  string user_id = 1;
+  string device_id = 2;                  // Target device ID
+}
+
+// Pre-key bundle for establishing outbound Olm session
+message PreKeyBundle {
+  string user_id = 1;
+  string device_id = 2;
+  bytes identity_key = 3;                // Ed25519 public key
+  bytes signed_prekey = 4;               // Curve25519 public key
+  bytes signed_prekey_signature = 5;     // Signature over signed_prekey
+  bytes one_time_key = 6;                // Curve25519 public key (optional)
+}
+
+message ClaimOneTimeKeyRequest {
+  string user_id = 1;
+  string device_id = 2;
+}
+
+message OneTimeKeyResponse {
+  bytes one_time_key = 1;
+  int32 remaining_count = 2;             // Remaining keys for this device
+}
+
+message ListDevicesRequest {
+  string user_id = 1;
+}
+
+message ListDevicesResponse {
+  repeated DeviceInfo devices = 1;
+}
+
+message RemoveDeviceRequest {
+  string user_id = 1;
+  string device_id = 2;
+}
+
+message RemoveDeviceResponse {
+  bool success = 1;
+}
+
+// ============================================================================
+// Data Models
+// ============================================================================
+
+message DeviceInfo {
+  string device_id = 1;
+  bytes identity_key = 2;
+  string device_name = 3;
+  string platform = 4;
+  int64 registered_at = 5;
+  int64 last_active_at = 6;
+  bool is_verified = 7;                  // User has verified this device
+}
+
+// Encrypted message payload (embedded in SendMessageRequest)
+message EncryptedPayload {
+  int32 version = 1;                     // Encryption version: 0=none, 1=AES, 2=Olm
+  string session_id = 2;                 // Olm session identifier
+  string sender_device_id = 3;           // Sender's device ID
+
+  oneof payload {
+    OlmMessage olm = 10;
+    LegacyAESMessage aes = 11;
+  }
+}
+
+message OlmMessage {
+  int32 message_type = 1;                // 0=PreKeyMessage, 1=Message
+  bytes ciphertext = 2;                  // Encrypted by Olm session
+}
+
+message LegacyAESMessage {
+  bytes ciphertext = 1;
+  bytes nonce = 2;
+}
+
+// ============================================================================
+// Internal Storage Models (for backend implementation reference)
+// ============================================================================
+
+// ClickHouse table: e2ee_devices
+// CREATE TABLE e2ee_devices (
+//     user_id String,
+//     device_id String,
+//     identity_key String,                -- Base64-encoded Ed25519 public key
+//     device_name String,
+//     platform String,
+//     registered_at DateTime DEFAULT now(),
+//     last_active_at DateTime DEFAULT now(),
+//     is_verified UInt8 DEFAULT 0,
+//     INDEX idx_user_id (user_id) TYPE bloom_filter GRANULARITY 1
+// ) ENGINE = ReplacingMergeTree(last_active_at)
+// ORDER BY (user_id, device_id);
+
+// ClickHouse table: e2ee_prekeys
+// CREATE TABLE e2ee_prekeys (
+//     device_id String,
+//     signed_prekey String,               -- Base64-encoded Curve25519 public key
+//     signed_prekey_signature String,     -- Base64-encoded signature
+//     one_time_keys Array(String),        -- Base64-encoded Curve25519 public keys
+//     uploaded_at DateTime DEFAULT now()
+// ) ENGINE = ReplacingMergeTree(uploaded_at)
+// ORDER BY device_id;
+
+// ClickHouse table: e2ee_claimed_keys (prevent reuse)
+// CREATE TABLE e2ee_claimed_keys (
+//     device_id String,
+//     one_time_key String,                -- Base64-encoded key
+//     claimed_by String,                  -- Requester's device_id
+//     claimed_at DateTime DEFAULT now()
+// ) ENGINE = MergeTree()
+// ORDER BY (device_id, one_time_key);

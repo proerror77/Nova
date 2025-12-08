@@ -259,6 +259,7 @@ struct ChatView: View {
     /// 必需参数
     @Binding var showChat: Bool
     let conversationId: String  // ← 从上级View传入，标识当前聊天对象
+    let recipientUserId: String  // ← 接收者用户ID，用于Signal加密
     var userName: String = "User"
 
     // MARK: - State
@@ -647,7 +648,7 @@ struct ChatView: View {
                     self.messages.append(ChatMessage(from: newMessage, currentUserId: self.currentUserId))
                 }
             }
-            chatService.connectWebSocket(conversationId: conversationId)
+            chatService.connectWebSocket(conversationId: conversationId, userId: currentUserId)
 
             #if DEBUG
             print("[ChatView] Loaded \(messages.count) messages for conversation \(conversationId)")
@@ -675,12 +676,14 @@ struct ChatView: View {
         messageText = ""
         showAttachmentOptions = false
 
-        // 异步发送到服务器
+        // 异步发送到服务器（使用Signal加密）
         Task {
             isSending = true
             do {
-                let sentMessage = try await chatService.sendMessage(
+                // 使用 Signal Protocol 加密发送消息
+                let sentMessage = try await chatService.sendSignalEncryptedMessage(
                     conversationId: conversationId,
+                    recipientUserId: recipientUserId,
                     content: trimmedText,
                     type: .text
                 )
@@ -691,17 +694,42 @@ struct ChatView: View {
                 }
 
                 #if DEBUG
-                print("[ChatView] Message sent successfully: \(sentMessage.id)")
+                print("[ChatView] Signal encrypted message sent: \(sentMessage.id)")
                 #endif
 
+            } catch SignalError.notInitialized {
+                // Signal未初始化，回退到普通消息
+                #if DEBUG
+                print("[ChatView] Signal not initialized, falling back to plaintext")
+                #endif
+                await sendPlaintextMessage(trimmedText, localMessage: localMessage)
+
             } catch {
-                // 发送失败 - 标记消息为失败状态（TODO: 添加重试UI）
+                // 发送失败 - 标记消息为失败状态
                 #if DEBUG
                 print("[ChatView] Failed to send message: \(error)")
                 #endif
-                // 可以在这里移除失败的消息或添加重试按钮
             }
             isSending = false
+        }
+    }
+
+    /// 发送明文消息（Signal未初始化时的回退）
+    private func sendPlaintextMessage(_ text: String, localMessage: ChatMessage) async {
+        do {
+            let sentMessage = try await chatService.sendMessage(
+                conversationId: conversationId,
+                content: text,
+                type: .text
+            )
+
+            if let index = messages.firstIndex(where: { $0.id == localMessage.id }) {
+                messages[index] = ChatMessage(from: sentMessage, currentUserId: currentUserId)
+            }
+        } catch {
+            #if DEBUG
+            print("[ChatView] Plaintext fallback also failed: \(error)")
+            #endif
         }
     }
 
@@ -764,6 +792,7 @@ struct ChatView: View {
     ChatView(
         showChat: .constant(true),
         conversationId: "preview_conversation_123",
+        recipientUserId: "preview_user_456",
         userName: "Alice AI"
     )
 }

@@ -1,0 +1,285 @@
+syntax = "proto3";
+
+package nova.realtime_chat.signal.v1;
+
+// Signal Protocol Key Distribution Service
+// Implements X3DH key agreement + Double Ratchet + PQXDH (post-quantum)
+service SignalService {
+  // Register device and upload initial key bundle
+  rpc RegisterKeys(RegisterKeysRequest) returns (RegisterKeysResponse);
+
+  // Get pre-key bundle for establishing session (X3DH)
+  rpc GetPreKeyBundle(GetPreKeyBundleRequest) returns (PreKeyBundle);
+
+  // Upload additional one-time prekeys
+  rpc UploadPreKeys(UploadPreKeysRequest) returns (UploadPreKeysResponse);
+
+  // Upload new signed prekey (rotation)
+  rpc UploadSignedPreKey(UploadSignedPreKeyRequest) returns (UploadSignedPreKeyResponse);
+
+  // Get remaining prekey count
+  rpc GetPreKeyCount(GetPreKeyCountRequest) returns (GetPreKeyCountResponse);
+
+  // List all devices for a user
+  rpc ListDevices(ListDevicesRequest) returns (ListDevicesResponse);
+
+  // Remove a device
+  rpc RemoveDevice(RemoveDeviceRequest) returns (RemoveDeviceResponse);
+
+  // Store sender key distribution for group messaging
+  rpc StoreSenderKeyDistribution(StoreSenderKeyRequest) returns (StoreSenderKeyResponse);
+
+  // Get sender key distribution for group
+  rpc GetSenderKeyDistribution(GetSenderKeyRequest) returns (GetSenderKeyResponse);
+}
+
+// ============================================================================
+// Key Registration
+// ============================================================================
+
+message RegisterKeysRequest {
+  string user_id = 1;
+  uint32 device_id = 2;
+  uint32 registration_id = 3;
+
+  // Identity key (Curve25519)
+  bytes identity_key = 4;
+
+  // Signed prekey (Curve25519 + Ed25519 signature)
+  SignedPreKey signed_pre_key = 5;
+
+  // One-time prekeys (Curve25519)
+  repeated PreKey pre_keys = 6;
+
+  // Kyber prekey (post-quantum, optional)
+  KyberPreKey kyber_pre_key = 7;
+
+  // Device metadata
+  string device_name = 8;
+  string platform = 9;  // "ios", "android", "web"
+}
+
+message RegisterKeysResponse {
+  bool success = 1;
+  uint32 device_id = 2;
+  int64 registered_at = 3;
+}
+
+// ============================================================================
+// PreKey Bundle (for X3DH session establishment)
+// ============================================================================
+
+message GetPreKeyBundleRequest {
+  string user_id = 1;
+  uint32 device_id = 2;
+}
+
+message PreKeyBundle {
+  string user_id = 1;
+  uint32 device_id = 2;
+  uint32 registration_id = 3;
+
+  // Identity key (Curve25519 public key, 33 bytes)
+  bytes identity_key = 4;
+
+  // Signed prekey
+  SignedPreKey signed_pre_key = 5;
+
+  // One-time prekey (consumed after use)
+  PreKey pre_key = 6;
+
+  // Kyber prekey (post-quantum)
+  KyberPreKey kyber_pre_key = 7;
+}
+
+// ============================================================================
+// PreKey Types
+// ============================================================================
+
+message PreKey {
+  uint32 key_id = 1;
+  bytes public_key = 2;  // Curve25519 public key (33 bytes)
+}
+
+message SignedPreKey {
+  uint32 key_id = 1;
+  bytes public_key = 2;    // Curve25519 public key (33 bytes)
+  bytes signature = 3;     // Ed25519 signature over public_key (64 bytes)
+  int64 timestamp = 4;     // Unix timestamp when generated
+}
+
+message KyberPreKey {
+  uint32 key_id = 1;
+  bytes public_key = 2;    // Kyber1024 public key
+  bytes signature = 3;     // Ed25519 signature over public_key
+  int64 timestamp = 4;
+}
+
+// ============================================================================
+// PreKey Upload
+// ============================================================================
+
+message UploadPreKeysRequest {
+  string user_id = 1;
+  uint32 device_id = 2;
+  repeated PreKey pre_keys = 3;
+}
+
+message UploadPreKeysResponse {
+  uint32 uploaded_count = 1;
+  uint32 remaining_count = 2;
+}
+
+message UploadSignedPreKeyRequest {
+  string user_id = 1;
+  uint32 device_id = 2;
+  SignedPreKey signed_pre_key = 3;
+}
+
+message UploadSignedPreKeyResponse {
+  bool success = 1;
+}
+
+message GetPreKeyCountRequest {
+  string user_id = 1;
+  uint32 device_id = 2;
+}
+
+message GetPreKeyCountResponse {
+  uint32 count = 1;
+}
+
+// ============================================================================
+// Device Management
+// ============================================================================
+
+message ListDevicesRequest {
+  string user_id = 1;
+}
+
+message ListDevicesResponse {
+  repeated DeviceInfo devices = 1;
+}
+
+message DeviceInfo {
+  uint32 device_id = 1;
+  string device_name = 2;
+  string platform = 3;
+  int64 registered_at = 4;
+  int64 last_active_at = 5;
+  bytes identity_key = 6;  // For fingerprint verification
+}
+
+message RemoveDeviceRequest {
+  string user_id = 1;
+  uint32 device_id = 2;
+}
+
+message RemoveDeviceResponse {
+  bool success = 1;
+}
+
+// ============================================================================
+// Sender Keys (Group Messaging)
+// ============================================================================
+
+message StoreSenderKeyRequest {
+  string user_id = 1;
+  uint32 device_id = 2;
+  string group_id = 3;
+  bytes distribution_message = 4;  // SenderKeyDistributionMessage serialized
+}
+
+message StoreSenderKeyResponse {
+  bool success = 1;
+}
+
+message GetSenderKeyRequest {
+  string group_id = 1;
+  string sender_user_id = 2;
+  uint32 sender_device_id = 3;
+}
+
+message GetSenderKeyResponse {
+  bytes distribution_message = 1;
+}
+
+// ============================================================================
+// Encrypted Message (for chat transport)
+// ============================================================================
+
+message SignalMessage {
+  // Message type: 1=PreKey, 2=Signal, 3=SenderKey
+  int32 message_type = 1;
+
+  // Serialized ciphertext
+  bytes ciphertext = 2;
+
+  // Sender info
+  string sender_user_id = 3;
+  uint32 sender_device_id = 4;
+  uint32 sender_registration_id = 5;
+
+  // For group messages
+  string group_id = 6;
+}
+
+// ============================================================================
+// Database Schema (ClickHouse)
+// ============================================================================
+//
+// CREATE TABLE signal_devices (
+//     user_id String,
+//     device_id UInt32,
+//     registration_id UInt32,
+//     identity_key String,           -- Base64 encoded
+//     device_name String,
+//     platform String,
+//     registered_at DateTime DEFAULT now(),
+//     last_active_at DateTime DEFAULT now(),
+//     INDEX idx_user (user_id) TYPE bloom_filter GRANULARITY 1
+// ) ENGINE = ReplacingMergeTree(last_active_at)
+// ORDER BY (user_id, device_id);
+//
+// CREATE TABLE signal_signed_prekeys (
+//     user_id String,
+//     device_id UInt32,
+//     key_id UInt32,
+//     public_key String,             -- Base64 encoded
+//     signature String,              -- Base64 encoded
+//     timestamp DateTime,
+//     uploaded_at DateTime DEFAULT now()
+// ) ENGINE = ReplacingMergeTree(uploaded_at)
+// ORDER BY (user_id, device_id, key_id);
+//
+// CREATE TABLE signal_prekeys (
+//     user_id String,
+//     device_id UInt32,
+//     key_id UInt32,
+//     public_key String,             -- Base64 encoded
+//     claimed_by_user String DEFAULT '',
+//     claimed_by_device UInt32 DEFAULT 0,
+//     claimed_at DateTime DEFAULT toDateTime(0),
+//     uploaded_at DateTime DEFAULT now()
+// ) ENGINE = ReplacingMergeTree(claimed_at)
+// ORDER BY (user_id, device_id, key_id);
+//
+// CREATE TABLE signal_kyber_prekeys (
+//     user_id String,
+//     device_id UInt32,
+//     key_id UInt32,
+//     public_key String,             -- Base64 encoded
+//     signature String,              -- Base64 encoded
+//     used UInt8 DEFAULT 0,
+//     uploaded_at DateTime DEFAULT now()
+// ) ENGINE = ReplacingMergeTree(uploaded_at)
+// ORDER BY (user_id, device_id, key_id);
+//
+// CREATE TABLE signal_sender_keys (
+//     group_id String,
+//     sender_user_id String,
+//     sender_device_id UInt32,
+//     distribution_message String,   -- Base64 encoded
+//     uploaded_at DateTime DEFAULT now()
+// ) ENGINE = ReplacingMergeTree(uploaded_at)
+// ORDER BY (group_id, sender_user_id, sender_device_id);

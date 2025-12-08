@@ -25,18 +25,39 @@ final class ChatService {
     /// WebSocket连接状态变化回调
     @MainActor var onConnectionStatusChanged: ((Bool) -> Void)?
 
-    /// E2EE Service for client-side encryption
-    /// Note: Optional because E2EE may not be initialized (requires device registration)
-    private let e2eeService: E2EEService?
+    /// Legacy E2EE Service (simple X25519 + ChaCha20)
+    /// Kept for backward compatibility with existing messages
+    private let legacyE2eeService: E2EEService?
+
+    /// Signal E2EE Service (X3DH + Double Ratchet + PQXDH)
+    /// Full Signal Protocol implementation for new messages
+    private let signalService = SignalE2EEService.shared
 
     /// Keychain for device ID storage
     private let keychain = KeychainService.shared
 
+    /// Whether Signal Protocol is initialized for current user
+    private var isSignalInitialized = false
+
     // MARK: - Initialization
 
     init() {
-        // Initialize E2EE service
-        self.e2eeService = E2EEService()
+        // Initialize legacy E2EE service for backward compatibility
+        self.legacyE2eeService = E2EEService()
+    }
+
+    /// Initialize Signal Protocol for the current user
+    /// Should be called after user login
+    @MainActor
+    func initializeSignalProtocol(userId: String) async throws {
+        guard !isSignalInitialized else { return }
+
+        try await signalService.initialize(userId: userId)
+        isSignalInitialized = true
+
+        #if DEBUG
+        print("[ChatService] Signal Protocol initialized for user: \(userId)")
+        #endif
     }
 
     // MARK: - REST API - Messages
@@ -285,16 +306,92 @@ final class ChatService {
         return conversation
     }
 
-    // MARK: - E2EE Messaging
+    // MARK: - Signal E2EE Messaging
 
-    /// Send an E2EE encrypted message via REST API
+    /// Send a Signal Protocol encrypted message to a specific user
+    /// Uses X3DH + Double Ratchet for perfect forward secrecy
+    /// - Parameters:
+    ///   - conversationId: 会话ID
+    ///   - recipientUserId: 接收者用户ID
+    ///   - content: 消息内容（明文）
+    ///   - type: 消息类型
+    ///   - replyToId: 回复的消息ID
+    /// - Returns: 发送后的消息对象
+    @MainActor
+    func sendSignalEncryptedMessage(
+        conversationId: String,
+        recipientUserId: String,
+        content: String,
+        type: ChatMessageType = .text,
+        replyToId: String? = nil
+    ) async throws -> Message {
+        guard isSignalInitialized else {
+            throw ChatError.e2eeNotAvailable
+        }
+
+        // Encrypt for all recipient devices
+        let encryptedMessages = try await signalService.encryptForAllDevices(
+            message: content,
+            userId: recipientUserId
+        )
+
+        guard let firstEncrypted = encryptedMessages.first else {
+            throw SignalError.encryptionFailed("No devices found for recipient")
+        }
+
+        // Build request with all encrypted payloads
+        let request = SendSignalMessageRequest(
+            conversationId: conversationId,
+            messages: encryptedMessages.map { msg in
+                SignalMessagePayload(
+                    deviceId: msg.senderDeviceId,
+                    ciphertext: msg.ciphertext.base64EncodedString(),
+                    messageType: msg.messageType.rawValue,
+                    registrationId: msg.registrationId
+                )
+            },
+            messageType: type.rawValue,
+            replyToMessageId: replyToId
+        )
+
+        #if DEBUG
+        print("[ChatService] Sending Signal encrypted message to \(encryptedMessages.count) devices")
+        #endif
+
+        let response: SendSignalMessageResponse = try await client.request(
+            endpoint: "/api/v1/signal/messages",
+            method: "POST",
+            body: request
+        )
+
+        #if DEBUG
+        print("[ChatService] Signal message sent: \(response.messageId)")
+        #endif
+
+        return Message(
+            id: response.messageId,
+            conversationId: conversationId,
+            senderId: AuthenticationManager.shared.currentUser?.id ?? "",
+            content: "", // Content is encrypted
+            type: type,
+            createdAt: Date(),
+            status: .sent,
+            encryptedContent: firstEncrypted.ciphertext.base64EncodedString(),
+            senderDeviceId: String(firstEncrypted.senderDeviceId),
+            encryptionVersion: 3 // Signal Protocol
+        )
+    }
+
+    // MARK: - Legacy E2EE Messaging (Backward Compatibility)
+
+    /// Send an E2EE encrypted message via REST API (Legacy)
     /// - Parameters:
     ///   - conversationId: 会话ID
     ///   - content: 消息内容（明文）
     ///   - type: 消息类型
     ///   - replyToId: 回复的消息ID
     /// - Returns: 发送后的消息对象
-    /// - Note: 使用 Megolm 群组加密（当前为简化版本，等待 vodozemac FFI 集成）
+    /// - Note: Legacy method using simple X25519 + ChaCha20. Use sendSignalEncryptedMessage for new messages.
     @MainActor
     func sendEncryptedMessage(
         conversationId: String,
@@ -302,7 +399,7 @@ final class ChatService {
         type: ChatMessageType = .text,
         replyToId: String? = nil
     ) async throws -> Message {
-        guard let e2ee = e2eeService else {
+        guard let e2ee = legacyE2eeService else {
             throw ChatError.e2eeNotAvailable
         }
 
@@ -394,27 +491,66 @@ final class ChatService {
     /// - Parameter message: 接收到的消息（可能加密）
     /// - Returns: 解密后的明文内容（如果消息未加密，返回原始内容）
     func decryptMessage(_ message: Message) async throws -> String {
-        // Check if message is encrypted
-        guard let encryptionVersion = message.encryptionVersion,
-              encryptionVersion == 2,
-              let encryptedContent = message.encryptedContent,
-              let nonce = message.nonce,
-              let _ = message.sessionId else {
-            // Not an E2EE message, return plaintext
+        // Check encryption version
+        guard let encryptionVersion = message.encryptionVersion else {
+            // Not encrypted, return plaintext
             return message.content
         }
 
-        guard let e2ee = e2eeService else {
+        switch encryptionVersion {
+        case 3:
+            // Signal Protocol (X3DH + Double Ratchet)
+            return try await decryptSignalMessage(message)
+        case 2:
+            // Legacy E2EE (simple X25519 + ChaCha20)
+            return try await decryptLegacyMessage(message)
+        default:
+            // Unknown encryption version
+            return message.content
+        }
+    }
+
+    /// Decrypt a Signal Protocol encrypted message
+    private func decryptSignalMessage(_ message: Message) async throws -> String {
+        guard let encryptedData = message.encryptedContent?.data(using: .utf8),
+              let ciphertext = Data(base64Encoded: encryptedData),
+              let senderDeviceId = message.senderDeviceId,
+              let deviceId = UInt32(senderDeviceId.components(separatedBy: "-").last ?? "1") else {
+            throw ChatError.invalidCiphertext
+        }
+
+        let encryptedMessage = SignalEncryptedMessage(
+            ciphertext: ciphertext,
+            messageType: message.isPreKeyMessage ? .preKey : .signal,
+            senderDeviceId: deviceId,
+            senderUserId: message.senderId,
+            registrationId: 0 // Will be read from message
+        )
+
+        let plaintext = try await signalService.decrypt(encryptedMessage)
+
+        #if DEBUG
+        print("[ChatService] Decrypted Signal message: \(message.id)")
+        #endif
+
+        return plaintext
+    }
+
+    /// Decrypt a legacy E2EE message (backward compatibility)
+    private func decryptLegacyMessage(_ message: Message) async throws -> String {
+        guard let encryptedContent = message.encryptedContent,
+              let nonce = message.nonce else {
+            throw ChatError.invalidCiphertext
+        }
+
+        guard let e2ee = legacyE2eeService else {
             throw ChatError.e2eeNotAvailable
         }
 
-        // Convert conversationId to UUID
         guard let conversationUUID = UUID(uuidString: message.conversationId) else {
             throw ChatError.invalidConversationId
         }
 
-        // TODO: When Megolm is available, use proper session-based decryption
-        // For now, use simple conversation-based decryption
         let encryptedMessage = EncryptedMessage(
             ciphertext: encryptedContent,
             nonce: nonce,
@@ -427,7 +563,7 @@ final class ChatService {
         )
 
         #if DEBUG
-        print("[ChatService] Decrypted message: \(message.id)")
+        print("[ChatService] Decrypted legacy message: \(message.id)")
         #endif
 
         return plaintext
@@ -449,7 +585,10 @@ final class ChatService {
 
     /// 连接WebSocket以接收实时消息
     /// ⚠️ 注意：需要先登录获取JWT token，并传入当前会话 ID
-    func connectWebSocket(conversationId: String) {
+    /// - Parameters:
+    ///   - conversationId: 会话 ID
+    ///   - userId: 当前用户 ID（从 AuthenticationManager 获取后传入）
+    func connectWebSocket(conversationId: String, userId: String) {
         guard let token = client.getAuthToken() else {
             #if DEBUG
             print("[ChatService] WebSocket connection failed: No auth token")
@@ -457,12 +596,7 @@ final class ChatService {
             return
         }
 
-        guard let currentUserId = AuthenticationManager.shared.currentUser?.id else {
-            #if DEBUG
-            print("[ChatService] WebSocket connection failed: No current user id")
-            #endif
-            return
-        }
+        let currentUserId = userId
 
         // 构建WebSocket URL
         let baseURL = APIConfig.current.baseURL.replacingOccurrences(of: "https://", with: "ws://")

@@ -90,6 +90,7 @@ struct Message: Identifiable, Codable, Sendable {
     var nonce: String?  // Base64-encoded nonce (12 bytes for ChaCha20-Poly1305)
     var sessionId: String?
     var senderDeviceId: String?
+    var isPreKeyMessage: Bool = false  // Signal: true if this is a PreKey message (new session)
 
     // Local-only fields (not from backend)
     var status: MessageStatus = .sent
@@ -110,6 +111,7 @@ struct Message: Identifiable, Codable, Sendable {
         case nonce
         case sessionId = "session_id"
         case senderDeviceId = "sender_device_id"
+        case isPreKeyMessage = "is_pre_key_message"
     }
 
     init(from decoder: Decoder) throws {
@@ -146,6 +148,7 @@ struct Message: Identifiable, Codable, Sendable {
         nonce = try container.decodeIfPresent(String.self, forKey: .nonce)
         sessionId = try container.decodeIfPresent(String.self, forKey: .sessionId)
         senderDeviceId = try container.decodeIfPresent(String.self, forKey: .senderDeviceId)
+        isPreKeyMessage = try container.decodeIfPresent(Bool.self, forKey: .isPreKeyMessage) ?? false
     }
 
     func encode(to encoder: Encoder) throws {
@@ -165,6 +168,7 @@ struct Message: Identifiable, Codable, Sendable {
         try container.encodeIfPresent(nonce, forKey: .nonce)
         try container.encodeIfPresent(sessionId, forKey: .sessionId)
         try container.encodeIfPresent(senderDeviceId, forKey: .senderDeviceId)
+        try container.encode(isPreKeyMessage, forKey: .isPreKeyMessage)
     }
 
     /// Convenience initializer for creating E2EE messages locally
@@ -503,6 +507,7 @@ enum ChatError: LocalizedError {
     case invalidCiphertext
     case decryptionFailed
     case invalidConversationId
+    case signalNotInitialized
 
     var errorDescription: String? {
         switch self {
@@ -516,6 +521,51 @@ enum ChatError: LocalizedError {
             return "Failed to decrypt message."
         case .invalidConversationId:
             return "Invalid conversation ID format."
+        case .signalNotInitialized:
+            return "Signal Protocol not initialized. Please initialize first."
         }
+    }
+}
+
+// MARK: - Signal Protocol API Models
+
+/// Request to send Signal encrypted message
+struct SendSignalMessageRequest: Codable, Sendable {
+    let conversationId: String
+    let messages: [SignalMessagePayload]
+    let messageType: String
+    let replyToMessageId: String?
+
+    enum CodingKeys: String, CodingKey {
+        case conversationId = "conversation_id"
+        case messages
+        case messageType = "message_type"
+        case replyToMessageId = "reply_to_message_id"
+    }
+}
+
+/// Signal message payload for a single device
+struct SignalMessagePayload: Codable, Sendable {
+    let deviceId: UInt32
+    let ciphertext: String  // Base64 encoded
+    let messageType: Int    // 1=PreKey, 2=Signal, 3=SenderKey
+    let registrationId: UInt32
+
+    enum CodingKeys: String, CodingKey {
+        case deviceId = "device_id"
+        case ciphertext
+        case messageType = "message_type"
+        case registrationId = "registration_id"
+    }
+}
+
+/// Response from sending Signal message
+struct SendSignalMessageResponse: Codable, Sendable {
+    let messageId: String
+    let timestamp: Date
+
+    enum CodingKeys: String, CodingKey {
+        case messageId = "message_id"
+        case timestamp
     }
 }

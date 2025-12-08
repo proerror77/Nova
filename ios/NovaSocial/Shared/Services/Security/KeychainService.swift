@@ -14,11 +14,24 @@ final class KeychainService {
 
     // MARK: - Keys
 
-    enum Key: String {
-        case authToken = "auth_token"
-        case refreshToken = "refresh_token"
-        case userId = "user_id"
-        case e2eeDeviceIdentity = "e2ee_device_identity"
+    enum Key: Hashable {
+        case authToken
+        case refreshToken
+        case userId
+        case e2eeDeviceIdentity
+        case signalDeviceId
+        case custom(String)
+
+        var rawValue: String {
+            switch self {
+            case .authToken: return "auth_token"
+            case .refreshToken: return "refresh_token"
+            case .userId: return "user_id"
+            case .e2eeDeviceIdentity: return "e2ee_device_identity"
+            case .signalDeviceId: return "signal_device_id"
+            case .custom(let key): return key
+            }
+        }
     }
 
     // MARK: - Public Methods

@@ -2,6 +2,8 @@ syntax = "proto3";
 
 package nova.realtime_chat.v1;
 
+import "e2ee.proto";
+
 // RealtimeChat Service - WebSocket messaging and E2EE
 service RealtimeChatService {
   // Create a 1:1 or group conversation
@@ -73,14 +75,20 @@ message GetMessagesResponse {
 // Message Types
 message SendMessageRequest {
   string conversation_id = 1;
-  string content = 2;
+  string content = 2;                    // Plaintext (for non-E2EE messages)
   MessageType message_type = 3;
   string media_url = 4;
   LocationData location = 5;
-  string encrypted_content = 6;  // E2EE encrypted payload
-  string ephemeral_public_key = 7;  // E2EE ephemeral key
-  string reply_to_message_id = 8;
-  string sender_id = 9; // UUID of sender (for membership + auth)
+
+  // E2EE payload (v2: Olm Double Ratchet)
+  nova.realtime_chat.e2ee.v1.EncryptedPayload encrypted_payload = 6;
+
+  // Legacy E2EE fields (deprecated, use encrypted_payload instead)
+  string encrypted_content = 7 [deprecated = true];
+  string ephemeral_public_key = 8 [deprecated = true];
+
+  string reply_to_message_id = 9;
+  string sender_id = 10;                 // UUID of sender (for membership + auth)
 }
 
 message SendMessageResponse {
@@ -192,16 +200,22 @@ message Message {
   string id = 1;
   string conversation_id = 2;
   string sender_id = 3;
-  string content = 4;
+  string content = 4;                    // Plaintext (for non-E2EE messages)
   MessageType message_type = 5;
   string media_url = 6;
   LocationData location = 7;
   int64 created_at = 8;
   int64 updated_at = 9;
   string status = 10;
-  string encrypted_content = 11;
-  string ephemeral_public_key = 12;
-  string reply_to_message_id = 13;
+
+  // E2EE payload (v2: Olm Double Ratchet)
+  nova.realtime_chat.e2ee.v1.EncryptedPayload encrypted_payload = 11;
+
+  // Legacy E2EE fields (deprecated)
+  string encrypted_content = 12 [deprecated = true];
+  string ephemeral_public_key = 13 [deprecated = true];
+
+  string reply_to_message_id = 14;
 }
 
 message Conversation {
