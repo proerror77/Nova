@@ -27,7 +27,7 @@ spec:
                 secretName: grpc-mtls-shared
           containers:
             - name: feed-etl
-              image: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/content-service:staging-20251208-runonce
+              image: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/content-service:5cfa7462c5121f499be5a64ad5d32a3d69af6669
               command: ["/app/content-service"]
               args: ["--mode", "feed-refresh"]
               resources:
@@ -163,7 +163,7 @@ spec:
             secretName: grpc-mtls-shared
       containers:
         - name: feed-etl
-          image: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/content-service:staging-20251208-runonce
+          image: asia-northeast1-docker.pkg.dev/banded-pad-479802-k9/nova/content-service:5cfa7462c5121f499be5a64ad5d32a3d69af6669
           command: ["/app/content-service"]
           args: ["--mode", "feed-refresh"]
           resources:
