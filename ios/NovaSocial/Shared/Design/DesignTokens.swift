@@ -67,6 +67,20 @@ struct DesignTokens {
     static let indicatorActive = Color(red: 0.82, green: 0.11, blue: 0.26)
     static let indicatorInactive = Color(red: 0.73, green: 0.73, blue: 0.73)
 
+    /// Chat Colors
+    static let chatBubbleOther = Color.dynamic(
+        light: UIColor(red: 0.85, green: 0.85, blue: 0.85, alpha: 1.0),
+        dark: UIColor(red: 0.22, green: 0.22, blue: 0.23, alpha: 1.0)
+    )
+    static let inputBackground = Color.dynamic(
+        light: UIColor(red: 0.53, green: 0.53, blue: 0.53, alpha: 0.2),
+        dark: UIColor(red: 0.28, green: 0.28, blue: 0.30, alpha: 1.0)
+    )
+    static let attachmentBackground = Color.dynamic(
+        light: UIColor(red: 0.91, green: 0.91, blue: 0.91, alpha: 1.0),
+        dark: UIColor(red: 0.18, green: 0.18, blue: 0.19, alpha: 1.0)
+    )
+
     // MARK: - Spacing
 
     static let spacing4: CGFloat = 4

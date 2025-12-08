@@ -19,7 +19,7 @@ struct QRCodeScannerView: View {
                         isPresented = false
                     }) {
                         Image(systemName: "xmark")
-                            .font(.system(size: 20))
+                            .frame(width: 24, height: 24)
                             .foregroundColor(.white)
                             .padding()
                             .background(Color.black.opacity(0.5))

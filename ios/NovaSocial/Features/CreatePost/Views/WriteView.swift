@@ -3,6 +3,7 @@ import SwiftUI
 /// 写作视图 - 纯文字内容创作
 struct WriteView: View {
     @Binding var showWrite: Bool
+    var currentPage: Binding<AppPage>? = nil
     @State private var textContent: String = ""
     @FocusState private var isTextFieldFocused: Bool
 
@@ -31,24 +32,31 @@ struct WriteView: View {
                         )
 
                     // TextEditor with placeholder
-                    ZStack(alignment: .topLeading) {
-                        if textContent.isEmpty {
-                            Text("Write something...")
+                    VStack(spacing: 0) {
+                        Spacer()
+
+                        ZStack(alignment: .topLeading) {
+                            if textContent.isEmpty {
+                                Text("Write something...")
+                                    .font(Font.custom("Helvetica Neue", size: 25).weight(.medium))
+                                    .lineSpacing(20)
+                                    .italic()
+                                    .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
+                                    .padding(.top, 8)
+                                    .padding(.leading, 5)
+                            }
+
+                            TextEditor(text: $textContent)
                                 .font(Font.custom("Helvetica Neue", size: 25).weight(.medium))
                                 .lineSpacing(20)
-                                .italic()
-                                .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
-                                .padding(.top, 8)
-                                .padding(.leading, 5)
+                                .foregroundColor(.black)
+                                .scrollContentBackground(.hidden)
+                                .background(Color.clear)
+                                .focused($isTextFieldFocused)
                         }
+                        .frame(height: 60)
 
-                        TextEditor(text: $textContent)
-                            .font(Font.custom("Helvetica Neue", size: 25).weight(.medium))
-                            .lineSpacing(20)
-                            .foregroundColor(.black)
-                            .scrollContentBackground(.hidden)
-                            .background(Color.clear)
-                            .focused($isTextFieldFocused)
+                        Spacer()
                     }
                     .frame(width: 303, height: 544)
                 }
@@ -58,7 +66,9 @@ struct WriteView: View {
                 // MARK: - 底部按钮
                 Button(action: {
                     // TODO: 实现文字转图片功能
+                    #if DEBUG
                     print("Text to Image tapped with content: \(textContent)")
+                    #endif
                 }) {
                     HStack(spacing: 8) {
                         Text("Text to Image")
@@ -80,6 +90,10 @@ struct WriteView: View {
                 isTextFieldFocused = true
             }
         }
+        .contentShape(Rectangle())
+        .onTapGesture {
+            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+        }
     }
 
     // MARK: - Top Navigation Bar
@@ -87,9 +101,13 @@ struct WriteView: View {
         HStack {
             // 返回按钮
             Button(action: {
-                showWrite = false
+                if let currentPage = currentPage {
+                    currentPage.wrappedValue = .home
+                } else {
+                    showWrite = false
+                }
             }) {
-                Image("Back-icon")
+                Image("Close-B")
                     .resizable()
                     .scaledToFit()
                     .frame(width: 24, height: 24)

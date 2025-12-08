@@ -78,7 +78,7 @@ struct AddFriendsView: View {
                         currentPage = .message
                     }) {
                         Image(systemName: "chevron.left")
-                            .font(.system(size: 20))
+                            .frame(width: 24, height: 24)
                             .foregroundColor(.black)
                     }
 
@@ -202,7 +202,6 @@ struct AddFriendsView: View {
 
                                 Text("Share invitation link")
                                     .font(Font.custom("Helvetica Neue", size: 15))
-                                    .lineSpacing(20)
                                     .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
 
                                 Spacer()
@@ -225,6 +224,10 @@ struct AddFriendsView: View {
         .task {
             await viewModel.loadRecommendations()
         }
+        .contentShape(Rectangle())
+        .onTapGesture {
+            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+        }
     }
 }
 
@@ -238,36 +241,22 @@ struct UserCardView: View {
 
     var body: some View {
         HStack(spacing: 13) {
-            if let avatarUrl = user.avatarUrl, let url = URL(string: avatarUrl) {
-                AsyncImage(url: url) { image in
-                    image.resizable().scaledToFill()
-                } placeholder: {
-                    Circle().fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
-                }
-                .frame(width: 50, height: 50)
-                .clipShape(Circle())
-            } else {
-                Circle()
-                    .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
-                    .frame(width: 50, height: 50)
-            }
+            // 头像 - 使用统一的默认头像组件
+            AvatarView(image: nil, url: user.avatarUrl, size: 50)
 
             VStack(alignment: .leading, spacing: 1) {
                 Text(user.displayName ?? user.username)
                     .font(Font.custom("Helvetica Neue", size: 16).weight(.bold))
-                    .lineSpacing(20)
                     .foregroundColor(.black)
 
                 if let bio = user.bio, !bio.isEmpty {
                     Text(bio)
                         .font(Font.custom("Helvetica Neue", size: 11.50).weight(.medium))
-                        .lineSpacing(20)
                         .foregroundColor(Color(red: 0.65, green: 0.65, blue: 0.65))
                         .lineLimit(1)
                 } else {
                     Text("@\(user.username)")
                         .font(Font.custom("Helvetica Neue", size: 11.50).weight(.medium))
-                        .lineSpacing(20)
                         .foregroundColor(Color(red: 0.65, green: 0.65, blue: 0.65))
                 }
             }

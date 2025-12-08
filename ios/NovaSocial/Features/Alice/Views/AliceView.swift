@@ -82,7 +82,7 @@ struct AliceView: View {
     private var aliceContent: some View {
         ZStack {
             // 背景色
-            Color(red: 0.97, green: 0.97, blue: 0.97)
+            DesignTokens.backgroundColor
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
@@ -90,14 +90,14 @@ struct AliceView: View {
                 HStack(spacing: 5) {
                     Text(selectedModel)
                         .font(Font.custom("Helvetica Neue", size: 20).weight(.bold))
-                        .foregroundColor(.black)
+                        .foregroundColor(DesignTokens.textPrimary)
                     Image(systemName: "chevron.down")
                         .font(.system(size: 16, weight: .bold))
-                        .foregroundColor(.black)
+                        .foregroundColor(DesignTokens.textPrimary)
                 }
                 .frame(maxWidth: .infinity)
                 .frame(height: 56)
-                .background(Color.white)
+                .background(DesignTokens.surface)
                 .onTapGesture {
                     showModelSelector.toggle()
                 }
@@ -164,32 +164,32 @@ struct AliceView: View {
                             HStack(spacing: 8) {
                                 Image(systemName: "sparkles")
                                     .font(.system(size: 18))
-                                    .foregroundColor(.black)
+                                    .foregroundColor(DesignTokens.textPrimary)
                                 Text("Get Super alice")
                                     .font(Font.custom("Inter", size: 16).weight(.medium))
-                                    .foregroundColor(.black)
+                                    .foregroundColor(DesignTokens.textPrimary)
                             }
                             .padding(.horizontal, 16)
                             .frame(height: 42)
-                            .background(Color.white)
+                            .background(DesignTokens.surface)
                             .cornerRadius(21)
                             .overlay(
                                 RoundedRectangle(cornerRadius: 21)
                                     .inset(by: 0.50)
-                                    .stroke(Color(red: 0.77, green: 0.77, blue: 0.77), lineWidth: 0.50)
+                                    .stroke(DesignTokens.borderColor, lineWidth: 0.50)
                             )
 
                             // Voice Mode 按钮
                             Text("Voice Mode")
                                 .font(Font.custom("Inter", size: 16).weight(.medium))
-                                .foregroundColor(.black)
+                                .foregroundColor(DesignTokens.textPrimary)
                                 .frame(width: 131, height: 42)
-                                .background(Color.white)
+                                .background(DesignTokens.surface)
                                 .cornerRadius(21)
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 21)
                                         .inset(by: 0.50)
-                                        .stroke(Color(red: 0.77, green: 0.77, blue: 0.77), lineWidth: 0.50)
+                                        .stroke(DesignTokens.borderColor, lineWidth: 0.50)
                                 )
                         }
                         .padding(.horizontal, 16)
@@ -200,11 +200,11 @@ struct AliceView: View {
                     HStack(spacing: 12) {
                         Image(systemName: "plus")
                             .font(.system(size: 20, weight: .medium))
-                            .foregroundColor(.black)
+                            .foregroundColor(DesignTokens.textPrimary)
 
                         TextField("Ask any questions", text: $inputText)
                             .font(Font.custom("Inter", size: 16))
-                            .foregroundColor(.black)
+                            .foregroundColor(DesignTokens.textPrimary)
                             .submitLabel(.send)
                             .onSubmit {
                                 sendMessage()
@@ -221,13 +221,12 @@ struct AliceView: View {
                     }
                     .padding(.horizontal, 20)
                     .frame(height: 52)
-                    .background(Color.white)
+                    .background(DesignTokens.surface)
                     .cornerRadius(26)
                     .overlay(
                         RoundedRectangle(cornerRadius: 26)
                             .inset(by: 0.50)
-
-                            .stroke(Color(red: 0.77, green: 0.77, blue: 0.77), lineWidth: 0.50)
+                            .stroke(DesignTokens.borderColor, lineWidth: 0.50)
                     )
                     .padding(.horizontal, 16)
                 }
@@ -362,7 +361,7 @@ struct AliceView: View {
                 }
                 .padding(.vertical, 8)
                 .frame(width: 280)
-                .background(Color.white)
+                .background(DesignTokens.surface)
                 .cornerRadius(20)
                 .shadow(color: Color(red: 0, green: 0, blue: 0, opacity: 0.15), radius: 12, x: 0, y: 4)
 
@@ -384,14 +383,14 @@ struct AliceChatMessageView: View {
                 // 用户消息气泡
                 Text(message.content)
                     .font(Font.custom("Helvetica Neue", size: 14))
-                    .foregroundColor(.black)
+                    .foregroundColor(DesignTokens.textPrimary)
                     .padding(EdgeInsets(top: 10, leading: 13, bottom: 10, trailing: 13))
-                    .background(Color.white)
+                    .background(DesignTokens.surface)
                     .cornerRadius(43)
                     .overlay(
                         RoundedRectangle(cornerRadius: 43)
                             .inset(by: 0.50)
-                            .stroke(Color(red: 0.75, green: 0.75, blue: 0.75), lineWidth: 0.50)
+                            .stroke(DesignTokens.borderColor, lineWidth: 0.50)
                     )
                     .frame(maxWidth: 249, alignment: .trailing)
             } else {
@@ -399,7 +398,7 @@ struct AliceChatMessageView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Text(message.content)
                         .font(Font.custom("Helvetica Neue", size: 14))
-                        .foregroundColor(.black)
+                        .foregroundColor(DesignTokens.textPrimary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -421,23 +420,23 @@ struct ModelRowView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(model.name)
                         .font(Font.custom("Helvetica Neue", size: 16))
-                        .foregroundColor(.black)
+                        .foregroundColor(DesignTokens.textPrimary)
 
                     Text(model.description)
                         .font(Font.custom("Helvetica Neue", size: 14))
-                        .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
+                        .foregroundColor(DesignTokens.textSecondary)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
 
                 if isSelected {
                     Image(systemName: "checkmark")
                         .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(Color(red: 0.87, green: 0.11, blue: 0.26))
+                        .foregroundColor(DesignTokens.accentColor)
                 }
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
-            .background(isSelected ? Color(red: 0.95, green: 0.95, blue: 0.95) : Color.clear)
+            .background(isSelected ? DesignTokens.tileBackground : Color.clear)
             .cornerRadius(12)
             .padding(.horizontal, 6)
         }

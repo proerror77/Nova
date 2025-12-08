@@ -32,99 +32,120 @@ struct WelcomeView: View {
 
                 // Main Content
                 ZStack {
-                    Group {
-                        // Invite Code Modal Background
-                        Rectangle()
+                    // Logo
+                    Image("Mountain-W")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 100, height: 80)
+                        .offset(x: 0, y: -160)
+
+                    // Title
+                    Text("Enter invite code")
+                        .font(.system(size: 30, weight: .bold))
+                        .foregroundColor(.white)
+                        .offset(x: -0.50, y: -89)
+
+                    // Subtitle
+                    Text("lf you have an invite code\nEnter it below.")
+                        .font(Font.custom("Helvetica Neue", size: 14).weight(.light))
+                        .multilineTextAlignment(.center)
+                        .foregroundColor(Color(red: 0.77, green: 0.77, blue: 0.77))
+                        .offset(x: -0.50, y: -36)
+
+                    // Invite code input field (styled as pill)
+                    ZStack {
+                        // Hidden TextField for input
+                        TextField("", text: $inviteCode)
+                            .font(Font.custom("Helvetica Neue", size: 16).weight(.light))
                             .foregroundColor(.clear)
-                            .frame(width: 343, height: 343)
-                            .background(Color(red: 0.16, green: 0.16, blue: 0.16))
-                            .cornerRadius(30)
-                            .offset(x: 0, y: -90)
-                            .shadow(
-                                color: Color(red: 0, green: 0, blue: 0, opacity: 0.25), radius: 4, y: 4
-                            )
-
-                        Text(LocalizedStringKey("Icered_invite_only"))
-                            .font(Font.custom("Inter", size: 24).weight(.bold))
-                            .lineSpacing(45.29)
-                            .foregroundColor(Color(red: 0.87, green: 0.11, blue: 0.26))
-                            .offset(x: 1, y: -143.50)
-
-                        Text(LocalizedStringKey("Invite_hint"))
-                            .font(Font.custom("Helvetica Neue", size: 14).weight(.light))
-                            .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
-                            .offset(x: 0.50, y: -120)
-
-                        // Invite code input field
-                        ZStack {
-                            Rectangle()
-                                .foregroundColor(.clear)
-                                .frame(width: 261, height: 39)
-                                .background(Color(red: 0.25, green: 0.25, blue: 0.25).opacity(0.51))
-                                .cornerRadius(6)
-
-                            TextField("", text: $inviteCode)
-                                .font(Font.custom("Helvetica Neue", size: 16))
-                                .foregroundColor(.white)
-                                .multilineTextAlignment(.center)
-                                .textInputAutocapitalization(.characters)
-                                .autocorrectionDisabled()
-                                .frame(width: 241)
-                                .onChange(of: inviteCode) { oldValue, newValue in
-                                    // Limit to 8 characters
-                                    if newValue.count > 8 {
-                                        inviteCode = String(newValue.prefix(8))
-                                    }
-                                    // Convert to uppercase
-                                    inviteCode = inviteCode.uppercased()
+                            .accentColor(.clear)
+                            .multilineTextAlignment(.center)
+                            .textInputAutocapitalization(.characters)
+                            .autocorrectionDisabled()
+                            .frame(width: 343, height: 46)
+                            .onChange(of: inviteCode) { oldValue, newValue in
+                                // Limit to 8 characters
+                                if newValue.count > 8 {
+                                    inviteCode = String(newValue.prefix(8))
                                 }
-                        }
-                        .offset(x: 0, y: -65)
-
-                        Button(action: {
-                            Task {
-                                await validateInviteCode()
+                                // Convert to uppercase
+                                inviteCode = inviteCode.uppercased()
                             }
-                        }) {
-                            HStack(spacing: 8) {
-                                if isLoading {
-                                    ProgressView()
-                                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                        .scaleEffect(0.8)
-                                }
-                                Text(LocalizedStringKey("Done"))
-                                    .font(Font.custom("Helvetica Neue", size: 16).weight(.medium))
-                                    .lineSpacing(20)
-                                    .foregroundColor(.white)
-                            }
-                            .frame(width: 101, height: 46)
-                            .background(isInviteCodeValid ? Color(red: 0.87, green: 0.11, blue: 0.26) : Color.gray.opacity(0.5))
-                            .cornerRadius(64)
-                        }
-                        .disabled(!isInviteCodeValid || isLoading)
-                        .offset(x: 0, y: -2.50)
 
+                        // Display text with cursor indicator
                         HStack(spacing: 0) {
-                            Text(LocalizedStringKey("Notify_me_when_access_opens"))
-                                .font(Font.custom("Helvetica Neue", size: 14).weight(.light))
-                                .lineSpacing(20)
-                                .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
+                            Text(inviteCode.isEmpty ? "" : inviteCode)
+                                .font(Font.custom("Helvetica Neue", size: 16).weight(.light))
+                                .tracking(4)
+                                .foregroundColor(Color(red: 0.77, green: 0.77, blue: 0.77))
+                            // Only show cursor when not at max length
+                            if inviteCode.count < 8 {
+                                Text("—")
+                                    .font(Font.custom("Helvetica Neue", size: 16).weight(.light))
+                                    .foregroundColor(Color(red: 0.77, green: 0.77, blue: 0.77))
+                            }
                         }
-                        .offset(x: 0.50, y: 50.50)
+                        .allowsHitTesting(false)
+                    }
+                    .frame(width: 343, height: 46)
+                    .background(Color(red: 0.27, green: 0.27, blue: 0.27).opacity(0.45))
+                    .cornerRadius(43)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 43)
+                            .inset(by: 0.20)
+                            .stroke(Color(red: 0.53, green: 0.53, blue: 0.53), lineWidth: 0.20)
+                    )
+                    .offset(x: 0, y: 36)
 
-                        // Error Message
-                        if let errorMessage = errorMessage {
-                            Text(LocalizedStringKey(errorMessage))
-                                .font(Font.custom("Helvetica Neue", size: 12))
-                                .foregroundColor(.red)
-                                .multilineTextAlignment(.center)
-                                .padding(.horizontal, 40)
-                                .offset(x: 0, y: 30)
+                    // Done Button
+                    Button(action: {
+                        Task {
+                            await validateInviteCode()
                         }
+                    }) {
+                        HStack(spacing: 8) {
+                            if isLoading {
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                    .scaleEffect(0.8)
+                            }
+                            Text("Done")
+                                .font(Font.custom("Helvetica Neue", size: 16).weight(.medium))
+                                .lineSpacing(20)
+                                .foregroundColor(.white)
+                        }
+                        .frame(width: 343, height: 46)
+                        .background(isInviteCodeValid ? Color(red: 0.87, green: 0.11, blue: 0.26) : Color(red: 0.87, green: 0.11, blue: 0.26).opacity(0.5))
+                        .cornerRadius(43)
+                    }
+                    .disabled(!isInviteCodeValid || isLoading)
+                    .offset(x: 0, y: 106)
+
+                    // Go back - 返回 Login 页面
+                    Button(action: {
+                        currentPage = .login
+                    }) {
+                        Text("Go back")
+                            .font(Font.custom("Helvetica Neue", size: 14).weight(.medium))
+                            .underline()
+                            .foregroundColor(Color(red: 0.77, green: 0.77, blue: 0.77))
+                    }
+                    .offset(x: -0.50, y: 169.50)
+
+                    // Error Message
+                    if let errorMessage = errorMessage {
+                        Text(LocalizedStringKey(errorMessage))
+                            .font(Font.custom("Helvetica Neue", size: 12))
+                            .foregroundColor(.red)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 40)
+                            .offset(x: 0, y: 220)
                     }
                 }
-                .frame(width: 375, height: 812)
+                .frame(width: 343, height: 450)
+                .offset(y: -40) // 统一调整所有内容的垂直位置（负值向上，正值向下）
 
+                Spacer()
                 Spacer()
             }
             .ignoresSafeArea(.keyboard)
@@ -173,9 +194,9 @@ struct WelcomeView: View {
             #endif
 
             if response.isValid {
-                // Valid invite code - navigate to login
+                // Valid invite code - navigate to create account
                 await MainActor.run {
-                    currentPage = .login
+                    currentPage = .createAccount
                 }
             } else {
                 // Invalid invite code

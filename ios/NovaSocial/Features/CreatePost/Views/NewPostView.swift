@@ -16,13 +16,9 @@ struct NewPostView: View {
     @State private var postError: String?
     @State private var showNameSelector = false  // 控制名称选择弹窗
     @State private var selectedNameType: NameDisplayType = .realName  // 选择的名称类型
+    @State private var showLocationPicker = false  // 控制位置选择弹窗
+    @State private var selectedLocation = ""  // 选择的位置
     @FocusState private var isTextFieldFocused: Bool
-
-    // 名称显示类型
-    enum NameDisplayType {
-        case realName
-        case alias
-    }
 
     // Services
     private let mediaService = MediaService()
@@ -30,12 +26,9 @@ struct NewPostView: View {
 
     var body: some View {
         ZStack {
-            // 背景色 - 点击可收起键盘
+            // 背景色
             Color(red: 0.97, green: 0.97, blue: 0.97)
                 .ignoresSafeArea()
-                .onTapGesture {
-                    hideKeyboard()
-                }
 
             VStack(spacing: 0) {
                 topNavigationBar
@@ -44,8 +37,8 @@ struct NewPostView: View {
                     contentView
                 }
                 .scrollDismissesKeyboard(.interactively)
-                .contentShape(Rectangle())
                 .onTapGesture {
+                    // 点击 ScrollView 区域收起键盘
                     hideKeyboard()
                 }
 
@@ -64,13 +57,13 @@ struct NewPostView: View {
         .sheet(isPresented: $showCamera) {
             ImagePicker(sourceType: .camera, selectedImage: .constant(nil))
         }
-        .photosPicker(isPresented: $showPhotoPicker, selection: $selectedPhotos, maxSelectionCount: 10 - selectedImages.count, matching: .images)
+        .photosPicker(isPresented: $showPhotoPicker, selection: $selectedPhotos, maxSelectionCount: 5 - selectedImages.count, matching: .images)
         .onChange(of: selectedPhotos) { oldValue, newValue in
             Task {
                 // 将新选择的照片添加到已有照片中（不清空）
                 for item in newValue {
                     // 检查是否已达到最大数量
-                    guard selectedImages.count < 10 else { break }
+                    guard selectedImages.count < 5 else { break }
 
                     if let data = try? await item.loadTransferable(type: Data.self),
                        let image = UIImage(data: data) {
@@ -95,6 +88,12 @@ struct NewPostView: View {
                     selectedNameType: $selectedNameType
                 )
             }
+        }
+        .sheet(isPresented: $showLocationPicker) {
+            LocationPickerView(
+                selectedLocation: $selectedLocation,
+                isPresented: $showLocationPicker
+            )
         }
     }
 
@@ -175,41 +174,32 @@ struct NewPostView: View {
     private var postAsSection: some View {
         HStack(spacing: 13) {
             // 头像 - 优先显示 AvatarManager 的头像
-            if let pendingAvatar = AvatarManager.shared.pendingAvatar {
-                Image(uiImage: pendingAvatar)
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: 30, height: 30)
-                    .clipShape(Circle())
-                    .overlay(
-                        Circle()
-                            .stroke(Color(red: 0.81, green: 0.13, blue: 0.25), lineWidth: 0.50)
-                    )
-            } else if let avatarUrl = authManager.currentUser?.avatarUrl,
-                      let url = URL(string: avatarUrl) {
-                AsyncImage(url: url) { image in
-                    image
+            ZStack {
+                if let pendingAvatar = AvatarManager.shared.pendingAvatar {
+                    Image(uiImage: pendingAvatar)
                         .resizable()
                         .scaledToFill()
-                } placeholder: {
-                    Circle()
-                        .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
-                }
-                .frame(width: 30, height: 30)
-                .clipShape(Circle())
-                .overlay(
-                    Circle()
-                        .stroke(Color(red: 0.81, green: 0.13, blue: 0.25), lineWidth: 0.50)
-                )
-            } else {
-                Circle()
-                    .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
+                        .frame(width: 30, height: 30)
+                        .clipShape(Circle())
+                } else if let avatarUrl = authManager.currentUser?.avatarUrl,
+                          let url = URL(string: avatarUrl) {
+                    AsyncImage(url: url) { image in
+                        image
+                            .resizable()
+                            .scaledToFill()
+                    } placeholder: {
+                        DefaultAvatarView(size: 30)
+                    }
                     .frame(width: 30, height: 30)
-                    .overlay(
-                        Circle()
-                            .stroke(Color(red: 0.81, green: 0.13, blue: 0.25), lineWidth: 0.50)
-                    )
+                    .clipShape(Circle())
+                } else {
+                    DefaultAvatarView(size: 30)
+                }
             }
+            .overlay(
+                Circle()
+                    .stroke(Color(red: 0.81, green: 0.13, blue: 0.25), lineWidth: 0.50)
+            )
 
             // 显示名称 - 根据选择的类型显示真实名称或别名
             Text(displayedName)
@@ -248,23 +238,14 @@ struct NewPostView: View {
     // MARK: - Image Preview Section
     private var imagePreviewSection: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(alignment: .top, spacing: 20) {
-                if selectedImages.isEmpty {
-                    // 预览占位符（无文字）
-                    Rectangle()
-                        .foregroundColor(.clear)
-                        .frame(width: 100, height: 133)
-                        .background(Color(red: 0, green: 0, blue: 0).opacity(0.20))
-                        .cornerRadius(10)
-                }
-
+            HStack(alignment: .top, spacing: 12) {
                 // 显示所有选中的图片
                 ForEach(Array(selectedImages.enumerated()), id: \.offset) { index, image in
                     ZStack(alignment: .topTrailing) {
                         Image(uiImage: image)
                             .resizable()
                             .scaledToFill()
-                            .frame(width: 100, height: 133)
+                            .frame(width: 255, height: 300)
                             .cornerRadius(10)
                             .clipped()
 
@@ -285,12 +266,12 @@ struct NewPostView: View {
                     }
                 }
 
-                // 添加更多图片按钮（最多10张）
-                if selectedImages.count < 10 {
+                // 添加更多图片按钮（最多5张）- 始终显示在最右边
+                if selectedImages.count < 5 {
                     ZStack {
                         Rectangle()
                             .foregroundColor(.clear)
-                            .frame(width: 100, height: 133)
+                            .frame(width: 255, height: 300)
                             .background(Color(red: 0.91, green: 0.91, blue: 0.91))
                             .cornerRadius(10)
 
@@ -300,7 +281,7 @@ struct NewPostView: View {
                                 .foregroundColor(.white)
 
                             if selectedImages.count > 0 {
-                                Text("\(selectedImages.count)/10")
+                                Text("\(selectedImages.count)/5")
                                     .font(.system(size: 12))
                                     .foregroundColor(.white)
                             }
@@ -335,8 +316,8 @@ struct NewPostView: View {
                     .font(Font.custom("Helvetica Neue", size: 14))
                     .lineSpacing(20)
                     .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
-                    .padding(.horizontal, 20)
-                    .padding(.top, 12)
+                    .padding(.leading, 5)
+                    .padding(.top, 8)
                     .allowsHitTesting(false)
             }
 
@@ -350,9 +331,6 @@ struct NewPostView: View {
         }
         .padding(.horizontal, 16)
         .padding(.top, 16)
-        .onTapGesture {
-            isTextFieldFocused = true
-        }
     }
 
     // MARK: - Channels and Enhance Section
@@ -375,9 +353,11 @@ struct NewPostView: View {
             .cornerRadius(24)
 
             HStack(spacing: 3) {
-                Circle()
+                Image("alice-center-icon")
+                    .resizable()
+                    .scaledToFit()
                     .frame(width: 11, height: 11)
-                    .foregroundColor(Color(red: 0.87, green: 0.11, blue: 0.26))
+                    .colorMultiply(Color(red: 0.87, green: 0.11, blue: 0.26))
 
                 Text("Enhance with alice")
                     .font(Font.custom("Helvetica Neue", size: 10))
@@ -397,12 +377,13 @@ struct NewPostView: View {
 
     // MARK: - Check In Section
     private var checkInSection: some View {
-        HStack(spacing: 6.14) {
-            Circle()
-                .stroke(Color.gray, lineWidth: 1)
-                .frame(width: 28.65, height: 28.65)
+        HStack(spacing: 10) {
+            Image("Location-icon")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 20, height: 20)
 
-            Text("Check in")
+            Text(selectedLocation.isEmpty ? "Check in" : selectedLocation)
                 .font(Font.custom("Helvetica Neue", size: 16))
                 .lineSpacing(40.94)
                 .foregroundColor(.black)
@@ -415,14 +396,20 @@ struct NewPostView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 20)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            showLocationPicker = true
+        }
     }
 
     // MARK: - Invite Alice Section
     private var inviteAliceSection: some View {
-        HStack {
-            Circle()
-                .stroke(Color.gray, lineWidth: 1)
-                .frame(width: 20.86, height: 20.86)
+        HStack(spacing: 10) {
+            Image("alice-center-icon")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 20, height: 20)
+                .colorMultiply(.black)
 
             Text("Invite alice")
                 .font(Font.custom("Helvetica Neue", size: 16))
@@ -676,235 +663,6 @@ struct ImagePicker: UIViewControllerRepresentable {
         func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
             parent.presentationMode.wrappedValue.dismiss()
         }
-    }
-}
-
-// MARK: - 名称选择弹窗组件
-struct NameSelectorModal: View {
-    @Binding var isPresented: Bool
-    @Binding var selectedNameType: NewPostView.NameDisplayType
-    @EnvironmentObject private var authManager: AuthenticationManager
-
-    var body: some View {
-        ZStack {
-            // 半透明背景
-            Color.black.opacity(0.4)
-                .ignoresSafeArea()
-                .onTapGesture {
-                    isPresented = false
-                }
-
-            // 弹窗内容
-            VStack {
-                Spacer()
-
-                ZStack {
-                    UnevenRoundedRectangle(
-                        topLeadingRadius: 11,
-                        topTrailingRadius: 11
-                    )
-                    .fill(.white)
-                    .frame(maxWidth: .infinity, maxHeight: 405)
-                    .offset(x: 0, y: 60)
-
-                    Rectangle()
-                        .foregroundColor(.clear)
-                        .frame(width: 56, height: 7)
-                        .background(Color(red: 0.82, green: 0.11, blue: 0.26))
-                        .cornerRadius(3.50)
-                        .offset(x: 0.50, y: -128)
-
-                    Text("Preferred name display")
-                        .font(Font.custom("Helvetica Neue", size: 20).weight(.medium))
-                        .lineSpacing(20)
-                        .foregroundColor(Color(red: 0.18, green: 0.18, blue: 0.18))
-                        .offset(x: -64.50, y: -101.50)
-
-                    Text("Choose how your name will appear when posting")
-                        .font(Font.custom("Helvetica Neue", size: 12))
-                        .lineSpacing(20)
-                        .foregroundColor(Color(red: 0.68, green: 0.68, blue: 0.68))
-                        .offset(x: -39, y: -74.50)
-
-                    ZStack {
-                        // 真实名称选项
-                        ZStack {
-                            HStack(spacing: 18) {
-                                // 头像 - 优先显示 AvatarManager 的头像
-                                if let pendingAvatar = AvatarManager.shared.pendingAvatar {
-                                    Image(uiImage: pendingAvatar)
-                                        .resizable()
-                                        .scaledToFill()
-                                        .frame(width: 67, height: 67)
-                                        .clipShape(Ellipse())
-                                        .overlay(
-                                            Ellipse()
-                                                .inset(by: 1)
-                                                .stroke(selectedNameType == .realName ? Color(red: 0.82, green: 0.11, blue: 0.26) : Color(red: 0.37, green: 0.37, blue: 0.37), lineWidth: 1)
-                                        )
-                                } else if let avatarUrl = authManager.currentUser?.avatarUrl,
-                                          let url = URL(string: avatarUrl) {
-                                    AsyncImage(url: url) { image in
-                                        image
-                                            .resizable()
-                                            .scaledToFill()
-                                    } placeholder: {
-                                        Ellipse()
-                                            .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
-                                    }
-                                    .frame(width: 67, height: 67)
-                                    .clipShape(Ellipse())
-                                    .overlay(
-                                        Ellipse()
-                                            .inset(by: 1)
-                                            .stroke(selectedNameType == .realName ? Color(red: 0.82, green: 0.11, blue: 0.26) : Color(red: 0.37, green: 0.37, blue: 0.37), lineWidth: 1)
-                                    )
-                                } else {
-                                    Ellipse()
-                                        .foregroundColor(.clear)
-                                        .frame(width: 67, height: 67)
-                                        .background(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
-                                        .overlay(
-                                            Ellipse()
-                                                .inset(by: 1)
-                                                .stroke(selectedNameType == .realName ? Color(red: 0.82, green: 0.11, blue: 0.26) : Color(red: 0.37, green: 0.37, blue: 0.37), lineWidth: 1)
-                                        )
-                                }
-
-                                VStack(alignment: .leading, spacing: 5) {
-                                    // 显示名称
-                                    Text(authManager.currentUser?.displayName ?? authManager.currentUser?.username ?? "User")
-                                        .font(Font.custom("Helvetica Neue", size: 19).weight(.bold))
-                                        .lineSpacing(20)
-                                        .foregroundColor(.black)
-
-                                    // 用户名
-                                    Text(authManager.currentUser?.username ?? "username")
-                                        .font(Font.custom("Helvetica Neue", size: 15))
-                                        .lineSpacing(20)
-                                        .foregroundColor(Color(red: 0.54, green: 0.54, blue: 0.54))
-                                }
-                                .frame(width: 161, height: 46)
-                            }
-                            .frame(width: 246, height: 67)
-                            .offset(x: -48.50, y: 0)
-                        }
-                        .frame(maxWidth: .infinity, maxHeight: 97)
-                        .offset(x: 0, y: -48)
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            selectedNameType = .realName
-                            isPresented = false
-                        }
-
-                        // 别名选项
-                        ZStack {
-                            Rectangle()
-                                .foregroundColor(.clear)
-                                .frame(maxWidth: .infinity, maxHeight: 97)
-                                .background(.white)
-                                .offset(x: 0, y: 0)
-
-                            HStack(spacing: 18) {
-                                // 头像 - 优先显示 AvatarManager 的头像
-                                if let pendingAvatar = AvatarManager.shared.pendingAvatar {
-                                    Image(uiImage: pendingAvatar)
-                                        .resizable()
-                                        .scaledToFill()
-                                        .frame(width: 67, height: 67)
-                                        .clipShape(Ellipse())
-                                        .overlay(
-                                            Ellipse()
-                                                .inset(by: 1)
-                                                .stroke(selectedNameType == .alias ? Color(red: 0.82, green: 0.11, blue: 0.26) : Color(red: 0.37, green: 0.37, blue: 0.37), lineWidth: 1)
-                                        )
-                                } else if let avatarUrl = authManager.currentUser?.avatarUrl,
-                                          let url = URL(string: avatarUrl) {
-                                    AsyncImage(url: url) { image in
-                                        image
-                                            .resizable()
-                                            .scaledToFill()
-                                    } placeholder: {
-                                        Ellipse()
-                                            .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
-                                    }
-                                    .frame(width: 67, height: 67)
-                                    .clipShape(Ellipse())
-                                    .overlay(
-                                        Ellipse()
-                                            .inset(by: 1)
-                                            .stroke(selectedNameType == .alias ? Color(red: 0.82, green: 0.11, blue: 0.26) : Color(red: 0.37, green: 0.37, blue: 0.37), lineWidth: 1)
-                                    )
-                                } else {
-                                    Ellipse()
-                                        .foregroundColor(.clear)
-                                        .frame(width: 67, height: 67)
-                                        .background(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
-                                        .overlay(
-                                            Ellipse()
-                                                .inset(by: 1)
-                                                .stroke(selectedNameType == .alias ? Color(red: 0.82, green: 0.11, blue: 0.26) : Color(red: 0.37, green: 0.37, blue: 0.37), lineWidth: 1)
-                                        )
-                                }
-
-                                VStack(alignment: .leading, spacing: 5) {
-                                    Text("Dreamer")
-                                        .font(Font.custom("Helvetica Neue", size: 19).weight(.bold))
-                                        .lineSpacing(20)
-                                        .foregroundColor(.black)
-
-                                    Text("Alias name")
-                                        .font(Font.custom("Helvetica Neue", size: 15))
-                                        .lineSpacing(20)
-                                        .foregroundColor(Color(red: 0.54, green: 0.54, blue: 0.54))
-                                }
-                                .frame(width: 161, height: 46)
-                            }
-                            .offset(x: -48.50, y: 0)
-                        }
-                        .frame(maxWidth: .infinity, maxHeight: 97)
-                        .offset(x: 0, y: 49)
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            selectedNameType = .alias
-                            isPresented = false
-                        }
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: 193)
-                    .offset(x: 0, y: 46)
-
-                    Rectangle()
-                        .foregroundColor(.clear)
-                        .frame(maxWidth: .infinity, maxHeight: 0)
-                        .overlay(
-                            Rectangle()
-                                .stroke(Color(red: 0.77, green: 0.77, blue: 0.77), lineWidth: 0.20)
-                        )
-                        .offset(x: 0, y: -51.50)
-
-                    Rectangle()
-                        .foregroundColor(.clear)
-                        .frame(maxWidth: .infinity, maxHeight: 0)
-                        .overlay(
-                            Rectangle()
-                                .stroke(Color(red: 0.77, green: 0.77, blue: 0.77), lineWidth: 0.20)
-                        )
-                        .offset(x: 0, y: 47.50)
-
-                    Rectangle()
-                        .foregroundColor(.clear)
-                        .frame(maxWidth: .infinity, maxHeight: 0)
-                        .overlay(
-                            Rectangle()
-                                .stroke(Color(red: 0.77, green: 0.77, blue: 0.77), lineWidth: 0.20)
-                        )
-                        .offset(x: 0, y: 142.50)
-                }
-                .frame(maxWidth: .infinity, maxHeight: 285)
-                .transition(.move(edge: .bottom))
-            }
-        }
-        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: isPresented)
     }
 }
 

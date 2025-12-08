@@ -22,7 +22,7 @@ struct NotificationView: View {
     private var notificationContent: some View {
         ZStack {
             // MARK: - 背景色
-            Color.white
+            DesignTokens.backgroundColor
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
@@ -33,8 +33,8 @@ struct NotificationView: View {
                         showNotification = false
                     }) {
                         Image(systemName: "chevron.left")
-                            .font(.system(size: 20, weight: .medium))
-                            .foregroundColor(.black)
+                            .frame(width: 24, height: 24)
+                            .foregroundColor(DesignTokens.textPrimary)
                     }
 
                     Spacer()
@@ -42,7 +42,7 @@ struct NotificationView: View {
                     // 标题
                     Text("Notification")
                         .font(Font.custom("Helvetica Neue", size: 24).weight(.medium))
-                        .foregroundColor(.black)
+                        .foregroundColor(DesignTokens.textPrimary)
 
                     Spacer()
 
@@ -52,12 +52,12 @@ struct NotificationView: View {
                 }
                 .frame(height: DesignTokens.topBarHeight)
                 .padding(.horizontal, 16)
-                .background(Color.white)
+                .background(DesignTokens.surface)
 
                 // 分隔线
                 Divider()
                     .frame(height: 0.5)
-                    .background(Color(red: 0.74, green: 0.74, blue: 0.74))
+                    .background(DesignTokens.borderColor)
 
                 // MARK: - 通知列表
                 ScrollView {
@@ -66,7 +66,7 @@ struct NotificationView: View {
                         VStack(alignment: .leading, spacing: 12) {
                             Text("Today")
                                 .font(Font.custom("Helvetica Neue", size: 16).weight(.medium))
-                                .foregroundColor(Color(red: 0.27, green: 0.27, blue: 0.27))
+                                .foregroundColor(DesignTokens.textPrimary)
                                 .padding(.horizontal, 16)
 
                             NotificationListItem(
@@ -87,7 +87,7 @@ struct NotificationView: View {
                         VStack(alignment: .leading, spacing: 12) {
                             Text("Last 7 Days")
                                 .font(Font.custom("Helvetica Neue", size: 16).weight(.medium))
-                                .foregroundColor(Color(red: 0.27, green: 0.27, blue: 0.27))
+                                .foregroundColor(DesignTokens.textPrimary)
                                 .padding(.horizontal, 16)
 
                             NotificationListItem(
@@ -123,7 +123,7 @@ struct NotificationView: View {
                         VStack(alignment: .leading, spacing: 12) {
                             Text("Last 30 Days")
                                 .font(Font.custom("Helvetica Neue", size: 16).weight(.medium))
-                                .foregroundColor(Color(red: 0.27, green: 0.27, blue: 0.27))
+                                .foregroundColor(DesignTokens.textPrimary)
                                 .padding(.horizontal, 16)
 
                             NotificationListItem(
@@ -197,16 +197,16 @@ struct NotificationListItem: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text(userName)
                     .font(Font.custom("Helvetica Neue", size: 16).weight(.bold))
-                    .foregroundColor(.black)
+                    .foregroundColor(DesignTokens.textPrimary)
 
                 HStack(spacing: 4) {
                     Text(action)
                         .font(Font.custom("Helvetica Neue", size: 14))
-                        .foregroundColor(.black)
+                        .foregroundColor(DesignTokens.textPrimary)
 
                     Text(time)
                         .font(Font.custom("Helvetica Neue", size: 14))
-                        .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
+                        .foregroundColor(DesignTokens.textSecondary)
                 }
             }
 
@@ -220,13 +220,13 @@ struct NotificationListItem: View {
                 }) {
                     Text("Message")
                         .font(Font.custom("Helvetica Neue", size: 12).weight(.medium))
-                        .foregroundColor(.black)
+                        .foregroundColor(DesignTokens.textPrimary)
                 }
                 .frame(width: 85, height: 24)
                 .overlay(
                     RoundedRectangle(cornerRadius: 100)
                         .inset(by: 0.50)
-                        .stroke(.black, lineWidth: 0.50)
+                        .stroke(DesignTokens.textPrimary, lineWidth: 0.50)
                 )
 
             case .follow:
@@ -265,7 +265,7 @@ struct NotificationListItem: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
-        .background(Color.white)
+        .background(DesignTokens.surface)
     }
 }
 

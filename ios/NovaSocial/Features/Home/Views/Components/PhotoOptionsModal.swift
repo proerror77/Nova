@@ -12,7 +12,7 @@ struct PhotoOptionsModal: View {
     var body: some View {
         ZStack {
             // Semi-transparent background overlay
-            DesignTokens.overlayBackground
+            Color.black.opacity(0.4)
                 .ignoresSafeArea()
                 .onTapGesture {
                     isPresented = false
@@ -22,112 +22,133 @@ struct PhotoOptionsModal: View {
             VStack {
                 Spacer()
 
-                ZStack {
-                    Group {
-                        // 背景 - 独立控制上下边距
-                        DesignTokens.cardBackground
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 356) // ← 基础高度
-                            .cornerRadius(16)
-                            .offset(y: 20) // ← 正数=底部增加，负数=顶部增加
-
-                        // 顶部红色指示条
-                        Rectangle()
-                            .foregroundColor(.clear)
-                            .frame(width: 56, height: 4)
-                            .background(Color(red: 0.82, green: 0.11, blue: 0.26))
-                            .cornerRadius(3.50)
-                            .offset(x: 0, y: -145)
-
-                        // Choose Photo
-                        Button(action: {
-                            onChoosePhoto()
-                            isPresented = false
-                        }) {
-                            Text("Choose Photo")
-                                .font(Font.custom("Helvetica Neue", size: 18).weight(.medium))
-                                .foregroundColor(Color(red: 0.18, green: 0.18, blue: 0.18))
-                        }
-                        .offset(x: 0, y: -110)
-
-                        // Take Photo
-                        Button(action: {
-                            onTakePhoto()
-                            isPresented = false
-                        }) {
-                            Text("Take Photo")
-                                .font(Font.custom("Helvetica Neue", size: 18).weight(.medium))
-                                .foregroundColor(Color(red: 0.18, green: 0.18, blue: 0.18))
-                        }
-                        .offset(x: 0, y: -50)
-
-                        // Generate Image
-                        Button(action: {
-                            onGenerateImage()
-                            isPresented = false
-                        }) {
-                            Text("Generate Image")
-                                .font(Font.custom("Helvetica Neue", size: 18).weight(.medium))
-                                .foregroundColor(Color(red: 0.18, green: 0.18, blue: 0.18))
-                        }
-                        .offset(x: 0, y: 10)
-
-                        // Write
-                        Button(action: {
-                            onWrite()
-                            isPresented = false
-                        }) {
-                            Text("Write")
-                                .font(Font.custom("Helvetica Neue", size: 18).weight(.medium))
-                                .foregroundColor(.black)
-                        }
-                        .offset(x: 0, y: 70)
-
-                    }
+                VStack(spacing: 0) {
+                    // 顶部红色指示条
+                    Rectangle()
+                        .fill(Color(red: 0.82, green: 0.11, blue: 0.26))
+                        .frame(width: 56, height: 7)
+                        .cornerRadius(3.5)
+                        .padding(.top, 12)
+                        .padding(.bottom, 16)
 
                     // 分隔线
-                    Group {
-                        Rectangle()
-                            .fill(Color(red: 0.77, green: 0.77, blue: 0.77))
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 0.5)
-                            .offset(x: 0, y: -80)
+                    Rectangle()
+                        .fill(Color(red: 0.77, green: 0.77, blue: 0.77))
+                        .frame(height: 0)
 
-                        Rectangle()
-                            .fill(Color(red: 0.77, green: 0.77, blue: 0.77))
+                    // Choose Photo
+                    Button {
+                        onChoosePhoto()
+                        isPresented = false
+                    } label: {
+                        Text("Choose Photo")
+                            .font(Font.custom("Helvetica Neue", size: 18).weight(.medium))
+                            .foregroundColor(Color(red: 0.18, green: 0.18, blue: 0.18))
                             .frame(maxWidth: .infinity)
-                            .frame(height: 0.5)
-                            .offset(x: 0, y: -20)
-
-                        Rectangle()
-                            .fill(Color(red: 0.77, green: 0.77, blue: 0.77))
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 0.5)
-                            .offset(x: 0, y: 40)
-
-                        // Cancel 上方分隔线
-                        Rectangle()
-                            .fill(Color(red: 0.93, green: 0.93, blue: 0.93))
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 6)
-                            .offset(x: 0, y: 100)
-
-                        // Cancel
-                        Button(action: {
-                            isPresented = false
-                        }) {
-                            Text("Cancel")
-                                .font(Font.custom("Helvetica Neue", size: 18).weight(.medium))
-                                .foregroundColor(.black)
-                        }
-                        .offset(x: 0, y: 132)
+                            .frame(height: 56)
+                            .background(Color.white)
+                            .contentShape(Rectangle())
                     }
+                    .buttonStyle(.plain)
+
+                    // 分隔线
+                    Rectangle()
+                        .fill(Color(red: 0.77, green: 0.77, blue: 0.77))
+                        .frame(height: 0.3)
+
+                    // Take Photo
+                    Button {
+                        onTakePhoto()
+                        isPresented = false
+                    } label: {
+                        Text("Take Photo")
+                            .font(Font.custom("Helvetica Neue", size: 18).weight(.medium))
+                            .foregroundColor(Color(red: 0.18, green: 0.18, blue: 0.18))
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 56)
+                            .background(Color.white)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+
+                    // 分隔线
+                    Rectangle()
+                        .fill(Color(red: 0.77, green: 0.77, blue: 0.77))
+                        .frame(height: 0.4)
+
+                    // Generate Image
+                    Button {
+                        onGenerateImage()
+                        isPresented = false
+                    } label: {
+                        Text("Generate Image")
+                            .font(Font.custom("Helvetica Neue", size: 18).weight(.medium))
+                            .foregroundColor(Color(red: 0.18, green: 0.18, blue: 0.18))
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 56)
+                            .background(Color.white)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+
+                    // 分隔线
+                    Rectangle()
+                        .fill(Color(red: 0.77, green: 0.77, blue: 0.77))
+                        .frame(height: 0.4)
+
+                    // Write
+                    Button {
+                        onWrite()
+                        isPresented = false
+                    } label: {
+                        Text("Write")
+                            .font(Font.custom("Helvetica Neue", size: 18).weight(.medium))
+                            .foregroundColor(Color(red: 0.18, green: 0.18, blue: 0.18))
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 56)
+                            .background(Color.white)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+
+                    // 灰色分隔区
+                    Rectangle()
+                        .fill(Color(red: 0.93, green: 0.93, blue: 0.93))
+                        .frame(height: 6)
+
+                    // Cancel
+                    Button {
+                        isPresented = false
+                    } label: {
+                        Text("Cancel")
+                            .font(Font.custom("Helvetica Neue", size: 18).weight(.medium))
+                            .foregroundColor(.black)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 56)
+                            .background(Color.white)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
                 }
-                .frame(maxWidth: .infinity)
-                .frame(height: 335)
-                .padding(.bottom, -20)
+                .background(
+                    UnevenRoundedRectangle(topLeadingRadius: 11, topTrailingRadius: 11)
+                        .fill(.white)
+                )
+                .safeAreaInset(edge: .bottom) {
+                    Color.white
+                        .frame(height: 0)
+                }
             }
+            .background(
+                VStack {
+                    Spacer()
+                    Color.white
+                        .frame(height: 50)
+                }
+                .ignoresSafeArea(edges: .bottom)
+            )
         }
+        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: isPresented)
     }
 }
 

@@ -28,9 +28,8 @@ struct GroupChatView: View {
                         currentPage = .message
                     }) {
                         Image(systemName: "chevron.left")
-                            .font(.system(size: 20))
-                            .foregroundColor(.black)
                             .frame(width: 24, height: 24)
+                            .foregroundColor(.black)
                     }
 
                     Spacer()
@@ -76,6 +75,7 @@ struct GroupChatView: View {
                     .padding(.bottom, 16)
                 }
                 .onTapGesture {
+                    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
                     if showAttachmentOptions {
                         showAttachmentOptions = false
                     }
@@ -233,7 +233,6 @@ private struct GroupChatAttachmentButton: View {
                 )
             Text(title)
                 .font(Font.custom("Helvetica Neue", size: 12))
-                .lineSpacing(20)
                 .foregroundColor(Color(red: 0.25, green: 0.25, blue: 0.25))
         }
         .frame(width: 60)

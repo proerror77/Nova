@@ -60,21 +60,9 @@ struct CreateAccountView: View {
                 // Main Content
                 ZStack {
                     Group {
-                        // Profile Picture Circle - 显示选择的头像或占位符
-                        ZStack {
-                            if let avatar = selectedAvatar {
-                                Image(uiImage: avatar)
-                                    .resizable()
-                                    .scaledToFill()
-                                    .frame(width: 136, height: 136)
-                                    .clipShape(Circle())
-                            } else {
-                                Circle()
-                                    .fill(Color(red: 0.77, green: 0.77, blue: 0.77))
-                                    .frame(width: 136, height: 136)
-                            }
-                        }
-                        .offset(x: 0.50, y: -290)
+                        // Profile Picture Circle - 显示选择的头像或默认头像
+                        AvatarView(image: selectedAvatar, url: nil, size: 136)
+                            .offset(x: 0.50, y: -290)
 
                         // Add Photo Button - 使用 PhotosPicker
                         PhotosPicker(selection: $selectedPhotoItem, matching: .images) {

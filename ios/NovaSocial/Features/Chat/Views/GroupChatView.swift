@@ -28,9 +28,8 @@ struct GroupChatView: View {
                         currentPage = .message
                     }) {
                         Image(systemName: "chevron.left")
-                            .font(.system(size: 20))
-                            .foregroundColor(.black)
                             .frame(width: 24, height: 24)
+                            .foregroundColor(.black)
                     }
 
                     Spacer()

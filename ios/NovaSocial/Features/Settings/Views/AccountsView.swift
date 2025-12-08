@@ -5,7 +5,7 @@ struct AccountsView: View {
 
     var body: some View {
         ZStack {
-            Color.white
+            DesignTokens.backgroundColor
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
@@ -15,7 +15,7 @@ struct AccountsView: View {
                         currentPage = .setting
                     }) {
                         Image(systemName: "chevron.left")
-                            .font(.system(size: 20))
+                            .frame(width: 24, height: 24)
                             .foregroundColor(DesignTokens.textPrimary)
                     }
 
@@ -33,7 +33,7 @@ struct AccountsView: View {
                 }
                 .frame(height: DesignTokens.topBarHeight)
                 .padding(.horizontal, 20)
-                .background(Color.white)
+                .background(DesignTokens.surface)
 
                 // 分隔线
                 Rectangle()
@@ -56,7 +56,7 @@ struct AccountsView: View {
                             .padding(.horizontal, 20)
                             .padding(.vertical, 16)
                         }
-                        .background(Color.white)
+                        .background(DesignTokens.surface)
                         .cornerRadius(6)
                         .overlay(
                             RoundedRectangle(cornerRadius: 6)

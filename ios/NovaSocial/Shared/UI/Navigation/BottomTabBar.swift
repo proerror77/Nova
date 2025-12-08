@@ -73,7 +73,7 @@ struct BottomTabBar: View {
                         .fill(isAccount ? Color(red: 0.87, green: 0.11, blue: 0.26) : Color.clear)
                         .frame(width: 32, height: 32)
 
-                    // 头像
+                    // 头像 - 使用统一的默认头像组件
                     if let pendingAvatar = avatarManager.pendingAvatar {
                         // 优先显示待上传的头像
                         Image(uiImage: pendingAvatar)
@@ -93,27 +93,15 @@ struct BottomTabBar: View {
                                     .frame(width: 26, height: 26)
                                     .clipShape(Circle())
                             case .failure(_), .empty:
-                                // 加载失败或空状态，显示iOS默认联系人图标
-                                Image(systemName: "person.circle.fill")
-                                    .resizable()
-                                    .scaledToFit()
-                                    .frame(width: 26, height: 26)
-                                    .foregroundColor(Color(red: 0.78, green: 0.78, blue: 0.78))
+                                // 加载失败或空状态，显示默认头像
+                                DefaultAvatarView(size: 26)
                             @unknown default:
-                                Image(systemName: "person.circle.fill")
-                                    .resizable()
-                                    .scaledToFit()
-                                    .frame(width: 26, height: 26)
-                                    .foregroundColor(Color(red: 0.78, green: 0.78, blue: 0.78))
+                                DefaultAvatarView(size: 26)
                             }
                         }
                     } else {
-                        // 默认iOS联系人图标（灰色）
-                        Image(systemName: "person.circle.fill")
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 26, height: 26)
-                            .foregroundColor(Color(red: 0.78, green: 0.78, blue: 0.78))
+                        // 默认头像
+                        DefaultAvatarView(size: 26)
                     }
                 }
 

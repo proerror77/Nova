@@ -8,7 +8,7 @@ struct SearchView: View {
     var body: some View {
         ZStack {
             // MARK: - 背景色
-            Color(red: 0.97, green: 0.96, blue: 0.96)
+            DesignTokens.backgroundColor
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
@@ -20,16 +20,16 @@ struct SearchView: View {
                         HStack(spacing: 10) {
                             Image(systemName: "magnifyingglass")
                                 .font(.system(size: 15))
-                                .foregroundColor(Color(red: 0.69, green: 0.68, blue: 0.68))
+                                .foregroundColor(DesignTokens.textMuted)
 
                             TextField("Search", text: $searchText)
                                 .font(Font.custom("Helvetica Neue", size: 15))
-                                .foregroundColor(.black)
+                                .foregroundColor(DesignTokens.textPrimary)
                                 .focused($isSearchFocused)
                         }
                         .padding(EdgeInsets(top: 6, leading: 12, bottom: 6, trailing: 12))
                         .frame(height: 32)
-                        .background(Color(red: 0.89, green: 0.88, blue: 0.87))
+                        .background(DesignTokens.inputBackground)
                         .cornerRadius(37)
 
                         // 取消按钮
@@ -38,18 +38,18 @@ struct SearchView: View {
                         }) {
                             Text("Cancel")
                                 .font(Font.custom("Helvetica Neue", size: 14))
-                                .foregroundColor(.black)
+                                .foregroundColor(DesignTokens.textPrimary)
                         }
                         .frame(width: 44)
                     }
                     .frame(height: DesignTokens.topBarHeight)
                     .padding(.horizontal, 16)
-                    .background(Color.white)
+                    .background(DesignTokens.surface)
 
                     // 分隔线
                     Divider()
                         .frame(height: 0.5)
-                        .background(Color(red: 0.74, green: 0.74, blue: 0.74))
+                        .background(DesignTokens.borderColor)
                 }
 
                 // MARK: - 搜索结果区域
@@ -59,7 +59,7 @@ struct SearchView: View {
                         if searchText.isEmpty {
                             // 空状态
                             Text("")
-                                .foregroundColor(Color(red: 0.69, green: 0.68, blue: 0.68))
+                                .foregroundColor(DesignTokens.textMuted)
                                 .padding(.top, 100)
                         } else {
                             // 搜索结果
@@ -80,6 +80,10 @@ struct SearchView: View {
                 isSearchFocused = true
             }
         }
+        .contentShape(Rectangle())
+        .onTapGesture {
+            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+        }
     }
 }
 
@@ -96,18 +100,18 @@ struct SearchResultItem: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Search Result")
                     .font(Font.custom("Helvetica Neue", size: 15).weight(.semibold))
-                    .foregroundColor(.black)
+                    .foregroundColor(DesignTokens.textPrimary)
 
                 Text("Description")
                     .font(Font.custom("Helvetica Neue", size: 13))
-                    .foregroundColor(Color(red: 0.54, green: 0.54, blue: 0.54))
+                    .foregroundColor(DesignTokens.textSecondary)
             }
 
             Spacer()
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
-        .background(Color.white)
+        .background(DesignTokens.surface)
     }
 }
 

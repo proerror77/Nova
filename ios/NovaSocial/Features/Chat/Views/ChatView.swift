@@ -141,10 +141,10 @@ struct LocationMessageView: View {
 
             Text("My Location")
                 .font(Font.custom("Helvetica Neue", size: 12))
-                .foregroundColor(Color(red: 0.34, green: 0.34, blue: 0.34))
+                .foregroundColor(DesignTokens.textPrimary)
         }
         .padding(8)
-        .background(Color(red: 0.85, green: 0.85, blue: 0.85))
+        .background(DesignTokens.chatBubbleOther)
         .cornerRadius(12)
     }
 }
@@ -167,24 +167,20 @@ struct MessageBubbleView: View {
 
             messageContent
 
-            Circle()
-                .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
-                .frame(width: 50, height: 50)
+            DefaultAvatarView(size: 50)
         }
         .padding(.horizontal, 16)
     }
 
     private var otherMessageView: some View {
         HStack(spacing: 6) {
-            Circle()
-                .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
-                .frame(width: 50, height: 50)
+            DefaultAvatarView(size: 50)
 
             Text(message.text)
                 .font(Font.custom("Helvetica Neue", size: 18))
-                .foregroundColor(Color(red: 0.34, green: 0.34, blue: 0.34))
+                .foregroundColor(DesignTokens.textPrimary)
                 .padding(EdgeInsets(top: 10, leading: 16, bottom: 10, trailing: 16))
-                .background(Color(red: 0.85, green: 0.85, blue: 0.85))
+                .background(DesignTokens.chatBubbleOther)
                 .cornerRadius(23)
 
             Spacer()
@@ -205,9 +201,9 @@ struct MessageBubbleView: View {
         } else {
             Text(message.text)
                 .font(Font.custom("Helvetica Neue", size: 18))
-                .foregroundColor(Color(red: 0.34, green: 0.34, blue: 0.34))
+                .foregroundColor(DesignTokens.textPrimary)
                 .padding(EdgeInsets(top: 10, leading: 16, bottom: 10, trailing: 16))
-                .background(Color(red: 0.85, green: 0.85, blue: 0.85))
+                .background(DesignTokens.chatBubbleOther)
                 .cornerRadius(23)
         }
     }
@@ -224,17 +220,17 @@ struct AttachmentOptionButton: View {
             Rectangle()
                 .foregroundColor(.clear)
                 .frame(width: 60, height: 60)
-                .background(.white)
+                .background(DesignTokens.surface)
                 .cornerRadius(10)
                 .overlay(
                     Image(systemName: icon)
                         .font(.system(size: 24))
-                        .foregroundColor(.black)
+                        .foregroundColor(DesignTokens.textPrimary)
                 )
             Text(title)
                 .font(Font.custom("Helvetica Neue", size: 12))
                 .lineSpacing(20)
-                .foregroundColor(Color(red: 0.25, green: 0.25, blue: 0.25))
+                .foregroundColor(DesignTokens.textPrimary)
         }
         .frame(width: 60)
         .onTapGesture {
@@ -294,7 +290,7 @@ struct ChatView: View {
 
     var body: some View {
         ZStack {
-            Color(red: 0.97, green: 0.96, blue: 0.96)
+            DesignTokens.backgroundColor
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
@@ -302,7 +298,7 @@ struct ChatView: View {
 
                 Divider()
                     .frame(height: 0.5)
-                    .background(Color(red: 0.74, green: 0.74, blue: 0.74))
+                    .background(DesignTokens.borderColor)
 
                 messageListView
 
@@ -364,12 +360,12 @@ struct ChatView: View {
                 showChat = false
             }) {
                 Image(systemName: "chevron.left")
-                    .font(.system(size: 20, weight: .medium))
-                    .foregroundColor(.black)
+                    .frame(width: 24, height: 24)
+                    .foregroundColor(DesignTokens.textPrimary)
             }
 
             HStack(spacing: 13) {
-                // 头像 - alice 使用自定义图片，其他用户使用默认圆形
+                // 头像 - alice 使用自定义图片，其他用户使用默认头像
                 if userName.lowercased() == "alice" {
                     Image("alice-avatar")
                         .resizable()
@@ -377,14 +373,12 @@ struct ChatView: View {
                         .frame(width: 50, height: 50)
                         .clipShape(Circle())
                 } else {
-                    Circle()
-                        .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
-                        .frame(width: 50, height: 50)
+                    DefaultAvatarView(size: 50)
                 }
 
                 Text(userName)
                     .font(Font.custom("Helvetica Neue", size: 20).weight(.medium))
-                    .foregroundColor(.black)
+                    .foregroundColor(DesignTokens.textPrimary)
             }
             .contentShape(Rectangle())
             .onTapGesture {
@@ -399,7 +393,7 @@ struct ChatView: View {
         }
         .frame(height: DesignTokens.topBarHeight)
         .padding(.horizontal, 16)
-        .background(Color.white)
+        .background(DesignTokens.surface)
     }
 
     // MARK: - 消息列表
@@ -433,7 +427,7 @@ struct ChatView: View {
 
                     Text(currentDateString())
                         .font(Font.custom("Helvetica Neue", size: 12))
-                        .foregroundColor(Color(red: 0.59, green: 0.59, blue: 0.59))
+                        .foregroundColor(DesignTokens.textMuted)
                         .padding(.top, 16)
 
                     ForEach(messages) { message in
@@ -479,7 +473,7 @@ struct ChatView: View {
         VStack(spacing: 0) {
             Divider()
                 .frame(height: 0.5)
-                .background(Color(red: 0.74, green: 0.74, blue: 0.74))
+                .background(DesignTokens.borderColor)
 
             HStack(spacing: 12) {
                 Button(action: {
@@ -501,18 +495,18 @@ struct ChatView: View {
                 HStack(spacing: 8) {
                     Image(systemName: "waveform")
                         .font(.system(size: 14))
-                        .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
+                        .foregroundColor(DesignTokens.textMuted)
 
                     TextField("Type a message...", text: $messageText)
                         .font(Font.custom("Helvetica Neue", size: 16))
-                        .foregroundColor(Color(red: 0.34, green: 0.34, blue: 0.34))
+                        .foregroundColor(DesignTokens.textPrimary)
                         .focused($isInputFocused)
                         .onSubmit {
                             sendMessage()
                         }
                 }
                 .padding(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12))
-                .background(Color(red: 0.53, green: 0.53, blue: 0.53).opacity(0.20))
+                .background(DesignTokens.inputBackground)
                 .cornerRadius(26)
                 .onChange(of: isInputFocused) { _, focused in
                     if focused && showAttachmentOptions {
@@ -536,7 +530,7 @@ struct ChatView: View {
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
-            .background(Color.white)
+            .background(DesignTokens.surface)
 
             if showAttachmentOptions {
                 attachmentOptionsView
@@ -554,17 +548,17 @@ struct ChatView: View {
                         Rectangle()
                             .foregroundColor(.clear)
                             .frame(width: 60, height: 60)
-                            .background(.white)
+                            .background(DesignTokens.surface)
                             .cornerRadius(10)
                             .overlay(
                                 Image(systemName: "photo.on.rectangle")
                                     .font(.system(size: 24))
-                                    .foregroundColor(.black)
+                                    .foregroundColor(DesignTokens.textPrimary)
                             )
                         Text("Album")
                             .font(Font.custom("Helvetica Neue", size: 12))
                             .lineSpacing(20)
-                            .foregroundColor(Color(red: 0.25, green: 0.25, blue: 0.25))
+                            .foregroundColor(DesignTokens.textPrimary)
                     }
                     .frame(width: 60)
                 }
@@ -591,7 +585,7 @@ struct ChatView: View {
             .padding(.vertical, 16)
         }
         .frame(maxWidth: .infinity)
-        .background(Color(red: 0.91, green: 0.91, blue: 0.91))
+        .background(DesignTokens.attachmentBackground)
     }
 
     // MARK: - 事件处理
@@ -639,7 +633,7 @@ struct ChatView: View {
             // 2. 转换为UI消息
             messages = response.messages.map { ChatMessage(from: $0, currentUserId: currentUserId) }
 
-            // 3. 连接WebSocket接收实时消息（绑定当前会话）
+            // 3. 连接WebSocket接收实时消息
             chatService.onMessageReceived = { newMessage in
                 Task { @MainActor in
                     // 避免重复添加（如果消息已存在）
@@ -647,7 +641,7 @@ struct ChatView: View {
                     self.messages.append(ChatMessage(from: newMessage, currentUserId: self.currentUserId))
                 }
             }
-            chatService.connectWebSocket(conversationId: conversationId)
+            chatService.connectWebSocket()
 
             #if DEBUG
             print("[ChatView] Loaded \(messages.count) messages for conversation \(conversationId)")
