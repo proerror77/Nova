@@ -88,6 +88,7 @@ pub struct GetPollResponse {
     pub my_voted_candidate_id: Option<String>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Serialize)]
 pub struct VoteResponse {
     pub success: bool,

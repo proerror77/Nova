@@ -163,6 +163,7 @@ async fn handle_ws_event_async(
 }
 
 impl WsSession {
+    #[allow(clippy::too_many_arguments)]
     fn new(
         conversation_id: Uuid,
         user_id: Uuid,
@@ -589,8 +590,7 @@ async fn validate_ws_token(
                 "✅ WebSocket authentication successful for user: {}",
                 claims.sub
             );
-            Uuid::parse_str(&claims.sub)
-                .map_err(|_| actix_web::http::StatusCode::UNAUTHORIZED)
+            Uuid::parse_str(&claims.sub).map_err(|_| actix_web::http::StatusCode::UNAUTHORIZED)
         }
         Err(e) => {
             error!(
@@ -630,9 +630,8 @@ async fn verify_conversation_membership(db: &Pool<Postgres>, params: &WsParams) 
     }
 }
 
-// HTTP handler
-#[get("/ws")]
-pub async fn ws_handler(
+// Core WebSocket handler implementation
+async fn ws_handler_inner(
     req: HttpRequest,
     stream: web::Payload,
     state: web::Data<AppState>,
@@ -711,6 +710,17 @@ pub async fn ws_handler(
     Ok(resp)
 }
 
+// HTTP handler
+#[get("/ws")]
+pub async fn ws_handler(
+    req: HttpRequest,
+    stream: web::Payload,
+    state: web::Data<AppState>,
+    query: web::Query<WsParams>,
+) -> Result<HttpResponse, Error> {
+    ws_handler_inner(req, stream, state, query).await
+}
+
 /// Alias path to match mobile client expectation (`/ws/chat`)
 #[get("/ws/chat")]
 pub async fn ws_chat_alias(
@@ -719,5 +729,5 @@ pub async fn ws_chat_alias(
     state: web::Data<AppState>,
     query: web::Query<WsParams>,
 ) -> Result<HttpResponse, Error> {
-    ws_handler(req, stream, state, query).await
+    ws_handler_inner(req, stream, state, query).await
 }

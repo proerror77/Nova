@@ -72,12 +72,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("Processing post {} original {}", post_id, s3_key);
 
             // Download original
-            let obj = s3
-                .get_object()
-                .bucket(&bucket)
-                .key(&s3_key)
-                .send()
-                .await?;
+            let obj = s3.get_object().bucket(&bucket).key(&s3_key).send().await?;
             let data = obj.body.collect().await?.to_vec();
 
             // Decode & resize

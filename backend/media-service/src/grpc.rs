@@ -199,17 +199,13 @@ impl MediaService for MediaServiceImpl {
         let storage_path = format!("uploads/{}/{}.{}", user_id, upload_id, ext);
 
         // Generate presigned URL for direct upload
-        let presigned_url = generate_presigned_url(
-            &self.s3_client,
-            &self.s3_config,
-            &storage_path,
-            &mime_type,
-        )
-        .await
-        .map_err(|e| {
-            tracing::error!("Failed to generate presigned URL: {:?}", e);
-            Status::internal("Failed to generate upload URL")
-        })?;
+        let presigned_url =
+            generate_presigned_url(&self.s3_client, &self.s3_config, &storage_path, &mime_type)
+                .await
+                .map_err(|e| {
+                    tracing::error!("Failed to generate presigned URL: {:?}", e);
+                    Status::internal("Failed to generate upload URL")
+                })?;
 
         let expires_at = Utc::now() + chrono::Duration::minutes(15);
 
@@ -463,15 +459,16 @@ impl MediaService for MediaServiceImpl {
             Status::internal("Database error")
         })?;
 
-        let total_count: (i64,) =
-            sqlx::query_as("SELECT COUNT(*) FROM media_files WHERE user_id = $1 AND deleted_at IS NULL")
-                .bind(user_id)
-                .fetch_one(&self.db_pool)
-                .await
-                .map_err(|e| {
-                    tracing::error!("Database error: {:?}", e);
-                    Status::internal("Database error")
-                })?;
+        let total_count: (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM media_files WHERE user_id = $1 AND deleted_at IS NULL",
+        )
+        .bind(user_id)
+        .fetch_one(&self.db_pool)
+        .await
+        .map_err(|e| {
+            tracing::error!("Database error: {:?}", e);
+            Status::internal("Database error")
+        })?;
 
         Ok(Response::new(GetUserMediaResponse {
             media: media.into_iter().map(|m| m.to_proto()).collect(),
@@ -485,7 +482,9 @@ impl MediaService for MediaServiceImpl {
         &self,
         _request: Request<GenerateThumbnailRequest>,
     ) -> Result<Response<GenerateThumbnailResponse>, Status> {
-        Err(Status::unimplemented("Thumbnail generation not yet implemented"))
+        Err(Status::unimplemented(
+            "Thumbnail generation not yet implemented",
+        ))
     }
 
     /// Transcode video (stub implementation)
@@ -493,7 +492,9 @@ impl MediaService for MediaServiceImpl {
         &self,
         _request: Request<TranscodeVideoRequest>,
     ) -> Result<Response<TranscodeVideoResponse>, Status> {
-        Err(Status::unimplemented("Video transcoding not yet implemented"))
+        Err(Status::unimplemented(
+            "Video transcoding not yet implemented",
+        ))
     }
 
     /// Get transcode status (stub implementation)
@@ -501,7 +502,9 @@ impl MediaService for MediaServiceImpl {
         &self,
         _request: Request<GetTranscodeStatusRequest>,
     ) -> Result<Response<GetTranscodeStatusResponse>, Status> {
-        Err(Status::unimplemented("Transcode status not yet implemented"))
+        Err(Status::unimplemented(
+            "Transcode status not yet implemented",
+        ))
     }
 
     /// Get streaming URL

@@ -469,26 +469,17 @@ async fn main() -> std::io::Result<()> {
             .service(close_poll)
             .service(delete_poll)
             // ✅ Graph API (Follow/Unfollow)
-            .route(
-                "/api/v2/graph/following",
-                web::get().to(get_my_following),
-            )
+            .route("/api/v2/graph/following", web::get().to(get_my_following))
             .route(
                 "/api/v2/graph/following/{user_id}",
                 web::get().to(get_user_following),
             )
-            .route(
-                "/api/v2/graph/followers",
-                web::get().to(get_my_followers),
-            )
+            .route("/api/v2/graph/followers", web::get().to(get_my_followers))
             .route(
                 "/api/v2/graph/followers/{user_id}",
                 web::get().to(get_user_followers),
             )
-            .route(
-                "/api/v2/graph/follow",
-                web::post().to(follow_user),
-            )
+            .route("/api/v2/graph/follow", web::post().to(follow_user))
             .route(
                 "/api/v2/graph/follow/{user_id}",
                 web::delete().to(unfollow_user),
@@ -498,10 +489,7 @@ async fn main() -> std::io::Result<()> {
                 web::get().to(check_is_following),
             )
             // ✅ Notifications API
-            .route(
-                "/api/v2/notifications",
-                web::get().to(get_notifications),
-            )
+            .route("/api/v2/notifications", web::get().to(get_notifications))
             .route(
                 "/api/v2/notifications/read/{id}",
                 web::post().to(mark_notification_read),
@@ -513,10 +501,16 @@ async fn main() -> std::io::Result<()> {
             // ✅ Search API (content, users, hashtags, trending)
             .route("/api/v2/search", web::get().to(search_all))
             .route("/api/v2/search/content", web::get().to(search_content))
-            .route("/api/v2/search/users-full", web::get().to(search_users_full))
+            .route(
+                "/api/v2/search/users-full",
+                web::get().to(search_users_full),
+            )
             .route("/api/v2/search/hashtags", web::get().to(search_hashtags))
             .route("/api/v2/search/suggestions", web::get().to(get_suggestions))
-            .route("/api/v2/search/trending", web::get().to(get_trending_topics))
+            .route(
+                "/api/v2/search/trending",
+                web::get().to(get_trending_topics),
+            )
             // ✅ User Settings API
             .route("/api/v2/settings", web::get().to(get_settings))
             .route("/api/v2/settings", web::put().to(update_settings))

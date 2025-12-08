@@ -118,7 +118,11 @@ pub async fn get_post(
                 updated_at: p.updated_at,
                 status: status_to_string(p.status),
                 media_urls: p.media_urls,
-                media_type: if p.media_type.is_empty() { None } else { Some(p.media_type) },
+                media_type: if p.media_type.is_empty() {
+                    None
+                } else {
+                    Some(p.media_type)
+                },
             });
 
             info!(post_id = %post_id, found = grpc_response.found, "Post retrieved");
@@ -195,7 +199,11 @@ pub async fn get_user_posts(
                     updated_at: p.updated_at,
                     status: status_to_string(p.status),
                     media_urls: p.media_urls,
-                    media_type: if p.media_type.is_empty() { None } else { Some(p.media_type) },
+                    media_type: if p.media_type.is_empty() {
+                        None
+                    } else {
+                        Some(p.media_type)
+                    },
                 })
                 .collect();
 
@@ -249,7 +257,12 @@ pub async fn create_post(
         content: body.content.clone(),
         media_urls: body.media_urls.clone().unwrap_or_default(),
         media_type: body.media_type.clone().unwrap_or_else(|| {
-            if body.media_urls.as_ref().map(|urls| !urls.is_empty()).unwrap_or(false) {
+            if body
+                .media_urls
+                .as_ref()
+                .map(|urls| !urls.is_empty())
+                .unwrap_or(false)
+            {
                 "image".to_string()
             } else {
                 "none".to_string()
@@ -277,7 +290,11 @@ pub async fn create_post(
                         updated_at: post.updated_at,
                         status: status_to_string(post.status),
                         media_urls: post.media_urls,
-                        media_type: if post.media_type.is_empty() { None } else { Some(post.media_type) },
+                        media_type: if post.media_type.is_empty() {
+                            None
+                        } else {
+                            Some(post.media_type)
+                        },
                     },
                 }))
             } else {
@@ -370,7 +387,11 @@ pub async fn update_post(
                         updated_at: post.updated_at,
                         status: status_to_string(post.status),
                         media_urls: post.media_urls,
-                        media_type: if post.media_type.is_empty() { None } else { Some(post.media_type) },
+                        media_type: if post.media_type.is_empty() {
+                            None
+                        } else {
+                            Some(post.media_type)
+                        },
                     },
                 }))
             } else {

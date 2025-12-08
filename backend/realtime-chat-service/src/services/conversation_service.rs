@@ -15,6 +15,7 @@ pub enum PrivacyMode {
 }
 
 impl PrivacyMode {
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(value: &str) -> Self {
         match value {
             "search_enabled" => PrivacyMode::SearchEnabled,
@@ -374,6 +375,7 @@ impl ConversationService {
     ///   - avatar_url: Optional group avatar URL
     ///   - member_ids: List of additional members to add (creator is always added as owner)
     ///   - privacy_mode: Privacy mode (default: strict_e2e)
+    #[allow(clippy::too_many_arguments)]
     pub async fn create_group_conversation(
         db: &Pool<Postgres>,
         auth_client: &AuthClient,

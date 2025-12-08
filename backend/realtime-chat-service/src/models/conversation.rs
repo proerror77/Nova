@@ -100,6 +100,7 @@ pub enum ConversationData {
 }
 
 impl ConversationData {
+    #[allow(clippy::too_many_arguments)]
     pub fn from_db_row(
         id: Uuid,
         kind: &str,

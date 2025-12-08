@@ -15,8 +15,8 @@ pub struct Post {
     pub content: Option<String>,
     pub caption: Option<String>,
     pub media_key: String,
-    pub media_type: String,                  // 'image', 'video', or 'text'
-    pub media_urls: Json<Vec<String>>,       // CDN URLs for attached media (JSONB in DB)
+    pub media_type: String,            // 'image', 'video', or 'text'
+    pub media_urls: Json<Vec<String>>, // CDN URLs for attached media (JSONB in DB)
     pub status: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,

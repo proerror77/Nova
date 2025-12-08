@@ -104,6 +104,31 @@ class FeedViewModel: ObservableObject {
                     await loadFeed(algorithm: algorithm, isGuestFallback: true)
                     return
                 }
+            } else if case .serverError(let statusCode, _) = apiError, statusCode == 500 {
+                // Backend feed-service unreachable or gRPC error (e.g. \"tcp connect error\")
+                // Fallback: load guest/trending feed instead of showing a hard error.
+                do {
+                    let fallbackResponse = try await feedService.getTrendingFeed(limit: 20, cursor: nil)
+
+                    self.postIds = fallbackResponse.postIds
+                    self.currentCursor = fallbackResponse.cursor
+                    self.hasMore = fallbackResponse.hasMore
+
+                    let allPosts = fallbackResponse.posts.map { FeedPost(from: $0) }
+                    var seenIds = Set<String>()
+                    self.posts = allPosts.filter { post in
+                        guard !seenIds.contains(post.id) else { return false }
+                        seenIds.insert(post.id)
+                        return true
+                    }
+
+                    self.error = nil
+                } catch {
+                    self.error = apiError.localizedDescription
+                    self.posts = []
+                }
+                isLoading = false
+                return
             } else {
                 // Show error and stop retrying
                 self.error = apiError.localizedDescription

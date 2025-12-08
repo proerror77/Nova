@@ -88,10 +88,12 @@ pub async fn get_settings(
                 }))
             } else if let Some(err) = inner.error {
                 error!(error = %err.message, "Failed to get user settings");
-                Ok(HttpResponse::InternalServerError().json(ErrorResponse::with_message(
-                    "Failed to get settings",
-                    &err.message,
-                )))
+                Ok(
+                    HttpResponse::InternalServerError().json(ErrorResponse::with_message(
+                        "Failed to get settings",
+                        &err.message,
+                    )),
+                )
             } else {
                 // Return default settings if none exist
                 Ok(HttpResponse::Ok().json(UserSettingsResponse {
@@ -111,10 +113,12 @@ pub async fn get_settings(
         }
         Err(status) => {
             error!(error = %status, "Failed to get user settings");
-            Ok(HttpResponse::InternalServerError().json(ErrorResponse::with_message(
-                "Failed to get settings",
-                status.message(),
-            )))
+            Ok(
+                HttpResponse::InternalServerError().json(ErrorResponse::with_message(
+                    "Failed to get settings",
+                    status.message(),
+                )),
+            )
         }
     }
 }
@@ -171,23 +175,29 @@ pub async fn update_settings(
                 }))
             } else if let Some(err) = inner.error {
                 error!(error = %err.message, "Failed to update user settings");
-                Ok(HttpResponse::InternalServerError().json(ErrorResponse::with_message(
-                    "Failed to update settings",
-                    &err.message,
-                )))
+                Ok(
+                    HttpResponse::InternalServerError().json(ErrorResponse::with_message(
+                        "Failed to update settings",
+                        &err.message,
+                    )),
+                )
             } else {
-                Ok(HttpResponse::InternalServerError().json(ErrorResponse::with_message(
-                    "Failed to update settings",
-                    "Unexpected empty response",
-                )))
+                Ok(
+                    HttpResponse::InternalServerError().json(ErrorResponse::with_message(
+                        "Failed to update settings",
+                        "Unexpected empty response",
+                    )),
+                )
             }
         }
         Err(status) => {
             error!(error = %status, "Failed to update user settings");
-            Ok(HttpResponse::InternalServerError().json(ErrorResponse::with_message(
-                "Failed to update settings",
-                status.message(),
-            )))
+            Ok(
+                HttpResponse::InternalServerError().json(ErrorResponse::with_message(
+                    "Failed to update settings",
+                    status.message(),
+                )),
+            )
         }
     }
 }

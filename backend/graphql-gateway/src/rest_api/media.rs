@@ -81,7 +81,10 @@ pub async fn upload_media(
         Some("aac") => (MediaType::Audio as i32, "audio/aac".to_string()),
         Some("m4a") => (MediaType::Audio as i32, "audio/mp4".to_string()),
         Some("ogg") => (MediaType::Audio as i32, "audio/ogg".to_string()),
-        _ => (MediaType::Unspecified as i32, "application/octet-stream".to_string()),
+        _ => (
+            MediaType::Unspecified as i32,
+            "application/octet-stream".to_string(),
+        ),
     };
 
     let req = InitiateUploadRequest {
@@ -204,7 +207,7 @@ pub async fn get_media(
             } else {
                 HttpResponse::NotFound().json(ErrorResponse::with_message(
                     "Media not found",
-                    &format!("No media with id {}", media_id),
+                    format!("No media with id {}", media_id),
                 ))
             }
         }
@@ -495,10 +498,8 @@ pub async fn delete_media(
         Err(e) => {
             error!("DeleteMedia failed: {}", e);
             if e.code() == tonic::Code::NotFound {
-                HttpResponse::NotFound().json(ErrorResponse::with_message(
-                    "Media not found",
-                    e.message(),
-                ))
+                HttpResponse::NotFound()
+                    .json(ErrorResponse::with_message("Media not found", e.message()))
             } else if e.code() == tonic::Code::PermissionDenied {
                 HttpResponse::Forbidden().json(ErrorResponse::with_message(
                     "Not authorized to delete this media",

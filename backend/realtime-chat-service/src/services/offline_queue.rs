@@ -43,6 +43,9 @@ fn consumer_name(user_id: Uuid, client_id: Uuid) -> String {
     format!("{}:{}", user_id, client_id)
 }
 
+type StreamEntries = Vec<(String, Vec<(String, Vec<(String, String)>)>)>;
+type StreamChunk = (String, Vec<(String, Vec<(String, String)>)>);
+
 fn flatten_read_entries(
     raw: RedisValue,
     conversation_id: Uuid,
@@ -51,8 +54,7 @@ fn flatten_read_entries(
         return Ok(Vec::new());
     }
 
-    let parsed: Vec<(String, Vec<(String, Vec<(String, String)>)>)> =
-        FromRedisValue::from_redis_value(&raw)?;
+    let parsed: StreamEntries = FromRedisValue::from_redis_value(&raw)?;
 
     Ok(parsed
         .into_iter()
@@ -293,8 +295,7 @@ pub async fn read_pending_messages(
             break;
         }
 
-        let (next_start, entries): (String, Vec<(String, Vec<(String, String)>)>) =
-            FromRedisValue::from_redis_value(&raw)?;
+        let (next_start, entries): StreamChunk = FromRedisValue::from_redis_value(&raw)?;
 
         for (entry_id, fields) in &entries {
             results.push(convert_entry(

@@ -989,7 +989,10 @@ impl OlmService {
         let count = result.rows_affected() as usize;
 
         if count > 0 {
-            info!(deleted = count, "Cleaned up expired/delivered to-device messages");
+            info!(
+                deleted = count,
+                "Cleaned up expired/delivered to-device messages"
+            );
         }
 
         Ok(count)

@@ -99,6 +99,7 @@ struct Message: Identifiable, Codable, Sendable {
         case conversationId = "conversation_id"
         case senderId = "sender_id"
         case content, type
+        case messageType = "message_type"
         case createdAt = "created_at"
         case isEdited = "is_edited"
         case isDeleted = "is_deleted"
@@ -116,9 +117,25 @@ struct Message: Identifiable, Codable, Sendable {
         id = try container.decode(String.self, forKey: .id)
         // Backend有時缺少 conversation_id，容錯為空字串以免整個列表解碼失敗
         conversationId = try container.decodeIfPresent(String.self, forKey: .conversationId) ?? ""
-        senderId = try container.decode(String.self, forKey: .senderId)
+        // 某些歷史訊息缺少 sender_id，避免整批失敗，默認為空字串
+        senderId = try container.decodeIfPresent(String.self, forKey: .senderId) ?? ""
         content = try container.decodeIfPresent(String.self, forKey: .content) ?? ""
-        type = try container.decode(ChatMessageType.self, forKey: .type)
+        // 兼容舊格式 (message_type 整數) 與新格式 (type 字串)
+        if let intType = try container.decodeIfPresent(Int.self, forKey: .messageType) {
+            switch intType {
+            case 0: type = .text
+            case 1: type = .image
+            case 2: type = .video
+            case 3: type = .audio
+            case 4: type = .file
+            case 5: type = .location
+            default: type = .text
+            }
+        } else if let stringType = try container.decodeIfPresent(String.self, forKey: .type) {
+            type = ChatMessageType(rawValue: stringType) ?? .text
+        } else {
+            type = .text
+        }
         createdAt = try decodeFlexibleDate(container, key: .createdAt)
         isEdited = try container.decodeIfPresent(Bool.self, forKey: .isEdited) ?? false
         isDeleted = try container.decodeIfPresent(Bool.self, forKey: .isDeleted) ?? false
@@ -129,6 +146,25 @@ struct Message: Identifiable, Codable, Sendable {
         nonce = try container.decodeIfPresent(String.self, forKey: .nonce)
         sessionId = try container.decodeIfPresent(String.self, forKey: .sessionId)
         senderDeviceId = try container.decodeIfPresent(String.self, forKey: .senderDeviceId)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(conversationId, forKey: .conversationId)
+        try container.encode(senderId, forKey: .senderId)
+        try container.encode(content, forKey: .content)
+        try container.encode(type.rawValue, forKey: .type)
+        try container.encode(createdAt, forKey: .createdAt)
+        try container.encode(isEdited, forKey: .isEdited)
+        try container.encode(isDeleted, forKey: .isDeleted)
+        try container.encodeIfPresent(mediaUrl, forKey: .mediaUrl)
+        try container.encodeIfPresent(replyToId, forKey: .replyToId)
+        try container.encodeIfPresent(encryptionVersion, forKey: .encryptionVersion)
+        try container.encodeIfPresent(encryptedContent, forKey: .encryptedContent)
+        try container.encodeIfPresent(nonce, forKey: .nonce)
+        try container.encodeIfPresent(sessionId, forKey: .sessionId)
+        try container.encodeIfPresent(senderDeviceId, forKey: .senderDeviceId)
     }
 
     /// Convenience initializer for creating E2EE messages locally
@@ -228,6 +264,17 @@ struct SendMessageRequest: Codable, Sendable {
         case .location: self.messageType = 5
         }
     }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(conversationId, forKey: .conversationId)
+        try container.encode(content, forKey: .content)
+        try container.encode(messageType, forKey: .messageType)
+        // 後端要求 media_url 必填，無附件時傳空字串避免 400
+        try container.encode(mediaUrl ?? "", forKey: .mediaUrl)
+        // 同理 reply_to_message_id 目前後端也要求存在，沒有回覆時送空字串
+        try container.encode(replyToMessageId ?? "", forKey: .replyToMessageId)
+    }
 }
 
 /// Response when fetching messages
@@ -239,6 +286,13 @@ struct GetMessagesResponse: Codable, Sendable {
     enum CodingKeys: String, CodingKey {
         case messages, cursor
         case hasMore = "has_more"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        messages = try container.decodeIfPresent([Message].self, forKey: .messages) ?? []
+        cursor = try container.decodeIfPresent(String.self, forKey: .cursor)
+        hasMore = try container.decodeIfPresent(Bool.self, forKey: .hasMore) ?? false
     }
 }
 

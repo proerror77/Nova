@@ -167,6 +167,7 @@ impl MessageService {
     /// Send an audio message to a conversation
     /// Stores audio metadata (codec, duration) alongside message
     /// Returns: (message_id, sequence_number)
+    #[allow(clippy::too_many_arguments)]
     pub async fn send_audio_message_db(
         db: &Pool<Postgres>,
         encryption: &EncryptionService,
@@ -643,7 +644,11 @@ impl MessageService {
                 "ts_rank(m.content_tsv, plainto_tsquery('english', $2)) DESC, m.created_at DESC",
                 "m.content IS NOT NULL AND m.content_tsv @@ plainto_tsquery('english', $2)",
             ),
-            "recent" | _ => (
+            "recent" => (
+                "m.created_at DESC",
+                "m.content IS NOT NULL AND m.content_tsv @@ plainto_tsquery('english', $2)",
+            ),
+            _ => (
                 "m.created_at DESC",
                 "m.content IS NOT NULL AND m.content_tsv @@ plainto_tsquery('english', $2)",
             ),

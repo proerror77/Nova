@@ -11,7 +11,8 @@ data:
   # Redis
   REDIS_URL: "redis://redis-master.nova-staging.svc.cluster.local:6379"
   # gRPC services
-  GRPC_IDENTITY_SERVICE_URL: "https://identity-service.nova-staging.svc.cluster.local:50051"
+  # Identity service currently serves plaintext gRPC (no TLS) in staging
+  GRPC_IDENTITY_SERVICE_URL: "http://identity-service.nova-staging.svc.cluster.local:50051"
   # S3
   S3_BUCKET: "nova-media-staging"
   S3_REGION: "ap-northeast-1"

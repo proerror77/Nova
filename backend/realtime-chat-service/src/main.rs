@@ -17,42 +17,13 @@ use realtime_chat_service::{
     websocket::streams::{start_streams_listener, StreamsConfig},
 };
 use redis_utils::{RedisPool, SentinelConfig};
-use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use std::env;
-use std::fs::File;
-use std::io::{self, BufReader};
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::task::JoinHandle;
 use tonic::transport::{Endpoint, Server as GrpcServer};
-
-fn load_rustls_config(
-    cert_path: &str,
-    key_path: &str,
-) -> Result<rustls::ServerConfig, Box<dyn std::error::Error>> {
-    let cert_file = File::open(cert_path)?;
-    let mut cert_reader = BufReader::new(cert_file);
-    let certs: Vec<CertificateDer> =
-        rustls_pemfile::certs(&mut cert_reader).collect::<Result<Vec<_>, _>>()?;
-
-    let key_file = File::open(key_path)?;
-    let mut key_reader = BufReader::new(key_file);
-    let keys: Vec<PrivateKeyDer> =
-        rustls_pemfile::pkcs8_private_keys(&mut key_reader).collect::<Result<Vec<_>, _>>()?;
-
-    let key = keys
-        .into_iter()
-        .next()
-        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "no private key found"))?;
-
-    let cfg = rustls::ServerConfig::builder()
-        .with_no_client_auth()
-        .with_single_cert(certs, key)?;
-
-    Ok(cfg)
-}
 
 #[tokio::main]
 async fn main() -> Result<(), error::AppError> {
@@ -220,6 +191,7 @@ async fn main() -> Result<(), error::AppError> {
     let grpc_service = realtime_chat_service::grpc::RealtimeChatServiceImpl::new(state.clone());
 
     // Server-side correlation-id extractor interceptor
+    #[allow(clippy::result_large_err)]
     fn grpc_server_interceptor(
         mut req: tonic::Request<()>,
     ) -> Result<tonic::Request<()>, tonic::Status> {
@@ -292,9 +264,6 @@ async fn main() -> Result<(), error::AppError> {
     });
 
     // REST server (WebSocket + HTTP endpoints)
-    let rest_tls_cert = env::var("REST_TLS_CERT_PATH").ok();
-    let rest_tls_key = env::var("REST_TLS_KEY_PATH").ok();
-
     let rest_server_factory = move || {
         let cors = actix_cors::Cors::default()
             .allow_any_origin()
@@ -345,23 +314,10 @@ async fn main() -> Result<(), error::AppError> {
             .route("/health", web::get().to(|| async { "OK" }))
     };
 
-    let rest_server = if let (Some(cert), Some(key)) = (rest_tls_cert, rest_tls_key) {
-        tracing::info!("Starting REST (HTTPS/wss) on {}", bind_addr);
-        let cfg = load_rustls_config(&cert, &key)
-            .map_err(|e| error::AppError::StartServer(format!("load REST TLS: {e}")))?;
-        HttpServer::new(rest_server_factory)
-            .bind_rustls_0_23(&bind_addr, cfg)
-            .map_err(|e| error::AppError::StartServer(format!("bind REST TLS: {e}")))?
-            .run()
-    } else {
-        tracing::warn!(
-            "REST TLS not configured; set REST_TLS_CERT_PATH and REST_TLS_KEY_PATH for wss support"
-        );
-        HttpServer::new(rest_server_factory)
-            .bind(&bind_addr)
-            .map_err(|e| error::AppError::StartServer(format!("bind REST: {e}")))?
-            .run()
-    };
+    let rest_server = HttpServer::new(rest_server_factory)
+        .bind(&bind_addr)
+        .map_err(|e| error::AppError::StartServer(format!("bind REST: {e}")))?
+        .run();
 
     // Run both servers concurrently
     tokio::select! {

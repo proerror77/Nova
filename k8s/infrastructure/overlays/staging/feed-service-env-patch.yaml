@@ -18,6 +18,11 @@ spec:
           value: "8084"
         - name: SERVER_PORT
           value: "8084"
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: nova-db-credentials
+              key: feed-db-url
 
         # ============================================================
         # Kafka 配置

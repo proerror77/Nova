@@ -790,7 +790,9 @@ impl SocialService for SocialServiceImpl {
             .ok_or_else(|| Status::not_found("Poll not found"))?;
 
         if poll.creator_id != user_id {
-            return Err(Status::permission_denied("Only poll creator can add candidates"));
+            return Err(Status::permission_denied(
+                "Only poll creator can add candidates",
+            ));
         }
 
         let candidate_user_id = if req.user_id.is_empty() {
@@ -859,7 +861,10 @@ impl SocialService for SocialServiceImpl {
         Ok(Response::new(Empty {}))
     }
 
-    async fn close_poll(&self, request: Request<ClosePollRequest>) -> Result<Response<Empty>, Status> {
+    async fn close_poll(
+        &self,
+        request: Request<ClosePollRequest>,
+    ) -> Result<Response<Empty>, Status> {
         let user_id = request
             .metadata()
             .get("x-user-id")
@@ -936,7 +941,10 @@ impl SocialService for SocialServiceImpl {
         // Get top candidates for each poll
         let mut summaries = Vec::with_capacity(polls.len());
         for poll in polls {
-            let top_candidates = repo.get_top_candidates(poll.id, 3).await.unwrap_or_default();
+            let top_candidates = repo
+                .get_top_candidates(poll.id, 3)
+                .await
+                .unwrap_or_default();
             summaries.push(to_proto_poll_summary(poll, top_candidates));
         }
 

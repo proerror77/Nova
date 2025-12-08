@@ -98,6 +98,7 @@
 		DEVICEMODELS_BLD01 /* DeviceModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEVICEMODELS_REF01 /* DeviceModels.swift */; };
 		DEVICESERVICE_BLD1 /* DeviceService.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEVICESERVICE_REF1 /* DeviceService.swift */; };
 		FRIENDSSERVICE_BLD1 /* FriendsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = FRIENDSSERVICE_REF1 /* FriendsService.swift */; };
+		STARTGROUPCHAT_BLD /* StartGroupChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = STARTGROUPCHAT_REF /* StartGroupChatView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -216,6 +217,7 @@
 		DEVICEMODELS_REF01 /* DeviceModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceModels.swift; sourceTree = "<group>"; };
 		DEVICESERVICE_REF1 /* DeviceService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceService.swift; sourceTree = "<group>"; };
 		FRIENDSSERVICE_REF1 /* FriendsService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FriendsService.swift; sourceTree = "<group>"; };
+		STARTGROUPCHAT_REF /* StartGroupChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StartGroupChatView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -294,6 +296,7 @@
 			isa = PBXGroup;
 			children = (
 				c305a0ac26e55adeed024b77 /* GroupChatView.swift */,
+				STARTGROUPCHAT_REF /* StartGroupChatView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -1002,6 +1005,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				STARTGROUPCHAT_BLD /* StartGroupChatView.swift in Sources */,
 				WRITEVIEW_BUILD001 /* WriteView.swift in Sources */,
 				DEVICEMODELS_BLD01 /* DeviceModels.swift in Sources */,
 				DEVICESERVICE_BLD1 /* DeviceService.swift in Sources */,

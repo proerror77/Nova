@@ -75,11 +75,11 @@ pub mod proto {
 }
 
 use proto::auth::auth_service_client::AuthServiceClient;
-use proto::identity::identity_service_client::IdentityServiceClient;
 use proto::chat::realtime_chat_service_client::RealtimeChatServiceClient;
 use proto::content::content_service_client::ContentServiceClient;
 use proto::feed::recommendation_service_client::RecommendationServiceClient;
 use proto::graph::graph_service_client::GraphServiceClient;
+use proto::identity::identity_service_client::IdentityServiceClient;
 use proto::media::media_service_client::MediaServiceClient;
 use proto::notification::notification_service_client::NotificationServiceClient;
 use proto::social::social_service_client::SocialServiceClient;

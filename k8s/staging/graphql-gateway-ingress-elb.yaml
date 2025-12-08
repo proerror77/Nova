@@ -23,7 +23,9 @@ metadata:
     nginx.ingress.kubernetes.io/proxy-connect-timeout: "60"
     nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "60"
-    nginx.ingress.kubernetes.io/websocket-services: graphql-gateway
+    # Enable WebSocket upgrade for both GraphQL subscriptions (/ws)
+    # and realtime-chat-service alias (/ws/chat)
+    nginx.ingress.kubernetes.io/websocket-services: "graphql-gateway,realtime-chat-service"
 spec:
   ingressClassName: nginx
   rules:
@@ -70,10 +72,18 @@ spec:
               number: 8080
         path: /api/v2
         pathType: Prefix
+      # WebSocket entrypoints
       - backend:
           service:
             name: graphql-gateway
             port:
               number: 8080
         path: /ws
+        pathType: Prefix
+      - backend:
+          service:
+            name: realtime-chat-service
+            port:
+              number: 8080
+        path: /ws/chat
         pathType: Prefix

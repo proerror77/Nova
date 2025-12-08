@@ -351,10 +351,12 @@ impl PollRepository {
         .await?;
 
         // Decrement poll total votes
-        sqlx::query("UPDATE polls SET total_votes = total_votes - 1 WHERE id = $1 AND total_votes > 0")
-            .bind(poll_id)
-            .execute(&mut *tx)
-            .await?;
+        sqlx::query(
+            "UPDATE polls SET total_votes = total_votes - 1 WHERE id = $1 AND total_votes > 0",
+        )
+        .bind(poll_id)
+        .execute(&mut *tx)
+        .await?;
 
         tx.commit().await?;
         Ok(true)

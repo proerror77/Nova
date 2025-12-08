@@ -11,8 +11,8 @@ use serde::{Deserialize, Serialize};
 use tracing::{error, info};
 
 use crate::clients::proto::search::{
-    GetSearchSuggestionsRequest, GetTrendingTopicsRequest, SearchAllRequest,
-    SearchContentRequest, SearchHashtagsRequest, SearchUsersRequest,
+    GetSearchSuggestionsRequest, GetTrendingTopicsRequest, SearchAllRequest, SearchContentRequest,
+    SearchHashtagsRequest, SearchUsersRequest,
 };
 use crate::clients::ServiceClients;
 use crate::middleware::jwt::AuthenticatedUser;
@@ -326,16 +326,17 @@ pub async fn search_content(
     let mut search_client = clients.search_client();
 
     // Build filter
-    let filter = query.verified_only.map(|verified_only| {
-        crate::clients::proto::search::SearchFilter {
-            types: vec![],
-            author_ids: vec![],
-            hashtags: vec![],
-            from: None,
-            to: None,
-            verified_only,
-        }
-    });
+    let filter =
+        query.verified_only.map(
+            |verified_only| crate::clients::proto::search::SearchFilter {
+                types: vec![],
+                author_ids: vec![],
+                hashtags: vec![],
+                from: None,
+                to: None,
+                verified_only,
+            },
+        );
 
     let grpc_request = tonic::Request::new(SearchContentRequest {
         query: query.q.clone(),

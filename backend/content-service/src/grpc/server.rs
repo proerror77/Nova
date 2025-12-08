@@ -82,7 +82,11 @@ impl ContentService for ContentServiceImpl {
         // Determine media type and key based on provided media_urls
         let has_media = !req.media_urls.is_empty();
         let media_type = if has_media {
-            if req.media_type.is_empty() { "image".to_string() } else { req.media_type.clone() }
+            if req.media_type.is_empty() {
+                "image".to_string()
+            } else {
+                req.media_type.clone()
+            }
         } else {
             "none".to_string()
         };

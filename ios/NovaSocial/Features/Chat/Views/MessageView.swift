@@ -39,15 +39,15 @@ struct MessageView: View {
 
     // MARK: - 从API加载会话列表
     private func loadConversations() async {
+        print("🚀 [MessageView] loadConversations() starting...")
         isLoading = true
         errorMessage = nil
 
         do {
+            print("📞 [MessageView] Calling chatService.getConversations()")
             let apiConversations = try await chatService.getConversations()
 
-            #if DEBUG
-            print("[MessageView] Loaded \(apiConversations.count) conversations from API")
-            #endif
+            print("✅ [MessageView] Loaded \(apiConversations.count) conversations from API")
 
             // 转换为UI模型
             let previews = apiConversations.map { conv -> ConversationPreview in
@@ -70,9 +70,7 @@ struct MessageView: View {
                 self.isLoading = false
             }
         } catch {
-            #if DEBUG
-            print("[MessageView] Failed to load conversations: \(error)")
-            #endif
+            print("❌ [MessageView] Failed to load conversations: \(error)")
 
             await MainActor.run {
                 self.errorMessage = "Failed to load messages"

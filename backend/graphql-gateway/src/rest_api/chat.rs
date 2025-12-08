@@ -78,7 +78,12 @@ pub async fn send_chat_message(
     {
         Ok(resp) => {
             // Convert minimal gRPC response into full REST message payload expected by iOS
-            let ts = resp.timestamp.unwrap_or_else(|| Utc::now().timestamp());
+            // Fail-safe: some older implementations may return 0; normalize to "now"
+            let ts = if resp.timestamp > 0 {
+                resp.timestamp
+            } else {
+                Utc::now().timestamp()
+            };
             let created_iso = timestamp_to_iso8601(ts);
 
             let rest = RestMessage {

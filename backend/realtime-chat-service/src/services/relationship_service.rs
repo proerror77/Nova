@@ -113,7 +113,7 @@ impl RelationshipServiceV2 {
                     Ok(CanMessageResult::NeedToFollow)
                 }
             }
-            "mutuals" | _ => {
+            "mutuals" => {
                 // Both users must follow each other (via graph-service)
                 let (are_mutuals, _, _) = self
                     .graph_client
@@ -125,6 +125,7 @@ impl RelationshipServiceV2 {
                     Ok(CanMessageResult::NeedMutualFollow)
                 }
             }
+            _ => Ok(CanMessageResult::NeedToFollow),
         }
     }
 
@@ -220,7 +221,7 @@ impl RelationshipService {
                     Ok(CanMessageResult::NeedToFollow)
                 }
             }
-            "mutuals" | _ => {
+            "mutuals" => {
                 // Both users must follow each other
                 if Self::are_mutuals(db, sender_id, recipient_id).await? {
                     Ok(CanMessageResult::Allowed)
@@ -228,6 +229,7 @@ impl RelationshipService {
                     Ok(CanMessageResult::NeedMutualFollow)
                 }
             }
+            _ => Ok(CanMessageResult::NeedToFollow),
         }
     }
 

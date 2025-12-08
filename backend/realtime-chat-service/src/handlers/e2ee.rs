@@ -876,8 +876,8 @@ pub async fn share_room_keys(
                 "session_id": body.session_id,
                 "encrypted_key": encrypted_room_key,
             });
-            let content_bytes = serde_json::to_vec(&message_content)
-                .unwrap_or_else(|_| key_bytes.clone());
+            let content_bytes =
+                serde_json::to_vec(&message_content).unwrap_or_else(|_| key_bytes.clone());
 
             // Store as to-device message for the target device
             match olm
@@ -886,7 +886,7 @@ pub async fn share_room_keys(
                     &sender_device_id,
                     recipient_user_id,
                     device_id,
-                    "m.room_key",  // Matrix-style message type for room keys
+                    "m.room_key", // Matrix-style message type for room keys
                     &content_bytes,
                 )
                 .await

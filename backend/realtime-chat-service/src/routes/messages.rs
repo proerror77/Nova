@@ -191,14 +191,14 @@ pub struct UpdateMessageRequest {
     pub reason: Option<String>, // Optional edit reason for audit trail
 }
 
-/// Update message with optimistic locking (version control)
-///
-/// Business rules:
-/// - Only message sender can edit (admins cannot edit others' messages)
-/// - Edit window: 24 hours after creation
-/// - Version number must match current version (prevents lost updates)
-/// - On conflict: returns 409 with server version
-/// - Edit history is automatically recorded via database trigger
+// Update message with optimistic locking (version control)
+//
+// Business rules:
+// - Only message sender can edit (admins cannot edit others' messages)
+// - Edit window: 24 hours after creation
+// - Version number must match current version (prevents lost updates)
+// - On conflict: returns 409 with server version
+// - Edit history is automatically recorded via database trigger
 // ============================================================================
 // Message Update Helpers
 // ============================================================================

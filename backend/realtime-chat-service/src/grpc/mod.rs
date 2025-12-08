@@ -88,12 +88,10 @@ impl RealtimeChatService for RealtimeChatServiceImpl {
                 .await
                 .map_err(|e| Status::internal(format!("load conversation meta failed: {e}")))?;
 
-        let created_at: chrono::DateTime<chrono::Utc> = meta_row
-            .try_get("created_at")
-            .unwrap_or_else(|_| Utc::now());
-        let updated_at: chrono::DateTime<chrono::Utc> = meta_row
-            .try_get("updated_at")
-            .unwrap_or_else(|_| created_at);
+        let created_at: chrono::DateTime<chrono::Utc> =
+            meta_row.try_get("created_at").unwrap_or(Utc::now());
+        let updated_at: chrono::DateTime<chrono::Utc> =
+            meta_row.try_get("updated_at").unwrap_or(created_at);
 
         let members = sqlx::query_scalar::<_, Uuid>(
             "SELECT user_id FROM conversation_members WHERE conversation_id = $1",
@@ -219,9 +217,9 @@ impl RealtimeChatService for RealtimeChatServiceImpl {
         .map_err(|e| Status::internal(format!("load members failed: {e}")))?;
 
         let created_at: chrono::DateTime<chrono::Utc> =
-            row.try_get("created_at").unwrap_or_else(|_| Utc::now());
+            row.try_get("created_at").unwrap_or(Utc::now());
         let updated_at: chrono::DateTime<chrono::Utc> =
-            row.try_get("updated_at").unwrap_or_else(|_| created_at);
+            row.try_get("updated_at").unwrap_or(created_at);
 
         let conversation = Conversation {
             id: conversation_id.to_string(),
@@ -308,9 +306,9 @@ impl RealtimeChatService for RealtimeChatServiceImpl {
                 };
 
                 let created_at: chrono::DateTime<chrono::Utc> =
-                    row.try_get("created_at").unwrap_or_else(|_| Utc::now());
+                    row.try_get("created_at").unwrap_or(Utc::now());
                 let updated_at: chrono::DateTime<chrono::Utc> =
-                    row.try_get("updated_at").unwrap_or_else(|_| created_at);
+                    row.try_get("updated_at").unwrap_or(created_at);
 
                 Conversation {
                     id: cid.to_string(),
@@ -394,7 +392,7 @@ impl RealtimeChatService for RealtimeChatServiceImpl {
             let content_nonce: Option<Vec<u8>> = row.try_get("content_nonce").ok();
             let encryption_version: i32 = row.try_get("encryption_version").unwrap_or(0);
             let created_at: chrono::DateTime<chrono::Utc> =
-                row.try_get("created_at").unwrap_or_else(|_| Utc::now());
+                row.try_get("created_at").unwrap_or(Utc::now());
             let updated_at: chrono::DateTime<chrono::Utc> =
                 row.try_get("updated_at").unwrap_or(created_at);
             let message_type_str: Option<String> = row.try_get("message_type").unwrap_or(None);

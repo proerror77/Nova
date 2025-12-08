@@ -99,30 +99,20 @@ class IdentityService {
 
     /// Get user profile by ID
     func getUser(userId: String) async throws -> UserProfile {
-        struct GetUserResponse: Codable {
-            let user: UserProfile
-        }
-
-        let response: GetUserResponse = try await client.request(
+        let response: UserEnvelope = try await client.request(
             endpoint: APIConfig.Profile.getProfile(userId),
             method: "GET"
         )
-
         return response.user
     }
 
     /// Update user profile
     func updateUser(userId: String, updates: UserProfileUpdate) async throws -> UserProfile {
-        struct UpdateUserResponse: Codable {
-            let user: UserProfile
-        }
-
-        let response: UpdateUserResponse = try await client.request(
+        let response: UserEnvelope = try await client.request(
             endpoint: APIConfig.Profile.updateProfile(userId),
             method: "PUT",
             body: updates
         )
-
         return response.user
     }
 
@@ -313,6 +303,29 @@ class IdentityService {
         )
 
         return response.valid
+    }
+}
+
+// MARK: - Flexible user envelope
+
+/// Some endpoints return `{ \"user\": { ... } }`, others return the user object directly.
+private struct UserEnvelope: Codable {
+    let user: UserProfile
+
+    enum CodingKeys: String, CodingKey {
+        case user
+    }
+
+    init(from decoder: Decoder) throws {
+        // Try keyed container first: { "user": { ... } }
+        if let container = try? decoder.container(keyedBy: CodingKeys.self),
+           let wrapped = try? container.decode(UserProfile.self, forKey: .user) {
+            self.user = wrapped
+            return
+        }
+        // Fallback: top-level user object
+        let single = try decoder.singleValueContainer()
+        self.user = try single.decode(UserProfile.self)
     }
 }
 

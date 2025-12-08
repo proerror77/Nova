@@ -82,18 +82,12 @@ pub async fn change_password(
             error!(user_id = %user_id, error = %status, "Failed to change password");
 
             let response = match status.code() {
-                tonic::Code::InvalidArgument => {
-                    HttpResponse::BadRequest().json(ErrorResponse::with_message(
-                        "Invalid password",
-                        status.message(),
-                    ))
-                }
-                tonic::Code::Unauthenticated => {
-                    HttpResponse::Unauthorized().json(ErrorResponse::with_message(
-                        "Current password is incorrect",
-                        status.message(),
-                    ))
-                }
+                tonic::Code::InvalidArgument => HttpResponse::BadRequest().json(
+                    ErrorResponse::with_message("Invalid password", status.message()),
+                ),
+                tonic::Code::Unauthenticated => HttpResponse::Unauthorized().json(
+                    ErrorResponse::with_message("Current password is incorrect", status.message()),
+                ),
                 _ => HttpResponse::InternalServerError().json(ErrorResponse::with_message(
                     "Failed to change password",
                     status.message(),
@@ -192,12 +186,11 @@ pub async fn reset_password(
             error!(error = %status, "Failed to reset password");
 
             let response = match status.code() {
-                tonic::Code::InvalidArgument | tonic::Code::NotFound => {
-                    HttpResponse::BadRequest().json(ErrorResponse::with_message(
+                tonic::Code::InvalidArgument | tonic::Code::NotFound => HttpResponse::BadRequest()
+                    .json(ErrorResponse::with_message(
                         "Invalid or expired token",
                         "The reset token is invalid or has expired",
-                    ))
-                }
+                    )),
                 _ => HttpResponse::InternalServerError().json(ErrorResponse::with_message(
                     "Failed to reset password",
                     status.message(),
