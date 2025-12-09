@@ -17,6 +17,17 @@ spec:
               value: "1"
             - name: GRPC_SOCIAL_SERVICE_TIER
               value: "1"
+            # 所有 feed-service 依賴都設為 Tier1，讓它在服務不可用時仍能啟動
+            - name: GRPC_MEDIA_SERVICE_TIER
+              value: "1"
+            - name: GRPC_NOTIFICATION_SERVICE_TIER
+              value: "1"
+            - name: GRPC_ANALYTICS_SERVICE_TIER
+              value: "1"
+            - name: GRPC_GRAPH_SERVICE_TIER
+              value: "1"
+            - name: GRPC_FEED_SERVICE_TIER
+              value: "1"
             # content-service 對 feed-service 來說非硬依賴，在啟動時降級為 Tier1 避免 CrashLoop
             - name: GRPC_CONTENT_SERVICE_TIER
               value: "1"
