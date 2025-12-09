@@ -9,6 +9,8 @@ final class ProfileSettingViewModel: ObservableObject {
     @Published var username = ""
     @Published var dateOfBirth = ""
     @Published var gender: Gender = .preferNotToSay
+    @Published var profession = ""
+    @Published var identity = ""
     @Published var location = ""
 
     // Avatar
@@ -22,11 +24,6 @@ final class ProfileSettingViewModel: ObservableObject {
     @Published var showSuccessMessage = false
 
     var validationError: String? {
-        let trimmedUsername = username.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmedUsername.isEmpty {
-            return NSLocalizedString("Username is required", comment: "")
-        }
-
         if !dateOfBirth.isEmpty && !isValidDate(dateOfBirth) {
             return NSLocalizedString("Invalid date", comment: "")
         }
@@ -36,6 +33,15 @@ final class ProfileSettingViewModel: ObservableObject {
 
     var isValid: Bool {
         validationError == nil
+    }
+
+    /// Save 按钮可用条件：First name、Last name、Username 都必须填写
+    var canSave: Bool {
+        let trimmedFirstName = firstName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedLastName = lastName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedUsername = username.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        return !trimmedFirstName.isEmpty && !trimmedLastName.isEmpty && !trimmedUsername.isEmpty && isValid
     }
 
     private let authManager: AuthenticationManager
@@ -61,6 +67,8 @@ final class ProfileSettingViewModel: ObservableObject {
                username != user.username ||
                dateOfBirth != (user.dateOfBirth ?? "") ||
                gender != (user.gender ?? .preferNotToSay) ||
+               profession != (user.bio ?? "") ||  // profession maps to bio
+               identity != "" ||  // identity is local only for now
                location != (user.location ?? "") ||
                avatarImage != nil
     }
@@ -96,11 +104,12 @@ final class ProfileSettingViewModel: ObservableObject {
         isLoading = false
     }
 
-    func saveProfile() async {
-        guard let userId = authManager.currentUser?.id else { return }
-        guard isValid else {
-            errorMessage = validationError
-            return
+    /// 保存个人资料，返回是否成功
+    func saveProfile() async -> Bool {
+        guard let userId = authManager.currentUser?.id else { return false }
+        guard canSave else {
+            errorMessage = NSLocalizedString("Please fill in First name, Last name and Username", comment: "")
+            return false
         }
 
         isSaving = true
@@ -135,12 +144,13 @@ final class ProfileSettingViewModel: ObservableObject {
                 #endif
             }
 
-            showSuccessMessage = true
+            isSaving = false
+            return true
         } catch {
             errorMessage = String(format: NSLocalizedString("Failed to save profile: %@", comment: ""), error.localizedDescription)
+            isSaving = false
+            return false
         }
-
-        isSaving = false
     }
 
     func updateAvatarImage(_ image: UIImage) {
@@ -166,6 +176,8 @@ final class ProfileSettingViewModel: ObservableObject {
         username = user.username
         dateOfBirth = user.dateOfBirth ?? ""
         gender = user.gender ?? .preferNotToSay
+        profession = user.bio ?? ""  // profession maps to bio
+        // identity is local only for now
         location = user.location ?? ""
         avatarUrl = user.avatarUrl
     }

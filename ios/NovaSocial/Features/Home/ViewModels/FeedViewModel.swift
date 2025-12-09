@@ -172,8 +172,66 @@ class FeedViewModel: ObservableObject {
     }
 
     /// Refresh feed (pull-to-refresh)
+    /// 下拉刷新时静默忽略取消错误，只在真正的网络错误时显示提示
     func refresh() async {
-        await loadFeed(algorithm: currentAlgorithm)
+        guard !isLoading else { return }
+
+        isLoading = true
+        // 刷新时不立即清除错误，只有在成功或真正的错误时才更新
+
+        do {
+            let response: FeedResponse
+            if isAuthenticated {
+                response = try await feedService.getFeed(algo: currentAlgorithm, limit: 20, cursor: nil)
+            } else {
+                response = try await feedService.getTrendingFeed(limit: 20, cursor: nil)
+            }
+
+            // 成功后更新数据
+            self.postIds = response.postIds
+            self.currentCursor = response.cursor
+            self.hasMore = response.hasMore
+
+            let allPosts = response.posts.map { FeedPost(from: $0) }
+            var seenIds = Set<String>()
+            self.posts = allPosts.filter { post in
+                guard !seenIds.contains(post.id) else { return false }
+                seenIds.insert(post.id)
+                return true
+            }
+
+            // 成功时清除错误
+            self.error = nil
+
+        } catch let apiError as APIError {
+            // 检查是否是取消错误（用户快速滑动导致）
+            if case .networkError(let underlyingError) = apiError {
+                let nsError = underlyingError as NSError
+                if nsError.code == NSURLErrorCancelled {
+                    // 静默忽略取消的请求，保持当前数据
+                    isLoading = false
+                    return
+                }
+            }
+            // 非取消错误：只有当前没有数据时才显示错误
+            if posts.isEmpty {
+                self.error = apiError.localizedDescription
+            }
+        } catch {
+            let nsError = error as NSError
+            // 检查是否是取消错误
+            if nsError.code == NSURLErrorCancelled || nsError.localizedDescription.lowercased().contains("cancelled") {
+                // 静默忽略取消的请求
+                isLoading = false
+                return
+            }
+            // 非取消错误：只有当前没有数据时才显示错误
+            if posts.isEmpty {
+                self.error = "Failed to refresh: \(error.localizedDescription)"
+            }
+        }
+
+        isLoading = false
     }
 
     /// Add a newly created post to the top of the feed (optimistic update)

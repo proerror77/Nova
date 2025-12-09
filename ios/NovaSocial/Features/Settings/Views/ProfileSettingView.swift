@@ -13,53 +13,24 @@ struct ProfileSettingView: View {
     @State private var showLocationPicker = false
     @State private var showDatePicker = false
 
+    // Card styling (matching SettingsView)
+    private let cardCornerRadius: CGFloat = 8
+    private let cardShadowColor = Color.black.opacity(0.05)
+    private let cardShadowRadius: CGFloat = 4
+    private let cardShadowY: CGFloat = 2
+    private let labelColor = Color(red: 0.38, green: 0.37, blue: 0.37)
+    private let labelFont = Font.custom("Helvetica Neue", size: 14.30).weight(.medium)
+    private let valueFont = Font.custom("Helvetica Neue", size: 14).weight(.medium)
 
     var body: some View {
         ZStack {
-            DesignTokens.backgroundColor
+            Color(red: 0.97, green: 0.97, blue: 0.97)
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
                 // MARK: - Top Navigation Bar
-                HStack {
-                    Button(action: {
-                        currentPage = .setting
-                    }) {
-                        Image(systemName: "chevron.left")
-                            .font(.system(size: 20))
-                            .foregroundColor(DesignTokens.textPrimary)
-                    }
-
-                    Spacer()
-
-                    Text(LocalizedStringKey("Profile Setting"))
-                        .font(.system(size: 24, weight: .medium))
-                        .foregroundColor(DesignTokens.textPrimary)
-
-                    Spacer()
-
-                    Button(action: {
-                        Task { await viewModel.saveProfile() }
-                    }) {
-                        if viewModel.isSaving {
-                            ProgressView()
-                                .scaleEffect(0.8)
-                        } else {
-                            Text(LocalizedStringKey("Save"))
-                                .font(.system(size: 18, weight: .medium))
-                                .foregroundColor(viewModel.hasChanges ? DesignTokens.accentColor : DesignTokens.textMuted)
-                        }
-                    }
-                    .disabled(viewModel.isSaving || !viewModel.hasChanges || !viewModel.isValid)
-                }
-                .frame(height: DesignTokens.topBarHeight)
-                .padding(.horizontal, 20)
-                .background(DesignTokens.surface)
-
-                // Divider
-                Rectangle()
-                    .fill(DesignTokens.dividerColor)
-                    .frame(height: 0.5)
+                topNavigationBar
+                    .background(.white)
 
                 if viewModel.isLoading {
                     Spacer()
@@ -67,168 +38,35 @@ struct ProfileSettingView: View {
                     Spacer()
                 } else {
                     ScrollView {
-                        VStack(spacing: 20) {
-                            // MARK: - Avatar
-                            ZStack(alignment: .bottomTrailing) {
-                                // 头像图片 - 优先级：AvatarManager 待上传头像 > 本地选择头像 > 服务器头像 > 占位符
-                                if let pendingAvatar = AvatarManager.shared.pendingAvatar {
-                                    // 1. 优先显示 AvatarManager 中的待上传头像
-                                    Image(uiImage: pendingAvatar)
-                                        .resizable()
-                                        .scaledToFill()
-                                        .frame(width: 120, height: 120)
-                                        .clipShape(Circle())
-                                } else if let image = viewModel.avatarImage {
-                                    // 2. 显示本地选择的头像
-                                    Image(uiImage: image)
-                                        .resizable()
-                                        .scaledToFill()
-                                        .frame(width: 120, height: 120)
-                                        .clipShape(Circle())
-                                } else if let url = viewModel.avatarUrl, !url.isEmpty {
-                                    // 3. 显示服务器上的头像
-                                    AsyncImage(url: URL(string: url)) { phase in
-                                        switch phase {
-                                        case .success(let image):
-                                            image
-                                                .resizable()
-                                                .scaledToFill()
-                                        case .failure:
-                                            Circle()
-                                                .fill(DesignTokens.avatarPlaceholder)
-                                        case .empty:
-                                            ProgressView()
-                                        @unknown default:
-                                            Circle()
-                                                .fill(DesignTokens.avatarPlaceholder)
-                                        }
-                                    }
-                                    .frame(width: 120, height: 120)
-                                    .clipShape(Circle())
-                                } else {
-                                    // 4. 默认占位符
-                                    Circle()
-                                        .fill(DesignTokens.avatarPlaceholder)
-                                        .frame(width: 120, height: 120)
-                                }
-
-                                // 红色加号按钮（右下角）
-                                PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
-                                    ZStack {
-                                        Circle()
-                                            .fill(DesignTokens.accentColor)
-                                            .frame(width: 32, height: 32)
-
-                                        Image(systemName: "plus")
-                                            .font(.system(size: 14, weight: .bold))
-                                            .foregroundColor(.white)
-                                    }
-                                }
-                                .offset(x: 0, y: 0)
-                            }
-                            .padding(.top, 30)
+                        VStack(spacing: 12) {
+                            // MARK: - Avatar Section
+                            avatarSection
+                                .padding(.top, 20)
+                                .padding(.bottom, 10)
 
                             // MARK: - Form Fields
-                            VStack(spacing: 8) {
+                            VStack(spacing: 12) {
                                 // First name & Last name
-                                VStack(spacing: 0) {
-                                    FormRow(label: "First name", text: $viewModel.firstName)
-
-                                    Rectangle()
-                                        .fill(DesignTokens.tileSeparator)
-                                        .frame(height: 0.5)
-
-                                    FormRow(label: "Last name", text: $viewModel.lastName)
-                                }
-                                .background(DesignTokens.tileBackground)
-                                .cornerRadius(6)
+                                nameCard
 
                                 // Username
-                                FormRow(label: "Username", text: $viewModel.username)
-                                    .background(DesignTokens.tileBackground)
-                                    .cornerRadius(6)
+                                usernameCard
 
                                 // Date of Birth
-                                Button(action: {
-                                    showDatePicker = true
-                                }) {
-                                    HStack {
-                                        Text(LocalizedStringKey("Date of Birth"))
-                                            .font(.system(size: 15))
-                                            .foregroundColor(DesignTokens.textPrimary)
-                                            .frame(width: 100, alignment: .leading)
-
-                                        Text(viewModel.dateOfBirth.isEmpty ? LocalizedStringKey("Not set") : LocalizedStringKey(viewModel.formatDateForDisplay(viewModel.dateOfBirth)))
-                                            .font(.system(size: 15))
-                                            .foregroundColor(viewModel.dateOfBirth.isEmpty ? DesignTokens.textMuted : DesignTokens.textPrimary)
-
-                                        Spacer()
-
-                                        Image(systemName: "chevron.right")
-                                            .font(.system(size: 12))
-                                            .foregroundColor(DesignTokens.textMuted)
-                                    }
-                                    .padding(.horizontal, 20)
-                                    .padding(.vertical, 12)
-                                }
-                                .background(DesignTokens.tileBackground)
-                                .cornerRadius(6)
+                                dateOfBirthCard
 
                                 // Gender
-                                Button(action: {
-                                    showGenderPicker = true
-                                }) {
-                                    HStack {
-                                        Text(LocalizedStringKey("Gender"))
-                                            .font(.system(size: 15))
-                                            .foregroundColor(DesignTokens.textPrimary)
-                                            .frame(width: 100, alignment: .leading)
+                                genderCard
 
-                                        Text(viewModel.gender.displayName)
-                                            .font(.system(size: 15))
-                                            .foregroundColor(DesignTokens.textPrimary)
-
-                                        Spacer()
-
-                                        Image(systemName: "chevron.right")
-                                            .font(.system(size: 12))
-                                            .foregroundColor(DesignTokens.textMuted)
-                                    }
-                                    .padding(.horizontal, 20)
-                                    .padding(.vertical, 12)
-                                }
-                                .background(DesignTokens.tileBackground)
-                                .cornerRadius(6)
+                                // Profession & Identity
+                                professionIdentityCard
 
                                 // Location
-                                Button(action: {
-                                    showLocationPicker = true
-                                }) {
-                                    HStack {
-                                        Text(LocalizedStringKey("Location"))
-                                            .font(.system(size: 15))
-                                            .foregroundColor(DesignTokens.textPrimary)
-                                            .frame(width: 100, alignment: .leading)
-
-                                        Text(viewModel.location.isEmpty ? LocalizedStringKey("Not set") : LocalizedStringKey(viewModel.location))
-                                            .font(.system(size: 15))
-                                            .foregroundColor(viewModel.location.isEmpty ? DesignTokens.textMuted : DesignTokens.textPrimary)
-
-                                        Spacer()
-
-                                        Image(systemName: "chevron.right")
-                                            .font(.system(size: 12))
-                                            .foregroundColor(.gray)
-                                    }
-                                    .padding(.horizontal, 20)
-                                    .padding(.vertical, 12)
-                                }
-                                .background(DesignTokens.tileBackground)
-                                .cornerRadius(6)
+                                locationCard
                             }
                             .padding(.horizontal, 12)
 
-                            // Error message (validation or save)
+                            // Error message
                             if let error = viewModel.errorMessage ?? viewModel.validationError {
                                 Text(error)
                                     .font(.system(size: 14))
@@ -249,14 +87,13 @@ struct ProfileSettingView: View {
                                     }
                             }
                         }
+                        .padding(.bottom, 40)
                     }
                     .contentShape(Rectangle())
                     .onTapGesture {
                         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
                     }
                 }
-
-                Spacer()
             }
         }
         .onAppear {
@@ -280,6 +117,316 @@ struct ProfileSettingView: View {
         .sheet(isPresented: $showDatePicker) {
             DateOfBirthPickerView(dateString: $viewModel.dateOfBirth, isPresented: $showDatePicker)
         }
+    }
+
+    // MARK: - Top Navigation Bar
+    private var topNavigationBar: some View {
+        HStack {
+            Button(action: {
+                currentPage = .setting
+            }) {
+                Image(systemName: "chevron.left")
+                    .frame(width: 24, height: 24)
+                    .foregroundColor(.black)
+            }
+            .frame(width: 50, alignment: .leading)
+
+            Spacer()
+
+            Text("Profile settings")
+                .font(Font.custom("Helvetica Neue", size: 18).weight(.medium))
+                .lineSpacing(19)
+                .foregroundColor(.black)
+
+            Spacer()
+
+            Button(action: {
+                Task {
+                    let success = await viewModel.saveProfile()
+                    if success {
+                        currentPage = .setting
+                    }
+                }
+            }) {
+                if viewModel.isSaving {
+                    ProgressView()
+                        .scaleEffect(0.8)
+                } else {
+                    Text("Save")
+                        .font(Font.custom("Helvetica Neue", size: 14))
+                        .lineSpacing(20)
+                        .foregroundColor(viewModel.canSave ? Color(red: 0.87, green: 0.11, blue: 0.26) : Color(red: 0.53, green: 0.53, blue: 0.53))
+                }
+            }
+            .frame(width: 50, alignment: .trailing)
+            .disabled(viewModel.isSaving || !viewModel.canSave)
+        }
+        .frame(height: 60)
+        .padding(.horizontal, 20)
+    }
+
+    // MARK: - Avatar Section
+    private var avatarSection: some View {
+        ZStack(alignment: .bottomTrailing) {
+            // 外圈白色边框
+            ZStack {
+                Ellipse()
+                    .fill(.white)
+                    .frame(width: 118, height: 118)
+
+                // 头像图片 - 使用统一的默认头像
+                if let pendingAvatar = AvatarManager.shared.pendingAvatar {
+                    Image(uiImage: pendingAvatar)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 114, height: 114)
+                        .clipShape(Ellipse())
+                } else if let image = viewModel.avatarImage {
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 114, height: 114)
+                        .clipShape(Ellipse())
+                } else if let url = viewModel.avatarUrl, !url.isEmpty {
+                    AsyncImage(url: URL(string: url)) { phase in
+                        switch phase {
+                        case .success(let image):
+                            image
+                                .resizable()
+                                .scaledToFill()
+                        case .failure:
+                            DefaultAvatarView(size: 114)
+                        case .empty:
+                            ProgressView()
+                        @unknown default:
+                            DefaultAvatarView(size: 114)
+                        }
+                    }
+                    .frame(width: 114, height: 114)
+                    .clipShape(Ellipse())
+                } else {
+                    DefaultAvatarView(size: 114)
+                }
+            }
+
+            // 红色加号按钮
+            PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
+                ZStack {
+                    Circle()
+                        .fill(Color(red: 0.87, green: 0.11, blue: 0.26))
+                        .frame(width: 32, height: 32)
+
+                    Image(systemName: "plus")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundColor(.white)
+                }
+            }
+            .offset(x: 5, y: 5)
+        }
+    }
+
+    // MARK: - Name Card (First name & Last name)
+    private var nameCard: some View {
+        VStack(spacing: 0) {
+            // First name row
+            HStack {
+                Text("First name")
+                    .font(labelFont)
+                    .lineSpacing(19)
+                    .foregroundColor(labelColor)
+                    .frame(width: 100, alignment: .leading)
+
+                TextField("", text: $viewModel.firstName)
+                    .font(valueFont)
+                    .foregroundColor(.black)
+
+                Spacer()
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 14)
+
+            // Separator
+            Rectangle()
+                .fill(Color(red: 0.90, green: 0.90, blue: 0.90))
+                .frame(height: 0.5)
+                .padding(.horizontal, 20)
+
+            // Last name row
+            HStack {
+                Text("Last name")
+                    .font(labelFont)
+                    .lineSpacing(19)
+                    .foregroundColor(labelColor)
+                    .frame(width: 100, alignment: .leading)
+
+                TextField("", text: $viewModel.lastName)
+                    .font(valueFont)
+                    .foregroundColor(.black)
+
+                Spacer()
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 14)
+        }
+        .background(.white)
+        .cornerRadius(cardCornerRadius)
+        .shadow(color: cardShadowColor, radius: cardShadowRadius, x: 0, y: cardShadowY)
+    }
+
+    // MARK: - Username Card
+    private var usernameCard: some View {
+        HStack {
+            Text("Username")
+                .font(labelFont)
+                .lineSpacing(19)
+                .foregroundColor(labelColor)
+                .frame(width: 100, alignment: .leading)
+
+            TextField("", text: $viewModel.username)
+                .font(valueFont)
+                .foregroundColor(.black)
+
+            Spacer()
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 12)
+        .background(.white)
+        .cornerRadius(cardCornerRadius)
+        .shadow(color: cardShadowColor, radius: cardShadowRadius, x: 0, y: cardShadowY)
+    }
+
+    // MARK: - Date of Birth Card
+    private var dateOfBirthCard: some View {
+        Button(action: {
+            showDatePicker = true
+        }) {
+            HStack {
+                Text("Date of Birth")
+                    .font(labelFont)
+                    .lineSpacing(19)
+                    .foregroundColor(labelColor)
+                    .frame(width: 100, alignment: .leading)
+
+                Text(viewModel.dateOfBirth.isEmpty ? "Not set" : viewModel.formatDateForDisplay(viewModel.dateOfBirth))
+                    .font(valueFont)
+                    .foregroundColor(viewModel.dateOfBirth.isEmpty ? labelColor : .black)
+
+                Spacer()
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
+        }
+        .background(.white)
+        .cornerRadius(cardCornerRadius)
+        .shadow(color: cardShadowColor, radius: cardShadowRadius, x: 0, y: cardShadowY)
+    }
+
+    // MARK: - Gender Card
+    private var genderCard: some View {
+        Button(action: {
+            showGenderPicker = true
+        }) {
+            HStack {
+                Text("Gender")
+                    .font(labelFont)
+                    .lineSpacing(19)
+                    .foregroundColor(labelColor)
+                    .frame(width: 100, alignment: .leading)
+
+                Text(viewModel.gender.displayName)
+                    .font(valueFont)
+                    .foregroundColor(.black)
+
+                Spacer()
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12))
+                    .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
+        }
+        .background(.white)
+        .cornerRadius(cardCornerRadius)
+        .shadow(color: cardShadowColor, radius: cardShadowRadius, x: 0, y: cardShadowY)
+    }
+
+    // MARK: - Profession & Identity Card
+    private var professionIdentityCard: some View {
+        VStack(spacing: 0) {
+            // Profession row
+            HStack {
+                Text("Profession")
+                    .font(labelFont)
+                    .lineSpacing(19)
+                    .foregroundColor(labelColor)
+                    .frame(width: 100, alignment: .leading)
+
+                TextField("", text: $viewModel.profession)
+                    .font(valueFont)
+                    .foregroundColor(.black)
+
+                Spacer()
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 14)
+
+            // Separator
+            Rectangle()
+                .fill(Color(red: 0.90, green: 0.90, blue: 0.90))
+                .frame(height: 0.5)
+                .padding(.horizontal, 20)
+
+            // Identity row
+            HStack {
+                Text("Identity")
+                    .font(labelFont)
+                    .lineSpacing(19)
+                    .foregroundColor(labelColor)
+                    .frame(width: 100, alignment: .leading)
+
+                TextField("", text: $viewModel.identity)
+                    .font(valueFont)
+                    .foregroundColor(.black)
+
+                Spacer()
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 14)
+        }
+        .background(.white)
+        .cornerRadius(cardCornerRadius)
+        .shadow(color: cardShadowColor, radius: cardShadowRadius, x: 0, y: cardShadowY)
+    }
+
+    // MARK: - Location Card
+    private var locationCard: some View {
+        Button(action: {
+            showLocationPicker = true
+        }) {
+            HStack {
+                Text("Location")
+                    .font(labelFont)
+                    .lineSpacing(19)
+                    .foregroundColor(labelColor)
+                    .frame(width: 100, alignment: .leading)
+
+                Text(viewModel.location.isEmpty ? "Not set" : viewModel.location)
+                    .font(valueFont)
+                    .foregroundColor(viewModel.location.isEmpty ? labelColor : .black)
+
+                Spacer()
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12))
+                    .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
+        }
+        .background(.white)
+        .cornerRadius(cardCornerRadius)
+        .shadow(color: cardShadowColor, radius: cardShadowRadius, x: 0, y: cardShadowY)
     }
 }
 

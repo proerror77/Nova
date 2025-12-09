@@ -204,8 +204,8 @@ struct MessageView: View {
                         showAddOptionsMenu = true
                     }) {
                         Image(systemName: "plus.circle")
-                            .font(.system(size: 24, weight: .regular))
-                            .foregroundColor(.black)
+                            .frame(width: 24, height: 24)
+                            .foregroundColor(DesignTokens.textPrimary)
                     }
                 }
                 .frame(height: DesignTokens.topBarHeight)
@@ -348,9 +348,9 @@ struct MessageView: View {
                     Spacer()
 
                     ZStack {
-                        // 白色背景
+                        // 背景
                         Rectangle()
-                            .foregroundColor(.white)
+                            .foregroundColor(DesignTokens.surface)
                             .frame(width: 180, height: 151)
                             .cornerRadius(8)
                             .shadow(color: Color.black.opacity(0.15), radius: 10, x: 0, y: 4)
@@ -368,7 +368,7 @@ struct MessageView: View {
                                         .frame(width: 28, height: 28)
                                     Text(LocalizedStringKey("Add Friends"))
                                         .font(Font.custom("Helvetica Neue", size: 14))
-                                        .foregroundColor(.black)
+                                        .foregroundColor(DesignTokens.textPrimary)
                                         .frame(maxWidth: .infinity, alignment: .leading)
                                 }
                                 .padding(.horizontal, 16)
@@ -393,7 +393,7 @@ struct MessageView: View {
                                         .frame(width: 28, height: 28)
                                     Text(LocalizedStringKey("Start Group Chat"))
                                         .font(Font.custom("Helvetica Neue", size: 14))
-                                        .foregroundColor(.black)
+                                        .foregroundColor(DesignTokens.textPrimary)
                                         .frame(maxWidth: .infinity, alignment: .leading)
                                 }
                                 .padding(.horizontal, 16)
@@ -418,7 +418,7 @@ struct MessageView: View {
                                         .frame(width: 28, height: 28)
                                     Text(LocalizedStringKey("Scan QR Code"))
                                         .font(Font.custom("Helvetica Neue", size: 14))
-                                        .foregroundColor(.black)
+                                        .foregroundColor(DesignTokens.textPrimary)
                                         .frame(maxWidth: .infinity, alignment: .leading)
                                 }
                                 .padding(.horizontal, 16)
@@ -449,7 +449,7 @@ struct MessageListItem: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            // 头像 - alice 使用自定义图片，其他用户使用默认圆形
+            // 头像 - alice 使用自定义图片，其他用户使用默认头像
             if name.lowercased() == "alice" {
                 Image("alice-avatar")
                     .resizable()
@@ -457,16 +457,14 @@ struct MessageListItem: View {
                     .frame(width: 63, height: 63)
                     .clipShape(Circle())
             } else {
-                Circle()
-                    .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
-                    .frame(width: 63, height: 63)
+                DefaultAvatarView(size: 63)
             }
 
             // 消息内容
             VStack(alignment: .leading, spacing: 5) {
                 Text(name)
                     .font(Font.custom("Helvetica Neue", size: 19).weight(.bold))
-                    .foregroundColor(.black)
+                    .foregroundColor(DesignTokens.textPrimary)
 
                 // 消息预览 - 使用动态消息
                 Text(messagePreview)

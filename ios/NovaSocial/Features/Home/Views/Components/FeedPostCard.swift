@@ -10,159 +10,234 @@ struct FeedPostCard: View {
     var onShare: () -> Void = {}
     var onBookmark: () -> Void = {}
 
+    @State private var currentImageIndex = 0
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        VStack(alignment: .leading, spacing: 10) {
             // MARK: - User Info Header
-            HStack(spacing: DesignTokens.spacing10) {
-                // Avatar
-                Circle()
-                    .fill(DesignTokens.avatarPlaceholder)
-                    .frame(width: DesignTokens.avatarMedium, height: DesignTokens.avatarMedium)
+            HStack {
+                HStack(spacing: 10) {
+                    // Avatar - 显示用户头像或默认头像
+                    AvatarView(image: nil, url: post.authorAvatar, size: 32)
 
-                // User Info
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(post.authorName)
-                        .font(.system(size: DesignTokens.fontMedium, weight: .semibold))
-                        .foregroundColor(DesignTokens.textPrimary)
+                    // User Info
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack(spacing: 4) {
+                            Text(post.authorName)
+                                .font(Font.custom("Helvetica Neue", size: 14).weight(.medium))
+                                .foregroundColor(DesignTokens.textPrimary)
 
-                    Text(post.createdAt.timeAgoDisplay())
-                        .font(.system(size: DesignTokens.fontSmall))
-                        .foregroundColor(DesignTokens.textTertiary)
+                            // 认证标记 (可选)
+                            Image(systemName: "checkmark.seal.fill")
+                                .font(.system(size: 10))
+                                .foregroundColor(Color(red: 0.20, green: 0.60, blue: 1.0))
+                        }
+
+                        HStack(spacing: 9) {
+                            Text(post.createdAt.timeAgoDisplay())
+                                .font(Font.custom("Helvetica Neue", size: 10))
+                                .lineSpacing(13)
+                                .foregroundColor(DesignTokens.textTertiary)
+
+                            Text("Location")
+                                .font(Font.custom("Helvetica Neue", size: 10))
+                                .lineSpacing(13)
+                                .foregroundColor(DesignTokens.textTertiary)
+                        }
+                    }
                 }
 
                 Spacer()
 
-                // Menu Button
-                Button(action: { showReportView = true }) {
-                    Image(systemName: "ellipsis")
-                        .foregroundColor(DesignTokens.textPrimary)
-                        .font(.system(size: DesignTokens.fontMedium))
-                        .contentShape(Rectangle())
+                // Share Button
+                Button(action: onShare) {
+                    Image("card-share-icon")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 20, height: 20)
                 }
-                .accessibilityLabel("More options")
+                .accessibilityLabel("Share")
             }
-            .padding(.horizontal, DesignTokens.spacing12)
-            .padding(.vertical, DesignTokens.spacing10)
+            .padding(.horizontal, 17)
+            .padding(.top, 14)
 
-            // MARK: - Post Images with Horizontal Swipe
+            // MARK: - Post Images (3:4 比例)
             if !post.displayMediaUrls.isEmpty {
-                TabView {
-                    ForEach(post.displayMediaUrls, id: \.self) { imageUrl in
-                        AsyncImage(url: URL(string: imageUrl)) { phase in
-                            switch phase {
-                            case .empty:
-                                Rectangle()
-                                    .fill(DesignTokens.loadingBackground)
-                                    .overlay(
-                                        ProgressView()
-                                            .tint(DesignTokens.accentColor)
-                                    )
-                            case .success(let image):
-                                image
-                                    .resizable()
-                                    .scaledToFill()
-                            case .failure:
-                                Rectangle()
-                                    .fill(DesignTokens.loadingBackground)
-                                    .overlay(
-                                        Image(systemName: "photo")
-                                            .font(.system(size: DesignTokens.iconXL))
-                                            .foregroundColor(DesignTokens.textMuted)
-                                    )
-                            @unknown default:
-                                EmptyView()
+                VStack(spacing: 7) {
+                    TabView(selection: $currentImageIndex) {
+                        ForEach(Array(post.displayMediaUrls.enumerated()), id: \.offset) { index, imageUrl in
+                            AsyncImage(url: URL(string: imageUrl)) { phase in
+                                switch phase {
+                                case .empty:
+                                    Rectangle()
+                                        .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
+                                        .overlay(
+                                            ProgressView()
+                                                .tint(.white)
+                                        )
+                                case .success(let image):
+                                    image
+                                        .resizable()
+                                        .scaledToFill()
+                                case .failure:
+                                    Rectangle()
+                                        .fill(Color(red: 0.50, green: 0.23, blue: 0.27).opacity(0.50))
+                                        .overlay(
+                                            Image(systemName: "photo")
+                                                .font(.system(size: 30))
+                                                .foregroundColor(.white.opacity(0.5))
+                                        )
+                                @unknown default:
+                                    EmptyView()
+                                }
+                            }
+                            .frame(maxWidth: .infinity)
+                            .aspectRatio(3/4, contentMode: .fill)
+                            .clipped()
+                            .tag(index)
+                        }
+                    }
+                    .tabViewStyle(.page(indexDisplayMode: .never))
+                    .frame(height: UIScreen.main.bounds.width * 4 / 3 - 68) // 3:4 比例
+                    .clipShape(RoundedRectangle(cornerRadius: 5))
+                    .padding(.horizontal, 17)
+
+                    // 自定义页面指示器
+                    if post.displayMediaUrls.count > 1 {
+                        HStack(spacing: 11) {
+                            ForEach(0..<post.displayMediaUrls.count, id: \.self) { index in
+                                Circle()
+                                    .fill(index == currentImageIndex ?
+                                          Color(red: 0.81, green: 0.13, blue: 0.25) :
+                                          Color(red: 0.85, green: 0.85, blue: 0.85))
+                                    .frame(width: 6, height: 6)
                             }
                         }
-                        .frame(maxWidth: .infinity, minHeight: 200)
-                        .clipped()
                     }
                 }
-                .tabViewStyle(.page(indexDisplayMode: post.displayMediaUrls.count > 1 ? .automatic : .never))
-                .frame(height: 280)
-                .cornerRadius(DesignTokens.cardCornerRadius)
-                .padding(.horizontal, DesignTokens.spacing12)
-                .padding(.vertical, DesignTokens.spacing8)
             }
-
-            // MARK: - Post Content
-            HStack(spacing: DesignTokens.spacing4) {
-                Text(post.content)
-                    .font(.system(size: DesignTokens.fontBody))
-                    .foregroundColor(DesignTokens.textPrimary)
-                    .lineLimit(3)
-
-                Spacer()
-            }
-            .padding(.horizontal, DesignTokens.spacing12)
-            .padding(.vertical, DesignTokens.spacing8)
 
             // MARK: - Interaction Buttons
-            HStack(spacing: DesignTokens.spacing16) {
+            HStack(spacing: 20) {
                 // Like button
                 Button(action: onLike) {
-                    HStack(spacing: DesignTokens.spacing6) {
-                        Image(systemName: post.isLiked ? "arrowtriangle.up.fill" : "arrowtriangle.up")
-                            .font(.system(size: DesignTokens.iconSmall))
-                            .foregroundColor(post.isLiked ? DesignTokens.accentColor : DesignTokens.textPrimary)
+                    HStack(spacing: 6) {
+                        Image("card-heart-icon")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 20, height: 20)
                         Text("\(post.likeCount)")
-                            .font(.system(size: DesignTokens.spacing12, weight: .bold))
-                            .foregroundColor(post.isLiked ? DesignTokens.accentColor : DesignTokens.textPrimary)
+                            .font(Font.custom("Helvetica Neue", size: 10))
+                            .lineSpacing(20)
+                            .foregroundColor(DesignTokens.textSecondary)
                     }
                 }
-                .accessibilityLabel(post.isLiked ? "Unlike, \(post.likeCount) likes" : "Like, \(post.likeCount) likes")
-
-                // Downvote placeholder (not implemented)
-                HStack(spacing: DesignTokens.spacing6) {
-                    Image(systemName: "arrowtriangle.down")
-                        .font(.system(size: DesignTokens.iconSmall))
-                        .foregroundColor(DesignTokens.textPrimary)
-                    Text("0")
-                        .font(.system(size: DesignTokens.spacing12, weight: .bold))
-                        .foregroundColor(DesignTokens.textPrimary)
-                }
+                .accessibilityLabel("Like, \(post.likeCount) likes")
 
                 // Comment button
                 Button(action: onComment) {
-                    HStack(spacing: DesignTokens.spacing6) {
-                        Image(systemName: "bubble.right")
-                            .font(.system(size: DesignTokens.iconSmall))
-                            .foregroundColor(DesignTokens.textPrimary)
+                    HStack(spacing: 6) {
+                        Image("card-comment-icon")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 20, height: 20)
                         Text("\(post.commentCount)")
-                            .font(.system(size: DesignTokens.spacing12, weight: .bold))
-                            .foregroundColor(DesignTokens.textPrimary)
+                            .font(Font.custom("Helvetica Neue", size: 10))
+                            .lineSpacing(20)
+                            .foregroundColor(DesignTokens.textSecondary)
                     }
                 }
                 .accessibilityLabel("Comments, \(post.commentCount)")
 
-                // Share button
-                Button(action: onShare) {
-                    HStack(spacing: DesignTokens.spacing6) {
-                        Image(systemName: "square.and.arrow.up")
-                            .font(.system(size: DesignTokens.iconSmall))
-                            .foregroundColor(DesignTokens.textPrimary)
+                // Bookmark/Star button
+                Button(action: onBookmark) {
+                    HStack(spacing: 6) {
+                        Image("card-star-icon")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 20, height: 20)
                         Text("\(post.shareCount)")
-                            .font(.system(size: DesignTokens.spacing12, weight: .bold))
-                            .foregroundColor(DesignTokens.textPrimary)
+                            .font(Font.custom("Helvetica Neue", size: 10))
+                            .lineSpacing(20)
+                            .foregroundColor(DesignTokens.textSecondary)
                     }
                 }
-                .accessibilityLabel("Share, \(post.shareCount) shares")
+                .accessibilityLabel("Bookmark")
 
                 Spacer()
-
-                // Bookmark button
-                Button(action: onBookmark) {
-                    Image(systemName: post.isBookmarked ? "bookmark.fill" : "bookmark")
-                        .font(.system(size: DesignTokens.spacing12))
-                        .foregroundColor(post.isBookmarked ? DesignTokens.accentColor : DesignTokens.textPrimary)
-                }
-                .accessibilityLabel(post.isBookmarked ? "Remove bookmark" : "Bookmark")
             }
-            .padding(.horizontal, DesignTokens.spacing12)
-            .padding(.vertical, DesignTokens.spacing8)
+            .padding(.horizontal, 17)
+            .padding(.bottom, 14)
         }
-        .background(DesignTokens.cardBackground)
-        .cornerRadius(DesignTokens.cardCornerRadius)
+        .background(DesignTokens.surface)
+        .cornerRadius(5)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Post by \(post.authorName)")
+    }
+}
+
+// MARK: - Preview
+#Preview {
+    @Previewable @State var showReport = false
+
+    ScrollView {
+        VStack(spacing: 16) {
+            // 带图片的帖子
+            FeedPostCard(
+                post: FeedPost.preview,
+                showReportView: $showReport
+            )
+
+            // 纯文字帖子
+            FeedPostCard(
+                post: FeedPost.previewTextOnly,
+                showReportView: $showReport
+            )
+        }
+        .padding(.horizontal, 16)
+    }
+    .background(Color(red: 0.97, green: 0.97, blue: 0.97))
+}
+
+// MARK: - Preview Data
+extension FeedPost {
+    static var preview: FeedPost {
+        FeedPost(
+            id: "preview-1",
+            authorId: "user-123",
+            authorName: "Simone Carter",
+            authorAvatar: "https://picsum.photos/100/100",
+            content: "This is a sample post with images.",
+            mediaUrls: [
+                "https://picsum.photos/400/533",
+                "https://picsum.photos/401/534",
+                "https://picsum.photos/402/535",
+                "https://picsum.photos/403/536",
+                "https://picsum.photos/404/537"
+            ],
+            createdAt: Date().addingTimeInterval(-5400), // 1d30m ago
+            likeCount: 2234,
+            commentCount: 1232,
+            shareCount: 1232,
+            isLiked: false,
+            isBookmarked: false
+        )
+    }
+
+    static var previewTextOnly: FeedPost {
+        FeedPost(
+            id: "preview-2",
+            authorId: "user-456",
+            authorName: "Jane Smith",
+            authorAvatar: nil,
+            content: "Just finished reading an amazing book!",
+            mediaUrls: [],
+            createdAt: Date().addingTimeInterval(-7200),
+            likeCount: 56,
+            commentCount: 8,
+            shareCount: 3,
+            isLiked: false,
+            isBookmarked: true
+        )
     }
 }

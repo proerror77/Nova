@@ -1,5 +1,4 @@
 import SwiftUI
-import PhotosUI
 
 struct ProfileView: View {
     @Binding var currentPage: AppPage
@@ -8,7 +7,6 @@ struct ProfileView: View {
     @State private var profileData = ProfileData()
     @State private var showNewPost = false
     @State private var showSetting = false
-    @State private var selectedPhotoItem: PhotosPickerItem?
     @State private var showPhotoOptions = false
     @State private var showImagePicker = false
     @State private var showCamera = false
@@ -71,20 +69,6 @@ struct ProfileView: View {
                 showNewPost = true
             }
         }
-        .onChange(of: selectedPhotoItem) { oldValue, newValue in
-            Task {
-                if let photoItem = newValue,
-                   let data = try? await photoItem.loadTransferable(type: Data.self),
-                   let image = UIImage(data: data) {
-                    // 立即显示选中的照片
-                    localAvatarImage = image
-                    // 同时保存到 AvatarManager
-                    avatarManager.savePendingAvatar(image)
-                    // 后台上传到服务器
-                    await profileData.uploadAvatar(image: image)
-                }
-            }
-        }
     }
 
     // MARK: - Profile 主内容
@@ -137,6 +121,45 @@ struct ProfileView: View {
         }
     }
 
+    // ==================== 布局配置（可在此调整） ====================
+    // 顶部导航栏布局
+    private var navBarLayout: ProfileNavBarLayout {
+        ProfileNavBarLayout(
+            horizontalPadding: 20,      // 左右边距
+            topPadding: 60,             // 顶部边距
+            bottomPadding: 40,          // 底部边距
+            usernameFontSize: 20,       // 用户名字体大小
+            chevronSize: 12,            // 下拉箭头大小
+            usernameChevronSpacing: 6,  // 用户名和箭头间距
+            iconSize: 24,               // 图标大小
+            iconSpacing: 18             // 图标间距
+        )
+    }
+
+    // 用户信息区域布局
+    private var userInfoLayout: ProfileUserInfoLayout {
+        ProfileUserInfoLayout(
+            containerWidth: 365,        // 容器宽度
+            verticalSpacing: 7,         // 垂直间距
+            bottomPadding: 10,          // 底部边距
+            avatarOuterSize: 108,       // 头像外圈大小
+            avatarInnerSize: 100,       // 头像内圈大小
+            avatarBorderWidth: 1,       // 边框宽度
+            usernameFontSize: 20,       // 用户名字体大小
+            usernameSpacingFromAvatar: 9,  // 与头像间距
+            locationFontSize: 12,       // 位置字体大小
+            professionFontSize: 12,     // 职业字体大小
+            blueVIconSize: 20,          // 蓝标大小
+            professionIconSpacing: 10,  // 蓝标与文字间距
+            statsTopPadding: 16,        // 统计区顶部间距
+            statsLabelFontSize: 16,     // 统计标签字体
+            statsValueFontSize: 16,     // 统计数值字体
+            statsItemWidth: 132,        // 统计项宽度
+            statsItemSpacing: -16,      // 统计项间距
+            statsDividerHeight: 24      // 分隔线高度
+        )
+    }
+
     // MARK: - 用户信息头部区域
     private var userHeaderSection: some View {
         ZStack(alignment: .top) {
@@ -153,173 +176,32 @@ struct ProfileView: View {
                 .ignoresSafeArea(edges: .top)
 
             VStack(spacing: 0) {
-                // MARK: - 顶部导航栏
-                HStack {
-                    Spacer()
+                // MARK: - 顶部导航栏（独立组件）
+                ProfileTopNavigationBar(
+                    username: displayUser?.displayName ?? displayUser?.username ?? "User",
+                    layout: navBarLayout,
+                    onShareTapped: { showShareSheet = true },
+                    onSettingsTapped: { currentPage = .setting },
+                    onUsernameTapped: { /* 用户名点击事件 */ }
+                )
 
-                    // 右侧：分享和设置图标
-                    HStack(spacing: 20) {
-                        Button(action: {
-                            showShareSheet = true
-                        }) {
-                            Image(systemName: "square.and.arrow.up")
-                                .font(.system(size: 22))
-                                .foregroundColor(.white)
-                        }
-
-                        Button(action: {
-                            currentPage = .setting
-                        }) {
-                            Image(systemName: "gearshape")
-                                .font(.system(size: 22))
-                                .foregroundColor(.white)
-                        }
-                    }
-                }
-                .padding(.horizontal, 20)
-                .padding(.top, 60)
-                .padding(.bottom, 40)
-
-                        // MARK: - 用户信息区域
-                        VStack(spacing: 16) {
-                            // 头像（居中显示）
-                            ZStack(alignment: .bottomTrailing) {
-                                // 头像图片 - 优先级：CreateAccount 选择的头像 > 本地选择 > 服务器头像 > 占位符
-                                if let pendingAvatar = avatarManager.pendingAvatar {
-                                    // 1. 优先显示 CreateAccount 页面选择的头像
-                                    Image(uiImage: pendingAvatar)
-                                        .resizable()
-                                        .scaledToFill()
-                                        .frame(width: 100, height: 100)
-                                        .clipShape(Circle())
-                                } else if let localImage = localAvatarImage {
-                                    // 2. 显示本地选择的照片
-                                    Image(uiImage: localImage)
-                                        .resizable()
-                                        .scaledToFill()
-                                        .frame(width: 100, height: 100)
-                                        .clipShape(Circle())
-                                } else if let avatarUrl = profileData.userProfile?.avatarUrl,
-                                          let url = URL(string: avatarUrl) {
-                                    // 3. 显示服务器上的头像
-                                    AsyncImage(url: url) { image in
-                                        image
-                                            .resizable()
-                                            .scaledToFill()
-                                    } placeholder: {
-                                        Circle()
-                                            .fill(DesignTokens.avatarPlaceholder)
-                                    }
-                                    .frame(width: 100, height: 100)
-                                    .clipShape(Circle())
-                                } else {
-                                    // 4. 默认占位符
-                                    Circle()
-                                        .fill(DesignTokens.avatarPlaceholder)
-                                        .frame(width: 100, height: 100)
-                                }
-
-                                // 加号按钮（右下角）
-                                PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
-                                    ZStack {
-                                        Circle()
-                                            .fill(DesignTokens.accentColor)
-                                            .frame(width: 32, height: 32)
-
-                                        Image(systemName: "plus")
-                                            .font(.system(size: 14, weight: .bold))
-                                            .foregroundColor(.white)
-                                    }
-                                }
-                                .offset(x: 0, y: 0)
-                            }
-                            .frame(maxWidth: .infinity)  // 居中到整个页面
-
-                            // 用户名
-                            Text(displayUser?.displayName ?? displayUser?.username ?? "User")
-                                .font(.system(size: 24, weight: .bold))
-                                .foregroundColor(.white)
-
-                            // 位置
-                            if let location = displayUser?.location, !location.isEmpty {
-                                Text(location)
-                                    .font(.system(size: 14))
-                                    .foregroundColor(.white)
-                            }
-
-                            // 简介/职位
-                            if let bio = displayUser?.bio, !bio.isEmpty {
-                                Text(bio)
-                                    .font(.system(size: 14, weight: .light))
-                                    .foregroundColor(.white.opacity(0.9))
-                            }
-
-                            // MARK: - 统计数据
-                                HStack(spacing: 10) {
-                                // Following
-                                VStack(spacing: 4) {
-                                    Text(LocalizedStringKey("Following"))
-                                        .font(.system(size: 16))
-                                        .foregroundColor(.white)
-                                    Text("\(displayUser?.safeFollowingCount ?? 0)")
-                                        .font(.system(size: 16))
-                                        .foregroundColor(.white)
-                                }
-                                .frame(maxWidth: .infinity)
-
-                                // 分隔线
-                                Rectangle()
-                                    .fill(.white)
-                                    .frame(width: 1, height: 30)
-
-                                // Followers
-                                VStack(spacing: 4) {
-                                    Text(LocalizedStringKey("Followers"))
-                                        .font(.system(size: 16))
-                                        .foregroundColor(.white)
-                                    Text("\(displayUser?.safeFollowerCount ?? 0)")
-                                        .font(.system(size: 16))
-                                        .foregroundColor(.white)
-                                }
-                                .frame(maxWidth: .infinity)
-
-                                // 分隔线
-                                Rectangle()
-                                    .fill(.white)
-                                    .frame(width: 1, height: 30)
-
-                                // Posts
-                                VStack(spacing: 4) {
-                                    Text(LocalizedStringKey("Likes"))
-                                        .font(.system(size: 16))
-                                        .foregroundColor(.white)
-                                    Text("\(displayUser?.safePostCount ?? 0)")
-                                        .font(.system(size: 16))
-                                        .foregroundColor(.white)
-                                }
-                                .frame(maxWidth: .infinity)
-                            }
-                            .padding(.horizontal, 40)
-                            .padding(.top, 45)
-
-                            // MARK: - 认证徽章
-                            if displayUser?.safeIsVerified == true {
-                                HStack(spacing: 8) {
-                                    Image(systemName: "checkmark.seal.fill")
-                                        .font(.system(size: 20))
-                                        .foregroundColor(.blue)
-
-                                    Text(LocalizedStringKey("Verified_partner"))
-                                        .font(.system(size: 16))
-                                        .foregroundColor(.white)
-                                }
-                                .padding(.top, 8)
-                            }
-                        }
-                        .padding(.bottom, 10)
-                    }
-                }
+                // MARK: - 用户信息区域（独立组件）
+                // 注意：当用户未填写信息时，组件会自动处理默认显示状态
+                ProfileUserInfoSection(
+                    avatarImage: avatarManager.pendingAvatar ?? localAvatarImage,
+                    avatarUrl: profileData.userProfile?.avatarUrl,
+                    username: displayUser?.displayName ?? displayUser?.username,  // 未填写时组件显示 "User"
+                    location: displayUser?.location,                               // 未填写时不显示
+                    profession: displayUser?.bio,                                  // 未填写时不显示
+                    isVerified: displayUser?.safeIsVerified ?? false,
+                    followingCount: displayUser?.safeFollowingCount ?? 0,
+                    followersCount: displayUser?.safeFollowerCount ?? 0,
+                    likesCount: displayUser?.safePostCount ?? 0,
+                    layout: userInfoLayout
+                )
+            }
         }
+    }
 
     // MARK: - 内容区域
     private var contentSection: some View {

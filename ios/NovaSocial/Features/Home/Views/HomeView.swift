@@ -45,7 +45,7 @@ struct HomeView: View {
                 GenerateImage01View(showGenerateImage: $showGenerateImage)
                     .transition(.identity)
             } else if showWrite {
-                WriteView(showWrite: $showWrite)
+                WriteView(showWrite: $showWrite, currentPage: $currentPage)
                     .transition(.identity)
             } else {
                 homeContent
@@ -106,41 +106,41 @@ struct HomeView: View {
 
     var homeContent: some View {
         ZStack {
-            // 背景色
+            // 背景色 - 浅灰色 (与 Message 页面一致)
             DesignTokens.backgroundColor
                 .ignoresSafeArea()
 
-            NavigationStack {
-                VStack(spacing: 0) {
-                    // MARK: - 顶部导航栏
-                    HStack {
-                        Button(action: { showSearch = true }) {
-                            Image("Back-icon")
-                                .resizable()
-                                .scaledToFit()
-                                .frame(width: 24, height: 24)
-                        }
-                        Spacer()
-                        Image("ICERED-icon")
-                            .resizable()
-                            .scaledToFit()
-                            .frame(height: 18)
-                        Spacer()
-                        Button(action: { showNotification = true }) {
-                            Image("Notice-icon")
-                                .resizable()
-                                .scaledToFit()
-                                .frame(width: 24, height: 24)
-                        }
+            VStack(spacing: 0) {
+                // MARK: - 顶部导航栏
+                HStack {
+                    Button(action: { showSearch = true }) {
+                        Image(systemName: "magnifyingglass")
+                            .frame(width: 24, height: 24)
+                            .foregroundColor(DesignTokens.textPrimary)
                     }
-                    .frame(height: DesignTokens.topBarHeight)
-                    .padding(.horizontal, 16)
-                    .background(Color.white)
+                    Spacer()
+                    Image("ICERED-icon")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(height: 18)
+                    Spacer()
+                    Button(action: { showNotification = true }) {
+                        Image(systemName: "bell")
+                            .frame(width: 24, height: 24)
+                            .foregroundColor(DesignTokens.textPrimary)
+                    }
+                }
+                .frame(height: DesignTokens.topBarHeight)
+                .padding(.horizontal, 16)
+                .background(DesignTokens.surface)
 
-                    Divider()
+                // MARK: - 顶部分割线
+                Divider()
+                    .frame(height: 0.5)
+                    .background(DesignTokens.dividerColor)
 
-                    // MARK: - 可滚动内容区
-                    ScrollView {
+                // MARK: - 可滚动内容区
+                ScrollView {
                         VStack(spacing: DesignTokens.spacing20) {
                             // MARK: - Loading State
                             if feedViewModel.isLoading && feedViewModel.posts.isEmpty {
@@ -182,24 +182,34 @@ struct HomeView: View {
                                 .padding()
                             }
 
-                            // MARK: - Feed Posts (Dynamic)
-                            ForEach(Array(feedViewModel.posts.enumerated()), id: \.element.id) { index, post in
-                                FeedPostCard(
-                                    post: post,
-                                    showReportView: $showReportView,
-                                    onLike: { Task { await feedViewModel.toggleLike(postId: post.id) } },
-                                    onComment: {
-                                        selectedPostForComment = post
-                                        showComments = true
-                                    },
-                                    onShare: { Task { await feedViewModel.sharePost(postId: post.id) } },
-                                    onBookmark: { feedViewModel.toggleBookmark(postId: post.id) }
-                                )
-                                .onAppear {
-                                    // Auto-load more when reaching near the end (3 posts before)
-                                    if index >= feedViewModel.posts.count - 3 && feedViewModel.hasMore && !feedViewModel.isLoadingMore {
-                                        Task { await feedViewModel.loadMore() }
+                            // MARK: - Feed Posts + Carousel (Dynamic Layout)
+                            // 配置在 FeedLayoutConfig.swift 中修改
+                            // 当前设置：每 4 个帖子后显示一次轮播图
+                            ForEach(FeedLayoutBuilder.buildFeedItems(from: feedViewModel.posts)) { item in
+                                switch item {
+                                case .post(let index, let post):
+                                    FeedPostCard(
+                                        post: post,
+                                        showReportView: $showReportView,
+                                        onLike: { Task { await feedViewModel.toggleLike(postId: post.id) } },
+                                        onComment: {
+                                            selectedPostForComment = post
+                                            showComments = true
+                                        },
+                                        onShare: { Task { await feedViewModel.sharePost(postId: post.id) } },
+                                        onBookmark: { feedViewModel.toggleBookmark(postId: post.id) }
+                                    )
+                                    .onAppear {
+                                        // Auto-load more when reaching near the end (3 posts before)
+                                        if index >= feedViewModel.posts.count - 3 && feedViewModel.hasMore && !feedViewModel.isLoadingMore {
+                                            Task { await feedViewModel.loadMore() }
+                                        }
                                     }
+
+                                case .carousel:
+                                    HottestBankerSection(onSeeAllTapped: {
+                                        currentPage = .rankingList
+                                    })
                                 }
                             }
 
@@ -245,77 +255,6 @@ struct HomeView: View {
                                 .padding()
                             }
 
-                            // MARK: - 标题部分
-                            ZStack {
-                                Button(action: {
-                                    currentPage = .rankingList
-                                }) {
-                                    Text(LocalizedStringKey("View more"))
-                                        .font(Font.custom("Helvetica Neue", size: 9))
-                                        .underline()
-                                        .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
-                                }
-                                .offset(x: 150, y: 12)
-
-                                Text(LocalizedStringKey("Hottest Banker in H.K."))
-                                    .font(Font.custom("Helvetica Neue", size: 20).weight(.bold))
-                                    .foregroundColor(.black)
-                                    .offset(x: 0, y: -5.50)
-                            }
-                            .frame(width: 343, height: 35)
-
-                            // MARK: - 轮播卡片容器 (水平滚动)
-                            ScrollView(.horizontal, showsIndicators: false) {
-                                HStack(spacing: 20) {
-                                    // 卡片 1
-                                    CarouselCardItem(
-                                        rankNumber: "1",
-                                        name: "Lucy Liu",
-                                        company: "Morgan Stanley",
-                                        votes: "2293",
-                                        imageAssetName: "PollCard-1"
-                                    )
-
-                                    // 卡片 2
-                                    CarouselCardItem(
-                                        rankNumber: "2",
-                                        name: "Lucy Liu",
-                                        company: "Morgan Stanley",
-                                        votes: "2293",
-                                        imageAssetName: "PollCard-2"
-                                    )
-
-                                    // 卡片 3
-                                    CarouselCardItem(
-                                        rankNumber: "3",
-                                        name: "Lucy Liu",
-                                        company: "Morgan Stanley",
-                                        votes: "2293",
-                                        imageAssetName: "PollCard-3"
-                                    )
-
-                                    // 卡片 4
-                                    CarouselCardItem(
-                                        rankNumber: "4",
-                                        name: "Lucy Liu",
-                                        company: "Morgan Stanley",
-                                        votes: "2293",
-                                        imageAssetName: "PollCard-4"
-                                    )
-
-                                    // 卡片 5
-                                    CarouselCardItem(
-                                        rankNumber: "5",
-                                        name: "Lucy Liu",
-                                        company: "Morgan Stanley",
-                                        votes: "2293",
-                                        imageAssetName: "PollCard-5"
-                                    )
-                                }
-                                .padding(.horizontal)
-                            }
-                            .frame(height: 320)
-
                         }
                         .padding(.vertical, DesignTokens.spacing16)
                         .padding(.horizontal)
@@ -324,14 +263,13 @@ struct HomeView: View {
                         await feedViewModel.refresh()
                     }
 
-                    // MARK: - ScrollView 下方间距
-                    Color.clear
-                        .frame(height: 0) // ← 调整 ScrollView 下方的间距
-                }
-                .safeAreaInset(edge: .bottom) {
-                    BottomTabBar(currentPage: $currentPage, showPhotoOptions: $showPhotoOptions)
-                        .padding(.top, 80)
-                }
+                // MARK: - ScrollView 下方间距
+                Color.clear
+                    .frame(height: 0) // ← 调整 ScrollView 下方的间距
+            }
+            .safeAreaInset(edge: .bottom) {
+                BottomTabBar(currentPage: $currentPage, showPhotoOptions: $showPhotoOptions)
+                    .padding(.top, 80)
             }
         }
     }

@@ -36,7 +36,7 @@ struct NotificationView: View {
                         showNotification = false
                     }) {
                         Image(systemName: "chevron.left")
-                            .font(.system(size: 20, weight: .medium))
+                            .frame(width: 24, height: 24)
                             .foregroundColor(.black)
                     }
 

@@ -28,8 +28,8 @@ struct SplashScreenView: View {
                     // 已登录，直接进入主页
                     currentPage = .home
                 } else {
-                    // 未登录，跳转到欢迎页
-                    currentPage = .welcome
+                    // 未登录，跳转到登录页
+                    currentPage = .login
                 }
             } catch {
                 // Task cancelled

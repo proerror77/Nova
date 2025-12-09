@@ -36,7 +36,7 @@ struct UserProfileView: View {
                                 showUserProfile = false
                             }) {
                                 Image(systemName: "chevron.left")
-                                    .font(.system(size: 22))
+                                    .frame(width: 24, height: 24)
                                     .foregroundColor(.white)
                             }
 
@@ -47,7 +47,7 @@ struct UserProfileView: View {
                                 // 分享操作
                             }) {
                                 Image(systemName: "square.and.arrow.up")
-                                    .font(.system(size: 22))
+                                    .frame(width: 24, height: 24)
                                     .foregroundColor(.white)
                             }
                         }

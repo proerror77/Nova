@@ -3,6 +3,9 @@ import SwiftUI
 struct SettingsView: View {
     @Binding var currentPage: AppPage
     @StateObject private var viewModel = SettingsViewModel()
+    @EnvironmentObject private var authManager: AuthenticationManager
+    @State private var isPostAsExpanded = false
+    @State private var selectedPostAsType: PostAsType = .realName
 
     var body: some View {
         ZStack {
@@ -16,7 +19,7 @@ struct SettingsView: View {
                         currentPage = .account
                     }) {
                         Image(systemName: "chevron.left")
-                            .font(.system(size: 20))
+                            .frame(width: 24, height: 24)
                             .foregroundColor(DesignTokens.textPrimary)
                     }
 
@@ -40,13 +43,6 @@ struct SettingsView: View {
                     VStack(spacing: 20) {
                         // MARK: - Account Settings Group
                         VStack(alignment: .leading, spacing: 0) {
-                            // Section Header
-                            Text("ACCOUNT")
-                                .font(.system(size: 12, weight: .semibold))
-                                .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
-                                .padding(.horizontal, 20)
-                                .padding(.bottom, 8)
-
                             VStack(spacing: 0) {
                                 SettingsRow(
                                     icon: "person.crop.circle",
@@ -60,15 +56,43 @@ struct SettingsView: View {
                                 Divider()
                                     .padding(.leading, 60)
 
-                                SettingsRow(
-                                    icon: "person.crop.square.filled.and.at.rectangle",
-                                    title: "Post as",
-                                    showChevron: true,
-                                    action: {
-                                        // TODO: 实现Post as功能
-                                        print("Post as tapped - feature coming soon")
+                                // MARK: - Post As (可展开)
+                                Button(action: {
+                                    withAnimation(.easeInOut(duration: 0.25)) {
+                                        isPostAsExpanded.toggle()
                                     }
+                                }) {
+                                    HStack(spacing: 16) {
+                                        Image(systemName: "person.crop.square.filled.and.at.rectangle")
+                                            .font(.system(size: 18))
+                                            .foregroundColor(DesignTokens.accentColor)
+                                            .frame(width: 24)
+
+                                        Text("Post as")
+                                            .font(.system(size: 14, weight: .medium))
+                                            .foregroundColor(DesignTokens.textPrimary)
+
+                                        Spacer()
+
+                                        Image(systemName: isPostAsExpanded ? "chevron.down" : "chevron.right")
+                                            .font(.system(size: 12))
+                                            .foregroundColor(DesignTokens.textSecondary)
+                                            .animation(.easeInOut(duration: 0.2), value: isPostAsExpanded)
+                                    }
+                                    .padding(.horizontal, 20)
+                                    .padding(.vertical, 16)
+                                }
+
+                                // 展开的选择面板 - 使用高度动画
+                                PostAsSelectionPanel(
+                                    selectedType: $selectedPostAsType,
+                                    realName: authManager.currentUser?.displayName ?? authManager.currentUser?.username ?? "User",
+                                    username: authManager.currentUser?.username ?? "username",
+                                    avatarUrl: authManager.currentUser?.avatarUrl
                                 )
+                                .frame(height: isPostAsExpanded ? nil : 0, alignment: .top)
+                                .clipped()
+                                .opacity(isPostAsExpanded ? 1 : 0)
 
                                 Divider()
                                     .padding(.leading, 60)
@@ -130,13 +154,6 @@ struct SettingsView: View {
 
                         // MARK: - Appearance Settings
                         VStack(alignment: .leading, spacing: 0) {
-                            // Section Header
-                            Text("APPEARANCE")
-                                .font(.system(size: 12, weight: .semibold))
-                                .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
-                                .padding(.horizontal, 20)
-                                .padding(.bottom, 8)
-
                             HStack(spacing: 16) {
                                 Image(systemName: "moon.fill")
                                     .font(.system(size: 18))
@@ -145,7 +162,7 @@ struct SettingsView: View {
 
                                 Text("Dark Mode")
                                     .font(.system(size: 14, weight: .medium))
-                                    .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
+                                    .foregroundColor(DesignTokens.textPrimary)
 
                                 Spacer()
 
@@ -188,12 +205,12 @@ struct SettingsView: View {
                                 HStack(spacing: 16) {
                                     Image(systemName: "rectangle.portrait.and.arrow.right")
                                         .font(.system(size: 18))
-                                        .foregroundColor(.red)
+                                        .foregroundColor(DesignTokens.accentColor)
                                         .frame(width: 24)
 
                                     Text("Sign Out")
                                         .font(.system(size: 14, weight: .medium))
-                                        .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
+                                        .foregroundColor(DesignTokens.textPrimary)
 
                                     Spacer()
                                 }
@@ -236,4 +253,5 @@ struct SettingsView: View {
 
 #Preview {
     SettingsView(currentPage: .constant(.setting))
+        .environmentObject(AuthenticationManager.shared)
 }

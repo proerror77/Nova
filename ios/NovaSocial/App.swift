@@ -7,6 +7,11 @@ struct ICEREDApp: App {
     @StateObject private var themeManager = ThemeManager.shared
     @State private var currentPage: AppPage
 
+    // 监听 App 生命周期状态
+    @Environment(\.scenePhase) private var scenePhase
+    // 记录 App 是否进入过后台
+    @State private var hasEnteredBackground = false
+
     // Check if running in UI testing mode
     private var isUITesting: Bool {
         ProcessInfo.processInfo.arguments.contains("--uitesting")
@@ -30,13 +35,15 @@ struct ICEREDApp: App {
     var body: some Scene {
         WindowGroup {
             ZStack {
-                // Check authentication state first
-                if !authManager.isAuthenticated {
+                // Splash Screen 优先显示（无论是否已登录）
+                if currentPage == .splash {
+                    SplashScreenView(currentPage: $currentPage)
+                        .transition(.identity)
+                }
+                // Check authentication state
+                else if !authManager.isAuthenticated {
                     // 未登录时的页面切换
                     switch currentPage {
-                    case .splash:
-                        SplashScreenView(currentPage: $currentPage)
-                            .transition(.identity)
                     case .welcome:
                         WelcomeView(currentPage: $currentPage)
                             .transition(.identity)
@@ -99,7 +106,7 @@ struct ICEREDApp: App {
                         AddFriendsView(currentPage: $currentPage)
                             .transition(.identity)
                     case .newChat:
-                        StartGroupChatView(currentPage: $currentPage)
+                        NewChatView(currentPage: $currentPage)
                             .transition(.identity)
                     case .groupChat:
                         GroupChatView(currentPage: $currentPage, groupName: "Group Chat")
@@ -114,6 +121,17 @@ struct ICEREDApp: App {
             .environmentObject(authManager)
             .environmentObject(themeManager)
             .preferredColorScheme(themeManager.colorScheme)
+            .onChange(of: scenePhase) { oldPhase, newPhase in
+                // 当 App 进入后台时，标记已进入后台
+                if newPhase == .background {
+                    hasEnteredBackground = true
+                }
+                // 当 App 从后台返回到活跃状态时，显示 Splash Screen
+                if newPhase == .active && hasEnteredBackground {
+                    hasEnteredBackground = false
+                    currentPage = .splash
+                }
+            }
         }
     }
 }

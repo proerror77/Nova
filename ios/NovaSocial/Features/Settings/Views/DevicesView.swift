@@ -8,7 +8,7 @@ struct DevicesView: View {
 
     var body: some View {
         ZStack {
-            Color.white
+            DesignTokens.backgroundColor
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
@@ -18,7 +18,7 @@ struct DevicesView: View {
                         currentPage = .setting
                     }) {
                         Image(systemName: "chevron.left")
-                            .font(.system(size: 20))
+                            .frame(width: 24, height: 24)
                             .foregroundColor(DesignTokens.textPrimary)
                     }
 
@@ -36,7 +36,7 @@ struct DevicesView: View {
                 }
                 .frame(height: DesignTokens.topBarHeight)
                 .padding(.horizontal, 20)
-                .background(Color.white)
+                .background(DesignTokens.surface)
 
                 // 分隔线
                 Rectangle()
@@ -54,11 +54,11 @@ struct DevicesView: View {
                         VStack(spacing: 16) {
                             Image(systemName: "exclamationmark.triangle")
                                 .font(.system(size: 48))
-                                .foregroundColor(.gray)
+                                .foregroundColor(DesignTokens.textMuted)
 
                             Text(errorMessage)
                                 .font(.system(size: 16))
-                                .foregroundColor(.gray)
+                                .foregroundColor(DesignTokens.textMuted)
                                 .multilineTextAlignment(.center)
                                 .padding(.horizontal, 40)
 
@@ -79,11 +79,11 @@ struct DevicesView: View {
                         VStack(spacing: 16) {
                             Image(systemName: "laptopcomputer.and.iphone")
                                 .font(.system(size: 48))
-                                .foregroundColor(.gray)
+                                .foregroundColor(DesignTokens.textMuted)
 
                             Text("暂无登录设备")
                                 .font(.system(size: 16))
-                                .foregroundColor(.gray)
+                                .foregroundColor(DesignTokens.textMuted)
                         }
                     } else {
                         // 设备列表
@@ -151,7 +151,7 @@ struct DeviceCard: View {
                     HStack(spacing: 6) {
                         Text(device.deviceName)
                             .font(.system(size: 16, weight: .medium))
-                            .foregroundColor(.black)
+                            .foregroundColor(DesignTokens.textPrimary)
 
                         // 当前设备标记
                         if device.isCurrent == true {
@@ -175,12 +175,12 @@ struct DeviceCard: View {
                 // 右箭头
                 Image(systemName: "chevron.right")
                     .font(.system(size: 14))
-                    .foregroundColor(.gray)
+                    .foregroundColor(DesignTokens.textMuted)
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 20)
         }
-        .background(Color.white)
+        .background(DesignTokens.surface)
         .cornerRadius(6)
         .overlay(
             RoundedRectangle(cornerRadius: 6)

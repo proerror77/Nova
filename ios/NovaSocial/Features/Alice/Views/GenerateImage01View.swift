@@ -28,11 +28,10 @@ struct GenerateImage01View: View {
                         showGenerateImage = false
                     }) {
                         Image(systemName: "chevron.left")
-                            .font(.system(size: 20))
+                            .frame(width: 24, height: 24)
                             .foregroundColor(.black)
                     }
                     .accessibilityLabel("Close")
-                    .frame(width: 24, height: 24)
 
                     Spacer()
 

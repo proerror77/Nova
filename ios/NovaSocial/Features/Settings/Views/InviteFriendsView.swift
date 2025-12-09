@@ -27,7 +27,7 @@ struct InviteFriendsView: View {
                         currentPage = .setting
                     }) {
                         Image(systemName: "chevron.left")
-                            .font(.system(size: 20))
+                            .frame(width: 24, height: 24)
                             .foregroundColor(DesignTokens.textPrimary)
                     }
 
@@ -61,7 +61,7 @@ struct InviteFriendsView: View {
 
                         TextField(LocalizedStringKey("Search_people_on_Icered"), text: $searchText)
                             .font(.system(size: 15))
-                            .foregroundColor(.black)
+                            .foregroundColor(DesignTokens.textPrimary)
                     }
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)

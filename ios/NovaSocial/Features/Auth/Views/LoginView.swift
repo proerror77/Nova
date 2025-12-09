@@ -52,28 +52,36 @@ struct LoginView: View {
                 // Main Content
                 ZStack {
                     Group {
-                        // ICERED Logo Icon at top
-                        Image("Login-Icon")
+                        // ICERED Logo Icon at top - 与 WelcomeView 保持一致
+                        Image("Mountain-W")
                             .resizable()
                             .scaledToFit()
-                            .frame(width: 180, height: 90)
+                            .frame(width: 100, height: 80)
                             .offset(x: 0, y: -290)
 
-                        // Welcome Text
-                        Text(LocalizedStringKey("Welcome_Title"))
-                            .font(Font.custom("Helvetica Neue", size: 16).weight(.thin))
-                            .lineSpacing(20)
-                            .foregroundColor(.white)
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal, 40)
-                            .offset(x: 0.50, y: -180)
+                        // Welcome Text - 两行样式
+                        ZStack {
+                            Text("\u{201C}For the masters of the universe.\u{201D}")
+                                .font(Font.custom("Helvetica Neue", size: 20).weight(.thin))
+                                .italic()
+                                .tracking(1)
+                                .lineSpacing(0)
+                                .multilineTextAlignment(.center)
+                                .foregroundColor(Color(red: 0.77, green: 0.77, blue: 0.77))
+                                .offset(x: 0, y: 30)
 
-                        // Labels removed - placeholder text provides field hints
+                            Text("Welcome to Icered")
+                                .font(Font.custom("Helvetica Neue", size: 30).weight(.bold))
+                                .lineSpacing(46)
+                                .foregroundColor(.white)
+                                .offset(x: 0, y: -30)
+                        }
+                        .frame(width: 300, height: 100)
+                        .offset(x: 0, y: -195)
 
                         // Forgot password
                         Text(LocalizedStringKey("Forgot_Password"))
                             .font(Font.custom("Helvetica Neue", size: 10).weight(.light))
-                            .lineSpacing(20)
                             .foregroundColor(Color(red: 0.77, green: 0.77, blue: 0.77))
                             .offset(x: 132, y: 44)
                             .onTapGesture {
@@ -83,7 +91,6 @@ struct LoginView: View {
                         // SHOW/HIDE password toggle
                         Text(showPassword ? LocalizedStringKey("Hide") : LocalizedStringKey("Show"))
                             .font(Font.custom("Helvetica Neue", size: 12).weight(.light))
-                            .lineSpacing(20)
                             .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
                             .padding(.horizontal, 30)
                             .padding(.vertical, 24)
@@ -106,7 +113,6 @@ struct LoginView: View {
                                 }
                                 Text(LocalizedStringKey("Sign_In"))
                                     .font(Font.custom("Helvetica Neue", size: 16).weight(.medium))
-                                    .lineSpacing(20)
                                     .foregroundColor(.white)
                             }
                             .frame(width: 343, height: 46)
@@ -148,39 +154,33 @@ struct LoginView: View {
                         // "or you can" text
                         Text("or you can")
                             .font(Font.custom("Helvetica Neue", size: 16).weight(.medium))
-                            .lineSpacing(20)
                             .foregroundColor(.white)
-                            .offset(x: 0.50, y: 208)
+                            .offset(y: 208)
 
-                        // Create Account Button - 跳转到 CreateAccountView
+                        // Create Account Button
                         Button(action: {
-                            currentPage = .createAccount
+                            currentPage = .welcome
                         }) {
-                            HStack(spacing: 8) {
-                                Text(LocalizedStringKey("Create_An_Account"))
-                                    .font(Font.custom("Helvetica Neue", size: 16).weight(.medium))
-                                    .lineSpacing(20)
-                                    .foregroundColor(.white)
-                            }
-                            .frame(width: 343, height: 46)
-                            .cornerRadius(31.50)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 31.50)
-                                    .inset(by: 0.20)
-                                    .stroke(.white, lineWidth: 0.20)
-                            )
+                            Text(LocalizedStringKey("Create_An_Account"))
+                                .font(Font.custom("Helvetica Neue", size: 16).weight(.medium))
+                                .foregroundColor(.white)
+                                .frame(width: 343, height: 46)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 31.50)
+                                        .stroke(.white, lineWidth: 0.20)
+                                )
                         }
                         .accessibilityIdentifier("createAccountButton")
-                        .offset(x: 0, y: 265)
+                        .offset(y: 265)
 
                         // Error Message
                         if let errorMessage = errorMessage {
-                                Text(LocalizedStringKey(errorMessage))
+                            Text(LocalizedStringKey(errorMessage))
                                 .font(Font.custom("Helvetica Neue", size: 12))
                                 .foregroundColor(.red)
                                 .multilineTextAlignment(.center)
                                 .padding(.horizontal, 40)
-                                .offset(x: 0, y: 100)
+                                .offset(y: 100)
                         }
                     }
 
@@ -301,7 +301,6 @@ struct LoginView: View {
                 UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
             }
         }
-        // 移除 .ignoresSafeArea(.keyboard) 防止页面随键盘浮动
         .scrollDismissesKeyboard(.interactively)
     }
 
