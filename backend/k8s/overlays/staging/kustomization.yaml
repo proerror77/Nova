@@ -1,0 +1,44 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+
+namespace: nova-backend
+
+commonLabels:
+  environment: staging
+
+# Staging-specific configuration patches
+patches:
+  # Reduce replicas for staging
+  - target:
+      kind: Deployment
+      name: ".*"
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 1
+  # Synapse resource patch for staging
+  - path: matrix-synapse-patch.yaml
+
+# ConfigMap patches for staging environment
+configMapGenerator:
+  - name: nova-backend-config
+    behavior: merge
+    literals:
+      - APP_ENV=staging
+      - LOG_LEVEL=debug
+      # Matrix configuration for staging
+      - MATRIX_ENABLED=true
+      - MATRIX_HOMESERVER_URL=http://matrix-synapse:8008
+      - MATRIX_SERVICE_USER=@nova-service:staging.nova.local
+      - MATRIX_DEVICE_NAME=nova-realtime-chat-service-staging
+      - MATRIX_SERVER_NAME=staging.nova.local
+
+# Staging image tags (use latest for staging)
+images:
+  - name: nova-realtime-chat-service
+    newTag: staging
+  - name: matrixdotorg/synapse
+    newTag: v1.98.0

@@ -1,0 +1,303 @@
+---
+# Matrix Synapse Homeserver for E2EE messaging
+# Internal deployment - federation disabled for private use
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: matrix-synapse-data
+  namespace: nova-backend
+  labels:
+    app: matrix-synapse
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: standard-rwo
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: matrix-synapse-config
+  namespace: nova-backend
+  labels:
+    app: matrix-synapse
+data:
+  homeserver.yaml: |
+    # Synapse homeserver configuration
+    # Auto-generated for Nova internal messaging
+
+    server_name: "SYNAPSE_SERVER_NAME_PLACEHOLDER"
+    pid_file: /data/homeserver.pid
+
+    # Listeners
+    listeners:
+      - port: 8008
+        tls: false
+        type: http
+        x_forwarded: true
+        resources:
+          - names: [client, federation]
+            compress: false
+
+    # Database (PostgreSQL)
+    database:
+      name: psycopg2
+      args:
+        user: synapse
+        password: "POSTGRES_PASSWORD_PLACEHOLDER"
+        database: synapse
+        host: postgres
+        port: 5432
+        cp_min: 5
+        cp_max: 10
+
+    # Logging
+    log_config: "/data/log.config"
+
+    # Media storage
+    media_store_path: /data/media_store
+    max_upload_size: 50M
+
+    # Registration (disabled - use admin API)
+    enable_registration: false
+    enable_registration_without_verification: false
+
+    # Federation (disabled for internal use)
+    federation_domain_whitelist: []
+    allow_public_rooms_over_federation: false
+    allow_public_rooms_without_auth: false
+
+    # Rate limiting (relaxed for internal service)
+    rc_message:
+      per_second: 100
+      burst_count: 200
+    rc_registration:
+      per_second: 0.1
+      burst_count: 3
+    rc_login:
+      address:
+        per_second: 1
+        burst_count: 10
+      account:
+        per_second: 1
+        burst_count: 10
+      failed_attempts:
+        per_second: 0.5
+        burst_count: 5
+
+    # URL preview (disabled)
+    url_preview_enabled: false
+
+    # Push notifications (will integrate with nova notification-service)
+    push:
+      enabled: false
+
+    # Metrics
+    enable_metrics: true
+
+    # Caching
+    caches:
+      global_factor: 0.5
+
+    # Trusted key servers (none - internal only)
+    trusted_key_servers: []
+    suppress_key_server_warning: true
+
+    # Report stats
+    report_stats: false
+
+    # Retention policy
+    retention:
+      enabled: true
+      default_policy:
+        min_lifetime: 1d
+        max_lifetime: 365d
+
+  log.config: |
+    version: 1
+    formatters:
+      precise:
+        format: '%(asctime)s - %(name)s - %(lineno)d - %(levelname)s - %(message)s'
+    handlers:
+      console:
+        class: logging.StreamHandler
+        formatter: precise
+    loggers:
+      synapse.storage.SQL:
+        level: WARNING
+    root:
+      level: INFO
+      handlers: [console]
+    disable_existing_loggers: false
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: matrix-synapse
+  namespace: nova-backend
+  labels:
+    app: matrix-synapse
+    component: messaging
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate  # Single writer for SQLite compatibility during init
+  selector:
+    matchLabels:
+      app: matrix-synapse
+  template:
+    metadata:
+      labels:
+        app: matrix-synapse
+    spec:
+      securityContext:
+        runAsUser: 991
+        runAsGroup: 991
+        fsGroup: 991
+      initContainers:
+        - name: generate-config
+          image: matrixdotorg/synapse:v1.98.0
+          command:
+            - sh
+            - -c
+            - |
+              if [ ! -f /data/homeserver.yaml ]; then
+                echo "Generating initial config..."
+                cp /config/homeserver.yaml /data/homeserver.yaml
+                cp /config/log.config /data/log.config
+
+                # Replace placeholders
+                sed -i "s/SYNAPSE_SERVER_NAME_PLACEHOLDER/${SYNAPSE_SERVER_NAME}/g" /data/homeserver.yaml
+                sed -i "s/POSTGRES_PASSWORD_PLACEHOLDER/${POSTGRES_PASSWORD}/g" /data/homeserver.yaml
+
+                # Generate signing key
+                python -m synapse.app.homeserver \
+                  --config-path /data/homeserver.yaml \
+                  --generate-keys
+              else
+                echo "Config already exists, skipping generation"
+              fi
+          env:
+            - name: SYNAPSE_SERVER_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: nova-backend-config
+                  key: MATRIX_SERVER_NAME
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: matrix-synapse-secrets
+                  key: POSTGRES_PASSWORD
+          volumeMounts:
+            - name: synapse-data
+              mountPath: /data
+            - name: synapse-config
+              mountPath: /config
+      containers:
+        - name: synapse
+          image: matrixdotorg/synapse:v1.98.0
+          imagePullPolicy: IfNotPresent
+          args:
+            - run
+            - -m
+            - synapse.app.homeserver
+            - -c
+            - /data/homeserver.yaml
+          ports:
+            - name: http
+              containerPort: 8008
+              protocol: TCP
+          env:
+            - name: SYNAPSE_SERVER_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: nova-backend-config
+                  key: MATRIX_SERVER_NAME
+          envFrom:
+            - secretRef:
+                name: matrix-synapse-secrets
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "250m"
+            limits:
+              memory: "2Gi"
+              cpu: "1000m"
+          volumeMounts:
+            - name: synapse-data
+              mountPath: /data
+            - name: synapse-config
+              mountPath: /config
+              readOnly: true
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8008
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 5
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8008
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 3
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 8008
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 30
+      volumes:
+        - name: synapse-data
+          persistentVolumeClaim:
+            claimName: matrix-synapse-data
+        - name: synapse-config
+          configMap:
+            name: matrix-synapse-config
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: matrix-synapse
+  namespace: nova-backend
+  labels:
+    app: matrix-synapse
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 8008
+      targetPort: 8008
+      protocol: TCP
+  selector:
+    app: matrix-synapse
+
+---
+# ServiceMonitor for Prometheus (if using prometheus-operator)
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: matrix-synapse
+  namespace: nova-backend
+  labels:
+    app: matrix-synapse
+spec:
+  selector:
+    matchLabels:
+      app: matrix-synapse
+  endpoints:
+    - port: http
+      path: /_synapse/metrics
+      interval: 30s
