@@ -603,14 +603,45 @@ pub async fn ice_candidate(
     })))
 }
 
-// TODO: Implement get_ice_servers - get STUN/TURN server configuration
+/// Get STUN/TURN server configuration for WebRTC ICE
+///
+/// Returns ICE server configuration including STUN and TURN servers
+/// for NAT traversal in WebRTC calls.
+///
+/// # Response Format
+/// ```json
+/// {
+///   "iceServers": [
+///     {
+///       "urls": ["stun:stun.l.google.com:19302"]
+///     },
+///     {
+///       "urls": ["turn:turn.example.com:3478"],
+///       "username": "user",
+///       "credential": "pass",
+///       "credentialType": "password"
+///     }
+///   ],
+///   "iceTransportPolicy": "all",
+///   "ttlSeconds": 86400
+/// }
+/// ```
 #[get("/calls/ice-servers")]
 pub async fn get_ice_servers(
-    _state: web::Data<AppState>,
+    state: web::Data<AppState>,
     _user: User,
 ) -> Result<HttpResponse, AppError> {
-    // TODO: Implement ICE server configuration
+    use crate::config::VoipConfig;
+
+    // Get VoIP configuration (includes ICE servers + Matrix config)
+    let voip_config = VoipConfig::from_config(&state.config);
+
+    // Convert to JSON format for WebRTC RTCConfiguration
+    let ice_servers = voip_config.ice_servers_json();
+
     Ok(HttpResponse::Ok().json(serde_json::json!({
-        "iceServers": []
+        "iceServers": ice_servers,
+        "iceTransportPolicy": "all",
+        "ttlSeconds": voip_config.ice_ttl_seconds
     })))
 }

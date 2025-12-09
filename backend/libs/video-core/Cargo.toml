@@ -10,7 +10,7 @@ serde.workspace = true
 serde_json.workspace = true
 uuid.workspace = true
 chrono.workspace = true
-sqlx = { version = "0.7", features = ["postgres", "uuid", "chrono"] }
+sqlx = { version = "0.8", default-features = false, features = ["postgres", "uuid", "chrono"] }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["full"] }

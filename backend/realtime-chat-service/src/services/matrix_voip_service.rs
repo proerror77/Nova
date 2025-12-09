@@ -21,6 +21,7 @@ pub struct IceCandidate {
 }
 
 /// SDP session description
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct SessionDescription {
     #[serde(rename = "type")]

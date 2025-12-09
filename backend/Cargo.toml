@@ -14,7 +14,9 @@ members = [
     "feed-service",           # Recommendation & Feed Generation (Phase A: using graph-service gRPC)
     "feature-store",          # Feature Store Service (Phase D: Ranking + Feature Store)
     "ranking-service",        # Ranking Service (Phase D: Ranking + Feature Store)
-    "realtime-chat-service",  # WebSocket & E2EE Messaging (Phase E: extracted from messaging-service)
+    # realtime-chat-service - SEPARATED INTO INDEPENDENT WORKSPACE (2025-12-09)
+    # Reason: Matrix SDK 0.16 requires libsqlite3-sys 0.35, conflicts with sqlx 0.8's 0.28
+    # Location: backend/realtime-chat-service/ (independent Cargo.toml)
     "trust-safety-service",   # UGC Moderation & Trust Service (Phase F: centralized content moderation)
 
     # API Gateway
@@ -65,7 +67,7 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
 # Database
-sqlx = { version = "0.7", features = ["runtime-tokio", "postgres", "chrono", "uuid", "migrate"], default-features = false }
+sqlx = { version = "0.8", features = ["runtime-tokio", "postgres", "chrono", "uuid", "migrate"], default-features = false }
 clickhouse = "0.11"
 
 # gRPC
@@ -142,8 +144,6 @@ aws-config = "1.1"
 aws-sdk-secretsmanager = "1.13"
 aws-sdk-s3 = "1.15"
 moka = { version = "0.12", features = ["future"] }
-
-# Temporarily removed patch section - will try different approach
 
 [profile.release]
 opt-level = 3

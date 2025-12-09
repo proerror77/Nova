@@ -16,7 +16,7 @@ tonic-reflection = "0.12"
 tonic-health = "0.12"  # P0-4: gRPC health check protocol
 
 # Database
-sqlx = { version = "0.7", features = ["runtime-tokio", "postgres", "chrono", "uuid"], default-features = false }
+sqlx = { version = "0.8", features = ["runtime-tokio", "postgres", "chrono", "uuid"], default-features = false }
 db-pool = { path = "../libs/db-pool" }
 
 # Authentication

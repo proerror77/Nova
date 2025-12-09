@@ -1,24 +1,126 @@
-[package]
-name = "realtime-chat-service"
+# realtime-chat-service - Independent Workspace
+# Separated from main backend workspace (2025-12-09)
+# Reason: Matrix SDK 0.16 requires libsqlite3-sys 0.35, conflicts with sqlx 0.8's 0.28
+# This service uses Matrix SDK's memory-only store to avoid sqlite dependency
+
+[workspace]
+resolver = "2"
+members = [
+    ".",
+    "libs/db-pool",
+    "libs/redis-utils",
+    "libs/crypto-core",
+    "libs/grpc-tls",
+    "libs/grpc-clients",
+    "libs/resilience",
+    "libs/grpc-metrics",
+    "libs/error-types",
+    "libs/error-handling",
+    "libs/actix-middleware",
+]
+
+[workspace.package]
 version = "0.1.0"
 edition = "2021"
+authors = ["Nova Team"]
+license = "MIT"
+rust-version = "1.76"
+
+[workspace.dependencies]
+# Async runtime
+tokio = { version = "1.35", features = ["full"] }
+
+# Error handling
+anyhow = "1.0"
+thiserror = "1.0"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Database - tokio-postgres (sqlx removed)
+tokio-postgres = { version = "0.7", features = ["with-uuid-1", "with-chrono-0_4", "with-serde_json-1", "with-time-0_3"] }
+deadpool-postgres = { version = "0.14", features = ["rt_tokio_1"] }
+postgres-types = { version = "0.2", features = ["derive", "with-uuid-1", "with-chrono-0_4"] }
+
+# gRPC
+tonic = "0.12"
+prost = "0.13"
+prost-types = "0.13"
+
+# Web framework
+actix = "0.13"
+actix-web = "4.4"
+actix-cors = "0.7"
+actix-rt = "2.9"
+
+# Tracing
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+
+# Authentication
+jsonwebtoken = "9.3"
+
+# Utilities
+uuid = { version = "1.6", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+futures = "0.3"
+futures-util = "0.3"
+rand = "0.8"
+once_cell = "1.19"
+lazy_static = "1.4"
+pin-project = "1.1"
+sha2 = "0.10"
+hex = "0.4"
+hmac = "0.12"
+hkdf = "0.12"
+base64 = "0.22"
+async-trait = "0.1"
+
+# Redis
+redis = { version = "0.25", features = ["aio", "tokio-comp", "connection-manager"] }
+
+# Events
+rdkafka = { version = "0.36", features = ["cmake-build"] }
+
+# Testing
+testcontainers = "0.17"
+
+# Metrics
+prometheus = "0.13"
+
+# Tower middleware (for gRPC)
+tower = "0.4"
+
+# gRPC health
+tonic-health = "0.12"
+
+# OpenAPI
+utoipa = "4.2"
+
+[package]
+name = "realtime-chat-service"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
 
 [dependencies]
 # WebSocket
 tokio-tungstenite = "0.28"
 futures-util = "0.3"
-futures = "0.3"
+futures = { workspace = true }
 actix-web-actors = "4.3"
 actix = { workspace = true }
 
 # E2EE Crypto (Matrix Olm/Megolm via vodozemac)
 vodozemac = "0.7"
 # Matrix SDK for E2EE messaging and VoIP
-# NOTE: Currently using 0.7.1 due to libsqlite3-sys version conflict with identity-service
-# TODO: Upgrade to 0.16+ once we can resolve sqlite dependency conflict
-# Tracking issue: matrix-sdk 0.16 uses libsqlite3-sys 0.35, but sqlx 0.7 uses 0.26
-matrix-sdk = { version = "0.7", features = ["e2e-encryption", "sso-login"] }
-ruma = { version = "0.9", features = ["client-api"] }
+# Version 0.16 with minimal features to avoid sqlite dependency conflict
+# Using memory-only store (no sqlite persistence) to avoid libsqlite3-sys version mismatch
+# Note: e2e-encryption uses in-memory crypto store when sqlite feature is disabled
+matrix-sdk = { version = "0.16", default-features = false, features = ["e2e-encryption", "rustls-tls"] }
+ruma = { version = "0.10", features = ["client-api"] }
 # Keep for password hashing and other non-E2EE crypto
 hkdf = { workspace = true }
 # AES-GCM for encrypting pickled crypto state at rest
@@ -29,9 +131,9 @@ sha2 = { workspace = true }
 # X25519 ECDH for legacy key exchange
 x25519-dalek = { version = "2.0", features = ["static_secrets"] }
 base64 = { workspace = true }
-rand = "0.8"
+rand = { workspace = true }
 getrandom = "0.2"
-hex = "0.4"
+hex = { workspace = true }
 
 # gRPC
 tonic = { workspace = true }
@@ -44,38 +146,40 @@ rustls = { version = "0.23", default-features = false, features = ["aws-lc-rs", 
 # HTTP Server
 actix-web = { workspace = true }
 actix-rt = { workspace = true }
-actix-cors = "0.7"
+actix-cors = { workspace = true }
 
-# Database
-sqlx = { version = "0.7", default-features = false, features = ["runtime-tokio-rustls", "postgres", "macros", "uuid", "chrono", "migrate"] }
-uuid = { version = "1", features = ["v4", "serde"] }
+# Database - tokio-postgres (sqlx removed)
+tokio-postgres = { workspace = true }
+deadpool-postgres = { version = "0.14", features = ["rt_tokio_1"] }
+uuid = { workspace = true }
 
 # Redis
-redis = { version = "0.25", features = ["tokio-comp", "connection-manager", "streams"] }
+redis = { workspace = true, features = ["streams"] }
 
-# Shared Libraries
-db-pool = { path = "../libs/db-pool" }
-redis-utils = { path = "../libs/redis-utils" }
-crypto-core = { path = "../libs/crypto-core" }
-grpc-tls = { path = "../libs/grpc-tls" }
-grpc-clients = { path = "../libs/grpc-clients" }
-resilience = { path = "../libs/resilience" }
-error-types = { path = "../libs/error-types" }
-actix-middleware = { path = "../libs/actix-middleware" }
-grpc-metrics = { path = "../libs/grpc-metrics" }
+# Shared Libraries (local copies in this independent workspace)
+db-pool = { path = "libs/db-pool" }
+redis-utils = { path = "libs/redis-utils" }
+crypto-core = { path = "libs/crypto-core" }
+grpc-tls = { path = "libs/grpc-tls" }
+grpc-clients = { path = "libs/grpc-clients" }
+resilience = { path = "libs/resilience" }
+grpc-metrics = { path = "libs/grpc-metrics" }
+error-types = { path = "libs/error-types" }
+error-handling = { path = "libs/error-handling" }
+actix-middleware = { path = "libs/actix-middleware" }
 
 # Serialization
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+serde = { workspace = true }
+serde_json = { workspace = true }
 
 # Utilities
-tokio = { version = "1", features = ["full"] }
-async-trait = "0.1"
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
+tokio = { workspace = true }
+async-trait = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
 dotenvy = "0.15"
-thiserror = "1"
-once_cell = "1.19"
+thiserror = { workspace = true }
+once_cell = { workspace = true }
 chrono = { workspace = true }
 bytes = "1.5"
 env_logger = "0.11"
@@ -93,6 +197,10 @@ aws-config = "1.1"
 
 # Tokio stream
 tokio-stream = "0.1"
+
+[patch.crates-io]
+sqlx = { path = "vendor/sqlx-pg" }
+sqlx-sqlite = { path = "vendor/sqlx-sqlite" }
 
 [profile.release]
 codegen-units = 1

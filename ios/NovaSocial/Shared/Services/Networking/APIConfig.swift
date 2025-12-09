@@ -22,8 +22,8 @@ enum APIEnvironment {
                !stagingURL.hasPrefix("$(") {  // Skip unresolved build variables
                 return stagingURL
             }
-            // Default staging API via GCP Ingress (graphql-gateway)
-            return "https://34.8.163.8"
+            // Default staging API: use canonical host (cert matches api.nova.local)
+            return "https://api.nova.local"
         case .production:
             return "https://api.nova.social"
         }

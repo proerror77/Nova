@@ -211,7 +211,9 @@ async fn fetch_global_posts(
     let resp = content_client
         .list_recent_posts(ListRecentPostsRequest {
             limit: request_limit,
-            exclude_user_id: user_id.to_string(),
+            // Do NOT exclude the current user; we want to return something even if the user
+            // only has their own posts. This avoids empty feeds when graph data is missing.
+            exclude_user_id: String::new(),
         })
         .await
         .map_err(|e| AppError::Internal(format!("Failed to fetch recent posts: {}", e)))?;
@@ -221,6 +223,14 @@ async fn fetch_global_posts(
         .into_iter()
         .filter_map(|id| Uuid::parse_str(&id).ok())
         .collect();
+
+    // Debug visibility into fallback result size
+    info!(
+        "Global fallback posts fetched: total_received={} request_limit={} page_limit={}",
+        all_posts.len(),
+        request_limit,
+        page_limit
+    );
 
     let start = offset.min(all_posts.len());
     let end = (start + page_limit as usize).min(all_posts.len());

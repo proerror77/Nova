@@ -1,0 +1,264 @@
+syntax = "proto3";
+
+package nova.social_service.v2;
+
+import "google/protobuf/timestamp.proto";
+
+// Social Service - Handles likes, shares, comments for posts
+//
+// Design principles:
+// - Cursor-based pagination for scalability
+// - Batch operations to prevent N+1 queries
+// - Idempotent operations (CreateLike is safe to retry)
+// - Clear separation of concerns (Like/Share/Comment)
+service SocialService {
+  // Like operations
+  rpc CreateLike(CreateLikeRequest) returns (CreateLikeResponse);
+  rpc DeleteLike(DeleteLikeRequest) returns (DeleteLikeResponse);
+  rpc GetLikeStatus(GetLikeStatusRequest) returns (GetLikeStatusResponse);
+  rpc GetLikeCount(GetLikeCountRequest) returns (GetLikeCountResponse);
+  rpc GetLikers(GetLikersRequest) returns (GetLikersResponse);
+
+  // Share operations
+  rpc CreateShare(CreateShareRequest) returns (CreateShareResponse);
+  rpc GetShareCount(GetShareCountRequest) returns (GetShareCountResponse);
+  rpc GetShares(GetSharesRequest) returns (GetSharesResponse);
+
+  // Comment operations
+  rpc CreateComment(CreateCommentRequest) returns (CreateCommentResponse);
+  rpc UpdateComment(UpdateCommentRequest) returns (UpdateCommentResponse);
+  rpc DeleteComment(DeleteCommentRequest) returns (DeleteCommentResponse);
+  rpc GetComment(GetCommentRequest) returns (GetCommentResponse);
+  rpc ListComments(ListCommentsRequest) returns (ListCommentsResponse);
+  rpc GetCommentCount(GetCommentCountRequest) returns (GetCommentCountResponse);
+
+  // Batch operations (optimization for feed rendering)
+  rpc BatchGetLikeStatus(BatchGetLikeStatusRequest) returns (BatchGetLikeStatusResponse);
+  rpc BatchGetCounts(BatchGetCountsRequest) returns (BatchGetCountsResponse);
+}
+
+// ============================================================================
+// LIKE OPERATIONS
+// ============================================================================
+
+message CreateLikeRequest {
+  string post_id = 1;  // UUID of the post being liked
+  string user_id = 2;  // UUID of the user liking the post
+}
+
+message CreateLikeResponse {
+  bool success = 1;            // true if like created or already existed (idempotent)
+  string like_id = 2;          // UUID of the like record
+  int64 new_like_count = 3;    // Updated like count for the post
+}
+
+message DeleteLikeRequest {
+  string post_id = 1;
+  string user_id = 2;
+}
+
+message DeleteLikeResponse {
+  bool success = 1;            // true even if like didn't exist (idempotent)
+  int64 new_like_count = 2;    // Updated like count for the post
+}
+
+message GetLikeStatusRequest {
+  string post_id = 1;
+  string user_id = 2;
+}
+
+message GetLikeStatusResponse {
+  bool is_liked = 1;                         // true if user has liked this post
+  google.protobuf.Timestamp liked_at = 2;    // when liked (null if not liked)
+}
+
+message GetLikeCountRequest {
+  string post_id = 1;
+}
+
+message GetLikeCountResponse {
+  int64 like_count = 1;  // Total number of likes on the post
+}
+
+message GetLikersRequest {
+  string post_id = 1;
+  int32 limit = 2;     // Number of likers to return (default 20, max 100)
+  string cursor = 3;   // Pagination cursor (empty for first page)
+}
+
+message GetLikersResponse {
+  repeated Liker likers = 1;    // List of users who liked the post
+  string next_cursor = 2;       // Cursor for next page (empty if no more)
+  bool has_more = 3;            // true if more results exist
+}
+
+message Liker {
+  string user_id = 1;                        // UUID of the user who liked
+  google.protobuf.Timestamp liked_at = 2;    // When they liked the post
+}
+
+// ============================================================================
+// SHARE OPERATIONS
+// ============================================================================
+
+message CreateShareRequest {
+  string post_id = 1;          // UUID of the post being shared
+  string user_id = 2;          // UUID of the user sharing
+  ShareType share_type = 3;    // How the post is being shared
+  string target_user_id = 4;   // For DM shares only (optional)
+}
+
+enum ShareType {
+  SHARE_TYPE_UNSPECIFIED = 0;
+  SHARE_TYPE_REPOST = 1;       // Repost to own feed (like quote tweet)
+  SHARE_TYPE_STORY = 2;        // Share to 24-hour story
+  SHARE_TYPE_DM = 3;           // Share via direct message
+  SHARE_TYPE_EXTERNAL = 4;     // Share outside platform (URL copy, etc.)
+}
+
+message CreateShareResponse {
+  bool success = 1;
+  string share_id = 2;         // UUID of the share record
+  int64 new_share_count = 3;   // Updated share count for the post
+}
+
+message GetShareCountRequest {
+  string post_id = 1;
+}
+
+message GetShareCountResponse {
+  int64 share_count = 1;  // Total number of shares for the post
+}
+
+message GetSharesRequest {
+  string post_id = 1;
+  int32 limit = 2;     // Number of shares to return (default 20, max 100)
+  string cursor = 3;   // Pagination cursor
+}
+
+message GetSharesResponse {
+  repeated Share shares = 1;
+  string next_cursor = 2;
+  bool has_more = 3;
+}
+
+message Share {
+  string share_id = 1;
+  string user_id = 2;
+  ShareType share_type = 3;
+  google.protobuf.Timestamp shared_at = 4;
+}
+
+// ============================================================================
+// COMMENT OPERATIONS
+// ============================================================================
+
+message CreateCommentRequest {
+  string post_id = 1;
+  string user_id = 2;
+  string content = 3;               // Comment text (max 2000 chars, validated server-side)
+  string parent_comment_id = 4;     // UUID of parent comment for replies (optional)
+}
+
+message CreateCommentResponse {
+  bool success = 1;
+  Comment comment = 2;              // The created comment with metadata
+  int64 new_comment_count = 3;      // Updated comment count for the post
+}
+
+message UpdateCommentRequest {
+  string comment_id = 1;
+  string user_id = 2;               // For authorization check (must be comment author)
+  string content = 3;               // New content (max 2000 chars)
+}
+
+message UpdateCommentResponse {
+  bool success = 1;
+  Comment comment = 2;              // Updated comment with new metadata
+}
+
+message DeleteCommentRequest {
+  string comment_id = 1;
+  string user_id = 2;               // For authorization (author or post owner can delete)
+}
+
+message DeleteCommentResponse {
+  bool success = 1;
+  int64 new_comment_count = 2;      // Updated comment count for the post
+}
+
+message GetCommentRequest {
+  string comment_id = 1;
+}
+
+message GetCommentResponse {
+  Comment comment = 1;
+}
+
+message ListCommentsRequest {
+  string post_id = 1;
+  int32 limit = 2;              // Number of comments to return (default 50, max 100)
+  string cursor = 3;            // Pagination cursor
+  CommentSort sort = 4;         // Sort order (default NEWEST)
+}
+
+enum CommentSort {
+  COMMENT_SORT_UNSPECIFIED = 0;
+  COMMENT_SORT_NEWEST = 1;      // Most recent first
+  COMMENT_SORT_OLDEST = 2;      // Oldest first
+  COMMENT_SORT_POPULAR = 3;     // Highest like count first
+}
+
+message ListCommentsResponse {
+  repeated Comment comments = 1;
+  string next_cursor = 2;
+  bool has_more = 3;
+}
+
+message Comment {
+  string comment_id = 1;
+  string post_id = 2;
+  string user_id = 3;
+  string content = 4;
+  string parent_comment_id = 5;             // null if top-level comment
+  int64 like_count = 6;                     // Number of likes on this comment
+  int64 reply_count = 7;                    // Number of direct replies
+  google.protobuf.Timestamp created_at = 8;
+  google.protobuf.Timestamp updated_at = 9;
+  bool is_edited = 10;                      // true if updated_at > created_at
+}
+
+message GetCommentCountRequest {
+  string post_id = 1;
+}
+
+message GetCommentCountResponse {
+  int64 comment_count = 1;  // Total number of comments (including replies) on the post
+}
+
+// ============================================================================
+// BATCH OPERATIONS (Optimization for feed rendering)
+// ============================================================================
+
+message BatchGetLikeStatusRequest {
+  repeated string post_ids = 1;  // List of post UUIDs (max 100)
+  string user_id = 2;            // User to check like status for
+}
+
+message BatchGetLikeStatusResponse {
+  map<string, bool> statuses = 1;  // post_id -> is_liked mapping
+}
+
+message BatchGetCountsRequest {
+  repeated string post_ids = 1;  // List of post UUIDs (max 100)
+}
+
+message BatchGetCountsResponse {
+  map<string, PostCounts> counts = 1;  // post_id -> counts mapping
+}
+
+message PostCounts {
+  int64 like_count = 1;
+  int64 comment_count = 2;
+  int64 share_count = 3;
+}

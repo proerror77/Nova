@@ -1,0 +1,38 @@
+[package]
+name = "grpc-tls"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+# Core gRPC and TLS
+tonic = { workspace = true, features = ["tls", "tls-roots"] }
+tokio = { workspace = true }
+
+# Error handling
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+
+# TLS/Certificate handling (MUST match tonic 0.12 requirements)
+rustls = { version = "0.23", default-features = false, features = ["aws-lc-rs", "std", "tls12"] }
+tokio-rustls = "0.25"
+rustls-pemfile = "2.0"
+rustls-native-certs = "0.7"
+
+# Certificate generation (dev/test only)
+rcgen = "0.13"
+
+# Certificate parsing and validation
+pem = "3.0"
+x509-parser = "0.16"
+chrono = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+
+[dev-dependencies]
+tokio-test = "0.4"
+tempfile = "3.8"
+tracing-subscriber = { workspace = true }
+
+[build-dependencies]
+tonic-build = "0.12"

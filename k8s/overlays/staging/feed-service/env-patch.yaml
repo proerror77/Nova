@@ -10,6 +10,10 @@ spec:
           env:
             - name: GRPC_TLS_ENABLED
               value: "true"
+            - name: GRPC_REQUIRE_CLIENT_CERT
+              value: "true"
+            - name: GRPC_CONTENT_SERVICE_URL
+              value: "https://content-service.nova-staging.svc.cluster.local:9080"
             # soften non-critical deps to avoid startup fail when peers未就緒
             - name: GRPC_SEARCH_SERVICE_TIER
               value: "1"

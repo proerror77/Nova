@@ -1,0 +1,11 @@
+[package]
+name = "redis-utils"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+once_cell = { workspace = true }
+redis = { workspace = true }
+tokio = { workspace = true, features = ["rt", "rt-multi-thread", "time", "sync", "macros"] }
+tracing = { workspace = true }

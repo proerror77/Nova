@@ -124,7 +124,12 @@ class APIClient {
 
             #if DEBUG
             if APIFeatureFlags.enableRequestLogging {
-                print("[\(request.httpMethod ?? "?")] \(request.url?.absoluteString ?? "?") -> \(httpResponse.statusCode)")
+                let bodyPreview: String = {
+                    guard let dataString = String(data: data, encoding: .utf8) else { return "" }
+                    let trimmed = dataString.replacingOccurrences(of: "\n", with: " ")
+                    return trimmed.prefix(500) + (trimmed.count > 500 ? "…" : "")
+                }()
+                print("[\(request.httpMethod ?? "?")] \(request.url?.absoluteString ?? "?") -> \(httpResponse.statusCode) body: \(bodyPreview)")
             }
             #endif
 

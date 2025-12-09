@@ -1,3 +1,5 @@
+#![recursion_limit = "512"]
+
 use actix_web::{web, App, HttpServer};
 use crypto_core::jwt as core_jwt;
 use grpc_clients::AuthClient;

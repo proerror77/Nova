@@ -542,4 +542,337 @@ impl CallService {
             })
             .collect())
     }
+
+    // ==================== Matrix VoIP Integration Methods ====================
+    // These methods provide optional Matrix E2EE VoIP signaling alongside WebSocket.
+    // See CALL_SERVICE_MATRIX_INTEGRATION.md for architecture details.
+
+    /// Initiate a new video call with Matrix VoIP signaling
+    ///
+    /// This is the Matrix-integrated version of `initiate_call()`.
+    /// It performs dual-write: creates call in Nova DB and sends m.call.invite to Matrix.
+    ///
+    /// # Arguments
+    /// * `db` - Database connection pool
+    /// * `matrix_voip_service` - Matrix VoIP service for sending events
+    /// * `matrix_client` - Matrix client for room lookups
+    /// * `conversation_id` - Nova conversation UUID
+    /// * `initiator_id` - User ID of call initiator
+    /// * `initiator_sdp` - WebRTC SDP offer from initiator
+    /// * `call_type` - "video" or "audio"
+    /// * `max_participants` - Maximum allowed participants
+    ///
+    /// # Returns
+    /// Call session UUID
+    ///
+    /// # Errors
+    /// - Database operation fails
+    /// - Matrix room not found for conversation
+    /// - Matrix event sending fails (logged as warning, not returned as error)
+    pub async fn initiate_call_with_matrix(
+        db: &Pool<Postgres>,
+        matrix_voip_service: &crate::services::matrix_voip_service::MatrixVoipService,
+        matrix_client: &crate::services::matrix_client::MatrixClient,
+        conversation_id: Uuid,
+        initiator_id: Uuid,
+        initiator_sdp: &str,
+        call_type: &str,
+        max_participants: i32,
+    ) -> Result<Uuid, crate::error::AppError> {
+        use tracing::{info, warn};
+
+        // Step 1: Create call in Nova database
+        let call_id = Self::initiate_call(
+            db,
+            conversation_id,
+            initiator_id,
+            initiator_sdp,
+            call_type,
+            max_participants,
+        )
+        .await?;
+
+        info!(
+            call_id = %call_id,
+            conversation_id = %conversation_id,
+            initiator_id = %initiator_id,
+            "Call created in database, sending Matrix invite"
+        );
+
+        // Step 2: Get Matrix room_id from conversation_id
+        let room_id = match matrix_client.get_cached_room_id(conversation_id).await {
+            Some(id) => id,
+            None => {
+                warn!(
+                    call_id = %call_id,
+                    conversation_id = %conversation_id,
+                    "No Matrix room ID found in cache, call will use WebSocket signaling only"
+                );
+                return Ok(call_id); // Non-blocking: return call_id without Matrix
+            }
+        };
+
+        // Step 3: Generate Matrix party_id for this call session
+        let party_id = format!("nova-{}", Uuid::new_v4());
+
+        // Step 4: Send m.call.invite to Matrix
+        let invite_result = matrix_voip_service
+            .send_invite(&room_id, call_id, &party_id, initiator_sdp, None)
+            .await;
+
+        let matrix_invite_event_id = match invite_result {
+            Ok(event_id) => event_id,
+            Err(e) => {
+                warn!(
+                    call_id = %call_id,
+                    error = ?e,
+                    "Failed to send Matrix invite, call will use WebSocket signaling only"
+                );
+                return Ok(call_id); // Non-blocking: return call_id without Matrix
+            }
+        };
+
+        info!(
+            call_id = %call_id,
+            matrix_event_id = %matrix_invite_event_id,
+            party_id = %party_id,
+            "Matrix invite sent successfully"
+        );
+
+        // Step 5: Update call_sessions with Matrix event IDs
+        let update_result = sqlx::query(
+            "UPDATE call_sessions
+             SET matrix_invite_event_id = $1, matrix_party_id = $2
+             WHERE id = $3",
+        )
+        .bind(&matrix_invite_event_id)
+        .bind(&party_id)
+        .bind(call_id)
+        .execute(db)
+        .await;
+
+        if let Err(e) = update_result {
+            warn!(
+                call_id = %call_id,
+                error = ?e,
+                "Failed to update Matrix event IDs in database"
+            );
+            // Non-blocking: call already created, Matrix metadata update failed
+        }
+
+        Ok(call_id)
+    }
+
+    /// Answer an existing call with Matrix VoIP signaling
+    ///
+    /// This is the Matrix-integrated version of `answer_call()`.
+    /// It performs dual-write: adds participant to Nova DB and sends m.call.answer to Matrix.
+    ///
+    /// # Arguments
+    /// * `db` - Database connection pool
+    /// * `matrix_voip_service` - Matrix VoIP service for sending events
+    /// * `matrix_client` - Matrix client for room lookups
+    /// * `call_id` - UUID of the call to answer
+    /// * `answerer_id` - User ID of the answerer
+    /// * `answer_sdp` - WebRTC SDP answer from answerer
+    ///
+    /// # Returns
+    /// Participant UUID
+    ///
+    /// # Errors
+    /// - Database operation fails
+    /// - Call not found
+    /// - Matrix event sending fails (logged as warning, not returned as error)
+    pub async fn answer_call_with_matrix(
+        db: &Pool<Postgres>,
+        matrix_voip_service: &crate::services::matrix_voip_service::MatrixVoipService,
+        matrix_client: &crate::services::matrix_client::MatrixClient,
+        call_id: Uuid,
+        answerer_id: Uuid,
+        answer_sdp: &str,
+    ) -> Result<Uuid, crate::error::AppError> {
+        use tracing::{info, warn};
+
+        // Step 1: Get call's matrix_party_id and conversation_id from DB
+        let call_row = sqlx::query(
+            "SELECT matrix_party_id, conversation_id FROM call_sessions WHERE id = $1",
+        )
+        .bind(call_id)
+        .fetch_optional(db)
+        .await
+        .map_err(|e| crate::error::AppError::StartServer(format!("fetch call: {e}")))?
+        .ok_or(crate::error::AppError::NotFound)?;
+
+        let conversation_id: Uuid = call_row.get("conversation_id");
+        let _call_party_id: Option<String> = call_row.get("matrix_party_id");
+
+        // Step 2: Add participant to Nova database
+        let participant_id = Self::answer_call(db, call_id, answerer_id, answer_sdp).await?;
+
+        info!(
+            call_id = %call_id,
+            participant_id = %participant_id,
+            answerer_id = %answerer_id,
+            "Participant added to database, sending Matrix answer"
+        );
+
+        // Step 3: Generate answerer's Matrix party_id
+        let answerer_party_id = format!("nova-{}", Uuid::new_v4());
+
+        // Step 4: Get Matrix room_id
+        let room_id = match matrix_client.get_cached_room_id(conversation_id).await {
+            Some(id) => id,
+            None => {
+                warn!(
+                    call_id = %call_id,
+                    conversation_id = %conversation_id,
+                    "No Matrix room ID found in cache, answer will use WebSocket signaling only"
+                );
+                return Ok(participant_id); // Non-blocking
+            }
+        };
+
+        // Step 5: Send m.call.answer to Matrix
+        let answer_result = matrix_voip_service
+            .send_answer(&room_id, call_id, &answerer_party_id, answer_sdp)
+            .await;
+
+        let matrix_answer_event_id = match answer_result {
+            Ok(event_id) => event_id,
+            Err(e) => {
+                warn!(
+                    call_id = %call_id,
+                    error = ?e,
+                    "Failed to send Matrix answer, will use WebSocket signaling only"
+                );
+                return Ok(participant_id); // Non-blocking
+            }
+        };
+
+        info!(
+            call_id = %call_id,
+            participant_id = %participant_id,
+            matrix_event_id = %matrix_answer_event_id,
+            party_id = %answerer_party_id,
+            "Matrix answer sent successfully"
+        );
+
+        // Step 6: Update call_participants with Matrix event IDs
+        let update_result = sqlx::query(
+            "UPDATE call_participants
+             SET matrix_answer_event_id = $1, matrix_party_id = $2
+             WHERE id = $3",
+        )
+        .bind(&matrix_answer_event_id)
+        .bind(&answerer_party_id)
+        .bind(participant_id)
+        .execute(db)
+        .await;
+
+        if let Err(e) = update_result {
+            warn!(
+                participant_id = %participant_id,
+                error = ?e,
+                "Failed to update Matrix event IDs in database"
+            );
+            // Non-blocking: participant already added
+        }
+
+        Ok(participant_id)
+    }
+
+    /// End a call with Matrix VoIP signaling
+    ///
+    /// This is the Matrix-integrated version of `end_call()`.
+    /// It performs dual-write: updates Nova DB and sends m.call.hangup to Matrix.
+    ///
+    /// # Arguments
+    /// * `db` - Database connection pool
+    /// * `matrix_voip_service` - Matrix VoIP service for sending events
+    /// * `matrix_client` - Matrix client for room lookups
+    /// * `call_id` - UUID of the call to end
+    /// * `reason` - Hangup reason (e.g., "user_hangup", "ice_failed", "invite_timeout")
+    ///
+    /// # Errors
+    /// - Database operation fails
+    /// - Call not found
+    /// - Matrix event sending fails (logged as warning, not returned as error)
+    pub async fn end_call_with_matrix(
+        db: &Pool<Postgres>,
+        matrix_voip_service: &crate::services::matrix_voip_service::MatrixVoipService,
+        matrix_client: &crate::services::matrix_client::MatrixClient,
+        call_id: Uuid,
+        reason: &str,
+    ) -> Result<(), crate::error::AppError> {
+        use tracing::{info, warn};
+
+        // Step 1: Get call's matrix_party_id and conversation_id from DB
+        let call_row = sqlx::query(
+            "SELECT matrix_party_id, conversation_id FROM call_sessions WHERE id = $1",
+        )
+        .bind(call_id)
+        .fetch_optional(db)
+        .await
+        .map_err(|e| crate::error::AppError::StartServer(format!("fetch call: {e}")))?
+        .ok_or(crate::error::AppError::NotFound)?;
+
+        let conversation_id: Uuid = call_row.get("conversation_id");
+        let party_id: Option<String> = call_row.get("matrix_party_id");
+
+        // Step 2: End call in Nova database
+        Self::end_call(db, call_id).await?;
+
+        info!(
+            call_id = %call_id,
+            reason = %reason,
+            "Call ended in database, sending Matrix hangup"
+        );
+
+        // Step 3: If no Matrix party_id, skip Matrix signaling
+        let party_id = match party_id {
+            Some(id) => id,
+            None => {
+                info!(
+                    call_id = %call_id,
+                    "No Matrix party_id found, skipping Matrix hangup"
+                );
+                return Ok(()); // Non-Matrix call, already ended in DB
+            }
+        };
+
+        // Step 4: Get Matrix room_id
+        let room_id = match matrix_client.get_cached_room_id(conversation_id).await {
+            Some(id) => id,
+            None => {
+                warn!(
+                    call_id = %call_id,
+                    conversation_id = %conversation_id,
+                    "No Matrix room ID found in cache, hangup will not be sent to Matrix"
+                );
+                return Ok(()); // Non-blocking: call already ended in DB
+            }
+        };
+
+        // Step 5: Send m.call.hangup to Matrix
+        let hangup_result = matrix_voip_service
+            .send_hangup(&room_id, call_id, &party_id, reason)
+            .await;
+
+        if let Err(e) = hangup_result {
+            warn!(
+                call_id = %call_id,
+                error = ?e,
+                "Failed to send Matrix hangup, but call already ended in database"
+            );
+            // Non-blocking: call already ended in DB
+        } else {
+            info!(
+                call_id = %call_id,
+                reason = %reason,
+                "Matrix hangup sent successfully"
+            );
+        }
+
+        Ok(())
+    }
 }

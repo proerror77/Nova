@@ -34,6 +34,64 @@ pub struct MatrixConfig {
     pub device_name: String,
 }
 
+/// VoIP configuration combining ICE servers and Matrix settings
+///
+/// This structure aggregates all VoIP-related configuration for easy access
+/// in VoIP signaling operations.
+#[derive(Debug, Clone)]
+pub struct VoipConfig {
+    /// TURN/STUN servers for WebRTC ICE
+    pub ice_servers: Vec<IceServerConfig>,
+    /// TTL for ICE credentials in seconds
+    pub ice_ttl_seconds: u32,
+    /// Matrix configuration (for E2EE VoIP signaling)
+    pub matrix: MatrixConfig,
+}
+
+impl VoipConfig {
+    /// Create VoipConfig from main Config
+    pub fn from_config(config: &Config) -> Self {
+        Self {
+            ice_servers: config.ice_servers.clone(),
+            ice_ttl_seconds: config.ice_ttl_seconds,
+            matrix: config.matrix.clone(),
+        }
+    }
+
+    /// Convert ICE servers to JSON format for m.call.invite
+    ///
+    /// Returns a JSON array suitable for WebRTC RTCConfiguration.iceServers
+    pub fn ice_servers_json(&self) -> serde_json::Value {
+        use serde_json::json;
+
+        let servers: Vec<serde_json::Value> = self
+            .ice_servers
+            .iter()
+            .map(|server| {
+                let mut obj = json!({
+                    "urls": server.urls,
+                });
+
+                if let Some(username) = &server.username {
+                    obj["username"] = json!(username);
+                }
+
+                if let Some(credential) = &server.credential {
+                    obj["credential"] = json!(credential);
+                }
+
+                if let Some(credential_type) = &server.credential_type {
+                    obj["credentialType"] = json!(credential_type);
+                }
+
+                obj
+            })
+            .collect();
+
+        json!(servers)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Config {
     pub database_url: String,
@@ -208,5 +266,99 @@ impl Config {
             auth_service_url,
             matrix,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_voip_config_ice_servers_json() {
+        let ice_servers = vec![
+            IceServerConfig {
+                urls: vec!["stun:stun.l.google.com:19302".to_string()],
+                username: None,
+                credential: None,
+                credential_type: None,
+            },
+            IceServerConfig {
+                urls: vec!["turn:turn.example.com:3478".to_string()],
+                username: Some("testuser".to_string()),
+                credential: Some("testpass".to_string()),
+                credential_type: Some("password".to_string()),
+            },
+        ];
+
+        let voip_config = VoipConfig {
+            ice_servers,
+            ice_ttl_seconds: 86400,
+            matrix: MatrixConfig {
+                enabled: false,
+                homeserver_url: "https://matrix.example.com".to_string(),
+                service_user: "@service:example.com".to_string(),
+                access_token: None,
+                device_name: "test".to_string(),
+            },
+        };
+
+        let json = voip_config.ice_servers_json();
+
+        // Verify JSON structure
+        assert!(json.is_array());
+        let servers = json.as_array().unwrap();
+        assert_eq!(servers.len(), 2);
+
+        // Check STUN server
+        let stun = &servers[0];
+        assert_eq!(stun["urls"][0], "stun:stun.l.google.com:19302");
+        assert!(stun.get("username").is_none());
+
+        // Check TURN server
+        let turn = &servers[1];
+        assert_eq!(turn["urls"][0], "turn:turn.example.com:3478");
+        assert_eq!(turn["username"], "testuser");
+        assert_eq!(turn["credential"], "testpass");
+        assert_eq!(turn["credentialType"], "password");
+    }
+
+    #[test]
+    fn test_voip_config_from_config() {
+        let config = Config {
+            database_url: "postgres://localhost/test".to_string(),
+            redis_url: "redis://localhost".to_string(),
+            redis_sentinel: None,
+            port: 3000,
+            grpc_port: 50051,
+            ice_servers: vec![
+                IceServerConfig {
+                    urls: vec!["stun:stun.test.com:19302".to_string()],
+                    username: None,
+                    credential: None,
+                    credential_type: None,
+                },
+            ],
+            ice_ttl_seconds: 3600,
+            encryption_master_key: [0u8; 32],
+            s3: S3Config {
+                bucket: "test-bucket".to_string(),
+                region: "us-east-1".to_string(),
+                endpoint: None,
+            },
+            auth_service_url: "http://localhost:50051".to_string(),
+            matrix: MatrixConfig {
+                enabled: true,
+                homeserver_url: "https://matrix.test.com".to_string(),
+                service_user: "@service:test.com".to_string(),
+                access_token: Some("token".to_string()),
+                device_name: "test-device".to_string(),
+            },
+        };
+
+        let voip_config = VoipConfig::from_config(&config);
+
+        assert_eq!(voip_config.ice_servers.len(), 1);
+        assert_eq!(voip_config.ice_ttl_seconds, 3600);
+        assert_eq!(voip_config.matrix.homeserver_url, "https://matrix.test.com");
     }
 }

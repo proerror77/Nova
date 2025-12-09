@@ -111,7 +111,7 @@ impl MatrixClient {
 
         let response = self
             .client
-            .send(request, None)
+            .send(request)
             .await
             .map_err(|e| AppError::StartServer(format!("Matrix room creation failed: {e}")))?;
 
@@ -278,6 +278,70 @@ impl MatrixClient {
             .map_err(|e| AppError::StartServer(format!("Matrix sync failed: {e}")))?;
 
         Ok(())
+    }
+
+    /// Register VoIP event handler for Matrix sync loop
+    ///
+    /// **STATUS**: Placeholder for SDK 0.7 limitation
+    ///
+    /// Matrix SDK 0.7 doesn't expose `AnySyncMessageLikeEvent` or provide easy hooks
+    /// for custom event types like m.call.invite, m.call.answer, etc.
+    ///
+    /// **Proper implementation requires**:
+    /// 1. Upgrade to Matrix SDK 0.16+ which has better custom event support
+    /// 2. Use `client.add_event_handler_context()` with `AnySyncMessageLikeEvent`
+    /// 3. Filter events by type string and deserialize manually
+    ///
+    /// **Current workaround for MVP**:
+    /// - VoIP signaling implemented via WebSocket direct signaling
+    /// - Matrix VoIP events can be sent (via placeholder) but not received
+    /// - For true E2EE VoIP, need SDK upgrade + full event loop integration
+    ///
+    /// **Future implementation pattern** (SDK 0.16):
+    /// ```rust
+    /// use matrix_sdk::ruma::events::AnySyncMessageLikeEvent;
+    ///
+    /// client.add_event_handler(|ev: AnySyncMessageLikeEvent, room: Room| async move {
+    ///     match ev.event_type().as_str() {
+    ///         "m.call.invite" => voip_handler.handle_invite(ev, room).await,
+    ///         "m.call.answer" => voip_handler.handle_answer(ev, room).await,
+    ///         "m.call.candidates" => voip_handler.handle_candidates(ev, room).await,
+    ///         "m.call.hangup" => voip_handler.handle_hangup(ev, room).await,
+    ///         _ => {}
+    ///     }
+    /// });
+    /// ```
+    ///
+    /// # Arguments
+    /// * `voip_handler` - Handler for VoIP events (currently unused in SDK 0.7)
+    pub fn register_voip_handler(
+        &self,
+        _voip_handler: Arc<crate::handlers::MatrixVoipEventHandler>,
+    ) {
+        warn!(
+            "[PLACEHOLDER] VoIP event handler registration deferred to SDK 0.16 upgrade"
+        );
+        warn!(
+            "Matrix VoIP events cannot be received in SDK 0.7 - use WebSocket signaling"
+        );
+
+        // TODO (SDK 0.16 upgrade):
+        // self.client.add_event_handler({
+        //     let handler = voip_handler.clone();
+        //     move |ev: AnySyncMessageLikeEvent, room: Room| {
+        //         let handler = handler.clone();
+        //         async move {
+        //             let event_type = ev.event_type().as_str();
+        //             if let Ok(raw_content) = ev.into_raw() {
+        //                 if let Err(e) = handler.handle_event(event_type, raw_content).await {
+        //                     error!(event_type = %event_type, error = ?e, "VoIP event handler failed");
+        //                 }
+        //             }
+        //         }
+        //     }
+        // });
+
+        info!("[PLACEHOLDER] VoIP handler registered (no-op in SDK 0.7)");
     }
 
     /// Get the underlying Matrix SDK client

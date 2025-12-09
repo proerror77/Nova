@@ -1,0 +1,13 @@
+[package]
+name = "error-handling"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[dependencies]
+error-types = { path = "../error-types" }
+thiserror = { workspace = true }
+serde = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }

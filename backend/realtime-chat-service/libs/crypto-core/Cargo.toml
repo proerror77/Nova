@@ -1,0 +1,22 @@
+[package]
+name = "crypto-core"
+version.workspace = true
+edition.workspace = true
+
+[lib]
+crate-type = ["rlib", "staticlib"]
+
+[dependencies]
+rand = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+sodiumoxide = { version = "0.2" }
+anyhow = { workspace = true }
+chrono = { workspace = true }
+once_cell = { workspace = true }
+jsonwebtoken = { workspace = true }
+uuid = { workspace = true }
+sha2 = { workspace = true }
+hex = { workspace = true }
+tokio = { workspace = true, features = ["sync"] }
+rdkafka = { workspace = true }

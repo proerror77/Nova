@@ -1,0 +1,71 @@
+syntax = "proto3";
+
+package ranking.v1;
+
+// Ranking Service - 推薦排序服務
+// Phase D: Candidate Recall + GBDT Ranking + Diversity Reranking
+service RankingService {
+  // Feed 排序（主流程：Recall -> Rank -> Diversity）
+  rpc RankFeed(RankFeedRequest) returns (RankFeedResponse);
+
+  // 召回候選集（僅召回階段）
+  rpc RecallCandidates(RecallRequest) returns (RecallResponse);
+}
+
+// Feed 排序請求
+message RankFeedRequest {
+  string user_id = 1;
+  int32 limit = 2;  // 最終返回數量（默認 20）
+  RecallConfig recall_config = 3;
+}
+
+message RecallConfig {
+  int32 graph_recall_limit = 1;    // 基於關注的召回數量（默認 200）
+  int32 trending_recall_limit = 2; // 熱門召回數量（默認 100）
+  int32 personalized_recall_limit = 3; // 個性化召回數量（默認 100）
+  bool enable_diversity = 4;       // 是否啟用多樣性重排（默認 true）
+}
+
+message RankFeedResponse {
+  repeated RankedPost posts = 1;
+  RecallStats recall_stats = 2;
+}
+
+message RankedPost {
+  string post_id = 1;
+  float score = 2;           // GBDT 模型打分
+  string recall_source = 3;  // "graph" | "trending" | "personalized"
+  PostFeatures features = 4; // 調試用：模型特徵
+}
+
+message PostFeatures {
+  float engagement_score = 1;    // 互動分數
+  float recency_score = 2;       // 時效分數
+  float author_quality_score = 3; // 作者質量分數
+  float content_quality_score = 4; // 內容質量分數
+}
+
+message RecallStats {
+  int32 graph_recall_count = 1;
+  int32 trending_recall_count = 2;
+  int32 personalized_recall_count = 3;
+  int32 total_candidates = 4;
+  int32 final_count = 5;
+}
+
+// 召回請求
+message RecallRequest {
+  string user_id = 1;
+  RecallConfig config = 2;
+}
+
+message RecallResponse {
+  repeated Candidate candidates = 1;
+  RecallStats stats = 2;
+}
+
+message Candidate {
+  string post_id = 1;
+  string recall_source = 2;
+  float recall_weight = 3;  // 召回策略權重
+}
