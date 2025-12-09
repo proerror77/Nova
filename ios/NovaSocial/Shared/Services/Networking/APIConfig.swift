@@ -22,8 +22,8 @@ enum APIEnvironment {
                !stagingURL.hasPrefix("$(") {  // Skip unresolved build variables
                 return stagingURL
             }
-            // Staging API via LoadBalancer (graphql-gateway-lb)
-            return "http://34.104.179.123"
+            // Default staging API via GCP Ingress (graphql-gateway)
+            return "https://34.8.163.8"
         case .production:
             return "https://api.nova.social"
         }
@@ -490,4 +490,7 @@ struct APIFeatureFlags {
     static var enableOfflineMode = false  // Cache and retry failed requests
     static var maxRetryAttempts = 3
     static var retryDelay: TimeInterval = 2.0
+    /// Allow connecting to staging even if the TLS cert does not match (DEBUG only).
+    /// Keep this false for release builds.
+    static var allowInsecureStagingCert = true
 }
