@@ -170,7 +170,8 @@ impl MediaServiceImpl {
 
 #[tonic::async_trait]
 impl MediaService for MediaServiceImpl {
-    /// Initiate a new upload - returns presigned URL for direct S3 upload
+    /// Initiate a new upload - returns presigned URL for direct object upload
+    #[tracing::instrument(skip(self, request), fields(user_id = %request.get_ref().user_id, filename = %request.get_ref().filename))]
     async fn initiate_upload(
         &self,
         request: Request<InitiateUploadRequest>,
@@ -189,6 +190,7 @@ impl MediaService for MediaServiceImpl {
         }
 
         let upload_id = Uuid::new_v4();
+        let started_at = std::time::Instant::now();
         let media_type = media_type_to_string(req.media_type);
         let mime_type = if req.mime_type.is_empty() {
             "application/octet-stream".to_string()
@@ -255,6 +257,8 @@ impl MediaService for MediaServiceImpl {
             upload_id = %upload_id,
             user_id = %user_id,
             filename = %req.filename,
+            elapsed_ms = %started_at.elapsed().as_millis(),
+            size_bytes = %req.size_bytes,
             "InitiateUpload: Created upload session"
         );
 
@@ -267,6 +271,7 @@ impl MediaService for MediaServiceImpl {
     }
 
     /// Complete an upload after client has uploaded to presigned URL
+    #[tracing::instrument(skip(self, request), fields(user_id = %request.get_ref().user_id, upload_id = %request.get_ref().upload_id))]
     async fn complete_upload(
         &self,
         request: Request<CompleteUploadRequest>,
@@ -280,6 +285,7 @@ impl MediaService for MediaServiceImpl {
             .map_err(|_| Status::invalid_argument("Invalid user ID"))?;
 
         // Get upload record
+        let started_at = std::time::Instant::now();
         let upload: UploadRow = sqlx::query_as(
             "SELECT id, user_id, media_id, filename, media_type, mime_type, size_bytes,
                     storage_path, presigned_url, expires_at, status, created_at, updated_at
@@ -333,15 +339,17 @@ impl MediaService for MediaServiceImpl {
             .bind(upload_id)
             .bind(media_id)
             .execute(&self.db_pool)
-            .await
-            .map_err(|e| {
-                tracing::error!("Failed to update upload status: {:?}", e);
-                Status::internal("Failed to complete upload")
-            })?;
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to update upload status: {:?}", e);
+            Status::internal("Failed to complete upload")
+        })?;
 
         tracing::info!(
             upload_id = %upload_id,
             media_id = %media_id,
+            elapsed_ms = %started_at.elapsed().as_millis(),
+            size_bytes = %upload.size_bytes,
             "CompleteUpload: Upload completed successfully"
         );
 

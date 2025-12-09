@@ -16,6 +16,7 @@ resources:
 patchesStrategicMerge:
   - content-service/env-patch.yaml
   - feed-service/env-patch.yaml
+  - media-service/env-cdn-patch.yaml
   - analytics-service/env-patch.yaml
 
 # Common labels for all resources in staging environment

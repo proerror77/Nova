@@ -1,0 +1,15 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: media-service
+spec:
+  template:
+    spec:
+      containers:
+        - name: media-service
+          env:
+            # 將媒體網址改寫到 GCP Cloud CDN 前端（目前 staging 直接使用 LB IP）
+            - name: CDN_URL
+              value: "http://35.186.234.219"
+            - name: MEDIA_CDN_BASE_URL
+              value: "http://35.186.234.219"

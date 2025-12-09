@@ -1,0 +1,9 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# This overlay is referenced by the parent staging kustomization
+# via patchesStrategicMerge for media-service CDN configuration
+
+resources: []
+
+# The env-cdn-patch.yaml is applied via the parent's patchesStrategicMerge

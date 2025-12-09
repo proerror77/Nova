@@ -23,3 +23,6 @@ spec:
             # identity-service 在啟動時可能尚未就緒，降級以避免 CrashLoop
             - name: GRPC_IDENTITY_SERVICE_TIER
               value: "1"
+            # Redis 用於 feed 緩存，避免每次都走後端服務/資料庫
+            - name: REDIS_URL
+              value: "redis://redis.nova-staging.svc.cluster.local:6379"

@@ -61,6 +61,13 @@ data:
   GRPC_CONNECTION_POOL_SIZE: "10"
   GRPC_TLS_ENABLED: "false"
 
+  # Matrix (E2EE messaging) - backend/realtime-chat-service consumes these.
+  # Set MATRIX_ENABLED=true only after homeserver is reachable.
+  MATRIX_ENABLED: "false"
+  MATRIX_HOMESERVER_URL: "https://chat.yourcorp.com"
+  MATRIX_SERVICE_USER: "@service:chat.yourcorp.com"
+  MATRIX_DEVICE_NAME: "nova-realtime-chat-service"
+
   # Rate Limiting
   RATE_LIMIT_MAX_REQUESTS: "100"
   RATE_LIMIT_WINDOW_SECS: "60"
