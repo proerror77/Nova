@@ -4,6 +4,7 @@ use crate::services::encryption::EncryptionService;
 use base64::{engine::general_purpose, Engine as _};
 use chrono::Utc;
 use sqlx::{Pool, Postgres, Row};
+use std::sync::Arc;
 use uuid::Uuid;
 
 pub struct MessageService;
@@ -248,6 +249,315 @@ impl MessageService {
         .map_err(|e| crate::error::AppError::StartServer(format!("insert audio msg: {e}")))?;
 
         Ok((id, seq))
+    }
+
+    /// Send a message with Matrix integration (dual-write pattern)
+    /// Sends to Nova DB first, then optionally to Matrix homeserver
+    /// Matrix failures are logged but do not block the message send
+    pub async fn send_message_with_matrix(
+        db: &Pool<Postgres>,
+        encryption: &EncryptionService,
+        matrix_client: Option<Arc<super::matrix_client::MatrixClient>>,
+        conversation_id: Uuid,
+        sender_id: Uuid,
+        plaintext: &[u8],
+        idempotency_key: Option<&str>,
+    ) -> Result<MessageRow, crate::error::AppError> {
+        // 1. Insert into Nova DB first (primary storage)
+        let message =
+            Self::send_message_db(db, encryption, conversation_id, sender_id, plaintext, idempotency_key)
+                .await?;
+
+        // 2. Optionally send to Matrix (best-effort, non-blocking)
+        if let Some(matrix) = matrix_client {
+            // Get conversation participants for room creation
+            let participants = match super::matrix_db::get_conversation_participants(db, conversation_id).await {
+                Ok(p) => p,
+                Err(e) => {
+                    tracing::warn!(
+                        error = %e,
+                        conversation_id = %conversation_id,
+                        "Failed to get conversation participants for Matrix room, skipping Matrix send"
+                    );
+                    return Ok(message);
+                }
+            };
+
+            // Get or create Matrix room
+            let room_id = match matrix.get_or_create_room(conversation_id, &participants).await {
+                Ok(r) => r,
+                Err(e) => {
+                    tracing::error!(
+                        error = %e,
+                        conversation_id = %conversation_id,
+                        "Failed to get/create Matrix room, message saved to DB only"
+                    );
+                    return Ok(message);
+                }
+            };
+
+            // Save room mapping to DB
+            if let Err(e) = super::matrix_db::save_room_mapping(db, conversation_id, &room_id).await {
+                tracing::warn!(
+                    error = %e,
+                    conversation_id = %conversation_id,
+                    room_id = %room_id,
+                    "Failed to save room mapping to DB"
+                );
+            }
+
+            // Send message to Matrix
+            let content = String::from_utf8_lossy(plaintext).to_string();
+            match matrix.send_message(conversation_id, &room_id, &content).await {
+                Ok(event_id) => {
+                    tracing::info!(
+                        message_id = %message.id,
+                        event_id = %event_id,
+                        room_id = %room_id,
+                        "Message sent to Matrix"
+                    );
+
+                    // Update message with Matrix event_id
+                    if let Err(e) = super::matrix_db::update_message_matrix_event_id(
+                        db,
+                        message.id,
+                        &event_id,
+                    )
+                    .await
+                    {
+                        tracing::warn!(
+                            error = %e,
+                            message_id = %message.id,
+                            "Failed to update message with matrix_event_id"
+                        );
+                    }
+                }
+                Err(e) => {
+                    tracing::error!(
+                        error = %e,
+                        message_id = %message.id,
+                        room_id = %room_id,
+                        "Failed to send message to Matrix, message saved to DB only"
+                    );
+                }
+            }
+        }
+
+        Ok(message)
+    }
+
+    /// Send an audio message with Matrix integration (dual-write pattern)
+    /// Sends to Nova DB first, then optionally to Matrix homeserver as media
+    /// Matrix failures are logged but do not block the message send
+    #[allow(clippy::too_many_arguments)]
+    pub async fn send_audio_message_with_matrix(
+        db: &Pool<Postgres>,
+        encryption: &EncryptionService,
+        matrix_client: Option<Arc<super::matrix_client::MatrixClient>>,
+        conversation_id: Uuid,
+        sender_id: Uuid,
+        audio_url: &str,
+        duration_ms: u32,
+        audio_codec: &str,
+        idempotency_key: Option<&str>,
+    ) -> Result<(Uuid, i64), crate::error::AppError> {
+        // 1. Insert into Nova DB first (primary storage)
+        let (message_id, seq) = Self::send_audio_message_db(
+            db,
+            encryption,
+            conversation_id,
+            sender_id,
+            audio_url,
+            duration_ms,
+            audio_codec,
+            idempotency_key,
+        )
+        .await?;
+
+        // 2. Optionally send to Matrix (best-effort, non-blocking)
+        if let Some(matrix) = matrix_client {
+            // Get conversation participants for room creation
+            let participants = match super::matrix_db::get_conversation_participants(db, conversation_id).await {
+                Ok(p) => p,
+                Err(e) => {
+                    tracing::warn!(
+                        error = %e,
+                        conversation_id = %conversation_id,
+                        "Failed to get conversation participants for Matrix room, skipping Matrix send"
+                    );
+                    return Ok((message_id, seq));
+                }
+            };
+
+            // Get or create Matrix room
+            let room_id = match matrix.get_or_create_room(conversation_id, &participants).await {
+                Ok(r) => r,
+                Err(e) => {
+                    tracing::error!(
+                        error = %e,
+                        conversation_id = %conversation_id,
+                        "Failed to get/create Matrix room, audio message saved to DB only"
+                    );
+                    return Ok((message_id, seq));
+                }
+            };
+
+            // Save room mapping to DB
+            if let Err(e) = super::matrix_db::save_room_mapping(db, conversation_id, &room_id).await {
+                tracing::warn!(
+                    error = %e,
+                    conversation_id = %conversation_id,
+                    room_id = %room_id,
+                    "Failed to save room mapping to DB"
+                );
+            }
+
+            // Send audio as media to Matrix
+            // Use audio_url as the media URL, extract filename
+            let filename = audio_url.split('/').next_back().unwrap_or("audio.opus");
+            match matrix
+                .send_media(conversation_id, &room_id, audio_url, "audio", filename)
+                .await
+            {
+                Ok(event_id) => {
+                    tracing::info!(
+                        message_id = %message_id,
+                        event_id = %event_id,
+                        room_id = %room_id,
+                        "Audio message sent to Matrix"
+                    );
+
+                    // Update message with Matrix event_id
+                    if let Err(e) = super::matrix_db::update_message_matrix_event_id(
+                        db,
+                        message_id,
+                        &event_id,
+                    )
+                    .await
+                    {
+                        tracing::warn!(
+                            error = %e,
+                            message_id = %message_id,
+                            "Failed to update audio message with matrix_event_id"
+                        );
+                    }
+                }
+                Err(e) => {
+                    tracing::error!(
+                        error = %e,
+                        message_id = %message_id,
+                        room_id = %room_id,
+                        "Failed to send audio to Matrix, message saved to DB only"
+                    );
+                }
+            }
+        }
+
+        Ok((message_id, seq))
+    }
+
+    /// Update a message with Matrix integration
+    /// Updates Nova DB first, then sends edit event to Matrix
+    /// Matrix failures are logged but do not block the update
+    pub async fn update_message_with_matrix(
+        db: &Pool<Postgres>,
+        encryption: &EncryptionService,
+        matrix_client: Option<Arc<super::matrix_client::MatrixClient>>,
+        message_id: Uuid,
+        plaintext: &[u8],
+    ) -> Result<(), crate::error::AppError> {
+        // 1. Update Nova DB first (primary storage)
+        Self::update_message_db(db, encryption, message_id, plaintext).await?;
+
+        // 2. Optionally send edit to Matrix (best-effort, non-blocking)
+        if let Some(matrix) = matrix_client {
+            // Get Matrix event_id and room_id for this message
+            match super::matrix_db::get_matrix_info(db, message_id).await {
+                Ok((Some(event_id), Some(room_id))) => {
+                    let new_content = String::from_utf8_lossy(plaintext).to_string();
+                    if let Err(e) = matrix.edit_message(&room_id, &event_id, &new_content).await {
+                        tracing::error!(
+                            error = %e,
+                            message_id = %message_id,
+                            event_id = %event_id,
+                            "Failed to edit message in Matrix, DB updated successfully"
+                        );
+                    } else {
+                        tracing::info!(
+                            message_id = %message_id,
+                            event_id = %event_id,
+                            "Message edited in Matrix"
+                        );
+                    }
+                }
+                Ok((None, _)) | Ok((Some(_), None)) => {
+                    tracing::debug!(
+                        message_id = %message_id,
+                        "Message has no complete Matrix info, skipping Matrix edit"
+                    );
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        error = %e,
+                        message_id = %message_id,
+                        "Failed to get Matrix info for message, skipping Matrix edit"
+                    );
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Soft delete a message with Matrix integration
+    /// Deletes from Nova DB first, then sends redaction to Matrix
+    /// Matrix failures are logged but do not block the deletion
+    pub async fn soft_delete_message_with_matrix(
+        db: &Pool<Postgres>,
+        matrix_client: Option<Arc<super::matrix_client::MatrixClient>>,
+        message_id: Uuid,
+        reason: Option<&str>,
+    ) -> Result<(), crate::error::AppError> {
+        // 1. Soft delete in Nova DB first (primary storage)
+        Self::soft_delete_message_db(db, message_id).await?;
+
+        // 2. Optionally redact in Matrix (best-effort, non-blocking)
+        if let Some(matrix) = matrix_client {
+            // Get Matrix event_id and room_id for this message
+            match super::matrix_db::get_matrix_info(db, message_id).await {
+                Ok((Some(event_id), Some(room_id))) => {
+                    if let Err(e) = matrix.delete_message(&room_id, &event_id, reason).await {
+                        tracing::error!(
+                            error = %e,
+                            message_id = %message_id,
+                            event_id = %event_id,
+                            "Failed to redact message in Matrix, DB deleted successfully"
+                        );
+                    } else {
+                        tracing::info!(
+                            message_id = %message_id,
+                            event_id = %event_id,
+                            "Message redacted in Matrix"
+                        );
+                    }
+                }
+                Ok((None, _)) | Ok((Some(_), None)) => {
+                    tracing::debug!(
+                        message_id = %message_id,
+                        "Message has no complete Matrix info, skipping Matrix redaction"
+                    );
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        error = %e,
+                        message_id = %message_id,
+                        "Failed to get Matrix info for message, skipping Matrix redaction"
+                    );
+                }
+            }
+        }
+
+        Ok(())
     }
 
     pub async fn get_message_history_db(

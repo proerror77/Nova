@@ -6,6 +6,10 @@ pub mod encryption;
 pub mod graph_client;
 pub mod key_exchange;
 pub mod location_service;
+pub mod matrix_client;
+pub mod matrix_db;
+pub mod matrix_event_handler;
+pub mod matrix_voip_service;
 pub mod megolm_service;
 pub mod message_service;
 pub mod offline_queue;
@@ -17,6 +21,7 @@ pub use e2ee_message_service::{
     E2eeMessage, E2eeMessageError, E2eeMessageService, SendE2eeMessageRequest,
 };
 pub use graph_client::GraphClient;
+pub use matrix_voip_service::{IceCandidate, MatrixVoipService};
 pub use megolm_service::{MegolmCiphertext, MegolmError, MegolmService, RoomKey};
 pub use olm_service::{AccountEncryptionKey, DeviceKeys, OlmError, OlmService};
 pub use relationship_service::{

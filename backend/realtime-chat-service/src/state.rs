@@ -2,7 +2,8 @@ use crate::{
     config::Config,
     redis_client::RedisClient,
     services::{
-        encryption::EncryptionService, key_exchange::KeyExchangeService, MegolmService, OlmService,
+        encryption::EncryptionService, key_exchange::KeyExchangeService,
+        matrix_client::MatrixClient, MegolmService, OlmService,
     },
     websocket::ConnectionRegistry,
 };
@@ -23,4 +24,6 @@ pub struct AppState {
     pub olm_service: Option<Arc<OlmService>>,
     /// Megolm service for group E2EE (vodozemac symmetric ratchet)
     pub megolm_service: Option<Arc<MegolmService>>,
+    /// Matrix client for E2EE messaging (optional, when MATRIX_ENABLED=true)
+    pub matrix_client: Option<Arc<MatrixClient>>,
 }

@@ -163,6 +163,23 @@ async fn main() -> Result<(), error::AppError> {
     };
     tracing::info!("✅ Auth gRPC client initialized (will connect on first use)");
 
+    // Initialize Matrix client (optional, when MATRIX_ENABLED=true)
+    let matrix_client = if cfg.matrix.enabled {
+        match realtime_chat_service::services::matrix_client::MatrixClient::new(cfg.matrix.clone()).await {
+            Ok(client) => {
+                tracing::info!("✅ Matrix client initialized for homeserver: {}", cfg.matrix.homeserver_url);
+                Some(Arc::new(client))
+            }
+            Err(e) => {
+                tracing::error!(error = %e, "Failed to initialize Matrix client, continuing without Matrix");
+                None
+            }
+        }
+    } else {
+        tracing::info!("Matrix integration disabled (MATRIX_ENABLED=false)");
+        None
+    };
+
     let state = AppState {
         db: db.clone(),
         registry: registry.clone(),
@@ -173,6 +190,7 @@ async fn main() -> Result<(), error::AppError> {
         auth_client: auth_client.clone(),
         olm_service,
         megolm_service,
+        matrix_client,
     };
 
     // Start Redis Streams listener for cross-instance fanout
@@ -183,6 +201,49 @@ async fn main() -> Result<(), error::AppError> {
             tracing::error!(error=%e, "redis streams listener failed");
         }
     });
+
+    // Start Matrix sync loop (if Matrix is enabled)
+    if let Some(ref matrix) = state.matrix_client {
+        let matrix_clone = matrix.clone();
+        let db_clone = db.clone();
+        let registry_clone = Arc::new(state.registry.clone());
+        let redis_clone = Arc::new(state.redis.clone());
+
+        let _matrix_sync_task: JoinHandle<()> = tokio::spawn(async move {
+            tracing::info!("Starting Matrix sync loop");
+
+            // Start sync loop with inline event handler
+            if let Err(e) = matrix_clone.start_sync({
+                let db = db_clone.clone();
+                let registry = registry_clone.clone();
+                let redis = redis_clone.clone();
+
+                move |event, room| {
+                    let db = db.clone();
+                    let registry = registry.clone();
+                    let redis = redis.clone();
+
+                    tokio::spawn(async move {
+                        if let Err(e) = realtime_chat_service::services::matrix_event_handler::handle_matrix_message_event(
+                            &db,
+                            &registry,
+                            &redis,
+                            room,
+                            event,
+                        )
+                        .await
+                        {
+                            tracing::error!(error = %e, "Failed to handle Matrix message event");
+                        }
+                    });
+                }
+            }).await {
+                tracing::error!(error = %e, "Matrix sync loop failed");
+            }
+        });
+
+        tracing::info!("✅ Matrix sync loop started in background");
+    }
 
     let bind_addr = format!("0.0.0.0:{}", cfg.port);
     tracing::info!(%bind_addr, "starting realtime-chat-service (REST on port {})", cfg.port);

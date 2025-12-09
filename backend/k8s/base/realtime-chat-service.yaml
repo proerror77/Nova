@@ -46,6 +46,9 @@ spec:
             name: nova-backend-config
         - secretRef:
             name: nova-backend-secrets
+        - secretRef:
+            name: nova-matrix-service-token
+            optional: true
         resources:
           requests:
             memory: "256Mi"

@@ -64,9 +64,11 @@ data:
   # Matrix (E2EE messaging) - backend/realtime-chat-service consumes these.
   # Set MATRIX_ENABLED=true only after homeserver is reachable.
   MATRIX_ENABLED: "false"
-  MATRIX_HOMESERVER_URL: "https://chat.yourcorp.com"
-  MATRIX_SERVICE_USER: "@service:chat.yourcorp.com"
+  MATRIX_HOMESERVER_URL: "http://matrix-synapse:8008"
+  MATRIX_SERVICE_USER: "@nova-service:nova.local"
   MATRIX_DEVICE_NAME: "nova-realtime-chat-service"
+  # Server name used in Synapse config - should match your domain
+  MATRIX_SERVER_NAME: "nova.local"
 
   # Rate Limiting
   RATE_LIMIT_MAX_REQUESTS: "100"

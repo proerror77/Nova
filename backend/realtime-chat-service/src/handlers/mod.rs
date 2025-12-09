@@ -4,3 +4,6 @@
 //! WebSocket-based real-time messaging system.
 
 pub mod e2ee;
+pub mod matrix_voip_event_handler;
+
+pub use matrix_voip_event_handler::MatrixVoipEventHandler;

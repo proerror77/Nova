@@ -26,6 +26,15 @@ pub struct S3Config {
 }
 
 #[derive(Debug, Clone)]
+pub struct MatrixConfig {
+    pub enabled: bool,
+    pub homeserver_url: String,
+    pub service_user: String,
+    pub access_token: Option<String>,
+    pub device_name: String,
+}
+
+#[derive(Debug, Clone)]
 pub struct Config {
     pub database_url: String,
     pub redis_url: String,
@@ -37,6 +46,7 @@ pub struct Config {
     pub encryption_master_key: [u8; 32],
     pub s3: S3Config,
     pub auth_service_url: String,
+    pub matrix: MatrixConfig,
 }
 
 impl Config {
@@ -169,6 +179,22 @@ impl Config {
         let auth_service_url = env::var("AUTH_SERVICE_URL")
             .unwrap_or_else(|_| "http://auth-service:50051".to_string());
 
+        // Matrix configuration (optional, for external E2EE bridge)
+        let matrix_enabled = env::var("MATRIX_ENABLED")
+            .ok()
+            .map(|v| v.eq_ignore_ascii_case("true") || v == "1")
+            .unwrap_or(false);
+        let matrix = MatrixConfig {
+            enabled: matrix_enabled,
+            homeserver_url: env::var("MATRIX_HOMESERVER_URL")
+                .unwrap_or_else(|_| "https://chat.yourcorp.com".to_string()),
+            service_user: env::var("MATRIX_SERVICE_USER")
+                .unwrap_or_else(|_| "@service:chat.yourcorp.com".to_string()),
+            access_token: env::var("MATRIX_ACCESS_TOKEN").ok(),
+            device_name: env::var("MATRIX_DEVICE_NAME")
+                .unwrap_or_else(|_| "nova-realtime-chat-service".to_string()),
+        };
+
         Ok(Self {
             database_url,
             redis_url,
@@ -180,6 +206,7 @@ impl Config {
             encryption_master_key,
             s3,
             auth_service_url,
+            matrix,
         })
     }
 }

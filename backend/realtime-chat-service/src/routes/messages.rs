@@ -42,9 +42,10 @@ pub async fn send_message(
 
     member.can_send()?;
 
-    let message = MessageService::send_message_db(
+    let message = MessageService::send_message_with_matrix(
         &state.db,
         &state.encryption,
+        state.matrix_client.clone(),
         conversation_id,
         user.id,
         body.plaintext.as_bytes(),
@@ -250,29 +251,6 @@ impl MessageEditValidator {
     }
 }
 
-/// Prepare content for storage based on privacy mode
-async fn prepare_content_payload(
-    encryption_service: &crate::services::encryption::EncryptionService,
-    conversation_id: Uuid,
-    plaintext: &[u8],
-    privacy_mode: crate::services::conversation_service::PrivacyMode,
-) -> Result<(String, Option<Vec<u8>>, Option<Vec<u8>>, i32), AppError> {
-    if matches!(
-        privacy_mode,
-        crate::services::conversation_service::PrivacyMode::StrictE2e
-    ) {
-        let (ciphertext, nonce) = encryption_service.encrypt(conversation_id, plaintext)?;
-        Ok((String::new(), Some(ciphertext), Some(nonce.to_vec()), 1))
-    } else {
-        Ok((
-            String::from_utf8_lossy(plaintext).to_string(),
-            None,
-            None,
-            0,
-        ))
-    }
-}
-
 /// Validate audio message parameters
 /// - Duration must be between 1ms and 10 minutes (600000ms)
 /// - Codec must be one of the supported formats
@@ -369,49 +347,27 @@ pub async fn update_message(
         crate::middleware::guards::ConversationMember::verify(&state.db, user.id, conversation_id)
             .await?;
 
-    // 6. Prepare encrypted payload
-    let (new_content_value, encrypted_payload, nonce_payload, encryption_version) =
-        prepare_content_payload(
-            &state.encryption,
-            conversation_id,
-            body.plaintext.as_bytes(),
-            privacy_mode.clone(),
-        )
-        .await?;
-
-    // 7. Update message with version increment (CAS - Compare-And-Swap)
-    let updated = sqlx::query(
-        r#"
-        UPDATE messages
-        SET
-            content = $1,
-            content_encrypted = $2,
-            content_nonce = $3,
-            encryption_version = $4,
-            version_number = version_number + 1,
-            updated_at = NOW()
-        WHERE id = $5 AND version_number = $6
-        RETURNING version_number
-        "#,
-    )
-    .bind(&new_content_value)
-    .bind(encrypted_payload.as_deref())
-    .bind(nonce_payload.as_deref())
-    .bind(encryption_version)
-    .bind(message_id)
-    .bind(current_version)
-    .fetch_optional(&mut *tx)
-    .await?
-    .ok_or(AppError::VersionConflict {
-        current_version: current_version + 1,
-        client_version: body.version_number,
-        server_content: validator.old_content,
-    })?;
-
-    let new_version: i32 = updated.get("version_number");
-
-    // 8. Commit transaction
+    // 6. Update message using Matrix-integrated function (handles DB + Matrix)
+    // First commit transaction to release FOR UPDATE lock
     tx.commit().await?;
+
+    // Use MessageService to update (handles encryption internally)
+    MessageService::update_message_with_matrix(
+        &state.db,
+        &state.encryption,
+        state.matrix_client.clone(),
+        message_id,
+        body.plaintext.as_bytes(),
+    )
+    .await?;
+
+    // Get new version number for broadcast event
+    let new_version: i32 = sqlx::query_scalar(
+        "SELECT version_number FROM messages WHERE id = $1"
+    )
+    .bind(message_id)
+    .fetch_one(&state.db)
+    .await?;
 
     // 9. Broadcast message.edited event
     let event = WebSocketEvent::MessageEdited {
@@ -465,22 +421,19 @@ pub async fn delete_message(
     let is_own_message = sender_id == user.id;
     member.can_delete_message(is_own_message)?;
 
-    // Delete message atomically with permission verification
-    let deleted = sqlx::query(
-        "UPDATE messages SET deleted_at = NOW()
-         WHERE id = $1 AND sender_id = $2
-         RETURNING id, conversation_id",
-    )
-    .bind(message_id)
-    .bind(user.id)
-    .fetch_optional(&mut *tx)
-    .await
-    .map_err(|e| crate::error::AppError::StartServer(format!("delete message: {e}")))?
-    .ok_or(crate::error::AppError::Forbidden)?; // Fails if user is not the sender
-
+    // Commit transaction to release lock
     tx.commit().await?;
 
-    let deleted_conversation_id: Uuid = deleted.get("conversation_id");
+    // Delete message using Matrix-integrated function (handles DB + Matrix redaction)
+    MessageService::soft_delete_message_with_matrix(
+        &state.db,
+        state.matrix_client.clone(),
+        message_id,
+        Some("Message deleted by user"),
+    )
+    .await?;
+
+    let deleted_conversation_id = conversation_id;
 
     // Broadcast message.deleted event using unified event system
     let event = WebSocketEvent::MessageDeleted {
