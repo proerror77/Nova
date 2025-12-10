@@ -23,7 +23,7 @@ struct AddFriendsView: View {
                     Spacer()
 
                     Text("Add friends")
-                        .font(Font.custom("Helvetica Neue", size: 20).weight(.bold))
+                        .font(.system(size: 20, weight: .bold))
                         .foregroundColor(.black)
 
                     Spacer()
@@ -45,7 +45,7 @@ struct AddFriendsView: View {
                         .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
 
                     Text("Search")
-                        .font(Font.custom("Helvetica Neue", size: 15))
+                        .font(.system(size: 15))
                         .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
 
                     Spacer()
@@ -60,7 +60,7 @@ struct AddFriendsView: View {
                 // MARK: - Icered contacts above 标题
                 HStack {
                     Text("Icered contacts above")
-                        .font(Font.custom("Helvetica Neue", size: 17.50).weight(.bold))
+                        .font(.system(size: 17.50, weight: .bold))
                         .lineSpacing(20)
                         .foregroundColor(Color(red: 0.32, green: 0.32, blue: 0.32))
                     Spacer()
@@ -78,11 +78,11 @@ struct AddFriendsView: View {
 
                     VStack(alignment: .leading, spacing: 1) {
                         Text("Bruce Li (you)")
-                            .font(Font.custom("Helvetica Neue", size: 16).weight(.bold))
+                            .font(.system(size: 16, weight: .bold))
                             .lineSpacing(20)
                             .foregroundColor(.black)
                         Text("+86 199xxxx6164")
-                            .font(Font.custom("Helvetica Neue", size: 11.50).weight(.medium))
+                            .font(.system(size: 11.50, weight: .medium))
                             .lineSpacing(20)
                             .foregroundColor(Color(red: 0.65, green: 0.65, blue: 0.65))
                     }
@@ -115,7 +115,7 @@ struct AddFriendsView: View {
                             .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
 
                         Text("Share invitation link")
-                            .font(Font.custom("Helvetica Neue", size: 15))
+                            .font(.system(size: 15))
                             .lineSpacing(20)
                             .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
 

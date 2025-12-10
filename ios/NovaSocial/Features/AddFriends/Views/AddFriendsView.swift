@@ -85,7 +85,7 @@ struct AddFriendsView: View {
                     Spacer()
 
                     Text("Add friends")
-                        .font(Font.custom("Helvetica Neue", size: 20).weight(.bold))
+                        .font(.system(size: 20, weight: .bold))
                         .foregroundColor(.black)
 
                     Spacer()
@@ -105,7 +105,7 @@ struct AddFriendsView: View {
                         .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
 
                     TextField("Search", text: $viewModel.searchQuery)
-                        .font(Font.custom("Helvetica Neue", size: 15))
+                        .font(.system(size: 15))
                         .foregroundColor(.black)
                         .onChange(of: viewModel.searchQuery) { _, newValue in
                             if !newValue.isEmpty {
@@ -146,7 +146,7 @@ struct AddFriendsView: View {
                         if !viewModel.searchResults.isEmpty {
                             VStack(alignment: .leading, spacing: 12) {
                                 Text("搜索结果")
-                                    .font(Font.custom("Helvetica Neue", size: 17.50).weight(.bold))
+                                    .font(.system(size: 17.50, weight: .bold))
                                     .foregroundColor(Color(red: 0.32, green: 0.32, blue: 0.32))
                                     .padding(.horizontal, 24)
 
@@ -169,7 +169,7 @@ struct AddFriendsView: View {
                         if !viewModel.recommendations.isEmpty {
                             VStack(alignment: .leading, spacing: 12) {
                                 Text("推荐联系人")
-                                    .font(Font.custom("Helvetica Neue", size: 17.50).weight(.bold))
+                                    .font(.system(size: 17.50, weight: .bold))
                                     .foregroundColor(Color(red: 0.32, green: 0.32, blue: 0.32))
                                     .padding(.horizontal, 24)
 
@@ -201,7 +201,7 @@ struct AddFriendsView: View {
                                     .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
 
                                 Text("Share invitation link")
-                                    .font(Font.custom("Helvetica Neue", size: 15))
+                                    .font(.system(size: 15))
                                     .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
 
                                 Spacer()
@@ -246,17 +246,17 @@ struct UserCardView: View {
 
             VStack(alignment: .leading, spacing: 1) {
                 Text(user.displayName ?? user.username)
-                    .font(Font.custom("Helvetica Neue", size: 16).weight(.bold))
+                    .font(.system(size: 16, weight: .bold))
                     .foregroundColor(.black)
 
                 if let bio = user.bio, !bio.isEmpty {
                     Text(bio)
-                        .font(Font.custom("Helvetica Neue", size: 11.50).weight(.medium))
+                        .font(.system(size: 11.50, weight: .medium))
                         .foregroundColor(Color(red: 0.65, green: 0.65, blue: 0.65))
                         .lineLimit(1)
                 } else {
                     Text("@\(user.username)")
-                        .font(Font.custom("Helvetica Neue", size: 11.50).weight(.medium))
+                        .font(.system(size: 11.50, weight: .medium))
                         .foregroundColor(Color(red: 0.65, green: 0.65, blue: 0.65))
                 }
             }

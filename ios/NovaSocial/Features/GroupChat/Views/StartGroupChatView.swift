@@ -100,7 +100,7 @@ struct StartGroupChatView: View {
                     Spacer()
 
                     Text("Start Group Chat")
-                        .font(Font.custom("Helvetica Neue", size: 20).weight(.bold))
+                        .font(.system(size: 20, weight: .bold))
                         .foregroundColor(.black)
 
                     Spacer()
@@ -116,7 +116,7 @@ struct StartGroupChatView: View {
                 // MARK: - Group Name Input
                 VStack(alignment: .leading, spacing: 8) {
                     Text("群组名称")
-                        .font(Font.custom("Helvetica Neue", size: 14).weight(.medium))
+                        .font(.system(size: 14, weight: .medium))
                         .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
 
                     HStack(spacing: 10) {
@@ -125,7 +125,7 @@ struct StartGroupChatView: View {
                             .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
 
                         TextField("Enter group name", text: $viewModel.groupName)
-                            .font(Font.custom("Helvetica Neue", size: 15))
+                            .font(.system(size: 15))
                             .foregroundColor(.black)
 
                         Spacer()
@@ -145,7 +145,7 @@ struct StartGroupChatView: View {
                         .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
 
                     TextField("Search friends", text: $viewModel.searchQuery)
-                        .font(Font.custom("Helvetica Neue", size: 15))
+                        .font(.system(size: 15))
                         .foregroundColor(.black)
                         .onChange(of: viewModel.searchQuery) { _, newValue in
                             if !newValue.isEmpty {
@@ -175,7 +175,7 @@ struct StartGroupChatView: View {
                 if !viewModel.selectedUsers.isEmpty {
                     HStack {
                         Text("已选择 \(viewModel.selectedUsers.count) 人")
-                            .font(Font.custom("Helvetica Neue", size: 13).weight(.medium))
+                            .font(.system(size: 13, weight: .medium))
                             .foregroundColor(Color(red: 0.32, green: 0.32, blue: 0.32))
 
                         Spacer()
@@ -184,7 +184,7 @@ struct StartGroupChatView: View {
                             viewModel.selectedUsers.removeAll()
                         }) {
                             Text("清除")
-                                .font(Font.custom("Helvetica Neue", size: 13).weight(.medium))
+                                .font(.system(size: 13, weight: .medium))
                                 .foregroundColor(.blue)
                         }
                     }
@@ -207,7 +207,7 @@ struct StartGroupChatView: View {
                         if !viewModel.searchResults.isEmpty {
                             VStack(alignment: .leading, spacing: 12) {
                                 Text("搜索结果")
-                                    .font(Font.custom("Helvetica Neue", size: 17.50).weight(.bold))
+                                    .font(.system(size: 17.50, weight: .bold))
                                     .foregroundColor(Color(red: 0.32, green: 0.32, blue: 0.32))
                                     .padding(.horizontal, 24)
 
@@ -242,7 +242,7 @@ struct StartGroupChatView: View {
                                         .scaleEffect(0.8)
                                 } else {
                                     Text("创建群聊")
-                                        .font(Font.custom("Helvetica Neue", size: 16).weight(.bold))
+                                        .font(.system(size: 16, weight: .bold))
                                         .foregroundColor(.white)
                                 }
                             }
@@ -289,19 +289,19 @@ struct SelectableUserCardView: View {
                 // User Info
                 VStack(alignment: .leading, spacing: 1) {
                     Text(user.displayName ?? user.username)
-                        .font(Font.custom("Helvetica Neue", size: 16).weight(.bold))
+                        .font(.system(size: 16, weight: .bold))
                         .lineSpacing(20)
                         .foregroundColor(.black)
 
                     if let bio = user.bio, !bio.isEmpty {
                         Text(bio)
-                            .font(Font.custom("Helvetica Neue", size: 11.50).weight(.medium))
+                            .font(.system(size: 11.50, weight: .medium))
                             .lineSpacing(20)
                             .foregroundColor(Color(red: 0.65, green: 0.65, blue: 0.65))
                             .lineLimit(1)
                     } else {
                         Text("@\(user.username)")
-                            .font(Font.custom("Helvetica Neue", size: 11.50).weight(.medium))
+                            .font(.system(size: 11.50, weight: .medium))
                             .lineSpacing(20)
                             .foregroundColor(Color(red: 0.65, green: 0.65, blue: 0.65))
                     }

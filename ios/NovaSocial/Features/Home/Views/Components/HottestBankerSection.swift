@@ -12,24 +12,21 @@ struct HottestBankerSection: View {
             // MARK: - 标题部分
             HStack {
                 Text(LocalizedStringKey("Hottest Banker in H.K."))
-                    .font(Font.custom("Helvetica Neue", size: 20).weight(.bold))
+                    .font(.system(size: 20, weight: .bold))
                     .foregroundColor(.black)
-                    .padding(.leading, 20) // ← 调整标题左边距
 
                 Spacer()
 
                 Button(action: onSeeAllTapped) {
-                    Text(LocalizedStringKey("See all"))
-                        .font(Font.custom("Helvetica Neue", size: 10).weight(.medium))
-                        .foregroundColor(.white)
-                        .padding(EdgeInsets(top: 6, leading: 12, bottom: 6, trailing: 12))
-                        .background(Color(red: 0.82, green: 0.11, blue: 0.26))
-                        .cornerRadius(5)
+                    Text(LocalizedStringKey("View more"))
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundColor(.black)
                 }
-                .padding(.trailing, 0) // ← 调整按钮右边距
             }
-            .padding(.top, 0) // ← 调整标题区域与上方的间距
-            .padding(.bottom, 5) // ← 调整标题区域与下方卡片的间距
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 16)
+            .padding(.top, 0)
+            .padding(.bottom, 5)
 
             // MARK: - 轮播卡片容器 (水平滚动)
             ScrollView(.horizontal, showsIndicators: false) {

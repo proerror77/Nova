@@ -32,276 +32,246 @@ struct LoginView: View {
     var body: some View {
         ZStack {
             // Background Image - Fixed size to prevent scaling when keyboard appears
-            Image("Login-Background")
+            Image("Registration-background")
                 .resizable()
                 .scaledToFill()
                 .frame(width: UIScreen.main.bounds.width, height: UIScreen.main.bounds.height)
                 .clipped()
                 .ignoresSafeArea(.all)
 
-            // Dark overlay to dim the background
+            // Dark overlay
             Color.black
                 .opacity(0.4)
                 .ignoresSafeArea()
 
-            VStack(spacing: 0) {
-                // 使用固定高度替代Spacer，防止键盘推动布局
-                Color.clear
-                    .frame(height: max(0, (UIScreen.main.bounds.height - 812) / 2))
+            // Main Content
+            GeometryReader { geometry in
+                ScrollView(showsIndicators: false) {
+                    VStack(spacing: 0) {
+                        // ============================================
+                        // 📐 整体内容垂直位置调整
+                        // 修改下面的 offset 值来调整整体位置
+                        // 正值 = 向下移动，负值 = 向上移动
+                        // ============================================
+                        let contentVerticalOffset: CGFloat = 140
 
-                // Main Content
-                ZStack {
-                    Group {
-                        // ICERED Logo Icon at top - 与 WelcomeView 保持一致
-                        Image("Mountain-W")
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 100, height: 80)
-                            .offset(x: 0, y: -290)
+                        // 内容容器
+                        VStack(spacing: 0) {
+                            // Logo Section
+                            logoSection
 
-                        // Welcome Text - 两行样式
-                        ZStack {
-                            Text("\u{201C}For the masters of the universe.\u{201D}")
-                                .font(Font.custom("Helvetica Neue", size: 20).weight(.thin))
-                                .italic()
-                                .tracking(1)
-                                .lineSpacing(0)
-                                .multilineTextAlignment(.center)
-                                .foregroundColor(Color(red: 0.77, green: 0.77, blue: 0.77))
-                                .offset(x: 0, y: 30)
+                            Spacer()
+                                .frame(height: 40)
 
+                            // Welcome Text
                             Text("Welcome to Icered")
-                                .font(Font.custom("Helvetica Neue", size: 30).weight(.bold))
-                                .lineSpacing(46)
+                                .font(.system(size: 30, weight: .bold))
                                 .foregroundColor(.white)
-                                .offset(x: 0, y: -30)
-                        }
-                        .frame(width: 300, height: 100)
-                        .offset(x: 0, y: -195)
 
-                        // Forgot password
-                        Text(LocalizedStringKey("Forgot_Password"))
-                            .font(Font.custom("Helvetica Neue", size: 10).weight(.light))
-                            .foregroundColor(Color(red: 0.77, green: 0.77, blue: 0.77))
-                            .offset(x: 132, y: 44)
-                            .onTapGesture {
-                                // TODO: Handle forgot password
-                            }
+                            Spacer()
+                                .frame(height: 36)
 
-                        // SHOW/HIDE password toggle
-                        Text(showPassword ? LocalizedStringKey("Hide") : LocalizedStringKey("Show"))
-                            .font(Font.custom("Helvetica Neue", size: 12).weight(.light))
-                            .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
-                            .padding(.horizontal, 30)
-                            .padding(.vertical, 24)
-                            .contentShape(Rectangle())
-                            .offset(x: 138.50, y: -10)
-                            .onTapGesture {
-                                showPassword.toggle()
-                            }
+                            // Input Fields
+                            VStack(spacing: 16) {
+                                // Email Field
+                                emailTextField
 
-                        // Sign In Button
-                        Button(action: {
-                            Task {
-                                await handleLogin()
+                                // Password Field
+                                passwordTextField
                             }
-                        }) {
-                            HStack(spacing: 8) {
-                                if isLoading {
-                                    ProgressView()
-                                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                            .padding(.horizontal, 16)
+
+                            // Forgot Password
+                            HStack {
+                                Spacer()
+                                Button(action: {
+                                    // TODO: Handle forgot password
+                                }) {
+                                    Text(LocalizedStringKey("Forgot_Password"))
+                                        .font(.system(size: 12, weight: .light))
+                                        .foregroundColor(Color(red: 0.77, green: 0.77, blue: 0.77))
                                 }
-                                Text(LocalizedStringKey("Sign_In"))
-                                    .font(Font.custom("Helvetica Neue", size: 16).weight(.medium))
-                                    .foregroundColor(.white)
                             }
-                            .frame(width: 343, height: 46)
-                            .background(Color(red: 0.87, green: 0.11, blue: 0.26))
-                            .cornerRadius(31.50)
-                        }
-                        .disabled(isLoading || isGoogleLoading)
-                        .accessibilityIdentifier("signInButton")
-                        .offset(x: 0, y: 87)
+                            .padding(.horizontal, 20)
+                            .padding(.top, 12)
 
-                        // Google Sign-In Button
-                        Button(action: {
-                            Task {
-                                await handleGoogleSignIn()
+                            // Error Message
+                            if let errorMessage = errorMessage {
+                                Text(LocalizedStringKey(errorMessage))
+                                    .font(.system(size: 12))
+                                    .foregroundColor(.red)
+                                    .multilineTextAlignment(.center)
+                                    .padding(.horizontal, 40)
+                                    .padding(.top, 12)
                             }
-                        }) {
-                            HStack(spacing: 12) {
-                                if isGoogleLoading {
-                                    ProgressView()
-                                        .progressViewStyle(CircularProgressViewStyle(tint: .black))
-                                } else {
-                                    // Google Logo
-                                    Image("GoogleLogo")
-                                        .resizable()
-                                        .scaledToFit()
-                                        .frame(width: 20, height: 20)
-                                }
-                                Text("Continue with Google")
-                                    .font(Font.custom("Helvetica Neue", size: 16).weight(.medium))
-                                    .foregroundColor(.black)
+
+                            Spacer()
+                                .frame(height: 32)
+
+                            // Buttons
+                            VStack(spacing: 16) {
+                                // Sign In Button
+                                signInButton
+
+                                // Create Account Button
+                                createAccountButton
                             }
-                            .frame(width: 343, height: 46)
-                            .background(Color.white)
-                            .cornerRadius(31.50)
+                            .padding(.horizontal, 16)
                         }
-                        .disabled(isLoading || isGoogleLoading)
-                        .offset(x: 0, y: 145)
+                        .offset(y: contentVerticalOffset)
 
-                        // "or you can" text
-                        Text("or you can")
-                            .font(Font.custom("Helvetica Neue", size: 16).weight(.medium))
-                            .foregroundColor(.white)
-                            .offset(y: 208)
-
-                        // Create Account Button
-                        Button(action: {
-                            currentPage = .welcome
-                        }) {
-                            Text(LocalizedStringKey("Create_An_Account"))
-                                .font(Font.custom("Helvetica Neue", size: 16).weight(.medium))
-                                .foregroundColor(.white)
-                                .frame(width: 343, height: 46)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 31.50)
-                                        .stroke(.white, lineWidth: 0.20)
-                                )
-                        }
-                        .accessibilityIdentifier("createAccountButton")
-                        .offset(y: 265)
-
-                        // Error Message
-                        if let errorMessage = errorMessage {
-                            Text(LocalizedStringKey(errorMessage))
-                                .font(Font.custom("Helvetica Neue", size: 12))
-                                .foregroundColor(.red)
-                                .multilineTextAlignment(.center)
-                                .padding(.horizontal, 40)
-                                .offset(y: 100)
-                        }
+                        Spacer()
                     }
-
-                    Group {
-                        // Email/Username Input Field
-                        VStack(alignment: .leading, spacing: 4) {
-                            ZStack(alignment: .leading) {
-                                Rectangle()
-                                    .foregroundColor(.clear)
-                                    .frame(width: 343, height: 49)
-                                    .cornerRadius(6)
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 6)
-                                            .inset(by: 0.20)
-                                            .stroke(emailError != nil ? Color.red : .white, lineWidth: emailError != nil ? 1 : 0.20)
-                                    )
-
-                                TextField("", text: $email, prompt: Text(LocalizedStringKey("Enter_your_email")).foregroundColor(Color.white.opacity(0.4)))
-                                    .foregroundColor(.white)
-                                    .font(Font.custom("Helvetica Neue", size: 14))
-                                    .padding(.horizontal, 16)
-                                    .autocapitalization(.none)
-                                    .keyboardType(.emailAddress)
-                                    .autocorrectionDisabled()
-                                    .accessibilityIdentifier("loginEmailTextField")
-                                    .focused($focusedField, equals: .email)
-                                    .onChange(of: email) { _, newValue in
-                                        validateEmailRealtime(newValue)
-                                    }
-                            }
-                            .frame(width: 343, height: 49)
-                            .contentShape(Rectangle())
-                            .onTapGesture {
-                                focusedField = .email
-                            }
-
-                            // Inline error for email - fixed height to prevent layout shift
-                            Text(LocalizedStringKey(emailError ?? " "))
-                                .font(Font.custom("Helvetica Neue", size: 11))
-                                .foregroundColor(Color(red: 1, green: 0.4, blue: 0.4))
-                                .padding(.leading, 4)
-                                .opacity(emailError != nil ? 1 : 0)
-                        }
-                        .offset(x: 0, y: -69.50)
-
-                        // Password Input Field
-                        VStack(alignment: .leading, spacing: 4) {
-                            ZStack(alignment: .leading) {
-                                Rectangle()
-                                    .foregroundColor(.clear)
-                                    .frame(width: 343, height: 49)
-                                    .cornerRadius(6)
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 6)
-                                            .inset(by: 0.20)
-                                            .stroke(passwordError != nil ? Color.red : .white, lineWidth: passwordError != nil ? 1 : 0.20)
-                                    )
-
-                                if showPassword {
-                                    TextField("", text: $password, prompt: Text(LocalizedStringKey("Enter_your_password")).foregroundColor(Color.white.opacity(0.4)))
-                                        .foregroundColor(.white)
-                                        .font(Font.custom("Helvetica Neue", size: 14))
-                                        .padding(.horizontal, 16)
-                                        .padding(.trailing, 60)
-                                        .autocapitalization(.none)
-                                        .autocorrectionDisabled()
-                                        .accessibilityIdentifier("loginPasswordTextField")
-                                        .focused($focusedField, equals: .password)
-                                } else {
-                                    SecureField("", text: $password, prompt: Text(LocalizedStringKey("Enter_your_password")).foregroundColor(Color.white.opacity(0.4)))
-                                        .foregroundColor(.white)
-                                        .font(Font.custom("Helvetica Neue", size: 14))
-                                        .padding(.horizontal, 16)
-                                        .padding(.trailing, 60)
-                                        .accessibilityIdentifier("loginPasswordTextField")
-                                        .focused($focusedField, equals: .password)
-                                }
-                            }
-                            .frame(width: 343, height: 49)
-                            .contentShape(Rectangle())
-                            .onTapGesture {
-                                focusedField = .password
-                            }
-
-                            // Inline error for password - fixed height to prevent layout shift
-                            Text(LocalizedStringKey(passwordError ?? " "))
-                                .font(Font.custom("Helvetica Neue", size: 11))
-                                .foregroundColor(Color(red: 1, green: 0.4, blue: 0.4))
-                                .padding(.leading, 4)
-                                .opacity(passwordError != nil ? 1 : 0)
-                        }
-                        .offset(x: 0, y: -0.50)
-
-                        // Decorative lines
-                        Rectangle()
-                            .foregroundColor(.clear)
-                            .frame(width: 120, height: 0)
-                            .overlay(Rectangle()
-                                .stroke(.white, lineWidth: 0.20))
-                            .offset(x: -111.50, y: 152)
-
-                        Rectangle()
-                            .foregroundColor(.clear)
-                            .frame(width: 120, height: 0)
-                            .overlay(Rectangle()
-                                .stroke(.white, lineWidth: 0.20))
-                            .offset(x: 111.50, y: 152)
-                    }
+                    .frame(minHeight: geometry.size.height)
                 }
-                .frame(width: 375, height: 812)
-
-                // 使用固定高度替代Spacer，防止键盘推动布局
-                Color.clear
-                    .frame(height: max(0, (UIScreen.main.bounds.height - 812) / 2))
+                .scrollDismissesKeyboard(.interactively)
             }
             .contentShape(Rectangle())
             .onTapGesture {
                 UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
             }
         }
-        .scrollDismissesKeyboard(.interactively)
+        .ignoresSafeArea(.keyboard)
+    }
+
+    // MARK: - Logo Section
+    private var logoSection: some View {
+        VStack(spacing: 4) {
+            Image("Logo-R")
+                .resizable()
+                .scaledToFit()
+                .frame(height: 90)
+                .colorInvert()
+                .brightness(1)
+        }
+    }
+
+    // MARK: - Email TextField
+    private var emailTextField: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            ZStack(alignment: .leading) {
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(Color.clear)
+                    .frame(height: 49)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6)
+                            .stroke(emailError != nil ? Color.red : Color.white.opacity(0.3), lineWidth: emailError != nil ? 1 : 0.5)
+                    )
+
+                TextField("", text: $email, prompt: Text(LocalizedStringKey("email_or_phone_number")).foregroundColor(Color(red: 0.77, green: 0.77, blue: 0.77)))
+                    .foregroundColor(.white)
+                    .font(.system(size: 14, weight: .light))
+                    .padding(.horizontal, 16)
+                    .autocapitalization(.none)
+                    .keyboardType(.emailAddress)
+                    .autocorrectionDisabled()
+                    .accessibilityIdentifier("loginEmailTextField")
+                    .focused($focusedField, equals: .email)
+                    .onChange(of: email) { _, newValue in
+                        validateEmailRealtime(newValue)
+                    }
+            }
+
+            if let error = emailError {
+                Text(LocalizedStringKey(error))
+                    .font(.system(size: 11))
+                    .foregroundColor(Color(red: 1, green: 0.4, blue: 0.4))
+                    .padding(.leading, 4)
+            }
+        }
+    }
+
+    // MARK: - Password TextField
+    private var passwordTextField: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            ZStack(alignment: .leading) {
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(Color.clear)
+                    .frame(height: 49)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6)
+                            .stroke(passwordError != nil ? Color.red : Color.white.opacity(0.3), lineWidth: passwordError != nil ? 1 : 0.5)
+                    )
+
+                HStack {
+                    if showPassword {
+                        TextField("", text: $password, prompt: Text(LocalizedStringKey("password")).foregroundColor(Color(red: 0.77, green: 0.77, blue: 0.77)))
+                            .foregroundColor(.white)
+                            .font(.system(size: 14, weight: .light))
+                            .autocapitalization(.none)
+                            .autocorrectionDisabled()
+                            .accessibilityIdentifier("loginPasswordTextField")
+                            .focused($focusedField, equals: .password)
+                    } else {
+                        SecureField("", text: $password, prompt: Text(LocalizedStringKey("password")).foregroundColor(Color(red: 0.77, green: 0.77, blue: 0.77)))
+                            .foregroundColor(.white)
+                            .font(.system(size: 14, weight: .light))
+                            .accessibilityIdentifier("loginPasswordTextField")
+                            .focused($focusedField, equals: .password)
+                    }
+
+                    Button(action: {
+                        showPassword.toggle()
+                    }) {
+                        Text(showPassword ? "HIDE" : "SHOW")
+                            .font(.system(size: 12, weight: .light))
+                            .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
+                    }
+                }
+                .padding(.horizontal, 16)
+            }
+
+            if let error = passwordError {
+                Text(LocalizedStringKey(error))
+                    .font(.system(size: 11))
+                    .foregroundColor(Color(red: 1, green: 0.4, blue: 0.4))
+                    .padding(.leading, 4)
+            }
+        }
+    }
+
+    // MARK: - Sign In Button
+    private var signInButton: some View {
+        Button(action: {
+            Task {
+                await handleLogin()
+            }
+        }) {
+            HStack(spacing: 8) {
+                if isLoading {
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: .black))
+                        .scaleEffect(0.9)
+                }
+                Text(LocalizedStringKey("Sign_In"))
+                    .font(.system(size: 20, weight: .bold))
+                    .foregroundColor(.black)
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 46)
+            .background(Color.white)
+            .cornerRadius(31.50)
+        }
+        .disabled(isLoading || isGoogleLoading)
+        .accessibilityIdentifier("signInButton")
+    }
+
+    // MARK: - Create Account Button
+    private var createAccountButton: some View {
+        Button(action: {
+            currentPage = .welcome
+        }) {
+            Text(LocalizedStringKey("Create_An_Account"))
+                .font(.system(size: 16, weight: .medium))
+                .foregroundColor(.white)
+                .frame(maxWidth: .infinity)
+                .frame(height: 46)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 31.50)
+                        .stroke(Color.white.opacity(0.5), lineWidth: 0.5)
+                )
+        }
+        .accessibilityIdentifier("createAccountButton")
     }
 
     // MARK: - Actions

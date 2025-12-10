@@ -40,7 +40,7 @@ struct CreateAccountView: View {
     var body: some View {
         ZStack {
             // Background Image - Fixed size to prevent scaling when keyboard appears
-            Image("Login-Background")
+            Image("Registration-background")
                 .resizable()
                 .scaledToFill()
                 .frame(width: UIScreen.main.bounds.width, height: UIScreen.main.bounds.height)
@@ -92,7 +92,7 @@ struct CreateAccountView: View {
                             }
                         }) {
                             Text(showPassword ? "HIDE" : "SHOW")
-                                .font(Font.custom("Helvetica Neue", size: 12).weight(.light))
+                                .font(.system(size: 12, weight: .light))
                                 .lineSpacing(20)
                                 .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
                                 .padding(.horizontal, 30)
@@ -115,7 +115,7 @@ struct CreateAccountView: View {
                             }
                         }) {
                             Text(showConfirmPassword ? "HIDE" : "SHOW")
-                                .font(Font.custom("Helvetica Neue", size: 12).weight(.light))
+                                .font(.system(size: 12, weight: .light))
                                 .lineSpacing(20)
                                 .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
                                 .padding(.horizontal, 30)
@@ -178,7 +178,7 @@ struct CreateAccountView: View {
                         // Text fields for input
                         TextField("", text: $email, prompt: Text("Enter your email").foregroundColor(Color.white.opacity(0.4)))
                             .foregroundColor(.white)
-                            .font(Font.custom("Helvetica Neue", size: 14))
+                            .font(.system(size: 14))
                             .padding(.horizontal, 16)
                             .frame(width: 343, height: 49)
                             .autocapitalization(.none)
@@ -189,7 +189,7 @@ struct CreateAccountView: View {
 
                         TextField("", text: $username, prompt: Text("Your Username").foregroundColor(Color.white.opacity(0.4)))
                             .foregroundColor(.white)
-                            .font(Font.custom("Helvetica Neue", size: 14))
+                            .font(.system(size: 14))
                             .padding(.horizontal, 16)
                             .frame(width: 343, height: 49)
                             .autocapitalization(.none)
@@ -202,7 +202,7 @@ struct CreateAccountView: View {
                             if showPassword {
                                 TextField("", text: $password, prompt: Text("Enter your password").foregroundColor(Color.white.opacity(0.4)))
                                     .foregroundColor(.white)
-                                    .font(Font.custom("Helvetica Neue", size: 14))
+                                    .font(.system(size: 14))
                                     .padding(.horizontal, 16)
                                     .frame(width: 343, height: 49)
                                     .autocapitalization(.none)
@@ -213,7 +213,7 @@ struct CreateAccountView: View {
                             } else {
                                 SecureField("", text: $password, prompt: Text("Enter your password").foregroundColor(Color.white.opacity(0.4)))
                                     .foregroundColor(.white)
-                                    .font(Font.custom("Helvetica Neue", size: 14))
+                                    .font(.system(size: 14))
                                     .padding(.horizontal, 16)
                                     .frame(width: 343, height: 49)
                                     .textContentType(.password)
@@ -228,7 +228,7 @@ struct CreateAccountView: View {
                             if showConfirmPassword {
                                 TextField("", text: $confirmPassword, prompt: Text("Confirm your password").foregroundColor(Color.white.opacity(0.4)))
                                     .foregroundColor(.white)
-                                    .font(Font.custom("Helvetica Neue", size: 14))
+                                    .font(.system(size: 14))
                                     .padding(.horizontal, 16)
                                     .frame(width: 343, height: 49)
                                     .autocapitalization(.none)
@@ -239,7 +239,7 @@ struct CreateAccountView: View {
                             } else {
                                 SecureField("", text: $confirmPassword, prompt: Text("Confirm your password").foregroundColor(Color.white.opacity(0.4)))
                                     .foregroundColor(.white)
-                                    .font(Font.custom("Helvetica Neue", size: 14))
+                                    .font(.system(size: 14))
                                     .padding(.horizontal, 16)
                                     .frame(width: 343, height: 49)
                                     .textContentType(.password)
@@ -261,7 +261,7 @@ struct CreateAccountView: View {
                                         .progressViewStyle(CircularProgressViewStyle(tint: .white))
                                 }
                                 Text(LocalizedStringKey("Sign_Up"))
-                                    .font(Font.custom("Helvetica Neue", size: 16).weight(.medium))
+                                    .font(.system(size: 16, weight: .medium))
                                     .lineSpacing(20)
                                     .foregroundColor(.white)
                             }
@@ -275,7 +275,7 @@ struct CreateAccountView: View {
 
                         // "or you can" text
                         Text(LocalizedStringKey("Or_you_can"))
-                            .font(Font.custom("Helvetica Neue", size: 16).weight(.medium))
+                            .font(.system(size: 16, weight: .medium))
                             .lineSpacing(20)
                             .foregroundColor(.white)
                             .offset(x: 0.50, y: 200)
@@ -356,7 +356,7 @@ struct CreateAccountView: View {
                         // Already have an account
                         HStack(spacing: 4) {
                             Text("Already have an account?")
-                                .font(Font.custom("Helvetica Neue", size: 16).weight(.light))
+                                .font(.system(size: 16, weight: .light))
                                 .lineSpacing(20)
                                 .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
 
@@ -364,7 +364,7 @@ struct CreateAccountView: View {
                                 currentPage = .login
                             }) {
                                 Text(LocalizedStringKey("Sign_in"))
-                                    .font(Font.custom("Helvetica Neue", size: 16).weight(.bold))
+                                    .font(.system(size: 16, weight: .bold))
                                     .lineSpacing(20)
                                     .underline()
                                     .foregroundColor(.white)
@@ -375,7 +375,7 @@ struct CreateAccountView: View {
                         // Error Message
                         if let errorMessage = errorMessage {
                             Text(LocalizedStringKey(errorMessage))
-                                .font(Font.custom("Helvetica Neue", size: 12))
+                                .font(.system(size: 12))
                                 .foregroundColor(.red)
                                 .multilineTextAlignment(.center)
                                 .padding(.horizontal, 40)

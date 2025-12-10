@@ -11,10 +11,13 @@ struct FeedLayoutConfig {
     static let postsBeforeCarousel: Int = 4
 
     /// 是否在 Feed 开始时先显示轮播图
-    static let showCarouselFirst: Bool = true
+    static let showCarouselFirst: Bool = false
 
     /// 是否启用轮播图插入
     static let carouselEnabled: Bool = true
+
+    /// 是否只显示一次轮播图（4个帖子后显示一次，之后全是帖子）
+    static let showCarouselOnlyOnce: Bool = true
 }
 
 // MARK: - Feed Item Type
@@ -48,11 +51,13 @@ struct FeedLayoutBuilder {
 
         var items: [FeedItemType] = []
         var carouselId = 0
+        var hasInsertedCarousel = false
 
         // 是否先显示轮播图
         if FeedLayoutConfig.showCarouselFirst {
             items.append(.carousel(id: carouselId))
             carouselId += 1
+            hasInsertedCarousel = true
         }
 
         // 遍历帖子，每 N 个帖子后插入轮播图
@@ -62,8 +67,13 @@ struct FeedLayoutBuilder {
             // 检查是否需要插入轮播图 (每 N 个帖子后)
             let postNumber = index + 1
             if postNumber % FeedLayoutConfig.postsBeforeCarousel == 0 {
+                // 如果只显示一次轮播图，检查是否已经插入过
+                if FeedLayoutConfig.showCarouselOnlyOnce && hasInsertedCarousel {
+                    continue
+                }
                 items.append(.carousel(id: carouselId))
                 carouselId += 1
+                hasInsertedCarousel = true
             }
         }
 

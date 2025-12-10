@@ -98,18 +98,6 @@ struct SettingsView: View {
                                     .padding(.leading, 60)
 
                                 SettingsRow(
-                                    icon: "person.text.rectangle",
-                                    title: "My Account",
-                                    showChevron: true,
-                                    action: {
-                                        currentPage = .accounts
-                                    }
-                                )
-
-                                Divider()
-                                    .padding(.leading, 60)
-
-                                SettingsRow(
                                     icon: "iphone",
                                     title: "Devices",
                                     showChevron: true,

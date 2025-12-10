@@ -16,7 +16,6 @@ enum AppPage {
     case alice
     case setting
     case profileSetting
-    case accounts
     case devices
     case inviteFriends
     case myChannels
@@ -24,4 +23,5 @@ enum AppPage {
     case newChat
     case groupChat
     case write
+    case getVerified
 }

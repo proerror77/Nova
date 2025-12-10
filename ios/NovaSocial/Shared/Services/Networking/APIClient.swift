@@ -18,15 +18,7 @@ class APIClient {
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = APIConfig.current.timeout
         config.timeoutIntervalForResource = APIConfig.current.resourceTimeout
-        #if DEBUG
-        if APIConfig.current == .staging && APIFeatureFlags.allowInsecureStagingCert {
-            self.session = URLSession(configuration: config, delegate: InsecureStagingURLSessionDelegate.shared, delegateQueue: nil)
-        } else {
-            self.session = URLSession(configuration: config)
-        }
-        #else
         self.session = URLSession(configuration: config)
-        #endif
     }
 
     func setAuthToken(_ token: String) {
@@ -42,11 +34,6 @@ class APIClient {
         var request = URLRequest(url: url)
         request.httpMethod = method
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-
-        // Set Host header for staging Ingress routing
-        if APIConfig.current == .staging {
-            request.setValue("api.nova.local", forHTTPHeaderField: "Host")
-        }
 
         if let token = authToken {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
@@ -70,11 +57,6 @@ class APIClient {
         var request = URLRequest(url: url)
         request.httpMethod = method
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-
-        // Set Host header for staging Ingress routing
-        if APIConfig.current == .staging {
-            request.setValue("api.nova.local", forHTTPHeaderField: "Host")
-        }
 
         if let token = authToken {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
@@ -124,12 +106,7 @@ class APIClient {
 
             #if DEBUG
             if APIFeatureFlags.enableRequestLogging {
-                let bodyPreview: String = {
-                    guard let dataString = String(data: data, encoding: .utf8) else { return "" }
-                    let trimmed = dataString.replacingOccurrences(of: "\n", with: " ")
-                    return trimmed.prefix(500) + (trimmed.count > 500 ? "…" : "")
-                }()
-                print("[\(request.httpMethod ?? "?")] \(request.url?.absoluteString ?? "?") -> \(httpResponse.statusCode) body: \(bodyPreview)")
+                print("[\(request.httpMethod ?? "?")] \(request.url?.absoluteString ?? "?") -> \(httpResponse.statusCode)")
             }
             #endif
 
@@ -211,20 +188,3 @@ class APIClient {
         }
     }
 }
-
-#if DEBUG
-// MARK: - Staging TLS override (DEBUG only)
-final class InsecureStagingURLSessionDelegate: NSObject, URLSessionDelegate {
-    static let shared = InsecureStagingURLSessionDelegate()
-
-    func urlSession(_ session: URLSession, didReceive challenge: URLAuthenticationChallenge, completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
-        if APIConfig.current == .staging && APIFeatureFlags.allowInsecureStagingCert,
-           let trust = challenge.protectionSpace.serverTrust {
-            // Accept even if hostname/cert mismatch. DEBUG + staging only.
-            completionHandler(.useCredential, URLCredential(trust: trust))
-            return
-        }
-        completionHandler(.performDefaultHandling, nil)
-    }
-}
-#endif

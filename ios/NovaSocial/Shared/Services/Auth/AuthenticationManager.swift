@@ -82,20 +82,11 @@ class AuthenticationManager: ObservableObject {
     private func loadCurrentUser(userId: String) async throws {
         do {
             self.currentUser = try await identityService.getUser(userId: userId)
-        } catch let apiError as APIError {
-            #if DEBUG
-            print("[Auth] Failed to load user profile: \(apiError)")
-            #endif
-            // If the user no longer exists in the current backend (e.g. environment switch),
-            // treat it as an invalid session and force logout so the app can re-authenticate.
-            if case .notFound = apiError {
-                await logout()
-            }
-            // For other errors, keep auth state but user will be nil
         } catch {
             #if DEBUG
             print("[Auth] Failed to load user profile: \(error)")
             #endif
+            // Keep auth state but user will be nil
         }
     }
 

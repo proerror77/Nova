@@ -140,7 +140,7 @@ struct LocationMessageView: View {
                 .disabled(true)
 
             Text("My Location")
-                .font(Font.custom("Helvetica Neue", size: 12))
+                .font(.system(size: 12))
                 .foregroundColor(DesignTokens.textPrimary)
         }
         .padding(8)
@@ -177,7 +177,7 @@ struct MessageBubbleView: View {
             DefaultAvatarView(size: 50)
 
             Text(message.text)
-                .font(Font.custom("Helvetica Neue", size: 18))
+                .font(.system(size: 18))
                 .foregroundColor(DesignTokens.textPrimary)
                 .padding(EdgeInsets(top: 10, leading: 16, bottom: 10, trailing: 16))
                 .background(DesignTokens.chatBubbleOther)
@@ -200,7 +200,7 @@ struct MessageBubbleView: View {
             LocationMessageView(location: location)
         } else {
             Text(message.text)
-                .font(Font.custom("Helvetica Neue", size: 18))
+                .font(.system(size: 18))
                 .foregroundColor(DesignTokens.textPrimary)
                 .padding(EdgeInsets(top: 10, leading: 16, bottom: 10, trailing: 16))
                 .background(DesignTokens.chatBubbleOther)
@@ -228,7 +228,7 @@ struct AttachmentOptionButton: View {
                         .foregroundColor(DesignTokens.textPrimary)
                 )
             Text(title)
-                .font(Font.custom("Helvetica Neue", size: 12))
+                .font(.system(size: 12))
                 .lineSpacing(20)
                 .foregroundColor(DesignTokens.textPrimary)
         }
@@ -377,7 +377,7 @@ struct ChatView: View {
                 }
 
                 Text(userName)
-                    .font(Font.custom("Helvetica Neue", size: 20).weight(.medium))
+                    .font(.system(size: 20, weight: .medium))
                     .foregroundColor(DesignTokens.textPrimary)
             }
             .contentShape(Rectangle())
@@ -426,7 +426,7 @@ struct ChatView: View {
                     }
 
                     Text(currentDateString())
-                        .font(Font.custom("Helvetica Neue", size: 12))
+                        .font(.system(size: 12))
                         .foregroundColor(DesignTokens.textMuted)
                         .padding(.top, 16)
 
@@ -498,7 +498,7 @@ struct ChatView: View {
                         .foregroundColor(DesignTokens.textMuted)
 
                     TextField("Type a message...", text: $messageText)
-                        .font(Font.custom("Helvetica Neue", size: 16))
+                        .font(.system(size: 16))
                         .foregroundColor(DesignTokens.textPrimary)
                         .focused($isInputFocused)
                         .onSubmit {
@@ -556,7 +556,7 @@ struct ChatView: View {
                                     .foregroundColor(DesignTokens.textPrimary)
                             )
                         Text("Album")
-                            .font(Font.custom("Helvetica Neue", size: 12))
+                            .font(.system(size: 12))
                             .lineSpacing(20)
                             .foregroundColor(DesignTokens.textPrimary)
                     }

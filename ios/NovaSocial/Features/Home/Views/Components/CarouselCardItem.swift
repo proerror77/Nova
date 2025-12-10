@@ -24,7 +24,7 @@ struct CarouselCardItem: View {
                 HStack(spacing: 10) {
                     // Rank badge
                     Text(rankNumber)
-                        .font(Font.custom("Helvetica Neue", size: 20).weight(.medium))
+                        .font(.system(size: 20, weight: .medium))
                         .foregroundColor(.white)
                         .frame(width: 35, height: 35)
                         .background(Color(red: 0.82, green: 0.11, blue: 0.26))
@@ -33,12 +33,12 @@ struct CarouselCardItem: View {
                     // Name and company
                     VStack(alignment: .leading, spacing: 0) {
                         Text(name)
-                            .font(Font.custom("Helvetica Neue", size: 18).weight(.bold))
+                            .font(.system(size: 18, weight: .bold))
                             .foregroundColor(Color(red: 0.25, green: 0.25, blue: 0.25))
                             .lineLimit(1)
                             .truncationMode(.tail)
                         Text(company)
-                            .font(Font.custom("Helvetica Neue", size: 14).weight(.medium))
+                            .font(.system(size: 14, weight: .medium))
                             .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.54))
                             .lineLimit(1)
                             .truncationMode(.tail)
@@ -54,7 +54,7 @@ struct CarouselCardItem: View {
                         .scaledToFit()
                         .frame(width: 15, height: 15)
                     Text(votes)
-                        .font(Font.custom("Inter", size: 9))
+                        .font(.system(size: 9))
                         .lineSpacing(13)
                         .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
                 }
@@ -76,25 +76,21 @@ struct CarouselCardItem: View {
         // MARK: - 标题部分
         HStack {
             Text("Hottest Banker in H.K.")
-                .font(Font.custom("Helvetica Neue", size: 20).weight(.bold))
+                .font(.system(size: 20, weight: .bold))
                 .foregroundColor(.black)
-                .padding(.leading, 20) // ← 调整标题左边距
 
             Spacer()
 
             Button(action: {}) {
-                Text("See all")
-                    .font(Font.custom("Helvetica Neue", size: 10).weight(.medium))
-                    .foregroundColor(.white)
-                    .padding(EdgeInsets(top: 6, leading: 12, bottom: 6, trailing: 12))
-                    .background(Color(red: 0.82, green: 0.11, blue: 0.26))
-                    .cornerRadius(5)
+                Text("View more")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundColor(.black)
             }
-            .padding(.trailing, 0) // ← 调整按钮右边距
         }
+        .frame(maxWidth: .infinity)
         .padding(.horizontal, 16)
-        .padding(.top, 0) // ← 调整标题区域与上方的间距
-        .padding(.bottom, 5) // ← 调整标题区域与下方卡片的间距
+        .padding(.top, 0)
+        .padding(.bottom, 5)
 
         // MARK: - 轮播卡片容器
         ScrollView(.horizontal, showsIndicators: false) {

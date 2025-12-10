@@ -42,7 +42,7 @@ struct ProfileTopNavigationBar: View {
             Button(action: onUsernameTapped) {
                 HStack(spacing: layout.usernameChevronSpacing) {
                     Text(username)
-                        .font(Font.custom("Helvetica Neue", size: layout.usernameFontSize).weight(.medium))
+                        .font(.system(size: layout.usernameFontSize, weight: .medium))
                         .lineSpacing(19)
                         .foregroundColor(layout.textColor)
 

@@ -37,11 +37,11 @@ struct NameSelectorModal: View {
                     // 标题
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Preferred name display")
-                            .font(Font.custom("Helvetica Neue", size: 20).weight(.medium))
+                            .font(.system(size: 20, weight: .medium))
                             .foregroundColor(Color(red: 0.18, green: 0.18, blue: 0.18))
 
                         Text("Choose how your name will appear when posting")
-                            .font(Font.custom("Helvetica Neue", size: 12))
+                            .font(.system(size: 12))
                             .foregroundColor(Color(red: 0.68, green: 0.68, blue: 0.68))
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -64,11 +64,11 @@ struct NameSelectorModal: View {
 
                             VStack(alignment: .leading, spacing: 5) {
                                 Text(authManager.currentUser?.displayName ?? authManager.currentUser?.username ?? "User")
-                                    .font(Font.custom("Helvetica Neue", size: 19).weight(.bold))
+                                    .font(.system(size: 19, weight: .bold))
                                     .foregroundColor(.black)
 
                                 Text(authManager.currentUser?.username ?? "username")
-                                    .font(Font.custom("Helvetica Neue", size: 15))
+                                    .font(.system(size: 15))
                                     .foregroundColor(Color(red: 0.54, green: 0.54, blue: 0.54))
                             }
 
@@ -97,11 +97,11 @@ struct NameSelectorModal: View {
 
                             VStack(alignment: .leading, spacing: 5) {
                                 Text("Dreamer")
-                                    .font(Font.custom("Helvetica Neue", size: 19).weight(.bold))
+                                    .font(.system(size: 19, weight: .bold))
                                     .foregroundColor(.black)
 
                                 Text("Alias name")
-                                    .font(Font.custom("Helvetica Neue", size: 15))
+                                    .font(.system(size: 15))
                                     .foregroundColor(Color(red: 0.54, green: 0.54, blue: 0.54))
                             }
 
@@ -181,4 +181,77 @@ struct NameSelectorModal: View {
         selectedNameType: $selectedType
     )
     .environmentObject(AuthenticationManager.shared)
+}
+
+// MARK: - Save Draft Modal
+struct SaveDraftModal: View {
+    @Binding var isPresented: Bool
+    var onNo: () -> Void
+    var onYes: () -> Void
+
+    var body: some View {
+        ZStack {
+            // 背景遮罩
+            Color.black.opacity(0.4)
+                .ignoresSafeArea()
+                .onTapGesture {
+                    // 点击遮罩不关闭，必须选择 Yes 或 No
+                }
+
+            // 弹窗内容
+            VStack(spacing: 0) {
+                Text("Do you want to save it")
+                    .font(.system(size: 17, weight: .semibold))
+                    .lineSpacing(20)
+                    .foregroundColor(.black)
+                    .padding(.top, 20)
+                    .padding(.bottom, 16)
+
+                Divider()
+
+                HStack(spacing: 0) {
+                    Button(action: {
+                        withAnimation(.easeOut(duration: 0.2)) {
+                            isPresented = false
+                        }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                            onNo()
+                        }
+                    }) {
+                        Text("No")
+                            .font(.system(size: 17, weight: .medium))
+                            .foregroundColor(.black)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 44)
+                    }
+
+                    Divider()
+                        .frame(height: 44)
+
+                    Button(action: {
+                        withAnimation(.easeOut(duration: 0.2)) {
+                            isPresented = false
+                        }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                            onYes()
+                        }
+                    }) {
+                        Text("Yes")
+                            .font(.system(size: 17, weight: .medium))
+                            .foregroundColor(Color(red: 0.87, green: 0.11, blue: 0.26))
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 44)
+                    }
+                }
+            }
+            .frame(width: 270)
+            .background(
+                RoundedRectangle(cornerRadius: 14)
+                    .fill(Color(red: 0.97, green: 0.97, blue: 0.97))
+            )
+            .scaleEffect(isPresented ? 1 : 1.1)
+            .opacity(isPresented ? 1 : 0)
+        }
+        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: isPresented)
+    }
 }

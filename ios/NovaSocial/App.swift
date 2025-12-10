@@ -90,9 +90,6 @@ struct ICEREDApp: App {
                     case .profileSetting:
                         ProfileSettingView(currentPage: $currentPage)
                             .transition(.identity)
-                    case .accounts:
-                        AccountsView(currentPage: $currentPage)
-                            .transition(.identity)
                     case .devices:
                         DevicesView(currentPage: $currentPage)
                             .transition(.identity)
@@ -110,6 +107,9 @@ struct ICEREDApp: App {
                             .transition(.identity)
                     case .groupChat:
                         GroupChatView(currentPage: $currentPage, groupName: "Group Chat")
+                            .transition(.identity)
+                    case .getVerified:
+                        GetVerifiedView(currentPage: $currentPage)
                             .transition(.identity)
                     default:
                         HomeView(currentPage: $currentPage)

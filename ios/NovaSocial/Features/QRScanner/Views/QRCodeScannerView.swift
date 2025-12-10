@@ -34,7 +34,7 @@ struct QRCodeScannerView: View {
 
                 // 扫描提示
                 Text("Align QR code within frame")
-                    .font(Font.custom("Helvetica Neue", size: 16))
+                    .font(.system(size: 16))
                     .foregroundColor(.white)
                     .padding()
                     .background(Color.black.opacity(0.6))

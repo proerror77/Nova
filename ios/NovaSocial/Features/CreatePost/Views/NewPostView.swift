@@ -18,7 +18,12 @@ struct NewPostView: View {
     @State private var selectedNameType: NameDisplayType = .realName  // 选择的名称类型
     @State private var showLocationPicker = false  // 控制位置选择弹窗
     @State private var selectedLocation = ""  // 选择的位置
-    @FocusState private var isTextFieldFocused: Bool
+    @State private var isTextEditorFocused: Bool = false  // 用于自定义 TextView 的焦点状态
+    @State private var showSaveDraftModal: Bool = false  // 控制保存草稿弹窗
+
+    // Draft storage keys
+    private let draftTextKey = "NewPostDraftText"
+    private let draftImagesKey = "NewPostDraftImages"
 
     // Services
     private let mediaService = MediaService()
@@ -48,10 +53,8 @@ struct NewPostView: View {
                         .font(.system(size: 12))
                         .foregroundColor(.red)
                         .padding(.horizontal, 16)
-                        .padding(.top, 8)
+                        .padding(.vertical, 8)
                 }
-
-                postButton
             }
         }
         .sheet(isPresented: $showCamera) {
@@ -78,6 +81,9 @@ struct NewPostView: View {
             // 如果有初始图片，添加到selectedImages
             if let image = initialImage, selectedImages.isEmpty {
                 selectedImages = [image]
+            } else if initialImage == nil {
+                // 没有初始图片时，尝试加载草稿
+                loadDraft()
             }
         }
         .overlay {
@@ -86,6 +92,23 @@ struct NewPostView: View {
                 NameSelectorModal(
                     isPresented: $showNameSelector,
                     selectedNameType: $selectedNameType
+                )
+            }
+
+            // MARK: - 保存草稿弹窗
+            if showSaveDraftModal {
+                SaveDraftModal(
+                    isPresented: $showSaveDraftModal,
+                    onNo: {
+                        // 不保存，清除草稿并关闭
+                        clearDraft()
+                        showNewPost = false
+                    },
+                    onYes: {
+                        // 保存草稿并关闭
+                        saveDraft()
+                        showNewPost = false
+                    }
                 )
             }
         }
@@ -102,10 +125,17 @@ struct NewPostView: View {
         HStack {
             // Cancel 按钮
             Button(action: {
-                showNewPost = false
+                // 如果有内容，显示保存确认弹窗
+                if hasContent {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                        showSaveDraftModal = true
+                    }
+                } else {
+                    showNewPost = false
+                }
             }) {
                 Text("Cancel")
-                    .font(Font.custom("Helvetica Neue", size: 14))
+                    .font(.system(size: 14))
                     .lineSpacing(20)
                     .foregroundColor(.black)
             }
@@ -114,21 +144,31 @@ struct NewPostView: View {
 
             // 标题
             Text("Newpost")
-                .font(Font.custom("Helvetica Neue", size: 18).weight(.medium))
+                .font(.system(size: 18, weight: .medium))
                 .lineSpacing(20)
                 .foregroundColor(.black)
 
             Spacer()
 
-            // Draft 按钮
+            // Post 按钮
             Button(action: {
-                // Draft action
+                Task {
+                    await submitPost()
+                }
             }) {
-                Text("Draft")
-                    .font(Font.custom("Helvetica Neue", size: 14))
-                    .lineSpacing(20)
-                    .foregroundColor(Color(red: 0.53, green: 0.53, blue: 0.53))
+                if isPosting {
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: Color(red: 0.87, green: 0.11, blue: 0.26)))
+                        .scaleEffect(0.8)
+                } else {
+                    Text("Post")
+                        .font(.system(size: 14))
+                        .lineSpacing(20)
+                        .foregroundColor(canPost ? Color(red: 0.87, green: 0.11, blue: 0.26) : Color(red: 0.53, green: 0.53, blue: 0.53))
+                }
             }
+            .disabled(!canPost || isPosting)
+            .frame(width: 36)
         }
         .frame(height: DesignTokens.topBarHeight)
         .padding(.horizontal, 16)
@@ -203,7 +243,7 @@ struct NewPostView: View {
 
             // 显示名称 - 根据选择的类型显示真实名称或别名
             Text(displayedName)
-                .font(Font.custom("Helvetica Neue", size: 14).weight(.medium))
+                .font(.system(size: 14, weight: .medium))
                 .lineSpacing(20)
                 .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
 
@@ -245,7 +285,7 @@ struct NewPostView: View {
                         Image(uiImage: image)
                             .resizable()
                             .scaledToFill()
-                            .frame(width: 255, height: 300)
+                            .frame(width: 239, height: 290)
                             .cornerRadius(10)
                             .clipped()
 
@@ -271,7 +311,7 @@ struct NewPostView: View {
                     ZStack {
                         Rectangle()
                             .foregroundColor(.clear)
-                            .frame(width: 255, height: 300)
+                            .frame(width: selectedImages.isEmpty ? 239 : 100, height: selectedImages.isEmpty ? 290 : 210)
                             .background(Color(red: 0.91, green: 0.91, blue: 0.91))
                             .cornerRadius(10)
 
@@ -310,24 +350,52 @@ struct NewPostView: View {
 
     // MARK: - Text Input Section
     private var textInputSection: some View {
-        ZStack(alignment: .topLeading) {
-            if postText.isEmpty {
-                Text("What do you want to talk about?")
-                    .font(Font.custom("Helvetica Neue", size: 14))
-                    .lineSpacing(20)
-                    .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
-                    .padding(.leading, 5)
-                    .padding(.top, 8)
-                    .allowsHitTesting(false)
-            }
+        VStack(alignment: .leading, spacing: 0) {
+            ZStack(alignment: .topLeading) {
+                // Enhance with alice 浮动气泡 (仿 AutoFill 样式)
+                if isTextEditorFocused {
+                    Button(action: {
+                        // TODO: 后续添加 AI 功能
+                    }) {
+                        HStack(spacing: 6) {
+                            Image("alice-center-icon")
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 14, height: 14)
 
-            TextEditor(text: $postText)
-                .font(Font.custom("Helvetica Neue", size: 14))
-                .foregroundColor(Color(red: 0.38, green: 0.37, blue: 0.37))
+                            Text("Enhance with alice")
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundColor(.black)
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .background(
+                            Capsule()
+                                .fill(Color.white)
+                                .shadow(color: Color.black.opacity(0.15), radius: 8, x: 0, y: 2)
+                        )
+                    }
+                    .offset(y: -45)
+                    .transition(.asymmetric(
+                        insertion: .scale(scale: 0.8, anchor: .bottom).combined(with: .opacity),
+                        removal: .scale(scale: 0.8, anchor: .bottom).combined(with: .opacity)
+                    ))
+                }
+
+                NoAutoFillTextView(
+                    text: $postText,
+                    placeholder: "What do you want to talk about?",
+                    textColor: UIColor(red: 0.38, green: 0.37, blue: 0.37, alpha: 1),
+                    placeholderColor: UIColor(red: 0.38, green: 0.37, blue: 0.37, alpha: 1),
+                    font: .systemFont(ofSize: 14),
+                    onFocusChange: { focused in
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                            isTextEditorFocused = focused
+                        }
+                    }
+                )
                 .frame(height: 150)
-                .scrollContentBackground(.hidden)
-                .background(Color.clear)
-                .focused($isTextFieldFocused)
+            }
         }
         .padding(.horizontal, 16)
         .padding(.top, 16)
@@ -338,35 +406,18 @@ struct NewPostView: View {
         HStack(spacing: 10) {
             HStack(spacing: 3) {
                 Text("#")
-                    .font(Font.custom("Helvetica Neue", size: 16))
+                    .font(.system(size: 16))
                     .lineSpacing(20)
                     .foregroundColor(Color(red: 0.27, green: 0.27, blue: 0.27))
 
                 Text("Channels")
-                    .font(Font.custom("Helvetica Neue", size: 10))
+                    .font(.system(size: 10))
                     .lineSpacing(20)
                     .foregroundColor(Color(red: 0.27, green: 0.27, blue: 0.27))
             }
             .padding(.horizontal, 16)
             .frame(height: 26)
             .background(Color(red: 0.91, green: 0.91, blue: 0.91))
-            .cornerRadius(24)
-
-            HStack(spacing: 3) {
-                Image("alice-center-icon")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 11, height: 11)
-                    .colorMultiply(Color(red: 0.87, green: 0.11, blue: 0.26))
-
-                Text("Enhance with alice")
-                    .font(Font.custom("Helvetica Neue", size: 10))
-                    .lineSpacing(20)
-                    .foregroundColor(Color(red: 0.87, green: 0.11, blue: 0.26))
-            }
-            .padding(.horizontal, 12)
-            .frame(height: 26)
-            .background(Color(red: 0.97, green: 0.92, blue: 0.92))
             .cornerRadius(24)
 
             Spacer()
@@ -384,7 +435,7 @@ struct NewPostView: View {
                 .frame(width: 20, height: 20)
 
             Text(selectedLocation.isEmpty ? "Check in" : selectedLocation)
-                .font(Font.custom("Helvetica Neue", size: 16))
+                .font(.system(size: 16))
                 .lineSpacing(40.94)
                 .foregroundColor(.black)
 
@@ -411,10 +462,17 @@ struct NewPostView: View {
                 .frame(width: 20, height: 20)
                 .colorMultiply(.black)
 
-            Text("Invite alice")
-                .font(Font.custom("Helvetica Neue", size: 16))
-                .lineSpacing(40.94)
-                .foregroundColor(.black)
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Invite alice")
+                    .font(.system(size: 16))
+                    .lineSpacing(40.94)
+                    .foregroundColor(.black)
+
+                Text("add AI insight to this conversation")
+                    .font(.system(size: 12))
+                    .lineSpacing(40.94)
+                    .foregroundColor(Color(red: 0.27, green: 0.27, blue: 0.27))
+            }
 
             Spacer()
 
@@ -448,7 +506,7 @@ struct NewPostView: View {
             .frame(width: 9.60, height: 9.60)
 
             Text("Invite Alice to join the discussion")
-                .font(Font.custom("Helvetica Neue", size: 12).weight(.medium))
+                .font(.system(size: 12, weight: .medium))
                 .lineSpacing(20)
                 .foregroundColor(Color(red: 0.82, green: 0.13, blue: 0.25))
 
@@ -458,38 +516,43 @@ struct NewPostView: View {
         .padding(.bottom, 20)
     }
 
-    // MARK: - Post Button
-    private var postButton: some View {
-        Button(action: {
-            Task {
-                await submitPost()
-            }
-        }) {
-            HStack {
-                if isPosting {
-                    ProgressView()
-                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                        .scaleEffect(0.8)
-                }
-                Text(isPosting ? "Posting..." : "Post")
-                    .font(Font.custom("Helvetica Neue", size: 16).weight(.medium))
-                    .lineSpacing(20)
-                    .foregroundColor(.white)
-            }
-            .frame(maxWidth: .infinity)
-            .frame(height: 46)
-            .background(canPost ? Color(red: 0.87, green: 0.11, blue: 0.26) : Color.gray)
-            .cornerRadius(31.50)
-        }
-        .disabled(!canPost || isPosting)
-        .padding(.horizontal, 16)
-        .padding(.vertical, 16)
-        .background(Color(red: 0.97, green: 0.97, blue: 0.97))
-    }
-
     // MARK: - 是否可以发布
     private var canPost: Bool {
         !postText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !selectedImages.isEmpty
+    }
+
+    // MARK: - 是否有内容（用于判断是否显示保存弹窗）
+    private var hasContent: Bool {
+        !postText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !selectedImages.isEmpty
+    }
+
+    // MARK: - 保存草稿
+    private func saveDraft() {
+        // 保存文本
+        UserDefaults.standard.set(postText, forKey: draftTextKey)
+
+        // 保存图片（转为 Data 数组）
+        let imageDataArray = selectedImages.compactMap { $0.jpegData(compressionQuality: 0.8) }
+        UserDefaults.standard.set(imageDataArray, forKey: draftImagesKey)
+    }
+
+    // MARK: - 清除草稿
+    private func clearDraft() {
+        UserDefaults.standard.removeObject(forKey: draftTextKey)
+        UserDefaults.standard.removeObject(forKey: draftImagesKey)
+    }
+
+    // MARK: - 加载草稿
+    private func loadDraft() {
+        // 加载文本
+        if let savedText = UserDefaults.standard.string(forKey: draftTextKey) {
+            postText = savedText
+        }
+
+        // 加载图片
+        if let imageDataArray = UserDefaults.standard.array(forKey: draftImagesKey) as? [Data] {
+            selectedImages = imageDataArray.compactMap { UIImage(data: $0) }
+        }
     }
 
     // MARK: - 收起键盘
@@ -613,6 +676,8 @@ struct NewPostView: View {
             // Step 3: 成功后关闭页面并触发刷新回调
             await MainActor.run {
                 isPosting = false
+                // 发帖成功后清除草稿
+                clearDraft()
                 showNewPost = false
                 // 调用成功回调，将创建的Post传递给 HomeView
                 onPostSuccess?(createdPost)
@@ -662,6 +727,83 @@ struct ImagePicker: UIViewControllerRepresentable {
 
         func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
             parent.presentationMode.wrappedValue.dismiss()
+        }
+    }
+}
+
+// MARK: - Custom TextView without AutoFill
+struct NoAutoFillTextView: UIViewRepresentable {
+    @Binding var text: String
+    var placeholder: String
+    var textColor: UIColor
+    var placeholderColor: UIColor
+    var font: UIFont
+    var onFocusChange: ((Bool) -> Void)?
+
+    func makeUIView(context: Context) -> UITextView {
+        let textView = UITextView()
+        textView.delegate = context.coordinator
+        textView.font = font
+        textView.textColor = text.isEmpty ? placeholderColor : textColor
+        textView.text = text.isEmpty ? placeholder : text
+        textView.backgroundColor = .clear
+
+        // 彻底禁用 AutoFill
+        textView.textContentType = .init(rawValue: "")
+        textView.autocorrectionType = .no
+        textView.autocapitalizationType = .sentences
+        textView.spellCheckingType = .no
+        textView.smartQuotesType = .no
+        textView.smartDashesType = .no
+        textView.smartInsertDeleteType = .no
+
+        // iOS 17+ 禁用 inline predictions
+        if #available(iOS 17.0, *) {
+            textView.inlinePredictionType = .no
+        }
+
+        return textView
+    }
+
+    func updateUIView(_ uiView: UITextView, context: Context) {
+        if text.isEmpty && !uiView.isFirstResponder {
+            uiView.text = placeholder
+            uiView.textColor = placeholderColor
+        } else if !text.isEmpty {
+            uiView.text = text
+            uiView.textColor = textColor
+        }
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+
+    class Coordinator: NSObject, UITextViewDelegate {
+        var parent: NoAutoFillTextView
+
+        init(_ parent: NoAutoFillTextView) {
+            self.parent = parent
+        }
+
+        func textViewDidBeginEditing(_ textView: UITextView) {
+            if textView.text == parent.placeholder {
+                textView.text = ""
+                textView.textColor = parent.textColor
+            }
+            parent.onFocusChange?(true)
+        }
+
+        func textViewDidEndEditing(_ textView: UITextView) {
+            if textView.text.isEmpty {
+                textView.text = parent.placeholder
+                textView.textColor = parent.placeholderColor
+            }
+            parent.onFocusChange?(false)
+        }
+
+        func textViewDidChange(_ textView: UITextView) {
+            parent.text = textView.text == parent.placeholder ? "" : textView.text
         }
     }
 }

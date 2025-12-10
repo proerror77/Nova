@@ -21,6 +21,12 @@ struct HomeView: View {
     @State private var selectedImage: UIImage?
     @State private var showGenerateImage = false
     @State private var showWrite = false
+    @State private var selectedPostForDetail: FeedPost?
+    @State private var showPostDetail = false
+    @State private var selectedChannel: String = "Fashion"  // 当前选中的 Channel
+
+    // Channel 列表
+    private let channels = ["Fashion", "Travel", "Fitness", "Pets", "Study", "Career", "Tech"]
 
     var body: some View {
         ZStack {
@@ -47,6 +53,12 @@ struct HomeView: View {
             } else if showWrite {
                 WriteView(showWrite: $showWrite, currentPage: $currentPage)
                     .transition(.identity)
+            } else if showPostDetail, let post = selectedPostForDetail {
+                PostDetailView(post: post, onDismiss: {
+                    showPostDetail = false
+                    selectedPostForDetail = nil
+                })
+                .transition(.identity)
             } else {
                 homeContent
             }
@@ -75,6 +87,7 @@ struct HomeView: View {
         .animation(.none, value: showNewPost)
         .animation(.none, value: showGenerateImage)
         .animation(.none, value: showWrite)
+        .animation(.none, value: showPostDetail)
         .navigationBarBackButtonHidden(true)
         .sheet(isPresented: $showReportView) {
             ReportModal(isPresented: $showReportView, showThankYouView: $showThankYouView)
@@ -134,14 +147,19 @@ struct HomeView: View {
                 .padding(.horizontal, 16)
                 .background(DesignTokens.surface)
 
-                // MARK: - 顶部分割线
-                Divider()
-                    .frame(height: 0.5)
-                    .background(DesignTokens.dividerColor)
+                // MARK: - Channel 栏
+                channelBar
 
                 // MARK: - 可滚动内容区
                 ScrollView {
                         VStack(spacing: DesignTokens.spacing20) {
+                            // MARK: - Promo Banner (活动/广告区域)
+                            PromoBannerView(onTap: {
+                                // TODO: 处理广告点击事件
+                            })
+                            .frame(maxWidth: .infinity)
+                            .padding(.horizontal, -16) // 突破外层 padding，贴紧屏幕边缘
+
                             // MARK: - Loading State
                             if feedViewModel.isLoading && feedViewModel.posts.isEmpty {
                                 ProgressView("Loading feed...")
@@ -199,6 +217,10 @@ struct HomeView: View {
                                         onShare: { Task { await feedViewModel.sharePost(postId: post.id) } },
                                         onBookmark: { feedViewModel.toggleBookmark(postId: post.id) }
                                     )
+                                    .onTapGesture {
+                                        selectedPostForDetail = post
+                                        showPostDetail = true
+                                    }
                                     .onAppear {
                                         // Auto-load more when reaching near the end (3 posts before)
                                         if index >= feedViewModel.posts.count - 3 && feedViewModel.hasMore && !feedViewModel.isLoadingMore {
@@ -272,6 +294,29 @@ struct HomeView: View {
                     .padding(.top, 80)
             }
         }
+    }
+
+    // MARK: - Channel Bar
+    private var channelBar: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 24) {
+                ForEach(channels, id: \.self) { channel in
+                    Button(action: {
+                        selectedChannel = channel
+                        // TODO: 根据 channel 筛选 feed
+                    }) {
+                        Text(channel)
+                            .font(.system(size: 14))
+                            .lineSpacing(20)
+                            .foregroundColor(selectedChannel == channel ? .black : Color(red: 0.53, green: 0.53, blue: 0.53))
+                            .fontWeight(selectedChannel == channel ? .medium : .regular)
+                    }
+                }
+            }
+            .padding(.horizontal, 16)
+        }
+        .frame(height: 36)
+        .background(.white)
     }
 }
 

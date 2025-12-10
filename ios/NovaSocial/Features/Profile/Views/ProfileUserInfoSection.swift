@@ -78,14 +78,14 @@ struct ProfileUserInfoSection: View {
 
                 // 用户名（始终显示，未填写时显示 "User"）
                 Text(displayUsername)
-                    .font(Font.custom("Helvetica Neue", size: layout.usernameFontSize).weight(.bold))
+                    .font(.system(size: layout.usernameFontSize, weight: .bold))
                     .lineSpacing(19)
                     .foregroundColor(layout.textColor)
 
                 // 位置信息（未填写时不显示）
                 if let location = location, !location.isEmpty {
                     Text(location)
-                        .font(Font.custom("Helvetica Neue", size: layout.locationFontSize))
+                        .font(.system(size: layout.locationFontSize))
                         .lineSpacing(19)
                         .foregroundColor(layout.textColor)
                 }
@@ -101,7 +101,7 @@ struct ProfileUserInfoSection: View {
                         .frame(width: layout.blueVIconSize, height: layout.blueVIconSize)
 
                     Text(profession)
-                        .font(Font.custom("Helvetica Neue", size: layout.professionFontSize).weight(.light))
+                        .font(.system(size: layout.professionFontSize, weight: .light))
                         .lineSpacing(19)
                         .foregroundColor(layout.secondaryTextColor)
                 }
@@ -186,12 +186,12 @@ struct ProfileUserInfoSection: View {
     private func statsItem(label: String, value: String) -> some View {
         VStack(alignment: .center, spacing: 1) {
             Text(LocalizedStringKey(label))
-                .font(Font.custom("Helvetica Neue", size: layout.statsLabelFontSize))
+                .font(.system(size: layout.statsLabelFontSize))
                 .lineSpacing(19)
                 .foregroundColor(layout.textColor)
 
             Text(value)
-                .font(Font.custom("Helvetica Neue", size: layout.statsValueFontSize))
+                .font(.system(size: layout.statsValueFontSize))
                 .lineSpacing(19)
                 .foregroundColor(layout.textColor)
         }

@@ -86,11 +86,11 @@ struct PostAsOptionRow: View {
                 // 名称和副标题 - 放大字体
                 VStack(alignment: .leading, spacing: 4) {
                     Text(displayName)
-                        .font(Font.custom("Helvetica Neue", size: 16).weight(.bold))
+                        .font(.system(size: 16, weight: .bold))
                         .foregroundColor(DesignTokens.textPrimary)
 
                     Text(subtitle)
-                        .font(Font.custom("Helvetica Neue", size: 13))
+                        .font(.system(size: 13))
                         .foregroundColor(DesignTokens.textSecondary)
                 }
 
