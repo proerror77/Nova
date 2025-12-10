@@ -164,8 +164,19 @@ async fn main() -> Result<()> {
     let counter_service = CounterService::new(redis_conn.clone(), pg_pool.clone());
     info!("✅ Counter service initialized");
 
+    // Initialize gRPC client for graph-service
+    let grpc_cfg = GrpcClientConfig::from_env()
+        .map_err(|e| anyhow::anyhow!("Failed to load gRPC client config: {}", e))?;
+    let grpc_pool = Arc::new(
+        GrpcClientPool::new(&grpc_cfg)
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to create gRPC client pool: {}", e))?,
+    );
+    let graph_client = grpc_pool.graph();
+    info!("✅ Graph service gRPC client initialized");
+
     // Create AppState
-    let app_state = Arc::new(AppState::new(pg_pool.clone(), counter_service, outbox_repo));
+    let app_state = Arc::new(AppState::new(pg_pool.clone(), counter_service, outbox_repo, graph_client));
     info!("✅ AppState created");
 
     // gRPC server address

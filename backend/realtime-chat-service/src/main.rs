@@ -11,6 +11,7 @@ use realtime_chat_service::{
     routes,
     services::{
         encryption::EncryptionService,
+        graph_client::GraphClient,
         key_exchange::KeyExchangeService,
         megolm_service::MegolmService,
         olm_service::{AccountEncryptionKey, OlmService},
@@ -165,6 +166,21 @@ async fn main() -> Result<(), error::AppError> {
     };
     tracing::info!("✅ Auth gRPC client initialized (will connect on first use)");
 
+    // Initialize GraphClient for block/follow operations via graph-service
+    let graph_client = match GraphClient::new().await {
+        Ok(client) => {
+            tracing::info!("✅ Graph gRPC client initialized");
+            Some(Arc::new(client))
+        }
+        Err(e) => {
+            tracing::warn!(
+                error = %e,
+                "Failed to initialize Graph gRPC client, block/follow operations will be unavailable"
+            );
+            None
+        }
+    };
+
     // Initialize Matrix client (optional, when MATRIX_ENABLED=true)
     let matrix_client = if cfg.matrix.enabled {
         match realtime_chat_service::services::matrix_client::MatrixClient::new(cfg.matrix.clone()).await {
@@ -207,6 +223,7 @@ async fn main() -> Result<(), error::AppError> {
         olm_service,
         megolm_service,
         matrix_client,
+        graph_client,
     };
 
     // Start Redis Streams listener for cross-instance fanout

@@ -12,6 +12,7 @@ use content_service::services::{FeedRankingConfig, FeedRankingService};
 use crypto_core::jwt;
 use db_pool::{create_pool as create_pg_pool, DbConfig as DbPoolConfig};
 use grpc_clients::{config::GrpcConfig, AuthClient, GrpcClientPool};
+use opentelemetry_config::{init_tracing, TracingConfig};
 use redis::aio::ConnectionManager;
 use redis::RedisError;
 use redis_utils::{RedisPool, SentinelConfig};
@@ -301,14 +302,35 @@ async fn main() -> io::Result<()> {
         }
     }
 
-    // Initialize tracing
-    tracing_subscriber::registry()
-        .with(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "info,actix_web=debug,sqlx=debug".into()),
-        )
-        .with(tracing_subscriber::fmt::layer())
-        .init();
+    // Initialize OpenTelemetry tracing (if enabled)
+    let tracing_config = TracingConfig::from_env();
+    if tracing_config.enabled {
+        match init_tracing("content-service", tracing_config) {
+            Ok(_tracer) => {
+                tracing::info!("OpenTelemetry distributed tracing initialized for content-service");
+            }
+            Err(e) => {
+                eprintln!("Failed to initialize OpenTelemetry tracing: {}", e);
+                // Initialize fallback tracing
+                tracing_subscriber::registry()
+                    .with(
+                        tracing_subscriber::EnvFilter::try_from_default_env()
+                            .unwrap_or_else(|_| "info,actix_web=debug,sqlx=debug".into()),
+                    )
+                    .with(tracing_subscriber::fmt::layer())
+                    .init();
+            }
+        }
+    } else {
+        // Initialize fallback tracing without OpenTelemetry
+        tracing_subscriber::registry()
+            .with(
+                tracing_subscriber::EnvFilter::try_from_default_env()
+                    .unwrap_or_else(|_| "info,actix_web=debug,sqlx=debug".into()),
+            )
+            .with(tracing_subscriber::fmt::layer())
+            .init();
+    }
 
     // Load configuration
     let config = match content_service::Config::from_env() {

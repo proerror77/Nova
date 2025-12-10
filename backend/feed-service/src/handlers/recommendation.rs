@@ -7,8 +7,10 @@ use std::sync::Arc;
 use tracing::{debug, error, warn};
 use uuid::Uuid;
 
+use crate::cache::CachedFeedPost;
 use crate::error::{AppError, Result};
 use crate::middleware::jwt_auth::UserId;
+use crate::services::fallback_rank_posts;
 use grpc_clients::nova::content_service::ListRecentPostsRequest;
 use grpc_clients::nova::ranking_service::v1::{RankFeedRequest, RecallConfig};
 use grpc_clients::RankingServiceClient;
@@ -80,7 +82,7 @@ pub struct RecommendationHandlerState {
 
 /// GET /api/v2/recommendations
 /// Get personalized recommendations for authenticated user
-/// Delegates ranking to ranking-service, with chronological fallback
+/// Delegates ranking to ranking-service, with smart fallback
 #[get("/api/v2/recommendations")]
 pub async fn get_recommendations(
     req: HttpRequest,
@@ -130,13 +132,25 @@ pub async fn get_recommendations(
         }
         Err(err) => {
             warn!(
-                "Ranking service unavailable: {:?}, falling back to chronological feed",
+                "Ranking service unavailable: {:?}, using fallback ranking",
                 err
             );
 
-            // Fallback: Simple chronological ordering
-            match fetch_chronological_feed(user_id, limit).await {
-                Ok(posts) => {
+            // Track fallback usage (via tracing, metrics can be added later)
+            tracing::info!(target: "feed.metrics", event = "ranking_fallback_used", reason = ?err);
+
+            // Fallback: Fetch posts and apply local time-decay ranking
+            match fetch_posts_with_metadata(user_id, limit).await {
+                Ok(posts_with_metadata) => {
+                    // Apply fallback ranking algorithm
+                    let ranked_posts = fallback_rank_posts(posts_with_metadata);
+
+                    // Convert to UUID vec
+                    let posts: Vec<Uuid> = ranked_posts
+                        .into_iter()
+                        .filter_map(|p| Uuid::parse_str(&p.id).ok())
+                        .collect();
+
                     let count = posts.len();
                     Ok(HttpResponse::Ok().json(RecommendationResponse { posts, count }))
                 }
@@ -152,7 +166,99 @@ pub async fn get_recommendations(
     }
 }
 
+/// Fetch posts with metadata for fallback ranking
+/// Returns posts with engagement counts and timestamps needed for time-decay ranking
+async fn fetch_posts_with_metadata(user_id: Uuid, limit: usize) -> Result<Vec<CachedFeedPost>> {
+    // Load gRPC config and connect to content-service
+    let cfg = grpc_clients::config::GrpcConfig::from_env()
+        .map_err(|e| AppError::Internal(format!("load gRPC config failed: {}", e)))?;
+    let channel = cfg
+        .make_endpoint(&cfg.content_service.url)
+        .map_err(|e| AppError::Internal(format!("content endpoint build failed: {}", e)))?
+        .connect_lazy();
+
+    let mut content_client =
+        grpc_clients::nova::content_service::content_service_client::ContentServiceClient::new(
+            channel.clone(),
+        );
+
+    // Fetch recent posts from content-service
+    let list_resp = content_client
+        .list_recent_posts(ListRecentPostsRequest {
+            limit: limit as i32,
+            exclude_user_id: user_id.to_string(),
+        })
+        .await
+        .map_err(|e| AppError::Internal(format!("list_recent_posts fallback failed: {}", e)))?
+        .into_inner();
+
+    if list_resp.post_ids.is_empty() {
+        return Ok(vec![]);
+    }
+
+    // Fetch full post details with metadata
+    let get_resp = content_client
+        .get_posts_by_ids(grpc_clients::nova::content_service::GetPostsByIdsRequest {
+            post_ids: list_resp.post_ids.clone(),
+        })
+        .await
+        .map_err(|e| AppError::Internal(format!("get_posts_by_ids fallback failed: {}", e)))?
+        .into_inner();
+
+    // Fetch social stats from social-service for engagement counts
+    let social_channel = cfg
+        .make_endpoint(&cfg.social_service.url)
+        .map_err(|e| AppError::Internal(format!("social endpoint build failed: {}", e)))?
+        .connect_lazy();
+
+    let mut social_client =
+        grpc_clients::nova::social_service::social_service_client::SocialServiceClient::new(
+            social_channel,
+        );
+
+    let social_counts = match social_client
+        .batch_get_counts(grpc_clients::nova::social_service::v2::BatchGetCountsRequest {
+            post_ids: list_resp.post_ids.clone(),
+        })
+        .await
+    {
+        Ok(response) => response.into_inner().counts,
+        Err(e) => {
+            warn!(
+                "Failed to fetch social counts for fallback (continuing with zeros): {}",
+                e
+            );
+            std::collections::HashMap::new()
+        }
+    };
+
+    // Convert to CachedFeedPost format with engagement data
+    let posts: Vec<CachedFeedPost> = get_resp
+        .posts
+        .into_iter()
+        .map(|post| {
+            let counts = social_counts.get(&post.id);
+            CachedFeedPost {
+                id: post.id.clone(),
+                user_id: post.author_id,
+                content: post.content,
+                created_at: post.created_at,
+                ranking_score: 0.0, // Will be computed by fallback ranking
+                like_count: counts.map(|c| c.like_count as u32).unwrap_or(0),
+                comment_count: counts.map(|c| c.comment_count as u32).unwrap_or(0),
+                share_count: counts.map(|c| c.share_count as u32).unwrap_or(0),
+                media_urls: post.media_urls,
+                media_type: post.media_type,
+                thumbnail_urls: post.thumbnail_urls,
+            }
+        })
+        .collect();
+
+    Ok(posts)
+}
+
 /// Fallback: Fetch chronological feed when ranking service is down
+/// Legacy function - now superseded by fetch_posts_with_metadata + fallback_rank_posts
 async fn fetch_chronological_feed(user_id: Uuid, limit: usize) -> Result<Vec<Uuid>> {
     // Degraded fallback: rely on content-service recency and exclude self posts
     let cfg = grpc_clients::config::GrpcConfig::from_env()

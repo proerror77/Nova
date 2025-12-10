@@ -3,24 +3,22 @@
 //! Provides centralized configuration for distributed tracing across all Nova backend services.
 //! Supports both OTLP (OpenTelemetry Protocol) and Jaeger exporters.
 
-use opentelemetry::{
-    global, trace::TracerProvider as _, KeyValue,
-};
+use opentelemetry::{global, KeyValue};
 use opentelemetry_otlp::WithExportConfig;
 use opentelemetry_sdk::{
     propagation::TraceContextPropagator,
     runtime,
-    trace::{BatchConfig, RandomIdGenerator, Sampler, Tracer},
+    trace::{RandomIdGenerator, Sampler, Tracer},
     Resource,
 };
-use std::time::Duration;
-use tracing::Level;
 use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
 pub mod config;
+#[cfg(feature = "grpc-interceptors")]
 pub mod interceptors;
 
 pub use config::{ExporterType, TracingConfig};
+#[cfg(feature = "grpc-interceptors")]
 pub use interceptors::{grpc_tracing_interceptor, http_tracing_layer};
 
 /// Initialize OpenTelemetry tracing for a service
@@ -117,12 +115,6 @@ fn init_jaeger_tracer(
                 .with_id_generator(RandomIdGenerator::default())
                 .with_resource(resource),
         )
-        .with_batch_processor_config(
-            BatchConfig::default()
-                .with_max_queue_size(2048)
-                .with_max_export_batch_size(512)
-                .with_scheduled_delay(Duration::from_millis(5000)),
-        )
         .install_batch(runtime::Tokio)
         .expect("Failed to install Jaeger tracer");
 
@@ -131,7 +123,7 @@ fn init_jaeger_tracer(
 
 /// Initialize OTLP exporter (for modern collectors like Jaeger with OTLP support)
 fn init_otlp_tracer(
-    service_name: &str,
+    _service_name: &str,
     config: &TracingConfig,
     resource: Resource,
 ) -> Result<Tracer, Box<dyn std::error::Error>> {
@@ -152,12 +144,6 @@ fn init_otlp_tracer(
                 .with_sampler(Sampler::TraceIdRatioBased(config.sample_rate))
                 .with_id_generator(RandomIdGenerator::default())
                 .with_resource(resource),
-        )
-        .with_batch_config(
-            BatchConfig::default()
-                .with_max_queue_size(2048)
-                .with_max_export_batch_size(512)
-                .with_scheduled_delay(Duration::from_millis(5000)),
         )
         .install_batch(runtime::Tokio)
         .expect("Failed to install OTLP tracer");

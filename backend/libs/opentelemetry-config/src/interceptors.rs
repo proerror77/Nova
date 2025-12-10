@@ -1,26 +1,26 @@
 //! OpenTelemetry interceptors for gRPC and HTTP
+//!
+//! This module requires the `grpc-interceptors` feature to be enabled.
 
 use opentelemetry::{
     global,
     propagation::Extractor,
-    trace::{SpanKind, Status, TraceContextExt, Tracer},
-    Context, KeyValue,
+    trace::SpanKind,
 };
 use std::task::{Context as TaskContext, Poll};
 use tonic::{
     body::BoxBody,
     metadata::MetadataMap,
-    transport::{Body, Channel},
-    Request, Response, Status as TonicStatus,
+    transport::Body,
+    Request, Status as TonicStatus,
 };
 use tower::{Layer, Service};
-use tracing::Span;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 /// gRPC metadata extractor for trace context propagation
 struct MetadataExtractor<'a>(&'a MetadataMap);
 
-impl<'a> Extractor for MetadataExtractor<'a> {
+impl Extractor for MetadataExtractor<'_> {
     fn get(&self, key: &str) -> Option<&str> {
         self.0.get(key).and_then(|v| v.to_str().ok())
     }
@@ -34,7 +34,7 @@ impl<'a> Extractor for MetadataExtractor<'a> {
 ///
 /// Extracts trace context from incoming requests and creates spans
 pub fn grpc_tracing_interceptor(
-    mut req: Request<()>,
+    req: Request<()>,
 ) -> Result<Request<()>, TonicStatus> {
     let metadata = req.metadata();
     let parent_context = global::get_text_map_propagator(|propagator| {
@@ -78,9 +78,9 @@ pub struct TracingService<S> {
     inner: S,
 }
 
-impl<S> Service<hyper::Request<Body>> for TracingService<S>
+impl<S> Service<http::Request<Body>> for TracingService<S>
 where
-    S: Service<hyper::Request<Body>, Response = hyper::Response<BoxBody>>,
+    S: Service<http::Request<Body>, Response = http::Response<BoxBody>>,
     S::Error: std::fmt::Display,
 {
     type Response = S::Response;
@@ -91,7 +91,7 @@ where
         self.inner.poll_ready(cx)
     }
 
-    fn call(&mut self, req: hyper::Request<Body>) -> Self::Future {
+    fn call(&mut self, req: http::Request<Body>) -> Self::Future {
         // Extract trace context from HTTP headers
         let parent_context = global::get_text_map_propagator(|propagator| {
             propagator.extract(&HeaderExtractor(req.headers()))
@@ -113,9 +113,9 @@ where
 }
 
 /// HTTP header extractor for trace context propagation
-struct HeaderExtractor<'a>(&'a hyper::HeaderMap);
+struct HeaderExtractor<'a>(&'a http::HeaderMap);
 
-impl<'a> Extractor for HeaderExtractor<'a> {
+impl Extractor for HeaderExtractor<'_> {
     fn get(&self, key: &str) -> Option<&str> {
         self.0.get(key).and_then(|v| v.to_str().ok())
     }
@@ -143,7 +143,7 @@ mod tests {
 
     #[test]
     fn test_header_extractor() {
-        let mut headers = hyper::HeaderMap::new();
+        let mut headers = http::HeaderMap::new();
         headers.insert(
             "traceparent",
             "00-trace-id-span-id-01".parse().expect("Valid header"),

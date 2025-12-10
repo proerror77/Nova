@@ -37,6 +37,16 @@ service IdentityService {
   rpc RevokeToken(RevokeTokenRequest) returns (google.protobuf.Empty);
   rpc RevokeAllUserTokens(RevokeAllUserTokensRequest) returns (google.protobuf.Empty);
   rpc ListActiveSessions(ListActiveSessionsRequest) returns (ListActiveSessionsResponse);
+
+  // ========== OAuth/SSO ==========
+  // Start OAuth flow - returns authorization URL to redirect user to
+  rpc StartOAuthFlow(StartOAuthFlowRequest) returns (StartOAuthFlowResponse);
+  // Complete OAuth flow - exchange authorization code for tokens
+  rpc CompleteOAuthFlow(CompleteOAuthFlowRequest) returns (CompleteOAuthFlowResponse);
+  // List linked OAuth providers for a user
+  rpc ListOAuthConnections(ListOAuthConnectionsRequest) returns (ListOAuthConnectionsResponse);
+  // Unlink an OAuth provider from user account
+  rpc UnlinkOAuthProvider(UnlinkOAuthProviderRequest) returns (google.protobuf.Empty);
 }
 
 // ============================================================================
@@ -197,4 +207,93 @@ message SessionRevokedEvent {
 message PasswordChangedEvent {
   string user_id = 1;
   google.protobuf.Timestamp changed_at = 2;
+}
+
+// ============================================================================
+// OAuth/SSO Messages
+// ============================================================================
+
+// Supported OAuth providers
+enum OAuthProvider {
+  OAUTH_PROVIDER_UNSPECIFIED = 0;
+  OAUTH_PROVIDER_GOOGLE = 1;
+  OAUTH_PROVIDER_APPLE = 2;
+}
+
+// -------- Start OAuth Flow --------
+message StartOAuthFlowRequest {
+  OAuthProvider provider = 1;      // OAuth provider (google, apple, etc.)
+  string redirect_uri = 2;         // Callback URL after OAuth completes
+  string invite_code = 3;          // Optional invite code for new user registration
+}
+
+message StartOAuthFlowResponse {
+  string authorization_url = 1;    // URL to redirect user to for OAuth
+  string state = 2;                // State token for CSRF protection
+}
+
+// -------- Complete OAuth Flow --------
+message CompleteOAuthFlowRequest {
+  string state = 1;                // State token from StartOAuthFlowResponse
+  string code = 2;                 // Authorization code from OAuth provider
+  string redirect_uri = 3;         // Same redirect URI used in start flow
+  string invite_code = 4;          // Optional invite code (for new user registration)
+}
+
+message CompleteOAuthFlowResponse {
+  string user_id = 1;
+  string access_token = 2;
+  string refresh_token = 3;
+  int64 expires_at = 4;
+
+  // User info
+  string username = 5;
+  string email = 6;
+  bool is_new_user = 7;            // True if this OAuth login created a new account
+}
+
+// -------- List OAuth Connections --------
+message ListOAuthConnectionsRequest {
+  string user_id = 1;
+}
+
+message OAuthConnection {
+  string id = 1;                   // Connection UUID
+  OAuthProvider provider = 2;      // OAuth provider
+  string provider_user_id = 3;     // User's ID on the provider
+  string email = 4;                // Email from provider (may differ from account email)
+  string name = 5;                 // Name from provider
+  string picture_url = 6;          // Profile picture URL from provider
+  google.protobuf.Timestamp connected_at = 7;
+  google.protobuf.Timestamp last_used_at = 8;
+}
+
+message ListOAuthConnectionsResponse {
+  repeated OAuthConnection connections = 1;
+}
+
+// -------- Unlink OAuth Provider --------
+message UnlinkOAuthProviderRequest {
+  string user_id = 1;
+  OAuthProvider provider = 2;      // Provider to unlink
+}
+
+// ============================================================================
+// OAuth Events
+// ============================================================================
+
+// Kafka Topic: identity.oauth.connected
+message OAuthConnectedEvent {
+  string user_id = 1;
+  string provider = 2;             // "google", "apple", etc.
+  string provider_user_id = 3;
+  bool is_new_user = 4;
+  google.protobuf.Timestamp connected_at = 5;
+}
+
+// Kafka Topic: identity.oauth.disconnected
+message OAuthDisconnectedEvent {
+  string user_id = 1;
+  string provider = 2;
+  google.protobuf.Timestamp disconnected_at = 3;
 }

@@ -14,6 +14,7 @@ use identity_service::{
     services::{spawn_outbox_consumer, EmailService, KafkaEventProducer, OutboxConsumerConfig},
 };
 use once_cell::sync::OnceCell;
+use opentelemetry_config::{init_tracing, TracingConfig};
 use redis_utils::RedisPool;
 use sqlx::postgres::PgPoolOptions;
 use std::time::Duration;
@@ -32,14 +33,36 @@ async fn main() -> Result<()> {
         return Err(anyhow!("Unable to install TLS crypto provider: {:?}", err));
     }
 
-    // Initialize tracing
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            std::env::var("RUST_LOG").unwrap_or_else(|_| "identity_service=info,info".into()),
-        )
-        .with_target(false)
-        .json()
-        .init();
+    // Initialize OpenTelemetry tracing (if enabled)
+    let tracing_config = TracingConfig::from_env();
+    if tracing_config.enabled {
+        match init_tracing("identity-service", tracing_config) {
+            Ok(_tracer) => {
+                info!("OpenTelemetry distributed tracing initialized for identity-service");
+            }
+            Err(e) => {
+                eprintln!("Failed to initialize OpenTelemetry tracing: {}", e);
+                // Initialize fallback tracing
+                tracing_subscriber::fmt()
+                    .with_env_filter(
+                        std::env::var("RUST_LOG")
+                            .unwrap_or_else(|_| "identity_service=info,info".into()),
+                    )
+                    .with_target(false)
+                    .json()
+                    .init();
+            }
+        }
+    } else {
+        // Initialize fallback tracing without OpenTelemetry
+        tracing_subscriber::fmt()
+            .with_env_filter(
+                std::env::var("RUST_LOG").unwrap_or_else(|_| "identity_service=info,info".into()),
+            )
+            .with_target(false)
+            .json()
+            .init();
+    }
 
     info!("Starting Identity Service");
 
@@ -149,6 +172,7 @@ async fn main() -> Result<()> {
         email_service,
         kafka_producer,
         sns_client,
+        settings.oauth.clone(),
     );
 
     let addr = format!("{}:{}", settings.server.host, settings.server.port)

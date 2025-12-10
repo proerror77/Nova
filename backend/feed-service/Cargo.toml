@@ -69,6 +69,7 @@ crypto-core = { path = "../libs/crypto-core" }
 grpc-clients = { path = "../libs/grpc-clients" }
 grpc-metrics = { path = "../libs/grpc-metrics" }
 grpc-tls = { path = "../libs/grpc-tls" }  # ✅ P0: mTLS for service-to-service auth
+opentelemetry-config = { path = "../libs/opentelemetry-config" }
 
 [build-dependencies]
 tonic-build = "0.12"

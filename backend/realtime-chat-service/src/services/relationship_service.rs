@@ -214,6 +214,52 @@ impl RelationshipServiceV2 {
             is_blocking: user_blocked_target, // user blocked target
         })
     }
+
+    /// Block a user (via graph-service)
+    /// Replaces local DB block_user operation with gRPC call
+    pub async fn block_user(
+        &self,
+        blocker_id: Uuid,
+        blocked_id: Uuid,
+    ) -> Result<bool, AppError> {
+        if blocker_id == blocked_id {
+            return Err(AppError::BadRequest("Cannot block yourself".to_string()));
+        }
+
+        self.graph_client.create_block(blocker_id, blocked_id).await
+    }
+
+    /// Unblock a user (via graph-service)
+    /// Replaces local DB unblock_user operation with gRPC call
+    pub async fn unblock_user(
+        &self,
+        blocker_id: Uuid,
+        blocked_id: Uuid,
+    ) -> Result<bool, AppError> {
+        self.graph_client.delete_block(blocker_id, blocked_id).await
+    }
+
+    /// Get list of blocked users (via graph-service)
+    /// Replaces local DB get_blocked_users operation with gRPC call
+    pub async fn get_blocked_users(
+        &self,
+        user_id: Uuid,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<Uuid>, AppError> {
+        let (blocked_user_ids, _, _) = self
+            .graph_client
+            .get_blocked_users(user_id, limit as i32, offset as i32)
+            .await?;
+
+        // Convert Vec<String> to Vec<Uuid>
+        let uuids: Result<Vec<Uuid>, _> = blocked_user_ids
+            .iter()
+            .map(|id| Uuid::parse_str(id))
+            .collect();
+
+        uuids.map_err(|e| AppError::BadRequest(format!("Invalid UUID in response: {}", e)))
+    }
 }
 
 /// Legacy implementation - uses direct PostgreSQL queries

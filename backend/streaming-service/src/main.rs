@@ -1,9 +1,11 @@
 use actix_web::{middleware::Logger, web, App, HttpRequest, HttpResponse, HttpServer};
 use anyhow::{anyhow, Context};
+use chrono::{DateTime, Utc};
 use once_cell::sync::OnceCell;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::env;
 use tracing::{info, warn};
+use uuid::Uuid;
 type RedisManager = redis::aio::ConnectionManager;
 
 #[derive(Debug, Clone)]
@@ -28,6 +30,43 @@ struct RtmpAuthQuery {
     name: Option<String>,
     addr: Option<String>,
     clientid: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StreamInfo {
+    pub stream_key: String,
+    pub user_id: Uuid,
+    pub title: String,
+    pub thumbnail_url: Option<String>,
+    pub status: StreamStatus,
+    pub viewer_count: u32,
+    pub started_at: Option<DateTime<Utc>>,
+    pub ended_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum StreamStatus {
+    Offline,
+    Live,
+    Ended,
+}
+
+#[derive(Debug, Deserialize)]
+struct StartStreamRequest {
+    stream_key: String,
+    user_id: Uuid,
+    title: String,
+    thumbnail_url: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct EndStreamRequest {
+    stream_key: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct ViewerCountUpdate {
+    viewer_count: u32,
 }
 
 async fn rtmp_auth(query: web::Query<RtmpAuthQuery>) -> HttpResponse {
@@ -74,6 +113,296 @@ async fn rtmp_done(query: web::Query<RtmpAuthQuery>) -> HttpResponse {
 
 async fn health() -> HttpResponse {
     HttpResponse::Ok().body("ok")
+}
+
+// POST /api/v1/streams/start - Called by RTMP server on publish
+async fn start_stream(
+    state: web::Data<AppState>,
+    body: web::Json<StartStreamRequest>,
+) -> HttpResponse {
+    let Some(redis) = state.redis.clone() else {
+        return HttpResponse::ServiceUnavailable().body("Redis not configured");
+    };
+
+    let stream_info = StreamInfo {
+        stream_key: body.stream_key.clone(),
+        user_id: body.user_id,
+        title: body.title.clone(),
+        thumbnail_url: body.thumbnail_url.clone(),
+        status: StreamStatus::Live,
+        viewer_count: 0,
+        started_at: Some(Utc::now()),
+        ended_at: None,
+    };
+
+    let mut conn = redis.clone();
+    let stream_key = &body.stream_key;
+
+    // Store stream info in Redis
+    let stream_json = match serde_json::to_string(&stream_info) {
+        Ok(json) => json,
+        Err(e) => {
+            warn!(error = %e, "Failed to serialize stream info");
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    // Set stream info
+    if let Err(e) = redis::cmd("SET")
+        .arg(format!("streaming:stream:{}", stream_key))
+        .arg(&stream_json)
+        .query_async::<_, ()>(&mut conn)
+        .await
+    {
+        warn!(error = %e, "Failed to set stream info");
+        return HttpResponse::InternalServerError().finish();
+    }
+
+    // Add to live streams set
+    if let Err(e) = redis::cmd("SADD")
+        .arg("streaming:live_streams")
+        .arg(stream_key)
+        .query_async::<_, ()>(&mut conn)
+        .await
+    {
+        warn!(error = %e, "Failed to add stream to live set");
+        return HttpResponse::InternalServerError().finish();
+    }
+
+    info!(
+        stream_key = %stream_key,
+        user_id = %body.user_id,
+        title = %body.title,
+        "Stream started"
+    );
+
+    HttpResponse::Ok().json(stream_info)
+}
+
+// POST /api/v1/streams/end - Called by RTMP server on unpublish
+async fn end_stream(
+    state: web::Data<AppState>,
+    body: web::Json<EndStreamRequest>,
+) -> HttpResponse {
+    let Some(redis) = state.redis.clone() else {
+        return HttpResponse::ServiceUnavailable().body("Redis not configured");
+    };
+
+    let mut conn = redis.clone();
+    let stream_key = &body.stream_key;
+
+    // Get existing stream info
+    let stream_json: Option<String> = match redis::cmd("GET")
+        .arg(format!("streaming:stream:{}", stream_key))
+        .query_async(&mut conn)
+        .await
+    {
+        Ok(json) => json,
+        Err(e) => {
+            warn!(error = %e, "Failed to get stream info");
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    let mut stream_info: StreamInfo = match stream_json {
+        Some(json) => match serde_json::from_str(&json) {
+            Ok(info) => info,
+            Err(e) => {
+                warn!(error = %e, "Failed to parse stream info");
+                return HttpResponse::NotFound().body("Stream not found");
+            }
+        },
+        None => {
+            return HttpResponse::NotFound().body("Stream not found");
+        }
+    };
+
+    // Update stream status
+    stream_info.status = StreamStatus::Ended;
+    stream_info.ended_at = Some(Utc::now());
+
+    let updated_json = match serde_json::to_string(&stream_info) {
+        Ok(json) => json,
+        Err(e) => {
+            warn!(error = %e, "Failed to serialize updated stream info");
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    // Update stream info
+    if let Err(e) = redis::cmd("SET")
+        .arg(format!("streaming:stream:{}", stream_key))
+        .arg(&updated_json)
+        .query_async::<_, ()>(&mut conn)
+        .await
+    {
+        warn!(error = %e, "Failed to update stream info");
+        return HttpResponse::InternalServerError().finish();
+    }
+
+    // Remove from live streams set
+    if let Err(e) = redis::cmd("SREM")
+        .arg("streaming:live_streams")
+        .arg(stream_key)
+        .query_async::<_, ()>(&mut conn)
+        .await
+    {
+        warn!(error = %e, "Failed to remove stream from live set");
+        return HttpResponse::InternalServerError().finish();
+    }
+
+    info!(stream_key = %stream_key, "Stream ended");
+
+    HttpResponse::Ok().json(stream_info)
+}
+
+// GET /api/v1/streams/{stream_key} - Get stream info
+async fn get_stream_info(
+    state: web::Data<AppState>,
+    path: web::Path<String>,
+) -> HttpResponse {
+    let Some(redis) = state.redis.clone() else {
+        return HttpResponse::ServiceUnavailable().body("Redis not configured");
+    };
+
+    let mut conn = redis.clone();
+    let stream_key = path.into_inner();
+
+    let stream_json: Option<String> = match redis::cmd("GET")
+        .arg(format!("streaming:stream:{}", stream_key))
+        .query_async(&mut conn)
+        .await
+    {
+        Ok(json) => json,
+        Err(e) => {
+            warn!(error = %e, "Failed to get stream info");
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    match stream_json {
+        Some(json) => match serde_json::from_str::<StreamInfo>(&json) {
+            Ok(info) => HttpResponse::Ok().json(info),
+            Err(e) => {
+                warn!(error = %e, "Failed to parse stream info");
+                HttpResponse::InternalServerError().finish()
+            }
+        },
+        None => HttpResponse::NotFound().body("Stream not found"),
+    }
+}
+
+// GET /api/v1/streams/live - List all live streams
+async fn list_live_streams(state: web::Data<AppState>) -> HttpResponse {
+    let Some(redis) = state.redis.clone() else {
+        return HttpResponse::ServiceUnavailable().body("Redis not configured");
+    };
+
+    let mut conn = redis.clone();
+
+    // Get all live stream keys
+    let stream_keys: Vec<String> = match redis::cmd("SMEMBERS")
+        .arg("streaming:live_streams")
+        .query_async(&mut conn)
+        .await
+    {
+        Ok(keys) => keys,
+        Err(e) => {
+            warn!(error = %e, "Failed to get live streams");
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    // Fetch info for each stream
+    let mut streams = Vec::new();
+    for stream_key in stream_keys {
+        let stream_json: Option<String> = match redis::cmd("GET")
+            .arg(format!("streaming:stream:{}", stream_key))
+            .query_async(&mut conn)
+            .await
+        {
+            Ok(json) => json,
+            Err(e) => {
+                warn!(error = %e, stream_key = %stream_key, "Failed to get stream info");
+                continue;
+            }
+        };
+
+        if let Some(json) = stream_json {
+            match serde_json::from_str::<StreamInfo>(&json) {
+                Ok(info) => streams.push(info),
+                Err(e) => {
+                    warn!(error = %e, stream_key = %stream_key, "Failed to parse stream info");
+                }
+            }
+        }
+    }
+
+    HttpResponse::Ok().json(streams)
+}
+
+// POST /api/v1/streams/{stream_key}/viewers - Update viewer count
+async fn update_viewer_count(
+    state: web::Data<AppState>,
+    path: web::Path<String>,
+    body: web::Json<ViewerCountUpdate>,
+) -> HttpResponse {
+    let Some(redis) = state.redis.clone() else {
+        return HttpResponse::ServiceUnavailable().body("Redis not configured");
+    };
+
+    let mut conn = redis.clone();
+    let stream_key = path.into_inner();
+
+    // Get existing stream info
+    let stream_json: Option<String> = match redis::cmd("GET")
+        .arg(format!("streaming:stream:{}", stream_key))
+        .query_async(&mut conn)
+        .await
+    {
+        Ok(json) => json,
+        Err(e) => {
+            warn!(error = %e, "Failed to get stream info");
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    let mut stream_info: StreamInfo = match stream_json {
+        Some(json) => match serde_json::from_str(&json) {
+            Ok(info) => info,
+            Err(e) => {
+                warn!(error = %e, "Failed to parse stream info");
+                return HttpResponse::NotFound().body("Stream not found");
+            }
+        },
+        None => {
+            return HttpResponse::NotFound().body("Stream not found");
+        }
+    };
+
+    // Update viewer count
+    stream_info.viewer_count = body.viewer_count;
+
+    let updated_json = match serde_json::to_string(&stream_info) {
+        Ok(json) => json,
+        Err(e) => {
+            warn!(error = %e, "Failed to serialize updated stream info");
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+
+    // Update stream info
+    if let Err(e) = redis::cmd("SET")
+        .arg(format!("streaming:stream:{}", stream_key))
+        .arg(&updated_json)
+        .query_async::<_, ()>(&mut conn)
+        .await
+    {
+        warn!(error = %e, "Failed to update stream info");
+        return HttpResponse::InternalServerError().finish();
+    }
+
+    HttpResponse::Ok().json(stream_info)
 }
 
 fn has_admin_access(req: &HttpRequest, cfg: &Settings) -> bool {
@@ -198,7 +527,7 @@ async fn main() -> anyhow::Result<()> {
 
     let redis = if let Ok(redis_url) = env::var("REDIS_URL") {
         match redis::Client::open(redis_url) {
-            Ok(client) => match client.get_tokio_connection_manager().await {
+            Ok(client) => match client.get_connection_manager().await {
                 Ok(manager) => Some(manager),
                 Err(e) => {
                     warn!(error = %e, "Failed to connect Redis, continuing without allowlist store");
@@ -253,7 +582,12 @@ async fn main() -> anyhow::Result<()> {
             .service(
                 web::scope("/api/v1/streams")
                     .route("/auth", web::post().to(rtmp_auth))
-                    .route("/done", web::post().to(rtmp_done)),
+                    .route("/done", web::post().to(rtmp_done))
+                    .route("/start", web::post().to(start_stream))
+                    .route("/end", web::post().to(end_stream))
+                    .route("/live", web::get().to(list_live_streams))
+                    .route("/{stream_key}", web::get().to(get_stream_info))
+                    .route("/{stream_key}/viewers", web::post().to(update_viewer_count)),
             )
             .route("/health", web::get().to(health))
             .service(

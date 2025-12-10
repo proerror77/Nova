@@ -352,43 +352,35 @@ impl EmailSettings {
     }
 }
 
-/// OAuth provider configuration
+/// OAuth provider configuration (Google and Apple)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OAuthSettings {
+    // Google OAuth 2.0
     pub google_client_id: Option<String>,
     pub google_client_secret: Option<String>,
     pub google_redirect_uri: Option<String>,
+    // Apple Sign In
     pub apple_team_id: Option<String>,
     pub apple_client_id: Option<String>,
     pub apple_key_id: Option<String>,
     pub apple_private_key: Option<String>,
     pub apple_redirect_uri: Option<String>,
-    pub facebook_app_id: Option<String>,
-    pub facebook_app_secret: Option<String>,
-    pub facebook_redirect_uri: Option<String>,
-    pub wechat_app_id: Option<String>,
-    pub wechat_app_secret: Option<String>,
-    pub wechat_redirect_uri: Option<String>,
     pub default_scope: String,
 }
 
 impl OAuthSettings {
     fn from_env() -> Result<Self> {
         Ok(Self {
+            // Google
             google_client_id: env::var("OAUTH_GOOGLE_CLIENT_ID").ok(),
             google_client_secret: env::var("OAUTH_GOOGLE_CLIENT_SECRET").ok(),
             google_redirect_uri: env::var("OAUTH_GOOGLE_REDIRECT_URI").ok(),
+            // Apple
             apple_team_id: env::var("OAUTH_APPLE_TEAM_ID").ok(),
             apple_client_id: env::var("OAUTH_APPLE_CLIENT_ID").ok(),
             apple_key_id: env::var("OAUTH_APPLE_KEY_ID").ok(),
             apple_private_key: env::var("OAUTH_APPLE_PRIVATE_KEY").ok(),
             apple_redirect_uri: env::var("OAUTH_APPLE_REDIRECT_URI").ok(),
-            facebook_app_id: env::var("OAUTH_FACEBOOK_APP_ID").ok(),
-            facebook_app_secret: env::var("OAUTH_FACEBOOK_APP_SECRET").ok(),
-            facebook_redirect_uri: env::var("OAUTH_FACEBOOK_REDIRECT_URI").ok(),
-            wechat_app_id: env::var("OAUTH_WECHAT_APP_ID").ok(),
-            wechat_app_secret: env::var("OAUTH_WECHAT_APP_SECRET").ok(),
-            wechat_redirect_uri: env::var("OAUTH_WECHAT_REDIRECT_URI").ok(),
             default_scope: env::var("OAUTH_DEFAULT_SCOPE")
                 .unwrap_or_else(|_| "email profile".to_string()),
         })

@@ -1,10 +1,12 @@
 mod config;
+mod consumers;
 mod domain;
 mod grpc;
 mod repository;
 
 use anyhow::{anyhow, Context, Result};
 use config::Config;
+use consumers::SocialEventsConsumer;
 use grpc::server::graph::graph_service_server::GraphServiceServer;
 use grpc::GraphServiceImpl;
 use nova_cache::NovaCache;
@@ -124,9 +126,15 @@ async fn main() -> Result<()> {
             }
         };
 
+        // Clone repo for Kafka consumer
+        let repo_for_consumer = repo.clone();
+
         // Create gRPC service
         let graph_service =
             GraphServiceImpl::new_with_trait(repo, config.internal_write_token.clone());
+
+        // Spawn Kafka consumer for social events if configured
+        spawn_kafka_consumer_if_enabled(repo_for_consumer, &config);
 
         // Setup and start server (rest of the code continues below)
         start_grpc_server(graph_service, &config).await?;
@@ -157,14 +165,30 @@ async fn main() -> Result<()> {
             Some(cache) => {
                 info!("🚀 Graph service initialized with Neo4j + caching");
                 let cached_repo = CachedGraphRepository::new(Arc::new(neo4j_repo), cache, true);
+                let repo: Arc<dyn repository::GraphRepositoryTrait + Send + Sync> = Arc::new(cached_repo);
+
+                // Clone repo for Kafka consumer
+                let repo_for_consumer = repo.clone();
+
+                // Spawn Kafka consumer for social events if configured
+                spawn_kafka_consumer_if_enabled(repo_for_consumer, &config);
+
                 GraphServiceImpl::new_with_trait(
-                    Arc::new(cached_repo),
+                    repo,
                     config.internal_write_token.clone(),
                 )
             }
             None => {
                 info!("🚀 Graph service initialized with Neo4j (no cache)");
-                GraphServiceImpl::new(neo4j_repo, config.internal_write_token.clone())
+                let repo: Arc<dyn repository::GraphRepositoryTrait + Send + Sync> = Arc::new(neo4j_repo);
+
+                // Clone repo for Kafka consumer
+                let repo_for_consumer = repo.clone();
+
+                // Spawn Kafka consumer for social events if configured
+                spawn_kafka_consumer_if_enabled(repo_for_consumer, &config);
+
+                GraphServiceImpl::new_with_trait(repo, config.internal_write_token.clone())
             }
         };
 
@@ -238,3 +262,53 @@ async fn start_grpc_server(graph_service: GraphServiceImpl, config: &Config) -> 
 
     Ok(())
 }
+
+/// Spawn Kafka consumer for social events if environment variables are configured
+fn spawn_kafka_consumer_if_enabled(
+    repo: Arc<dyn repository::GraphRepositoryTrait + Send + Sync>,
+    _config: &Config,
+) {
+    let kafka_enabled = std::env::var("KAFKA_ENABLED")
+        .unwrap_or_else(|_| "false".to_string())
+        .to_lowercase()
+        == "true";
+
+    if !kafka_enabled {
+        info!("Kafka consumer disabled (KAFKA_ENABLED not set to true)");
+        return;
+    }
+
+    let brokers = match std::env::var("KAFKA_BROKERS") {
+        Ok(b) if !b.is_empty() => b,
+        _ => {
+            warn!("KAFKA_BROKERS not set or empty - Kafka consumer disabled");
+            return;
+        }
+    };
+
+    let group_id = std::env::var("KAFKA_CONSUMER_GROUP")
+        .unwrap_or_else(|_| "graph-service-social-events".to_string());
+
+    let topic_prefix = std::env::var("KAFKA_TOPIC_PREFIX").unwrap_or_else(|_| "nova".to_string());
+    let topic = format!("{}.social.events", topic_prefix);
+
+    info!(
+        "Starting Kafka consumer: brokers={}, group={}, topic={}",
+        brokers, group_id, topic
+    );
+
+    tokio::spawn(async move {
+        match SocialEventsConsumer::new(&brokers, &group_id, &topic, repo) {
+            Ok(consumer) => {
+                info!("✅ Kafka consumer initialized successfully");
+                if let Err(e) = consumer.start().await {
+                    error!("Kafka consumer failed: {}", e);
+                }
+            }
+            Err(e) => {
+                error!("Failed to create Kafka consumer: {}", e);
+            }
+        }
+    });
+}
+

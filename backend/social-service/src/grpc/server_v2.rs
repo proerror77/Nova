@@ -1,8 +1,10 @@
 use std::sync::Arc;
 
 use chrono::{DateTime, Utc};
+use grpc_clients::nova::graph_service::v2::graph_service_client::GraphServiceClient;
 use pbjson_types::{Empty, Timestamp};
 use sqlx::PgPool;
+use tonic::transport::Channel;
 use tonic::{Request, Response, Status};
 use transactional_outbox::{OutboxError, SqlxOutboxRepository};
 use uuid::Uuid;
@@ -35,6 +37,7 @@ pub struct AppState {
     pub pg_pool: PgPool,
     pub counter_service: CounterService,
     pub outbox_repo: Arc<SqlxOutboxRepository>,
+    pub graph_client: GraphServiceClient<Channel>,
 }
 
 impl AppState {
@@ -42,11 +45,13 @@ impl AppState {
         pg_pool: PgPool,
         counter_service: CounterService,
         outbox_repo: Arc<SqlxOutboxRepository>,
+        graph_client: GraphServiceClient<Channel>,
     ) -> Self {
         Self {
             pg_pool,
             counter_service,
             outbox_repo,
+            graph_client,
         }
     }
 }
@@ -65,7 +70,7 @@ impl SocialServiceImpl {
     }
 
     fn follow_service(&self) -> FollowService {
-        FollowService::new(self.state.pg_pool.clone())
+        FollowService::new(self.state.graph_client.clone())
     }
 
     fn comment_repo(&self) -> CommentRepository {

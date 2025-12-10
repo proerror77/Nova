@@ -1,6 +1,6 @@
 use crate::error::AppError;
 use crate::middleware::guards::User;
-use crate::services::relationship_service::RelationshipService;
+use crate::services::relationship_service::{RelationshipService, RelationshipServiceV2};
 use crate::state::AppState;
 use actix_web::{delete, get, post, put, web, HttpResponse};
 use serde::{Deserialize, Serialize};
@@ -64,9 +64,14 @@ pub async fn block_user(
     user: User,
     body: web::Json<BlockUserRequest>,
 ) -> Result<HttpResponse, AppError> {
-    let blocked =
-        RelationshipService::block_user(&state.db, user.id, body.user_id, body.reason.clone())
-            .await?;
+    // Create GraphClient and RelationshipServiceV2
+    let graph_client = state
+        .graph_client
+        .as_ref()
+        .ok_or_else(|| AppError::StartServer("graph_client not initialized".to_string()))?;
+    let service = RelationshipServiceV2::new((**graph_client).clone(), state.db.clone());
+
+    let blocked = service.block_user(user.id, body.user_id).await?;
 
     if blocked {
         Ok(HttpResponse::Created().json(serde_json::json!({
@@ -90,7 +95,15 @@ pub async fn unblock_user(
     path: web::Path<Uuid>,
 ) -> Result<HttpResponse, AppError> {
     let blocked_id = path.into_inner();
-    let unblocked = RelationshipService::unblock_user(&state.db, user.id, blocked_id).await?;
+
+    // Create GraphClient and RelationshipServiceV2
+    let graph_client = state
+        .graph_client
+        .as_ref()
+        .ok_or_else(|| AppError::StartServer("graph_client not initialized".to_string()))?;
+    let service = RelationshipServiceV2::new((**graph_client).clone(), state.db.clone());
+
+    let unblocked = service.unblock_user(user.id, blocked_id).await?;
 
     if unblocked {
         Ok(HttpResponse::Ok().json(serde_json::json!({
@@ -116,14 +129,22 @@ pub async fn get_blocked_users(
     let limit = query.limit.unwrap_or(50).min(100);
     let offset = query.offset.unwrap_or(0);
 
-    let blocked = RelationshipService::get_blocked_users(&state.db, user.id, limit, offset).await?;
+    // Create GraphClient and RelationshipServiceV2
+    let graph_client = state
+        .graph_client
+        .as_ref()
+        .ok_or_else(|| AppError::StartServer("graph_client not initialized".to_string()))?;
+    let service = RelationshipServiceV2::new((**graph_client).clone(), state.db.clone());
 
-    let response: Vec<BlockedUserResponse> = blocked
+    let blocked_user_ids = service.get_blocked_users(user.id, limit, offset).await?;
+
+    // Convert to response format (note: we no longer have reason and created_at from graph-service)
+    let response: Vec<BlockedUserResponse> = blocked_user_ids
         .into_iter()
-        .map(|b| BlockedUserResponse {
-            user_id: b.blocked_id,
-            reason: b.reason,
-            blocked_at: b.created_at.to_rfc3339(),
+        .map(|blocked_id| BlockedUserResponse {
+            user_id: blocked_id,
+            reason: None, // graph-service doesn't store block reasons
+            blocked_at: chrono::Utc::now().to_rfc3339(), // graph-service doesn't return timestamps
         })
         .collect();
 

@@ -6,7 +6,8 @@
 
 use crate::error::AppError;
 use grpc_clients::nova::graph_service::v2::{
-    AreMutualFollowersRequest, HasBlockBetweenRequest, IsBlockedRequest, IsFollowingRequest,
+    AreMutualFollowersRequest, CreateBlockRequest, DeleteBlockRequest, GetBlockedUsersRequest,
+    HasBlockBetweenRequest, IsBlockedRequest, IsFollowingRequest,
 };
 use grpc_clients::{config::GrpcConfig, GrpcClientPool};
 use std::sync::Arc;
@@ -157,6 +158,111 @@ impl GraphClient {
                     status = ?status.code(),
                     message = %status.message(),
                     "graph-service are_mutual_followers failed"
+                );
+                Err(AppError::GrpcClient(format!(
+                    "graph-service error: {}",
+                    status.message()
+                )))
+            }
+        }
+    }
+
+    /// Create a block relationship (write operation)
+    /// Replaces: INSERT INTO blocks (blocker_id, blocked_id, reason) VALUES ($1, $2, $3)
+    pub async fn create_block(
+        &self,
+        blocker_id: Uuid,
+        blocked_id: Uuid,
+    ) -> Result<bool, AppError> {
+        let mut client = self.pool.graph();
+        let request = Request::new(CreateBlockRequest {
+            blocker_id: blocker_id.to_string(),
+            blocked_id: blocked_id.to_string(),
+        });
+
+        match client.create_block(request).await {
+            Ok(response) => {
+                let r = response.into_inner();
+                Ok(r.success)
+            }
+            Err(status) => {
+                tracing::error!(
+                    blocker_id = %blocker_id,
+                    blocked_id = %blocked_id,
+                    status = ?status.code(),
+                    message = %status.message(),
+                    "graph-service create_block failed"
+                );
+                Err(AppError::GrpcClient(format!(
+                    "graph-service error: {}",
+                    status.message()
+                )))
+            }
+        }
+    }
+
+    /// Delete a block relationship (write operation)
+    /// Replaces: DELETE FROM blocks WHERE blocker_id = $1 AND blocked_id = $2
+    pub async fn delete_block(
+        &self,
+        blocker_id: Uuid,
+        blocked_id: Uuid,
+    ) -> Result<bool, AppError> {
+        let mut client = self.pool.graph();
+        let request = Request::new(DeleteBlockRequest {
+            blocker_id: blocker_id.to_string(),
+            blocked_id: blocked_id.to_string(),
+        });
+
+        match client.delete_block(request).await {
+            Ok(response) => {
+                let r = response.into_inner();
+                Ok(r.success)
+            }
+            Err(status) => {
+                tracing::error!(
+                    blocker_id = %blocker_id,
+                    blocked_id = %blocked_id,
+                    status = ?status.code(),
+                    message = %status.message(),
+                    "graph-service delete_block failed"
+                );
+                Err(AppError::GrpcClient(format!(
+                    "graph-service error: {}",
+                    status.message()
+                )))
+            }
+        }
+    }
+
+    /// Get list of users blocked by a user
+    /// Replaces: SELECT blocked_id FROM blocks WHERE blocker_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3
+    pub async fn get_blocked_users(
+        &self,
+        user_id: Uuid,
+        limit: i32,
+        offset: i32,
+    ) -> Result<(Vec<String>, i32, bool), AppError> {
+        let mut client = self.pool.graph();
+        let request = Request::new(GetBlockedUsersRequest {
+            user_id: user_id.to_string(),
+            limit,
+            offset,
+        });
+
+        match client.get_blocked_users(request).await {
+            Ok(response) => {
+                let r = response.into_inner();
+                Ok((r.blocked_user_ids, r.total_count, r.has_more))
+            }
+            Err(status) => {
+                tracing::error!(
+                    user_id = %user_id,
+                    limit = %limit,
+                    offset = %offset,
+                    status = ?status.code(),
+                    message = %status.message(),
+                    "graph-service get_blocked_users failed"
                 );
                 Err(AppError::GrpcClient(format!(
                     "graph-service error: {}",

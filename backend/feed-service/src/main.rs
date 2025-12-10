@@ -1,6 +1,7 @@
 mod openapi;
 
 use actix_web::{dev::Service, web, App, HttpServer};
+use opentelemetry_config::{init_tracing, TracingConfig};
 use std::io;
 use std::sync::Arc;
 use std::time::Instant;
@@ -42,25 +43,55 @@ async fn main() -> io::Result<()> {
         std::process::exit(1);
     }
 
-    // Initialize structured logging with JSON format for production-grade observability
-    // Includes: timestamp, level, target, thread IDs, line numbers, and structured fields
-    tracing_subscriber::registry()
-        .with(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "info,actix_web=debug".into()),
-        )
-        .with(
-            tracing_subscriber::fmt::layer()
-                .json() // ✅ JSON format for log aggregation (CloudWatch, Datadog, ELK)
-                .with_current_span(true) // Include span context for distributed tracing
-                .with_span_list(true) // Include all parent spans
-                .with_thread_ids(true) // Include thread IDs for debugging
-                .with_thread_names(true) // Include thread names
-                .with_line_number(true) // Include source line numbers
-                .with_file(true) // Include source file paths
-                .with_target(true), // Include target module path
-        )
-        .init();
+    // Initialize OpenTelemetry tracing (if enabled)
+    let tracing_config = TracingConfig::from_env();
+    if tracing_config.enabled {
+        match init_tracing("feed-service", tracing_config) {
+            Ok(_tracer) => {
+                tracing::info!("OpenTelemetry distributed tracing initialized for feed-service");
+            }
+            Err(e) => {
+                eprintln!("Failed to initialize OpenTelemetry tracing: {}", e);
+                // Initialize fallback structured logging with JSON format
+                tracing_subscriber::registry()
+                    .with(
+                        tracing_subscriber::EnvFilter::try_from_default_env()
+                            .unwrap_or_else(|_| "info,actix_web=debug".into()),
+                    )
+                    .with(
+                        tracing_subscriber::fmt::layer()
+                            .json()
+                            .with_current_span(true)
+                            .with_span_list(true)
+                            .with_thread_ids(true)
+                            .with_thread_names(true)
+                            .with_line_number(true)
+                            .with_file(true)
+                            .with_target(true),
+                    )
+                    .init();
+            }
+        }
+    } else {
+        // Initialize fallback structured logging without OpenTelemetry
+        tracing_subscriber::registry()
+            .with(
+                tracing_subscriber::EnvFilter::try_from_default_env()
+                    .unwrap_or_else(|_| "info,actix_web=debug".into()),
+            )
+            .with(
+                tracing_subscriber::fmt::layer()
+                    .json()
+                    .with_current_span(true)
+                    .with_span_list(true)
+                    .with_thread_ids(true)
+                    .with_thread_names(true)
+                    .with_line_number(true)
+                    .with_file(true)
+                    .with_target(true),
+            )
+            .init();
+    }
 
     // Load configuration
     let config = match Config::from_env() {

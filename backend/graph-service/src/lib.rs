@@ -1,4 +1,5 @@
 pub mod config;
+pub mod consumers;
 pub mod domain;
 pub mod grpc;
 pub mod migration;

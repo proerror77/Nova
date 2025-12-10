@@ -1,10 +1,8 @@
 /// OAuth 2.0 authentication service
 ///
-/// Supports multiple OAuth providers:
+/// Supports OAuth providers:
 /// - Google (OAuth 2.0)
 /// - Apple (Sign in with Apple)
-/// - Facebook (OAuth 2.0)
-/// - WeChat (OAuth 2.0)
 ///
 /// ## Security
 ///
@@ -33,8 +31,6 @@ const OAUTH_STATE_TTL_SECS: u64 = 600; // 10 minutes
 pub enum OAuthProvider {
     Google,
     Apple,
-    Facebook,
-    WeChat,
 }
 
 impl OAuthProvider {
@@ -42,8 +38,6 @@ impl OAuthProvider {
         match self {
             Self::Google => "google",
             Self::Apple => "apple",
-            Self::Facebook => "facebook",
-            Self::WeChat => "wechat",
         }
     }
 }
@@ -123,8 +117,6 @@ impl OAuthService {
         let url = match provider {
             OAuthProvider::Google => self.google_auth_url(&state, redirect_uri),
             OAuthProvider::Apple => self.apple_auth_url(&state, redirect_uri),
-            OAuthProvider::Facebook => self.facebook_auth_url(&state, redirect_uri),
-            OAuthProvider::WeChat => self.wechat_auth_url(&state, redirect_uri),
         };
 
         Ok(OAuthAuthorizationUrl { url, state })
@@ -174,8 +166,6 @@ impl OAuthService {
         let provider = match provider_str.as_str() {
             "google" => OAuthProvider::Google,
             "apple" => OAuthProvider::Apple,
-            "facebook" => OAuthProvider::Facebook,
-            "wechat" => OAuthProvider::WeChat,
             _ => return Err(IdentityError::InvalidOAuthProvider),
         };
 
@@ -183,8 +173,6 @@ impl OAuthService {
         let oauth_user = match provider {
             OAuthProvider::Google => self.exchange_google(code, redirect_uri).await?,
             OAuthProvider::Apple => self.exchange_apple(code, redirect_uri).await?,
-            OAuthProvider::Facebook => self.exchange_facebook(code, redirect_uri).await?,
-            OAuthProvider::WeChat => self.exchange_wechat(code, redirect_uri).await?,
         };
 
         // Create or link user
@@ -206,24 +194,6 @@ impl OAuthService {
         format!(
             "https://appleid.apple.com/auth/authorize?client_id={}&redirect_uri={}&response_type=code&scope=name%20email&response_mode=form_post&state={}",
             self.config.apple_client_id.as_deref().unwrap_or(""),
-            urlencoding::encode(redirect_uri),
-            state
-        )
-    }
-
-    fn facebook_auth_url(&self, state: &str, redirect_uri: &str) -> String {
-        format!(
-            "https://www.facebook.com/v12.0/dialog/oauth?client_id={}&redirect_uri={}&scope=email&state={}",
-            self.config.facebook_app_id.as_deref().unwrap_or(""),
-            urlencoding::encode(redirect_uri),
-            state
-        )
-    }
-
-    fn wechat_auth_url(&self, state: &str, redirect_uri: &str) -> String {
-        format!(
-            "https://open.weixin.qq.com/connect/qrconnect?appid={}&redirect_uri={}&response_type=code&scope=snsapi_login&state={}#wechat_redirect",
-            self.config.wechat_app_id.as_deref().unwrap_or(""),
             urlencoding::encode(redirect_uri),
             state
         )
@@ -311,110 +281,6 @@ impl OAuthService {
             access_token: token_response.access_token,
             refresh_token: token_response.refresh_token,
             expires_at: to_expiry(token_response.expires_in),
-        })
-    }
-
-    async fn exchange_facebook(&self, code: &str, redirect_uri: &str) -> Result<OAuthUserInfo> {
-        let client_id = self.config.facebook_app_id.as_ref().ok_or_else(|| {
-            IdentityError::OAuthError("Facebook client ID not configured".to_string())
-        })?;
-        let client_secret = self.config.facebook_app_secret.as_ref().ok_or_else(|| {
-            IdentityError::OAuthError("Facebook client secret not configured".to_string())
-        })?;
-
-        // Exchange code for access token
-        let token_response = self
-            .http
-            .get("https://graph.facebook.com/v12.0/oauth/access_token")
-            .query(&[
-                ("code", code),
-                ("client_id", client_id),
-                ("client_secret", client_secret),
-                ("redirect_uri", redirect_uri),
-            ])
-            .send()
-            .await
-            .map_err(|e| IdentityError::OAuthError(e.to_string()))?
-            .json::<FacebookTokenResponse>()
-            .await
-            .map_err(|e| IdentityError::OAuthError(e.to_string()))?;
-
-        // Fetch user info
-        let user_info = self
-            .http
-            .get("https://graph.facebook.com/me")
-            .query(&[
-                ("fields", "id,name,email,picture"),
-                ("access_token", &token_response.access_token),
-            ])
-            .send()
-            .await
-            .map_err(|e| IdentityError::OAuthError(e.to_string()))?
-            .json::<FacebookUserInfo>()
-            .await
-            .map_err(|e| IdentityError::OAuthError(e.to_string()))?;
-
-        Ok(OAuthUserInfo {
-            provider_user_id: user_info.id,
-            email: user_info.email.unwrap_or_default(),
-            name: user_info.name,
-            picture: user_info.picture.as_ref().and_then(|p| p.data.url.clone()),
-            access_token: token_response.access_token,
-            refresh_token: None,
-            expires_at: to_expiry(token_response.expires_in),
-        })
-    }
-
-    async fn exchange_wechat(&self, code: &str, _redirect_uri: &str) -> Result<OAuthUserInfo> {
-        let app_id =
-            self.config.wechat_app_id.as_ref().ok_or_else(|| {
-                IdentityError::OAuthError("WeChat app ID not configured".to_string())
-            })?;
-        let app_secret = self.config.wechat_app_secret.as_ref().ok_or_else(|| {
-            IdentityError::OAuthError("WeChat app secret not configured".to_string())
-        })?;
-
-        // Exchange code for access token
-        let token_response = self
-            .http
-            .get("https://api.weixin.qq.com/sns/oauth2/access_token")
-            .query(&[
-                ("appid", app_id.as_str()),
-                ("secret", app_secret.as_str()),
-                ("code", code),
-                ("grant_type", "authorization_code"),
-            ])
-            .send()
-            .await
-            .map_err(|e| IdentityError::OAuthError(e.to_string()))?
-            .json::<WeChatTokenResponse>()
-            .await
-            .map_err(|e| IdentityError::OAuthError(e.to_string()))?;
-
-        // Fetch user info
-        let user_info = self
-            .http
-            .get("https://api.weixin.qq.com/sns/userinfo")
-            .query(&[
-                ("access_token", &token_response.access_token),
-                ("openid", &token_response.openid),
-                ("lang", &"zh_CN".to_string()),
-            ])
-            .send()
-            .await
-            .map_err(|e| IdentityError::OAuthError(e.to_string()))?
-            .json::<WeChatUserInfo>()
-            .await
-            .map_err(|e| IdentityError::OAuthError(e.to_string()))?;
-
-        Ok(OAuthUserInfo {
-            provider_user_id: user_info.unionid.unwrap_or(user_info.openid),
-            email: String::new(), // WeChat doesn't provide email
-            name: Some(user_info.nickname),
-            picture: Some(user_info.headimgurl),
-            access_token: token_response.access_token,
-            refresh_token: Some(token_response.refresh_token),
-            expires_at: to_expiry(Some(token_response.expires_in)),
         })
     }
 
@@ -606,46 +472,6 @@ struct AppleTokenResponse {
 struct AppleIdTokenClaims {
     sub: String,
     email: Option<String>,
-}
-
-#[derive(Deserialize)]
-struct FacebookTokenResponse {
-    access_token: String,
-    expires_in: Option<i64>,
-}
-
-#[derive(Deserialize)]
-struct FacebookUserInfo {
-    id: String,
-    email: Option<String>,
-    name: Option<String>,
-    picture: Option<FacebookPicture>,
-}
-
-#[derive(Deserialize)]
-struct FacebookPicture {
-    data: FacebookPictureData,
-}
-
-#[derive(Deserialize)]
-struct FacebookPictureData {
-    url: Option<String>,
-}
-
-#[derive(Deserialize)]
-struct WeChatTokenResponse {
-    access_token: String,
-    refresh_token: String,
-    expires_in: i64,
-    openid: String,
-}
-
-#[derive(Deserialize)]
-struct WeChatUserInfo {
-    openid: String,
-    unionid: Option<String>,
-    nickname: String,
-    headimgurl: String,
 }
 
 // ===== Utility Functions =====

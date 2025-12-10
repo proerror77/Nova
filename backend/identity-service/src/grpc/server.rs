@@ -1,6 +1,6 @@
 /// gRPC server implementation for identity-service
 ///
-/// Implements all 16 RPCs from auth_service.proto:
+/// Implements all RPCs from auth_service.proto:
 /// - Authentication: Register, Login, Refresh
 /// - Token validation: VerifyToken
 /// - User queries: GetUser, GetUsersByIds, GetUserByEmail, CheckUserExists, ListUsers
@@ -8,11 +8,14 @@
 /// - Security: RecordFailedLogin
 /// - Profile: UpdateUserProfile
 /// - E2EE: UpsertUserPublicKey, GetUserPublicKey
+/// - OAuth/SSO: StartOAuthFlow, CompleteOAuthFlow, ListOAuthConnections, UnlinkOAuthProvider
+use crate::config::OAuthSettings;
 use crate::db;
 use crate::error::IdentityError;
 use crate::security::{generate_token_pair, hash_password, validate_token, verify_password};
 use crate::services::{
-    EmailService, InviteDeliveryConfig, InviteDeliveryService, KafkaEventProducer, TwoFaService,
+    EmailService, InviteDeliveryConfig, InviteDeliveryService, KafkaEventProducer, OAuthService,
+    TwoFaService,
 };
 use chrono::{TimeZone, Utc};
 use redis_utils::SharedConnectionManager;
@@ -46,14 +49,15 @@ use nova::auth_service::*;
 #[derive(Clone)]
 pub struct IdentityServiceServer {
     db: PgPool,
-    #[allow(dead_code)] // Reserved for rate limiting implementation
-    _redis: SharedConnectionManager,
+    #[allow(dead_code)] // Used internally by OAuthService
+    redis: SharedConnectionManager,
     #[allow(dead_code)] // Reserved for email verification flow
     _email: EmailService,
     #[allow(dead_code)] // Reserved for 2FA implementation
     _two_fa: TwoFaService,
     kafka: Option<KafkaEventProducer>,
     invite_delivery: std::sync::Arc<InviteDeliveryService>,
+    oauth: OAuthService,
 }
 
 impl IdentityServiceServer {
@@ -63,6 +67,7 @@ impl IdentityServiceServer {
         email: EmailService,
         kafka: Option<KafkaEventProducer>,
         sns_client: Option<aws_sdk_sns::Client>,
+        oauth_settings: OAuthSettings,
     ) -> Self {
         let two_fa = TwoFaService::new(db.clone(), redis.clone(), kafka.clone());
         let invite_delivery = std::sync::Arc::new(InviteDeliveryService::new(
@@ -71,13 +76,15 @@ impl IdentityServiceServer {
             email.clone(),
             InviteDeliveryConfig::default(),
         ));
+        let oauth = OAuthService::new(oauth_settings, db.clone(), redis.clone(), kafka.clone());
         Self {
             db,
-            _redis: redis,
+            redis,
             _email: email,
             _two_fa: two_fa,
             kafka,
             invite_delivery,
+            oauth,
         }
     }
 }
@@ -1124,6 +1131,162 @@ impl AuthService for IdentityServiceServer {
             error: None,
         }))
     }
+
+    // ========== OAuth/SSO ==========
+
+    /// Start OAuth flow - returns authorization URL
+    async fn start_o_auth_flow(
+        &self,
+        request: Request<StartOAuthFlowRequest>,
+    ) -> std::result::Result<Response<StartOAuthFlowResponse>, Status> {
+        let req = request.into_inner();
+
+        let provider = proto_provider_to_oauth(req.provider())
+            .ok_or_else(|| Status::invalid_argument("Invalid or unsupported OAuth provider"))?;
+
+        let result = self
+            .oauth
+            .start_flow(provider, &req.redirect_uri)
+            .await
+            .map_err(to_status)?;
+
+        info!(provider = ?provider, "OAuth flow started");
+
+        Ok(Response::new(StartOAuthFlowResponse {
+            authorization_url: result.url,
+            state: result.state,
+        }))
+    }
+
+    /// Complete OAuth flow - exchange authorization code for tokens
+    async fn complete_o_auth_flow(
+        &self,
+        request: Request<CompleteOAuthFlowRequest>,
+    ) -> std::result::Result<Response<CompleteOAuthFlowResponse>, Status> {
+        let req = request.into_inner();
+
+        // For new users via OAuth, we require an invite code (Nova is invite-only)
+        // The invite code is validated during user creation in OAuthService::upsert_user
+
+        let result = self
+            .oauth
+            .complete_flow(&req.state, &req.code, &req.redirect_uri)
+            .await
+            .map_err(to_status)?;
+
+        // Generate token pair for the user
+        let tokens = generate_token_pair(result.user.id, &result.user.email, &result.user.username)
+            .map_err(anyhow_to_status)?;
+
+        info!(
+            user_id = %result.user.id,
+            is_new_user = result.is_new_user,
+            "OAuth flow completed"
+        );
+
+        Ok(Response::new(CompleteOAuthFlowResponse {
+            user_id: result.user.id.to_string(),
+            token: tokens.access_token,
+            refresh_token: tokens.refresh_token,
+            expires_in: tokens.expires_in,
+            username: result.user.username,
+            email: result.user.email,
+            is_new_user: result.is_new_user,
+        }))
+    }
+
+    /// List linked OAuth providers for a user
+    async fn list_o_auth_connections(
+        &self,
+        request: Request<ListOAuthConnectionsRequest>,
+    ) -> std::result::Result<Response<ListOAuthConnectionsResponse>, Status> {
+        let req = request.into_inner();
+        let user_id = Uuid::parse_str(&req.user_id)
+            .map_err(|_| Status::invalid_argument("Invalid user ID format"))?;
+
+        let connections = db::oauth::find_by_user_id(&self.db, user_id)
+            .await
+            .map_err(to_status)?;
+
+        let proto_connections: Vec<OAuthConnectionInfo> = connections
+            .into_iter()
+            .map(|conn| OAuthConnectionInfo {
+                id: conn.id.to_string(),
+                provider: oauth_provider_str_to_proto(&conn.provider).into(),
+                provider_user_id: conn.provider_user_id,
+                email: conn.email,
+                name: conn.name,
+                picture_url: conn.picture_url,
+                connected_at: conn.created_at.timestamp(),
+                last_used_at: conn.updated_at.timestamp(),
+            })
+            .collect();
+
+        Ok(Response::new(ListOAuthConnectionsResponse {
+            connections: proto_connections,
+        }))
+    }
+
+    /// Unlink an OAuth provider from user account
+    async fn unlink_o_auth_provider(
+        &self,
+        request: Request<UnlinkOAuthProviderRequest>,
+    ) -> std::result::Result<Response<UnlinkOAuthProviderResponse>, Status> {
+        let req = request.into_inner();
+        let user_id = Uuid::parse_str(&req.user_id)
+            .map_err(|_| Status::invalid_argument("Invalid user ID format"))?;
+
+        let provider_str = proto_provider_to_str(req.provider())
+            .ok_or_else(|| Status::invalid_argument("Invalid OAuth provider"))?;
+
+        // Check if user has other authentication methods before unlinking
+        // (either password or other OAuth connections)
+        let user = db::users::find_by_id(&self.db, user_id)
+            .await
+            .map_err(to_status)?
+            .ok_or_else(|| Status::not_found("User not found"))?;
+
+        let connections = db::oauth::find_by_user_id(&self.db, user_id)
+            .await
+            .map_err(to_status)?;
+
+        let other_oauth_count = connections
+            .iter()
+            .filter(|c| c.provider != provider_str)
+            .count();
+
+        let has_password = !user.password_hash.is_empty();
+
+        if other_oauth_count == 0 && !has_password {
+            return Ok(Response::new(UnlinkOAuthProviderResponse {
+                success: false,
+                error: Some(
+                    "Cannot unlink the only authentication method. Please set a password or link another OAuth provider first.".to_string()
+                ),
+            }));
+        }
+
+        // Find and delete the connection
+        let connection = connections
+            .iter()
+            .find(|c| c.provider == provider_str)
+            .ok_or_else(|| Status::not_found("OAuth connection not found"))?;
+
+        db::oauth::delete_connection(&self.db, connection.id)
+            .await
+            .map_err(to_status)?;
+
+        info!(
+            user_id = %user_id,
+            provider = %provider_str,
+            "OAuth provider unlinked"
+        );
+
+        Ok(Response::new(UnlinkOAuthProviderResponse {
+            success: true,
+            error: None,
+        }))
+    }
 }
 
 // ===== Helper Functions =====
@@ -1209,5 +1372,34 @@ fn settings_to_proto(settings: &db::user_settings::UserSettingsRecord) -> UserSe
         show_online_status: settings.show_online_status,
         created_at: settings.created_at.timestamp(),
         updated_at: settings.updated_at.timestamp(),
+    }
+}
+
+// ===== OAuth Helper Functions =====
+
+/// Convert proto OAuthProvider enum to service OAuthProvider
+fn proto_provider_to_oauth(provider: OAuthProvider) -> Option<crate::services::OAuthProvider> {
+    match provider {
+        OAuthProvider::OauthProviderGoogle => Some(crate::services::OAuthProvider::Google),
+        OAuthProvider::OauthProviderApple => Some(crate::services::OAuthProvider::Apple),
+        OAuthProvider::OauthProviderUnspecified => None,
+    }
+}
+
+/// Convert proto OAuthProvider enum to string
+fn proto_provider_to_str(provider: OAuthProvider) -> Option<&'static str> {
+    match provider {
+        OAuthProvider::OauthProviderGoogle => Some("google"),
+        OAuthProvider::OauthProviderApple => Some("apple"),
+        OAuthProvider::OauthProviderUnspecified => None,
+    }
+}
+
+/// Convert provider string to proto OAuthProvider enum
+fn oauth_provider_str_to_proto(provider: &str) -> OAuthProvider {
+    match provider.to_lowercase().as_str() {
+        "google" => OAuthProvider::OauthProviderGoogle,
+        "apple" => OAuthProvider::OauthProviderApple,
+        _ => OAuthProvider::OauthProviderUnspecified,
     }
 }
