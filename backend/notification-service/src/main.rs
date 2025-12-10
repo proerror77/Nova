@@ -7,7 +7,9 @@ use notification_service::{
         preferences::register_routes as register_preferences,
         websocket::register_routes as register_websocket,
     },
-    metrics, ConnectionManager, NotificationService,
+    metrics,
+    services::{APNsClient, FCMClient, KafkaNotificationConsumer, ServiceAccountKey},
+    ConnectionManager, NotificationService,
 };
 use std::io;
 use std::sync::Arc;
@@ -53,14 +55,111 @@ async fn main() -> io::Result<()> {
         }
     };
 
-    // Initialize FCM and APNs clients (optional - for now, disabled)
-    // These would need proper credential configuration
+    // Initialize FCM client from environment
+    // FCM_CREDENTIALS should point to a Firebase service account JSON file
+    let fcm_client: Option<Arc<FCMClient>> =
+        if let Ok(credentials_path) = std::env::var("FCM_CREDENTIALS") {
+            match std::fs::read_to_string(&credentials_path) {
+                Ok(json_content) => {
+                    match serde_json::from_str::<ServiceAccountKey>(&json_content) {
+                        Ok(key) => {
+                            let project_id = key.project_id.clone();
+                            let client = FCMClient::new(project_id.clone(), key);
+                            tracing::info!(
+                                "FCM client initialized for project {} from {}",
+                                project_id,
+                                credentials_path
+                            );
+                            Some(Arc::new(client))
+                        }
+                        Err(e) => {
+                            tracing::warn!(
+                                "Failed to parse FCM credentials from {}: {}",
+                                credentials_path,
+                                e
+                            );
+                            None
+                        }
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        "Failed to read FCM credentials file {}: {}",
+                        credentials_path,
+                        e
+                    );
+                    None
+                }
+            }
+        } else {
+            tracing::warn!("FCM_CREDENTIALS not set - FCM push notifications disabled");
+            None
+        };
+
+    // Initialize APNs client from environment
+    let apns_client: Option<Arc<APNsClient>> =
+        if let Ok(cert_path) = std::env::var("APNS_CERTIFICATE_PATH") {
+            let key_id = std::env::var("APNS_KEY_ID").unwrap_or_default();
+            let team_id = std::env::var("APNS_TEAM_ID").unwrap_or_default();
+            let is_production = std::env::var("APNS_PRODUCTION")
+                .map(|v| v.to_lowercase() == "true" || v == "1")
+                .unwrap_or(false);
+
+            if key_id.is_empty() || team_id.is_empty() {
+                tracing::warn!(
+                    "APNS_KEY_ID or APNS_TEAM_ID not set - APNs push notifications disabled"
+                );
+                None
+            } else {
+                let client = APNsClient::new(
+                    cert_path.clone(),
+                    String::new(), // key_path - not used in wrapper
+                    team_id,
+                    key_id,
+                    is_production,
+                );
+                tracing::info!(
+                    "APNs client initialized (production={}) from {}",
+                    is_production,
+                    cert_path
+                );
+                Some(Arc::new(client))
+            }
+        } else {
+            tracing::warn!("APNS_CERTIFICATE_PATH not set - APNs push notifications disabled");
+            None
+        };
 
     let notification_service = Arc::new(NotificationService::new(
         db_pool.clone(),
-        None, // FCM client
-        None, // APNs client
+        fcm_client.clone(),
+        apns_client.clone(),
     ));
+
+    // Start Kafka consumer in background for event-driven notifications
+    let kafka_notification_service = notification_service.clone();
+    let kafka_broker =
+        std::env::var("KAFKA_BROKER").unwrap_or_else(|_| "localhost:9092".to_string());
+    let kafka_enabled = std::env::var("KAFKA_ENABLED")
+        .map(|v| v.to_lowercase() == "true" || v == "1")
+        .unwrap_or(true);
+
+    if kafka_enabled {
+        tokio::spawn(async move {
+            let consumer = KafkaNotificationConsumer::new(kafka_broker.clone(), "notifications".to_string());
+
+            tracing::info!(
+                "Starting Kafka notification consumer (broker: {})",
+                kafka_broker
+            );
+
+            if let Err(e) = consumer.start(kafka_notification_service).await {
+                tracing::error!("Kafka consumer error: {}", e);
+            }
+        });
+    } else {
+        tracing::info!("Kafka consumer disabled (KAFKA_ENABLED=false)");
+    }
 
     // Initialize WebSocket connection manager
     let connection_manager = Arc::new(ConnectionManager::new());
@@ -79,6 +178,8 @@ async fn main() -> io::Result<()> {
 
     let grpc_db_pool = db_pool.clone();
     let grpc_notification_service = notification_service.clone();
+    let grpc_fcm_client = fcm_client.clone();
+    let grpc_apns_client = apns_client.clone();
     tokio::spawn(async move {
         use notification_service::grpc::{
             nova::notification_service::v2::notification_service_server::NotificationServiceServer,
@@ -110,7 +211,11 @@ async fn main() -> io::Result<()> {
             .await;
         tracing::info!("gRPC health check enabled (tonic-health protocol)");
 
-        let push_sender = Arc::new(PushSender::new(grpc_db_pool.clone(), None, None));
+        let push_sender = Arc::new(PushSender::new(
+            grpc_db_pool.clone(),
+            grpc_fcm_client,
+            grpc_apns_client,
+        ));
         let svc =
             NotificationServiceImpl::new(grpc_db_pool, grpc_notification_service, push_sender);
 

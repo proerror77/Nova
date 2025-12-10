@@ -28,10 +28,15 @@ pub struct RecallLayer {
 }
 
 impl RecallLayer {
-    pub fn new(graph_client: Channel, redis_client: redis::Client, config: RecallConfig) -> Self {
+    pub fn new(
+        graph_client: Channel,
+        content_client: Channel,
+        redis_client: redis::Client,
+        config: RecallConfig,
+    ) -> Self {
         let strategies: Vec<(Box<dyn RecallStrategy>, f32)> = vec![
             (
-                Box::new(GraphRecallStrategy::new(graph_client.clone())),
+                Box::new(GraphRecallStrategy::new(graph_client.clone(), content_client.clone())),
                 config.graph_recall_weight,
             ),
             (
@@ -161,8 +166,9 @@ mod tests {
         let redis_client =
             redis::Client::open("redis://localhost:6379").expect("Redis client failed");
         let graph_channel = Channel::from_static("http://localhost:9008").connect_lazy();
+        let content_channel = Channel::from_static("http://localhost:9002").connect_lazy();
 
-        let layer = RecallLayer::new(graph_channel, redis_client, config);
+        let layer = RecallLayer::new(graph_channel, content_channel, redis_client, config);
         let unique = layer.deduplicate_and_merge(candidates);
 
         assert_eq!(unique.len(), 2);

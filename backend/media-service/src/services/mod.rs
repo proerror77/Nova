@@ -428,12 +428,21 @@ impl QualityProfile {
 }
 
 /// Transcode pipeline orchestrates jobs asynchronously
+///
+/// Supports two modes:
+/// - Mock mode (default): Simulates transcoding with delays, updates DB only
+/// - Real mode: Uses GCP Transcoder API for actual video transcoding
+///
+/// Set `MEDIA_TRANSCODE_ENABLE_MOCK=false` and configure GCP credentials to enable real transcoding.
 #[derive(Clone)]
 pub struct ReelTranscodePipeline {
     pool: PgPool,
     profiles: Arc<Vec<QualityProfile>>,
     cdn_base_url: String,
     enable_mock: bool,
+    gcs_bucket: Option<String>,
+    gcp_project_id: Option<String>,
+    gcp_location: Option<String>,
 }
 
 impl ReelTranscodePipeline {
@@ -451,6 +460,9 @@ impl ReelTranscodePipeline {
             profiles: Arc::new(profiles),
             cdn_base_url,
             enable_mock,
+            gcs_bucket: std::env::var("GCS_BUCKET").ok(),
+            gcp_project_id: std::env::var("GCP_PROJECT_ID").ok(),
+            gcp_location: std::env::var("GCP_TRANSCODER_LOCATION").ok(),
         }
     }
 
@@ -459,24 +471,50 @@ impl ReelTranscodePipeline {
         Arc::clone(&self.profiles)
     }
 
+    /// Check if real GCP transcoding is available
+    fn is_gcp_transcoding_available(&self) -> bool {
+        !self.enable_mock
+            && self.gcs_bucket.is_some()
+            && self.gcp_project_id.is_some()
+    }
+
     /// Enqueue asynchronous processing for a reel
     pub async fn enqueue_reel(&self, reel_id: Uuid, upload_id: Option<Uuid>) -> Result<()> {
         let pool = self.pool.clone();
         let profiles = Arc::clone(&self.profiles);
         let cdn_base_url = self.cdn_base_url.clone();
         let enable_mock = self.enable_mock;
+        let gcs_bucket = self.gcs_bucket.clone();
+        let gcp_project_id = self.gcp_project_id.clone();
+        let gcp_location = self.gcp_location.clone();
 
         tokio::spawn(async move {
-            if let Err(err) = Self::process_reel(
-                pool,
-                reel_id,
-                upload_id,
-                profiles,
-                cdn_base_url,
-                enable_mock,
-            )
-            .await
-            {
+            let use_gcp = !enable_mock && gcs_bucket.is_some() && gcp_project_id.is_some();
+
+            let result = if use_gcp {
+                Self::process_reel_with_gcp(
+                    pool,
+                    reel_id,
+                    upload_id,
+                    profiles,
+                    cdn_base_url,
+                    gcs_bucket.unwrap(),
+                    gcp_project_id.unwrap(),
+                    gcp_location.unwrap_or_else(|| "us-central1".to_string()),
+                )
+                .await
+            } else {
+                Self::process_reel_mock(
+                    pool,
+                    reel_id,
+                    upload_id,
+                    profiles,
+                    cdn_base_url,
+                )
+                .await
+            };
+
+            if let Err(err) = result {
                 error!(
                     "Reel transcoding failed: reel_id={}, error={}",
                     reel_id, err
@@ -487,13 +525,259 @@ impl ReelTranscodePipeline {
         Ok(())
     }
 
-    async fn process_reel(
+    /// Process reel using GCP Transcoder API
+    async fn process_reel_with_gcp(
         pool: PgPool,
         reel_id: Uuid,
         upload_id: Option<Uuid>,
         profiles: Arc<Vec<QualityProfile>>,
         cdn_base_url: String,
-        enable_mock: bool,
+        gcs_bucket: String,
+        gcp_project_id: String,
+        gcp_location: String,
+    ) -> Result<()> {
+        use crate::services::video::transcoder::{
+            GcpTranscoderClient, TranscoderConfig, TranscodeProfile, TranscodeJobStatus,
+        };
+
+        let upload_id = match upload_id {
+            Some(id) => id,
+            None => {
+                warn!("Reel {} missing upload_id. Marking as failed.", reel_id);
+                mark_reel_failed(&pool, reel_id, "missing upload id").await?;
+                return Ok(());
+            }
+        };
+
+        // Get upload info to find source GCS URI
+        let upload = sqlx::query_as::<_, Upload>(
+            "SELECT id, user_id, filename, content_type, file_size, checksum, status,
+                    upload_url, storage_path, created_at, updated_at, expires_at
+             FROM uploads WHERE id = $1",
+        )
+        .bind(upload_id)
+        .fetch_optional(&pool)
+        .await?;
+
+        let upload = match upload {
+            Some(u) => u,
+            None => {
+                warn!("Upload {} not found for reel {}", upload_id, reel_id);
+                mark_reel_failed(&pool, reel_id, "upload not found").await?;
+                return Ok(());
+            }
+        };
+
+        // Build input GCS URI from upload info
+        // Format: gs://bucket/uploads/{user_id}/{upload_id}/{filename}
+        let input_gcs_uri = format!(
+            "gs://{}/uploads/{}/{}",
+            gcs_bucket, upload.user_id, upload.file_name
+        );
+
+        info!(
+            "Starting GCP transcoding for reel {}: input={}",
+            reel_id, input_gcs_uri
+        );
+
+        // Update reel status
+        sqlx::query(
+            "UPDATE reels
+             SET processing_stage = 'transcoding',
+                 processing_progress = 5,
+                 updated_at = NOW()
+             WHERE id = $1 AND status <> 'deleted'",
+        )
+        .bind(reel_id)
+        .execute(&pool)
+        .await?;
+
+        // Initialize GCP Transcoder client
+        let transcoder_config = TranscoderConfig {
+            project_id: gcp_project_id,
+            location: gcp_location,
+            gcs_bucket: gcs_bucket.clone(),
+            cdn_base_url: cdn_base_url.clone(),
+        };
+
+        let mut transcoder = match GcpTranscoderClient::new(transcoder_config).await {
+            Ok(client) => client,
+            Err(e) => {
+                error!("Failed to create GCP Transcoder client: {}", e);
+                mark_reel_failed(&pool, reel_id, &format!("Transcoder client error: {}", e)).await?;
+                return Ok(());
+            }
+        };
+
+        // Convert QualityProfile to TranscodeProfile
+        let transcode_profiles: Vec<TranscodeProfile> = profiles
+            .iter()
+            .map(|p| TranscodeProfile {
+                name: p.quality.to_string(),
+                width: p.width,
+                height: p.height,
+                bitrate_kbps: p.bitrate_kbps,
+                frame_rate: p.frame_rate,
+                codec: "h264".to_string(),
+            })
+            .collect();
+
+        // Create transcoding job
+        let job_id = match transcoder.create_transcode_job(
+            reel_id,
+            &input_gcs_uri,
+            &transcode_profiles,
+        ).await {
+            Ok(id) => id,
+            Err(e) => {
+                error!("Failed to create transcode job: {}", e);
+                mark_reel_failed(&pool, reel_id, &format!("Job creation failed: {}", e)).await?;
+                return Ok(());
+            }
+        };
+
+        info!("GCP Transcoder job created: {} for reel {}", job_id, reel_id);
+
+        // Update all transcode jobs with GCP job ID
+        sqlx::query(
+            "UPDATE reel_transcode_jobs
+             SET status = 'processing',
+                 stage = 'transcoding',
+                 worker_id = $2,
+                 started_at = NOW()
+             WHERE reel_id = $1",
+        )
+        .bind(reel_id)
+        .bind(&job_id)
+        .execute(&pool)
+        .await?;
+
+        // Poll for job completion
+        let poll_interval = std::time::Duration::from_secs(10);
+        let max_wait = std::time::Duration::from_secs(3600); // 1 hour max
+        let start_time = std::time::Instant::now();
+
+        loop {
+            let job_result = match transcoder.get_job_status(&job_id).await {
+                Ok(r) => r,
+                Err(e) => {
+                    warn!("Failed to get job status: {}", e);
+                    sleep(poll_interval).await;
+                    continue;
+                }
+            };
+
+            // Update progress in DB
+            sqlx::query(
+                "UPDATE reels
+                 SET processing_progress = $2,
+                     updated_at = NOW()
+                 WHERE id = $1 AND status <> 'deleted'",
+            )
+            .bind(reel_id)
+            .bind(job_result.progress.min(95) as i16)
+            .execute(&pool)
+            .await?;
+
+            sqlx::query(
+                "UPDATE reel_transcode_jobs
+                 SET progress = $2
+                 WHERE reel_id = $1 AND status = 'processing'",
+            )
+            .bind(reel_id)
+            .bind(job_result.progress.min(95) as i16)
+            .execute(&pool)
+            .await?;
+
+            match job_result.status {
+                TranscodeJobStatus::Succeeded => {
+                    info!("GCP Transcoder job {} succeeded", job_id);
+
+                    // Create reel variants from outputs
+                    for output in &job_result.output_uris {
+                        let profile = profiles.iter().find(|p| p.quality == output.quality);
+                        if let Some(profile) = profile {
+                            sqlx::query(
+                                "INSERT INTO reel_variants (
+                                    reel_id, quality, codec, bitrate_kbps, width, height,
+                                    frame_rate, cdn_url, file_size_bytes, is_default, created_at, updated_at
+                                )
+                                VALUES ($1, $2, 'h264', $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
+                                ON CONFLICT (reel_id, quality) DO UPDATE
+                                SET cdn_url = EXCLUDED.cdn_url,
+                                    file_size_bytes = EXCLUDED.file_size_bytes,
+                                    updated_at = NOW()",
+                            )
+                            .bind(reel_id)
+                            .bind(&output.quality)
+                            .bind(profile.bitrate_kbps)
+                            .bind(profile.width)
+                            .bind(profile.height)
+                            .bind(profile.frame_rate)
+                            .bind(&output.cdn_url)
+                            .bind(output.file_size_bytes)
+                            .bind(profile.is_default)
+                            .execute(&pool)
+                            .await?;
+                        }
+                    }
+
+                    // Mark all jobs as completed
+                    sqlx::query(
+                        "UPDATE reel_transcode_jobs
+                         SET status = 'completed',
+                             stage = 'completed',
+                             progress = 100,
+                             finished_at = NOW()
+                         WHERE reel_id = $1",
+                    )
+                    .bind(reel_id)
+                    .execute(&pool)
+                    .await?;
+
+                    // Mark reel as published
+                    sqlx::query(
+                        "UPDATE reels
+                         SET status = 'published',
+                             processing_stage = 'completed',
+                             processing_progress = 100,
+                             published_at = COALESCE(published_at, NOW()),
+                             updated_at = NOW()
+                         WHERE id = $1 AND status <> 'deleted'",
+                    )
+                    .bind(reel_id)
+                    .execute(&pool)
+                    .await?;
+
+                    info!("Reel {} transcoding completed successfully", reel_id);
+                    return Ok(());
+                }
+                TranscodeJobStatus::Failed => {
+                    let error_msg = job_result.error_message.unwrap_or_else(|| "Unknown error".to_string());
+                    error!("GCP Transcoder job {} failed: {}", job_id, error_msg);
+                    mark_reel_failed(&pool, reel_id, &error_msg).await?;
+                    return Ok(());
+                }
+                _ => {
+                    // Check timeout
+                    if start_time.elapsed() > max_wait {
+                        error!("Transcode job {} timed out after {:?}", job_id, max_wait);
+                        mark_reel_failed(&pool, reel_id, "Transcoding timed out").await?;
+                        return Ok(());
+                    }
+                    sleep(poll_interval).await;
+                }
+            }
+        }
+    }
+
+    /// Process reel using mock/simulation mode (original behavior)
+    async fn process_reel_mock(
+        pool: PgPool,
+        reel_id: Uuid,
+        upload_id: Option<Uuid>,
+        profiles: Arc<Vec<QualityProfile>>,
+        cdn_base_url: String,
     ) -> Result<()> {
         if upload_id.is_none() {
             warn!(
@@ -525,6 +809,12 @@ impl ReelTranscodePipeline {
             return Ok(());
         }
 
+        info!(
+            "Processing reel {} in MOCK mode ({} jobs)",
+            reel_id,
+            jobs.len()
+        );
+
         let total_jobs = jobs.len() as i16;
 
         for (index, job) in jobs.iter().enumerate() {
@@ -532,6 +822,7 @@ impl ReelTranscodePipeline {
             let completion_progress = ((index as i16 + 1) * 100) / total_jobs.max(1);
             let quality = &job.target_quality;
 
+            // Stage: download
             sqlx::query(
                 "UPDATE reel_transcode_jobs
                  SET status = 'processing',
@@ -558,15 +849,9 @@ impl ReelTranscodePipeline {
             .execute(&pool)
             .await?;
 
-            if !enable_mock {
-                info!(
-                    "Reel {} processing (quality={}): running in dry-run mode",
-                    reel_id, quality
-                );
-            }
-
             sleep(Duration::from_millis(100)).await;
 
+            // Stage: transcode
             sqlx::query(
                 "UPDATE reel_transcode_jobs
                  SET stage = 'transcode',
@@ -592,6 +877,7 @@ impl ReelTranscodePipeline {
 
             sleep(Duration::from_millis(150)).await;
 
+            // Stage: package
             sqlx::query(
                 "UPDATE reel_transcode_jobs
                  SET stage = 'package',
@@ -617,6 +903,7 @@ impl ReelTranscodePipeline {
 
             sleep(Duration::from_millis(120)).await;
 
+            // Create variant
             let profile = match profiles.iter().find(|p| p.quality == quality) {
                 Some(profile) => profile,
                 None => {
@@ -637,18 +924,8 @@ impl ReelTranscodePipeline {
 
             sqlx::query(
                 "INSERT INTO reel_variants (
-                    reel_id,
-                    quality,
-                    codec,
-                    bitrate_kbps,
-                    width,
-                    height,
-                    frame_rate,
-                    cdn_url,
-                    file_size_bytes,
-                    is_default,
-                    created_at,
-                    updated_at
+                    reel_id, quality, codec, bitrate_kbps, width, height,
+                    frame_rate, cdn_url, file_size_bytes, is_default, created_at, updated_at
                 )
                 VALUES ($1, $2, 'h264', $3, $4, $5, $6, $7, NULL, $8, NOW(), NOW())
                 ON CONFLICT (reel_id, quality) DO UPDATE
@@ -673,6 +950,7 @@ impl ReelTranscodePipeline {
             .execute(&pool)
             .await?;
 
+            // Mark job completed
             sqlx::query(
                 "UPDATE reel_transcode_jobs
                  SET status = 'completed',
@@ -698,11 +976,12 @@ impl ReelTranscodePipeline {
             .await?;
 
             info!(
-                "Reel {} transcoding step complete (quality={})",
+                "Reel {} mock transcoding step complete (quality={})",
                 reel_id, quality
             );
         }
 
+        // Mark reel as published
         sqlx::query(
             "UPDATE reels
              SET status = 'published',
@@ -716,7 +995,7 @@ impl ReelTranscodePipeline {
         .execute(&pool)
         .await?;
 
-        info!("Reel {} transcoding pipeline completed", reel_id);
+        info!("Reel {} mock transcoding pipeline completed", reel_id);
         Ok(())
     }
 }

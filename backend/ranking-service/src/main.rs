@@ -39,8 +39,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .expect("Invalid graph service URL")
             .connect_lazy();
 
+    let content_client =
+        tonic::transport::Channel::from_shared(config.grpc_clients.content_service_url.clone())
+            .expect("Invalid content service URL")
+            .connect_lazy();
+
     // Initialize layers
-    let recall_layer = RecallLayer::new(graph_client, redis_client, config.recall.clone());
+    let recall_layer = RecallLayer::new(graph_client, content_client, redis_client, config.recall.clone());
     let ranking_layer = RankingLayer::new();
     let diversity_layer = DiversityLayer::new(0.7); // lambda = 0.7
 

@@ -83,6 +83,16 @@ aws-sdk-s3 = "1.63"  # Upgraded from 1.9 (media) / 1.11 (video) to 1.63 (cdn)
 aws-config = "1.5"   # Upgraded from 1.1 (media/video) to 1.5 (cdn)
 
 # ============================================================================
+# GCP DEPENDENCIES (for Transcoder API)
+# ============================================================================
+google-cloud-googleapis = "0.16"
+google-cloud-auth = "0.16"
+hyper = { version = "1.5", features = ["client", "http1", "http2"] }
+hyper-util = { version = "0.1", features = ["client-legacy", "tokio"] }
+http-body-util = "0.1"
+tower = "0.5"
+
+# ============================================================================
 # gRPC INFRASTRUCTURE
 # ============================================================================
 tonic-health = "0.10"  # P0-4: gRPC health check protocol

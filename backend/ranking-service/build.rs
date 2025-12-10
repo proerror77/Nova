@@ -2,6 +2,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     tonic_build::configure()
         .build_server(true)
         .build_client(true)
-        .compile_protos(&["proto/ranking.proto", "proto/graph.proto"], &["proto"])?;
+        .compile_protos(
+            &[
+                "proto/ranking.proto",
+                "proto/graph.proto",
+                "../proto/services_v2/content_service.proto",
+            ],
+            &[
+                "proto",
+                "../proto/services_v2",
+                "../proto",
+                "../proto/third_party",
+            ],
+        )?;
     Ok(())
 }
