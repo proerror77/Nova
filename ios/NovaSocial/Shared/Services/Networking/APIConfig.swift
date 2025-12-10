@@ -22,7 +22,7 @@ enum APIEnvironment {
                !stagingURL.hasPrefix("$(") {  // Skip unresolved build variables
                 return stagingURL
             }
-            // Default staging API: GCP LB via IP, Host header set to api.nova.local in APIClient
+            // Default staging API: direct LB IP to bypass DNS/proxy issues
             return "http://34.8.163.8"
         case .production:
             return "https://api.nova.social"

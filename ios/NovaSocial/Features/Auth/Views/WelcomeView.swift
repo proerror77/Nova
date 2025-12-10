@@ -210,11 +210,30 @@ struct WelcomeView: View {
             print("[WelcomeView] Error type: \(type(of: error))")
             #endif
 
-                if error.localizedDescription.contains("network") || error.localizedDescription.contains("connection") {
+            if let apiError = error as? APIError {
+                switch apiError {
+                case .timeout, .noConnection, .networkError(_), .invalidResponse:
+                    // Clear network-related errors
                     errorMessage = "Network_error"
-                } else {
+                case .serverError(let statusCode, _):
+                    if statusCode >= 500 {
+                        // Backend / gateway unavailable (e.g. 503), treat as network issue
+                        errorMessage = "Network_error"
+                    } else {
+                        // 4xx from server – treat as invalid code for now
+                        errorMessage = "Invalid_invite_code_generic"
+                    }
+                case .notFound:
+                    // Invite endpoint / code not found
+                    errorMessage = "Invalid_invite_code_generic"
+                default:
                     errorMessage = "Invalid_invite_code_generic"
                 }
+            } else if error.localizedDescription.contains("network") || error.localizedDescription.contains("connection") {
+                errorMessage = "Network_error"
+            } else {
+                errorMessage = "Invalid_invite_code_generic"
+            }
         }
 
         isLoading = false
