@@ -34,11 +34,11 @@ scrape_configs:
   # Backend Services
   # =====================
 
-  - job_name: 'user-service'
+  - job_name: 'identity-service'
     static_configs:
-      - targets: ['localhost:8080']
+      - targets: ['localhost:8081']
         labels:
-          service: 'user-service'
+          service: 'identity-service'
           instance: 'primary'
     metrics_path: '/metrics'
     scrape_interval: 15s
@@ -47,16 +47,6 @@ scrape_configs:
       # Add environment label
       - source_labels: [__address__]
         target_label: instance_address
-
-  - job_name: 'messaging-service'
-    static_configs:
-      - targets: ['localhost:8081']
-        labels:
-          service: 'messaging-service'
-          instance: 'primary'
-    metrics_path: '/metrics'
-    scrape_interval: 15s
-    scrape_timeout: 10s
 
   - job_name: 'search-service'
     static_configs:
